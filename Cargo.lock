@@ -477,6 +477,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-control"
+version = "0.1.0"
+dependencies = [
+ "nexus-kernel",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "nexus-kernel"
 version = "0.1.0"
 dependencies = [
