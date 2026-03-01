@@ -1,12 +1,32 @@
 # NEXUS OS
 
-Governed agent operating system built atop **NEX Lang**.
+**Tagline:** Don't trust. Verify.
 
-## Goals
-- Capability-bounded execution
-- Fuel-bounded workflows
-- Audited, replayable I/O via proxy
-- Privacy-by-design (encrypted at rest)
+NEXUS OS is a consumer-facing governed agent operating system built to run policy-bounded agents on top of NEX Lang.
 
-## Status
-- v0.1.0 not started (repo scaffold only)
+## Architecture
+
+```text
++---------+
+| Host OS |
++---------+
+     |
+     v
++----------+
+| NEX Lang |
++----------+
+     |
+     v
++----------+
+| NEXUS OS |
++----------+
+     |
+     v
++--------+
+| Agents |
++--------+
+```
+
+## License
+
+TBD

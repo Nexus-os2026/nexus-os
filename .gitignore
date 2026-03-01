@@ -1,5 +1,20 @@
-target/
+# Rust build artifacts
+/target
+**/target
+
+# Cargo lock for libraries/workspaces is optional
+# Keep if desired for reproducible top-level builds
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
 .DS_Store
-.env
+Thumbs.db
+
+# Logs and temp
 *.log
-agent_output/
+*.tmp
