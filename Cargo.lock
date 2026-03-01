@@ -655,6 +655,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-self-update"
+version = "0.1.0"
+dependencies = [
+ "nexus-kernel",
+ "nexus-marketplace",
+ "serde",
+ "uuid",
+]
+
+[[package]]
 name = "nexus-workflows"
 version = "0.1.0"
 dependencies = [

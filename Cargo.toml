@@ -16,6 +16,7 @@ members = [
   "control",
   "factory",
   "marketplace",
+  "self-update",
   "app/src-tauri",
 ]
 
