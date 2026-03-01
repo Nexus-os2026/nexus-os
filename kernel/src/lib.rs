@@ -4,5 +4,6 @@ pub mod audit;
 pub mod errors;
 pub mod lifecycle;
 pub mod manifest;
+pub mod orchestration;
 pub mod privacy;
 pub mod supervisor;
