@@ -1,0 +1,22 @@
+[package]
+name = "social-poster-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "social-poster-agent"
+path = "src/main.rs"
+
+[dependencies]
+nexus-connectors-llm = { path = "../../connectors/llm" }
+nexus-connectors-web = { path = "../../connectors/web" }
+nexus-content = { path = "../../content" }
+nexus-kernel = { path = "../../kernel" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+uuid = { version = "1.10", features = ["v4", "serde"] }

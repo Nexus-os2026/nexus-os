@@ -1,0 +1,12 @@
+name = "social-poster"
+version = "1.0.0"
+capabilities = ["web.search", "web.read", "llm.query", "social.x.post"]
+fuel_budget = 10000
+schedule = "0 9 * * *"
+llm_model = "claude-sonnet-4-5"
+
+[config]
+topic = "AI and technology"
+platforms = ["x"]
+style = "professional"
+posts_per_day = 2

@@ -5,12 +5,15 @@ use std::collections::BTreeSet;
 const MIN_NAME_LEN: usize = 3;
 const MAX_NAME_LEN: usize = 64;
 const MAX_FUEL_BUDGET: u64 = 1_000_000;
-const CAPABILITY_REGISTRY: [&str; 7] = [
+const CAPABILITY_REGISTRY: [&str; 10] = [
     "web.search",
+    "web.read",
     "llm.query",
     "fs.read",
     "fs.write",
     "social.post",
+    "social.x.post",
+    "social.x.read",
     "messaging.send",
     "audit.read",
 ];

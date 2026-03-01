@@ -2,6 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use nexus_kernel::manifest::parse_manifest;
+use social_poster_agent::run_social_poster_from_manifest;
 pub mod setup;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -32,15 +33,33 @@ pub enum TopLevelCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum AgentCommand {
-    Create { manifest: String },
-    Start { agent_id: String },
-    Stop { agent_id: String },
-    Pause { agent_id: String },
-    Resume { agent_id: String },
-    Destroy { agent_id: String },
+    Create {
+        manifest: String,
+    },
+    Start {
+        agent_id: String,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    Stop {
+        agent_id: String,
+    },
+    Pause {
+        agent_id: String,
+    },
+    Resume {
+        agent_id: String,
+    },
+    Destroy {
+        agent_id: String,
+    },
     List,
-    Logs { agent_id: String },
-    Audit { agent_id: String },
+    Logs {
+        agent_id: String,
+    },
+    Audit {
+        agent_id: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -62,7 +81,7 @@ pub fn execute_agent_command(command: AgentCommand) -> Result<String, String> {
     match command {
         AgentCommand::Create { manifest } => create_agent_from_path(Path::new(&manifest))
             .map_err(|error| format!("Failed to create agent: {error}")),
-        AgentCommand::Start { agent_id } => Ok(format!("Agent '{agent_id}' started successfully")),
+        AgentCommand::Start { agent_id, dry_run } => start_agent(agent_id.as_str(), dry_run),
         AgentCommand::Stop { agent_id } => Ok(format!("Agent '{agent_id}' stopped successfully")),
         AgentCommand::Pause { agent_id } => Ok(format!("Agent '{agent_id}' paused successfully")),
         AgentCommand::Resume { agent_id } => Ok(format!("Agent '{agent_id}' resumed successfully")),
@@ -75,6 +94,34 @@ pub fn execute_agent_command(command: AgentCommand) -> Result<String, String> {
             Ok(format!("Showing audit trail for agent '{agent_id}'"))
         }
     }
+}
+
+fn start_agent(agent_id: &str, dry_run: bool) -> Result<String, String> {
+    if agent_id != "social-poster" {
+        if dry_run {
+            return Ok(format!(
+                "Agent '{agent_id}' started successfully (dry-run mode)"
+            ));
+        }
+        return Ok(format!("Agent '{agent_id}' started successfully"));
+    }
+
+    let manifest = resolve_social_poster_manifest()?;
+    let report = run_social_poster_from_manifest(manifest.as_path(), dry_run)
+        .map_err(|error| format!("social-poster run failed: {error}"))?;
+
+    let mut summary = format!(
+        "Agent 'social-poster' completed (dry_run={}, generated={}, published={})",
+        report.dry_run,
+        report.generated_posts.len(),
+        report.published_post_ids.len()
+    );
+    if report.dry_run {
+        for (index, post) in report.generated_posts.iter().enumerate() {
+            summary.push_str(format!("\n[post {}] {}", index + 1, post.text).as_str());
+        }
+    }
+    Ok(summary)
 }
 
 pub fn create_agent_from_path(manifest_path: &Path) -> Result<String, String> {
@@ -138,4 +185,21 @@ fn resolve_voice_dir() -> Result<PathBuf, String> {
     }
 
     Err("voice directory not found".to_string())
+}
+
+fn resolve_social_poster_manifest() -> Result<PathBuf, String> {
+    if let Ok(cwd) = std::env::current_dir() {
+        let candidate = cwd.join("agents/social-poster/manifest.toml");
+        if candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+
+    let fallback =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../agents/social-poster/manifest.toml");
+    if fallback.exists() {
+        return Ok(fallback);
+    }
+
+    Err("social-poster manifest not found".to_string())
 }
