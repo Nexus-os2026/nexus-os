@@ -12,6 +12,7 @@ members = [
   "research",
   "content",
   "analytics",
+  "adaptation",
 ]
 
 [workspace.package]

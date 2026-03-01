@@ -1,0 +1,17 @@
+[package]
+name = "nexus-adaptation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+analytics = { package = "nexus-analytics", path = "../analytics" }
+nexus-kernel = { path = "../kernel" }
+nexus-connectors-llm = { path = "../connectors/llm" }
+regex = "1.11"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.10", features = ["v4", "serde"] }
