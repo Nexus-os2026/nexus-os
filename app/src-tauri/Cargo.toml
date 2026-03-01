@@ -1,0 +1,20 @@
+[package]
+name = "nexus-desktop-backend"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+tauri-runtime = []
+
+[dependencies]
+nexus-kernel = { path = "../../kernel" }
+nexus-connectors-core = { path = "../../connectors/core" }
+nexus-connectors-web = { path = "../../connectors/web" }
+nexus-connectors-social = { path = "../../connectors/social" }
+nexus-connectors-messaging = { path = "../../connectors/messaging" }
+nexus-connectors-llm = { path = "../../connectors/llm" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.10", features = ["v4", "serde"] }

@@ -14,6 +14,7 @@ members = [
   "analytics",
   "adaptation",
   "control",
+  "app/src-tauri",
 ]
 
 [workspace.package]
