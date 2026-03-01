@@ -1,4 +1,10 @@
 import unittest
+from pathlib import Path
+import sys
+
+VOICE_DIR = Path(__file__).resolve().parents[1]
+if str(VOICE_DIR) not in sys.path:
+    sys.path.insert(0, str(VOICE_DIR))
 
 from tts import PiperTTS, TtsConfig
 

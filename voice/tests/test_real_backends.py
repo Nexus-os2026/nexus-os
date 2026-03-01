@@ -2,7 +2,12 @@ import tempfile
 import unittest
 import wave
 from pathlib import Path
+import sys
 from unittest.mock import patch
+
+VOICE_DIR = Path(__file__).resolve().parents[1]
+if str(VOICE_DIR) not in sys.path:
+    sys.path.insert(0, str(VOICE_DIR))
 
 from stt import FasterWhisperSTT, discover_whisper_command, whisper_backend_kind
 from tts import PiperTTS, TtsConfig, discover_piper_command
@@ -39,10 +44,11 @@ class RealBackendTests(unittest.TestCase):
         stt._faster_whisper_model = None
         stt.whisper_command = None
 
-        with tempfile.NamedTemporaryFile(suffix=".wav") as audio:
-            self._write_valid_pcm_wav(Path(audio.name))
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audio_path = Path(temp_dir) / "silence.wav"
+            self._write_valid_pcm_wav(audio_path)
             with self.assertRaises(RuntimeError):
-                stt.transcribe_audio_file(audio.name)
+                stt.transcribe_audio_file(str(audio_path))
 
     def test_synthesize_stream_falls_back_when_piper_unavailable(self) -> None:
         tts = PiperTTS(TtsConfig(piper_command=None, model_path=None))

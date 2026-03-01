@@ -165,6 +165,7 @@ class FasterWhisperSTT:
 
     def transcribe_audio_file(self, audio_path: str) -> TranscriptionResult:
         start = time.perf_counter()
+        self._ensure_backend_available()
         audio_file = Path(audio_path)
         if not audio_file.exists():
             raise FileNotFoundError(f"audio file not found: {audio_file}")
@@ -196,6 +197,19 @@ class FasterWhisperSTT:
             latency_ms=latency_ms,
             model=self.model,
             sentence_chunks=split_sentences(text),
+        )
+
+    def _ensure_backend_available(self) -> None:
+        if self._faster_whisper_model is not None or self.whisper_command:
+            return
+        details = (
+            f" faster-whisper init error: {self._faster_whisper_error}"
+            if self._faster_whisper_error
+            else ""
+        )
+        raise RuntimeError(
+            "No Whisper backend found. Install faster-whisper or set NEXUS_WHISPER_CMD."
+            f"{details}"
         )
 
     def _run_faster_whisper(self, audio_file: Path) -> tuple[str, str, float]:

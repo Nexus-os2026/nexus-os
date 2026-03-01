@@ -137,9 +137,9 @@ mod tests {
             "2026-01-01T12:00:00Z",
         );
 
-        assert!(post1.is_ok());
-        assert!(post2.is_ok());
-        assert!(post3.is_ok());
+        assert!(post1.is_ok(), "post1 failed: {:?}", post1.err());
+        assert!(post2.is_ok(), "post2 failed: {:?}", post2.err());
+        assert!(post3.is_ok(), "post3 failed: {:?}", post3.err());
 
         let listed = calendar.list_upcoming();
         assert_eq!(listed.len(), 3);
