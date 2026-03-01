@@ -505,6 +505,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-factory"
+version = "0.1.0"
+dependencies = [
+ "nexus-connectors-core",
+ "nexus-connectors-llm",
+ "nexus-connectors-messaging",
+ "nexus-connectors-social",
+ "nexus-connectors-web",
+ "nexus-kernel",
+ "serde",
+ "serde_json",
+ "toml",
+ "uuid",
+]
+
+[[package]]
 name = "nexus-kernel"
 version = "0.1.0"
 dependencies = [
