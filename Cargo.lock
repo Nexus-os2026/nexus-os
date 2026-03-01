@@ -407,6 +407,14 @@ dependencies = [
 [[package]]
 name = "nexus-connectors-messaging"
 version = "0.1.0"
+dependencies = [
+ "nexus-connectors-core",
+ "nexus-kernel",
+ "serde",
+ "serde_json",
+ "sha2",
+ "uuid",
+]
 
 [[package]]
 name = "nexus-connectors-social"
