@@ -1,6 +1,8 @@
+import { hasDesktopRuntime, transcribePushToTalk } from "../api/backend";
+
 export interface PushToTalkResult {
   transcript: string;
-  source: "web-speech" | "mock-whisper";
+  source: "tauri-stt" | "web-speech" | "mock-whisper";
 }
 
 interface SpeechRecognitionResultItem {
@@ -74,6 +76,14 @@ export class PushToTalk {
     }
 
     this.isRecording = false;
+
+    if (hasDesktopRuntime()) {
+      const transcript = await transcribePushToTalk();
+      return {
+        transcript,
+        source: "tauri-stt"
+      };
+    }
 
     if (this.recognition && this.pendingTranscript) {
       this.recognition.stop();

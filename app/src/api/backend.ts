@@ -1,5 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AgentSummary, AuditEventRow, VoiceRuntimeState } from "../types";
+import type {
+  AgentSummary,
+  AuditEventRow,
+  ChatResponse,
+  NexusConfig,
+  VoiceRuntimeState
+} from "../types";
 
 interface TauriWindow extends Window {
   __TAURI__?: unknown;
@@ -36,8 +42,16 @@ export function listAgents(): Promise<AgentSummary[]> {
   return invokeDesktop<AgentSummary[]>("list_agents");
 }
 
-export function getAuditLog(): Promise<AuditEventRow[]> {
-  return invokeDesktop<AuditEventRow[]>("get_audit_log");
+export function createAgent(manifestJson: string): Promise<string> {
+  return invokeDesktop<string>("create_agent", { manifestJson, manifest_json: manifestJson });
+}
+
+export function getAuditLog(agentId?: string, limit = 200): Promise<AuditEventRow[]> {
+  return invokeDesktop<AuditEventRow[]>("get_audit_log", {
+    agentId,
+    agent_id: agentId,
+    limit
+  });
 }
 
 export function startAgent(agentId: string): Promise<void> {
@@ -54,6 +68,22 @@ export function pauseAgent(agentId: string): Promise<void> {
 
 export function resumeAgent(agentId: string): Promise<void> {
   return invokeDesktop<void>("resume_agent", agentArgs(agentId));
+}
+
+export function sendChat(message: string): Promise<ChatResponse> {
+  return invokeDesktop<ChatResponse>("send_chat", { message });
+}
+
+export function getConfig(): Promise<NexusConfig> {
+  return invokeDesktop<NexusConfig>("get_config");
+}
+
+export function saveConfig(config: NexusConfig): Promise<void> {
+  return invokeDesktop<void>("save_config", { config });
+}
+
+export function transcribePushToTalk(): Promise<string> {
+  return invokeDesktop<string>("transcribe_push_to_talk");
 }
 
 export function startJarvisMode(): Promise<VoiceRuntimeState> {

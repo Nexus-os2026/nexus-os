@@ -3,22 +3,17 @@
 @tailwind utilities;
 
 :root {
-  color: #102033;
-  background: linear-gradient(140deg, #f5f8fc 0%, #e4edf8 45%, #f8f2e8 100%);
+  color: #f4f4f5;
+  background: radial-gradient(circle at top right, #164e63 0%, #0b1120 35%, #09090b 100%);
   font-family: "Source Sans 3", sans-serif;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  background: transparent;
 }
 
 #root {
   min-height: 100vh;
-}
-
-.soft-card {
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(16, 32, 51, 0.12);
-  backdrop-filter: blur(6px);
 }

@@ -1,105 +1,93 @@
-import { useMemo, useState } from "react";
-import { PushToTalk } from "../voice/PushToTalk";
+import type { ChatMessage } from "../types";
 
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
+interface ChatProps {
+  messages: ChatMessage[];
+  draft: string;
+  isRecording: boolean;
+  isSending: boolean;
+  onDraftChange: (value: string) => void;
+  onSend: () => void;
+  onToggleMic: () => void;
 }
 
-export function Chat(): JSX.Element {
-  const [draft, setDraft] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const voice = useMemo(() => new PushToTalk(), []);
-
-  function sendMessage(content: string): void {
-    const trimmed = content.trim();
-    if (!trimmed) {
-      return;
-    }
-
-    setMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), role: "user", content: trimmed },
-      {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: "Command queued. I will run it through governed policy checks."
-      }
-    ]);
-    setDraft("");
+function bubbleClass(role: ChatMessage["role"]): string {
+  if (role === "user") {
+    return "self-end max-w-[85%] rounded-2xl rounded-br-md bg-sky-600 px-4 py-3 text-sm text-white sm:max-w-[70%]";
   }
+  return "self-start max-w-[85%] rounded-2xl rounded-bl-md bg-zinc-800 px-4 py-3 text-sm text-zinc-100 sm:max-w-[70%]";
+}
 
-  async function togglePushToTalk(): Promise<void> {
-    if (!isRecording) {
-      voice.startRecording();
-      setIsRecording(true);
-      return;
-    }
-
-    const result = await voice.stopAndTranscribe();
-    setIsRecording(false);
-    if (result.transcript.trim()) {
-      setDraft(result.transcript);
-    }
-  }
-
+export function Chat({
+  messages,
+  draft,
+  isRecording,
+  isSending,
+  onDraftChange,
+  onSend,
+  onToggleMic
+}: ChatProps): JSX.Element {
   return (
-    <section className="soft-card rounded-2xl p-6 shadow-sm">
-      <h2 className="font-display text-2xl text-ink">What would you like me to do?</h2>
-      <p className="mt-1 text-sm text-slate-600">
-        Chat-first control surface for NEXUS OS agents.
-      </p>
+    <section className="flex h-[calc(100vh-10rem)] flex-col rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-[0_30px_80px_-45px_rgba(34,197,94,0.4)]">
+      <header className="border-b border-zinc-800 px-5 py-4">
+        <h2 className="font-display text-xl text-zinc-100">NEXUS Chat</h2>
+        <p className="mt-1 text-xs text-zinc-400">
+          Governed conversation loop with agent factory command routing.
+        </p>
+      </header>
 
-      <div className="mt-6 space-y-3 rounded-xl border border-slate-200 bg-white/70 p-4">
+      <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
         {messages.length === 0 ? (
-          <p className="text-sm text-slate-500">No messages yet.</p>
+          <p className="rounded-xl border border-dashed border-zinc-700 bg-zinc-900/60 p-4 text-sm text-zinc-400">
+            Start by describing a task. Example: create agent weekly-research with web.search and llm.query.
+          </p>
         ) : (
           messages.map((message) => (
-            <article
-              key={message.id}
-              className={`rounded-lg px-3 py-2 text-sm ${
-                message.role === "user"
-                  ? "ml-10 bg-ink text-white"
-                  : "mr-10 bg-mist text-ink"
-              }`}
-            >
-              {message.content}
+            <article key={message.id} className={`flex flex-col ${message.role === "user" ? "items-end" : "items-start"}`}>
+              <div className={bubbleClass(message.role)}>
+                <p className="whitespace-pre-wrap">{message.content || (message.streaming ? "…" : "")}</p>
+              </div>
+              <span className="mt-1 text-[11px] text-zinc-500">
+                {new Date(message.timestamp).toLocaleTimeString()}
+                {message.model ? ` · ${message.model}` : ""}
+              </span>
             </article>
           ))
         )}
       </div>
 
       <form
-        className="mt-4 flex flex-col gap-3 sm:flex-row"
+        className="border-t border-zinc-800 p-4"
         onSubmit={(event) => {
           event.preventDefault();
-          sendMessage(draft);
+          if (!isSending) {
+            onSend();
+          }
         }}
       >
-        <input
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder="Tell NEXUS OS what to do..."
-          className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none ring-accent transition focus:ring-2"
-        />
-        <div className="flex gap-2">
+        <div className="flex items-end gap-2">
           <button
             type="button"
-            onClick={togglePushToTalk}
-            className={`rounded-xl px-4 py-3 text-sm font-semibold text-white transition ${
-              isRecording ? "bg-rose-600" : "bg-mint"
+            onClick={onToggleMic}
+            className={`h-12 rounded-xl px-4 text-sm font-semibold transition ${
+              isRecording ? "bg-rose-600 text-white" : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
             }`}
             title="Push to talk"
           >
             {isRecording ? "Stop Mic" : "Mic"}
           </button>
+          <textarea
+            value={draft}
+            onChange={(event) => onDraftChange(event.target.value)}
+            placeholder="Ask NEXUS OS..."
+            rows={2}
+            className="min-h-12 flex-1 resize-none rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 outline-none ring-emerald-500/60 transition focus:ring-2"
+          />
           <button
             type="submit"
-            className="rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white"
+            disabled={isSending}
+            className="h-12 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            Send
+            {isSending ? "Sending..." : "Send"}
           </button>
         </div>
       </form>
