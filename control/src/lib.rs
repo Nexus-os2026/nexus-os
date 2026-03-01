@@ -4,6 +4,7 @@ pub mod action_log;
 pub mod browser;
 pub mod capture;
 pub mod input;
+pub mod vision;
 
 use std::collections::HashSet;
 use uuid::Uuid;

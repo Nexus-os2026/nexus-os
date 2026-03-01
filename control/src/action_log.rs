@@ -18,6 +18,12 @@ pub enum ActionType {
     BrowserType,
     BrowserContentRead,
     BrowserScreenshot,
+    VisionCapture,
+    VisionAction,
+    VisionVerify,
+    VisionBudgetAlert,
+    VisionBudgetPause,
+    VisionBudgetStop,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

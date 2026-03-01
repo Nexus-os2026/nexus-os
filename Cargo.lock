@@ -481,9 +481,11 @@ name = "nexus-control"
 version = "0.1.0"
 dependencies = [
  "nexus-connectors-core",
+ "nexus-connectors-llm",
  "nexus-kernel",
  "serde",
  "serde_json",
+ "sha2",
  "uuid",
 ]
 
