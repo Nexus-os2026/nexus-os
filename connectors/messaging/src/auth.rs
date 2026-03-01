@@ -85,6 +85,7 @@ struct StoredPairing {
 #[derive(Debug, Clone)]
 struct StoredStepUp {
     token_id: String,
+    operation: Operation,
     expected_response: String,
     expires_at: u64,
 }
@@ -240,7 +241,12 @@ impl AuthManager {
                 if live_token.auth_level == AuthLevel::Strong {
                     Ok(StepUpAuthResult::Allowed)
                 } else {
-                    Err(AuthError::OperationRequiresStrongVerification)
+                    let challenge = self.generate_step_up_challenge(
+                        &live_token.token_id,
+                        &operation,
+                        &live_token.device_id,
+                    );
+                    Ok(StepUpAuthResult::RequiresChallenge(challenge))
                 }
             }
         }
@@ -280,9 +286,14 @@ impl AuthManager {
             return Err(AuthError::InvalidChallengeResponse);
         }
 
+        let (auth_level, expires_at) = match stored.operation {
+            Operation::CreateAgent => (AuthLevel::Strong, now + 900),
+            _ => (AuthLevel::StepUp, now + 600),
+        };
+
         let upgraded = DeviceToken {
-            auth_level: AuthLevel::StepUp,
-            expires_at: now + 600,
+            auth_level,
+            expires_at,
             ..live_token
         };
 
@@ -338,6 +349,7 @@ impl AuthManager {
             challenge_id.clone(),
             StoredStepUp {
                 token_id: token_id.to_string(),
+                operation: operation.clone(),
                 expected_response,
                 expires_at,
             },

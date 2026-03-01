@@ -86,6 +86,7 @@ fn build_agent_name(intent: &ParsedIntent) -> String {
 fn primary_task_label(task: TaskType) -> &'static str {
     match task {
         TaskType::ContentPosting => "content",
+        TaskType::FileBackup => "backup",
         TaskType::Research => "research",
         TaskType::Monitoring => "monitor",
         TaskType::Unknown => "agent",
@@ -115,6 +116,16 @@ fn normalize_schedule_to_cron(schedule: &str) -> Option<String> {
     if lower.is_empty() || lower == "unspecified" {
         return None;
     }
+    if lower == "0 0 * * *"
+        || lower == "0 9 * * *"
+        || lower == "0 * * * *"
+        || lower == "@daily"
+    {
+        return Some(match lower.as_str() {
+            "@daily" => "0 0 * * *".to_string(),
+            _ => lower,
+        });
+    }
 
     if lower.contains("every morning at 9am") || (lower.contains("daily") && lower.contains("9")) {
         return Some("0 9 * * *".to_string());
@@ -126,6 +137,9 @@ fn normalize_schedule_to_cron(schedule: &str) -> Option<String> {
 
     if lower.contains("every hour") {
         return Some("0 * * * *".to_string());
+    }
+    if lower.contains("every night") || lower.contains("nightly") {
+        return Some("0 0 * * *".to_string());
     }
 
     None

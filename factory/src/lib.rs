@@ -5,3 +5,5 @@ pub mod capabilities;
 pub mod code_gen;
 pub mod intent;
 pub mod manifest_gen;
+pub mod notifications;
+pub mod remote;

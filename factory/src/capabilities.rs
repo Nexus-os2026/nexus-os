@@ -40,6 +40,14 @@ pub fn map_intent_to_capabilities(intent: &ParsedIntent) -> CapabilityPlan {
                 optional: vec!["audit.read".to_string()],
             }
         }
+        TaskType::FileBackup => CapabilityPlan {
+            required: vec![
+                "storage.backup".to_string(),
+                "llm.query".to_string(),
+                "web.search".to_string(),
+            ],
+            optional: vec!["audit.read".to_string()],
+        },
         TaskType::Research => CapabilityPlan {
             required: vec!["web.search".to_string(), "llm.query".to_string()],
             optional: vec!["audit.read".to_string()],
@@ -62,6 +70,7 @@ pub fn manifest_compatible_capabilities(capabilities: &[String]) -> Vec<String> 
             "social.x.post" | "social.instagram.post" | "social.facebook.post" => {
                 "social.post".to_string()
             }
+            "storage.backup" => "fs.write".to_string(),
             _ => capability.clone(),
         })
         .collect::<Vec<_>>();

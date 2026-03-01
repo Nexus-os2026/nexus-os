@@ -60,6 +60,11 @@ fn blocks_for_intent(intent: &ParsedIntent) -> Vec<ComposableBlock> {
             ComposableBlock::AnalyzeStep,
             ComposableBlock::AdaptStep,
         ],
+        TaskType::FileBackup => vec![
+            ComposableBlock::ResearchStep,
+            ComposableBlock::AnalyzeStep,
+            ComposableBlock::AdaptStep,
+        ],
         TaskType::Research => vec![
             ComposableBlock::ResearchStep,
             ComposableBlock::AnalyzeStep,

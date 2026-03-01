@@ -8,6 +8,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TaskType {
     ContentPosting,
+    FileBackup,
     Research,
     Monitoring,
     Unknown,
@@ -86,6 +87,7 @@ fn intent_from_llm_output(request: &str, output: LlmIntentOutput) -> ParsedInten
         .as_str()
     {
         "contentposting" | "content_posting" | "content-posting" => TaskType::ContentPosting,
+        "filebackup" | "file_backup" | "file-backup" => TaskType::FileBackup,
         "research" => TaskType::Research,
         "monitoring" => TaskType::Monitoring,
         _ => infer_task_type(request),
@@ -126,7 +128,12 @@ fn parse_with_rules(request: &str) -> ParsedIntent {
 fn infer_task_type(request: &str) -> TaskType {
     let lower = request.to_lowercase();
 
-    if lower.contains("post") || lower.contains("publish") {
+    if lower.contains("back up")
+        || lower.contains("backup")
+        || (lower.contains("archive") && lower.contains("file"))
+    {
+        TaskType::FileBackup
+    } else if lower.contains("post") || lower.contains("publish") {
         TaskType::ContentPosting
     } else if lower.contains("research") {
         TaskType::Research
@@ -177,6 +184,9 @@ fn normalize_platforms(platforms: Vec<String>) -> Vec<String> {
 fn infer_schedule(request: &str) -> String {
     let lower = request.to_lowercase();
 
+    if lower.contains("every night") || lower.contains("nightly") {
+        return "0 0 * * *".to_string();
+    }
     if lower.contains("daily") {
         return "daily".to_string();
     }
@@ -193,6 +203,20 @@ fn infer_schedule(request: &str) -> String {
 fn infer_topic(request: &str) -> String {
     let lower = request.to_lowercase();
     let marker = "about ";
+
+    if lower.contains("back up ") || lower.contains("backup ") {
+        let candidate = lower
+            .replace("back up ", "")
+            .replace("backup ", "")
+            .split(" every ")
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        if !candidate.is_empty() {
+            return candidate;
+        }
+    }
 
     if let Some(start) = lower.find(marker) {
         let suffix = &lower[(start + marker.len())..];
