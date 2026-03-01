@@ -5,7 +5,9 @@ use crate::intent::{IntentParser, ParsedIntent};
 use crate::manifest_gen::generate_manifest_toml;
 use crate::notifications;
 use nexus_connectors_llm::providers::LlmProvider;
-use nexus_connectors_messaging::auth::{AuthError, AuthManager, DeviceToken, Operation, StepUpAuthResult, StepUpChallenge};
+use nexus_connectors_messaging::auth::{
+    AuthError, AuthManager, DeviceToken, Operation, StepUpAuthResult, StepUpChallenge,
+};
 use nexus_connectors_messaging::messaging::{IncomingMessage, MessagingPlatform};
 use nexus_kernel::errors::AgentError;
 use std::collections::HashMap;
@@ -24,8 +26,7 @@ impl VoiceTranscriber for BridgeVoiceTranscriber {
             .rsplit('/')
             .next()
             .unwrap_or_default()
-            .replace('-', " ")
-            .replace('_', " ")
+            .replace(['-', '_'], " ")
             .trim()
             .to_string();
 
@@ -314,7 +315,9 @@ impl<P: LlmProvider, V: VoiceTranscriber> RemoteFactoryInterface<P, V> {
         }
 
         if let Some(voice_note_url) = incoming.voice_note_url.as_ref() {
-            return self.transcriber.transcribe_voice_note(voice_note_url.as_str());
+            return self
+                .transcriber
+                .transcribe_voice_note(voice_note_url.as_str());
         }
 
         Err(AgentError::SupervisorError(
@@ -350,8 +353,13 @@ mod tests {
     use super::{RemoteFactoryInterface, RemoteFlowStatus, VoiceTranscriber};
     use crate::intent::TaskType;
     use nexus_connectors_llm::providers::{LlmProvider, LlmResponse};
-    use nexus_connectors_messaging::auth::{AuthManager, DeviceToken, Operation, PairingResponse, StepUpAuthResult};
-    use nexus_connectors_messaging::messaging::{IncomingMessage, IncomingMessageStream, MessageId, MessagingPlatform, RateLimitConfig, RichMessage};
+    use nexus_connectors_messaging::auth::{
+        AuthManager, DeviceToken, Operation, PairingResponse, StepUpAuthResult,
+    };
+    use nexus_connectors_messaging::messaging::{
+        IncomingMessage, IncomingMessageStream, MessageId, MessagingPlatform, RateLimitConfig,
+        RichMessage,
+    };
     use nexus_kernel::errors::AgentError;
 
     struct MockCreationProvider;
@@ -546,13 +554,11 @@ mod tests {
             .expect("approval should deploy");
 
         assert_eq!(approve_result.status, RemoteFlowStatus::Deployed);
-        assert!(
-            approve_result
-                .deployment
-                .as_ref()
-                .map(|deployment| deployment.deployed)
-                .unwrap_or(false)
-        );
+        assert!(approve_result
+            .deployment
+            .as_ref()
+            .map(|deployment| deployment.deployed)
+            .unwrap_or(false));
     }
 
     #[test]
@@ -634,7 +640,10 @@ mod tests {
             )
             .expect("approve should request step-up challenge");
 
-        assert_eq!(approve_result.status, RemoteFlowStatus::AwaitingStepUpChallenge);
+        assert_eq!(
+            approve_result.status,
+            RemoteFlowStatus::AwaitingStepUpChallenge
+        );
         assert!(approve_result.challenge_id.is_some());
         assert!(approve_result.deployment.is_none());
     }

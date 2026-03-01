@@ -78,4 +78,3 @@ pub fn send_deployment_success(
         format!("Request {request_id} deployed. agent_id={agent_id}, status={state}").as_str(),
     )
 }
-

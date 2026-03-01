@@ -116,11 +116,7 @@ fn normalize_schedule_to_cron(schedule: &str) -> Option<String> {
     if lower.is_empty() || lower == "unspecified" {
         return None;
     }
-    if lower == "0 0 * * *"
-        || lower == "0 9 * * *"
-        || lower == "0 * * * *"
-        || lower == "@daily"
-    {
+    if lower == "0 0 * * *" || lower == "0 9 * * *" || lower == "0 * * * *" || lower == "@daily" {
         return Some(match lower.as_str() {
             "@daily" => "0 0 * * *".to_string(),
             _ => lower,

@@ -44,7 +44,10 @@ impl std::fmt::Display for ConnectorUpdateError {
                 write!(f, "no connector failures detected")
             }
             ConnectorUpdateError::DownloadFailed(connector_id) => {
-                write!(f, "failed to download update for connector '{connector_id}'")
+                write!(
+                    f,
+                    "failed to download update for connector '{connector_id}'"
+                )
             }
             ConnectorUpdateError::Tuf(error) => write!(f, "{error}"),
             ConnectorUpdateError::Marketplace(error) => write!(f, "{error}"),
@@ -122,12 +125,7 @@ impl ConnectorAutoUpdater {
             let package = source
                 .download_for_connector(connector_id.as_str())
                 .ok_or_else(|| ConnectorUpdateError::DownloadFailed(connector_id.clone()))?;
-            self.verify_connector_update(
-                connector_id.as_str(),
-                &package,
-                repository,
-                tuf_client,
-            )?;
+            self.verify_connector_update(connector_id.as_str(), &package, repository, tuf_client)?;
 
             self.connector_versions
                 .insert(connector_id.clone(), package.metadata.version.clone());
@@ -288,7 +286,10 @@ mod tests {
         }
     }
 
-    fn connector_package(connector_id: &str, version: &str) -> nexus_marketplace::package::SignedPackageBundle {
+    fn connector_package(
+        connector_id: &str,
+        version: &str,
+    ) -> nexus_marketplace::package::SignedPackageBundle {
         let unsigned = create_unsigned_bundle(
             r#"name = "social-facebook"
 version = "1.2.0"
@@ -330,21 +331,18 @@ fuel_budget = 2000
         let mut source = InMemoryConnectorUpdateSource::default();
         source.add_package("social.facebook", package);
 
-        let mut tuf_client =
-            TufClient::with_clock(root_metadata(), 0, 0, 0, Arc::new(|| 100_u64));
+        let mut tuf_client = TufClient::with_clock(root_metadata(), 0, 0, 0, Arc::new(|| 100_u64));
         let repository = repo("social.facebook", "1.2.0");
 
         let outcome = updater
-            .update_failed_connectors(
-                &failures,
-                &source,
-                &repository,
-                &mut tuf_client,
-            )
+            .update_failed_connectors(&failures, &source, &repository, &mut tuf_client)
             .expect("connector update should succeed");
 
         assert_eq!(outcome.restarted_agents, vec![affected_agent]);
         assert_eq!(updater.connector_version("social.facebook"), Some("1.2.0"));
-        assert!(updater.affected_agents().iter().all(|agent| agent.restarted));
+        assert!(updater
+            .affected_agents()
+            .iter()
+            .all(|agent| agent.restarted));
     }
 }

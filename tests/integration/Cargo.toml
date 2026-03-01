@@ -1,0 +1,22 @@
+[package]
+name = "nexus-integration"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+nexus-kernel = { path = "../../kernel" }
+nexus-factory = { path = "../../factory" }
+nexus-research = { path = "../../research" }
+nexus-content = { path = "../../content" }
+nexus-workflows = { path = "../../workflows" }
+nexus-analytics = { path = "../../analytics" }
+nexus-adaptation = { path = "../../adaptation" }
+nexus-connectors-web = { path = "../../connectors/web" }
+nexus-connectors-llm = { path = "../../connectors/llm" }
+serde_json = "1.0"
+uuid = { version = "1.10", features = ["v4", "serde"] }

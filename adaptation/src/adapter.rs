@@ -101,10 +101,9 @@ impl StrategyAdapter {
         for change in &authority_changes {
             if is_never_allowed(change) {
                 self.log_security_event(change, "never_allowed");
-                return Err(AdaptationError::NeverAllowed(format!(
-                    "{}",
-                    change_description(change)
-                )));
+                return Err(AdaptationError::NeverAllowed(
+                    change_description(change).to_string(),
+                ));
             }
         }
 

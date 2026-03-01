@@ -105,9 +105,7 @@ impl DependencyMonitor {
             .get_mut(name)
             .ok_or_else(|| MonitorError::DependencyNotTracked(name.to_string()))?;
 
-        let due = now
-            .saturating_sub(tracked.last_checked_unix)
-            >= self.check_interval_seconds;
+        let due = now.saturating_sub(tracked.last_checked_unix) >= self.check_interval_seconds;
         if !due {
             return Ok(UpdateOutcome::NotDue);
         }
@@ -139,7 +137,9 @@ impl DependencyMonitor {
                     candidate_version: candidate_version.to_string(),
                 },
             );
-            return Ok(UpdateOutcome::ApprovalRequired(candidate_version.to_string()));
+            return Ok(UpdateOutcome::ApprovalRequired(
+                candidate_version.to_string(),
+            ));
         }
 
         tracked.current_version = candidate_version.to_string();

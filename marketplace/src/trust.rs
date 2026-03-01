@@ -40,10 +40,7 @@ impl TrustSystem {
 
     pub fn add_review(&mut self, package_id: &str, review: Review) {
         let rating = review.rating.clamp(1, 5);
-        let sanitized = Review {
-            rating,
-            ..review
-        };
+        let sanitized = Review { rating, ..review };
         self.package_reviews
             .entry(package_id.to_string())
             .or_default()
@@ -83,9 +80,7 @@ impl TrustSystem {
         match capability {
             "llm.query" | "web.search" | "audit.read" => CapabilityRisk::Low,
             "social.post" | "messaging.send" | "fs.read" => CapabilityRisk::Medium,
-            "fs.write" | "screen.capture" | "input.keyboard" | "shell.exec" => {
-                CapabilityRisk::High
-            }
+            "fs.write" | "screen.capture" | "input.keyboard" | "shell.exec" => CapabilityRisk::High,
             _ => CapabilityRisk::Medium,
         }
     }

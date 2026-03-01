@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.0.0 - Production Release
+
+- Integrated end-to-end cross-crate pipeline tests in `tests/integration/`:
+  - agent creation → research → content generation → publishing → analytics → adaptation → report
+- Added governance overhead benchmark test with release budget target (<5% overhead).
+- Finalized secure update stack:
+  - TUF verification with rollback/freeze protection
+  - signed package verification and in-toto attestation checks
+  - canary deploy with rollback
+  - connector auto-update and restart flow
+  - opt-in research-preview self-patching with fixed verifier boundary
+- Added production documentation:
+  - `docs/USER_GUIDE.md`
+  - `THREAT_MODEL.md`
+- Added installer/package assets:
+  - Linux `.deb` packaging script + `systemd` service
+  - macOS Homebrew formula + `launchd` plist
+  - Windows `.msi` (WiX manifest) packaging script
+- Upgraded CI/CD for matrix build/test across Ubuntu, macOS, and Windows, with release packaging workflow.
+
 ## v0.5.0 - Early Access
 
 - Added `nexus-content` crate with:

@@ -312,8 +312,7 @@ fuel_budget = 5000
         let mut source = InMemoryUpdateSource::default();
         source.add_package(package);
 
-        let mut tuf_client =
-            TufClient::with_clock(root_metadata(), 0, 0, 0, Arc::new(|| 100_u64));
+        let mut tuf_client = TufClient::with_clock(root_metadata(), 0, 0, 0, Arc::new(|| 100_u64));
         let repo = tuf_repo("nexus-agent-runtime", "1.1.0");
 
         let outcome = pipeline
@@ -345,8 +344,7 @@ fuel_budget = 5000
         let mut source = InMemoryUpdateSource::default();
         source.add_package(package);
 
-        let mut tuf_client =
-            TufClient::with_clock(root_metadata(), 0, 0, 0, Arc::new(|| 100_u64));
+        let mut tuf_client = TufClient::with_clock(root_metadata(), 0, 0, 0, Arc::new(|| 100_u64));
         let repo = tuf_repo("nexus-agent-runtime", "1.1.0");
 
         let result = pipeline.apply_signed_update(

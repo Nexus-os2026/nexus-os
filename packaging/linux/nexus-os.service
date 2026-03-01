@@ -1,0 +1,16 @@
+[Unit]
+Description=NEXUS OS Agent Runtime Service
+After=network.target
+
+[Service]
+Type=simple
+User=nexus
+Group=nexus
+ExecStart=/usr/bin/nexus-cli
+Restart=on-failure
+RestartSec=3
+Environment=RUST_LOG=info
+WorkingDirectory=/var/lib/nexus-os
+
+[Install]
+WantedBy=multi-user.target

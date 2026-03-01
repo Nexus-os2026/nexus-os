@@ -93,7 +93,9 @@ impl<P: LlmProvider> ErrorAnalyzer<P> {
             .provider
             .query(prompt.as_str(), self.max_tokens, self.model_name.as_str())
             .ok()
-            .and_then(|response| serde_json::from_str::<LlmAnalysis>(response.output_text.as_str()).ok());
+            .and_then(|response| {
+                serde_json::from_str::<LlmAnalysis>(response.output_text.as_str()).ok()
+            });
 
         let fallback = heuristic_analysis(&context);
         let analysis = llm_result.unwrap_or(fallback);
@@ -177,7 +179,10 @@ fn heuristic_analysis(context: &CrashContext) -> LlmAnalysis {
             "high".to_string(),
         )
     } else if reason.contains("panic") || joined.contains("panic") {
-        ("Unhandled runtime panic".to_string(), "critical".to_string())
+        (
+            "Unhandled runtime panic".to_string(),
+            "critical".to_string(),
+        )
     } else {
         (
             "Unhandled runtime error triggered by event sequence".to_string(),
@@ -194,7 +199,10 @@ fn heuristic_analysis(context: &CrashContext) -> LlmAnalysis {
         ]),
         severity: Some(severity),
         expected_behavior: Some("Agent should handle the failing condition gracefully".to_string()),
-        actual_behavior: Some(format!("Agent crashed with reason: {}", context.crash_reason)),
+        actual_behavior: Some(format!(
+            "Agent crashed with reason: {}",
+            context.crash_reason
+        )),
     }
 }
 

@@ -74,7 +74,11 @@ impl MutationLifecycle {
         }
     }
 
-    pub fn propose(&mut self, patch_source: &str, proposed_by: &str) -> Result<String, MutationError> {
+    pub fn propose(
+        &mut self,
+        patch_source: &str,
+        proposed_by: &str,
+    ) -> Result<String, MutationError> {
         let patch = parse_patch(patch_source).map_err(map_patch_error)?;
         let patch_id = format!("mut-{}", Uuid::new_v4());
         self.records.insert(
@@ -120,7 +124,11 @@ impl MutationLifecycle {
         Ok(())
     }
 
-    pub fn replay_ab(&mut self, patch_id: &str, corpus: &[ReplayCase]) -> Result<(), MutationError> {
+    pub fn replay_ab(
+        &mut self,
+        patch_id: &str,
+        corpus: &[ReplayCase],
+    ) -> Result<(), MutationError> {
         let patch = {
             let record = self
                 .records
@@ -216,11 +224,7 @@ impl MutationLifecycle {
 
     pub fn has_attestation(&self, patch_id: &str) -> bool {
         self.audit_trail.events().iter().any(|event| {
-            event
-                .payload
-                .get("event")
-                .and_then(|value| value.as_str())
-                == Some("mutation_attested")
+            event.payload.get("event").and_then(|value| value.as_str()) == Some("mutation_attested")
                 && event
                     .payload
                     .get("patch_id")
@@ -251,7 +255,10 @@ fn map_patch_error(error: PatchLangError) -> MutationError {
     }
 }
 
-fn run_replay_checks(state: &RuntimePatchState, corpus: &[ReplayCase]) -> Result<(), MutationError> {
+fn run_replay_checks(
+    state: &RuntimePatchState,
+    corpus: &[ReplayCase],
+) -> Result<(), MutationError> {
     for case in corpus {
         match &case.expectation {
             ReplayExpectation::ConfigEquals { key, expected } => {

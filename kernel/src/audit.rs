@@ -135,10 +135,7 @@ fn compute_hash(
         payload,
     };
 
-    let serialized = match serde_json::to_vec(&canonical) {
-        Ok(bytes) => bytes,
-        Err(_) => Vec::new(),
-    };
+    let serialized = serde_json::to_vec(&canonical).unwrap_or_default();
 
     let mut hasher = Sha256::new();
     hasher.update(previous_hash.as_bytes());

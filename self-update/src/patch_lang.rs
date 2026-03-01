@@ -206,8 +206,12 @@ fn guard_verifier_boundary(target: &str, value: &str) -> Result<(), PatchLangErr
 }
 
 fn guard_capability_escalation(target: &str, value: &str) -> Result<(), PatchLangError> {
-    const CAPABILITY_BLOCKLIST: [&str; 4] =
-        ["capability", "capabilities", "allow_all_caps", "privileged_mode"];
+    const CAPABILITY_BLOCKLIST: [&str; 4] = [
+        "capability",
+        "capabilities",
+        "allow_all_caps",
+        "privileged_mode",
+    ];
     let haystack = format!("{} {}", target.to_lowercase(), value.to_lowercase());
     if CAPABILITY_BLOCKLIST
         .iter()
@@ -222,9 +226,7 @@ fn guard_audit_bypass(target: &str, value: &str) -> Result<(), PatchLangError> {
     let target_lower = target.to_lowercase();
     let value_lower = value.to_lowercase();
     let bypass = (target_lower.contains("audit")
-        && (value_lower.contains("disable")
-            || value_lower == "off"
-            || value_lower == "false"))
+        && (value_lower.contains("disable") || value_lower == "off" || value_lower == "false"))
         || value_lower.contains("bypass_audit")
         || value_lower.contains("skip_audit");
     if bypass {

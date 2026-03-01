@@ -58,7 +58,9 @@ pub fn policy_lint(capabilities: &[String]) -> PolicyLintReport {
     let mut findings = Vec::new();
 
     if capabilities.len() > 5 {
-        findings.push("package requests many capabilities; principle-of-least-privilege warning".to_string());
+        findings.push(
+            "package requests many capabilities; principle-of-least-privilege warning".to_string(),
+        );
     }
     if base_risk == CapabilityRisk::High {
         findings.push("contains high-risk capability".to_string());
@@ -86,7 +88,9 @@ pub fn static_analysis(agent_code: &str) -> StaticAnalysisReport {
         .map(|pattern| (*pattern).to_string())
         .collect::<Vec<_>>();
 
-    StaticAnalysisReport { suspicious_patterns }
+    StaticAnalysisReport {
+        suspicious_patterns,
+    }
 }
 
 pub fn behavioral_sandbox(agent_code: &str) -> BehavioralSandboxReport {

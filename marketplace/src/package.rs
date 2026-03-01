@@ -114,13 +114,8 @@ pub fn create_unsigned_bundle(
     source_uri: &str,
     builder_id: &str,
 ) -> Result<UnsignedPackageBundle, MarketplaceError> {
-    let attestation = create_attestation(
-        manifest_toml,
-        agent_code,
-        &metadata,
-        source_uri,
-        builder_id,
-    )?;
+    let attestation =
+        create_attestation(manifest_toml, agent_code, &metadata, source_uri, builder_id)?;
 
     Ok(UnsignedPackageBundle {
         manifest_toml: manifest_toml.to_string(),
@@ -173,8 +168,8 @@ pub fn verify_package(bundle: &SignedPackageBundle) -> Result<(), MarketplaceErr
         .try_into()
         .map_err(|_| MarketplaceError::SignatureInvalid)?;
 
-    let verifying_key =
-        VerifyingKey::from_bytes(&public_key_bytes).map_err(|_| MarketplaceError::SignatureInvalid)?;
+    let verifying_key = VerifyingKey::from_bytes(&public_key_bytes)
+        .map_err(|_| MarketplaceError::SignatureInvalid)?;
     let signature = Signature::from_bytes(&signature_bytes);
     let payload = canonical_signing_payload(
         bundle.package_id.as_str(),

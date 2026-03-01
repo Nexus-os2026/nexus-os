@@ -606,6 +606,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-integration"
+version = "0.1.0"
+dependencies = [
+ "nexus-adaptation",
+ "nexus-analytics",
+ "nexus-connectors-llm",
+ "nexus-connectors-web",
+ "nexus-content",
+ "nexus-factory",
+ "nexus-kernel",
+ "nexus-research",
+ "nexus-workflows",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "nexus-kernel"
 version = "0.1.0"
 dependencies = [

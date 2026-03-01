@@ -48,7 +48,11 @@ impl MarketplaceRegistry {
                 if query_lower.is_empty() {
                     return true;
                 }
-                let name_hit = package.metadata.name.to_lowercase().contains(query_lower.as_str());
+                let name_hit = package
+                    .metadata
+                    .name
+                    .to_lowercase()
+                    .contains(query_lower.as_str());
                 let desc_hit = package
                     .metadata
                     .description
