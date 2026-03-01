@@ -2,86 +2,108 @@
 
 ## Scope
 
-This document captures known risks for NEXUS OS v1.0.0 and the mitigations currently implemented.
+This model covers NEXUS OS v1.0.0 runtime, connectors, desktop/CLI surfaces, messaging bridge, voice pipeline, and update path.
 
-## Security Principles
+## Security Goals
 
-- Don’t trust. Verify.
-- Explicit capabilities and least privilege
-- Auditability and tamper evidence
-- Human approval for authority-changing actions
+1. Preserve integrity of governed actions.
+2. Prevent unauthorized capability use.
+3. Maintain tamper-evident audit history.
+4. Protect secrets and sensitive runtime data.
+5. Ensure updates are authentic and rollback-resistant.
 
-## Assets
+## Known Attack Surfaces
 
-- Agent manifests and capability grants
-- Runtime state and fuel budgets
-- Connector credentials and tokens
-- Update metadata and release artifacts
-- Audit logs and telemetry data
+1. LLM prompt and tool invocation channel.
+2. Web ingestion (search + page reader).
+3. Messaging bridge (Telegram and future channels).
+4. Desktop control and screen capture pathways.
+5. External provider APIs (LLM/social/search).
+6. Agent package/install/update supply chain.
+7. Local config and credential storage.
 
-## Trust Boundaries
+## Prompt Injection Mitigations
 
-- Local runtime vs external APIs/connectors
-- Signed update metadata vs downloaded package payloads
-- User-approved actions vs autonomous behavior
-- Production update path vs research-preview patching
+Threats:
+- untrusted web content attempts to override system instructions
+- model output requests unauthorized tool calls
 
-## Threats and Mitigations
+Controls:
+1. Capability checks before every tool action.
+2. Fuel budget checks to constrain abuse loops.
+3. Prompt/output defense filters in LLM connector layer.
+4. Action-level validation before execution.
+5. Audit event emission for all LLM/tool transitions.
+6. Circuit-breaker behavior for suspicious output patterns.
 
-### 1. Malicious or tampered updates
-- Threat: package/signature tampering, provenance spoofing
-- Mitigations:
-  - Ed25519 package signatures
-  - in-toto provenance validation
-  - TUF verification (root/targets/snapshot/timestamp)
-  - rollback and freeze attack protection
-  - canary rollout with rollback
+Residual risk:
+- sophisticated context poisoning may still degrade quality even when execution is blocked.
 
-### 2. Capability escalation
-- Threat: unauthorized actions beyond declared permissions
-- Mitigations:
-  - capability checks in runtime gateways
-  - manifest capability validation
-  - adaptation authority policy (`never allowed` classes)
-  - self-patch DSL blocks capability edits
+## Messaging Bridge Security Model
 
-### 3. Audit bypass / repudiation
-- Threat: hiding or altering event traces
-- Mitigations:
-  - hash-chained audit trail integrity
-  - policy blocks for audit bypass mutations
-  - mutation lifecycle attestation events
+Threats:
+- unauthorized remote command injection
+- replay of old approvals
+- device impersonation
 
-### 4. Remote command abuse
-- Threat: unauthorized mobile/messaging actions
-- Mitigations:
-  - step-up authentication and cryptographic challenges
-  - stronger auth requirement for remote creation/deploy
-  - explicit approval flow before deployment
+Controls:
+1. Pairing flow with one-time code and expiry.
+2. Chat/device authorization before command routing.
+3. Step-up authentication for sensitive operations.
+4. Approval workflow for authority-escalating actions.
+5. Rate limiting and command parsing validation.
+6. Auditable records of inbound/outbound bridge actions.
 
-### 5. Prompt injection and unsafe LLM outputs
-- Threat: instruction hijack, unsafe tool invocation
-- Mitigations:
-  - governed LLM gateway capability and fuel checks
-  - LLM defense validation and circuit breaker
-  - output action validation and audit logging
+Residual risk:
+- compromised user messaging account can still issue authenticated commands.
 
-### 6. Data leakage in telemetry/reports
-- Threat: sensitive identifiers leaked to telemetry
-- Mitigations:
-  - telemetry opt-in default OFF
-  - anonymized report payloads (hashed identifiers)
-  - report redaction patterns for API keys/tokens
+## Screen Capture Trust Boundary
 
-## Residual Risks
+Threats:
+- over-collection of sensitive UI data
+- unauthorized capture/control execution
 
-- Third-party API schema changes can break connector semantics before updates are available.
-- Human approval quality varies and remains a social/operational risk.
-- LLM model behavior drift may impact generated strategy quality.
+Boundary definition:
+- Screen control and capture are privileged capabilities separate from core agent logic.
 
-## Future Hardening
+Controls:
+1. Explicit capability gating for capture/input actions.
+2. Action logs with immutable hash-chain audit records.
+3. Human approval path for sensitive operations.
+4. Privacy-oriented retention and telemetry defaults.
 
-- Sigstore/cosign verification chain for release artifacts
-- Hardware-backed key storage for signing roles
-- Continuous chaos testing for rollback pathways
-- Mandatory SLSA provenance levels for all release builds
+Residual risk:
+- endpoint-level malware outside NEXUS OS can still exfiltrate screen data.
+
+## Update Supply Chain Integrity
+
+Threats:
+- artifact tampering
+- malicious mirror/repository content
+- rollback/freeze attacks
+
+Controls:
+1. TUF metadata verification (root, targets, snapshot, timestamp).
+2. Signature verification on release artifacts.
+3. in-toto provenance verification for package trust.
+4. Rollback/freeze protections in update checks.
+5. Canary rollout and automatic rollback on failure signals.
+6. Policy restrictions on self-patching boundaries.
+
+Residual risk:
+- compromised signing infrastructure remains high impact and requires key rotation response.
+
+## Additional Hardening Priorities
+
+1. Hardware-backed signing keys and stricter key custody.
+2. Sigstore/cosign integration for release attestations.
+3. Automated chaos drills for rollback and update recovery.
+4. Expanded abuse-detection heuristics for remote control channels.
+
+## Incident Response Baseline
+
+1. Contain: disable affected connectors or bridge routes.
+2. Verify: inspect audit chain integrity and recent events.
+3. Rotate: revoke impacted credentials/tokens.
+4. Recover: deploy signed patch through verified release path.
+5. Review: document root cause and update threat controls.

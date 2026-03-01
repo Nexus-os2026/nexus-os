@@ -1,3 +1,5 @@
+//! Social poster agent pipeline for governed research, generation, review, and publishing.
+
 use nexus_connectors_llm::gateway::{select_provider, ProviderSelectionConfig};
 use nexus_connectors_llm::providers::LlmProvider;
 use nexus_connectors_llm::providers::MockProvider;
@@ -18,6 +20,7 @@ use std::path::Path;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Deserialize)]
+/// Runtime configuration values loaded from the agent manifest `[config]` section.
 pub struct SocialPosterConfig {
     pub topic: String,
     pub platforms: Vec<String>,
@@ -26,6 +29,7 @@ pub struct SocialPosterConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+/// Typed manifest model for the `social-poster` agent package.
 pub struct SocialPosterManifest {
     pub name: String,
     pub version: String,
@@ -37,6 +41,7 @@ pub struct SocialPosterManifest {
 }
 
 #[derive(Debug, Clone)]
+/// Execution summary returned after a social-poster run completes.
 pub struct SocialPosterRunReport {
     pub generated_posts: Vec<PlatformContent>,
     pub published_post_ids: Vec<String>,
@@ -45,14 +50,17 @@ pub struct SocialPosterRunReport {
     pub audit_events: Vec<AuditEvent>,
 }
 
+/// Research stage abstraction (search provider).
 pub trait SearchStep {
     fn search(&mut self, topic: &str, max_results: usize) -> Result<Vec<SearchResult>, AgentError>;
 }
 
+/// Reading stage abstraction (web content extraction provider).
 pub trait ReaderStep {
     fn read(&mut self, url: &str) -> Result<CleanContent, AgentError>;
 }
 
+/// Generation stage abstraction (LLM/content provider).
 pub trait GenerateStep {
     fn generate(
         &mut self,
@@ -62,11 +70,13 @@ pub trait GenerateStep {
     ) -> Result<PlatformContent, AgentError>;
 }
 
+/// Publishing stage abstraction (social API provider).
 pub trait PublishStep {
     fn publish_x(&mut self, text: &str) -> Result<TweetResult, AgentError>;
     fn publish_calls(&self) -> usize;
 }
 
+/// Dependency bundle for social-poster pipeline stages.
 pub struct PipelineDependencies {
     pub search: Box<dyn SearchStep>,
     pub reader: Box<dyn ReaderStep>,
@@ -75,6 +85,7 @@ pub struct PipelineDependencies {
 }
 
 impl PipelineDependencies {
+    /// Builds production dependencies backed by real connectors/providers.
     pub fn real(fuel_budget: u64, model_name: &str) -> Result<Self, AgentError> {
         Ok(Self {
             search: Box::new(RealSearchStep::new(fuel_budget)),
@@ -84,6 +95,7 @@ impl PipelineDependencies {
         })
     }
 
+    /// Builds offline-safe dry-run dependencies that avoid external mutations.
     pub fn dry_run_defaults(model_name: &str, fuel_budget: u64) -> Self {
         Self {
             search: Box::new(DryRunSearchStep),
@@ -100,6 +112,7 @@ impl PipelineDependencies {
     }
 }
 
+/// Governed runnable social-poster agent.
 pub struct SocialPosterAgent {
     manifest: SocialPosterManifest,
     dependencies: PipelineDependencies,
@@ -109,6 +122,7 @@ pub struct SocialPosterAgent {
 }
 
 impl SocialPosterAgent {
+    /// Creates a social-poster agent from manifest values.
     pub fn new(manifest: SocialPosterManifest, dry_run: bool) -> Result<Self, AgentError> {
         let model_name = manifest
             .llm_model
@@ -122,6 +136,7 @@ impl SocialPosterAgent {
         Ok(Self::with_dependencies(manifest, dry_run, dependencies))
     }
 
+    /// Creates a social-poster agent with injected dependencies (useful for tests).
     pub fn with_dependencies(
         manifest: SocialPosterManifest,
         dry_run: bool,
@@ -136,6 +151,7 @@ impl SocialPosterAgent {
         }
     }
 
+    /// Executes the full pipeline and returns a run report with audit events.
     pub fn run(&mut self) -> Result<SocialPosterRunReport, AgentError> {
         self.audit_trail.append_event(
             self.agent_id,
@@ -319,6 +335,7 @@ impl SocialPosterAgent {
     }
 }
 
+/// Loads and deserializes a social-poster manifest from disk.
 pub fn load_manifest(path: &Path) -> Result<SocialPosterManifest, AgentError> {
     let manifest_str = fs::read_to_string(path).map_err(|error| {
         AgentError::ManifestError(format!(
@@ -330,6 +347,7 @@ pub fn load_manifest(path: &Path) -> Result<SocialPosterManifest, AgentError> {
         .map_err(|error| AgentError::ManifestError(format!("invalid manifest format: {error}")))
 }
 
+/// Runs social-poster directly from a manifest path.
 pub fn run_social_poster_from_manifest(
     manifest_path: &Path,
     dry_run: bool,
