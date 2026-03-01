@@ -490,7 +490,9 @@ name = "nexus-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "nexus-connectors-core",
  "nexus-kernel",
+ "uuid",
 ]
 
 [[package]]

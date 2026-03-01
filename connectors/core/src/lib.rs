@@ -7,4 +7,5 @@ pub mod http_connector;
 pub mod idempotency;
 pub mod rate_limit;
 pub mod registry;
+pub mod validation;
 pub mod vault;

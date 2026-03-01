@@ -70,6 +70,44 @@ impl Supervisor {
         }
     }
 
+    pub fn pause_agent(&mut self, id: AgentId) -> Result<(), AgentError> {
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+
+        match handle.state {
+            AgentState::Running => {
+                handle.state = transition_state(handle.state, AgentState::Paused)?;
+                Ok(())
+            }
+            AgentState::Paused => Ok(()),
+            _ => Err(AgentError::InvalidTransition {
+                from: handle.state,
+                to: AgentState::Paused,
+            }),
+        }
+    }
+
+    pub fn resume_agent(&mut self, id: AgentId) -> Result<(), AgentError> {
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+
+        match handle.state {
+            AgentState::Paused => {
+                handle.state = transition_state(handle.state, AgentState::Running)?;
+                Ok(())
+            }
+            AgentState::Running => Ok(()),
+            _ => Err(AgentError::InvalidTransition {
+                from: handle.state,
+                to: AgentState::Running,
+            }),
+        }
+    }
+
     pub fn restart_agent(&mut self, id: AgentId) -> Result<(), AgentError> {
         let current_state = self
             .agents
@@ -167,5 +205,44 @@ mod tests {
 
         let restart_result = supervisor.restart_agent(id);
         assert_eq!(restart_result, Err(AgentError::FuelExhausted));
+    }
+
+    #[test]
+    fn test_pause_and_resume_agent() {
+        let mut supervisor = Supervisor::new();
+        let id = supervisor
+            .start_agent(sample_manifest(10))
+            .expect("agent should start");
+
+        let paused = supervisor.pause_agent(id);
+        assert!(paused.is_ok());
+        let paused_status = supervisor.get_agent(id).expect("paused agent should exist");
+        assert_eq!(paused_status.state, AgentState::Paused);
+
+        let resumed = supervisor.resume_agent(id);
+        assert!(resumed.is_ok());
+        let running_status = supervisor
+            .get_agent(id)
+            .expect("resumed agent should exist");
+        assert_eq!(running_status.state, AgentState::Running);
+    }
+
+    #[test]
+    fn test_pause_requires_running_state() {
+        let mut supervisor = Supervisor::new();
+        let id = supervisor
+            .start_agent(sample_manifest(10))
+            .expect("agent should start");
+        let stopped = supervisor.stop_agent(id);
+        assert!(stopped.is_ok());
+
+        let paused = supervisor.pause_agent(id);
+        assert_eq!(
+            paused,
+            Err(AgentError::InvalidTransition {
+                from: AgentState::Stopped,
+                to: AgentState::Paused,
+            })
+        );
     }
 }

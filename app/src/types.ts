@@ -17,3 +17,9 @@ export interface AuditEventRow {
   hash: string;
   previous_hash: string;
 }
+
+export interface VoiceRuntimeState {
+  wake_word_enabled: boolean;
+  push_to_talk_enabled: boolean;
+  overlay_visible: boolean;
+}

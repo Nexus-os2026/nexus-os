@@ -1,0 +1,64 @@
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from stt import FasterWhisperSTT, discover_whisper_command, whisper_backend_kind
+from tts import PiperTTS, TtsConfig, discover_piper_command
+
+
+class RealBackendTests(unittest.TestCase):
+    def test_whisper_backend_kind(self) -> None:
+        self.assertEqual(whisper_backend_kind("whisper-cli"), "whisper_cpp")
+        self.assertEqual(whisper_backend_kind("/usr/local/bin/whisper"), "whisper_python")
+
+    @patch.dict("os.environ", {"NEXUS_WHISPER_CMD": "/opt/bin/whisper-cli"}, clear=False)
+    def test_discover_whisper_command_env_override(self) -> None:
+        self.assertEqual(discover_whisper_command(), "/opt/bin/whisper-cli")
+
+    @patch.dict("os.environ", {"NEXUS_PIPER_CMD": "/opt/bin/piper"}, clear=False)
+    def test_discover_piper_command_env_override(self) -> None:
+        self.assertEqual(discover_piper_command(), "/opt/bin/piper")
+
+    @patch("stt.discover_whisper_command", return_value=None)
+    def test_transcribe_audio_file_requires_backend(self, _discover_mock) -> None:
+        stt = FasterWhisperSTT()
+        with tempfile.NamedTemporaryFile(suffix=".wav") as audio:
+            with self.assertRaises(RuntimeError):
+                stt.transcribe_audio_file(audio.name)
+
+    def test_synthesize_stream_falls_back_when_piper_unavailable(self) -> None:
+        tts = PiperTTS(TtsConfig(piper_command=None, model_path=None))
+        chunks = list(tts.synthesize_stream("hello nexus"))
+        self.assertEqual(chunks, [b"hello", b"nexus"])
+
+    @patch("tts.subprocess.run")
+    def test_synthesize_to_wav_executes_command(self, run_mock) -> None:
+        tts = PiperTTS(
+            TtsConfig(
+                piper_command="piper",
+                model_path="/models/en_US-lessac-medium.onnx",
+                speed=1.0,
+                speaker=2,
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "sample.wav"
+
+            def _fake_run(*args, **kwargs):
+                output.write_bytes(b"RIFF....WAVE")
+                return None
+
+            run_mock.side_effect = _fake_run
+            result = tts.synthesize_to_wav("hello", output)
+
+        self.assertEqual(result.name, "sample.wav")
+        called = run_mock.call_args[0][0]
+        self.assertIn("--model", called)
+        self.assertIn("--output_file", called)
+        self.assertIn("--speaker", called)
+
+
+if __name__ == "__main__":
+    unittest.main()

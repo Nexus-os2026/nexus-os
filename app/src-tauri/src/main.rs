@@ -216,6 +216,62 @@ pub fn stop_agent(state: &AppState, agent_id: String) -> Result<(), String> {
 }
 
 #[cfg_attr(feature = "tauri-runtime", tauri::command)]
+pub fn pause_agent(state: &AppState, agent_id: String) -> Result<(), String> {
+    let parsed = parse_agent_id(agent_id.as_str())?;
+
+    let mut supervisor = match state.supervisor.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    supervisor.pause_agent(parsed).map_err(agent_error)?;
+
+    let mut meta_guard = match state.meta.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if let Some(meta) = meta_guard.get_mut(&parsed) {
+        meta.last_action = "paused".to_string();
+    }
+
+    state.log_event(
+        parsed,
+        EventType::StateChange,
+        json!({"event": "pause_agent", "status": "ok"}),
+    );
+
+    Ok(())
+}
+
+#[cfg_attr(feature = "tauri-runtime", tauri::command)]
+pub fn resume_agent(state: &AppState, agent_id: String) -> Result<(), String> {
+    let parsed = parse_agent_id(agent_id.as_str())?;
+
+    let mut supervisor = match state.supervisor.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    supervisor.resume_agent(parsed).map_err(agent_error)?;
+
+    let mut meta_guard = match state.meta.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if let Some(meta) = meta_guard.get_mut(&parsed) {
+        meta.last_action = "resumed".to_string();
+    }
+
+    state.log_event(
+        parsed,
+        EventType::StateChange,
+        json!({"event": "resume_agent", "status": "ok"}),
+    );
+
+    Ok(())
+}
+
+#[cfg_attr(feature = "tauri-runtime", tauri::command)]
 pub fn list_agents(state: &AppState) -> Result<Vec<AgentRow>, String> {
     let supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
@@ -300,7 +356,9 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{create_agent, list_agents, AppState, CreateAgentRequest};
+    use super::{
+        create_agent, list_agents, pause_agent, resume_agent, AppState, CreateAgentRequest,
+    };
 
     fn build_request(name: &str) -> CreateAgentRequest {
         CreateAgentRequest {
@@ -339,6 +397,31 @@ mod tests {
         if let Ok(agents) = listed {
             assert_eq!(agents.len(), 3);
             assert!(agents.iter().all(|agent| agent.status == "Running"));
+        }
+    }
+
+    #[test]
+    fn test_tauri_pause_and_resume() {
+        let state = AppState::new();
+        let created = create_agent(&state, build_request("voice-agent"));
+        assert!(created.is_ok());
+
+        if let Ok(agent_id) = created {
+            let paused = pause_agent(&state, agent_id.clone());
+            assert!(paused.is_ok());
+
+            let paused_rows = list_agents(&state).expect("list should succeed");
+            assert_eq!(paused_rows.len(), 1);
+            assert_eq!(paused_rows[0].status, "Paused");
+            assert_eq!(paused_rows[0].last_action, "paused");
+
+            let resumed = resume_agent(&state, agent_id);
+            assert!(resumed.is_ok());
+
+            let resumed_rows = list_agents(&state).expect("list should succeed");
+            assert_eq!(resumed_rows.len(), 1);
+            assert_eq!(resumed_rows[0].status, "Running");
+            assert_eq!(resumed_rows[0].last_action, "resumed");
         }
     }
 }

@@ -1,11 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  getAuditLog,
+  hasDesktopRuntime,
+  jarvisStatus,
+  listAgents,
+  pauseAgent,
+  resumeAgent,
+  startAgent,
+  startJarvisMode,
+  stopAgent,
+  stopJarvisMode
+} from "./api/backend";
 import { VoiceOverlay, type VoiceOverlayState } from "./components/VoiceOverlay";
 import { Audit } from "./pages/Audit";
 import { Chat } from "./pages/Chat";
 import { Dashboard } from "./pages/Dashboard";
-import type { AgentSummary, AuditEventRow } from "./types";
+import type { AgentSummary, AuditEventRow, VoiceRuntimeState } from "./types";
 
 type Page = "chat" | "dashboard" | "audit";
+type RuntimeMode = "desktop" | "mock";
 
 function mockAgents(): AgentSummary[] {
   return [
@@ -51,26 +64,77 @@ function mockAudit(): AuditEventRow[] {
 
 export default function App(): JSX.Element {
   const [page, setPage] = useState<Page>("chat");
-  const [agents, setAgents] = useState<AgentSummary[]>(() => mockAgents());
+  const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>("mock");
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AuditEventRow[]>([]);
   const [overlay, setOverlay] = useState<VoiceOverlayState>({
     visible: false,
     listening: false,
     transcription: "",
     responseText: ""
   });
-  const auditEvents = useMemo(() => mockAudit(), []);
 
   useEffect(() => {
-    if (!overlay.visible || !overlay.listening) {
+    if (!hasDesktopRuntime()) {
+      setRuntimeMode("mock");
+      setAgents(mockAgents());
+      setAuditEvents(mockAudit());
       return;
     }
 
-    const timeout = setTimeout(() => {
-      setOverlay((prev) => ({ ...prev, listening: false }));
-    }, 5000);
+    let cancelled = false;
 
-    return () => clearTimeout(timeout);
-  }, [overlay.listening, overlay.visible]);
+    const hydrateDesktop = async (): Promise<void> => {
+      try {
+        const [loadedAgents, loadedAudit, voice] = await Promise.all([
+          listAgents(),
+          getAuditLog(),
+          jarvisStatus()
+        ]);
+        if (cancelled) {
+          return;
+        }
+        setRuntimeMode("desktop");
+        setRuntimeError(null);
+        setAgents(loadedAgents);
+        setAuditEvents(loadedAudit);
+        applyVoiceState(voice);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        setRuntimeMode("mock");
+        setRuntimeError(`Desktop backend unavailable: ${formatError(error)}`);
+        setAgents(mockAgents());
+        setAuditEvents(mockAudit());
+      }
+    };
+
+    void hydrateDesktop();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function applyVoiceState(state: VoiceRuntimeState): void {
+    setOverlay((prev) => ({
+      ...prev,
+      visible: state.overlay_visible,
+      listening: state.overlay_visible
+    }));
+  }
+
+  async function refreshDesktopData(): Promise<void> {
+    if (runtimeMode !== "desktop") {
+      return;
+    }
+
+    const [loadedAgents, loadedAudit] = await Promise.all([listAgents(), getAuditLog()]);
+    setAgents(loadedAgents);
+    setAuditEvents(loadedAudit);
+  }
 
   function updateAgentStatus(id: string, status: AgentSummary["status"]): void {
     setAgents((prev) =>
@@ -78,31 +142,110 @@ export default function App(): JSX.Element {
     );
   }
 
-  function simulateWakeWord(): void {
-    setOverlay({
-      visible: true,
-      listening: true,
-      transcription: "Hey NEXUS",
-      responseText: "Listening for your command..."
-    });
+  async function handleStartAgent(id: string): Promise<void> {
+    if (runtimeMode !== "desktop") {
+      updateAgentStatus(id, "Running");
+      return;
+    }
+
+    try {
+      try {
+        await resumeAgent(id);
+      } catch {
+        await startAgent(id);
+      }
+      await refreshDesktopData();
+      setRuntimeError(null);
+    } catch (error) {
+      setRuntimeError(`Unable to start agent ${id}: ${formatError(error)}`);
+    }
   }
 
-  function simulateResponse(): void {
-    setOverlay((prev) => ({
-      ...prev,
-      listening: false,
-      transcription: "start market-researcher and summarize this week",
-      responseText: "Queued. Running under governed policy checks."
-    }));
+  async function handlePauseAgent(id: string): Promise<void> {
+    if (runtimeMode !== "desktop") {
+      updateAgentStatus(id, "Paused");
+      return;
+    }
+
+    try {
+      await pauseAgent(id);
+      await refreshDesktopData();
+      setRuntimeError(null);
+    } catch (error) {
+      setRuntimeError(`Unable to pause agent ${id}: ${formatError(error)}`);
+    }
   }
 
-  function sayGoodbye(): void {
-    setOverlay({
-      visible: false,
-      listening: false,
-      transcription: "",
-      responseText: ""
-    });
+  async function handleStopAgent(id: string): Promise<void> {
+    if (runtimeMode !== "desktop") {
+      updateAgentStatus(id, "Stopped");
+      return;
+    }
+
+    try {
+      await stopAgent(id);
+      await refreshDesktopData();
+      setRuntimeError(null);
+    } catch (error) {
+      setRuntimeError(`Unable to stop agent ${id}: ${formatError(error)}`);
+    }
+  }
+
+  async function enableJarvisMode(): Promise<void> {
+    if (runtimeMode !== "desktop") {
+      setOverlay({
+        visible: true,
+        listening: true,
+        transcription: "Hey NEXUS",
+        responseText: "Listening for your command..."
+      });
+      return;
+    }
+
+    try {
+      const voice = await startJarvisMode();
+      applyVoiceState(voice);
+      setOverlay((prev) => ({ ...prev, responseText: "Jarvis mode active." }));
+      setRuntimeError(null);
+    } catch (error) {
+      setRuntimeError(`Unable to start Jarvis mode: ${formatError(error)}`);
+    }
+  }
+
+  async function disableJarvisMode(): Promise<void> {
+    if (runtimeMode !== "desktop") {
+      setOverlay({
+        visible: false,
+        listening: false,
+        transcription: "",
+        responseText: ""
+      });
+      return;
+    }
+
+    try {
+      const voice = await stopJarvisMode();
+      applyVoiceState(voice);
+      setOverlay((prev) => ({ ...prev, transcription: "", responseText: "" }));
+      setRuntimeError(null);
+    } catch (error) {
+      setRuntimeError(`Unable to stop Jarvis mode: ${formatError(error)}`);
+    }
+  }
+
+  async function handleRefresh(): Promise<void> {
+    if (runtimeMode !== "desktop") {
+      setAgents(mockAgents());
+      setAuditEvents(mockAudit());
+      return;
+    }
+
+    try {
+      await refreshDesktopData();
+      setRuntimeError(null);
+    } catch (error) {
+      setRuntimeError(`Unable to refresh backend data: ${formatError(error)}`);
+    }
   }
 
   return (
@@ -126,29 +269,47 @@ export default function App(): JSX.Element {
           ))}
         </nav>
         <div className="flex gap-2 text-xs">
-          <button onClick={simulateWakeWord} className="rounded bg-mint px-3 py-2 font-semibold text-white">
-            Simulate Wake
+          <button onClick={() => void enableJarvisMode()} className="rounded bg-mint px-3 py-2 font-semibold text-white">
+            Start Jarvis
           </button>
-          <button onClick={simulateResponse} className="rounded bg-accent px-3 py-2 font-semibold text-white">
-            Simulate Response
+          <button onClick={() => void disableJarvisMode()} className="rounded bg-slate-600 px-3 py-2 font-semibold text-white">
+            Stop Jarvis
           </button>
-          <button onClick={sayGoodbye} className="rounded bg-slate-600 px-3 py-2 font-semibold text-white">
-            Goodbye NEXUS
+          <button onClick={() => void handleRefresh()} className="rounded bg-accent px-3 py-2 font-semibold text-white">
+            Refresh
           </button>
         </div>
       </header>
+
+      <section className="mb-4 flex flex-wrap items-center gap-3 text-xs">
+        <span
+          className={`rounded-full px-3 py-1 font-semibold ${
+            runtimeMode === "desktop" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+          }`}
+        >
+          Runtime: {runtimeMode === "desktop" ? "Desktop backend" : "Mock fallback"}
+        </span>
+        {runtimeError && <span className="text-rose-700">{runtimeError}</span>}
+      </section>
 
       {page === "chat" && <Chat />}
       {page === "dashboard" && (
         <Dashboard
           agents={agents}
-          onStart={(id) => updateAgentStatus(id, "Running")}
-          onPause={(id) => updateAgentStatus(id, "Paused")}
-          onStop={(id) => updateAgentStatus(id, "Stopped")}
+          onStart={(id) => void handleStartAgent(id)}
+          onPause={(id) => void handlePauseAgent(id)}
+          onStop={(id) => void handleStopAgent(id)}
         />
       )}
       {page === "audit" && <Audit events={auditEvents} />}
-      <VoiceOverlay state={overlay} onDismiss={sayGoodbye} />
+      <VoiceOverlay state={overlay} onDismiss={() => void disableJarvisMode()} />
     </main>
   );
+}
+
+function formatError(value: unknown): string {
+  if (value instanceof Error) {
+    return value.message;
+  }
+  return String(value);
 }

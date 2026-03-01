@@ -2,6 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use nexus_kernel::manifest::parse_manifest;
+pub mod setup;
 use std::fs;
 use std::path::Path;
 
@@ -17,6 +18,10 @@ pub enum TopLevelCommand {
     Agent {
         #[command(subcommand)]
         command: AgentCommand,
+    },
+    Setup {
+        #[arg(long)]
+        check: bool,
     },
 }
 
@@ -36,6 +41,7 @@ pub enum AgentCommand {
 pub fn execute_command(cli: Cli) -> Result<String, String> {
     match cli.command {
         TopLevelCommand::Agent { command } => execute_agent_command(command),
+        TopLevelCommand::Setup { check } => setup::run_setup(check),
     }
 }
 
