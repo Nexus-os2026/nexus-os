@@ -4,114 +4,112 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
 
 jobs:
-  verify:
-    name: Verify Release
+  build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+      - name: Build release
+        run: cargo build --release
 
-      - name: Run clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-
-      - name: Run tests
-        run: cargo test --workspace
-
-      - name: Build docs
-        run: cargo doc --workspace --no-deps
-
-  package-linux:
-    name: Package Linux (.deb)
-    runs-on: ubuntu-latest
-    needs: verify
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install dpkg tools
-        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
-
-      - name: Build Linux package
-        run: bash scripts/build_linux_deb.sh "${GITHUB_REF_NAME#v}" amd64
+      - name: Build .deb package
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev
+          bash scripts/build_linux_deb.sh "${GITHUB_REF_NAME#v}" amd64
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nexus-os-linux
+          name: nexus-linux
           path: target/package/*
 
-  package-macos:
-    name: Package macOS (brew + launchd)
+  build-macos:
     runs-on: macos-latest
-    needs: verify
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build macOS package assets
-        run: bash scripts/build_macos_release.sh "${GITHUB_REF_NAME#v}"
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Create .dmg package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          OUT_DIR="target/package/macos-dmg-root"
+          mkdir -p "${OUT_DIR}"
+          cp target/release/nexus-cli "${OUT_DIR}/nexus-cli"
+          hdiutil create -volname "NEXUS OS" -srcfolder "${OUT_DIR}" -ov -format UDZO "target/package/nexus-os_${VERSION}_macos.dmg"
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nexus-os-macos
+          name: nexus-macos
           path: target/package/*
 
-  package-windows:
-    name: Package Windows (MSI manifest)
+  build-windows:
     runs-on: windows-latest
-    needs: verify
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build Windows packaging assets
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Install WiX toolset
         shell: pwsh
-        run: ./scripts/build_windows_msi.ps1 -Version "${env:GITHUB_REF_NAME}".TrimStart("v")
+        run: |
+          dotnet tool install --global wix
+          echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Create .msi installer
+        shell: pwsh
+        run: |
+          ./scripts/build_windows_msi.ps1 -Version "${env:GITHUB_REF_NAME}".TrimStart("v")
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nexus-os-windows
+          name: nexus-windows
           path: target/package/*
 
-  publish:
-    name: Publish GitHub Release
+  create-release:
     runs-on: ubuntu-latest
-    needs: [package-linux, package-macos, package-windows]
+    needs: [build-linux, build-macos, build-windows]
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
 
-      - name: Publish release
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: release-artifacts/**/*

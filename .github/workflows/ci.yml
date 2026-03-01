@@ -2,22 +2,23 @@ name: NEXUS OS CI
 
 on:
   push:
-    branches: [main, develop]
+    branches:
+      - main
   pull_request:
-    branches: [main]
+    branches:
+      - main
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
 
 jobs:
-  lint-and-format:
-    name: Lint + Format
+  test-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -28,54 +29,57 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-      - name: Run Clippy (deny warnings)
+      - name: Run clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-  build-and-test:
-    name: Build + Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v4
+      - name: Run tests
+        run: cargo test --workspace
 
-      - name: Install Rust toolchain
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Build workspace
-        run: cargo build --workspace
-
-      - name: Run workspace tests
+      - name: Run tests
         run: cargo test --workspace
 
-  security-audit:
-    name: Security Audit (cargo-audit)
-    runs-on: ubuntu-latest
+  test-windows:
+    runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
 
-      - name: Run cargo-audit
-        run: cargo audit
+      - name: Run tests
+        run: cargo test --workspace
 
-  docs:
-    name: API Docs
+  test-python:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-      - name: Build docs
-        run: cargo doc --workspace --no-deps
+      - name: Install voice dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install faster-whisper openwakeword silero-vad piper-tts pytest
+
+      - name: Run Python voice tests
+        run: cd voice && python -m pytest -v
