@@ -15,6 +15,7 @@ members = [
   "adaptation",
   "control",
   "factory",
+  "marketplace",
   "app/src-tauri",
 ]
 
