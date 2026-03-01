@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import wave
 from pathlib import Path
 from unittest.mock import patch
 
@@ -8,6 +9,18 @@ from tts import PiperTTS, TtsConfig, discover_piper_command
 
 
 class RealBackendTests(unittest.TestCase):
+    def _write_valid_pcm_wav(self, path: Path) -> None:
+        sample_rate = 16_000
+        duration_seconds = 1
+        total_frames = sample_rate * duration_seconds
+        silence_frame = (0).to_bytes(2, byteorder="little", signed=True)
+
+        with wave.open(str(path), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(silence_frame * total_frames)
+
     def test_whisper_backend_kind(self) -> None:
         self.assertEqual(whisper_backend_kind("whisper-cli"), "whisper_cpp")
         self.assertEqual(whisper_backend_kind("/usr/local/bin/whisper"), "whisper_python")
@@ -23,7 +36,11 @@ class RealBackendTests(unittest.TestCase):
     @patch("stt.discover_whisper_command", return_value=None)
     def test_transcribe_audio_file_requires_backend(self, _discover_mock) -> None:
         stt = FasterWhisperSTT()
+        stt._faster_whisper_model = None
+        stt.whisper_command = None
+
         with tempfile.NamedTemporaryFile(suffix=".wav") as audio:
+            self._write_valid_pcm_wav(Path(audio.name))
             with self.assertRaises(RuntimeError):
                 stt.transcribe_audio_file(audio.name)
 

@@ -81,6 +81,13 @@ impl ContentCalendar {
         let serialized = serde_json::to_string_pretty(&self.posts).map_err(|error| {
             AgentError::SupervisorError(format!("failed serializing calendar posts: {error}"))
         })?;
+        if let Some(parent) = self.storage_path.parent() {
+            fs::create_dir_all(parent).map_err(|error| {
+                AgentError::SupervisorError(format!(
+                    "failed creating calendar storage directory: {error}"
+                ))
+            })?;
+        }
         fs::write(self.storage_path.as_path(), serialized).map_err(|error| {
             AgentError::SupervisorError(format!("failed writing calendar store: {error}"))
         })
@@ -91,6 +98,7 @@ impl ContentCalendar {
 mod tests {
     use super::ContentCalendar;
     use crate::generator::{PlatformContent, SocialPlatform};
+    use tempfile::tempdir;
 
     fn sample_content(platform: SocialPlatform, text: &str) -> PlatformContent {
         PlatformContent {
@@ -105,8 +113,10 @@ mod tests {
 
     #[test]
     fn test_content_calendar_schedule() {
-        let file_path = format!("/tmp/nexus-calendar-{}.json", uuid::Uuid::new_v4());
-        let mut calendar = match ContentCalendar::new(file_path.as_str()) {
+        let temp_dir = tempdir().expect("temp directory should be created");
+        let file_path = temp_dir.path().join("nexus-calendar.json");
+
+        let mut calendar = match ContentCalendar::new(file_path.as_path()) {
             Ok(calendar) => calendar,
             Err(error) => panic!("calendar should initialize: {error}"),
         };

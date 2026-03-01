@@ -41,12 +41,7 @@ fn main() {
             );
             if report.dry_run {
                 for (idx, post) in report.generated_posts.iter().enumerate() {
-                    println!(
-                        "\n--- dry-run post {} [{}] ---\n{}\n",
-                        idx + 1,
-                        "x",
-                        post.text
-                    );
+                    println!("\n--- dry-run post {} [x] ---\n{}\n", idx + 1, post.text);
                 }
             }
         }

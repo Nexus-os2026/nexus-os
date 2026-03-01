@@ -114,7 +114,7 @@ fn test_social_poster_dry_run() {
     assert!(report.dry_run);
     assert_eq!(report.published_post_ids.len(), 0);
     assert_eq!(report.publish_calls, 0);
-    assert!(report.generated_posts.len() >= 1);
+    assert!(!report.generated_posts.is_empty());
 
     let steps = report
         .audit_events
