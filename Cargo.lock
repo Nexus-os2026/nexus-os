@@ -376,6 +376,13 @@ dependencies = [
 [[package]]
 name = "nexus-connectors-core"
 version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "nexus-kernel",
+ "serde",
+ "serde_json",
+ "uuid",
+]
 
 [[package]]
 name = "nexus-connectors-llm"
