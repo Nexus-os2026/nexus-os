@@ -33,4 +33,4 @@ jobs:
         run: cargo audit
 
       - name: Run cargo deny check
-        run: cargo deny --config .github/deny.toml check
+        run: cargo deny check --config .github/deny.toml
