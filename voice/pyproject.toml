@@ -1,0 +1,11 @@
+[project]
+name = "nexus-voice"
+version = "0.13.5"
+description = "Local-only wake word, VAD, STT, TTS and Jarvis loop for NEXUS OS"
+requires-python = ">=3.10"
+
+dependencies = []
+
+[tool.nexus_voice]
+local_only = true
+wake_word = "Hey NEXUS"

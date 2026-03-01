@@ -6,6 +6,7 @@ const requiredFiles = [
   "src/pages/Chat.tsx",
   "src/pages/Dashboard.tsx",
   "src/pages/Audit.tsx",
+  "src/components/VoiceOverlay.tsx",
   "src/voice/PushToTalk.ts",
   "src-tauri/src/main.rs"
 ];

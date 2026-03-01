@@ -46,11 +46,19 @@ struct AgentMeta {
     last_action: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct VoiceRuntimeState {
+    pub wake_word_enabled: bool,
+    pub push_to_talk_enabled: bool,
+    pub overlay_visible: bool,
+}
+
 #[derive(Clone, Default)]
 pub struct AppState {
     supervisor: Arc<Mutex<Supervisor>>,
     audit: Arc<Mutex<AuditTrail>>,
     meta: Arc<Mutex<HashMap<AgentId, AgentMeta>>>,
+    voice: Arc<Mutex<VoiceRuntimeState>>,
 }
 
 impl AppState {
@@ -59,6 +67,11 @@ impl AppState {
             supervisor: Arc::new(Mutex::new(Supervisor::new())),
             audit: Arc::new(Mutex::new(AuditTrail::new())),
             meta: Arc::new(Mutex::new(HashMap::new())),
+            voice: Arc::new(Mutex::new(VoiceRuntimeState {
+                wake_word_enabled: true,
+                push_to_talk_enabled: true,
+                overlay_visible: false,
+            })),
         }
     }
 
@@ -69,6 +82,38 @@ impl AppState {
         };
         let _ = guard.append_event(agent_id, event_type, payload);
     }
+}
+
+#[cfg_attr(feature = "tauri-runtime", tauri::command)]
+pub fn start_jarvis_mode(state: &AppState) -> Result<VoiceRuntimeState, String> {
+    let mut voice = match state.voice.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    voice.overlay_visible = true;
+    Ok(voice.clone())
+}
+
+#[cfg_attr(feature = "tauri-runtime", tauri::command)]
+pub fn stop_jarvis_mode(state: &AppState) -> Result<VoiceRuntimeState, String> {
+    let mut voice = match state.voice.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    voice.overlay_visible = false;
+    Ok(voice.clone())
+}
+
+#[cfg_attr(feature = "tauri-runtime", tauri::command)]
+pub fn jarvis_status(state: &AppState) -> Result<VoiceRuntimeState, String> {
+    let voice = match state.voice.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    Ok(voice.clone())
 }
 
 #[cfg_attr(feature = "tauri-runtime", tauri::command)]

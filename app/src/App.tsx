@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { VoiceOverlay, type VoiceOverlayState } from "./components/VoiceOverlay";
 import { Audit } from "./pages/Audit";
 import { Chat } from "./pages/Chat";
 import { Dashboard } from "./pages/Dashboard";
@@ -51,12 +52,57 @@ function mockAudit(): AuditEventRow[] {
 export default function App(): JSX.Element {
   const [page, setPage] = useState<Page>("chat");
   const [agents, setAgents] = useState<AgentSummary[]>(() => mockAgents());
+  const [overlay, setOverlay] = useState<VoiceOverlayState>({
+    visible: false,
+    listening: false,
+    transcription: "",
+    responseText: ""
+  });
   const auditEvents = useMemo(() => mockAudit(), []);
+
+  useEffect(() => {
+    if (!overlay.visible || !overlay.listening) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setOverlay((prev) => ({ ...prev, listening: false }));
+    }, 5000);
+
+    return () => clearTimeout(timeout);
+  }, [overlay.listening, overlay.visible]);
 
   function updateAgentStatus(id: string, status: AgentSummary["status"]): void {
     setAgents((prev) =>
       prev.map((agent) => (agent.id === id ? { ...agent, status, last_action: `Status set to ${status}` } : agent))
     );
+  }
+
+  function simulateWakeWord(): void {
+    setOverlay({
+      visible: true,
+      listening: true,
+      transcription: "Hey NEXUS",
+      responseText: "Listening for your command..."
+    });
+  }
+
+  function simulateResponse(): void {
+    setOverlay((prev) => ({
+      ...prev,
+      listening: false,
+      transcription: "start market-researcher and summarize this week",
+      responseText: "Queued. Running under governed policy checks."
+    }));
+  }
+
+  function sayGoodbye(): void {
+    setOverlay({
+      visible: false,
+      listening: false,
+      transcription: "",
+      responseText: ""
+    });
   }
 
   return (
@@ -79,6 +125,17 @@ export default function App(): JSX.Element {
             </button>
           ))}
         </nav>
+        <div className="flex gap-2 text-xs">
+          <button onClick={simulateWakeWord} className="rounded bg-mint px-3 py-2 font-semibold text-white">
+            Simulate Wake
+          </button>
+          <button onClick={simulateResponse} className="rounded bg-accent px-3 py-2 font-semibold text-white">
+            Simulate Response
+          </button>
+          <button onClick={sayGoodbye} className="rounded bg-slate-600 px-3 py-2 font-semibold text-white">
+            Goodbye NEXUS
+          </button>
+        </div>
       </header>
 
       {page === "chat" && <Chat />}
@@ -91,6 +148,7 @@ export default function App(): JSX.Element {
         />
       )}
       {page === "audit" && <Audit events={auditEvents} />}
+      <VoiceOverlay state={overlay} onDismiss={sayGoodbye} />
     </main>
   );
 }
