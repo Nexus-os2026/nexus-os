@@ -1,0 +1,33 @@
+[agent]
+id = "example-agent-v1"
+name = "Example Research Agent"
+version = "0.1.0"
+description = "Demonstrates the capability manifest schema"
+
+[capabilities]
+network = [
+    { domain = "api.openai.com", purpose = "LLM inference" },
+]
+filesystem = [
+    { path = "output/", permission = "read-write" },
+    { path = "context/", permission = "read-only" },
+]
+spawn_agents = false
+messaging = []
+
+[fuel]
+max_llm_calls = 50
+max_tool_calls = 100
+max_wall_clock_seconds = 300
+max_output_bytes = 10485760
+
+[audit]
+log_llm_inputs = true
+log_llm_outputs = true
+log_tool_calls = true
+encrypt_at_rest = true
+
+[privacy]
+data_classification = "personal"
+erasure_strategy = "key-deletion"
+retention_days = 90
