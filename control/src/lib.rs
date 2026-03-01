@@ -1,6 +1,7 @@
 //! Cross-platform computer control foundation for governed capture and input automation.
 
 pub mod action_log;
+pub mod browser;
 pub mod capture;
 pub mod input;
 

@@ -13,6 +13,11 @@ pub enum ActionType {
     MouseClick,
     TypeText,
     KeyPress,
+    BrowserNavigate,
+    BrowserClick,
+    BrowserType,
+    BrowserContentRead,
+    BrowserScreenshot,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
