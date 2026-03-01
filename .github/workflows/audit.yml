@@ -27,7 +27,16 @@ jobs:
         run: cargo install cargo-audit --locked
 
       - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
+        run: |
+          cargo install cargo-deny --locked --force
+          cargo deny -V
+
+      - name: Print toolchain and cargo-deny versions
+        run: |
+          rustc -V
+          cargo -V
+          cargo deny -V
+          which cargo-deny
 
       - name: Run cargo audit
         run: cargo audit
