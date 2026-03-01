@@ -67,11 +67,9 @@ impl WebReaderConnector {
             }
         }
 
-        let html = self
-            .mock_pages
-            .get(url)
-            .cloned()
-            .ok_or_else(|| AgentError::SupervisorError(format!("no mock page configured for '{url}'")))?;
+        let html = self.mock_pages.get(url).cloned().ok_or_else(|| {
+            AgentError::SupervisorError(format!("no mock page configured for '{url}'"))
+        })?;
 
         let title = extract_title(html.as_str());
         let mut text = extract_readable_text(html.as_str());
@@ -152,11 +150,15 @@ fn strip_personal_data(input: &str) -> String {
     let mut output = input.to_string();
 
     if let Ok(email_re) = Regex::new(r"(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b") {
-        output = email_re.replace_all(&output, "[redacted-email]").into_owned();
+        output = email_re
+            .replace_all(&output, "[redacted-email]")
+            .into_owned();
     }
 
     if let Ok(phone_re) = Regex::new(r"\b(?:\+?\d[\d\s\-\(\)]{8,}\d)\b") {
-        output = phone_re.replace_all(&output, "[redacted-phone]").into_owned();
+        output = phone_re
+            .replace_all(&output, "[redacted-phone]")
+            .into_owned();
     }
 
     sanitize_whitespace(output.as_str())
@@ -170,7 +172,10 @@ fn enforce_size_limit(input: &str, max_chars: usize) -> String {
 
     let marker_chars = TRUNCATION_MARKER.chars().count();
     if max_chars <= marker_chars {
-        return TRUNCATION_MARKER.chars().take(max_chars).collect::<String>();
+        return TRUNCATION_MARKER
+            .chars()
+            .take(max_chars)
+            .collect::<String>();
     }
 
     let keep = max_chars - marker_chars;
@@ -229,7 +234,9 @@ mod tests {
         assert!(result.is_ok());
 
         if let Ok(content) = result {
-            assert!(content.text.contains("Rust makes systems programming safer."));
+            assert!(content
+                .text
+                .contains("Rust makes systems programming safer."));
             assert!(!content.text.contains("Home | About"));
             assert!(!content.text.contains("Buy now!"));
             assert!(!content.text.contains("stealCookies"));

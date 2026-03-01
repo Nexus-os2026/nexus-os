@@ -24,7 +24,12 @@ pub fn generate_agent_code(intent: &ParsedIntent) -> GeneratedAgentCode {
 }
 
 pub fn passes_nex_safety_checks(code: &GeneratedAgentCode) -> bool {
-    let banned_tokens = ["unsafe", "std::process::Command", "tokio::process", "fs::remove_dir_all"];
+    let banned_tokens = [
+        "unsafe",
+        "std::process::Command",
+        "tokio::process",
+        "fs::remove_dir_all",
+    ];
     if banned_tokens
         .iter()
         .any(|token| code.source.contains(token))
@@ -43,11 +48,7 @@ pub fn passes_nex_safety_checks(code: &GeneratedAgentCode) -> bool {
     code.source
         .lines()
         .filter(|line| line.trim().starts_with("fn "))
-        .all(|line| {
-            allowed_block_names
-                .iter()
-                .any(|name| line.contains(name))
-        })
+        .all(|line| allowed_block_names.iter().any(|name| line.contains(name)))
 }
 
 fn blocks_for_intent(intent: &ParsedIntent) -> Vec<ComposableBlock> {
@@ -64,10 +65,7 @@ fn blocks_for_intent(intent: &ParsedIntent) -> Vec<ComposableBlock> {
             ComposableBlock::AnalyzeStep,
             ComposableBlock::AdaptStep,
         ],
-        TaskType::Monitoring => vec![
-            ComposableBlock::ResearchStep,
-            ComposableBlock::AnalyzeStep,
-        ],
+        TaskType::Monitoring => vec![ComposableBlock::ResearchStep, ComposableBlock::AnalyzeStep],
         TaskType::Unknown => vec![ComposableBlock::ResearchStep],
     }
 }

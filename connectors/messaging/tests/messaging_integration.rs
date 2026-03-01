@@ -1,16 +1,17 @@
+use nexus_connectors_messaging::messaging::MessagingPlatform;
 use nexus_connectors_messaging::telegram::TelegramAdapter;
 use nexus_connectors_messaging::whatsapp::{WhatsAppAdapter, WhatsAppQualityTier};
-use nexus_connectors_messaging::messaging::MessagingPlatform;
 use nexus_kernel::errors::AgentError;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 #[test]
 fn test_rate_limit_per_platform() {
     let now = Arc::new(AtomicU64::new(0));
 
     let tg_clock = Arc::clone(&now);
-    let mut telegram = TelegramAdapter::with_clock(Some(Arc::new(move || tg_clock.load(Ordering::SeqCst))));
+    let mut telegram =
+        TelegramAdapter::with_clock(Some(Arc::new(move || tg_clock.load(Ordering::SeqCst))));
 
     let first = telegram.send_message("chat-1", "hello");
     assert!(first.is_ok());

@@ -106,7 +106,11 @@ impl<B: InputBackend> InputController<B> {
         Ok(())
     }
 
-    pub fn type_text(&mut self, context: &ControlAgentContext, text: &str) -> Result<(), AgentError> {
+    pub fn type_text(
+        &mut self,
+        context: &ControlAgentContext,
+        text: &str,
+    ) -> Result<(), AgentError> {
         ensure_capability(context, "input.keyboard")?;
         self.backend.type_text(text)?;
 
@@ -121,7 +125,11 @@ impl<B: InputBackend> InputController<B> {
         Ok(())
     }
 
-    pub fn key_press(&mut self, context: &ControlAgentContext, key: &str) -> Result<(), AgentError> {
+    pub fn key_press(
+        &mut self,
+        context: &ControlAgentContext,
+        key: &str,
+    ) -> Result<(), AgentError> {
         ensure_capability(context, "input.keyboard")?;
         self.backend.key_press(key)?;
 
@@ -249,7 +257,10 @@ mod tests {
     use uuid::Uuid;
 
     fn context_with_caps(caps: &[&str]) -> ControlAgentContext {
-        let capabilities = caps.iter().map(|cap| (*cap).to_string()).collect::<HashSet<_>>();
+        let capabilities = caps
+            .iter()
+            .map(|cap| (*cap).to_string())
+            .collect::<HashSet<_>>();
         ControlAgentContext::new(Uuid::new_v4(), capabilities)
     }
 

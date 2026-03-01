@@ -113,8 +113,7 @@ impl FailureRecoveryManager {
         }
 
         action()?;
-        self.executed_compensations
-            .insert(action_id.to_string());
+        self.executed_compensations.insert(action_id.to_string());
 
         let _ = self.audit_trail.append_event(
             uuid::Uuid::nil(),

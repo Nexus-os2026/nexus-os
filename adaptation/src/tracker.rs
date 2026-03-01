@@ -56,7 +56,10 @@ impl ChangeTracker {
     }
 
     pub fn current_version(&self) -> u32 {
-        self.versions.last().map(|version| version.version).unwrap_or(0)
+        self.versions
+            .last()
+            .map(|version| version.version)
+            .unwrap_or(0)
     }
 
     pub fn current_strategy(&self) -> Option<&StrategyDocument> {
@@ -113,7 +116,11 @@ impl ChangeTracker {
         Ok(snapshot)
     }
 
-    pub fn diff(&self, from_version: u32, to_version: u32) -> Result<StrategyDiff, AdaptationError> {
+    pub fn diff(
+        &self,
+        from_version: u32,
+        to_version: u32,
+    ) -> Result<StrategyDiff, AdaptationError> {
         let left = self
             .versions
             .iter()
@@ -273,8 +280,14 @@ mod tests {
         let diff = tracker.diff(1, 2);
         assert!(diff.is_ok());
         if let Ok(diff) = diff {
-            assert!(diff.changes.iter().any(|line| line.contains("posting_times")));
-            assert!(diff.changes.iter().any(|line| line.contains("content_style")));
+            assert!(diff
+                .changes
+                .iter()
+                .any(|line| line.contains("posting_times")));
+            assert!(diff
+                .changes
+                .iter()
+                .any(|line| line.contains("content_style")));
         }
     }
 }

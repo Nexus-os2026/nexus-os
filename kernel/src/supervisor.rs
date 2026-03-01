@@ -144,13 +144,17 @@ mod tests {
             .start_agent(sample_manifest(10))
             .expect("agent should start successfully");
 
-        let started = supervisor.get_agent(id).expect("started agent should exist");
+        let started = supervisor
+            .get_agent(id)
+            .expect("started agent should exist");
         assert_eq!(started.state, AgentState::Running);
 
         let stopped = supervisor.stop_agent(id);
         assert!(stopped.is_ok());
 
-        let status = supervisor.get_agent(id).expect("stopped agent should exist");
+        let status = supervisor
+            .get_agent(id)
+            .expect("stopped agent should exist");
         assert_eq!(status.state, AgentState::Stopped);
     }
 

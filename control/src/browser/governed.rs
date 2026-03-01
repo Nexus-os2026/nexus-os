@@ -108,7 +108,10 @@ impl<R: BrowserRuntime> GovernedBrowser<R> {
         Self {
             runtime,
             policy,
-            capture_service: ScreenCaptureService::new(MockCaptureBackend::default(), logger.clone()),
+            capture_service: ScreenCaptureService::new(
+                MockCaptureBackend::default(),
+                logger.clone(),
+            ),
             logger,
             rate_limiter: limiter,
         }
@@ -260,7 +263,10 @@ mod tests {
     use uuid::Uuid;
 
     fn context_with_caps(caps: &[&str]) -> ControlAgentContext {
-        let capabilities = caps.iter().map(|cap| (*cap).to_string()).collect::<HashSet<_>>();
+        let capabilities = caps
+            .iter()
+            .map(|cap| (*cap).to_string())
+            .collect::<HashSet<_>>();
         ControlAgentContext::new(Uuid::new_v4(), capabilities)
     }
 
@@ -301,14 +307,21 @@ mod tests {
             .navigate(&context, "https://github.com/nex-lang")
             .is_ok());
         assert!(browser.click_element(&context, "#submit").is_ok());
-        assert!(browser.type_in_element(&context, "#prompt", "hello").is_ok());
+        assert!(browser
+            .type_in_element(&context, "#prompt", "hello")
+            .is_ok());
 
         let events = logger.events();
         assert_eq!(events.len(), 3);
 
         let action_types = events
             .iter()
-            .filter_map(|event| event.payload.get("action_type").and_then(|value| value.as_str()))
+            .filter_map(|event| {
+                event
+                    .payload
+                    .get("action_type")
+                    .and_then(|value| value.as_str())
+            })
             .collect::<Vec<_>>();
         assert!(action_types.contains(&"BrowserNavigate"));
         assert!(action_types.contains(&"BrowserClick"));

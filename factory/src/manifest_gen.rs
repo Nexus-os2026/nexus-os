@@ -9,7 +9,10 @@ pub struct ManifestGenerationResult {
     pub fuel_budget: u64,
 }
 
-pub fn generate_manifest_toml(intent: &ParsedIntent, plan: &CapabilityPlan) -> ManifestGenerationResult {
+pub fn generate_manifest_toml(
+    intent: &ParsedIntent,
+    plan: &CapabilityPlan,
+) -> ManifestGenerationResult {
     let name = build_agent_name(intent);
     let fuel_budget = estimate_fuel_budget(intent, plan);
     let schedule_cron = normalize_schedule_to_cron(intent.schedule.as_str());
@@ -41,7 +44,11 @@ pub fn generate_manifest_toml(intent: &ParsedIntent, plan: &CapabilityPlan) -> M
 }
 
 fn build_agent_name(intent: &ParsedIntent) -> String {
-    let mut seed = format!("{}-{}", primary_task_label(intent.task_type.clone()), intent.content_topic);
+    let mut seed = format!(
+        "{}-{}",
+        primary_task_label(intent.task_type.clone()),
+        intent.content_topic
+    );
     seed = seed
         .chars()
         .map(|ch| {
@@ -138,9 +145,8 @@ mod tests {
             platforms: vec!["twitter".to_string()],
             schedule: "every morning at 9am".to_string(),
             content_topic: "rust".to_string(),
-            raw_request:
-                "Create an agent that posts about Rust on Twitter every morning at 9am"
-                    .to_string(),
+            raw_request: "Create an agent that posts about Rust on Twitter every morning at 9am"
+                .to_string(),
         };
         let capabilities = map_intent_to_capabilities(&intent);
         let generated = generate_manifest_toml(&intent, &capabilities);

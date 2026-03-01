@@ -184,7 +184,13 @@ impl HttpConnector {
         Ok(headers)
     }
 
-    fn log_http_event(&mut self, method: &str, url: &str, status_code: u16, request_id: Option<&str>) {
+    fn log_http_event(
+        &mut self,
+        method: &str,
+        url: &str,
+        status_code: u16,
+        request_id: Option<&str>,
+    ) {
         let _ = self.audit_trail.append_event(
             self.agent_id,
             EventType::ToolCall,

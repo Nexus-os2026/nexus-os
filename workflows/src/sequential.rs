@@ -1,5 +1,5 @@
-use content::generator::{PlatformContent, SocialPlatform};
 use content::compliance::{check_compliance, ComplianceDecision};
+use content::generator::{PlatformContent, SocialPlatform};
 use nexus_connectors_core::idempotency::IdempotencyManager;
 use nexus_connectors_social::facebook::{FacebookConnector, FacebookPostResult};
 use nexus_connectors_social::instagram::{InstagramConnector, InstagramPublishResult};
@@ -180,9 +180,7 @@ impl SequentialWorkflow {
             }
             SocialPlatform::Instagram => {
                 let InstagramPublishResult {
-                    media_id,
-                    cached,
-                    ..
+                    media_id, cached, ..
                 } = self.instagram.publish(content.text.as_str(), request_id)?;
                 PublishOutcome {
                     platform,
@@ -192,9 +190,7 @@ impl SequentialWorkflow {
             }
             SocialPlatform::Facebook => {
                 let FacebookPostResult {
-                    post_id,
-                    cached,
-                    ..
+                    post_id, cached, ..
                 } = self.facebook.post(content.text.as_str(), request_id)?;
                 PublishOutcome {
                     platform,

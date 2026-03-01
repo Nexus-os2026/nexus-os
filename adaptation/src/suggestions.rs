@@ -25,16 +25,19 @@ impl ProactiveSuggestionEngine {
         }
     }
 
-    pub fn generate_suggestions(&self, user_id: &str, approvals: &[ApprovalRecord]) -> Vec<Suggestion> {
+    pub fn generate_suggestions(
+        &self,
+        user_id: &str,
+        approvals: &[ApprovalRecord],
+    ) -> Vec<Suggestion> {
         let mut suggestions = Vec::new();
 
         if has_monday_streak(approvals, 4) {
             suggestions.push(Suggestion {
                 suggestion_id: deterministic_suggestion_id(user_id, "monday-auto-schedule"),
                 user_id: user_id.to_string(),
-                message:
-                    "You approve social media posts every Monday. Want to auto-schedule?"
-                        .to_string(),
+                message: "You approve social media posts every Monday. Want to auto-schedule?"
+                    .to_string(),
                 requires_opt_in: true,
                 opted_in: false,
             });

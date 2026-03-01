@@ -69,7 +69,11 @@ impl SecretsVault {
         Ok(())
     }
 
-    pub fn get_secret(&mut self, name: &str, user_key: &VaultUserKey) -> Result<String, AgentError> {
+    pub fn get_secret(
+        &mut self,
+        name: &str,
+        user_key: &VaultUserKey,
+    ) -> Result<String, AgentError> {
         let encrypted = self
             .secrets
             .get(name)
@@ -83,7 +87,10 @@ impl SecretsVault {
 
         let cipher = self.cipher_from_key(user_key)?;
         let plaintext = cipher
-            .decrypt(Nonce::from_slice(&encrypted.nonce), encrypted.ciphertext.as_ref())
+            .decrypt(
+                Nonce::from_slice(&encrypted.nonce),
+                encrypted.ciphertext.as_ref(),
+            )
             .map_err(|_| AgentError::SupervisorError("failed to decrypt secret".to_string()))?;
 
         let decoded = String::from_utf8(plaintext)

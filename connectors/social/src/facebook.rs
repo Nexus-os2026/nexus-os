@@ -99,7 +99,10 @@ impl Connector for FacebookConnector {
     }
 
     fn required_capabilities(&self) -> Vec<String> {
-        vec!["social.facebook.post".to_string(), "social.facebook.read".to_string()]
+        vec![
+            "social.facebook.post".to_string(),
+            "social.facebook.read".to_string(),
+        ]
     }
 
     fn health_check(&self) -> Result<HealthStatus, AgentError> {

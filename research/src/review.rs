@@ -51,12 +51,7 @@ impl UserReviewGate {
         }
     }
 
-    pub fn record_decision(
-        &mut self,
-        agent_id: Uuid,
-        request_id: &str,
-        decision: ReviewDecision,
-    ) {
+    pub fn record_decision(&mut self, agent_id: Uuid, request_id: &str, decision: ReviewDecision) {
         self.decisions
             .insert(request_id.to_string(), decision.clone());
 
@@ -124,16 +119,26 @@ mod tests {
         let mut gate = UserReviewGate::new();
         let request = gate.present_for_review(sample_strategy());
 
-        let blocked = gate.enforce_approval_for_running(request.request_id.as_str(), AgentState::Starting);
+        let blocked =
+            gate.enforce_approval_for_running(request.request_id.as_str(), AgentState::Starting);
         assert!(blocked.is_err());
 
-        gate.record_decision(Uuid::new_v4(), request.request_id.as_str(), ReviewDecision::Reject);
+        gate.record_decision(
+            Uuid::new_v4(),
+            request.request_id.as_str(),
+            ReviewDecision::Reject,
+        );
         let still_blocked =
             gate.enforce_approval_for_running(request.request_id.as_str(), AgentState::Starting);
         assert!(still_blocked.is_err());
 
-        gate.record_decision(Uuid::new_v4(), request.request_id.as_str(), ReviewDecision::Approve);
-        let allowed = gate.enforce_approval_for_running(request.request_id.as_str(), AgentState::Starting);
+        gate.record_decision(
+            Uuid::new_v4(),
+            request.request_id.as_str(),
+            ReviewDecision::Approve,
+        );
+        let allowed =
+            gate.enforce_approval_for_running(request.request_id.as_str(), AgentState::Starting);
         assert_eq!(allowed, Ok(AgentState::Running));
     }
 }

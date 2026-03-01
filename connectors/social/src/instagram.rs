@@ -35,7 +35,11 @@ impl InstagramConnector {
         }
     }
 
-    pub fn publish(&mut self, caption: &str, request_id: &str) -> Result<InstagramPublishResult, AgentError> {
+    pub fn publish(
+        &mut self,
+        caption: &str,
+        request_id: &str,
+    ) -> Result<InstagramPublishResult, AgentError> {
         if caption.trim().is_empty() {
             return Err(AgentError::SupervisorError(
                 "instagram caption cannot be empty".to_string(),

@@ -141,16 +141,19 @@ impl TwitterConnector {
         self.consume_fuel(agent, 2)?;
         self.check_rate_limit()?;
 
-        let metrics = self
-            .metrics
-            .get(tweet_id)
-            .cloned()
-            .ok_or_else(|| AgentError::SupervisorError(format!("tweet '{tweet_id}' not found")))?;
+        let metrics =
+            self.metrics.get(tweet_id).cloned().ok_or_else(|| {
+                AgentError::SupervisorError(format!("tweet '{tweet_id}' not found"))
+            })?;
 
         Ok(metrics)
     }
 
-    fn ensure_capability(&self, agent: &WebAgentContext, capability: &str) -> Result<(), AgentError> {
+    fn ensure_capability(
+        &self,
+        agent: &WebAgentContext,
+        capability: &str,
+    ) -> Result<(), AgentError> {
         if !agent.has_capability(capability) {
             return Err(AgentError::CapabilityDenied(capability.to_string()));
         }
@@ -211,7 +214,8 @@ mod tests {
         let allowed_result = connector.post_tweet(&mut allowed, "hello from NEXUS");
         assert!(allowed_result.is_ok());
 
-        let mut denied = WebAgentContext::new(Uuid::new_v4(), capability_set(&["social.x.read"]), 100);
+        let mut denied =
+            WebAgentContext::new(Uuid::new_v4(), capability_set(&["social.x.read"]), 100);
         let denied_result = connector.post_tweet(&mut denied, "should fail");
         assert_eq!(
             denied_result,

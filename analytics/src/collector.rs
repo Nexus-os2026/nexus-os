@@ -27,7 +27,11 @@ pub struct RawMetric {
 }
 
 impl RawMetric {
-    pub fn from_twitter(content_id: &str, metrics: EngagementMetrics, follower_growth: i64) -> Self {
+    pub fn from_twitter(
+        content_id: &str,
+        metrics: EngagementMetrics,
+        follower_growth: i64,
+    ) -> Self {
         Self {
             content_id: content_id.to_string(),
             like_count: metrics.likes,
@@ -40,7 +44,11 @@ impl RawMetric {
         }
     }
 
-    pub fn from_instagram(content_id: &str, metrics: InstagramMetrics, follower_growth: i64) -> Self {
+    pub fn from_instagram(
+        content_id: &str,
+        metrics: InstagramMetrics,
+        follower_growth: i64,
+    ) -> Self {
         Self {
             content_id: content_id.to_string(),
             like_count: metrics.likes,
@@ -53,7 +61,11 @@ impl RawMetric {
         }
     }
 
-    pub fn from_facebook(page_id: &str, metrics: FacebookPageMetrics, follower_growth: i64) -> Self {
+    pub fn from_facebook(
+        page_id: &str,
+        metrics: FacebookPageMetrics,
+        follower_growth: i64,
+    ) -> Self {
         Self {
             content_id: page_id.to_string(),
             like_count: metrics.engagement,
@@ -278,6 +290,8 @@ mod tests {
 
         let stored = collector.stored_metrics();
         assert_eq!(stored.len(), 10);
-        assert!(stored.iter().all(|MetricRecord { platform, .. }| *platform == Platform::X));
+        assert!(stored
+            .iter()
+            .all(|MetricRecord { platform, .. }| *platform == Platform::X));
     }
 }

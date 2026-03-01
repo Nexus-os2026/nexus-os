@@ -37,7 +37,11 @@ impl ApprovalFlow {
         }
     }
 
-    pub fn present_for_review(&mut self, capabilities: Vec<String>, fuel_budget: u64) -> ApprovalRequest {
+    pub fn present_for_review(
+        &mut self,
+        capabilities: Vec<String>,
+        fuel_budget: u64,
+    ) -> ApprovalRequest {
         let _ = self.audit_trail.append_event(
             uuid::Uuid::nil(),
             EventType::UserAction,
@@ -143,15 +147,28 @@ mod tests {
         let generated_code = generate_agent_code(&intent);
 
         let mut flow = ApprovalFlow::new();
-        let request = flow.present_for_review(capabilities.required.clone(), generated_manifest.fuel_budget);
+        let request = flow.present_for_review(
+            capabilities.required.clone(),
+            generated_manifest.fuel_budget,
+        );
 
-        let denied = flow.approve_and_deploy(&request, generated_manifest.toml.as_str(), &generated_code, false);
+        let denied = flow.approve_and_deploy(
+            &request,
+            generated_manifest.toml.as_str(),
+            &generated_code,
+            false,
+        );
         assert!(denied.is_ok());
         if let Ok(denied) = denied {
             assert!(!denied.deployed);
         }
 
-        let approved = flow.approve_and_deploy(&request, generated_manifest.toml.as_str(), &generated_code, true);
+        let approved = flow.approve_and_deploy(
+            &request,
+            generated_manifest.toml.as_str(),
+            &generated_code,
+            true,
+        );
         assert!(approved.is_ok());
         if let Ok(approved) = approved {
             assert!(approved.deployed);

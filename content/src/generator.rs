@@ -30,7 +30,9 @@ pub struct ContentGenerator<P: LlmProvider> {
 
 impl<P: LlmProvider> ContentGenerator<P> {
     pub fn new(provider: P, model_name: &str, llm_fuel_budget: u64) -> Self {
-        let capabilities = ["llm.query".to_string()].into_iter().collect::<HashSet<_>>();
+        let capabilities = ["llm.query".to_string()]
+            .into_iter()
+            .collect::<HashSet<_>>();
         Self {
             gateway: GovernedLlmGateway::new(provider),
             llm_context: AgentRuntimeContext {
@@ -51,11 +53,18 @@ impl<P: LlmProvider> ContentGenerator<P> {
         let prompt = format!(
             "Generate {platform:?} social copy about '{topic}' in '{style}' style. Return concise text only."
         );
-        let response = self
-            .gateway
-            .query(&mut self.llm_context, prompt.as_str(), 120, self.model_name.as_str())?;
+        let response = self.gateway.query(
+            &mut self.llm_context,
+            prompt.as_str(),
+            120,
+            self.model_name.as_str(),
+        )?;
 
-        let base = response.output_text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let base = response
+            .output_text
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
         let hashtags = hashtags_from_topic(topic);
 
         match platform {
@@ -86,7 +95,9 @@ impl<P: LlmProvider> ContentGenerator<P> {
                 })
             }
             SocialPlatform::Instagram => {
-                let caption = format!("{}\n\n{}", base, hashtags.join(" ")).trim().to_string();
+                let caption = format!("{}\n\n{}", base, hashtags.join(" "))
+                    .trim()
+                    .to_string();
                 Ok(PlatformContent {
                     platform,
                     text: caption,
@@ -109,7 +120,10 @@ impl<P: LlmProvider> ContentGenerator<P> {
                     hashtags,
                     thread: None,
                     image_prompt: None,
-                    link_preview: Some(format!("https://example.com/{}", topic.replace(' ', "-").to_lowercase())),
+                    link_preview: Some(format!(
+                        "https://example.com/{}",
+                        topic.replace(' ', "-").to_lowercase()
+                    )),
                 })
             }
         }
@@ -158,7 +172,8 @@ mod tests {
             model: &str,
         ) -> Result<LlmResponse, AgentError> {
             Ok(LlmResponse {
-                output_text: "Rust gives you fearless concurrency and performance at scale.".to_string(),
+                output_text: "Rust gives you fearless concurrency and performance at scale."
+                    .to_string(),
                 token_count: max_tokens.min(40),
                 model_name: model.to_string(),
                 tool_calls: Vec::new(),

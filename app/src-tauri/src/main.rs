@@ -263,11 +263,14 @@ pub fn get_audit_log(state: &AppState) -> Result<Vec<AuditRow>, String> {
 #[cfg_attr(feature = "tauri-runtime", tauri::command)]
 pub fn tray_status(state: &AppState) -> Result<TrayStatus, String> {
     let agents = list_agents(state)?;
-    let running_agents = agents.iter().filter(|agent| agent.status == "Running").count();
+    let running_agents = agents
+        .iter()
+        .filter(|agent| agent.status == "Running")
+        .count();
 
     Ok(TrayStatus {
-      running_agents,
-      menu_items: vec!["Dashboard".to_string(), "Quit".to_string()],
+        running_agents,
+        menu_items: vec!["Dashboard".to_string(), "Quit".to_string()],
     })
 }
 

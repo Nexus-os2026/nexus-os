@@ -1,6 +1,6 @@
 use crate::errors::AgentError;
-use aes_gcm::aead::{Aead, KeyInit, OsRng};
 use aes_gcm::aead::rand_core::RngCore;
+use aes_gcm::aead::{Aead, KeyInit, OsRng};
 use aes_gcm::{Aes256Gcm, Nonce};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -40,10 +40,8 @@ impl PrivacyManager {
         self.assert_key_is_active(&user_key.id)?;
         self.known_keys.insert(user_key.id.clone(), user_key.bytes);
 
-        let cipher =
-            Aes256Gcm::new_from_slice(&user_key.bytes).map_err(|_| {
-                AgentError::SupervisorError("invalid AES-256 key length".to_string())
-            })?;
+        let cipher = Aes256Gcm::new_from_slice(&user_key.bytes)
+            .map_err(|_| AgentError::SupervisorError("invalid AES-256 key length".to_string()))?;
         let mut nonce = [0_u8; 12];
         OsRng.fill_bytes(&mut nonce);
         let ciphertext = cipher
@@ -69,12 +67,13 @@ impl PrivacyManager {
         }
         self.assert_key_is_active(&user_key.id)?;
 
-        let cipher =
-            Aes256Gcm::new_from_slice(&user_key.bytes).map_err(|_| {
-                AgentError::SupervisorError("invalid AES-256 key length".to_string())
-            })?;
+        let cipher = Aes256Gcm::new_from_slice(&user_key.bytes)
+            .map_err(|_| AgentError::SupervisorError("invalid AES-256 key length".to_string()))?;
         cipher
-            .decrypt(Nonce::from_slice(&encrypted.nonce), encrypted.ciphertext.as_ref())
+            .decrypt(
+                Nonce::from_slice(&encrypted.nonce),
+                encrypted.ciphertext.as_ref(),
+            )
             .map_err(|_| AgentError::SupervisorError("decryption failure".to_string()))
     }
 

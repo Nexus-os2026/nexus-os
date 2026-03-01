@@ -49,8 +49,9 @@ impl ReportGenerator {
     }
 
     pub fn render_dashboard(&self, report: &AnalyticsReport) -> Result<String, AgentError> {
-        let payload = serde_json::to_string_pretty(report)
-            .map_err(|error| AgentError::SupervisorError(format!("failed to serialize report: {error}")))?;
+        let payload = serde_json::to_string_pretty(report).map_err(|error| {
+            AgentError::SupervisorError(format!("failed to serialize report: {error}"))
+        })?;
         Ok(redact_sensitive(payload.as_str()))
     }
 }
@@ -77,7 +78,10 @@ fn compute_growth_trends(metrics: &[MetricRecord]) -> Vec<String> {
                 "{} follower_growth={} over {} observations",
                 platform_label(&platform),
                 growth,
-                metrics.iter().filter(|row| row.platform == platform).count()
+                metrics
+                    .iter()
+                    .filter(|row| row.platform == platform)
+                    .count()
             )
         })
         .collect::<Vec<_>>();

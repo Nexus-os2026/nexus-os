@@ -23,8 +23,9 @@ impl ContentCalendar {
     pub fn new(storage_path: impl AsRef<Path>) -> Result<Self, AgentError> {
         let storage_path = storage_path.as_ref().to_path_buf();
         let posts = if storage_path.exists() {
-            let data = fs::read_to_string(storage_path.as_path())
-                .map_err(|error| AgentError::SupervisorError(format!("failed reading calendar store: {error}")))?;
+            let data = fs::read_to_string(storage_path.as_path()).map_err(|error| {
+                AgentError::SupervisorError(format!("failed reading calendar store: {error}"))
+            })?;
             if data.trim().is_empty() {
                 Vec::new()
             } else {
@@ -36,7 +37,10 @@ impl ContentCalendar {
             Vec::new()
         };
 
-        Ok(Self { storage_path, posts })
+        Ok(Self {
+            storage_path,
+            posts,
+        })
     }
 
     pub fn schedule_post(
@@ -74,10 +78,12 @@ impl ContentCalendar {
     }
 
     fn persist(&self) -> Result<(), AgentError> {
-        let serialized = serde_json::to_string_pretty(&self.posts)
-            .map_err(|error| AgentError::SupervisorError(format!("failed serializing calendar posts: {error}")))?;
-        fs::write(self.storage_path.as_path(), serialized)
-            .map_err(|error| AgentError::SupervisorError(format!("failed writing calendar store: {error}")))
+        let serialized = serde_json::to_string_pretty(&self.posts).map_err(|error| {
+            AgentError::SupervisorError(format!("failed serializing calendar posts: {error}"))
+        })?;
+        fs::write(self.storage_path.as_path(), serialized).map_err(|error| {
+            AgentError::SupervisorError(format!("failed writing calendar store: {error}"))
+        })
     }
 }
 

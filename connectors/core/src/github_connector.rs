@@ -48,7 +48,9 @@ impl GitHubConnector {
         })
         .to_string();
 
-        let response = self.http.post(url.as_str(), payload.as_str(), HashMap::new())?;
+        let response = self
+            .http
+            .post(url.as_str(), payload.as_str(), HashMap::new())?;
         Ok(response.body)
     }
 

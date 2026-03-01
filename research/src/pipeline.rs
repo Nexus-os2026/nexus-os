@@ -65,7 +65,11 @@ impl<D: ResearchDataSource> ResearchPipeline<D> {
         self.search_max_results = search_max_results;
     }
 
-    pub fn research(&mut self, topic: &str, fuel_budget: u64) -> Result<ResearchReport, AgentError> {
+    pub fn research(
+        &mut self,
+        topic: &str,
+        fuel_budget: u64,
+    ) -> Result<ResearchReport, AgentError> {
         let mut remaining_fuel = fuel_budget;
         if remaining_fuel < self.search_cost {
             return Err(AgentError::FuelExhausted);
@@ -166,7 +170,11 @@ mod tests {
     }
 
     impl ResearchDataSource for MockDataSource {
-        fn search(&mut self, _topic: &str, _max_results: usize) -> Result<Vec<SearchResult>, AgentError> {
+        fn search(
+            &mut self,
+            _topic: &str,
+            _max_results: usize,
+        ) -> Result<Vec<SearchResult>, AgentError> {
             Ok(self.results.clone())
         }
 

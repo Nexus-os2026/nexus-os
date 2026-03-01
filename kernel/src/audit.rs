@@ -44,7 +44,14 @@ impl AuditTrail {
             .last()
             .map(|event| event.hash.clone())
             .unwrap_or_else(|| GENESIS_HASH.to_string());
-        let hash = compute_hash(event_id, timestamp, agent_id, &event_type, &payload, &previous_hash);
+        let hash = compute_hash(
+            event_id,
+            timestamp,
+            agent_id,
+            &event_type,
+            &payload,
+            &previous_hash,
+        );
 
         let event = AuditEvent {
             event_id,

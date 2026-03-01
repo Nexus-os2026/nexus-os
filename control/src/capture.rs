@@ -217,7 +217,10 @@ mod tests {
     use uuid::Uuid;
 
     fn context_with_caps(caps: &[&str]) -> ControlAgentContext {
-        let capabilities = caps.iter().map(|cap| (*cap).to_string()).collect::<HashSet<_>>();
+        let capabilities = caps
+            .iter()
+            .map(|cap| (*cap).to_string())
+            .collect::<HashSet<_>>();
         ControlAgentContext::new(Uuid::new_v4(), capabilities)
     }
 

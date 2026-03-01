@@ -39,7 +39,9 @@ pub struct IntentParser<P: LlmProvider> {
 
 impl<P: LlmProvider> IntentParser<P> {
     pub fn new(provider: P, model_name: &str, fuel_budget: u64) -> Self {
-        let capabilities = ["llm.query".to_string()].into_iter().collect::<HashSet<_>>();
+        let capabilities = ["llm.query".to_string()]
+            .into_iter()
+            .collect::<HashSet<_>>();
         Self {
             gateway: GovernedLlmGateway::new(provider),
             context: AgentRuntimeContext {
@@ -89,7 +91,8 @@ fn intent_from_llm_output(request: &str, output: LlmIntentOutput) -> ParsedInten
         _ => infer_task_type(request),
     };
 
-    let platforms = normalize_platforms(output.platforms.unwrap_or_else(|| infer_platforms(request)));
+    let platforms =
+        normalize_platforms(output.platforms.unwrap_or_else(|| infer_platforms(request)));
     let schedule = output
         .schedule
         .unwrap_or_else(|| infer_schedule(request))

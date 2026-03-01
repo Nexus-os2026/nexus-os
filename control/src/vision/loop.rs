@@ -56,12 +56,13 @@ impl<P: LlmProvider> VisionModel for ProviderVisionModel<P> {
         prompt: &str,
         max_tokens: u32,
     ) -> Result<VisionInference, AgentError> {
-        let composed_prompt = format!(
-            "Task: {prompt}\nScreenshot hash: {screenshot_hash}\nReturn one action."
-        );
-        let response = self
-            .provider
-            .query(composed_prompt.as_str(), max_tokens, self.model_name.as_str())?;
+        let composed_prompt =
+            format!("Task: {prompt}\nScreenshot hash: {screenshot_hash}\nReturn one action.");
+        let response = self.provider.query(
+            composed_prompt.as_str(),
+            max_tokens,
+            self.model_name.as_str(),
+        )?;
 
         Ok(VisionInference {
             response: response.output_text,
@@ -141,7 +142,8 @@ pub struct VisionLoopReport {
     pub interval_plan_secs: Vec<u64>,
 }
 
-pub struct VisionLoop<B: ScreenCaptureBackend, M: VisionModel, E: VisionExecutor, V: VisionVerifier> {
+pub struct VisionLoop<B: ScreenCaptureBackend, M: VisionModel, E: VisionExecutor, V: VisionVerifier>
+{
     capture_service: ScreenCaptureService<B>,
     model: M,
     executor: E,
@@ -368,7 +370,11 @@ impl<B: ScreenCaptureBackend, M: VisionModel, E: VisionExecutor, V: VisionVerifi
         count_files(self.screenshot_dir.as_path())
     }
 
-    fn persist_screenshot(&self, step_index: u32, screenshot: &Screenshot) -> Result<PathBuf, AgentError> {
+    fn persist_screenshot(
+        &self,
+        step_index: u32,
+        screenshot: &Screenshot,
+    ) -> Result<PathBuf, AgentError> {
         let path = self.screenshot_dir.join(format!("step-{step_index}.rgba"));
         fs::write(path.as_path(), &screenshot.pixels_rgba).map_err(|error| {
             AgentError::SupervisorError(format!("failed to persist screenshot: {error}"))
@@ -395,7 +401,10 @@ fn ensure_capability(context: &ControlAgentContext, capability: &str) -> Result<
     Ok(())
 }
 
-fn ensure_action_capability(context: &ControlAgentContext, action: &VisionAction) -> Result<(), AgentError> {
+fn ensure_action_capability(
+    context: &ControlAgentContext,
+    action: &VisionAction,
+) -> Result<(), AgentError> {
     match action {
         VisionAction::Click { .. } => ensure_capability(context, "input.mouse"),
         VisionAction::TypeText { .. } | VisionAction::KeyPress { .. } => {
@@ -434,8 +443,12 @@ pub fn parse_vision_action(raw: &str) -> VisionAction {
     if lower.starts_with("click:") {
         let coords = normalized[6..].trim();
         let mut parts = coords.split(',');
-        let x = parts.next().and_then(|value| value.trim().parse::<i32>().ok());
-        let y = parts.next().and_then(|value| value.trim().parse::<i32>().ok());
+        let x = parts
+            .next()
+            .and_then(|value| value.trim().parse::<i32>().ok());
+        let y = parts
+            .next()
+            .and_then(|value| value.trim().parse::<i32>().ok());
         if let (Some(x), Some(y)) = (x, y) {
             return VisionAction::Click { x, y };
         }
@@ -504,7 +517,10 @@ mod tests {
     }
 
     fn context_with_caps(caps: &[&str]) -> ControlAgentContext {
-        let capabilities = caps.iter().map(|cap| (*cap).to_string()).collect::<HashSet<_>>();
+        let capabilities = caps
+            .iter()
+            .map(|cap| (*cap).to_string())
+            .collect::<HashSet<_>>();
         ControlAgentContext::new(Uuid::new_v4(), capabilities)
     }
 
@@ -619,7 +635,10 @@ mod tests {
             .and_then(|engine| engine.run(&context, "observe", 1_000).ok());
         assert!(report.is_some());
 
-        let file_count = loop_engine.as_ref().ok().and_then(|engine| engine.screenshot_file_count().ok());
+        let file_count = loop_engine
+            .as_ref()
+            .ok()
+            .and_then(|engine| engine.screenshot_file_count().ok());
         assert_eq!(file_count, Some(0));
 
         let events = logger.events();
@@ -656,6 +675,9 @@ mod tests {
     #[test]
     fn test_parse_vision_action() {
         assert_eq!(parse_vision_action("done"), VisionAction::Done);
-        assert_eq!(parse_vision_action("click:1,2"), VisionAction::Click { x: 1, y: 2 });
+        assert_eq!(
+            parse_vision_action("click:1,2"),
+            VisionAction::Click { x: 1, y: 2 }
+        );
     }
 }

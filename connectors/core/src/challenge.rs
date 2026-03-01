@@ -31,10 +31,16 @@ pub fn detect_challenge(http_response: &str) -> Option<ChallengeType> {
     if normalized.contains("429") || normalized.contains("rate limit") {
         return Some(ChallengeType::RateLimit);
     }
-    if normalized.contains("401") || normalized.contains("auth expired") || normalized.contains("token expired") {
+    if normalized.contains("401")
+        || normalized.contains("auth expired")
+        || normalized.contains("token expired")
+    {
         return Some(ChallengeType::AuthExpired);
     }
-    if normalized.contains("bot block") || normalized.contains("bot detected") || normalized.contains("access denied") {
+    if normalized.contains("bot block")
+        || normalized.contains("bot detected")
+        || normalized.contains("access denied")
+    {
         return Some(ChallengeType::BotBlock);
     }
 

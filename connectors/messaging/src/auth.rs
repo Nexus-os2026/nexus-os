@@ -223,10 +223,16 @@ impl AuthManager {
         match operation {
             Operation::Status | Operation::Logs => Ok(StepUpAuthResult::Allowed),
             Operation::Approve | Operation::Start | Operation::Stop => {
-                if live_token.auth_level == AuthLevel::StepUp || live_token.auth_level == AuthLevel::Strong {
+                if live_token.auth_level == AuthLevel::StepUp
+                    || live_token.auth_level == AuthLevel::Strong
+                {
                     Ok(StepUpAuthResult::Allowed)
                 } else {
-                    let challenge = self.generate_step_up_challenge(&live_token.token_id, &operation, &live_token.device_id);
+                    let challenge = self.generate_step_up_challenge(
+                        &live_token.token_id,
+                        &operation,
+                        &live_token.device_id,
+                    );
                     Ok(StepUpAuthResult::RequiresChallenge(challenge))
                 }
             }
@@ -240,7 +246,11 @@ impl AuthManager {
         }
     }
 
-    pub fn expected_step_up_response(&self, challenge: &StepUpChallenge, device_id: &str) -> String {
+    pub fn expected_step_up_response(
+        &self,
+        challenge: &StepUpChallenge,
+        device_id: &str,
+    ) -> String {
         self.sign(format!("stepup:{}:{}", challenge.challenge_id, device_id).as_bytes())
     }
 
@@ -284,8 +294,7 @@ impl AuthManager {
 
     pub fn revoke_device(&mut self, device_id: &str) {
         self.revoked_devices.insert(device_id.to_string());
-        self.tokens
-            .retain(|_, token| token.device_id != device_id);
+        self.tokens.retain(|_, token| token.device_id != device_id);
         self.step_up.retain(|_, challenge| {
             let token = self.tokens.get(challenge.token_id.as_str());
             match token {
@@ -360,14 +369,15 @@ fn current_unix_timestamp() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{AuthError, AuthManager, Operation, PairingResponse, StepUpAuthResult};
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
 
     #[test]
     fn test_pairing_flow() {
         let now = Arc::new(AtomicU64::new(1_000));
         let clock = Arc::clone(&now);
-        let mut manager = AuthManager::with_clock("secret", Arc::new(move || clock.load(Ordering::SeqCst)));
+        let mut manager =
+            AuthManager::with_clock("secret", Arc::new(move || clock.load(Ordering::SeqCst)));
 
         let qr = manager.generate_pairing_qr("user-123");
         let response = PairingResponse {
@@ -390,7 +400,8 @@ mod tests {
     fn test_step_up_auth() {
         let now = Arc::new(AtomicU64::new(2_000));
         let clock = Arc::clone(&now);
-        let mut manager = AuthManager::with_clock("secret", Arc::new(move || clock.load(Ordering::SeqCst)));
+        let mut manager =
+            AuthManager::with_clock("secret", Arc::new(move || clock.load(Ordering::SeqCst)));
 
         let qr = manager.generate_pairing_qr("user-xyz");
         let pairing = PairingResponse {
@@ -398,21 +409,31 @@ mod tests {
             device_id: qr.device_id.clone(),
             challenge_response: qr.one_time_challenge.clone(),
         };
-        let basic_token = manager.verify_pairing(pairing).expect("pairing should succeed");
+        let basic_token = manager
+            .verify_pairing(pairing)
+            .expect("pairing should succeed");
 
         let status = manager.step_up_auth(&basic_token, Operation::Status);
         assert_eq!(status, Ok(StepUpAuthResult::Allowed));
 
         let approve = manager.step_up_auth(&basic_token, Operation::Approve);
-        assert!(matches!(approve, Ok(StepUpAuthResult::RequiresChallenge(_))));
+        assert!(matches!(
+            approve,
+            Ok(StepUpAuthResult::RequiresChallenge(_))
+        ));
 
         let challenge = match approve {
             Ok(StepUpAuthResult::RequiresChallenge(challenge)) => challenge,
             _ => panic!("expected step-up challenge for approve"),
         };
 
-        let response = manager.expected_step_up_response(&challenge, basic_token.device_id.as_str());
-        let upgraded = manager.verify_step_up_challenge(&basic_token, challenge.challenge_id.as_str(), response.as_str());
+        let response =
+            manager.expected_step_up_response(&challenge, basic_token.device_id.as_str());
+        let upgraded = manager.verify_step_up_challenge(
+            &basic_token,
+            challenge.challenge_id.as_str(),
+            response.as_str(),
+        );
         assert!(upgraded.is_ok());
 
         if let Ok(upgraded_token) = upgraded {
@@ -425,7 +446,8 @@ mod tests {
     fn test_revoke_device() {
         let now = Arc::new(AtomicU64::new(3_000));
         let clock = Arc::clone(&now);
-        let mut manager = AuthManager::with_clock("secret", Arc::new(move || clock.load(Ordering::SeqCst)));
+        let mut manager =
+            AuthManager::with_clock("secret", Arc::new(move || clock.load(Ordering::SeqCst)));
 
         let qr = manager.generate_pairing_qr("user-revoke");
         let pairing = PairingResponse {
@@ -433,7 +455,9 @@ mod tests {
             device_id: qr.device_id.clone(),
             challenge_response: qr.one_time_challenge.clone(),
         };
-        let token = manager.verify_pairing(pairing).expect("pairing should succeed");
+        let token = manager
+            .verify_pairing(pairing)
+            .expect("pairing should succeed");
 
         manager.revoke_device(token.device_id.as_str());
 

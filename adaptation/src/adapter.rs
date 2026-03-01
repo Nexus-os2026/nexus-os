@@ -65,7 +65,10 @@ impl StrategyAdapter {
         }
 
         if let Some(style) = extract_preferred_style(analytics_report) {
-            if !updated_strategy.content_style.eq_ignore_ascii_case(style.as_str()) {
+            if !updated_strategy
+                .content_style
+                .eq_ignore_ascii_case(style.as_str())
+            {
                 let previous_style = updated_strategy.content_style.clone();
                 updated_strategy.content_style = style.clone();
                 applied_changes.push(StrategyChange::ContentStyleUpdate {
@@ -426,15 +429,15 @@ mod tests {
         assert!(result.is_ok());
 
         if let Ok(result) = result {
-            assert_eq!(result.updated_strategy.posting_times.first(), Some(&"9am".to_string()));
+            assert_eq!(
+                result.updated_strategy.posting_times.first(),
+                Some(&"9am".to_string())
+            );
             assert!(result.authority_changes.is_empty());
 
             let has_auto_event = adapter.audit_trail().events().iter().any(|event| {
                 event.event_type == EventType::UserAction
-                    && event
-                        .payload
-                        .get("event")
-                        .and_then(|value| value.as_str())
+                    && event.payload.get("event").and_then(|value| value.as_str())
                         == Some("auto_adaptation_applied")
             });
             assert!(has_auto_event);
@@ -472,10 +475,7 @@ mod tests {
 
         let security_logged = adapter.audit_trail().events().iter().any(|event| {
             event.event_type == EventType::Error
-                && event
-                    .payload
-                    .get("event")
-                    .and_then(|value| value.as_str())
+                && event.payload.get("event").and_then(|value| value.as_str())
                     == Some("adaptation_security_violation")
         });
         assert!(security_logged);

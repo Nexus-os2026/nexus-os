@@ -277,12 +277,10 @@ mod tests {
         let result = sanitize_external_input(input);
 
         assert!(result.threat_detected());
-        assert!(
-            !result
-                .sanitized_text
-                .to_lowercase()
-                .contains("ignore previous instructions")
-        );
+        assert!(!result
+            .sanitized_text
+            .to_lowercase()
+            .contains("ignore previous instructions"));
     }
 
     #[test]
@@ -313,10 +311,7 @@ mod tests {
         }
 
         let has_violation_log = audit_trail.events().iter().any(|event| {
-            event
-                .payload
-                .get("event")
-                .and_then(|value| value.as_str())
+            event.payload.get("event").and_then(|value| value.as_str())
                 == Some("output_validation_violation")
         });
         assert!(has_violation_log);
@@ -332,16 +327,14 @@ mod tests {
         let _ = circuit_breaker.record_violation(agent_id, 0, &mut state, &mut audit_trail);
         let _ = circuit_breaker.record_violation(agent_id, 60, &mut state, &mut audit_trail);
         let _ = circuit_breaker.record_violation(agent_id, 120, &mut state, &mut audit_trail);
-        let activated = circuit_breaker.record_violation(agent_id, 180, &mut state, &mut audit_trail);
+        let activated =
+            circuit_breaker.record_violation(agent_id, 180, &mut state, &mut audit_trail);
 
         assert!(activated);
         assert_eq!(state, AgentState::Stopped);
 
         let has_circuit_breaker_event = audit_trail.events().iter().any(|event| {
-            event
-                .payload
-                .get("event")
-                .and_then(|value| value.as_str())
+            event.payload.get("event").and_then(|value| value.as_str())
                 == Some("circuit_breaker_activated")
         });
         assert!(has_circuit_breaker_event);

@@ -1,4 +1,7 @@
-use crate::messaging::{IncomingMessage, IncomingMessageStream, MessageId, MessagingPlatform, RateLimitConfig, RichMessage};
+use crate::messaging::{
+    IncomingMessage, IncomingMessageStream, MessageId, MessagingPlatform, RateLimitConfig,
+    RichMessage,
+};
 use nexus_connectors_core::rate_limit::{RateLimitDecision, RateLimiter};
 use nexus_kernel::errors::AgentError;
 use uuid::Uuid;
@@ -50,7 +53,11 @@ impl MessagingPlatform for DiscordAdapter {
         Ok(format!("dc-{}", Uuid::new_v4()))
     }
 
-    fn send_rich_message(&mut self, chat_id: &str, message: RichMessage) -> Result<MessageId, AgentError> {
+    fn send_rich_message(
+        &mut self,
+        chat_id: &str,
+        message: RichMessage,
+    ) -> Result<MessageId, AgentError> {
         self.send_message(chat_id, message.text.as_str())
     }
 

@@ -56,7 +56,11 @@ impl Iterator for IncomingMessageStream {
 
 pub trait MessagingPlatform: Send + Sync {
     fn send_message(&mut self, chat_id: &str, text: &str) -> Result<MessageId, AgentError>;
-    fn send_rich_message(&mut self, chat_id: &str, message: RichMessage) -> Result<MessageId, AgentError>;
+    fn send_rich_message(
+        &mut self,
+        chat_id: &str,
+        message: RichMessage,
+    ) -> Result<MessageId, AgentError>;
     fn receive_messages(&mut self) -> IncomingMessageStream;
     fn platform_name(&self) -> &str;
     fn rate_limit(&self) -> RateLimitConfig;

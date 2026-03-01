@@ -131,14 +131,17 @@ impl ResumableWorkflowEngine {
     }
 
     fn checkpoint_path(&self, workflow_id: &str) -> PathBuf {
-        self.checkpoint_root
-            .join(format!("workflow-{}.json", sanitize_workflow_id(workflow_id)))
+        self.checkpoint_root.join(format!(
+            "workflow-{}.json",
+            sanitize_workflow_id(workflow_id)
+        ))
     }
 }
 
 fn ensure_checkpoint_root(path: &Path) -> Result<(), AgentError> {
-    fs::create_dir_all(path)
-        .map_err(|error| AgentError::SupervisorError(format!("failed to create checkpoint root: {error}")))
+    fs::create_dir_all(path).map_err(|error| {
+        AgentError::SupervisorError(format!("failed to create checkpoint root: {error}"))
+    })
 }
 
 fn load_checkpoint(
@@ -177,15 +180,19 @@ fn persist_checkpoint(path: &Path, checkpoint: &WorkflowCheckpoint) -> Result<()
         AgentError::SupervisorError(format!("failed serializing workflow checkpoint: {error}"))
     })?;
 
-    fs::write(path, serialized)
-        .map_err(|error| AgentError::SupervisorError(format!("failed writing workflow checkpoint: {error}")))
+    fs::write(path, serialized).map_err(|error| {
+        AgentError::SupervisorError(format!("failed writing workflow checkpoint: {error}"))
+    })
 }
 
 fn find_ready_steps(plan: &WorkflowPlan, statuses: &BTreeMap<String, StepStatus>) -> Vec<String> {
     let mut ready = Vec::new();
 
     for step in &plan.steps {
-        let status = statuses.get(step.id.as_str()).copied().unwrap_or(StepStatus::Pending);
+        let status = statuses
+            .get(step.id.as_str())
+            .copied()
+            .unwrap_or(StepStatus::Pending);
         if status != StepStatus::Pending {
             continue;
         }
@@ -213,7 +220,10 @@ fn find_ready_steps(plan: &WorkflowPlan, statuses: &BTreeMap<String, StepStatus>
 
 fn has_pending_steps(plan: &WorkflowPlan, statuses: &BTreeMap<String, StepStatus>) -> bool {
     for step in &plan.steps {
-        let status = statuses.get(step.id.as_str()).copied().unwrap_or(StepStatus::Pending);
+        let status = statuses
+            .get(step.id.as_str())
+            .copied()
+            .unwrap_or(StepStatus::Pending);
         if status == StepStatus::Pending {
             return true;
         }
@@ -300,7 +310,9 @@ mod tests {
 
     impl RecordingExecutor {
         fn new() -> Self {
-            Self { executed: Vec::new() }
+            Self {
+                executed: Vec::new(),
+            }
         }
     }
 

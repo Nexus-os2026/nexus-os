@@ -81,7 +81,9 @@ impl PreferenceStore {
     pub fn with_storage_dir(storage_dir: impl Into<PathBuf>) -> Result<Self, AdaptationError> {
         let storage_dir = storage_dir.into();
         fs::create_dir_all(&storage_dir).map_err(|error| {
-            AdaptationError::PreferencesError(format!("failed to create storage directory: {error}"))
+            AdaptationError::PreferencesError(format!(
+                "failed to create storage directory: {error}"
+            ))
         })?;
 
         Ok(Self {
@@ -110,9 +112,12 @@ impl PreferenceStore {
             .decrypt_field(encrypted, user_key)
             .map_err(AdaptationError::from)?;
 
-        let preferences: UserPreferences = serde_json::from_slice(decrypted.as_slice()).map_err(|error| {
-            AdaptationError::PreferencesError(format!("failed to deserialize preferences: {error}"))
-        })?;
+        let preferences: UserPreferences =
+            serde_json::from_slice(decrypted.as_slice()).map_err(|error| {
+                AdaptationError::PreferencesError(format!(
+                    "failed to deserialize preferences: {error}"
+                ))
+            })?;
 
         Ok(Some(preferences))
     }
@@ -245,7 +250,9 @@ impl PreferenceStore {
 
         let path = preference_file_path(dir, user_id);
         let data = serde_json::to_vec_pretty(encrypted).map_err(|error| {
-            AdaptationError::PreferencesError(format!("failed to serialize encrypted blob: {error}"))
+            AdaptationError::PreferencesError(format!(
+                "failed to serialize encrypted blob: {error}"
+            ))
         })?;
 
         fs::write(path, data).map_err(|error| {
@@ -267,11 +274,15 @@ impl PreferenceStore {
             AdaptationError::PreferencesError(format!("failed to read preference file: {error}"))
         })?;
 
-        let encrypted: EncryptedField = serde_json::from_slice(raw.as_slice()).map_err(|error| {
-            AdaptationError::PreferencesError(format!("failed to parse preference file: {error}"))
-        })?;
+        let encrypted: EncryptedField =
+            serde_json::from_slice(raw.as_slice()).map_err(|error| {
+                AdaptationError::PreferencesError(format!(
+                    "failed to parse preference file: {error}"
+                ))
+            })?;
 
-        self.encrypted_by_user.insert(user_id.to_string(), encrypted);
+        self.encrypted_by_user
+            .insert(user_id.to_string(), encrypted);
         Ok(true)
     }
 
@@ -422,10 +433,7 @@ mod tests {
         assert!(store.list_users().is_empty());
 
         let has_delete_event = store.audit_trail().events().iter().any(|event| {
-            event
-                .payload
-                .get("event")
-                .and_then(|value| value.as_str())
+            event.payload.get("event").and_then(|value| value.as_str())
                 == Some("preferences_deleted")
         });
         assert!(has_delete_event);

@@ -101,11 +101,10 @@ impl Orchestrator {
     }
 
     pub fn assign_task(&mut self, team_id: TeamId, task: &str) -> Result<TeamTaskPlan, AgentError> {
-        let team = self
-            .teams
-            .get(&team_id)
-            .cloned()
-            .ok_or_else(|| AgentError::SupervisorError(format!("team '{team_id}' not found")))?;
+        let team =
+            self.teams.get(&team_id).cloned().ok_or_else(|| {
+                AgentError::SupervisorError(format!("team '{team_id}' not found"))
+            })?;
 
         let mut ordered_agents = team.agents.clone();
         ordered_agents.sort_by_key(|agent| agent.role.canonical_rank());
@@ -205,7 +204,10 @@ mod tests {
             assert!(team.is_some());
             if let Some(team) = team {
                 assert_eq!(team.agents.len(), 3);
-                assert!(team.agents.iter().all(|agent| agent.state == crate::lifecycle::AgentState::Running));
+                assert!(team
+                    .agents
+                    .iter()
+                    .all(|agent| agent.state == crate::lifecycle::AgentState::Running));
             }
         }
     }

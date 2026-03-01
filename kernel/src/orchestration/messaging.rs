@@ -245,10 +245,7 @@ mod tests {
         );
 
         let violation_logged = bus.audit_trail().events().iter().any(|event| {
-            event
-                .payload
-                .get("event")
-                .and_then(|value| value.as_str())
+            event.payload.get("event").and_then(|value| value.as_str())
                 == Some("message_injection_blocked")
         });
         assert!(violation_logged);

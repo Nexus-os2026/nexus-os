@@ -29,6 +29,9 @@ mod tests {
     #[test]
     fn test_tos_rate_limit() {
         let decision = check_compliance(SocialPlatform::Instagram, 25);
-        assert_eq!(decision, ComplianceDecision::Blocked("daily limit".to_string()));
+        assert_eq!(
+            decision,
+            ComplianceDecision::Blocked("daily limit".to_string())
+        );
     }
 }

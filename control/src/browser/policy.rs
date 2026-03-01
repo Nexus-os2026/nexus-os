@@ -111,7 +111,13 @@ mod tests {
 
     #[test]
     fn test_extract_host() {
-        assert_eq!(extract_host("https://github.com/nex-lang"), Some("github.com".to_string()));
-        assert_eq!(extract_host("http://user:pass@example.com:8080/path"), Some("example.com".to_string()));
+        assert_eq!(
+            extract_host("https://github.com/nex-lang"),
+            Some("github.com".to_string())
+        );
+        assert_eq!(
+            extract_host("http://user:pass@example.com:8080/path"),
+            Some("example.com".to_string())
+        );
     }
 }

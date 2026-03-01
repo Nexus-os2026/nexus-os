@@ -41,28 +41,30 @@ pub fn execute_command(cli: Cli) -> Result<String, String> {
 
 pub fn execute_agent_command(command: AgentCommand) -> Result<String, String> {
     match command {
-        AgentCommand::Create { manifest } => {
-            create_agent_from_path(Path::new(&manifest))
-                .map_err(|error| format!("Failed to create agent: {error}"))
-        }
+        AgentCommand::Create { manifest } => create_agent_from_path(Path::new(&manifest))
+            .map_err(|error| format!("Failed to create agent: {error}")),
         AgentCommand::Start { agent_id } => Ok(format!("Agent '{agent_id}' started successfully")),
         AgentCommand::Stop { agent_id } => Ok(format!("Agent '{agent_id}' stopped successfully")),
         AgentCommand::Pause { agent_id } => Ok(format!("Agent '{agent_id}' paused successfully")),
-        AgentCommand::Resume { agent_id } => {
-            Ok(format!("Agent '{agent_id}' resumed successfully"))
-        }
+        AgentCommand::Resume { agent_id } => Ok(format!("Agent '{agent_id}' resumed successfully")),
         AgentCommand::Destroy { agent_id } => {
             Ok(format!("Agent '{agent_id}' destroyed successfully"))
         }
         AgentCommand::List => Ok("Listing all registered agents".to_string()),
         AgentCommand::Logs { agent_id } => Ok(format!("Showing logs for agent '{agent_id}'")),
-        AgentCommand::Audit { agent_id } => Ok(format!("Showing audit trail for agent '{agent_id}'")),
+        AgentCommand::Audit { agent_id } => {
+            Ok(format!("Showing audit trail for agent '{agent_id}'"))
+        }
     }
 }
 
 pub fn create_agent_from_path(manifest_path: &Path) -> Result<String, String> {
-    let manifest_content = fs::read_to_string(manifest_path)
-        .map_err(|error| format!("unable to read manifest '{}': {error}", manifest_path.display()))?;
+    let manifest_content = fs::read_to_string(manifest_path).map_err(|error| {
+        format!(
+            "unable to read manifest '{}': {error}",
+            manifest_path.display()
+        )
+    })?;
     create_agent_from_manifest_str(&manifest_content)
 }
 

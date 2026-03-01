@@ -43,10 +43,9 @@ impl BridgeDaemon {
         chat_id: &str,
         text: &str,
     ) -> Result<String, AgentError> {
-        let platform = self
-            .platforms
-            .get_mut(platform_name)
-            .ok_or_else(|| AgentError::SupervisorError(format!("unknown platform '{platform_name}'")))?;
+        let platform = self.platforms.get_mut(platform_name).ok_or_else(|| {
+            AgentError::SupervisorError(format!("unknown platform '{platform_name}'"))
+        })?;
 
         platform.send_message(chat_id, text)
     }
@@ -56,10 +55,9 @@ impl BridgeDaemon {
         platform_name: &str,
         runtime: &mut dyn AgentRuntime,
     ) -> Result<Vec<String>, AgentError> {
-        let platform = self
-            .platforms
-            .get_mut(platform_name)
-            .ok_or_else(|| AgentError::SupervisorError(format!("unknown platform '{platform_name}'")))?;
+        let platform = self.platforms.get_mut(platform_name).ok_or_else(|| {
+            AgentError::SupervisorError(format!("unknown platform '{platform_name}'"))
+        })?;
 
         let mut outputs = Vec::new();
         let stream = platform.receive_messages();

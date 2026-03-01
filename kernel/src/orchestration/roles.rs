@@ -34,7 +34,8 @@ impl AgentRole {
                 role: self,
                 default_capabilities: vec!["llm.query".to_string()],
                 default_fuel_allocation: 2_500,
-                description: "Drafts publishable content from approved research context.".to_string(),
+                description: "Drafts publishable content from approved research context."
+                    .to_string(),
                 expected_inputs: vec!["research_summary".to_string(), "style_guide".to_string()],
                 expected_outputs: vec!["draft_content".to_string()],
             },
@@ -42,16 +43,23 @@ impl AgentRole {
                 role: self,
                 default_capabilities: vec!["llm.query".to_string(), "audit.read".to_string()],
                 default_fuel_allocation: 1_500,
-                description: "Checks policy, quality, and factual consistency before publishing.".to_string(),
+                description: "Checks policy, quality, and factual consistency before publishing."
+                    .to_string(),
                 expected_inputs: vec!["draft_content".to_string(), "policy_rules".to_string()],
-                expected_outputs: vec!["review_feedback".to_string(), "approval_decision".to_string()],
+                expected_outputs: vec![
+                    "review_feedback".to_string(),
+                    "approval_decision".to_string(),
+                ],
             },
             AgentRole::Publisher => RoleProfile {
                 role: self,
                 default_capabilities: vec!["social.post".to_string(), "messaging.send".to_string()],
                 default_fuel_allocation: 1_200,
                 description: "Publishes approved content to configured channels.".to_string(),
-                expected_inputs: vec!["approved_content".to_string(), "publish_schedule".to_string()],
+                expected_inputs: vec![
+                    "approved_content".to_string(),
+                    "publish_schedule".to_string(),
+                ],
                 expected_outputs: vec!["publish_receipt".to_string()],
             },
             AgentRole::Analyst => RoleProfile {
@@ -59,8 +67,14 @@ impl AgentRole {
                 default_capabilities: vec!["audit.read".to_string(), "llm.query".to_string()],
                 default_fuel_allocation: 1_800,
                 description: "Evaluates outcome metrics and proposes strategy updates.".to_string(),
-                expected_inputs: vec!["engagement_metrics".to_string(), "historical_reports".to_string()],
-                expected_outputs: vec!["performance_report".to_string(), "recommendations".to_string()],
+                expected_inputs: vec![
+                    "engagement_metrics".to_string(),
+                    "historical_reports".to_string(),
+                ],
+                expected_outputs: vec![
+                    "performance_report".to_string(),
+                    "recommendations".to_string(),
+                ],
             },
         }
     }
@@ -94,7 +108,10 @@ mod tests {
     fn test_role_profile_defaults() {
         let profile = AgentRole::Researcher.default_profile();
         assert_eq!(profile.role, AgentRole::Researcher);
-        assert!(profile.default_capabilities.iter().any(|cap| cap == "web.search"));
+        assert!(profile
+            .default_capabilities
+            .iter()
+            .any(|cap| cap == "web.search"));
         assert!(profile.default_fuel_allocation > 0);
     }
 

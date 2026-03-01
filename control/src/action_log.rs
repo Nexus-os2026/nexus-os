@@ -125,7 +125,10 @@ mod tests {
     use uuid::Uuid;
 
     fn context_with_caps(caps: &[&str]) -> ControlAgentContext {
-        let capabilities = caps.iter().map(|cap| (*cap).to_string()).collect::<HashSet<_>>();
+        let capabilities = caps
+            .iter()
+            .map(|cap| (*cap).to_string())
+            .collect::<HashSet<_>>();
         ControlAgentContext::new(Uuid::new_v4(), capabilities)
     }
 
@@ -172,7 +175,12 @@ mod tests {
 
         let action_types = events
             .iter()
-            .filter_map(|event| event.payload.get("action_type").and_then(|value| value.as_str()))
+            .filter_map(|event| {
+                event
+                    .payload
+                    .get("action_type")
+                    .and_then(|value| value.as_str())
+            })
             .collect::<Vec<_>>();
         assert!(action_types.contains(&"ScreenCapture"));
         assert!(action_types.contains(&"MouseClick"));

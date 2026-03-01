@@ -40,9 +40,9 @@ pub enum ErrorStrategy {
 
 pub fn on_error(error: &AgentError) -> ErrorStrategy {
     match error {
-        AgentError::FuelExhausted | AgentError::CapabilityDenied(_) | AgentError::KeyDestroyed(_) => {
-            ErrorStrategy::Escalate
-        }
+        AgentError::FuelExhausted
+        | AgentError::CapabilityDenied(_)
+        | AgentError::KeyDestroyed(_) => ErrorStrategy::Escalate,
         AgentError::InvalidTransition { .. } | AgentError::ManifestError(_) => ErrorStrategy::Skip,
         AgentError::SupervisorError(_) => ErrorStrategy::Retry { max_attempts: 3 },
     }
@@ -79,7 +79,9 @@ mod tests {
 
     #[test]
     fn test_on_error_strategy_defaults() {
-        let retry = on_error(&AgentError::SupervisorError("temporary failure".to_string()));
+        let retry = on_error(&AgentError::SupervisorError(
+            "temporary failure".to_string(),
+        ));
         let escalate = on_error(&AgentError::FuelExhausted);
         let skip = on_error(&AgentError::ManifestError("bad config".to_string()));
 

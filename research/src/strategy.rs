@@ -35,7 +35,9 @@ pub struct StrategySynthesizer<P: LlmProvider> {
 
 impl<P: LlmProvider> StrategySynthesizer<P> {
     pub fn new(provider: P, model_name: &str, llm_fuel_budget: u64) -> Self {
-        let capabilities = ["llm.query".to_string()].into_iter().collect::<HashSet<_>>();
+        let capabilities = ["llm.query".to_string()]
+            .into_iter()
+            .collect::<HashSet<_>>();
         Self {
             gateway: GovernedLlmGateway::new(provider),
             llm_context: AgentRuntimeContext {

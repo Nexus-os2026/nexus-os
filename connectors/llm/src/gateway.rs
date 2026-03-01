@@ -192,13 +192,21 @@ mod tests {
             fuel_remaining: 1_000,
         };
 
-        let result = gateway.query(&mut context, "Return audit-safe output", 25, "claude-sonnet-4-5");
+        let result = gateway.query(
+            &mut context,
+            "Return audit-safe output",
+            25,
+            "claude-sonnet-4-5",
+        );
         assert!(result.is_ok());
         assert_eq!(gateway.oracle_events().len(), 1);
 
         let mut found = false;
         for event in gateway.audit_trail().events() {
-            let event_kind = event.payload.get("event_kind").and_then(|value| value.as_str());
+            let event_kind = event
+                .payload
+                .get("event_kind")
+                .and_then(|value| value.as_str());
             let response_hash = event
                 .payload
                 .get("response_hash")
