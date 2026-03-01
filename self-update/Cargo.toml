@@ -11,7 +11,9 @@ path = "src/lib.rs"
 nexus-kernel = { path = "../kernel" }
 nexus-marketplace = { path = "../marketplace" }
 nexus-connectors-llm = { path = "../connectors/llm" }
+nexus-connectors-core = { path = "../connectors/core" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
+ed25519-dalek = "2.2"
 uuid = { version = "1.10", features = ["v4", "serde"] }

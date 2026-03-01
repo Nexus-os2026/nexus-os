@@ -658,6 +658,8 @@ dependencies = [
 name = "nexus-self-update"
 version = "0.1.0"
 dependencies = [
+ "ed25519-dalek",
+ "nexus-connectors-core",
  "nexus-connectors-llm",
  "nexus-kernel",
  "nexus-marketplace",
