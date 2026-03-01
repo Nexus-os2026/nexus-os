@@ -84,7 +84,6 @@ impl AppState {
     }
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
 pub fn start_jarvis_mode(state: &AppState) -> Result<VoiceRuntimeState, String> {
     let mut voice = match state.voice.lock() {
         Ok(guard) => guard,
@@ -95,7 +94,6 @@ pub fn start_jarvis_mode(state: &AppState) -> Result<VoiceRuntimeState, String> 
     Ok(voice.clone())
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
 pub fn stop_jarvis_mode(state: &AppState) -> Result<VoiceRuntimeState, String> {
     let mut voice = match state.voice.lock() {
         Ok(guard) => guard,
@@ -106,7 +104,6 @@ pub fn stop_jarvis_mode(state: &AppState) -> Result<VoiceRuntimeState, String> {
     Ok(voice.clone())
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
 pub fn jarvis_status(state: &AppState) -> Result<VoiceRuntimeState, String> {
     let voice = match state.voice.lock() {
         Ok(guard) => guard,
@@ -116,7 +113,6 @@ pub fn jarvis_status(state: &AppState) -> Result<VoiceRuntimeState, String> {
     Ok(voice.clone())
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
 pub fn create_agent(state: &AppState, request: CreateAgentRequest) -> Result<String, String> {
     let manifest = AgentManifest {
         name: request.name.clone(),
@@ -159,7 +155,6 @@ pub fn create_agent(state: &AppState, request: CreateAgentRequest) -> Result<Str
     Ok(agent_id.to_string())
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
 pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     let parsed = parse_agent_id(agent_id.as_str())?;
 
@@ -187,7 +182,6 @@ pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
 pub fn stop_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     let parsed = parse_agent_id(agent_id.as_str())?;
 
@@ -215,7 +209,6 @@ pub fn stop_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
 pub fn pause_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     let parsed = parse_agent_id(agent_id.as_str())?;
 
@@ -243,7 +236,6 @@ pub fn pause_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
 pub fn resume_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     let parsed = parse_agent_id(agent_id.as_str())?;
 
@@ -271,7 +263,6 @@ pub fn resume_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
 pub fn list_agents(state: &AppState) -> Result<Vec<AgentRow>, String> {
     let supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
@@ -306,7 +297,6 @@ pub fn list_agents(state: &AppState) -> Result<Vec<AgentRow>, String> {
     Ok(rows)
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
 pub fn get_audit_log(state: &AppState) -> Result<Vec<AuditRow>, String> {
     let guard = match state.audit.lock() {
         Ok(guard) => guard,
@@ -316,7 +306,6 @@ pub fn get_audit_log(state: &AppState) -> Result<Vec<AuditRow>, String> {
     Ok(guard.events().iter().map(event_to_row).collect::<Vec<_>>())
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
 pub fn tray_status(state: &AppState) -> Result<TrayStatus, String> {
     let agents = list_agents(state)?;
     let running_agents = agents

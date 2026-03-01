@@ -174,10 +174,7 @@ mod tests {
         let mut leaked_secret = false;
 
         for event in vault.audit_trail().events() {
-            let payload_text = match serde_json::to_string(&event.payload) {
-                Ok(value) => value,
-                Err(_) => String::new(),
-            };
+            let payload_text: String = serde_json::to_string(&event.payload).unwrap_or_default();
             if payload_text.contains("secret_accessed") {
                 accessed_logged = true;
             }
