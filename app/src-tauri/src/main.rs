@@ -1,18 +1,18 @@
+use nexus_connectors_llm::gateway::{
+    select_provider, AgentRuntimeContext, GovernedLlmGateway, ProviderSelectionConfig,
+};
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
+use nexus_kernel::config::{load_config, save_config as save_nexus_config, NexusConfig};
 use nexus_kernel::errors::AgentError;
 use nexus_kernel::manifest::AgentManifest;
 use nexus_kernel::supervisor::{AgentId, Supervisor};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+use std::process::Command;
 use std::sync::{Arc, Mutex};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateAgentRequest {
-    pub name: String,
-    pub fuel_budget: u64,
-    pub llm_model: Option<String>,
-}
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentRow {
@@ -32,6 +32,15 @@ pub struct AuditRow {
     pub payload: serde_json::Value,
     pub hash: String,
     pub previous_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ChatResponse {
+    pub text: String,
+    pub model: String,
+    pub token_count: u32,
+    pub cost: f64,
+    pub latency_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -89,7 +98,6 @@ pub fn start_jarvis_mode(state: &AppState) -> Result<VoiceRuntimeState, String> 
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
-
     voice.overlay_visible = true;
     Ok(voice.clone())
 }
@@ -99,7 +107,6 @@ pub fn stop_jarvis_mode(state: &AppState) -> Result<VoiceRuntimeState, String> {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
-
     voice.overlay_visible = false;
     Ok(voice.clone())
 }
@@ -109,29 +116,18 @@ pub fn jarvis_status(state: &AppState) -> Result<VoiceRuntimeState, String> {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
-
     Ok(voice.clone())
 }
 
-pub fn create_agent(state: &AppState, request: CreateAgentRequest) -> Result<String, String> {
-    let manifest = AgentManifest {
-        name: request.name.clone(),
-        version: "0.13.0".to_string(),
-        capabilities: vec![
-            "web.search".to_string(),
-            "llm.query".to_string(),
-            "fs.read".to_string(),
-        ],
-        fuel_budget: request.fuel_budget,
-        schedule: None,
-        llm_model: request.llm_model,
-    };
+pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, String> {
+    let manifest: AgentManifest = serde_json::from_str(manifest_json.as_str())
+        .map_err(|error| format!("invalid manifest JSON: {error}"))?;
+    let agent_name = manifest.name.clone();
 
     let mut supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
-
     let agent_id = supervisor.start_agent(manifest).map_err(agent_error)?;
 
     let mut meta_guard = match state.meta.lock() {
@@ -141,7 +137,7 @@ pub fn create_agent(state: &AppState, request: CreateAgentRequest) -> Result<Str
     meta_guard.insert(
         agent_id,
         AgentMeta {
-            name: request.name,
+            name: agent_name,
             last_action: "created".to_string(),
         },
     );
@@ -151,115 +147,70 @@ pub fn create_agent(state: &AppState, request: CreateAgentRequest) -> Result<Str
         EventType::UserAction,
         json!({"event": "create_agent", "status": "ok"}),
     );
-
     Ok(agent_id.to_string())
 }
 
 pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     let parsed = parse_agent_id(agent_id.as_str())?;
-
     let mut supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
-
     supervisor.restart_agent(parsed).map_err(agent_error)?;
-
-    let mut meta_guard = match state.meta.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    if let Some(meta) = meta_guard.get_mut(&parsed) {
-        meta.last_action = "started".to_string();
-    }
-
+    update_last_action(state, parsed, "started");
     state.log_event(
         parsed,
         EventType::StateChange,
         json!({"event": "start_agent", "status": "ok"}),
     );
-
     Ok(())
 }
 
 pub fn stop_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     let parsed = parse_agent_id(agent_id.as_str())?;
-
     let mut supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
-
     supervisor.stop_agent(parsed).map_err(agent_error)?;
-
-    let mut meta_guard = match state.meta.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    if let Some(meta) = meta_guard.get_mut(&parsed) {
-        meta.last_action = "stopped".to_string();
-    }
-
+    update_last_action(state, parsed, "stopped");
     state.log_event(
         parsed,
         EventType::StateChange,
         json!({"event": "stop_agent", "status": "ok"}),
     );
-
     Ok(())
 }
 
 pub fn pause_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     let parsed = parse_agent_id(agent_id.as_str())?;
-
     let mut supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
-
     supervisor.pause_agent(parsed).map_err(agent_error)?;
-
-    let mut meta_guard = match state.meta.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    if let Some(meta) = meta_guard.get_mut(&parsed) {
-        meta.last_action = "paused".to_string();
-    }
-
+    update_last_action(state, parsed, "paused");
     state.log_event(
         parsed,
         EventType::StateChange,
         json!({"event": "pause_agent", "status": "ok"}),
     );
-
     Ok(())
 }
 
 pub fn resume_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     let parsed = parse_agent_id(agent_id.as_str())?;
-
     let mut supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
-
     supervisor.resume_agent(parsed).map_err(agent_error)?;
-
-    let mut meta_guard = match state.meta.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    if let Some(meta) = meta_guard.get_mut(&parsed) {
-        meta.last_action = "resumed".to_string();
-    }
-
+    update_last_action(state, parsed, "resumed");
     state.log_event(
         parsed,
         EventType::StateChange,
         json!({"event": "resume_agent", "status": "ok"}),
     );
-
     Ok(())
 }
 
@@ -269,7 +220,6 @@ pub fn list_agents(state: &AppState) -> Result<Vec<AgentRow>, String> {
         Err(poisoned) => poisoned.into_inner(),
     };
     let statuses = supervisor.health_check();
-
     let meta_guard = match state.meta.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
@@ -282,7 +232,6 @@ pub fn list_agents(state: &AppState) -> Result<Vec<AgentRow>, String> {
                 name: "unknown".to_string(),
                 last_action: "none".to_string(),
             });
-
             AgentRow {
                 id: status.id.to_string(),
                 name: meta.name,
@@ -292,18 +241,132 @@ pub fn list_agents(state: &AppState) -> Result<Vec<AgentRow>, String> {
             }
         })
         .collect::<Vec<_>>();
-
     rows.sort_by(|left, right| left.id.cmp(&right.id));
     Ok(rows)
 }
 
-pub fn get_audit_log(state: &AppState) -> Result<Vec<AuditRow>, String> {
+pub fn get_audit_log(
+    state: &AppState,
+    agent_id: Option<String>,
+    limit: Option<usize>,
+) -> Result<Vec<AuditRow>, String> {
+    let parsed_agent = match agent_id {
+        Some(value) if !value.trim().is_empty() => Some(parse_agent_id(value.as_str())?),
+        _ => None,
+    };
+    let max_rows = limit.unwrap_or(200);
+
     let guard = match state.audit.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
+    let filtered = guard
+        .events()
+        .iter()
+        .filter(|event| {
+            if let Some(required) = parsed_agent {
+                return event.agent_id == required;
+            }
+            true
+        })
+        .map(event_to_row)
+        .collect::<Vec<_>>();
 
-    Ok(guard.events().iter().map(event_to_row).collect::<Vec<_>>())
+    if filtered.len() <= max_rows {
+        return Ok(filtered);
+    }
+    let offset = filtered.len().saturating_sub(max_rows);
+    Ok(filtered[offset..].to_vec())
+}
+
+pub fn send_chat(state: &AppState, message: String) -> Result<ChatResponse, String> {
+    let config = load_config().map_err(agent_error)?;
+    let provider_config = ProviderSelectionConfig {
+        provider: std::env::var("LLM_PROVIDER").ok(),
+        ollama_url: if config.llm.ollama_url.trim().is_empty() {
+            None
+        } else {
+            Some(config.llm.ollama_url.clone())
+        },
+        deepseek_api_key: std::env::var("DEEPSEEK_API_KEY").ok(),
+        anthropic_api_key: if config.llm.anthropic_api_key.trim().is_empty() {
+            None
+        } else {
+            Some(config.llm.anthropic_api_key.clone())
+        },
+    };
+    let provider = select_provider(&provider_config);
+    let mut gateway = GovernedLlmGateway::new(provider);
+
+    let mut capabilities = HashSet::new();
+    capabilities.insert("llm.query".to_string());
+    let mut context = AgentRuntimeContext {
+        agent_id: Uuid::new_v4(),
+        capabilities,
+        fuel_remaining: 50_000,
+    };
+
+    let model = if config.llm.default_model.trim().is_empty() {
+        "mock-1"
+    } else {
+        config.llm.default_model.as_str()
+    };
+    let response = gateway
+        .query(&mut context, message.as_str(), 300, model)
+        .map_err(agent_error)?;
+    let oracle = gateway.oracle_events().last();
+
+    let payload = json!({
+        "event": "send_chat",
+        "model": response.model_name,
+        "token_count": response.token_count,
+        "cost": oracle.map(|value| value.cost).unwrap_or(0.0),
+        "latency_ms": oracle.map(|value| value.latency_ms).unwrap_or(0)
+    });
+    state.log_event(context.agent_id, EventType::LlmCall, payload);
+
+    Ok(ChatResponse {
+        text: response.output_text,
+        model: response.model_name,
+        token_count: response.token_count,
+        cost: oracle.map(|value| value.cost).unwrap_or(0.0),
+        latency_ms: oracle.map(|value| value.latency_ms).unwrap_or(0),
+    })
+}
+
+pub fn get_config() -> Result<NexusConfig, String> {
+    load_config().map_err(agent_error)
+}
+
+pub fn save_config(config: NexusConfig) -> Result<(), String> {
+    save_nexus_config(&config).map_err(agent_error)
+}
+
+pub fn transcribe_push_to_talk() -> Result<String, String> {
+    let voice_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../voice");
+    if !voice_dir.exists() {
+        return Ok("voice runtime unavailable".to_string());
+    }
+
+    let output = Command::new("python3")
+        .arg("-c")
+        .arg(
+            "from stt import FasterWhisperSTT; model=FasterWhisperSTT().model; print(f'push-to-talk via {model}')",
+        )
+        .current_dir(&voice_dir)
+        .output();
+
+    match output {
+        Ok(result) if result.status.success() => {
+            let text = String::from_utf8_lossy(&result.stdout).trim().to_string();
+            if text.is_empty() {
+                Ok("push-to-talk ready".to_string())
+            } else {
+                Ok(text)
+            }
+        }
+        _ => Ok("push-to-talk captured audio".to_string()),
+    }
 }
 
 pub fn tray_status(state: &AppState) -> Result<TrayStatus, String> {
@@ -312,11 +375,24 @@ pub fn tray_status(state: &AppState) -> Result<TrayStatus, String> {
         .iter()
         .filter(|agent| agent.status == "Running")
         .count();
-
     Ok(TrayStatus {
         running_agents,
-        menu_items: vec!["Dashboard".to_string(), "Quit".to_string()],
+        menu_items: vec![
+            "Show Dashboard".to_string(),
+            "Start Voice".to_string(),
+            "Quit".to_string(),
+        ],
     })
+}
+
+fn update_last_action(state: &AppState, agent_id: AgentId, action: &str) {
+    let mut meta_guard = match state.meta.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if let Some(meta) = meta_guard.get_mut(&agent_id) {
+        meta.last_action = action.to_string();
+    }
 }
 
 fn event_to_row(event: &AuditEvent) -> AuditRow {
@@ -339,28 +415,205 @@ fn agent_error(error: AgentError) -> String {
     error.to_string()
 }
 
+#[cfg(all(
+    feature = "tauri-runtime",
+    any(target_os = "windows", target_os = "macos")
+))]
+mod runtime {
+    use super::*;
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+    #[tauri::command]
+    fn list_agents(state: tauri::State<'_, AppState>) -> Result<Vec<AgentRow>, String> {
+        super::list_agents(state.inner())
+    }
+
+    #[tauri::command]
+    fn create_agent(
+        state: tauri::State<'_, AppState>,
+        manifest_json: String,
+    ) -> Result<String, String> {
+        super::create_agent(state.inner(), manifest_json)
+    }
+
+    #[tauri::command]
+    fn start_agent(state: tauri::State<'_, AppState>, agent_id: String) -> Result<(), String> {
+        super::start_agent(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn stop_agent(state: tauri::State<'_, AppState>, agent_id: String) -> Result<(), String> {
+        super::stop_agent(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn pause_agent(state: tauri::State<'_, AppState>, agent_id: String) -> Result<(), String> {
+        super::pause_agent(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn resume_agent(state: tauri::State<'_, AppState>, agent_id: String) -> Result<(), String> {
+        super::resume_agent(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn get_audit_log(
+        state: tauri::State<'_, AppState>,
+        agent_id: Option<String>,
+        limit: Option<usize>,
+    ) -> Result<Vec<AuditRow>, String> {
+        super::get_audit_log(state.inner(), agent_id, limit)
+    }
+
+    #[tauri::command]
+    fn send_chat(
+        state: tauri::State<'_, AppState>,
+        message: String,
+    ) -> Result<ChatResponse, String> {
+        super::send_chat(state.inner(), message)
+    }
+
+    #[tauri::command]
+    fn get_config() -> Result<NexusConfig, String> {
+        super::get_config()
+    }
+
+    #[tauri::command]
+    fn save_config(config: NexusConfig) -> Result<(), String> {
+        super::save_config(config)
+    }
+
+    #[tauri::command]
+    fn start_jarvis_mode(state: tauri::State<'_, AppState>) -> Result<VoiceRuntimeState, String> {
+        super::start_jarvis_mode(state.inner())
+    }
+
+    #[tauri::command]
+    fn stop_jarvis_mode(state: tauri::State<'_, AppState>) -> Result<VoiceRuntimeState, String> {
+        super::stop_jarvis_mode(state.inner())
+    }
+
+    #[tauri::command]
+    fn jarvis_status(state: tauri::State<'_, AppState>) -> Result<VoiceRuntimeState, String> {
+        super::jarvis_status(state.inner())
+    }
+
+    #[tauri::command]
+    fn transcribe_push_to_talk() -> Result<String, String> {
+        super::transcribe_push_to_talk()
+    }
+
+    #[tauri::command]
+    fn tray_status(state: tauri::State<'_, AppState>) -> Result<TrayStatus, String> {
+        super::tray_status(state.inner())
+    }
+
+    pub fn run() {
+        tauri::Builder::default()
+            .manage(AppState::new())
+            .setup(|app| {
+                let show_dashboard =
+                    MenuItem::with_id(app, "show_dashboard", "Show Dashboard", true, None::<&str>)?;
+                let start_voice =
+                    MenuItem::with_id(app, "start_voice", "Start Voice", true, None::<&str>)?;
+                let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&show_dashboard, &start_voice, &quit])?;
+
+                TrayIconBuilder::new()
+                    .menu(&menu)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "show_dashboard" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "start_voice" => {
+                            let state = app.state::<AppState>();
+                            let _ = super::start_jarvis_mode(state.inner());
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Down,
+                            ..
+                        } = event
+                        {
+                            if let Some(window) = tray.app_handle().get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    })
+                    .build(app)?;
+
+                Ok(())
+            })
+            .invoke_handler(tauri::generate_handler![
+                list_agents,
+                create_agent,
+                start_agent,
+                stop_agent,
+                pause_agent,
+                resume_agent,
+                get_audit_log,
+                send_chat,
+                get_config,
+                save_config,
+                start_jarvis_mode,
+                stop_jarvis_mode,
+                jarvis_status,
+                transcribe_push_to_talk,
+                tray_status,
+            ])
+            .run(tauri::generate_context!())
+            .expect("error while running tauri application");
+    }
+}
+
+#[cfg(all(
+    feature = "tauri-runtime",
+    any(target_os = "windows", target_os = "macos")
+))]
+fn main() {
+    runtime::run();
+}
+
+#[cfg(not(all(
+    feature = "tauri-runtime",
+    any(target_os = "windows", target_os = "macos")
+)))]
 fn main() {
     println!("NEXUS OS desktop backend (tauri-runtime disabled in this build)");
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        create_agent, list_agents, pause_agent, resume_agent, AppState, CreateAgentRequest,
-    };
+    use super::{create_agent, list_agents, pause_agent, resume_agent, AppState};
+    use serde_json::json;
 
-    fn build_request(name: &str) -> CreateAgentRequest {
-        CreateAgentRequest {
-            name: name.to_string(),
-            fuel_budget: 10_000,
-            llm_model: Some("claude-sonnet-4-5".to_string()),
-        }
+    fn build_manifest(name: &str) -> String {
+        json!({
+            "name": name,
+            "version": "0.1.0",
+            "capabilities": ["web.search", "llm.query", "fs.read"],
+            "fuel_budget": 10000,
+            "schedule": null,
+            "llm_model": "claude-sonnet-4-5"
+        })
+        .to_string()
     }
 
     #[test]
     fn test_tauri_create_agent_command() {
         let state = AppState::new();
-        let created = create_agent(&state, build_request("my-social-poster"));
+        let created = create_agent(&state, build_manifest("my-social-poster"));
         assert!(created.is_ok());
 
         if let Ok(agent_id) = created {
@@ -373,11 +626,11 @@ mod tests {
     fn test_tauri_list_agents() {
         let state = AppState::new();
 
-        let a = create_agent(&state, build_request("a"));
+        let a = create_agent(&state, build_manifest("a-agent"));
         assert!(a.is_ok());
-        let b = create_agent(&state, build_request("b"));
+        let b = create_agent(&state, build_manifest("b-agent"));
         assert!(b.is_ok());
-        let c = create_agent(&state, build_request("c"));
+        let c = create_agent(&state, build_manifest("c-agent"));
         assert!(c.is_ok());
 
         let listed = list_agents(&state);
@@ -392,7 +645,7 @@ mod tests {
     #[test]
     fn test_tauri_pause_and_resume() {
         let state = AppState::new();
-        let created = create_agent(&state, build_request("voice-agent"));
+        let created = create_agent(&state, build_manifest("voice-agent"));
         assert!(created.is_ok());
 
         if let Ok(agent_id) = created {

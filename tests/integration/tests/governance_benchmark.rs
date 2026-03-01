@@ -47,7 +47,13 @@ impl LlmProvider for BusyProvider {
 }
 
 #[test]
+#[ignore = "performance benchmark; set NEXUS_PERF=1 and run with -- --ignored"]
 fn test_governance_overhead_under_five_percent() {
+    if std::env::var("NEXUS_PERF").ok().as_deref() != Some("1") {
+        eprintln!("Skipping governance benchmark. Set NEXUS_PERF=1 to enable.");
+        return;
+    }
+
     let iterations = 120_u64;
     let provider = BusyProvider { work: 150_000 };
     let prompt = "benchmark governance path";
