@@ -658,9 +658,12 @@ dependencies = [
 name = "nexus-self-update"
 version = "0.1.0"
 dependencies = [
+ "nexus-connectors-llm",
  "nexus-kernel",
  "nexus-marketplace",
  "serde",
+ "serde_json",
+ "sha2",
  "uuid",
 ]
 
