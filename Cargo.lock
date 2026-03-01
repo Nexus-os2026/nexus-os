@@ -380,6 +380,13 @@ version = "0.1.0"
 [[package]]
 name = "nexus-connectors-llm"
 version = "0.1.0"
+dependencies = [
+ "nexus-kernel",
+ "serde",
+ "serde_json",
+ "sha2",
+ "uuid",
+]
 
 [[package]]
 name = "nexus-connectors-messaging"
