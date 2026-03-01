@@ -14,30 +14,81 @@ AudioFrame = Union[str, bytes, Sequence[float]]
 class WakeWordDetection:
     detected: bool
     phrase: str
+    score: float = 0.0
 
 
 class WakeWordDetector:
     """Low-overhead wake word detector with optional OpenWakeWord backend."""
 
-    def __init__(self, wake_phrase: str = "Hey NEXUS") -> None:
+    def __init__(
+        self,
+        wake_phrase: str = "Hey NEXUS",
+        model_name: str = "hey_jarvis",
+        detection_threshold: float = 0.5,
+    ) -> None:
         self.wake_phrase = wake_phrase.strip().lower()
+        self.model_name = model_name
+        self.detection_threshold = detection_threshold
+        self._openwakeword_model = self._load_openwakeword_model()
         self._stop_event = Event()
         self._thread: Optional[Thread] = None
+
+    def _load_openwakeword_model(self) -> object | None:
+        try:
+            from openwakeword import Model  # type: ignore
+
+            return Model(wakeword_models=[self.model_name])
+        except Exception:
+            return None
 
     def detect(self, frame: AudioFrame) -> WakeWordDetection:
         if isinstance(frame, bytes):
             text = frame.decode("utf-8", errors="ignore").lower()
-            return WakeWordDetection(detected=self.wake_phrase in text, phrase=self.wake_phrase)
-
-        if isinstance(frame, str):
             return WakeWordDetection(
-                detected=self.wake_phrase in frame.lower(),
+                detected=self.wake_phrase in text,
                 phrase=self.wake_phrase,
+                score=1.0 if self.wake_phrase in text else 0.0,
             )
 
-        # Numeric frame fallback. If OpenWakeWord backend is unavailable,
-        # local fallback cannot semantically decode speech from PCM floats.
-        return WakeWordDetection(detected=False, phrase=self.wake_phrase)
+        if isinstance(frame, str):
+            normalized = frame.lower()
+            return WakeWordDetection(
+                detected=self.wake_phrase in normalized,
+                phrase=self.wake_phrase,
+                score=1.0 if self.wake_phrase in normalized else 0.0,
+            )
+
+        if self._openwakeword_model is not None:
+            score = self._predict_score(frame)
+            return WakeWordDetection(
+                detected=score >= self.detection_threshold,
+                phrase=self.wake_phrase,
+                score=score,
+            )
+
+        return WakeWordDetection(detected=False, phrase=self.wake_phrase, score=0.0)
+
+    def _predict_score(self, frame: Sequence[float]) -> float:
+        try:
+            import numpy as np  # type: ignore
+        except Exception:
+            return 0.0
+
+        try:
+            audio = np.asarray(frame, dtype=np.float32)
+            predictions = self._openwakeword_model.predict(audio)  # type: ignore[union-attr]
+            if isinstance(predictions, dict):
+                if self.model_name in predictions:
+                    return float(predictions[self.model_name])
+                if predictions:
+                    return float(next(iter(predictions.values())))
+            if isinstance(predictions, (list, tuple)) and predictions:
+                return float(predictions[0])
+            if isinstance(predictions, (int, float)):
+                return float(predictions)
+        except Exception:
+            return 0.0
+        return 0.0
 
     def start_background(
         self,

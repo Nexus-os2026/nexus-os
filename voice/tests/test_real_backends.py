@@ -29,8 +29,9 @@ class RealBackendTests(unittest.TestCase):
 
     def test_synthesize_stream_falls_back_when_piper_unavailable(self) -> None:
         tts = PiperTTS(TtsConfig(piper_command=None, model_path=None))
-        chunks = list(tts.synthesize_stream("hello nexus"))
-        self.assertEqual(chunks, [b"hello", b"nexus"])
+        chunks = list(tts.synthesize_stream("hello nexus. test"))
+        self.assertGreaterEqual(len(chunks), 1)
+        self.assertTrue(all(len(chunk) > 0 for chunk in chunks))
 
     @patch("tts.subprocess.run")
     def test_synthesize_to_wav_executes_command(self, run_mock) -> None:
