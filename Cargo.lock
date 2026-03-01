@@ -445,6 +445,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-research"
+version = "0.1.0"
+dependencies = [
+ "nexus-connectors-llm",
+ "nexus-connectors-web",
+ "nexus-kernel",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "nexus-workflows"
 version = "0.1.0"
 

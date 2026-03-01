@@ -9,6 +9,7 @@ members = [
   "connectors/llm",
   "workflows",
   "cli",
+  "research",
 ]
 
 [workspace.package]
