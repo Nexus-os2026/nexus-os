@@ -14,4 +14,5 @@ nexus-connectors-llm = { path = "../connectors/llm" }
 regex = "1.11"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sha2 = "0.10"
 uuid = { version = "1.10", features = ["v4", "serde"] }

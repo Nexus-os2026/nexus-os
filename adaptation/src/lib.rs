@@ -2,6 +2,8 @@
 
 pub mod adapter;
 pub mod authority;
+pub mod preferences;
+pub mod suggestions;
 pub mod tracker;
 
 use nexus_kernel::errors::AgentError;
@@ -35,6 +37,7 @@ pub enum AdaptationError {
     RequiresApproval(String),
     NeverAllowed(String),
     TrackerError(String),
+    PreferencesError(String),
     KernelError(String),
 }
 
@@ -48,6 +51,9 @@ impl Display for AdaptationError {
                 write!(f, "never-allowed change rejected: {reason}")
             }
             AdaptationError::TrackerError(reason) => write!(f, "change tracker error: {reason}"),
+            AdaptationError::PreferencesError(reason) => {
+                write!(f, "preferences error: {reason}")
+            }
             AdaptationError::KernelError(reason) => write!(f, "kernel error: {reason}"),
         }
     }
