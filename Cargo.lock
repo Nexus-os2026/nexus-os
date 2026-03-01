@@ -419,6 +419,13 @@ dependencies = [
 [[package]]
 name = "nexus-connectors-social"
 version = "0.1.0"
+dependencies = [
+ "nexus-connectors-core",
+ "nexus-kernel",
+ "serde",
+ "serde_json",
+ "uuid",
+]
 
 [[package]]
 name = "nexus-connectors-web"
@@ -427,6 +434,17 @@ dependencies = [
  "nexus-connectors-core",
  "nexus-kernel",
  "regex",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
+name = "nexus-content"
+version = "0.1.0"
+dependencies = [
+ "nexus-connectors-llm",
+ "nexus-kernel",
  "serde",
  "serde_json",
  "uuid",
@@ -459,6 +477,16 @@ dependencies = [
 [[package]]
 name = "nexus-workflows"
 version = "0.1.0"
+dependencies = [
+ "nexus-connectors-core",
+ "nexus-connectors-social",
+ "nexus-content",
+ "nexus-kernel",
+ "nexus-research",
+ "serde",
+ "serde_json",
+ "uuid",
+]
 
 [[package]]
 name = "once_cell"
