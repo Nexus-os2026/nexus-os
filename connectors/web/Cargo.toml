@@ -11,6 +11,14 @@ path = "src/lib.rs"
 nexus-connectors-core = { path = "../core" }
 nexus-kernel = { path = "../../kernel" }
 regex = "1.11"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+scraper = "0.24"
+url = "2.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 uuid = { version = "1.10", features = ["v4", "serde"] }
+base64 = "0.22"
+hmac = "0.12"
+sha1 = "0.10"
+percent-encoding = "2.3"
+rand = "0.8"
