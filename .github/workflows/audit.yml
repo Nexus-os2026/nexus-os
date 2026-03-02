@@ -13,6 +13,7 @@ env:
 jobs:
   security-audit:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,23 +21,23 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Cargo dependencies
+      - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
+        run: cargo install cargo-audit --locked --force
 
-      - name: Install cargo-deny
+      - name: Install cargo-deny (Pinned)
         run: |
-          cargo install cargo-deny --locked --force
+          cargo install cargo-deny --locked --force --version 0.14.24
           cargo deny -V
 
-      - name: Print toolchain and cargo-deny versions
+      - name: Tool versions (debug proof)
         run: |
           rustc -V
           cargo -V
           cargo deny -V
-          which cargo-deny
+          which cargo-deny || true
 
       - name: Run cargo audit
         run: cargo audit
