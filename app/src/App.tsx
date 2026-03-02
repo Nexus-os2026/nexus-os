@@ -15,6 +15,7 @@ import {
   stopAgent,
   stopJarvisMode
 } from "./api/backend";
+import { SplashScreen } from "./components/SplashScreen";
 import { VoiceOverlay, type VoiceOverlayState } from "./components/VoiceOverlay";
 import { Agents } from "./pages/Agents";
 import { Audit } from "./pages/Audit";
@@ -182,6 +183,8 @@ export default function App(): JSX.Element {
   const [isRecording, setIsRecording] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [factoryTrigger, setFactoryTrigger] = useState(0);
+  const [appReady, setAppReady] = useState(false);
+  const [splashVisible, setSplashVisible] = useState(true);
   const [overlay, setOverlay] = useState<VoiceOverlayState>({
     visible: false,
     listening: false,
@@ -206,6 +209,7 @@ export default function App(): JSX.Element {
           "Desktop runtime not detected. You are in mock mode; UI remains fully interactive."
         )
       ]);
+      setAppReady(true);
       return;
     }
 
@@ -234,6 +238,7 @@ export default function App(): JSX.Element {
             `Connected to desktop backend. Default model: ${loadedConfig.llm.default_model || "mock-1"}.`
           )
         ]);
+        setAppReady(true);
       } catch (error) {
         if (cancelled) {
           return;
@@ -246,6 +251,7 @@ export default function App(): JSX.Element {
         setMessages([
           makeMessage("assistant", "Backend connection failed; running in mock mode.")
         ]);
+        setAppReady(true);
       }
     };
 
@@ -610,6 +616,13 @@ export default function App(): JSX.Element {
 
   return (
     <>
+      <SplashScreen
+        ready={appReady}
+        visible={splashVisible}
+        onDismiss={() => {
+          setSplashVisible(false);
+        }}
+      />
       <div className="nexus-shell text-slate-100">
         <aside className="nexus-sidebar hidden w-72 flex-col px-5 py-6 md:flex">
           <div className="nexus-panel p-4">
