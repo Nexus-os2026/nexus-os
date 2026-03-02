@@ -417,7 +417,7 @@ fn agent_error(error: AgentError) -> String {
 
 #[cfg(all(
     feature = "tauri-runtime",
-    any(target_os = "windows", target_os = "macos")
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
 ))]
 mod runtime {
     use super::*;
@@ -579,7 +579,7 @@ mod runtime {
 
 #[cfg(all(
     feature = "tauri-runtime",
-    any(target_os = "windows", target_os = "macos")
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
 ))]
 fn main() {
     runtime::run();
@@ -587,10 +587,10 @@ fn main() {
 
 #[cfg(not(all(
     feature = "tauri-runtime",
-    any(target_os = "windows", target_os = "macos")
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
 )))]
 fn main() {
-    println!("NEXUS OS desktop backend (tauri-runtime disabled in this build)");
+    println!("NexusOS desktop backend (tauri-runtime disabled in this build)");
 }
 
 #[cfg(test)]

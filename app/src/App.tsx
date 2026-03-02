@@ -35,10 +35,10 @@ type Page = "chat" | "agents" | "audit" | "settings";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: Array<{ id: Page; label: string; hint: string }> = [
-  { id: "chat", label: "Chat", hint: "LLM + command routing" },
-  { id: "agents", label: "Agents", hint: "Runtime + controls" },
-  { id: "audit", label: "Audit", hint: "Event chain explorer" },
-  { id: "settings", label: "Settings", hint: "Config + privacy" }
+  { id: "chat", label: "Comms", hint: "LLM command channel" },
+  { id: "agents", label: "Agents", hint: "Runtime orchestration" },
+  { id: "audit", label: "Audit", hint: "Integrity ledger" },
+  { id: "settings", label: "Config", hint: "Keys, voice, privacy" }
 ];
 
 function defaultConfig(): NexusConfig {
@@ -610,47 +610,58 @@ export default function App(): JSX.Element {
 
   return (
     <>
-      <div className="flex min-h-screen text-zinc-100">
-        <aside className="hidden w-72 flex-col border-r border-zinc-800/80 bg-zinc-950/80 px-5 py-6 backdrop-blur md:flex">
-          <div>
-            <h1 className="font-display text-2xl tracking-wide text-zinc-100">NEXUS OS</h1>
-            <p className="mt-1 text-xs text-zinc-400">Governed agent operating system</p>
+      <div className="nexus-shell text-slate-100">
+        <aside className="nexus-sidebar hidden w-72 flex-col px-5 py-6 md:flex">
+          <div className="nexus-panel p-4">
+            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-cyan-300/80">NexusOS Core</p>
+            <h1 className="nexus-display mt-1 text-3xl">NexusOS</h1>
+            <p className="mt-1 text-xs text-slate-300/80">Governed Agent Operating System</p>
           </div>
-          <nav className="mt-8 space-y-2">
+
+          <nav className="mt-5 space-y-2">
             {NAV_ITEMS.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setPage(item.id)}
-                className={`w-full rounded-xl border px-3 py-3 text-left transition ${
+                className={`nexus-nav-button ${
                   page === item.id
-                    ? "border-emerald-500/60 bg-emerald-500/10"
-                    : "border-zinc-800 bg-zinc-900/70 hover:border-zinc-700"
+                    ? "nexus-nav-button-active"
+                    : "nexus-nav-button-idle"
                 }`}
               >
-                <span className="block font-display text-base text-zinc-100">{item.label}</span>
-                <span className="mt-0.5 block text-xs text-zinc-400">{item.hint}</span>
+                <span className="block font-display text-base text-slate-100">{item.label}</span>
+                <span className="mt-0.5 block text-xs text-cyan-100/60">{item.hint}</span>
               </button>
             ))}
           </nav>
-          <div className="mt-auto rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
-            <p className="text-xs text-zinc-400">Running agents</p>
-            <p className="mt-1 font-display text-2xl text-emerald-300">{runningAgents}</p>
+
+          <div className="mt-auto space-y-3">
+            <div className="nexus-panel p-3">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-cyan-100/60">Active Agents</p>
+              <p className="nexus-display mt-1 text-3xl text-cyan-200">{runningAgents}</p>
+            </div>
+            <div className="nexus-panel p-3">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-cyan-100/60">Runtime Link</p>
+              <p className="mt-1 text-sm text-slate-100">
+                {connectionStatus === "connected" ? "Kernel uplink: online" : "Kernel uplink: mock"}
+              </p>
+            </div>
           </div>
         </aside>
 
         <div className="flex min-h-screen flex-1 flex-col">
-          <header className="border-b border-zinc-800/80 bg-zinc-950/60 px-4 py-4 backdrop-blur sm:px-6">
+          <header className="nexus-topbar px-4 py-4 sm:px-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="font-display text-xl text-zinc-100">Desktop Control Plane</p>
+                <p className="nexus-display text-2xl text-cyan-100">Desktop Command Grid</p>
                 <div className="mt-1 flex items-center gap-2 text-xs">
                   <span
                     className={`inline-flex h-2.5 w-2.5 rounded-full ${
-                      connectionStatus === "connected" ? "bg-emerald-400" : "bg-amber-400"
+                      connectionStatus === "connected" ? "bg-cyan-300 shadow-[0_0_12px_rgba(56,189,248,0.95)]" : "bg-amber-300"
                     }`}
                   />
-                  <span className="text-zinc-400">
-                    {connectionStatus === "connected" ? "Connected to kernel backend" : "Mock runtime"}
+                  <span className="text-cyan-100/70">
+                    {connectionStatus === "connected" ? "Connected to governed kernel backend" : "Mock runtime mode"}
                   </span>
                 </div>
               </div>
@@ -659,7 +670,7 @@ export default function App(): JSX.Element {
                   onClick={() => {
                     void handleRefresh();
                   }}
-                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-200 hover:border-zinc-600"
+                  className="nexus-btn nexus-btn-secondary"
                 >
                   Refresh
                 </button>
@@ -671,11 +682,11 @@ export default function App(): JSX.Element {
                     }
                     void enableJarvisMode();
                   }}
-                  className={`rounded-lg px-3 py-2 font-semibold text-white ${
-                    overlay.visible ? "bg-rose-600 hover:bg-rose-500" : "bg-emerald-600 hover:bg-emerald-500"
+                  className={`nexus-btn font-semibold ${
+                    overlay.visible ? "bg-rose-600/90 text-white hover:bg-rose-500" : "nexus-btn-primary"
                   }`}
                 >
-                  {overlay.visible ? "Stop Voice" : "Start Voice"}
+                  {overlay.visible ? "Stop Jarvis" : "Start Jarvis"}
                 </button>
               </div>
             </div>
@@ -686,15 +697,15 @@ export default function App(): JSX.Element {
                   onClick={() => setPage(item.id)}
                   className={`rounded-lg border px-3 py-2 text-sm ${
                     page === item.id
-                      ? "border-emerald-500/60 bg-emerald-500/10 text-zinc-100"
-                      : "border-zinc-700 bg-zinc-900/70 text-zinc-300"
+                      ? "border-cyan-400/70 bg-cyan-500/15 text-cyan-50"
+                      : "border-slate-700/70 bg-slate-900/70 text-slate-300"
                   }`}
                 >
                   {item.label}
                 </button>
               ))}
             </nav>
-            {runtimeError ? <p className="mt-3 text-xs text-rose-400">{runtimeError}</p> : null}
+            {runtimeError ? <p className="mt-3 text-xs text-rose-300">{runtimeError}</p> : null}
           </header>
 
           <div className="flex-1 px-4 py-4 sm:px-6 sm:py-6">{renderPage()}</div>

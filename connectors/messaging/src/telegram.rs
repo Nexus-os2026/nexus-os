@@ -32,6 +32,12 @@ impl TelegramAdapter {
         Self::with_clock(None)
     }
 
+    pub fn with_clock_and_no_token(clock: Option<Arc<dyn Fn() -> u64 + Send + Sync>>) -> Self {
+        let mut adapter = Self::with_clock(clock);
+        adapter.bot_token = None;
+        adapter
+    }
+
     pub fn with_clock(clock: Option<Arc<dyn Fn() -> u64 + Send + Sync>>) -> Self {
         let limiter = match clock {
             Some(clock_fn) => RateLimiter::with_clock(clock_fn),

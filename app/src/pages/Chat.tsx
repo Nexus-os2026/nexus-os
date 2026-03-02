@@ -12,9 +12,9 @@ interface ChatProps {
 
 function bubbleClass(role: ChatMessage["role"]): string {
   if (role === "user") {
-    return "self-end max-w-[85%] rounded-2xl rounded-br-md bg-sky-600 px-4 py-3 text-sm text-white sm:max-w-[70%]";
+    return "self-end max-w-[88%] rounded-2xl rounded-br-md border border-cyan-200/70 bg-cyan-400/20 px-4 py-3 text-sm text-cyan-50 sm:max-w-[72%]";
   }
-  return "self-start max-w-[85%] rounded-2xl rounded-bl-md bg-zinc-800 px-4 py-3 text-sm text-zinc-100 sm:max-w-[70%]";
+  return "self-start max-w-[88%] rounded-2xl rounded-bl-md border border-slate-700/80 bg-slate-900/90 px-4 py-3 text-sm text-slate-100 sm:max-w-[72%]";
 }
 
 export function Chat({
@@ -27,17 +27,17 @@ export function Chat({
   onToggleMic
 }: ChatProps): JSX.Element {
   return (
-    <section className="flex h-[calc(100vh-10rem)] flex-col rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-[0_30px_80px_-45px_rgba(34,197,94,0.4)]">
-      <header className="border-b border-zinc-800 px-5 py-4">
-        <h2 className="font-display text-xl text-zinc-100">NEXUS Chat</h2>
-        <p className="mt-1 text-xs text-zinc-400">
+    <section className="nexus-panel flex h-[calc(100vh-10rem)] flex-col overflow-hidden">
+      <header className="border-b border-cyan-300/20 px-5 py-4">
+        <h2 className="nexus-display text-2xl text-cyan-100">NexusOS Comms</h2>
+        <p className="mt-1 text-xs text-cyan-100/65">
           Governed conversation loop with agent factory command routing.
         </p>
       </header>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
         {messages.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-zinc-700 bg-zinc-900/60 p-4 text-sm text-zinc-400">
+          <p className="rounded-xl border border-dashed border-cyan-300/35 bg-slate-900/75 p-4 text-sm text-cyan-100/70">
             Start by describing a task. Example: create agent weekly-research with web.search and llm.query.
           </p>
         ) : (
@@ -46,7 +46,7 @@ export function Chat({
               <div className={bubbleClass(message.role)}>
                 <p className="whitespace-pre-wrap">{message.content || (message.streaming ? "…" : "")}</p>
               </div>
-              <span className="mt-1 text-[11px] text-zinc-500">
+              <span className="mt-1 text-[11px] text-cyan-100/50">
                 {new Date(message.timestamp).toLocaleTimeString()}
                 {message.model ? ` · ${message.model}` : ""}
               </span>
@@ -56,7 +56,7 @@ export function Chat({
       </div>
 
       <form
-        className="border-t border-zinc-800 p-4"
+        className="border-t border-cyan-300/20 p-4"
         onSubmit={(event) => {
           event.preventDefault();
           if (!isSending) {
@@ -69,7 +69,9 @@ export function Chat({
             type="button"
             onClick={onToggleMic}
             className={`h-12 rounded-xl px-4 text-sm font-semibold transition ${
-              isRecording ? "bg-rose-600 text-white" : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+              isRecording
+                ? "border border-rose-300/60 bg-rose-500/80 text-white"
+                : "border border-slate-700/80 bg-slate-900/90 text-cyan-100 hover:border-cyan-300/55"
             }`}
             title="Push to talk"
           >
@@ -78,14 +80,14 @@ export function Chat({
           <textarea
             value={draft}
             onChange={(event) => onDraftChange(event.target.value)}
-            placeholder="Ask NEXUS OS..."
+            placeholder="Ask NexusOS..."
             rows={2}
-            className="min-h-12 flex-1 resize-none rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 outline-none ring-emerald-500/60 transition focus:ring-2"
+            className="min-h-12 flex-1 resize-none rounded-xl border border-cyan-400/35 bg-slate-950/95 px-4 py-3 text-sm text-cyan-50 outline-none ring-cyan-400/35 transition focus:border-cyan-300/75 focus:ring-2"
           />
           <button
             type="submit"
             disabled={isSending}
-            className="h-12 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-70"
+            className="h-12 rounded-xl border border-cyan-300/70 bg-cyan-500/20 px-5 text-sm font-semibold text-cyan-50 transition hover:bg-cyan-400/25 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isSending ? "Sending..." : "Send"}
           </button>

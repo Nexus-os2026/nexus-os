@@ -3,17 +3,138 @@
 @tailwind utilities;
 
 :root {
-  color: #f4f4f5;
-  background: radial-gradient(circle at top right, #164e63 0%, #0b1120 35%, #09090b 100%);
-  font-family: "Source Sans 3", sans-serif;
+  color-scheme: dark;
+  color: #d7f6ff;
+  background-color: #030712;
+  font-family: "Rajdhani", sans-serif;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background: transparent;
+  background:
+    radial-gradient(circle at 14% 22%, rgba(34, 211, 238, 0.2), transparent 32%),
+    radial-gradient(circle at 84% 8%, rgba(6, 182, 212, 0.16), transparent 35%),
+    radial-gradient(circle at 60% 110%, rgba(14, 116, 144, 0.25), transparent 45%),
+    linear-gradient(160deg, #020617 0%, #020b1c 38%, #061025 100%);
+  color: #d7f6ff;
+  font-family: "Rajdhani", sans-serif;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(14, 165, 233, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 165, 233, 0.08) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.9), transparent 85%);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(6, 182, 212, 0.04) 0px,
+    rgba(6, 182, 212, 0.04) 2px,
+    transparent 2px,
+    transparent 7px
+  );
+  opacity: 0.5;
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Orbitron", sans-serif;
+  letter-spacing: 0.02em;
 }
 
 #root {
   min-height: 100vh;
+}
+
+@layer components {
+  .nexus-shell {
+    @apply relative min-h-screen;
+  }
+
+  .nexus-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background: linear-gradient(120deg, rgba(15, 23, 42, 0.28) 0%, rgba(2, 132, 199, 0.06) 100%);
+  }
+
+  .nexus-shell > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .nexus-display {
+    font-family: "Orbitron", sans-serif;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .nexus-sidebar {
+    @apply border-r border-cyan-400/20 bg-slate-950/55 backdrop-blur-xl;
+  }
+
+  .nexus-topbar {
+    @apply border-b border-cyan-300/20 bg-slate-950/45 backdrop-blur-xl;
+  }
+
+  .nexus-panel {
+    @apply rounded-2xl border border-cyan-400/25 bg-slate-950/75;
+    box-shadow:
+      inset 0 1px 0 rgba(191, 247, 255, 0.08),
+      0 18px 45px -28px rgba(8, 145, 178, 0.75);
+  }
+
+  .nexus-panel-soft {
+    @apply rounded-xl border border-cyan-300/20 bg-slate-900/65;
+  }
+
+  .nexus-nav-button {
+    @apply w-full rounded-xl border px-3 py-3 text-left transition;
+  }
+
+  .nexus-nav-button-idle {
+    @apply border-slate-700/70 bg-slate-900/70 hover:border-cyan-300/45;
+  }
+
+  .nexus-nav-button-active {
+    @apply border-cyan-300/70 bg-cyan-400/10 shadow-[0_0_0_1px_rgba(125,211,252,0.2),0_0_24px_rgba(6,182,212,0.2)];
+  }
+
+  .nexus-btn {
+    @apply rounded-lg border px-3 py-2 text-xs transition;
+  }
+
+  .nexus-btn-primary {
+    @apply border-cyan-300/70 bg-cyan-500/20 text-cyan-50 hover:bg-cyan-400/25;
+  }
+
+  .nexus-btn-secondary {
+    @apply border-slate-600/90 bg-slate-900/75 text-slate-200 hover:border-cyan-300/50 hover:text-cyan-100;
+  }
+
+  .nexus-input {
+    @apply w-full rounded-lg border border-cyan-400/35 bg-slate-950/90 px-3 py-2 text-sm text-cyan-50 outline-none transition;
+  }
+
+  .nexus-input:focus {
+    @apply border-cyan-300/80 ring-2 ring-cyan-400/25;
+  }
 }

@@ -10,8 +10,9 @@ fn test_rate_limit_per_platform() {
     let now = Arc::new(AtomicU64::new(0));
 
     let tg_clock = Arc::clone(&now);
-    let mut telegram =
-        TelegramAdapter::with_clock(Some(Arc::new(move || tg_clock.load(Ordering::SeqCst))));
+    let mut telegram = TelegramAdapter::with_clock_and_no_token(Some(Arc::new(move || {
+        tg_clock.load(Ordering::SeqCst)
+    })));
 
     let first = telegram.send_message("chat-1", "hello");
     assert!(first.is_ok());

@@ -1,12 +1,12 @@
-# NEXUS OS User Guide
+# NexusOS User Guide
 
 ## Who This Guide Is For
 
-This guide is for operators who want to install NEXUS OS, configure real integrations, and run their first governed agent in minutes.
+This guide is for operators who want to install NexusOS, configure real integrations, and run their first governed agent in minutes.
 
 ## Getting Started (5 Minutes To First Agent)
 
-1. Install NEXUS OS CLI (platform steps below).
+1. Install NexusOS CLI (platform steps below).
 2. Run setup wizard: `nexus setup`
 3. Create first agent: `nexus agent create agents/social-poster/manifest.toml`
 4. Start safely in demo mode: `nexus agent start social-poster --dry-run`
@@ -46,7 +46,7 @@ Option B (from source):
 ### Windows
 
 Option A (installer):
-1. Download the latest `.msi` release artifact.
+1. Download the latest `.exe` (NSIS) or `.msi` release artifact.
 2. Install via installer UI.
 3. Open terminal and verify: `nexus --help`
 
@@ -163,6 +163,12 @@ Correct. Dry-run runs the full pipeline and audit logging but does not perform r
 
 - If bundling errors occur, use non-bundled build path and verify `tauri build` config.
 - Ensure required system libraries are present for your distro.
+
+### Desktop installer artifacts by platform
+
+- Windows desktop: `.exe` (NSIS installer) and `.msi`
+- macOS desktop: `.dmg`
+- Linux desktop: `.AppImage`, `.deb`, `.rpm`
 
 ### Where is configuration stored?
 

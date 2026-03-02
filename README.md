@@ -1,28 +1,45 @@
-# NEXUS OS
+# NexusOS
 
 **Tagline:** Don't trust. Verify.
 
-NEXUS OS is a governed agent operating system built in Rust. It runs policy-bounded agents with explicit capabilities, fuel budgets, audit trails, and human approval boundaries.
+NexusOS is a governed agent operating system built in Rust. It runs policy-bounded agents with explicit capabilities, fuel budgets, audit trails, and human approval boundaries.
 
 ## Installation
 
-### Linux
+### Linux (CLI)
 
 1. Download latest `.deb` artifact from Releases.
 2. Install: `sudo dpkg -i nexus-os_<version>_amd64.deb`
 3. Verify: `nexus --help`
 
-### macOS
+### macOS (CLI)
 
 1. Download latest macOS artifact (`.dmg` or package tarball).
 2. Install binary into your PATH.
 3. Verify: `nexus --help`
 
-### Windows
+### Windows (CLI)
 
 1. Download latest `.msi` artifact.
 2. Run installer.
 3. Verify in terminal: `nexus --help`
+
+## Desktop App Distribution (Tauri)
+
+Desktop artifacts are produced from `app/`:
+- Windows: `.exe` (NSIS installer) and `.msi`
+- macOS: `.dmg`
+- Linux: `.AppImage`, `.deb`, `.rpm`
+
+Local build commands:
+
+```bash
+cd app
+npm ci
+npm run dist:windows   # Windows host
+npm run dist:macos     # macOS host
+npm run dist:linux     # Linux host
+```
 
 For source-based installation on all platforms:
 

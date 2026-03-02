@@ -14,12 +14,12 @@ export function Settings({ config, onChange, onSave, saving }: SettingsProps): J
 
   return (
     <section className="grid h-[calc(100vh-10rem)] grid-cols-1 gap-4 overflow-y-auto pr-1 lg:grid-cols-2">
-      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
+      <article className="nexus-panel p-5">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-display text-xl text-zinc-100">API Configuration</h2>
+          <h2 className="nexus-display text-xl text-cyan-100">API Configuration</h2>
           <button
             onClick={() => setShowSecrets((prev) => !prev)}
-            className="rounded-lg bg-zinc-800 px-3 py-1 text-xs text-zinc-200"
+            className="nexus-btn nexus-btn-secondary"
           >
             {showSecrets ? "Hide Keys" : "Show Keys"}
           </button>
@@ -52,8 +52,8 @@ export function Settings({ config, onChange, onSave, saving }: SettingsProps): J
         </div>
       </article>
 
-      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
-        <h2 className="font-display text-xl text-zinc-100">Voice Settings</h2>
+      <article className="nexus-panel p-5">
+        <h2 className="nexus-display text-xl text-cyan-100">Voice Settings</h2>
         <div className="mt-3 space-y-3">
           <LabelledInput
             label="Whisper Model"
@@ -78,11 +78,11 @@ export function Settings({ config, onChange, onSave, saving }: SettingsProps): J
         </div>
       </article>
 
-      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
-        <h2 className="font-display text-xl text-zinc-100">Privacy</h2>
+      <article className="nexus-panel p-5">
+        <h2 className="nexus-display text-xl text-cyan-100">Privacy</h2>
         <div className="mt-4 space-y-4">
-          <label className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-            <span className="text-sm text-zinc-200">Telemetry</span>
+          <label className="flex items-center justify-between rounded-lg border border-slate-700/80 bg-slate-950 p-3">
+            <span className="text-sm text-cyan-50">Telemetry</span>
             <input
               type="checkbox"
               checked={config.privacy.telemetry}
@@ -107,18 +107,18 @@ export function Settings({ config, onChange, onSave, saving }: SettingsProps): J
         </div>
       </article>
 
-      <article className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
-        <h2 className="font-display text-xl text-zinc-100">About</h2>
-        <ul className="mt-3 space-y-2 text-sm text-zinc-300">
+      <article className="nexus-panel p-5">
+        <h2 className="nexus-display text-xl text-cyan-100">About</h2>
+        <ul className="mt-3 space-y-2 text-sm text-slate-200">
           <li>Version: 1.0.0</li>
           <li>License: TBD</li>
-          <li>Project: github.com/nexai-lang/nexus-os</li>
+          <li>Project: github.com/nex-lang/nexus-os</li>
           <li>Stack: Tauri + React + TypeScript + Tailwind</li>
         </ul>
         <button
           onClick={onSave}
           disabled={saving}
-          className="mt-5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-70"
+          className="nexus-btn nexus-btn-primary mt-5 px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70"
         >
           {saving ? "Saving..." : "Save Settings"}
         </button>
@@ -137,12 +137,12 @@ interface LabelledInputProps {
 function LabelledInput({ label, value, onChange, type = "text" }: LabelledInputProps): JSX.Element {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs text-zinc-400">{label}</span>
+      <span className="mb-1 block text-xs text-cyan-100/65">{label}</span>
       <input
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+        className="nexus-input"
       />
     </label>
   );

@@ -5,14 +5,14 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        display: ["'Space Grotesk'", "sans-serif"],
-        body: ["'Source Sans 3'", "sans-serif"]
+        display: ["'Orbitron'", "sans-serif"],
+        body: ["'Rajdhani'", "sans-serif"]
       },
       colors: {
-        ink: "#102033",
-        mist: "#eef4fb",
-        accent: "#d95f18",
-        mint: "#2b8a6e"
+        ink: "#08162a",
+        mist: "#d8fbff",
+        accent: "#06b6d4",
+        mint: "#22d3ee"
       }
     }
   },
