@@ -23,8 +23,8 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Install cargo-audit (pinned)
-        run: cargo install cargo-audit --version 0.21.1 --locked --force
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked --force
 
       - name: Install cargo-deny (pinned)
         run: |
