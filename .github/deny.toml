@@ -2,13 +2,14 @@
 all-features = true
 
 [advisories]
-vulnerability = "deny"
-unmaintained = "warn"
+# cargo-deny >= 0.19 uses scope values for informational advisories.
+unmaintained = "workspace"
 yanked = "warn"
 ignore = []
 
 [licenses]
-unlicensed = "warn"
+# Workspace crates still use placeholder SPDX values, so CI downgrades
+# unlicensed findings to warnings via: cargo deny ... -W unlicensed
 allow = [
   "0BSD",
   "Apache-2.0",
@@ -21,6 +22,8 @@ allow = [
   "MIT",
   "MPL-2.0",
   "OpenSSL",
+  "CDLA-Permissive-2.0",
+  "Unicode-3.0",
   "Unicode-DFS-2016",
   "Zlib"
 ]
