@@ -23,14 +23,18 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked --force
+      - name: Install cargo-audit (pinned CVSS4-capable revision)
+        run: cargo install --git https://github.com/RustSec/rustsec.git --rev 7e8ce5c6933a81c6aa8459f69615069f8cf766f4 cargo-audit --locked --force
 
-      - name: Install cargo-deny (pinned)
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked --force
+
+      - name: Print tool versions
         run: |
-          cargo install cargo-deny --version 0.14.24 --locked --force
+          rustc -V
+          cargo -V
+          cargo audit -V
           cargo deny -V
-          which cargo-deny || true
 
       - name: Run cargo audit
         run: cargo audit
