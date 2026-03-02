@@ -13,6 +13,11 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
+#[cfg(all(
+    feature = "tauri-runtime",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
+use tauri::Manager;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentRow {
@@ -510,7 +515,7 @@ mod runtime {
     }
 
     pub fn run() {
-        tauri::Builder::default()
+        tauri::Builder::<tauri::Wry>::default()
             .manage(AppState::new())
             .setup(|app| {
                 let show_dashboard =
