@@ -34,7 +34,6 @@
       "msi",
       "nsis"
     ],
-    "identifier": "com.nexus-os.app",
     "icon": [
       "icons/icon.ico",
       "icons/icon.png"
@@ -51,7 +50,6 @@
         "sidebarImage": "icons/sidebar.bmp"
       }
     },
-    "productName": "NexusOS",
     "shortDescription": "Governed Agent Operating System",
     "longDescription": "NexusOS — The AI agent OS that proves what it did. Create, manage, and monitor autonomous AI agents with complete governance, audit trails, and voice control."
   }
