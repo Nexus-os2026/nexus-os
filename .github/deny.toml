@@ -3,7 +3,7 @@ all-features = true
 
 [advisories]
 vulnerability = "deny"
-unmaintained = "workspace"
+unmaintained = "warn"
 yanked = "warn"
 ignore = []
 
