@@ -16,6 +16,7 @@ import {
   stopJarvisMode
 } from "./api/backend";
 import { SplashScreen } from "./components/SplashScreen";
+import { Background } from "./components/ui/Background";
 import { VoiceOverlay, type VoiceOverlayState } from "./components/VoiceOverlay";
 import { Agents } from "./pages/Agents";
 import { Audit } from "./pages/Audit";
@@ -616,6 +617,7 @@ export default function App(): JSX.Element {
 
   return (
     <>
+      <Background />
       <SplashScreen
         ready={appReady}
         visible={splashVisible}

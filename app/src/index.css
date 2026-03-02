@@ -4,21 +4,17 @@
 
 :root {
   color-scheme: dark;
-  color: #d7f6ff;
-  background-color: #030712;
-  font-family: "Rajdhani", sans-serif;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  font-family: var(--font-body);
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 14% 22%, rgba(34, 211, 238, 0.2), transparent 32%),
-    radial-gradient(circle at 84% 8%, rgba(6, 182, 212, 0.16), transparent 35%),
-    radial-gradient(circle at 60% 110%, rgba(14, 116, 144, 0.25), transparent 45%),
-    linear-gradient(160deg, #020617 0%, #020b1c 38%, #061025 100%);
-  color: #d7f6ff;
-  font-family: "Rajdhani", sans-serif;
+  background: linear-gradient(165deg, var(--bg-primary) 0%, var(--bg-secondary) 55%, #05090f 100%);
+  color: var(--text-primary);
+  font-family: var(--font-body);
   overflow-x: hidden;
 }
 
@@ -29,8 +25,8 @@ body::before {
   z-index: -2;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(14, 165, 233, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(14, 165, 233, 0.08) 1px, transparent 1px);
+    linear-gradient(rgba(0, 240, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.05) 1px, transparent 1px);
   background-size: 34px 34px;
   mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.9), transparent 85%);
 }
@@ -43,8 +39,8 @@ body::after {
   pointer-events: none;
   background: repeating-linear-gradient(
     to bottom,
-    rgba(6, 182, 212, 0.04) 0px,
-    rgba(6, 182, 212, 0.04) 2px,
+    rgba(0, 240, 255, 0.025) 0px,
+    rgba(0, 240, 255, 0.025) 2px,
     transparent 2px,
     transparent 7px
   );
@@ -54,7 +50,7 @@ body::after {
 h1,
 h2,
 h3 {
-  font-family: "Orbitron", sans-serif;
+  font-family: var(--font-display);
   letter-spacing: 0.02em;
 }
 
@@ -82,24 +78,31 @@ h3 {
   }
 
   .nexus-display {
-    font-family: "Orbitron", sans-serif;
+    font-family: var(--font-display);
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
 
   .nexus-sidebar {
-    @apply border-r border-cyan-400/20 bg-slate-950/55 backdrop-blur-xl;
+    @apply border-r backdrop-blur-xl;
+    border-color: var(--border);
+    background: linear-gradient(155deg, rgba(13, 17, 23, 0.7), rgba(13, 17, 23, 0.42));
   }
 
   .nexus-topbar {
-    @apply border-b border-cyan-300/20 bg-slate-950/45 backdrop-blur-xl;
+    @apply border-b backdrop-blur-xl;
+    border-color: var(--border);
+    background: linear-gradient(180deg, rgba(13, 17, 23, 0.8), rgba(13, 17, 23, 0.5));
   }
 
   .nexus-panel {
-    @apply rounded-2xl border border-cyan-400/25 bg-slate-950/75;
+    @apply rounded-2xl border;
+    border-color: var(--border);
+    background: linear-gradient(145deg, rgba(13, 17, 23, 0.88), rgba(13, 17, 23, 0.64));
+    backdrop-filter: blur(10px);
     box-shadow:
-      inset 0 1px 0 rgba(191, 247, 255, 0.08),
-      0 18px 45px -28px rgba(8, 145, 178, 0.75);
+      inset 0 1px 0 rgba(0, 240, 255, 0.08),
+      0 18px 45px -28px rgba(0, 240, 255, 0.42);
   }
 
   .nexus-panel-soft {
@@ -115,7 +118,7 @@ h3 {
   }
 
   .nexus-nav-button-active {
-    @apply border-cyan-300/70 bg-cyan-400/10 shadow-[0_0_0_1px_rgba(125,211,252,0.2),0_0_24px_rgba(6,182,212,0.2)];
+    @apply border-cyan-300/70 bg-cyan-400/10 shadow-[0_0_0_1px_rgba(0,240,255,0.3),0_0_26px_rgba(0,240,255,0.18)];
   }
 
   .nexus-btn {
@@ -279,7 +282,7 @@ h3 {
 .splash-version {
   margin: 0 0 0.6rem;
   color: rgba(125, 211, 252, 0.85);
-  font-family: "Roboto Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.78rem;
   letter-spacing: 0.1em;
   opacity: 0;

@@ -1,0 +1,85 @@
+@keyframes glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 6px rgba(0, 240, 255, 0.2), 0 0 16px rgba(0, 240, 255, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(0, 240, 255, 0.45), 0 0 28px rgba(0, 240, 255, 0.4);
+  }
+}
+
+@keyframes scan-line {
+  from {
+    transform: translateX(-130%);
+  }
+  to {
+    transform: translateX(130%);
+  }
+}
+
+@keyframes data-flow {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
+}
+
+@keyframes hex-draw {
+  from {
+    stroke-dashoffset: 400;
+    opacity: 0.3;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+@keyframes fade-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes typing {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes ripple-out {
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(25);
+    opacity: 0;
+  }
+}
+
+@keyframes float-particle {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-6px, -18px, 0);
+  }
+  100% {
+    transform: translate3d(5px, -40px, 0);
+  }
+}
+
+.fade-slide-up {
+  animation: fade-slide-up 280ms ease both;
+}
