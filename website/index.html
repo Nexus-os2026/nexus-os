@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NexusOS | Governed Agent Operating System</title>
+    <meta
+      name="description"
+      content="NexusOS is the AI agent operating system that proves what it did. Create, govern, and verify autonomous AI agents."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Orbitron:wght@500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <canvas id="particle-canvas" aria-hidden="true"></canvas>
+    <div class="grid-overlay" aria-hidden="true"></div>
+    <div class="scan-overlay" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <div class="logo-wrap">
+        <div class="logo-hex" aria-hidden="true"></div>
+        <span class="logo-text">NEXUSOS</span>
+      </div>
+      <a class="header-link" href="https://github.com/nexai-lang/nexus-os" target="_blank" rel="noreferrer">GitHub</a>
+    </header>
+
+    <main>
+      <section class="hero section" id="home">
+        <div class="hero-copy">
+          <p class="hero-status"><span class="status-dot"></span>NEXUS CORE // ACTIVE</p>
+          <h1>NexusOS</h1>
+          <p class="tagline">The AI Agent Operating System That Proves What It Did</p>
+          <p class="subtitle">Create, govern, and verify autonomous AI agents</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="#download">Download for Free</a>
+            <a class="btn btn-ghost" href="https://github.com/nexai-lang/nexus-os" target="_blank" rel="noreferrer">View on GitHub</a>
+          </div>
+        </div>
+
+        <div class="hero-mockup" aria-hidden="true">
+          <div class="mockup-shell">
+            <div class="mockup-topbar">
+              <span></span><span></span><span></span>
+              <p>NEXUSOS // Mission Control</p>
+            </div>
+            <div class="mockup-body">
+              <aside class="mockup-side">
+                <div></div><div></div><div></div><div></div>
+              </aside>
+              <section class="mockup-main">
+                <div class="mock-line long"></div>
+                <div class="mock-line medium"></div>
+                <div class="mock-line short"></div>
+                <div class="mock-cards">
+                  <article></article><article></article><article></article>
+                </div>
+                <div class="mock-terminal">
+                  <p>&gt; AGENT social-poster status: RUNNING</p>
+                  <p>&gt; AUDIT CHAIN integrity: VERIFIED</p>
+                  <p>&gt; VOICE PIPELINE latency: 42ms</p>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section features" id="features">
+        <h2>Core Capabilities</h2>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <div class="icon">⬢</div>
+            <h3>Governed Agents</h3>
+            <p>Capability-bounded, fuel-limited, audited operations with explicit control boundaries.</p>
+          </article>
+          <article class="feature-card">
+            <div class="icon">⛓</div>
+            <h3>Forensic Replay</h3>
+            <p>Prove exactly what every agent did with immutable event trails and replay visibility.</p>
+          </article>
+          <article class="feature-card">
+            <div class="icon">◉</div>
+            <h3>Voice Control</h3>
+            <p>Talk to your agents using local-first voice interfaces for private, controlled execution.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section how" id="how-it-works">
+        <h2>How It Works</h2>
+        <div class="steps-line" aria-hidden="true"></div>
+        <div class="steps-grid">
+          <article class="step-card"><span>01</span><p>Install NexusOS (one command)</p></article>
+          <article class="step-card"><span>02</span><p>Describe your agent in plain English</p></article>
+          <article class="step-card"><span>03</span><p>NEXUS researches, creates, and runs it</p></article>
+          <article class="step-card"><span>04</span><p>Verify everything with forensic replay</p></article>
+        </div>
+      </section>
+
+      <section class="section download" id="download">
+        <h2>Download NexusOS</h2>
+        <div class="download-grid">
+          <a class="platform-card" href="https://github.com/nexai-lang/nexus-os/releases/latest/download/NexusOS_1.0.0_x64-setup.exe" target="_blank" rel="noreferrer">
+            <h3>Windows (.exe)</h3>
+            <p>Download for Windows</p>
+          </a>
+          <a class="platform-card" href="https://github.com/nexai-lang/nexus-os/releases/latest/download/NexusOS_1.0.0_aarch64.dmg" target="_blank" rel="noreferrer">
+            <h3>macOS (.dmg)</h3>
+            <p>Download for macOS</p>
+          </a>
+          <a class="platform-card" href="https://github.com/nexai-lang/nexus-os/releases/latest/download/nexus-os_1.0.0_amd64.deb" target="_blank" rel="noreferrer">
+            <h3>Linux (.deb)</h3>
+            <p>Download for Linux</p>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <nav>
+        <a href="https://github.com/nexai-lang/nexus-os" target="_blank" rel="noreferrer">GitHub</a>
+        <a href="https://github.com/nexai-lang/nexus-os/tree/main/docs" target="_blank" rel="noreferrer">Documentation</a>
+        <a href="https://github.com/nexai-lang/nexus-os/blob/main/LICENSE" target="_blank" rel="noreferrer">License</a>
+      </nav>
+      <p>Don't trust. Verify.</p>
+    </footer>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
