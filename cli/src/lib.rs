@@ -1,6 +1,7 @@
 //! Command-surface helpers for NEXUS OS operator and developer interfaces.
 
 use clap::{Parser, Subcommand};
+use coding_agent::run_coding_agent_from_manifest;
 use nexus_kernel::manifest::parse_manifest;
 use social_poster_agent::run_social_poster_from_manifest;
 pub mod setup;
@@ -97,31 +98,46 @@ pub fn execute_agent_command(command: AgentCommand) -> Result<String, String> {
 }
 
 fn start_agent(agent_id: &str, dry_run: bool) -> Result<String, String> {
-    if agent_id != "social-poster" {
-        if dry_run {
-            return Ok(format!(
-                "Agent '{agent_id}' started successfully (dry-run mode)"
-            ));
+    if agent_id == "social-poster" {
+        let manifest = resolve_social_poster_manifest()?;
+        let report = run_social_poster_from_manifest(manifest.as_path(), dry_run)
+            .map_err(|error| format!("social-poster run failed: {error}"))?;
+
+        let mut summary = format!(
+            "Agent 'social-poster' completed (dry_run={}, generated={}, published={})",
+            report.dry_run,
+            report.generated_posts.len(),
+            report.published_post_ids.len()
+        );
+        if report.dry_run {
+            for (index, post) in report.generated_posts.iter().enumerate() {
+                summary.push_str(format!("\n[post {}] {}", index + 1, post.text).as_str());
+            }
         }
-        return Ok(format!("Agent '{agent_id}' started successfully"));
+        return Ok(summary);
     }
 
-    let manifest = resolve_social_poster_manifest()?;
-    let report = run_social_poster_from_manifest(manifest.as_path(), dry_run)
-        .map_err(|error| format!("social-poster run failed: {error}"))?;
-
-    let mut summary = format!(
-        "Agent 'social-poster' completed (dry_run={}, generated={}, published={})",
-        report.dry_run,
-        report.generated_posts.len(),
-        report.published_post_ids.len()
-    );
-    if report.dry_run {
-        for (index, post) in report.generated_posts.iter().enumerate() {
-            summary.push_str(format!("\n[post {}] {}", index + 1, post.text).as_str());
-        }
+    if agent_id == "coding-agent" {
+        let manifest = resolve_coding_agent_manifest()?;
+        let report = run_coding_agent_from_manifest(manifest.as_path(), dry_run)
+            .map_err(|error| format!("coding-agent run failed: {error}"))?;
+        return Ok(format!(
+            "Agent 'coding-agent' completed (dry_run={}, success={}, iterations={}, modified_files={}, fuel_remaining={})\nstatus: {}",
+            report.dry_run,
+            report.success,
+            report.iterations,
+            report.modified_files.len(),
+            report.fuel_remaining,
+            report.status
+        ));
     }
-    Ok(summary)
+
+    if dry_run {
+        return Ok(format!(
+            "Agent '{agent_id}' started successfully (dry-run mode)"
+        ));
+    }
+    Ok(format!("Agent '{agent_id}' started successfully"))
 }
 
 pub fn create_agent_from_path(manifest_path: &Path) -> Result<String, String> {
@@ -202,4 +218,21 @@ fn resolve_social_poster_manifest() -> Result<PathBuf, String> {
     }
 
     Err("social-poster manifest not found".to_string())
+}
+
+fn resolve_coding_agent_manifest() -> Result<PathBuf, String> {
+    if let Ok(cwd) = std::env::current_dir() {
+        let candidate = cwd.join("agents/coding-agent/manifest.toml");
+        if candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+
+    let fallback =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../agents/coding-agent/manifest.toml");
+    if fallback.exists() {
+        return Ok(fallback);
+    }
+
+    Err("coding-agent manifest not found".to_string())
 }

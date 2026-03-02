@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+  "agents/coding-agent",
   "agents/social-poster",
   "kernel",
   "connectors/core",

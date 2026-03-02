@@ -1,0 +1,12 @@
+name = "coding-agent"
+version = "2.0.0"
+capabilities = ["fs.read", "fs.write", "process.exec", "audit.read"]
+fuel_budget = 50000
+llm_model = "claude-sonnet-4-5"
+
+[config]
+repo_path = "."
+objective = "Read the repository, apply fixes, and keep iterating until tests pass."
+test_command = "cargo test --workspace"
+max_iterations = 5
+target_files = ["cli/src/lib.rs", "kernel/src/manifest.rs"]

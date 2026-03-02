@@ -409,6 +409,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a822ea5bc7590f9d40f1ba12c0dc3c2760f3482c6984db1573ad11031420831"
 
 [[package]]
+name = "coding-agent"
+version = "0.1.0"
+dependencies = [
+ "nexus-kernel",
+ "serde",
+ "serde_json",
+ "toml 0.8.23",
+ "uuid",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2157,6 +2168,7 @@ name = "nexus-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "coding-agent",
  "nexus-connectors-core",
  "nexus-kernel",
  "social-poster-agent",
@@ -2293,6 +2305,7 @@ dependencies = [
 name = "nexus-integration"
 version = "0.1.0"
 dependencies = [
+ "coding-agent",
  "nexus-adaptation",
  "nexus-analytics",
  "nexus-connectors-llm",
