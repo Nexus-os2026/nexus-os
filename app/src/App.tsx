@@ -16,6 +16,7 @@ import {
   stopJarvisMode
 } from "./api/backend";
 import { SplashScreen } from "./components/SplashScreen";
+import { Sidebar, type SidebarItem } from "./components/layout/Sidebar";
 import { Background } from "./components/ui/Background";
 import { VoiceOverlay, type VoiceOverlayState } from "./components/VoiceOverlay";
 import { Agents } from "./pages/Agents";
@@ -33,14 +34,15 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "settings";
+type Page = "chat" | "agents" | "audit" | "marketplace" | "settings";
 type RuntimeMode = "desktop" | "mock";
 
-const NAV_ITEMS: Array<{ id: Page; label: string; hint: string }> = [
-  { id: "chat", label: "Comms", hint: "LLM command channel" },
-  { id: "agents", label: "Agents", hint: "Runtime orchestration" },
-  { id: "audit", label: "Audit", hint: "Integrity ledger" },
-  { id: "settings", label: "Config", hint: "Keys, voice, privacy" }
+const NAV_ITEMS: SidebarItem[] = [
+  { id: "chat", label: "Chat", icon: "⌁", shortcut: "Alt+1" },
+  { id: "agents", label: "Agents", icon: "⬢", shortcut: "Alt+2" },
+  { id: "audit", label: "Audit", icon: "⧉", shortcut: "Alt+3" },
+  { id: "marketplace", label: "Marketplace", icon: "◈", shortcut: "Alt+4" },
+  { id: "settings", label: "Settings", icon: "⚙", shortcut: "Alt+5" }
 ];
 
 function defaultConfig(): NexusConfig {
@@ -603,6 +605,18 @@ export default function App(): JSX.Element {
     if (page === "audit") {
       return <Audit events={auditEvents} />;
     }
+    if (page === "marketplace") {
+      return (
+        <section className="nexus-panel flex h-[calc(100vh-10rem)] items-center justify-center p-8">
+          <div className="text-center">
+            <h2 className="nexus-display text-2xl text-cyan-100">Marketplace // Soon</h2>
+            <p className="mt-2 text-sm text-cyan-100/65">
+              Curated agent packages and trust policies will appear here.
+            </p>
+          </div>
+        </section>
+      );
+    }
     return (
       <Settings
         config={config}
@@ -626,43 +640,12 @@ export default function App(): JSX.Element {
         }}
       />
       <div className="nexus-shell text-slate-100">
-        <aside className="nexus-sidebar hidden w-72 flex-col px-5 py-6 md:flex">
-          <div className="nexus-panel p-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-cyan-300/80">NexusOS Core</p>
-            <h1 className="nexus-display mt-1 text-3xl">NexusOS</h1>
-            <p className="mt-1 text-xs text-slate-300/80">Governed Agent Operating System</p>
-          </div>
-
-          <nav className="mt-5 space-y-2">
-            {NAV_ITEMS.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setPage(item.id)}
-                className={`nexus-nav-button ${
-                  page === item.id
-                    ? "nexus-nav-button-active"
-                    : "nexus-nav-button-idle"
-                }`}
-              >
-                <span className="block font-display text-base text-slate-100">{item.label}</span>
-                <span className="mt-0.5 block text-xs text-cyan-100/60">{item.hint}</span>
-              </button>
-            ))}
-          </nav>
-
-          <div className="mt-auto space-y-3">
-            <div className="nexus-panel p-3">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-cyan-100/60">Active Agents</p>
-              <p className="nexus-display mt-1 text-3xl text-cyan-200">{runningAgents}</p>
-            </div>
-            <div className="nexus-panel p-3">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-cyan-100/60">Runtime Link</p>
-              <p className="mt-1 text-sm text-slate-100">
-                {connectionStatus === "connected" ? "Kernel uplink: online" : "Kernel uplink: mock"}
-              </p>
-            </div>
-          </div>
-        </aside>
+        <Sidebar
+          items={NAV_ITEMS}
+          activeId={page}
+          onSelect={(id) => setPage(id as Page)}
+          version="v1.0.0"
+        />
 
         <div className="flex min-h-screen flex-1 flex-col">
           <header className="nexus-topbar px-4 py-4 sm:px-6">
@@ -705,21 +688,14 @@ export default function App(): JSX.Element {
                 </button>
               </div>
             </div>
-            <nav className="mt-4 grid grid-cols-2 gap-2 md:hidden">
-              {NAV_ITEMS.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setPage(item.id)}
-                  className={`rounded-lg border px-3 py-2 text-sm ${
-                    page === item.id
-                      ? "border-cyan-400/70 bg-cyan-500/15 text-cyan-50"
-                      : "border-slate-700/70 bg-slate-900/70 text-slate-300"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </nav>
+            <div className="mt-3 flex flex-wrap items-center gap-4 text-xs">
+              <span className="text-cyan-100/60">
+                Active agents: <span className="text-cyan-100">{runningAgents}</span>
+              </span>
+              <span className="text-cyan-100/60">
+                Runtime: <span className="text-cyan-100">{connectionStatus}</span>
+              </span>
+            </div>
             {runtimeError ? <p className="mt-3 text-xs text-rose-300">{runtimeError}</p> : null}
           </header>
 

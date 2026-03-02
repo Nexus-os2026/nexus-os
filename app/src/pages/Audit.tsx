@@ -1,167 +1,321 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import "./audit.css";
 import type { AuditEventRow } from "../types";
 
 interface AuditProps {
   events: AuditEventRow[];
 }
 
-export function Audit({ events }: AuditProps): JSX.Element {
-  const [query, setQuery] = useState("");
-  const [agentFilter, setAgentFilter] = useState("all");
-  const [eventTypeFilter, setEventTypeFilter] = useState("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(events[0]?.event_id ?? null);
+type EventCategory = "StateChange" | "ToolCall" | "LlmCall" | "Error" | "UserAction" | "Other";
 
-  const filtered = useMemo(() => {
-    const lowered = query.toLowerCase();
-    return events.filter((event) => {
-      const eventDate = new Date(event.timestamp * 1000);
-      const fromMatches = dateFrom.length === 0 || eventDate >= new Date(`${dateFrom}T00:00:00`);
-      const toMatches = dateTo.length === 0 || eventDate <= new Date(`${dateTo}T23:59:59`);
-      const matchesQuery =
-        lowered.length === 0 ||
-        event.event_id.toLowerCase().includes(lowered) ||
-        JSON.stringify(event.payload).toLowerCase().includes(lowered);
-      const matchesAgent = agentFilter === "all" || event.agent_id === agentFilter;
-      const matchesType = eventTypeFilter === "all" || event.event_type === eventTypeFilter;
-      return matchesQuery && matchesAgent && matchesType && fromMatches && toMatches;
-    });
-  }, [agentFilter, dateFrom, dateTo, eventTypeFilter, events, query]);
+const EVENT_TYPES: EventCategory[] = ["StateChange", "ToolCall", "LlmCall", "Error", "UserAction", "Other"];
 
-  const integrity = useMemo(() => {
-    for (let index = 1; index < filtered.length; index += 1) {
-      if (filtered[index].previous_hash !== filtered[index - 1].hash) {
-        return false;
-      }
-    }
-    return true;
-  }, [filtered]);
+function eventCategory(eventType: string): EventCategory {
+  const lowered = eventType.toLowerCase();
+  if (lowered.includes("state")) {
+    return "StateChange";
+  }
+  if (lowered.includes("tool")) {
+    return "ToolCall";
+  }
+  if (lowered.includes("llm")) {
+    return "LlmCall";
+  }
+  if (lowered.includes("error")) {
+    return "Error";
+  }
+  if (lowered.includes("user")) {
+    return "UserAction";
+  }
+  return "Other";
+}
 
-  const agents = Array.from(new Set(events.map((event) => event.agent_id)));
-  const eventTypes = Array.from(new Set(events.map((event) => event.event_type)));
-  const selectedEvent = filtered.find((event) => event.event_id === selectedEventId) ?? filtered[0] ?? null;
+function categoryClass(category: EventCategory): string {
+  if (category === "StateChange") {
+    return "audit-color-statechange";
+  }
+  if (category === "ToolCall") {
+    return "audit-color-toolcall";
+  }
+  if (category === "LlmCall") {
+    return "audit-color-llmcall";
+  }
+  if (category === "Error") {
+    return "audit-color-error";
+  }
+  if (category === "UserAction") {
+    return "audit-color-useraction";
+  }
+  return "audit-color-statechange";
+}
 
-  return (
-    <section className="grid h-[calc(100vh-10rem)] grid-cols-1 gap-4 lg:grid-cols-[1.25fr_1fr]">
-      <div className="nexus-panel p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="nexus-display text-2xl text-cyan-100">Audit Explorer</h2>
-          <span
-            className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-              integrity
-                ? "border-cyan-300/60 bg-cyan-500/15 text-cyan-100"
-                : "border-rose-300/60 bg-rose-500/15 text-rose-200"
-            }`}
-          >
-            {integrity ? "Chain: verified" : "Chain: invalid"}
-          </span>
-        </div>
-
-        <div className="mt-4 grid gap-2 sm:grid-cols-5">
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search events"
-            className="nexus-input"
-          />
-          <select
-            value={agentFilter}
-            onChange={(event) => setAgentFilter(event.target.value)}
-            className="nexus-input"
-          >
-            <option value="all">All agents</option>
-            {agents.map((agentId) => (
-              <option key={agentId} value={agentId}>{agentId}</option>
-            ))}
-          </select>
-          <select
-            value={eventTypeFilter}
-            onChange={(event) => setEventTypeFilter(event.target.value)}
-            className="nexus-input"
-          >
-            <option value="all">All event types</option>
-            {eventTypes.map((eventType) => (
-              <option key={eventType} value={eventType}>{eventType}</option>
-            ))}
-          </select>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(event) => setDateFrom(event.target.value)}
-            className="nexus-input"
-          />
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(event) => setDateTo(event.target.value)}
-            className="nexus-input"
-          />
-        </div>
-
-        <div className="mt-4 max-h-[32rem] overflow-auto rounded-xl border border-cyan-300/20 bg-slate-950/85">
-          <table className="min-w-full text-left text-xs text-slate-200">
-            <thead className="sticky top-0 bg-slate-900 text-cyan-100/80">
-              <tr>
-                <th className="px-3 py-2">Time</th>
-                <th className="px-3 py-2">Agent</th>
-                <th className="px-3 py-2">Type</th>
-                <th className="px-3 py-2">Summary</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((event) => (
-                <tr
-                  key={event.event_id}
-                  onClick={() => setSelectedEventId(event.event_id)}
-                  className={`cursor-pointer border-t border-slate-700/70 ${
-                    selectedEvent?.event_id === event.event_id ? "bg-cyan-500/10" : "hover:bg-slate-900"
-                  }`}
-                >
-                  <td className="px-3 py-2">{new Date(event.timestamp * 1000).toLocaleString()}</td>
-                  <td className="px-3 py-2">{event.agent_id}</td>
-                  <td className="px-3 py-2">{event.event_type}</td>
-                  <td className="px-3 py-2">{summarizePayload(event.payload)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <aside className="nexus-panel p-6">
-        <h3 className="nexus-display text-lg text-cyan-100">Event Details</h3>
-        {selectedEvent ? (
-          <div className="mt-3 space-y-3 text-xs">
-            <div className="rounded-lg border border-slate-700/80 bg-slate-950 p-3">
-              <p className="text-cyan-100/60">Timestamp</p>
-              <p className="mt-1 text-cyan-50">{new Date(selectedEvent.timestamp * 1000).toLocaleString()}</p>
-            </div>
-            <div className="rounded-lg border border-slate-700/80 bg-slate-950 p-3">
-              <p className="text-cyan-100/60">Agent</p>
-              <p className="mt-1 text-cyan-50">{selectedEvent.agent_id}</p>
-            </div>
-            <div className="rounded-lg border border-slate-700/80 bg-slate-950 p-3">
-              <p className="text-cyan-100/60">Event Type</p>
-              <p className="mt-1 text-cyan-50">{selectedEvent.event_type}</p>
-            </div>
-            <div className="rounded-lg border border-slate-700/80 bg-slate-950 p-3">
-              <p className="text-cyan-100/60">Payload</p>
-              <pre className="mt-1 whitespace-pre-wrap text-slate-200">{JSON.stringify(selectedEvent.payload, null, 2)}</pre>
-            </div>
-          </div>
-        ) : (
-          <p className="mt-3 text-sm text-cyan-100/60">Select an event to inspect payload details.</p>
-        )}
-      </aside>
-    </section>
-  );
+function categoryIcon(category: EventCategory): string {
+  if (category === "StateChange") {
+    return "◉";
+  }
+  if (category === "ToolCall") {
+    return "⬢";
+  }
+  if (category === "LlmCall") {
+    return "✦";
+  }
+  if (category === "Error") {
+    return "✕";
+  }
+  if (category === "UserAction") {
+    return "✓";
+  }
+  return "◌";
 }
 
 function summarizePayload(payload: Record<string, unknown>): string {
   const compact = JSON.stringify(payload);
-  if (compact.length <= 120) {
+  if (compact.length <= 140) {
     return compact;
   }
-  return `${compact.slice(0, 117)}...`;
+  return `${compact.slice(0, 137)}...`;
+}
+
+function formatDateTime(timestamp: number): string {
+  return new Date(timestamp * 1000).toLocaleString("en-GB", {
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
+
+function chainIntegrity(rows: AuditEventRow[]): boolean {
+  for (let index = 1; index < rows.length; index += 1) {
+    if (rows[index].previous_hash !== rows[index - 1].hash) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function Audit({ events }: AuditProps): JSX.Element {
+  const [query, setQuery] = useState("");
+  const [agentFilter, setAgentFilter] = useState("all");
+  const [selectedTypes, setSelectedTypes] = useState<EventCategory[]>(EVENT_TYPES);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [replayMode, setReplayMode] = useState(false);
+  const [replayIndex, setReplayIndex] = useState(0);
+
+  const chronological = useMemo(
+    () => [...events].sort((left, right) => left.timestamp - right.timestamp),
+    [events]
+  );
+
+  const filtered = useMemo(() => {
+    const lowered = query.trim().toLowerCase();
+    return chronological.filter((event) => {
+      const eventDate = new Date(event.timestamp * 1000);
+      const fromMatches = dateFrom.length === 0 || eventDate >= new Date(`${dateFrom}T00:00:00`);
+      const toMatches = dateTo.length === 0 || eventDate <= new Date(`${dateTo}T23:59:59`);
+      const category = eventCategory(event.event_type);
+      const typeMatches = selectedTypes.includes(category);
+      const agentMatches = agentFilter === "all" || event.agent_id === agentFilter;
+      const textMatches =
+        lowered.length === 0 ||
+        event.event_id.toLowerCase().includes(lowered) ||
+        event.event_type.toLowerCase().includes(lowered) ||
+        JSON.stringify(event.payload).toLowerCase().includes(lowered);
+      return fromMatches && toMatches && typeMatches && agentMatches && textMatches;
+    });
+  }, [agentFilter, chronological, dateFrom, dateTo, query, selectedTypes]);
+
+  const integrity = useMemo(() => chainIntegrity(filtered), [filtered]);
+
+  const visibleEvents = useMemo(() => {
+    if (!replayMode) {
+      return filtered;
+    }
+    return filtered.slice(0, replayIndex + 1);
+  }, [filtered, replayIndex, replayMode]);
+
+  useEffect(() => {
+    if (!replayMode) {
+      return;
+    }
+    if (filtered.length === 0) {
+      setReplayMode(false);
+      setReplayIndex(0);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setReplayIndex((current) => {
+        if (current >= filtered.length - 1) {
+          window.clearInterval(timer);
+          setReplayMode(false);
+          return current;
+        }
+        return current + 1;
+      });
+    }, 520);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [filtered, replayMode]);
+
+  const agents = useMemo(
+    () => Array.from(new Set(events.map((event) => event.agent_id))),
+    [events]
+  );
+
+  function toggleType(category: EventCategory): void {
+    setSelectedTypes((previous) => {
+      if (previous.includes(category)) {
+        const next = previous.filter((item) => item !== category);
+        return next.length > 0 ? next : previous;
+      }
+      return [...previous, category];
+    });
+  }
+
+  function startReplay(): void {
+    if (filtered.length === 0) {
+      return;
+    }
+    setReplayIndex(0);
+    setReplayMode(true);
+  }
+
+  return (
+    <section className="audit-forensic">
+      <header className="audit-header">
+        <h2 className="audit-title">FORENSIC REPLAY // AUDIT TRAIL</h2>
+        <span className={`audit-integrity ${integrity ? "valid" : "invalid"}`}>
+          <span>{integrity ? "⬢✓" : "⛓✕"}</span>
+          {integrity ? "Hash chain intact" : "Chain integrity warning"}
+        </span>
+      </header>
+
+      <div className="audit-controls">
+        <input
+          className="audit-input"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search payloads, type, id..."
+        />
+
+        <select
+          className="audit-select"
+          value={agentFilter}
+          onChange={(event) => setAgentFilter(event.target.value)}
+        >
+          <option value="all">All agents</option>
+          {agents.map((agentId) => (
+            <option key={agentId} value={agentId}>
+              {agentId}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="audit-select"
+          multiple
+          value={selectedTypes}
+          onChange={(event) => {
+            const values = Array.from(event.target.selectedOptions).map(
+              (option) => option.value as EventCategory
+            );
+            if (values.length > 0) {
+              setSelectedTypes(values);
+            }
+          }}
+          aria-label="Event types"
+        >
+          {EVENT_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </select>
+
+        <input
+          type="date"
+          className="audit-input"
+          value={dateFrom}
+          onChange={(event) => setDateFrom(event.target.value)}
+        />
+
+        <input
+          type="date"
+          className="audit-input"
+          value={dateTo}
+          onChange={(event) => setDateTo(event.target.value)}
+        />
+
+        <button
+          type="button"
+          className="audit-replay-btn"
+          onClick={() => {
+            if (replayMode) {
+              setReplayMode(false);
+              return;
+            }
+            startReplay();
+          }}
+        >
+          {replayMode ? "Stop Replay" : "Replay"}
+        </button>
+      </div>
+
+      <div className="audit-controls !grid-cols-1 !pt-0">
+        <div className="flex flex-wrap items-center gap-2">
+          {EVENT_TYPES.map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => toggleType(type)}
+              className={`audit-event-toggle ${selectedTypes.includes(type) ? "audit-color-statechange" : ""}`}
+            >
+              {selectedTypes.includes(type) ? "✓" : "○"} {type}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <main className="audit-timeline">
+        {visibleEvents.length === 0 ? (
+          <p className="audit-empty">No events match the current forensic filters.</p>
+        ) : (
+          visibleEvents.map((event) => {
+            const category = eventCategory(event.event_type);
+            const colorClass = categoryClass(category);
+            const expanded = expandedEventId === event.event_id;
+            return (
+              <article key={event.event_id} className="audit-event fade-slide-up">
+                <span className={`audit-event-node ${colorClass}`} />
+                <div className="audit-event-head">
+                  <span className={`audit-event-type ${colorClass}`}>
+                    {categoryIcon(category)} {event.event_type}
+                  </span>
+                  <span className="audit-event-time">{formatDateTime(event.timestamp)}</span>
+                </div>
+                <p className="audit-event-agent">Agent: {event.agent_id}</p>
+                <p className="audit-event-summary">{summarizePayload(event.payload)}</p>
+                <button
+                  type="button"
+                  className="audit-event-toggle"
+                  onClick={() => setExpandedEventId(expanded ? null : event.event_id)}
+                >
+                  {expanded ? "Hide Payload" : "View Payload JSON"}
+                </button>
+                {expanded ? (
+                  <pre className="audit-event-code">{JSON.stringify(event.payload, null, 2)}</pre>
+                ) : null}
+              </article>
+            );
+          })
+        )}
+      </main>
+    </section>
+  );
 }
