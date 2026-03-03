@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "agents/coder",
   "agents/coding-agent",
+  "agents/screen-poster",
   "agents/social-poster",
   "kernel",
   "connectors/core",

@@ -3550,6 +3550,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "screen-poster-agent"
+version = "0.1.0"
+dependencies = [
+ "nexus-connectors-llm",
+ "nexus-kernel",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
 name = "selectors"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
