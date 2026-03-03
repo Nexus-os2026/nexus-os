@@ -1,0 +1,340 @@
+.workflow-studio {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 0.8rem;
+  height: calc(100vh - 10rem);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  background: linear-gradient(150deg, rgba(8, 12, 26, 0.94), rgba(12, 17, 30, 0.88));
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+
+.workflow-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid rgba(0, 240, 255, 0.2);
+  background: linear-gradient(90deg, rgba(0, 240, 255, 0.07), rgba(0, 240, 255, 0.01));
+}
+
+.workflow-title {
+  margin: 0;
+  color: var(--text-accent);
+  font-family: var(--font-display);
+  letter-spacing: 0.11em;
+  font-size: 0.9rem;
+}
+
+.workflow-subtitle {
+  margin: 0.24rem 0 0;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+}
+
+.workflow-header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.workflow-btn {
+  border: 1px solid rgba(0, 240, 255, 0.36);
+  background: rgba(0, 240, 255, 0.07);
+  color: var(--text-accent);
+  font-family: var(--font-mono);
+  font-size: 0.67rem;
+  padding: 0.42rem 0.65rem;
+  cursor: pointer;
+}
+
+.workflow-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.workflow-btn-primary {
+  border-color: rgba(0, 255, 136, 0.45);
+  background: rgba(0, 255, 136, 0.09);
+  color: #9effcd;
+}
+
+.workflow-body {
+  display: grid;
+  grid-template-columns: 260px 1fr 280px;
+  gap: 0.75rem;
+  min-height: 0;
+  padding: 0 0.75rem 0.75rem;
+}
+
+.workflow-palette,
+.workflow-config,
+.workflow-log-panel {
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  background: rgba(13, 17, 23, 0.78);
+  min-height: 0;
+  overflow: auto;
+}
+
+.workflow-palette {
+  padding: 0.65rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.workflow-palette-group h3 {
+  margin: 0;
+  color: var(--text-accent);
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.workflow-palette-items {
+  margin-top: 0.45rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.workflow-palette-item {
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  background: rgba(0, 240, 255, 0.05);
+  color: #d8f8ff;
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  text-align: left;
+  padding: 0.38rem 0.45rem;
+  cursor: grab;
+}
+
+.workflow-palette-item:active {
+  cursor: grabbing;
+}
+
+.workflow-canvas-shell {
+  display: grid;
+  grid-template-rows: 1fr 180px;
+  gap: 0.65rem;
+  min-height: 0;
+}
+
+.workflow-canvas {
+  position: relative;
+  border: 1px solid rgba(0, 240, 255, 0.22);
+  background-image:
+    linear-gradient(rgba(0, 240, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+  overflow: hidden;
+}
+
+.workflow-connections {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.workflow-connections path {
+  fill: none;
+  stroke: rgba(0, 240, 255, 0.62);
+  stroke-width: 2;
+}
+
+.workflow-node {
+  position: absolute;
+  width: 180px;
+  min-height: 84px;
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  background: linear-gradient(150deg, rgba(13, 17, 23, 0.95), rgba(12, 20, 37, 0.85));
+  box-shadow: 0 12px 26px -20px rgba(0, 240, 255, 0.45);
+  padding: 0.42rem 0.5rem;
+  display: grid;
+  gap: 0.45rem;
+  cursor: move;
+}
+
+.workflow-node.selected {
+  border-color: rgba(0, 240, 255, 0.72);
+  box-shadow: 0 0 18px rgba(0, 240, 255, 0.26);
+}
+
+.workflow-node.running {
+  border-color: rgba(255, 170, 0, 0.65);
+}
+
+.workflow-node.success {
+  border-color: rgba(0, 255, 136, 0.58);
+}
+
+.workflow-node.error {
+  border-color: rgba(255, 0, 64, 0.6);
+}
+
+.workflow-node-head {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.workflow-node-head strong {
+  color: #d8f8ff;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+.workflow-node-head span {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+}
+
+.workflow-node-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.workflow-port {
+  border: 1px solid rgba(0, 240, 255, 0.32);
+  background: rgba(0, 240, 255, 0.08);
+  color: #d8f8ff;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  padding: 0.25rem 0.4rem;
+  cursor: pointer;
+}
+
+.workflow-port.pending {
+  border-color: rgba(255, 170, 0, 0.6);
+  color: #ffd89e;
+}
+
+.workflow-minimap {
+  position: absolute;
+  right: 0.55rem;
+  bottom: 0.55rem;
+  width: 190px;
+  border: 1px solid rgba(0, 240, 255, 0.26);
+  background: rgba(8, 12, 20, 0.86);
+  padding: 0.4rem;
+}
+
+.workflow-minimap h4 {
+  margin: 0 0 0.3rem;
+  color: var(--text-accent);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+}
+
+.workflow-minimap-canvas {
+  position: relative;
+  height: 108px;
+  border: 1px solid rgba(0, 240, 255, 0.22);
+}
+
+.workflow-minimap-canvas svg {
+  position: absolute;
+  inset: 0;
+}
+
+.workflow-minimap-canvas line {
+  stroke: rgba(0, 240, 255, 0.45);
+  stroke-width: 1;
+}
+
+.workflow-minimap-node {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(0, 240, 255, 0.85);
+}
+
+.workflow-log-panel {
+  padding: 0.55rem;
+}
+
+.workflow-log-panel h3 {
+  margin: 0;
+  color: var(--text-accent);
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.workflow-log-panel div {
+  margin-top: 0.45rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.workflow-log-panel p {
+  margin: 0;
+  color: #cfe8ff;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  line-height: 1.4;
+}
+
+.workflow-config {
+  padding: 0.65rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.workflow-config h3 {
+  margin: 0;
+  color: var(--text-accent);
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.workflow-config p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+}
+
+.workflow-config label {
+  display: grid;
+  gap: 0.28rem;
+  color: #d6ebff;
+  font-size: 0.68rem;
+}
+
+.workflow-config input,
+.workflow-config textarea {
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  background: rgba(8, 12, 20, 0.85);
+  color: #e8f6ff;
+  padding: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+}
+
+.workflow-config textarea {
+  resize: vertical;
+}
+
+@media (max-width: 1200px) {
+  .workflow-body {
+    grid-template-columns: 220px 1fr;
+  }
+
+  .workflow-config {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 900px) {
+  .workflow-body {
+    grid-template-columns: 1fr;
+    grid-auto-rows: minmax(180px, auto);
+  }
+
+  .workflow-canvas-shell {
+    min-height: 380px;
+  }
+}

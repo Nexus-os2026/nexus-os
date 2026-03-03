@@ -6,6 +6,7 @@ members = [
   "agents/screen-poster",
   "agents/social-poster",
   "agents/web-builder",
+  "agents/workflow-studio",
   "kernel",
   "connectors/core",
   "connectors/web",

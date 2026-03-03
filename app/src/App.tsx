@@ -23,6 +23,7 @@ import { Agents } from "./pages/Agents";
 import { Audit } from "./pages/Audit";
 import { Chat } from "./pages/Chat";
 import { Settings } from "./pages/Settings";
+import { Workflows } from "./pages/Workflows";
 import type {
   AgentSummary,
   AuditEventRow,
@@ -34,15 +35,16 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "marketplace" | "settings";
+type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
   { id: "chat", label: "Chat", icon: "⌁", shortcut: "Alt+1" },
   { id: "agents", label: "Agents", icon: "⬢", shortcut: "Alt+2" },
   { id: "audit", label: "Audit", icon: "⧉", shortcut: "Alt+3" },
-  { id: "marketplace", label: "Marketplace", icon: "◈", shortcut: "Alt+4" },
-  { id: "settings", label: "Settings", icon: "⚙", shortcut: "Alt+5" }
+  { id: "workflows", label: "Workflows", icon: "⎇", shortcut: "Alt+4" },
+  { id: "marketplace", label: "Marketplace", icon: "◈", shortcut: "Alt+5" },
+  { id: "settings", label: "Settings", icon: "⚙", shortcut: "Alt+6" }
 ];
 
 function defaultConfig(): NexusConfig {
@@ -604,6 +606,9 @@ export default function App(): JSX.Element {
     }
     if (page === "audit") {
       return <Audit events={auditEvents} />;
+    }
+    if (page === "workflows") {
+      return <Workflows />;
     }
     if (page === "marketplace") {
       return (
