@@ -3,6 +3,7 @@
 
 pub mod knowledge;
 pub mod learner;
+pub mod r#loop;
 pub mod prompt_optimizer;
 pub mod skills;
 pub mod tracker;

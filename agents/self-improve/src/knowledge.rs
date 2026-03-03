@@ -10,6 +10,7 @@ pub enum KnowledgeCategory {
     PostingStrategies,
     DesignPrinciples,
     WorkflowOptimizations,
+    ErrorFixes,
     ErrorSolutions,
 }
 
@@ -134,6 +135,10 @@ impl KnowledgeBase {
         });
         hits.truncate(limit.max(1));
         hits
+    }
+
+    pub fn search_knowledge(&self, agent_id: &str, query: &str) -> Vec<RetrievalHit> {
+        self.retrieve(agent_id, query, 5)
     }
 
     pub fn entries(&self) -> &[KnowledgeEntry] {

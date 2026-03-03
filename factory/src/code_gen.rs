@@ -71,6 +71,11 @@ fn blocks_for_intent(intent: &ParsedIntent) -> Vec<ComposableBlock> {
             ComposableBlock::AdaptStep,
         ],
         TaskType::Monitoring => vec![ComposableBlock::ResearchStep, ComposableBlock::AnalyzeStep],
+        TaskType::SelfImprove => vec![
+            ComposableBlock::ResearchStep,
+            ComposableBlock::AnalyzeStep,
+            ComposableBlock::AdaptStep,
+        ],
         TaskType::Unknown => vec![ComposableBlock::ResearchStep],
     }
 }

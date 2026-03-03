@@ -152,6 +152,17 @@ impl PerformanceTracker {
         Ok(outcome)
     }
 
+    pub fn track_outcome_auto(
+        &mut self,
+        agent_id: &str,
+        task: &str,
+        result: OutcomeResult,
+        metrics: TaskMetrics,
+    ) -> Result<TrackedOutcome, AgentError> {
+        let task_type = infer_task_type(&metrics);
+        self.track_outcome(agent_id, task_type, task, result, metrics)
+    }
+
     pub fn outcomes_for(&self, agent_id: &str, task_type: TaskType) -> Vec<TrackedOutcome> {
         let mut history = self
             .outcomes
@@ -225,6 +236,16 @@ impl PerformanceTracker {
     }
 }
 
+pub fn track_outcome(
+    tracker: &mut PerformanceTracker,
+    agent_id: &str,
+    task: &str,
+    result: OutcomeResult,
+    metrics: TaskMetrics,
+) -> Result<TrackedOutcome, AgentError> {
+    tracker.track_outcome_auto(agent_id, task, result, metrics)
+}
+
 fn metric_value(outcome: &TrackedOutcome, metric: MetricKind) -> Option<f64> {
     match metric {
         MetricKind::TestPassRate => outcome.metrics.test_pass_rate,
@@ -251,4 +272,26 @@ fn now_secs() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
+}
+
+fn infer_task_type(metrics: &TaskMetrics) -> TaskType {
+    if metrics.test_pass_rate.is_some()
+        || metrics.fix_iterations.is_some()
+        || metrics.code_quality_score.is_some()
+    {
+        return TaskType::Coding;
+    }
+    if metrics.engagement_rate.is_some()
+        || metrics.approval_rate.is_some()
+        || metrics.reach.is_some()
+    {
+        return TaskType::Posting;
+    }
+    if metrics.build_success.is_some()
+        || metrics.user_satisfaction.is_some()
+        || metrics.load_time.is_some()
+    {
+        return TaskType::Website;
+    }
+    TaskType::Other
 }

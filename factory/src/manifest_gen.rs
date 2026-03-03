@@ -89,6 +89,7 @@ fn primary_task_label(task: TaskType) -> &'static str {
         TaskType::FileBackup => "backup",
         TaskType::Research => "research",
         TaskType::Monitoring => "monitor",
+        TaskType::SelfImprove => "self-improve",
         TaskType::Unknown => "agent",
     }
 }

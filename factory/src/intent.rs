@@ -11,6 +11,7 @@ pub enum TaskType {
     FileBackup,
     Research,
     Monitoring,
+    SelfImprove,
     Unknown,
 }
 
@@ -90,6 +91,7 @@ fn intent_from_llm_output(request: &str, output: LlmIntentOutput) -> ParsedInten
         "filebackup" | "file_backup" | "file-backup" => TaskType::FileBackup,
         "research" => TaskType::Research,
         "monitoring" => TaskType::Monitoring,
+        "selfimprove" | "self_improve" | "self-improve" => TaskType::SelfImprove,
         _ => infer_task_type(request),
     };
 
@@ -139,6 +141,12 @@ fn infer_task_type(request: &str) -> TaskType {
         TaskType::Research
     } else if lower.contains("monitor") || lower.contains("watch") {
         TaskType::Monitoring
+    } else if lower.contains("self-improve")
+        || lower.contains("self improve")
+        || lower.contains("optimize prompts")
+        || lower.contains("learn from outcomes")
+    {
+        TaskType::SelfImprove
     } else {
         TaskType::Unknown
     }

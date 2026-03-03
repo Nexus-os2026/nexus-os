@@ -56,6 +56,15 @@ pub fn map_intent_to_capabilities(intent: &ParsedIntent) -> CapabilityPlan {
             required: vec!["web.search".to_string(), "llm.query".to_string()],
             optional: vec!["messaging.send".to_string(), "audit.read".to_string()],
         },
+        TaskType::SelfImprove => CapabilityPlan {
+            required: vec![
+                "llm.query".to_string(),
+                "audit.read".to_string(),
+                "fs.read".to_string(),
+                "fs.write".to_string(),
+            ],
+            optional: vec!["web.search".to_string()],
+        },
         TaskType::Unknown => CapabilityPlan {
             required: vec!["llm.query".to_string()],
             optional: vec!["web.search".to_string()],

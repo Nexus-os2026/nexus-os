@@ -13,6 +13,7 @@ nexus-kernel = { path = "../kernel" }
 nexus-connectors-core = { path = "../connectors/core" }
 coding-agent = { path = "../agents/coding-agent" }
 social-poster-agent = { path = "../agents/social-poster" }
+self-improve-agent = { path = "../agents/self-improve" }
 
 [dev-dependencies]
 uuid = { version = "1.10", features = ["v4"] }

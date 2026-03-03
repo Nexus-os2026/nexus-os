@@ -77,15 +77,11 @@ fn test_context_building() {
         .map(|file| file.path.as_str())
         .collect::<Vec<_>>();
     assert!(
-        paths
-            .iter()
-            .any(|path| *path == "connectors/core/src/connector.rs"),
+        paths.contains(&"connectors/core/src/connector.rs"),
         "expected Connector trait file in context"
     );
     assert!(
-        paths
-            .iter()
-            .any(|path| *path == "connectors/core/src/github_connector.rs"),
+        paths.contains(&"connectors/core/src/github_connector.rs"),
         "expected existing connector example in context"
     );
 

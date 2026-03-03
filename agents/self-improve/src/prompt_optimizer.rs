@@ -17,7 +17,7 @@ pub struct PromptVariant {
     pub average_score: f64,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PromptOptimizer {
     variants_by_base: HashMap<String, Vec<PromptVariant>>,
     default_prompt_by_base: HashMap<String, String>,
@@ -76,6 +76,13 @@ impl PromptOptimizer {
         self.default_prompt_by_base
             .get(base_prompt)
             .map(|value| value.as_str())
+    }
+
+    pub fn set_default_prompt(&mut self, base_prompt: &str, prompt: &str) {
+        self.ensure_base_variant(base_prompt);
+        self.record_outcome(base_prompt, prompt, true, 1.0);
+        self.default_prompt_by_base
+            .insert(base_prompt.to_string(), prompt.to_string());
     }
 
     pub fn variants_for(&self, base_prompt: &str) -> Vec<PromptVariant> {
