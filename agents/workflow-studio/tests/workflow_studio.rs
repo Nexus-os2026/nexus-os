@@ -144,17 +144,9 @@ fn test_parallel_execution() {
     let engine = WorkflowEngine::new(executor.clone());
     let mut context = context_with_caps();
 
-    let start = Instant::now();
     let report = engine
         .execute(&workflow, json!({"seed": "value"}), &mut context)
         .expect("parallel workflow should execute");
-    let elapsed = start.elapsed();
-
-    assert!(
-        elapsed < Duration::from_millis(300),
-        "expected parallel execution under 300ms, got {:?}",
-        elapsed
-    );
     assert_eq!(
         report
             .records
@@ -164,6 +156,34 @@ fn test_parallel_execution() {
         4
     );
 
+    let index_a = report
+        .execution_order
+        .iter()
+        .position(|node| node == "A")
+        .expect("A should be in execution order");
+    let index_b = report
+        .execution_order
+        .iter()
+        .position(|node| node == "B")
+        .expect("B should be in execution order");
+    let index_c = report
+        .execution_order
+        .iter()
+        .position(|node| node == "C")
+        .expect("C should be in execution order");
+    let index_d = report
+        .execution_order
+        .iter()
+        .position(|node| node == "D")
+        .expect("D should be in execution order");
+    assert!(index_a < index_b, "A must execute before B");
+    assert!(index_a < index_c, "A must execute before C");
+    assert!(index_b < index_d, "B must execute before D");
+    assert!(index_c < index_d, "C must execute before D");
+    assert!(report.outputs.contains_key("B"), "B output should exist");
+    assert!(report.outputs.contains_key("C"), "C output should exist");
+    assert!(report.outputs.contains_key("D"), "D output should exist");
+
     let starts = executor
         .starts
         .lock()
@@ -172,18 +192,24 @@ fn test_parallel_execution() {
         .finishes
         .lock()
         .expect("finishes lock must be available");
+    let end_a = finishes.get("A").expect("A finish missing");
     let start_b = starts.get("B").expect("B start missing");
     let start_c = starts.get("C").expect("C start missing");
     let end_b = finishes.get("B").expect("B finish missing");
     let end_c = finishes.get("C").expect("C finish missing");
     let start_d = starts.get("D").expect("D start missing");
-
-    let spread = if start_b > start_c {
-        start_b.duration_since(*start_c)
-    } else {
-        start_c.duration_since(*start_b)
-    };
-    assert!(spread < Duration::from_millis(80));
+    assert!(
+        *start_b >= *end_a,
+        "B should not start until A has completed"
+    );
+    assert!(
+        *start_c >= *end_a,
+        "C should not start until A has completed"
+    );
+    assert!(
+        *start_b <= *end_c && *start_c <= *end_b,
+        "B and C should overlap to demonstrate parallel execution"
+    );
 
     let bc_done = if end_b > end_c { end_b } else { end_c };
     assert!(*start_d >= *bc_done, "D should wait for B and C to finish");

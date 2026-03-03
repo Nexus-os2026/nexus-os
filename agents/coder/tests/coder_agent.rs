@@ -10,7 +10,8 @@ use tempfile::tempdir;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
+        .join("..")
+        .join("..")
         .canonicalize()
         .expect("repo root should resolve")
 }

@@ -53,7 +53,10 @@ fn main() {
 
 fn default_manifest_path() -> PathBuf {
     if let Ok(cwd) = env::current_dir() {
-        let candidate = cwd.join("agents/coding-agent/manifest.toml");
+        let candidate = cwd
+            .join("agents")
+            .join("coding-agent")
+            .join("manifest.toml");
         if candidate.exists() {
             return candidate;
         }

@@ -1,3 +1,4 @@
+use std::path::{Component, Path};
 use web_builder_agent::codegen::{generate_website, FileChange};
 use web_builder_agent::interpreter::{
     interpret, AnimationSpec, ComponentSpec, Framework, PageSpec, SectionKind, SectionSpec,
@@ -125,7 +126,10 @@ fn test_full_website_generation() {
     assert!(has_file(&files, "tailwind.config.ts"));
 
     for (path, content) in created_files(&files) {
-        if path.ends_with(".ts") || path.ends_with(".tsx") {
+        let extension = Path::new(path.as_str())
+            .extension()
+            .and_then(|ext| ext.to_str());
+        if matches!(extension, Some("ts") | Some("tsx")) {
             assert!(
                 !content.contains(": any") && !content.contains("<any>"),
                 "expected generated TypeScript without any in {path}"
@@ -181,10 +185,11 @@ fn template_for(kind: &SectionKind) -> &'static str {
 }
 
 fn has_file(changes: &[FileChange], path: &str) -> bool {
+    let expected = path_components(path);
     changes.iter().any(|change| match change {
-        FileChange::Create(candidate, _) => candidate == path,
-        FileChange::Modify(candidate, _, _) => candidate == path,
-        FileChange::Delete(candidate) => candidate == path,
+        FileChange::Create(candidate, _) => path_components(candidate.as_str()) == expected,
+        FileChange::Modify(candidate, _, _) => path_components(candidate.as_str()) == expected,
+        FileChange::Delete(candidate) => path_components(candidate.as_str()) == expected,
     })
 }
 
@@ -196,4 +201,14 @@ fn created_files(changes: &[FileChange]) -> Vec<(String, String)> {
         }
     }
     files
+}
+
+fn path_components(path: &str) -> Vec<String> {
+    Path::new(path)
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(name) => Some(name.to_string_lossy().to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
 }
