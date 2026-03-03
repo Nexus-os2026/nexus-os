@@ -4,6 +4,7 @@ members = [
   "agents/coder",
   "agents/coding-agent",
   "agents/screen-poster",
+  "agents/self-improve",
   "agents/social-poster",
   "agents/web-builder",
   "agents/workflow-studio",
