@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "agents/coder",
+  "agents/designer",
   "agents/coding-agent",
   "agents/screen-poster",
   "agents/self-improve",
