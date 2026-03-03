@@ -15,10 +15,15 @@ import {
   stopAgent,
   stopJarvisMode
 } from "./api/backend";
+import { useUiAudio } from "./audio/soundEngine";
 import { SplashScreen } from "./components/SplashScreen";
+import { HoloPanel } from "./components/fx/HoloPanel";
+import { NeuralBackground } from "./components/fx/NeuralBackground";
+import { PageTransition } from "./components/fx/PageTransition";
 import { Sidebar, type SidebarItem } from "./components/layout/Sidebar";
-import { Background } from "./components/ui/Background";
 import { VoiceOverlay, type VoiceOverlayState } from "./components/VoiceOverlay";
+import { PulseRing } from "./components/viz/PulseRing";
+import { RadialGauge } from "./components/viz/RadialGauge";
 import { Agents } from "./pages/Agents";
 import { Audit } from "./pages/Audit";
 import { Chat } from "./pages/Chat";
@@ -188,6 +193,7 @@ export default function App(): JSX.Element {
   const [isRecording, setIsRecording] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [factoryTrigger, setFactoryTrigger] = useState(0);
+  const [activityPulse, setActivityPulse] = useState(0);
   const [appReady, setAppReady] = useState(false);
   const [splashVisible, setSplashVisible] = useState(true);
   const [overlay, setOverlay] = useState<VoiceOverlayState>({
@@ -197,6 +203,13 @@ export default function App(): JSX.Element {
     responseText: ""
   });
   const pushToTalk = useRef<PushToTalk | null>(null);
+  const previousPageRef = useRef<Page>(page);
+  const { enabled: uiSoundEnabled, volume: uiSoundVolume, setEnabled: setUiSoundEnabled, setVolume: setUiSoundVolume, play } =
+    useUiAudio();
+
+  function bumpActivity(): void {
+    setActivityPulse((previous) => previous + 1);
+  }
 
   useEffect(() => {
     pushToTalk.current = new PushToTalk();
@@ -214,6 +227,7 @@ export default function App(): JSX.Element {
           "Desktop runtime not detected. You are in mock mode; UI remains fully interactive."
         )
       ]);
+      bumpActivity();
       setAppReady(true);
       return;
     }
@@ -243,6 +257,8 @@ export default function App(): JSX.Element {
             `Connected to desktop backend. Default model: ${loadedConfig.llm.default_model || "mock-1"}.`
           )
         ]);
+        play("notification");
+        bumpActivity();
         setAppReady(true);
       } catch (error) {
         if (cancelled) {
@@ -256,6 +272,7 @@ export default function App(): JSX.Element {
         setMessages([
           makeMessage("assistant", "Backend connection failed; running in mock mode.")
         ]);
+        play("error");
         setAppReady(true);
       }
     };
@@ -267,17 +284,34 @@ export default function App(): JSX.Element {
     };
   }, []);
 
+  useEffect(() => {
+    if (previousPageRef.current !== page) {
+      previousPageRef.current = page;
+      play("transition");
+      bumpActivity();
+    }
+  }, [page, play]);
+
   const connectionStatus: ConnectionStatus = runtimeMode === "desktop" ? "connected" : "mock";
   const runningAgents = useMemo(
     () => agents.filter((agent) => agent.status === "Running").length,
     [agents]
   );
+  const averageFuel = useMemo(() => {
+    if (agents.length === 0) {
+      return 0;
+    }
+    const total = agents.reduce((sum, agent) => sum + Math.max(0, Math.min(100, agent.fuel_remaining / 100)), 0);
+    return total / agents.length;
+  }, [agents]);
 
   function applyVoiceState(state: VoiceRuntimeState): void {
     setOverlay((prev) => ({
       ...prev,
       visible: state.overlay_visible,
-      listening: state.overlay_visible
+      listening: state.overlay_visible,
+      phase: state.overlay_visible ? "listening" : "idle",
+      amplitude: state.overlay_visible ? 0.42 : 0.18
     }));
   }
 
@@ -303,6 +337,8 @@ export default function App(): JSX.Element {
   async function handleStartAgent(id: string): Promise<void> {
     if (runtimeMode !== "desktop") {
       updateMockAgentStatus(id, "Running");
+      play("success");
+      bumpActivity();
       return;
     }
     try {
@@ -313,36 +349,49 @@ export default function App(): JSX.Element {
       }
       await refreshDesktopData();
       setRuntimeError(null);
+      play("success");
+      bumpActivity();
     } catch (error) {
       setRuntimeError(`Unable to start agent: ${formatError(error)}`);
+      play("error");
     }
   }
 
   async function handlePauseAgent(id: string): Promise<void> {
     if (runtimeMode !== "desktop") {
       updateMockAgentStatus(id, "Paused");
+      play("click");
+      bumpActivity();
       return;
     }
     try {
       await pauseAgent(id);
       await refreshDesktopData();
       setRuntimeError(null);
+      play("click");
+      bumpActivity();
     } catch (error) {
       setRuntimeError(`Unable to pause agent: ${formatError(error)}`);
+      play("error");
     }
   }
 
   async function handleStopAgent(id: string): Promise<void> {
     if (runtimeMode !== "desktop") {
       updateMockAgentStatus(id, "Stopped");
+      play("click");
+      bumpActivity();
       return;
     }
     try {
       await stopAgent(id);
       await refreshDesktopData();
       setRuntimeError(null);
+      play("click");
+      bumpActivity();
     } catch (error) {
       setRuntimeError(`Unable to stop agent: ${formatError(error)}`);
+      play("error");
     }
   }
 
@@ -369,6 +418,8 @@ export default function App(): JSX.Element {
         ...prev
       ]);
       setRuntimeError(null);
+      play("success");
+      bumpActivity();
       return;
     }
 
@@ -380,8 +431,11 @@ export default function App(): JSX.Element {
         ...prev,
         makeMessage("assistant", `Agent created: ${agentId}`, { model: "system" })
       ]);
+      play("success");
+      bumpActivity();
     } catch (error) {
       setRuntimeError(`Unable to create agent: ${formatError(error)}`);
+      play("error");
     }
   }
 
@@ -414,6 +468,7 @@ export default function App(): JSX.Element {
     }
 
     setDraft("");
+    play("click");
     setMessages((prev) => [...prev, makeMessage("user", input)]);
 
     if (/^\s*create agent\b/i.test(input)) {
@@ -426,6 +481,7 @@ export default function App(): JSX.Element {
           "Routing to Agent Factory. Confirm manifest details, then click Create."
         )
       ]);
+      bumpActivity();
       return;
     }
 
@@ -446,6 +502,9 @@ export default function App(): JSX.Element {
       const response = runtimeMode === "desktop" ? await sendChat(input) : mockChatReply(input);
       await streamAssistantMessage(assistantId, response.text, response.model);
       setRuntimeError(null);
+      setOverlay((prev) => ({ ...prev, phase: "speaking", amplitude: 0.5 }));
+      play("notification");
+      bumpActivity();
     } catch (error) {
       setMessages((prev) =>
         prev.map((message) =>
@@ -460,8 +519,10 @@ export default function App(): JSX.Element {
         )
       );
       setRuntimeError(`Chat request failed: ${formatError(error)}`);
+      play("error");
     } finally {
       setIsSending(false);
+      setOverlay((prev) => ({ ...prev, phase: prev.listening ? "listening" : "idle", amplitude: 0.18 }));
     }
   }
 
@@ -475,6 +536,8 @@ export default function App(): JSX.Element {
       recorder.startRecording();
       setIsRecording(true);
       setRuntimeError(null);
+      setOverlay((prev) => ({ ...prev, visible: true, listening: true, phase: "listening", amplitude: 0.45 }));
+      play("click");
       return;
     }
 
@@ -484,8 +547,11 @@ export default function App(): JSX.Element {
       if (result.transcript.trim().length > 0) {
         setDraft(result.transcript.trim());
       }
+      setOverlay((prev) => ({ ...prev, phase: "processing", amplitude: 0.32 }));
+      bumpActivity();
     } catch (error) {
       setRuntimeError(`Push-to-talk failed: ${formatError(error)}`);
+      play("error");
     }
   }
 
@@ -501,8 +567,10 @@ export default function App(): JSX.Element {
         await sleep(140);
       }
       setRuntimeError(null);
+      play("success");
     } catch (error) {
       setRuntimeError(`Unable to save settings: ${formatError(error)}`);
+      play("error");
     } finally {
       setIsSavingConfig(false);
     }
@@ -513,6 +581,7 @@ export default function App(): JSX.Element {
       setAgents(mockAgents());
       setAuditEvents(mockAudit());
       setRuntimeError(null);
+      bumpActivity();
       return;
     }
     try {
@@ -520,8 +589,11 @@ export default function App(): JSX.Element {
       setConfig(loadedConfig);
       applyVoiceState(voice);
       setRuntimeError(null);
+      play("notification");
+      bumpActivity();
     } catch (error) {
       setRuntimeError(`Unable to refresh data: ${formatError(error)}`);
+      play("error");
     }
   }
 
@@ -531,17 +603,22 @@ export default function App(): JSX.Element {
         visible: true,
         listening: true,
         transcription: "hey nexus",
-        responseText: "mock voice mode active"
+        responseText: "mock voice mode active",
+        phase: "listening",
+        amplitude: 0.44
       });
+      play("notification");
       return;
     }
     try {
       const voice = await startJarvisMode();
       applyVoiceState(voice);
-      setOverlay((prev) => ({ ...prev, responseText: "Jarvis mode active." }));
+      setOverlay((prev) => ({ ...prev, responseText: "Jarvis mode active.", phase: "listening", amplitude: 0.44 }));
       setRuntimeError(null);
+      play("notification");
     } catch (error) {
       setRuntimeError(`Unable to start voice mode: ${formatError(error)}`);
+      play("error");
     }
   }
 
@@ -551,17 +628,22 @@ export default function App(): JSX.Element {
         visible: false,
         listening: false,
         transcription: "",
-        responseText: ""
+        responseText: "",
+        phase: "idle",
+        amplitude: 0.12
       });
+      play("click");
       return;
     }
     try {
       const voice = await stopJarvisMode();
       applyVoiceState(voice);
-      setOverlay((prev) => ({ ...prev, transcription: "", responseText: "" }));
+      setOverlay((prev) => ({ ...prev, transcription: "", responseText: "", phase: "idle", amplitude: 0.12 }));
       setRuntimeError(null);
+      play("click");
     } catch (error) {
       setRuntimeError(`Unable to stop voice mode: ${formatError(error)}`);
+      play("error");
     }
   }
 
@@ -627,6 +709,10 @@ export default function App(): JSX.Element {
         config={config}
         saving={isSavingConfig}
         onChange={setConfig}
+        uiSoundEnabled={uiSoundEnabled}
+        uiSoundVolume={uiSoundVolume}
+        onUiSoundEnabledChange={setUiSoundEnabled}
+        onUiSoundVolumeChange={setUiSoundVolume}
         onSave={() => {
           void handleSaveConfig();
         }}
@@ -636,7 +722,7 @@ export default function App(): JSX.Element {
 
   return (
     <>
-      <Background />
+      <NeuralBackground activityPulse={activityPulse} />
       <SplashScreen
         ready={appReady}
         visible={splashVisible}
@@ -648,63 +734,84 @@ export default function App(): JSX.Element {
         <Sidebar
           items={NAV_ITEMS}
           activeId={page}
-          onSelect={(id) => setPage(id as Page)}
+          onSelect={(id) => {
+            setPage(id as Page);
+            play("click");
+          }}
           version="v1.0.0"
         />
 
         <div className="flex min-h-screen flex-1 flex-col">
-          <header className="nexus-topbar px-4 py-4 sm:px-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="nexus-display text-2xl text-cyan-100">Desktop Command Grid</p>
-                <div className="mt-1 flex items-center gap-2 text-xs">
-                  <span
-                    className={`inline-flex h-2.5 w-2.5 rounded-full ${
-                      connectionStatus === "connected" ? "bg-cyan-300 shadow-[0_0_12px_rgba(56,189,248,0.95)]" : "bg-amber-300"
-                    }`}
-                  />
-                  <span className="text-cyan-100/70">
-                    {connectionStatus === "connected" ? "Connected to governed kernel backend" : "Mock runtime mode"}
-                  </span>
+          <header className="px-4 py-4 sm:px-6">
+            <HoloPanel depth="foreground" className="nexus-topbar">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="nexus-display text-2xl text-cyan-100">Desktop Command Grid</p>
+                  <div className="mt-1 flex items-center gap-2 text-xs">
+                    <span
+                      className={`inline-flex h-2.5 w-2.5 rounded-full ${
+                        connectionStatus === "connected" ? "bg-cyan-300 shadow-[0_0_12px_rgba(56,189,248,0.95)]" : "bg-amber-300"
+                      }`}
+                    />
+                    <span className="text-cyan-100/70">
+                      {connectionStatus === "connected" ? "Connected to governed kernel backend" : "Mock runtime mode"}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="hidden items-center gap-3 md:flex">
+                    <RadialGauge value={averageFuel} label="Avg Fuel" size={88} />
+                    <PulseRing active={runningAgents > 0} size={44} />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <button
+                      onClick={() => {
+                        void handleRefresh();
+                      }}
+                      className="nexus-btn nexus-btn-secondary"
+                    >
+                      Refresh
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (overlay.visible) {
+                          void disableJarvisMode();
+                          return;
+                        }
+                        void enableJarvisMode();
+                      }}
+                      className={`nexus-btn font-semibold ${
+                        overlay.visible ? "bg-rose-600/90 text-white hover:bg-rose-500" : "nexus-btn-primary"
+                      }`}
+                    >
+                      {overlay.visible ? "Stop Jarvis" : "Start Jarvis"}
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <button
-                  onClick={() => {
-                    void handleRefresh();
-                  }}
-                  className="nexus-btn nexus-btn-secondary"
-                >
-                  Refresh
-                </button>
-                <button
-                  onClick={() => {
-                    if (overlay.visible) {
-                      void disableJarvisMode();
-                      return;
-                    }
-                    void enableJarvisMode();
-                  }}
-                  className={`nexus-btn font-semibold ${
-                    overlay.visible ? "bg-rose-600/90 text-white hover:bg-rose-500" : "nexus-btn-primary"
-                  }`}
-                >
-                  {overlay.visible ? "Stop Jarvis" : "Start Jarvis"}
-                </button>
+              <div className="mt-3 flex flex-wrap items-center gap-4 text-xs">
+                <span className="text-cyan-100/60">
+                  Active agents: <span className="text-cyan-100">{runningAgents}</span>
+                </span>
+                <span className="text-cyan-100/60">
+                  Runtime: <span className="text-cyan-100">{connectionStatus}</span>
+                </span>
               </div>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-4 text-xs">
-              <span className="text-cyan-100/60">
-                Active agents: <span className="text-cyan-100">{runningAgents}</span>
-              </span>
-              <span className="text-cyan-100/60">
-                Runtime: <span className="text-cyan-100">{connectionStatus}</span>
-              </span>
-            </div>
-            {runtimeError ? <p className="mt-3 text-xs text-rose-300">{runtimeError}</p> : null}
+              {runtimeError ? (
+                <div className="nexus-notification nexus-notification-error mt-3">
+                  <p className="text-xs text-rose-100">{runtimeError}</p>
+                </div>
+              ) : null}
+            </HoloPanel>
           </header>
 
-          <div className="flex-1 px-4 py-4 sm:px-6 sm:py-6">{renderPage()}</div>
+          <div className="flex-1 px-4 py-4 sm:px-6 sm:py-6">
+            <PageTransition pageKey={page}>
+              <HoloPanel depth="mid" className="min-h-[calc(100vh-11.5rem)]">
+                {renderPage()}
+              </HoloPanel>
+            </PageTransition>
+          </div>
         </div>
       </div>
 

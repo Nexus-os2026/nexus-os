@@ -1,4 +1,5 @@
 import type { AgentSummary, AuditEventRow } from "../../types";
+import { Avatar } from "./Avatar";
 
 interface AgentCardProps {
   agent: AgentSummary;
@@ -55,6 +56,20 @@ function formatEventTimestamp(timestamp: number): string {
   });
 }
 
+function inferRole(agentName: string): "coding" | "social" | "design" | "general" {
+  const lowered = agentName.toLowerCase();
+  if (lowered.includes("code") || lowered.includes("dev") || lowered.includes("rust")) {
+    return "coding";
+  }
+  if (lowered.includes("social") || lowered.includes("content") || lowered.includes("post")) {
+    return "social";
+  }
+  if (lowered.includes("design") || lowered.includes("web") || lowered.includes("ui")) {
+    return "design";
+  }
+  return "general";
+}
+
 export function AgentCard({
   agent,
   selected,
@@ -75,6 +90,8 @@ export function AgentCard({
   const eventLine = latestEvent
     ? `${formatEventTimestamp(latestEvent.timestamp)} // ${summarizePayload(latestEvent.payload)}`
     : `${new Date().toLocaleTimeString("en-GB", { hour12: false })} // ${agent.last_action}`;
+  const role = inferRole(agent.name);
+  const avatarState = tone === "running" ? "running" : tone === "paused" ? "paused" : tone === "stopped" ? "stopped" : "idle";
 
   return (
     <article
@@ -86,7 +103,10 @@ export function AgentCard({
 
       <header className="agent-card-head">
         <div>
-          <h3 className="agent-card-title">{agent.name}</h3>
+          <div className="agent-card-identity">
+            <Avatar agentName={agent.name} role={role} state={avatarState} />
+            <h3 className="agent-card-title">{agent.name}</h3>
+          </div>
           <span className={`agent-status-badge ${tone}`}>
             <span className="agent-status-dot" />
             {agent.status}

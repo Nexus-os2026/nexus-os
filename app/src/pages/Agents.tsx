@@ -3,6 +3,10 @@ import { ActivityFeed } from "../components/agents/ActivityFeed";
 import { AgentCard } from "../components/agents/AgentCard";
 import { AgentDetail, type AgentDetailTab } from "../components/agents/AgentDetail";
 import { CreateAgent } from "../components/agents/CreateAgent";
+import { HeatMap } from "../components/viz/HeatMap";
+import { NeuralGraph } from "../components/viz/NeuralGraph";
+import { PulseRing } from "../components/viz/PulseRing";
+import { RadialGauge } from "../components/viz/RadialGauge";
 import type { AgentSummary, AuditEventRow } from "../types";
 import "./agents.css";
 
@@ -65,6 +69,42 @@ export function Agents({
       .slice(0, 20)
       .map((event) => makeActivityEntry(event, nameById.get(event.agent_id) ?? event.agent_id));
   }, [agents, auditEvents]);
+
+  const graphNodes = useMemo(
+    () =>
+      agents.map((agent) => ({
+        id: agent.id,
+        group: agent.name.toLowerCase().includes("code")
+          ? "coding"
+          : agent.name.toLowerCase().includes("social")
+            ? "social"
+            : agent.name.toLowerCase().includes("design")
+              ? "design"
+              : "general",
+        activity: latestByAgent.get(agent.id) ? 0.65 : 0.28
+      })),
+    [agents, latestByAgent]
+  );
+
+  const graphEdges = useMemo(
+    () =>
+      agents.slice(1).map((agent, index) => ({
+        from: agents[index].id,
+        to: agent.id,
+        weight: 0.42 + (index % 3) * 0.2
+      })),
+    [agents]
+  );
+
+  const heatmapValues = useMemo(() => {
+    const buckets = Array.from({ length: 24 }, () => 0);
+    for (const event of auditEvents) {
+      const hour = new Date(event.timestamp * 1000).getHours();
+      buckets[hour] += 1;
+    }
+    const max = Math.max(1, ...buckets);
+    return buckets.map((value) => value / max);
+  }, [auditEvents]);
 
   useEffect(() => {
     if (factoryTrigger > 0) {
@@ -130,6 +170,31 @@ export function Agents({
           ))
         )}
       </main>
+
+      <section className="mission-viz-strip">
+        <div className="mission-viz-card">
+          <div className="mission-viz-card-head">
+            <p className="mission-viz-title">Agent Fuel Matrix</p>
+            <PulseRing active={activeCount > 0} />
+          </div>
+          <div className="mission-viz-gauges">
+            {agents.slice(0, 3).map((agent) => (
+              <RadialGauge
+                key={agent.id}
+                value={Math.max(0, Math.min(100, Math.round(agent.fuel_remaining / 100)))}
+                label={agent.name.slice(0, 10)}
+              />
+            ))}
+          </div>
+        </div>
+        <div className="mission-viz-card mission-viz-card-wide">
+          <p className="mission-viz-title">Neural Agent Link Graph</p>
+          <NeuralGraph nodes={graphNodes} edges={graphEdges} />
+        </div>
+        <div className="mission-viz-card">
+          <HeatMap values={heatmapValues} columns={8} title="Hourly Activity" />
+        </div>
+      </section>
 
       <ActivityFeed entries={activityEntries} />
 

@@ -208,6 +208,12 @@ export function Chat({
           {isSending ? (
             <div className="jarvis-thinking">
               <span>NEXUS is thinking...</span>
+              <span className="dna-spinner" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+                <span />
+              </span>
               <span className="jarvis-thinking-scan" />
             </div>
           ) : null}

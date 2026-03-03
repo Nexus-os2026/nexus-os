@@ -7,6 +7,10 @@ interface SettingsProps {
   onChange: (next: NexusConfig) => void;
   onSave: () => void;
   saving: boolean;
+  uiSoundEnabled: boolean;
+  uiSoundVolume: number;
+  onUiSoundEnabledChange: (value: boolean) => void;
+  onUiSoundVolumeChange: (value: number) => void;
 }
 
 type SettingsTab = "api" | "voice" | "privacy" | "about";
@@ -47,7 +51,16 @@ function statusLabel(status: ServiceStatus): string {
   return "Not tested";
 }
 
-export function Settings({ config, onChange, onSave, saving }: SettingsProps): JSX.Element {
+export function Settings({
+  config,
+  onChange,
+  onSave,
+  saving,
+  uiSoundEnabled,
+  uiSoundVolume,
+  onUiSoundEnabledChange,
+  onUiSoundVolumeChange
+}: SettingsProps): JSX.Element {
   const [tab, setTab] = useState<SettingsTab>("api");
   const [showSecrets, setShowSecrets] = useState(false);
   const [serviceStatus, setServiceStatus] = useState<Record<string, ServiceStatus>>({});
@@ -274,6 +287,34 @@ export function Settings({ config, onChange, onSave, saving }: SettingsProps): J
                 <div className="voice-meter-fill" style={{ width: `${Math.round(micLevel * 100)}%` }} />
               </div>
             </div>
+
+            <div className="voice-meter">
+              <div className="flex items-center justify-between gap-2">
+                <span className="settings-label">UI Sound Design</span>
+                <label className="holo-toggle">
+                  <input
+                    type="checkbox"
+                    checked={uiSoundEnabled}
+                    onChange={(event) => onUiSoundEnabledChange(event.target.checked)}
+                  />
+                  <span className="holo-toggle__track">
+                    <span className="holo-toggle__thumb" />
+                  </span>
+                </label>
+              </div>
+              <div className="voice-meter-track">
+                <div className="voice-meter-fill" style={{ width: `${Math.round(uiSoundVolume * 100)}%` }} />
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                className="create-slider"
+                value={Math.round(uiSoundVolume * 100)}
+                onChange={(event) => onUiSoundVolumeChange(Number(event.target.value) / 100)}
+              />
+            </div>
           </section>
         ) : null}
 
@@ -286,6 +327,7 @@ export function Settings({ config, onChange, onSave, saving }: SettingsProps): J
               </div>
               <input
                 type="checkbox"
+                className="holo-toggle-input"
                 checked={config.privacy.telemetry}
                 onChange={(event) =>
                   onChange({ ...config, privacy: { ...config.privacy, telemetry: event.target.checked } })

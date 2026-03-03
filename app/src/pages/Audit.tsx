@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { TimelineStream } from "../components/viz/TimelineStream";
 import "./audit.css";
 import type { AuditEventRow } from "../types";
 
@@ -168,6 +169,22 @@ export function Audit({ events }: AuditProps): JSX.Element {
     [events]
   );
 
+  const timelineItems = useMemo(
+    () =>
+      filtered.slice(-20).map((event) => ({
+        id: event.event_id,
+        label: `${event.agent_id} · ${event.event_type}`,
+        timestamp: event.timestamp,
+        level:
+          eventCategory(event.event_type) === "Error"
+            ? ("error" as const)
+            : eventCategory(event.event_type) === "UserAction"
+              ? ("success" as const)
+              : ("info" as const)
+      })),
+    [filtered]
+  );
+
   function toggleType(category: EventCategory): void {
     setSelectedTypes((previous) => {
       if (previous.includes(category)) {
@@ -195,6 +212,8 @@ export function Audit({ events }: AuditProps): JSX.Element {
           {integrity ? "Hash chain intact" : "Chain integrity warning"}
         </span>
       </header>
+
+      <TimelineStream items={timelineItems} />
 
       <div className="audit-controls">
         <input

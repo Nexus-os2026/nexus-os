@@ -1,8 +1,12 @@
+import { VoiceOrb, type VoiceOrbState } from "./fx/VoiceOrb";
+
 export interface VoiceOverlayState {
   visible: boolean;
   listening: boolean;
   transcription: string;
   responseText: string;
+  phase?: VoiceOrbState;
+  amplitude?: number;
 }
 
 interface VoiceOverlayProps {
@@ -15,18 +19,21 @@ export function VoiceOverlay({ state, onDismiss }: VoiceOverlayProps): JSX.Eleme
     return null;
   }
 
+  const phase: VoiceOrbState = state.phase ?? (state.listening ? "listening" : "idle");
+
   return (
-    <aside className="fixed bottom-5 right-5 z-50 w-full max-w-sm rounded-2xl border border-cyan-300/35 bg-slate-950/90 p-4 shadow-xl backdrop-blur-md">
+    <aside className="fixed bottom-5 right-5 z-50 w-full max-w-sm rounded-2xl border border-cyan-300/35 bg-slate-950/88 p-4 shadow-xl backdrop-blur-md holo-tooltip">
       <div className="mb-2 flex items-center justify-between">
         <h3 className="nexus-display text-lg text-cyan-100">Jarvis Mode</h3>
         <button onClick={onDismiss} className="nexus-btn nexus-btn-secondary">Close</button>
       </div>
 
-      <div className="mb-2 flex items-center gap-2 text-xs text-cyan-100/75">
-        <span
-          className={`h-2 w-2 rounded-full ${state.listening ? "animate-pulse bg-cyan-300" : "bg-slate-500"}`}
-        />
-        {state.listening ? "Listening" : "Idle"}
+      <div className="mb-3 flex items-center gap-4 text-xs text-cyan-100/75">
+        <VoiceOrb state={phase} amplitude={state.amplitude ?? 0.24} size={112} />
+        <div className="grid gap-1">
+          <span className="text-cyan-100/80 uppercase tracking-[0.12em]">Voice Core</span>
+          <span className="text-cyan-100/65">{phase.toUpperCase()}</span>
+        </div>
       </div>
 
       <div className="space-y-2 text-sm">
