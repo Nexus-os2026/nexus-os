@@ -103,7 +103,7 @@ export function AgentDetail({
     }
     const inferred = {
       name: agent.name,
-      version: "0.1.0",
+      version: "2.0.0",
       fuel_budget: 10_000,
       status: agent.status,
       llm_model: "claude-sonnet-4-5",

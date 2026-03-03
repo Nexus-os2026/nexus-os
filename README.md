@@ -1,35 +1,44 @@
-# NexusOS
+# NexusOS v2.0.0
 
 **Tagline:** Don't trust. Verify.
 
 NexusOS is a governed agent operating system built in Rust. It runs policy-bounded agents with explicit capabilities, fuel budgets, audit trails, and human approval boundaries.
 
+## What's New in v2.0.0
+
+- Coding Agent: scans repositories, analyzes architecture, writes code, runs tests, and iterates on fixes.
+- Screen Poster Agent: vision-driven posting and comment workflows with mandatory human approval gates.
+- Web Builder Agent: natural language to deployable React/Tailwind websites with Three.js scene generation.
+- Workflow Studio: visual DAG automation engine with parallel node execution, retries, and checkpoints.
+- Self-Improve Agent: tracks outcomes, learns strategies, optimizes prompts, and versions improvements.
+- Design Agent + UI overhaul: design generation pipeline and futuristic desktop experience upgrades.
+
 ## Installation
 
 ### Linux (CLI)
 
-1. Download latest `.deb` artifact from Releases.
+1. Download latest `.deb` artifact from Releases (`nexus-os_2.0.0_amd64.deb` for v2.0.0).
 2. Install: `sudo dpkg -i nexus-os_<version>_amd64.deb`
 3. Verify: `nexus --help`
 
 ### macOS (CLI)
 
-1. Download latest macOS artifact (`.dmg` or package tarball).
+1. Download latest macOS artifact (`NexusOS_2.0.0_aarch64.dmg` for v2.0.0).
 2. Install binary into your PATH.
 3. Verify: `nexus --help`
 
 ### Windows (CLI)
 
-1. Download latest `.msi` artifact.
+1. Download latest installer artifact (`NexusOS_2.0.0_x64-setup.exe` for v2.0.0).
 2. Run installer.
 3. Verify in terminal: `nexus --help`
 
 ## Desktop App Distribution (Tauri)
 
 Desktop artifacts are produced from `app/`:
-- Windows: `.exe` (NSIS installer) and `.msi`
-- macOS: `.dmg`
-- Linux: `.AppImage`, `.deb`, `.rpm`
+- Windows: `NexusOS_2.0.0_x64-setup.exe` (NSIS installer)
+- macOS: `NexusOS_2.0.0_aarch64.dmg`
+- Linux: `nexus-os_2.0.0_amd64.deb` and `NexusOS_2.0.0_amd64.AppImage`
 
 Local build commands:
 

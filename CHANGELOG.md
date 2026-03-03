@@ -2,6 +2,30 @@
 
 All notable changes to NEXUS OS are documented here.
 
+## v2.0.0 - Autonomous Digital Worker Platform
+
+### Agent Platform Expansion
+- Added `coder-agent` with project scanning, architecture analysis, context building, style-aware code writing, test execution, and iterative fix loops.
+- Added `screen-poster-agent` with platform navigation maps, draft composition, approval-gated posting, comment interaction, engagement tracking, and stealth timing controls.
+- Added `web-builder-agent` for natural-language website generation with reusable templates, Tailwind theme synthesis, and React Three Fiber scene generation.
+- Added `workflow-studio-agent` with typed node system, DAG execution engine, checkpointing, retry/skip/halt strategies, parallel node execution, and workflow serialization/versioning.
+- Added `self-improve-agent` with performance tracking, strategy learning, prompt optimization, encrypted knowledge storage, skill ratings, and rollback-capable improvement loop.
+- Added `designer-agent` for design spec generation, component library generation, screenshot analysis, and design token output.
+
+### Desktop and UX
+- Shipped major desktop UI upgrade with neural background effects, holographic panels, richer data visualizations, voice orb, agent avatar system, and fast page transitions.
+- Expanded command center navigation to include workflow studio and deeper agent visibility.
+- Updated About, splash, and runtime version surfaces for `v2.0.0`.
+
+### Quality and Integration
+- Added cross-agent integration coverage in `tests/integration/tests/e2e_system_workflows.rs`:
+  - Coding agent end-to-end workflow
+  - Screen poster draft approval workflow
+  - Website builder generation workflow
+  - Workflow studio DAG execution workflow
+  - Self-improvement learning workflow
+- Re-verified workspace-wide formatting, linting, Rust tests, voice Python tests, and app build/test checks.
+
 ## v1.0.0 - Production Readiness (Phase 9)
 
 ### Documentation and Productization

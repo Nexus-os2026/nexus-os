@@ -615,7 +615,7 @@ mod tests {
     fn build_manifest(name: &str) -> String {
         json!({
             "name": name,
-            "version": "0.1.0",
+            "version": "2.0.0",
             "capabilities": ["web.search", "llm.query", "fs.read"],
             "fuel_budget": 10000,
             "schedule": null,

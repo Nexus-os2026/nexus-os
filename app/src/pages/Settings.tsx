@@ -384,7 +384,7 @@ export function Settings({
             <div className="about-logo">N</div>
             <h3 className="about-title">NexusOS</h3>
             <ul className="about-list">
-              <li>Version: 1.0.0</li>
+              <li>Version: 2.0.0</li>
               <li>Tagline: Don&apos;t trust. Verify.</li>
               <li>
                 GitHub:{" "}

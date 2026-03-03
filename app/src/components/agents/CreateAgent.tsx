@@ -75,7 +75,7 @@ export function CreateAgent({ open, onClose, onDeploy }: CreateAgentProps): JSX.
   function deploy(): void {
     const payload = {
       name: inferName(name.trim()),
-      version: "0.1.0",
+      version: "2.0.0",
       capabilities: chosenCapabilities,
       fuel_budget: fuelBudget,
       schedule: null,

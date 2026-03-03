@@ -738,7 +738,7 @@ export default function App(): JSX.Element {
             setPage(id as Page);
             play("click");
           }}
-          version="v1.0.0"
+          version="v2.0.0"
         />
 
         <div className="flex min-h-screen flex-1 flex-col">
