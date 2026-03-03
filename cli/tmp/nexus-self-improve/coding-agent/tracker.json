@@ -1,0 +1,80 @@
+{
+  "outcomes": [
+    {
+      "id": 1,
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "task_type": "Other",
+      "task": "manual self-improve run",
+      "result": "Partial",
+      "metrics": {
+        "test_pass_rate": null,
+        "fix_iterations": null,
+        "code_quality_score": null,
+        "engagement_rate": null,
+        "approval_rate": null,
+        "reach": null,
+        "build_success": null,
+        "user_satisfaction": null,
+        "load_time": null
+      }
+    },
+    {
+      "id": 2,
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "task_type": "Coding",
+      "task": "run coding agent iteration",
+      "result": "Success",
+      "metrics": {
+        "test_pass_rate": 1.0,
+        "fix_iterations": 2.0,
+        "code_quality_score": 0.9,
+        "engagement_rate": null,
+        "approval_rate": null,
+        "reach": null,
+        "build_success": null,
+        "user_satisfaction": null,
+        "load_time": null
+      }
+    },
+    {
+      "id": 3,
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "task_type": "Other",
+      "task": "manual self-improve run",
+      "result": "Partial",
+      "metrics": {
+        "test_pass_rate": null,
+        "fix_iterations": null,
+        "code_quality_score": null,
+        "engagement_rate": null,
+        "approval_rate": null,
+        "reach": null,
+        "build_success": null,
+        "user_satisfaction": null,
+        "load_time": null
+      }
+    },
+    {
+      "id": 4,
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "task_type": "Coding",
+      "task": "run coding agent iteration",
+      "result": "Success",
+      "metrics": {
+        "test_pass_rate": 1.0,
+        "fix_iterations": 2.0,
+        "code_quality_score": 0.9,
+        "engagement_rate": null,
+        "approval_rate": null,
+        "reach": null,
+        "build_success": null,
+        "user_satisfaction": null,
+        "load_time": null
+      }
+    }
+  ]
+}

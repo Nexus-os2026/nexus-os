@@ -116,8 +116,8 @@ fn test_integration_screen_poster_draft_flow() {
         .iter()
         .filter_map(|event| event.payload.get("step").and_then(Value::as_str))
         .collect::<Vec<_>>();
-    assert!(steps.iter().any(|step| *step == "present_for_approval"));
-    assert!(steps.iter().any(|step| *step == "approval_decision"));
+    assert!(steps.contains(&"present_for_approval"));
+    assert!(steps.contains(&"approval_decision"));
 }
 
 #[test]

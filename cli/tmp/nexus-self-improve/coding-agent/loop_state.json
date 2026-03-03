@@ -1,0 +1,229 @@
+{
+  "versions": [
+    {
+      "version_id": 1,
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "task_type": "Other",
+      "status": "Applied",
+      "base_prompt": "Review recent outcomes and suggest safe, tested improvements.",
+      "selected_prompt": "Review recent outcomes and suggest safe, tested improvements.",
+      "recommendations": [
+        "Collect at least 20 outcomes to establish statistically useful strategy trends."
+      ],
+      "knowledge_entry_ids": [
+        1
+      ]
+    },
+    {
+      "version_id": 2,
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "task_type": "Coding",
+      "status": "Applied",
+      "base_prompt": "Implement requested code changes and iterate until tests pass.",
+      "selected_prompt": "Implement requested code changes and iterate until tests pass.",
+      "recommendations": [],
+      "knowledge_entry_ids": []
+    },
+    {
+      "version_id": 3,
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "task_type": "Other",
+      "status": "Applied",
+      "base_prompt": "Review recent outcomes and suggest safe, tested improvements.",
+      "selected_prompt": "Review recent outcomes and suggest safe, tested improvements.",
+      "recommendations": [
+        "Collect at least 20 outcomes to establish statistically useful strategy trends."
+      ],
+      "knowledge_entry_ids": [
+        2
+      ]
+    },
+    {
+      "version_id": 4,
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "task_type": "Coding",
+      "status": "Applied",
+      "base_prompt": "Implement requested code changes and iterate until tests pass.",
+      "selected_prompt": "Implement requested code changes and iterate until tests pass.",
+      "recommendations": [],
+      "knowledge_entry_ids": []
+    }
+  ],
+  "audit_log": [
+    {
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "action": "loop_started",
+      "detail": "manual self-improve run"
+    },
+    {
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "action": "outcome_recorded",
+      "detail": "outcome_id=1"
+    },
+    {
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "action": "history_analyzed",
+      "detail": "recommendations=1"
+    },
+    {
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "action": "prompt_updated",
+      "detail": "Review recent outcomes and suggest safe, tested improvements."
+    },
+    {
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "action": "knowledge_updated",
+      "detail": "entries=1"
+    },
+    {
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "action": "version_created",
+      "detail": "version_id=1"
+    },
+    {
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "action": "loop_started",
+      "detail": "run coding agent iteration"
+    },
+    {
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "action": "outcome_recorded",
+      "detail": "outcome_id=2"
+    },
+    {
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "action": "history_analyzed",
+      "detail": "recommendations=0"
+    },
+    {
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "action": "prompt_updated",
+      "detail": "Implement requested code changes and iterate until tests pass."
+    },
+    {
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "action": "knowledge_updated",
+      "detail": "entries=0"
+    },
+    {
+      "timestamp": 1772503058,
+      "agent_id": "coding-agent",
+      "action": "version_created",
+      "detail": "version_id=2"
+    },
+    {
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "action": "loop_started",
+      "detail": "manual self-improve run"
+    },
+    {
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "action": "outcome_recorded",
+      "detail": "outcome_id=3"
+    },
+    {
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "action": "history_analyzed",
+      "detail": "recommendations=1"
+    },
+    {
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "action": "prompt_updated",
+      "detail": "Review recent outcomes and suggest safe, tested improvements."
+    },
+    {
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "action": "knowledge_updated",
+      "detail": "entries=1"
+    },
+    {
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "action": "version_created",
+      "detail": "version_id=3"
+    },
+    {
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "action": "loop_started",
+      "detail": "run coding agent iteration"
+    },
+    {
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "action": "outcome_recorded",
+      "detail": "outcome_id=4"
+    },
+    {
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "action": "history_analyzed",
+      "detail": "recommendations=0"
+    },
+    {
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "action": "prompt_updated",
+      "detail": "Implement requested code changes and iterate until tests pass."
+    },
+    {
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "action": "knowledge_updated",
+      "detail": "entries=0"
+    },
+    {
+      "timestamp": 1772503068,
+      "agent_id": "coding-agent",
+      "action": "version_created",
+      "detail": "version_id=4"
+    }
+  ],
+  "optimizer": {
+    "variants_by_base": {
+      "Review recent outcomes and suggest safe, tested improvements.": [
+        {
+          "id": 1,
+          "prompt": "Review recent outcomes and suggest safe, tested improvements.",
+          "attempts": 3,
+          "successes": 2,
+          "average_score": 0.4
+        }
+      ],
+      "Implement requested code changes and iterate until tests pass.": [
+        {
+          "id": 2,
+          "prompt": "Implement requested code changes and iterate until tests pass.",
+          "attempts": 3,
+          "successes": 2,
+          "average_score": 0.6
+        }
+      ]
+    },
+    "default_prompt_by_base": {
+      "Implement requested code changes and iterate until tests pass.": "Implement requested code changes and iterate until tests pass.",
+      "Review recent outcomes and suggest safe, tested improvements.": "Review recent outcomes and suggest safe, tested improvements."
+    },
+    "next_variant_id": 3
+  }
+}
