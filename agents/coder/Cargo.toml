@@ -1,0 +1,18 @@
+[package]
+name = "coder-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+nexus-kernel = { path = "../../kernel" }
+nexus-connectors-llm = { path = "../../connectors/llm" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tempfile = "3.13"
