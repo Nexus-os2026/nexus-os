@@ -214,7 +214,7 @@ impl CodingAgent {
                         "step": "read",
                         "iteration": iteration,
                         "path": path,
-                        "bytes": content.as_bytes().len(),
+                        "bytes": content.len(),
                     }),
                 );
             }
@@ -251,7 +251,7 @@ impl CodingAgent {
                         "iteration": iteration,
                         "path": write.path,
                         "summary": write.summary,
-                        "bytes": write.content.as_bytes().len(),
+                        "bytes": write.content.len(),
                     }),
                 );
             }
@@ -295,8 +295,8 @@ impl CodingAgent {
                     "command": self.manifest.config.test_command,
                     "success": test_result.success,
                     "exit_code": test_result.exit_code,
-                    "stdout_bytes": test_result.stdout.as_bytes().len(),
-                    "stderr_bytes": test_result.stderr.as_bytes().len(),
+                    "stdout_bytes": test_result.stdout.len(),
+                    "stderr_bytes": test_result.stderr.len(),
                 }),
             );
 

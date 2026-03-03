@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex};
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
 ))]
+#[cfg(not(target_os = "linux"))]
 use tauri::Manager;
 use uuid::Uuid;
 
@@ -426,7 +427,9 @@ fn agent_error(error: AgentError) -> String {
 ))]
 mod runtime {
     use super::*;
+    #[cfg(not(target_os = "linux"))]
     use tauri::menu::{Menu, MenuItem};
+    #[cfg(not(target_os = "linux"))]
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
     #[tauri::command]
@@ -515,51 +518,57 @@ mod runtime {
     }
 
     pub fn run() {
-        tauri::Builder::<tauri::Wry>::default()
-            .manage(AppState::new())
-            .setup(|app| {
-                let show_dashboard =
-                    MenuItem::with_id(app, "show_dashboard", "Show Dashboard", true, None::<&str>)?;
-                let start_voice =
-                    MenuItem::with_id(app, "start_voice", "Start Voice", true, None::<&str>)?;
-                let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-                let menu = Menu::with_items(app, &[&show_dashboard, &start_voice, &quit])?;
+        let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
-                TrayIconBuilder::new()
-                    .menu(&menu)
-                    .on_menu_event(|app, event| match event.id.as_ref() {
-                        "show_dashboard" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        }
-                        "start_voice" => {
-                            let state = app.state::<AppState>();
-                            let _ = super::start_jarvis_mode(state.inner());
-                        }
-                        "quit" => {
-                            app.exit(0);
-                        }
-                        _ => {}
-                    })
-                    .on_tray_icon_event(|tray, event| {
-                        if let TrayIconEvent::Click {
-                            button: MouseButton::Left,
-                            button_state: MouseButtonState::Down,
-                            ..
-                        } = event
-                        {
-                            if let Some(window) = tray.app_handle().get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        }
-                    })
-                    .build(app)?;
+        #[cfg(target_os = "linux")]
+        let builder = builder;
 
-                Ok(())
-            })
+        #[cfg(not(target_os = "linux"))]
+        let builder = builder.setup(|app| {
+            let show_dashboard =
+                MenuItem::with_id(app, "show_dashboard", "Show Dashboard", true, None::<&str>)?;
+            let start_voice =
+                MenuItem::with_id(app, "start_voice", "Start Voice", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_dashboard, &start_voice, &quit])?;
+
+            TrayIconBuilder::new()
+                .menu(&menu)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show_dashboard" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "start_voice" => {
+                        let state = app.state::<AppState>();
+                        let _ = super::start_jarvis_mode(state.inner());
+                    }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Down,
+                        ..
+                    } = event
+                    {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
+            Ok(())
+        });
+
+        builder
             .invoke_handler(tauri::generate_handler![
                 list_agents,
                 create_agent,

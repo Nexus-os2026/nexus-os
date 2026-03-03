@@ -73,9 +73,9 @@ impl LlmProvider for ClaudeProvider {
         #[cfg(not(feature = "real-claude"))]
         {
             let _ = (prompt, max_tokens, model);
-            return Err(AgentError::SupervisorError(
+            Err(AgentError::SupervisorError(
                 "Claude provider is disabled. Rebuild with feature 'real-claude'.".to_string(),
-            ));
+            ))
         }
 
         #[cfg(feature = "real-claude")]
