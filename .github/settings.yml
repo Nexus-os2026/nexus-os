@@ -1,0 +1,15 @@
+repository:
+  description: "The Autonomous Digital Worker Platform — AI agents that code, post, build websites, and improve themselves. Governed, audited, verifiable."
+  topics:
+    - ai
+    - agents
+    - rust
+    - tauri
+    - voice-assistant
+    - automation
+    - screen-vision
+    - llm
+    - self-improving
+    - governed-ai
+    - desktop-app
+    - three-js
