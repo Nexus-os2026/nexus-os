@@ -5,7 +5,7 @@ use nexus_kernel::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -150,11 +150,18 @@ fn detect_design_patterns(project_map: &ProjectMap) -> Vec<String> {
     let has_view = lower_paths.iter().any(|path| path.contains("view"));
     let has_service = lower_paths.iter().any(|path| path.contains("service"));
     let has_repo = lower_paths.iter().any(|path| path.contains("repository"));
-    let has_kernel = lower_paths.iter().any(|path| path.starts_with("kernel/"));
-    let has_connector = lower_paths
+    let has_kernel = project_map
+        .file_tree
         .iter()
-        .any(|path| path.starts_with("connectors/"));
-    let has_app = lower_paths.iter().any(|path| path.starts_with("app/"));
+        .any(|entry| starts_with_component(entry.path.as_str(), "kernel"));
+    let has_connector = project_map
+        .file_tree
+        .iter()
+        .any(|entry| starts_with_component(entry.path.as_str(), "connectors"));
+    let has_app = project_map
+        .file_tree
+        .iter()
+        .any(|entry| starts_with_component(entry.path.as_str(), "app"));
 
     let mut patterns = Vec::new();
     if has_controller && has_model && has_view {
@@ -180,35 +187,32 @@ fn detect_test_frameworks(project_map: &ProjectMap) -> Vec<String> {
     if project_map
         .config_files
         .iter()
-        .any(|path| path.ends_with("Cargo.toml"))
+        .any(|path| has_file_name(path.as_str(), "Cargo.toml"))
     {
         frameworks.insert("cargo test".to_string());
     }
     if project_map
         .config_files
         .iter()
-        .any(|path| path.ends_with("package.json"))
+        .any(|path| has_file_name(path.as_str(), "package.json"))
     {
         frameworks.insert("npm test".to_string());
     }
-    if project_map
-        .config_files
-        .iter()
-        .any(|path| path.ends_with("jest.config.js") || path.ends_with("jest.config.ts"))
-    {
+    if project_map.config_files.iter().any(|path| {
+        has_file_name(path.as_str(), "jest.config.js")
+            || has_file_name(path.as_str(), "jest.config.ts")
+    }) {
         frameworks.insert("jest".to_string());
     }
-    if project_map
-        .config_files
-        .iter()
-        .any(|path| path.ends_with("pyproject.toml") || path.ends_with("pytest.ini"))
-    {
+    if project_map.config_files.iter().any(|path| {
+        has_file_name(path.as_str(), "pyproject.toml") || has_file_name(path.as_str(), "pytest.ini")
+    }) {
         frameworks.insert("pytest".to_string());
     }
     if project_map
         .config_files
         .iter()
-        .any(|path| path.ends_with("go.mod"))
+        .any(|path| has_file_name(path.as_str(), "go.mod"))
     {
         frameworks.insert("go test".to_string());
     }
@@ -348,6 +352,17 @@ fn read_file(project_map: &ProjectMap, rel_path: &str) -> Option<String> {
     let root = PathBuf::from(project_map.root_path.as_str());
     let full = root.join(rel_path);
     fs::read_to_string(full).ok()
+}
+
+fn starts_with_component(path: &str, component: &str) -> bool {
+    matches!(
+        Path::new(path).components().next(),
+        Some(Component::Normal(name)) if name.to_string_lossy().eq_ignore_ascii_case(component)
+    )
+}
+
+fn has_file_name(path: &str, expected: &str) -> bool {
+    Path::new(path).file_name().and_then(|name| name.to_str()) == Some(expected)
 }
 
 fn parse_rust_dependencies(content: &str) -> Vec<String> {

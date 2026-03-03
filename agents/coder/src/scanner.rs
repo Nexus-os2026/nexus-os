@@ -2,7 +2,7 @@ use nexus_kernel::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Component, Path};
 use std::process::Command;
 use std::time::UNIX_EPOCH;
 
@@ -240,7 +240,7 @@ fn scan_dir(
         if is_config_file(path.as_path()) {
             state.config_files.push(rel_path.clone());
         }
-        if is_test_file(path.as_path(), rel_path.as_str()) {
+        if is_test_file(path.as_path()) {
             state.test_files.push(rel_path.clone());
         }
 
@@ -309,9 +309,10 @@ fn is_config_file(path: &Path) -> bool {
     )
 }
 
-fn is_test_file(path: &Path, rel_path: &str) -> bool {
-    let lowered = rel_path.to_ascii_lowercase();
-    if lowered.contains("/tests/") || lowered.contains("\\tests\\") {
+fn is_test_file(path: &Path) -> bool {
+    if path.components().any(|component| {
+        matches!(component, Component::Normal(name) if name.to_string_lossy().eq_ignore_ascii_case("tests"))
+    }) {
         return true;
     }
 
@@ -406,7 +407,12 @@ pub fn cargo_manifests(project_map: &ProjectMap) -> HashSet<String> {
     project_map
         .config_files
         .iter()
-        .filter(|path| path.ends_with("Cargo.toml"))
+        .filter(|path| {
+            Path::new(path.as_str())
+                .file_name()
+                .and_then(|name| name.to_str())
+                == Some("Cargo.toml")
+        })
         .cloned()
         .collect::<HashSet<_>>()
 }

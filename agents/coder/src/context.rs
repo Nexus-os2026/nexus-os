@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -42,7 +42,8 @@ pub fn build_context(
     for entry in &project_map.file_tree {
         let mut score = 0.0_f64;
         let mut reasons = Vec::new();
-        let lower_path = entry.path.to_ascii_lowercase();
+        let normalized_path = normalize_rel_path(entry.path.as_str());
+        let lower_path = normalized_path.to_ascii_lowercase();
 
         for keyword in &keywords {
             if lower_path.contains(keyword) {
@@ -67,12 +68,16 @@ pub fn build_context(
             score += 1.2;
             reasons.push("test example".to_string());
         }
-        if recent_files.contains(entry.path.as_str()) {
+        if recent_files.contains(normalized_path.as_str()) {
             score += 2.5;
             reasons.push("recent git change".to_string());
         }
 
-        if entry.path.ends_with("connectors/core/src/connector.rs") && task_mentions_connector {
+        if path_ends_with_components(
+            entry.path.as_str(),
+            &["connectors", "core", "src", "connector.rs"],
+        ) && task_mentions_connector
+        {
             score += 12.0;
             reasons.push("core connector trait".to_string());
         }
@@ -327,7 +332,7 @@ fn recent_changed_files(root: &Path) -> HashSet<String> {
     text.lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
-        .map(|line| line.to_string())
+        .map(normalize_rel_path)
         .collect::<HashSet<_>>()
 }
 
@@ -336,4 +341,34 @@ fn current_unix_timestamp() -> u64 {
         Ok(duration) => duration.as_secs(),
         Err(_) => 0,
     }
+}
+
+fn normalize_rel_path(path: &str) -> String {
+    Path::new(path)
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(name) => Some(name.to_string_lossy().to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn path_ends_with_components(path: &str, suffix: &[&str]) -> bool {
+    let components = Path::new(path)
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(name) => Some(name.to_string_lossy().to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    if components.len() < suffix.len() {
+        return false;
+    }
+
+    components[components.len() - suffix.len()..]
+        .iter()
+        .map(String::as_str)
+        .eq(suffix.iter().copied())
 }

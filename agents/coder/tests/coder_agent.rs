@@ -5,7 +5,7 @@ use coder_agent::scanner::{detect_language, scan_project, Language};
 use coder_agent::test_runner::{TestError, TestFramework, TestResult};
 use coder_agent::writer::{detect_style, NamingConvention};
 use nexus_kernel::errors::AgentError;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use tempfile::tempdir;
 
 fn repo_root() -> PathBuf {
@@ -13,6 +13,36 @@ fn repo_root() -> PathBuf {
         .join("../..")
         .canonicalize()
         .expect("repo root should resolve")
+}
+
+fn file_name(path: &str) -> Option<String> {
+    Path::new(path)
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+}
+
+fn has_component(path: &str, component: &str) -> bool {
+    Path::new(path).components().any(
+        |segment| matches!(segment, Component::Normal(name) if name.to_string_lossy() == component),
+    )
+}
+
+fn has_suffix_components(path: &str, suffix: &[&str]) -> bool {
+    let components = Path::new(path)
+        .components()
+        .filter_map(|segment| match segment {
+            Component::Normal(name) => Some(name.to_string_lossy().to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let tail_len = suffix.len();
+    if components.len() < tail_len {
+        return false;
+    }
+    components[components.len() - tail_len..]
+        .iter()
+        .map(String::as_str)
+        .eq(suffix.iter().copied())
 }
 
 #[test]
@@ -25,14 +55,14 @@ fn test_scan_rust_project() {
         project
             .config_files
             .iter()
-            .any(|path| path.ends_with("Cargo.toml")),
+            .any(|path| file_name(path.as_str()).as_deref() == Some("Cargo.toml")),
         "expected Cargo.toml in config files"
     );
 
     let crate_count = project
         .config_files
         .iter()
-        .filter(|path| path.ends_with("Cargo.toml"))
+        .filter(|path| file_name(path.as_str()).as_deref() == Some("Cargo.toml"))
         .count();
     assert!(
         crate_count >= 15,
@@ -44,10 +74,11 @@ fn test_scan_rust_project() {
         "expected rich test discovery across crates"
     );
     assert!(
-        project
-            .test_files
-            .iter()
-            .any(|path| path.ends_with("connectors/core/tests/placeholder.rs")),
+        project.test_files.iter().any(|path| {
+            has_component(path.as_str(), "connectors")
+                && has_component(path.as_str(), "core")
+                && has_suffix_components(path.as_str(), &["tests", "placeholder.rs"])
+        }),
         "expected connector core test file in scan results"
     );
 }
@@ -71,24 +102,34 @@ fn test_context_building() {
     let project = scan_project(repo_root()).expect("project scan should succeed");
     let context = build_context(&project, "add a new connector").expect("context should build");
 
-    let paths = context
-        .files
-        .iter()
-        .map(|file| file.path.as_str())
-        .collect::<Vec<_>>();
     assert!(
-        paths.contains(&"connectors/core/src/connector.rs"),
+        context.files.iter().any(|file| {
+            has_suffix_components(
+                file.path.as_str(),
+                &["connectors", "core", "src", "connector.rs"],
+            )
+        }),
         "expected Connector trait file in context"
     );
     assert!(
-        paths.contains(&"connectors/core/src/github_connector.rs"),
+        context.files.iter().any(|file| {
+            has_suffix_components(
+                file.path.as_str(),
+                &["connectors", "core", "src", "github_connector.rs"],
+            )
+        }),
         "expected existing connector example in context"
     );
 
     let trait_file = context
         .files
         .iter()
-        .find(|file| file.path == "connectors/core/src/connector.rs")
+        .find(|file| {
+            has_suffix_components(
+                file.path.as_str(),
+                &["connectors", "core", "src", "connector.rs"],
+            )
+        })
         .expect("connector trait file should be selected");
     assert!(
         trait_file.content.contains("trait Connector"),
