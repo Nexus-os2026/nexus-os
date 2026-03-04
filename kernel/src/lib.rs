@@ -1,6 +1,7 @@
 //! Core runtime primitives and governance enforcement surfaces for NEXUS OS.
 
 pub mod audit;
+pub mod autonomy;
 pub mod config;
 pub mod errors;
 pub mod lifecycle;

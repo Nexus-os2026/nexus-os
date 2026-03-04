@@ -76,6 +76,7 @@ fn test_coding_agent_dry_run_integration() {
             "process.exec".to_string(),
         ],
         fuel_budget: 200,
+        autonomy_level: Some(1),
         schedule: None,
         llm_model: Some("claude-sonnet-4-5".to_string()),
         config: CodingAgentConfig {

@@ -1,4 +1,5 @@
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
+use nexus_kernel::autonomy::{AutonomyGuard, AutonomyLevel};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashSet;
@@ -58,6 +59,7 @@ pub struct OutputChunk {
 pub enum CommandError {
     CapabilityDenied(String),
     CommandBlocked(String),
+    AutonomyDenied(String),
     ExecutionFailed(String),
     Timeout(String),
 }
@@ -69,6 +71,7 @@ impl Display for CommandError {
                 write!(f, "capability denied: {capability}")
             }
             CommandError::CommandBlocked(reason) => write!(f, "command blocked: {reason}"),
+            CommandError::AutonomyDenied(reason) => write!(f, "autonomy denied: {reason}"),
             CommandError::ExecutionFailed(reason) => write!(f, "execution failed: {reason}"),
             CommandError::Timeout(reason) => write!(f, "command timed out: {reason}"),
         }
@@ -82,24 +85,34 @@ pub struct TerminalExecutor {
     capabilities: HashSet<String>,
     audit_trail: AuditTrail,
     agent_id: Uuid,
+    autonomy_guard: AutonomyGuard,
 }
 
 impl Default for TerminalExecutor {
     fn default() -> Self {
-        Self::with_capabilities(
+        Self::with_capabilities_and_autonomy(
             [TERMINAL_EXECUTE_CAPABILITY.to_string()]
                 .into_iter()
                 .collect(),
+            AutonomyLevel::L0,
         )
     }
 }
 
 impl TerminalExecutor {
     pub fn with_capabilities(capabilities: HashSet<String>) -> Self {
+        Self::with_capabilities_and_autonomy(capabilities, AutonomyLevel::L0)
+    }
+
+    pub fn with_capabilities_and_autonomy(
+        capabilities: HashSet<String>,
+        level: AutonomyLevel,
+    ) -> Self {
         Self {
             capabilities,
             audit_trail: AuditTrail::new(),
             agent_id: Uuid::new_v4(),
+            autonomy_guard: AutonomyGuard::new(level),
         }
     }
 
@@ -122,6 +135,15 @@ impl TerminalExecutor {
     where
         F: FnMut(OutputChunk),
     {
+        if let Err(error) = self
+            .autonomy_guard
+            .require_tool_call(self.agent_id, &mut self.audit_trail)
+        {
+            let denied = CommandError::AutonomyDenied(error.to_string());
+            self.log_error(command, working_dir.as_ref(), &denied, "", "", 0);
+            return Err(denied);
+        }
+
         if !self.capabilities.contains(TERMINAL_EXECUTE_CAPABILITY) {
             let error = CommandError::CapabilityDenied(TERMINAL_EXECUTE_CAPABILITY.to_string());
             self.log_error(command, working_dir.as_ref(), &error, "", "", 0);

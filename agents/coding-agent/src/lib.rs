@@ -1,6 +1,7 @@
 //! Governed coding agent runtime for repository-aware test/fix iterations.
 
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
+use nexus_kernel::autonomy::{AutonomyGuard, AutonomyLevel};
 use nexus_kernel::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -36,6 +37,8 @@ pub struct CodingAgentManifest {
     pub version: String,
     pub capabilities: Vec<String>,
     pub fuel_budget: u64,
+    #[serde(default)]
+    pub autonomy_level: Option<u8>,
     pub schedule: Option<String>,
     pub llm_model: Option<String>,
     pub config: CodingAgentConfig,
@@ -132,6 +135,7 @@ pub struct CodingAgent {
     dry_run: bool,
     agent_id: Uuid,
     audit_trail: AuditTrail,
+    autonomy_guard: AutonomyGuard,
     fuel_consumed: u64,
     modified_files: BTreeSet<String>,
 }
@@ -152,6 +156,9 @@ impl CodingAgent {
         dependencies: CodingDependencies,
     ) -> Self {
         Self {
+            autonomy_guard: AutonomyGuard::new(AutonomyLevel::from_manifest(
+                manifest.autonomy_level,
+            )),
             manifest,
             dependencies,
             dry_run,
@@ -175,6 +182,7 @@ impl CodingAgent {
                 "max_iterations": self.manifest.config.max_iterations,
                 "schedule": self.manifest.schedule,
                 "llm_model": self.manifest.llm_model,
+                "autonomy_level": self.autonomy_guard.level().as_str(),
             }),
         );
 
@@ -182,6 +190,8 @@ impl CodingAgent {
         let max_iterations = self.manifest.config.max_iterations.max(1);
 
         for iteration in 1..=max_iterations {
+            self.autonomy_guard
+                .require_tool_call(self.agent_id, &mut self.audit_trail)?;
             self.charge_fuel(FUEL_COST_PLAN)?;
             let plan = self.dependencies.planner.plan(PlanningContext {
                 iteration,
@@ -204,6 +214,8 @@ impl CodingAgent {
             );
 
             for path in &plan.read_paths {
+                self.autonomy_guard
+                    .require_tool_call(self.agent_id, &mut self.audit_trail)?;
                 self.ensure_capability(CAP_FS_READ)?;
                 self.charge_fuel(FUEL_COST_READ)?;
                 let content = self.dependencies.io.read_file(path.as_str())?;
@@ -220,6 +232,8 @@ impl CodingAgent {
             }
 
             for write in &plan.writes {
+                self.autonomy_guard
+                    .require_tool_call(self.agent_id, &mut self.audit_trail)?;
                 self.ensure_capability(CAP_FS_WRITE)?;
                 if !self.dependencies.approval.approve_write(write, iteration) {
                     self.audit_trail.append_event(
@@ -261,6 +275,8 @@ impl CodingAgent {
             }
 
             self.ensure_capability(CAP_PROCESS_EXEC)?;
+            self.autonomy_guard
+                .require_tool_call(self.agent_id, &mut self.audit_trail)?;
             if !self
                 .dependencies
                 .approval
@@ -702,6 +718,7 @@ mod tests {
                 .map(|item| (*item).to_string())
                 .collect(),
             fuel_budget,
+            autonomy_level: Some(1),
             schedule: None,
             llm_model: Some("claude-sonnet-4-5".to_string()),
             config: CodingAgentConfig {

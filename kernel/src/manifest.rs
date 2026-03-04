@@ -1,3 +1,4 @@
+use crate::autonomy::AutonomyLevel;
 use crate::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -25,6 +26,7 @@ pub struct AgentManifest {
     pub version: String,
     pub capabilities: Vec<String>,
     pub fuel_budget: u64,
+    pub autonomy_level: Option<u8>,
     pub schedule: Option<String>,
     pub llm_model: Option<String>,
 }
@@ -35,6 +37,7 @@ struct RawManifest {
     version: Option<String>,
     capabilities: Option<Vec<String>>,
     fuel_budget: Option<u64>,
+    autonomy_level: Option<u8>,
     schedule: Option<String>,
     llm_model: Option<String>,
 }
@@ -66,12 +69,14 @@ pub fn parse_manifest(input: &str) -> Result<AgentManifest, AgentError> {
         AgentError::ManifestError("missing required field: fuel_budget".to_string())
     })?;
     validate_fuel_budget(fuel_budget)?;
+    let autonomy_level = parse_autonomy_level(raw.autonomy_level)?;
 
     Ok(AgentManifest {
         name,
         version,
         capabilities,
         fuel_budget,
+        autonomy_level,
         schedule: raw.schedule,
         llm_model: raw.llm_model,
     })
@@ -130,6 +135,17 @@ fn validate_fuel_budget(fuel_budget: u64) -> Result<(), AgentError> {
     Ok(())
 }
 
+fn parse_autonomy_level(value: Option<u8>) -> Result<Option<u8>, AgentError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+
+    let _ = AutonomyLevel::from_numeric(value).ok_or_else(|| {
+        AgentError::ManifestError("autonomy_level must be one of 0, 1, 2, 3, 4, 5".to_string())
+    })?;
+    Ok(Some(value))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{parse_manifest, AgentManifest};
@@ -159,6 +175,7 @@ llm_model = "claude-sonnet-4-5"
                 "fs.read".to_string(),
             ],
             fuel_budget: 10_000,
+            autonomy_level: None,
             schedule: Some("*/10 * * * *".to_string()),
             llm_model: Some("claude-sonnet-4-5".to_string()),
         };
@@ -199,5 +216,19 @@ fuel_budget = 0
 
         let zero_fuel_error = parse_manifest(zero_fuel);
         assert!(matches!(zero_fuel_error, Err(AgentError::ManifestError(_))));
+    }
+
+    #[test]
+    fn test_parse_autonomy_level() {
+        let toml = r#"
+name = "agent-with-autonomy"
+version = "0.1.0"
+capabilities = ["web.search"]
+fuel_budget = 100
+autonomy_level = 2
+"#;
+
+        let parsed = parse_manifest(toml).expect("manifest with autonomy level should parse");
+        assert_eq!(parsed.autonomy_level, Some(2));
     }
 }
