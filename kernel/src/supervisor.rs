@@ -1,6 +1,9 @@
+use crate::audit::AuditTrail;
+use crate::autonomy::{AutonomyGuard, AutonomyLevel};
 use crate::errors::AgentError;
 use crate::lifecycle::{transition_state, AgentState};
 use crate::manifest::AgentManifest;
+use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -10,6 +13,7 @@ pub type AgentId = Uuid;
 pub struct AgentHandle {
     pub id: AgentId,
     pub manifest: AgentManifest,
+    pub autonomy_guard: AutonomyGuard,
     pub state: AgentState,
     pub remaining_fuel: u64,
 }
@@ -24,23 +28,36 @@ pub struct AgentStatus {
 #[derive(Debug, Default)]
 pub struct Supervisor {
     agents: HashMap<AgentId, AgentHandle>,
+    audit_trail: AuditTrail,
 }
 
 impl Supervisor {
     pub fn new() -> Self {
         Self {
             agents: HashMap::new(),
+            audit_trail: AuditTrail::new(),
         }
     }
 
     pub fn start_agent(&mut self, manifest: AgentManifest) -> Result<AgentId, AgentError> {
         let id = Uuid::new_v4();
+        let autonomy_level = AutonomyLevel::from_manifest(manifest.autonomy_level);
         let mut handle = AgentHandle {
             id,
             remaining_fuel: manifest.fuel_budget,
+            autonomy_guard: AutonomyGuard::new(autonomy_level),
             manifest,
             state: AgentState::Created,
         };
+
+        let _ = self.audit_trail.append_event(
+            id,
+            crate::audit::EventType::StateChange,
+            json!({
+                "event": "autonomy.level_initialized",
+                "level": autonomy_level.as_str(),
+            }),
+        );
 
         handle.state = transition_state(handle.state, AgentState::Starting)?;
         Self::consume_fuel(&mut handle)?;
@@ -148,6 +165,54 @@ impl Supervisor {
         self.agents.get(&id)
     }
 
+    pub fn audit_trail(&self) -> &AuditTrail {
+        &self.audit_trail
+    }
+
+    pub fn require_tool_call(&mut self, id: AgentId) -> Result<(), AgentError> {
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        handle
+            .autonomy_guard
+            .require_tool_call(id, &mut self.audit_trail)
+            .map_err(AgentError::from)
+    }
+
+    pub fn require_multi_agent(&mut self, id: AgentId) -> Result<(), AgentError> {
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        handle
+            .autonomy_guard
+            .require_multi_agent(id, &mut self.audit_trail)
+            .map_err(AgentError::from)
+    }
+
+    pub fn require_self_modification(&mut self, id: AgentId) -> Result<(), AgentError> {
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        handle
+            .autonomy_guard
+            .require_self_modification(id, &mut self.audit_trail)
+            .map_err(AgentError::from)
+    }
+
+    pub fn require_distributed(&mut self, id: AgentId) -> Result<(), AgentError> {
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        handle
+            .autonomy_guard
+            .require_distributed(id, &mut self.audit_trail)
+            .map_err(AgentError::from)
+    }
+
     fn consume_fuel(agent: &mut AgentHandle) -> Result<(), AgentError> {
         if agent.remaining_fuel == 0 {
             return Err(AgentError::FuelExhausted);
@@ -170,6 +235,7 @@ mod tests {
             version: "0.1.0".to_string(),
             capabilities: vec!["web.search".to_string(), "llm.query".to_string()],
             fuel_budget,
+            autonomy_level: None,
             schedule: None,
             llm_model: Some("ollama/llama3".to_string()),
         }
@@ -243,6 +309,28 @@ mod tests {
                 from: AgentState::Stopped,
                 to: AgentState::Paused,
             })
+        );
+    }
+
+    #[test]
+    fn test_start_agent_emits_autonomy_initialized_event() {
+        let mut supervisor = Supervisor::new();
+        let id = supervisor
+            .start_agent(sample_manifest(5))
+            .expect("agent should start successfully");
+
+        let initialized = supervisor.audit_trail().events().iter().find(|event| {
+            event.agent_id == id
+                && event.payload.get("event").and_then(|value| value.as_str())
+                    == Some("autonomy.level_initialized")
+        });
+        let initialized = initialized.expect("autonomy initialized event should be present");
+        assert_eq!(
+            initialized
+                .payload
+                .get("level")
+                .and_then(|value| value.as_str()),
+            Some("L0")
         );
     }
 }

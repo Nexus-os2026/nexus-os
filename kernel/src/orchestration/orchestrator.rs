@@ -1,4 +1,5 @@
 use crate::audit::{AuditTrail, EventType};
+use crate::autonomy::{AutonomyGuard, AutonomyLevel};
 use crate::errors::AgentError;
 use crate::lifecycle::{transition_state, AgentState};
 use crate::orchestration::messaging::{AgentId, TeamId, TeamMessage, TeamMessageBus};
@@ -44,18 +45,26 @@ pub struct Orchestrator {
     teams: HashMap<TeamId, Team>,
     bus: TeamMessageBus,
     audit_trail: AuditTrail,
+    autonomy_guard: AutonomyGuard,
 }
 
 impl Orchestrator {
     pub fn new() -> Self {
+        Self::with_autonomy_level(AutonomyLevel::L0)
+    }
+
+    pub fn with_autonomy_level(level: AutonomyLevel) -> Self {
         Self {
             teams: HashMap::new(),
             bus: TeamMessageBus::new(),
             audit_trail: AuditTrail::new(),
+            autonomy_guard: AutonomyGuard::new(level),
         }
     }
 
     pub fn create_team(&mut self, roles: &[AgentRole]) -> Result<TeamId, AgentError> {
+        self.autonomy_guard
+            .require_multi_agent(Uuid::nil(), &mut self.audit_trail)?;
         if roles.is_empty() {
             return Err(AgentError::SupervisorError(
                 "team must include at least one role".to_string(),
@@ -163,6 +172,10 @@ impl Orchestrator {
     pub fn audit_trail(&self) -> &AuditTrail {
         &self.audit_trail
     }
+
+    pub fn autonomy_guard(&self) -> &AutonomyGuard {
+        &self.autonomy_guard
+    }
 }
 
 fn build_role_task(role: AgentRole, task: &str) -> String {
@@ -187,11 +200,12 @@ pub fn canonical_merge_messages(mut messages: Vec<TeamMessage>) -> Vec<TeamMessa
 #[cfg(test)]
 mod tests {
     use super::Orchestrator;
+    use crate::autonomy::AutonomyLevel;
     use crate::orchestration::roles::AgentRole;
 
     #[test]
     fn test_team_creation() {
-        let mut orchestrator = Orchestrator::new();
+        let mut orchestrator = Orchestrator::with_autonomy_level(AutonomyLevel::L2);
         let team_id = orchestrator.create_team(&[
             AgentRole::Researcher,
             AgentRole::Writer,
@@ -214,7 +228,7 @@ mod tests {
 
     #[test]
     fn test_task_distribution() {
-        let mut orchestrator = Orchestrator::new();
+        let mut orchestrator = Orchestrator::with_autonomy_level(AutonomyLevel::L2);
         let team_id = orchestrator.create_team(&[
             AgentRole::Researcher,
             AgentRole::Writer,
