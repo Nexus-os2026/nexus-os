@@ -1,6 +1,8 @@
 mod manager;
 mod software;
 mod stubs;
+#[cfg(test)]
+mod tests;
 mod types;
 
 pub use manager::{KeyBackendKind, KeyManager, KeyManagerConfig, RotationApproval};
