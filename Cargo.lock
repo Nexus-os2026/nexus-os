@@ -2362,6 +2362,7 @@ name = "nexus-kernel"
 version = "2.0.0"
 dependencies = [
  "aes-gcm",
+ "ed25519-dalek",
  "serde",
  "serde_json",
  "sha2",
