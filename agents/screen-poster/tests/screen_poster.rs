@@ -215,3 +215,15 @@ fn test_post_verification() {
         .expect("post attempt should complete");
     assert!(success.posted);
 }
+
+#[test]
+fn test_kill_gate_blocks_post_when_ban_rate_exceeds_threshold() {
+    let approved = ApprovedDraft {
+        ticket_id: uuid::Uuid::new_v4(),
+        draft: sample_draft(SocialPlatform::X),
+    };
+    let mut engine = sample_engine(true).with_ban_rate_percent(3.0);
+
+    let result = engine.post(&approved, SocialPlatform::X);
+    assert!(matches!(result, Err(AgentError::SupervisorError(_))));
+}
