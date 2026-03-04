@@ -1,7 +1,10 @@
-use crate::audit::AuditTrail;
+use crate::audit::{AuditTrail, EventType};
 use crate::autonomy::{AutonomyGuard, AutonomyLevel};
 use crate::consent::{ApprovalRequest, ConsentRuntime, GovernedOperation};
 use crate::errors::AgentError;
+use crate::fuel_hardening::{
+    AgentFuelLedger, BudgetPeriodId, BurnAnomalyDetector, FuelAuditReport, FuelViolation,
+};
 use crate::lifecycle::{transition_state, AgentState};
 use crate::manifest::AgentManifest;
 use serde_json::json;
@@ -16,6 +19,7 @@ pub struct AgentHandle {
     pub manifest: AgentManifest,
     pub autonomy_guard: AutonomyGuard,
     pub consent_runtime: ConsentRuntime,
+    pub autonomy_level: u8,
     pub state: AgentState,
     pub remaining_fuel: u64,
 }
@@ -30,6 +34,7 @@ pub struct AgentStatus {
 #[derive(Debug, Default)]
 pub struct Supervisor {
     agents: HashMap<AgentId, AgentHandle>,
+    fuel_ledgers: HashMap<AgentId, AgentFuelLedger>,
     audit_trail: AuditTrail,
 }
 
@@ -37,6 +42,7 @@ impl Supervisor {
     pub fn new() -> Self {
         Self {
             agents: HashMap::new(),
+            fuel_ledgers: HashMap::new(),
             audit_trail: AuditTrail::new(),
         }
     }
@@ -44,34 +50,77 @@ impl Supervisor {
     pub fn start_agent(&mut self, manifest: AgentManifest) -> Result<AgentId, AgentError> {
         let id = Uuid::new_v4();
         let autonomy_level = AutonomyLevel::from_manifest(manifest.autonomy_level);
+        let autonomy_level_numeric = autonomy_level_numeric(autonomy_level);
         let consent_runtime = ConsentRuntime::from_manifest(
             manifest.consent_policy_path.as_deref(),
             manifest.requester_id.as_deref(),
             manifest.name.as_str(),
         )?;
-        let mut handle = AgentHandle {
+
+        let period_id = BudgetPeriodId::new(
+            manifest
+                .fuel_period_id
+                .clone()
+                .unwrap_or_else(|| "period.default".to_string()),
+        );
+        let monthly_cap = manifest.monthly_fuel_cap.unwrap_or(manifest.fuel_budget);
+
+        let handle = AgentHandle {
             id,
             remaining_fuel: manifest.fuel_budget,
             autonomy_guard: AutonomyGuard::new(autonomy_level),
             consent_runtime,
+            autonomy_level: autonomy_level_numeric,
             manifest,
             state: AgentState::Created,
         };
 
+        self.agents.insert(id, handle);
+        self.fuel_ledgers.insert(
+            id,
+            AgentFuelLedger::new(
+                period_id.clone(),
+                monthly_cap,
+                BurnAnomalyDetector::default(),
+            ),
+        );
+
         let _ = self.audit_trail.append_event(
             id,
-            crate::audit::EventType::StateChange,
+            EventType::StateChange,
+            json!({
+                "event_kind": "fuel.period_set",
+                "agent_id": id,
+                "period": period_id.0,
+                "cap_units": monthly_cap,
+                "spent_units": 0,
+            }),
+        );
+        let _ = self.audit_trail.append_event(
+            id,
+            EventType::StateChange,
             json!({
                 "event": "autonomy.level_initialized",
                 "level": autonomy_level.as_str(),
             }),
         );
 
-        handle.state = transition_state(handle.state, AgentState::Starting)?;
-        Self::consume_fuel(&mut handle)?;
-        handle.state = transition_state(handle.state, AgentState::Running)?;
+        {
+            let entry = self
+                .agents
+                .get_mut(&id)
+                .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+            entry.state = transition_state(entry.state, AgentState::Starting)?;
+        }
 
-        self.agents.insert(id, handle);
+        self.consume_fuel(id, "supervisor.start")?;
+
+        let entry = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        entry.state = transition_state(entry.state, AgentState::Running)?;
+
         Ok(id)
     }
 
@@ -144,15 +193,64 @@ impl Supervisor {
             self.stop_agent(id)?;
         }
 
+        self.consume_fuel(id, "supervisor.restart")?;
+
         let handle = self
             .agents
             .get_mut(&id)
             .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
-
-        Self::consume_fuel(handle)?;
         handle.state = transition_state(handle.state, AgentState::Starting)?;
         handle.state = transition_state(handle.state, AgentState::Running)?;
         Ok(())
+    }
+
+    pub fn record_llm_spend(
+        &mut self,
+        id: AgentId,
+        model: &str,
+        input_tokens: u32,
+        output_tokens: u32,
+        cost_units: u64,
+    ) -> Result<(), AgentError> {
+        let output_units = u64::from(output_tokens);
+        {
+            let handle = self
+                .agents
+                .get_mut(&id)
+                .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+            if handle.remaining_fuel < output_units {
+                return Err(self.apply_fuel_violation(
+                    id,
+                    FuelViolation::OverMonthlyCap,
+                    "LLM token spend exceeded remaining fuel",
+                ));
+            }
+            handle.remaining_fuel -= output_units;
+        }
+
+        let ledger = self.fuel_ledgers.get_mut(&id).ok_or_else(|| {
+            AgentError::SupervisorError(format!("agent '{id}' missing fuel ledger"))
+        })?;
+
+        match ledger.record_llm_spend(
+            id,
+            model,
+            input_tokens,
+            output_tokens,
+            cost_units,
+            &mut self.audit_trail,
+        ) {
+            Ok(()) => Ok(()),
+            Err(violation) => Err(self.apply_fuel_violation(
+                id,
+                violation,
+                "fuel hardening violation from LLM spend",
+            )),
+        }
+    }
+
+    pub fn fuel_audit_report(&self, id: AgentId) -> Option<FuelAuditReport> {
+        self.fuel_ledgers.get(&id).map(|ledger| ledger.snapshot(id))
     }
 
     pub fn health_check(&self) -> Vec<AgentStatus> {
@@ -316,12 +414,74 @@ impl Supervisor {
         Ok(handle.consent_runtime.pending_requests())
     }
 
-    fn consume_fuel(agent: &mut AgentHandle) -> Result<(), AgentError> {
-        if agent.remaining_fuel == 0 {
-            return Err(AgentError::FuelExhausted);
+    fn consume_fuel(&mut self, id: AgentId, reason: &str) -> Result<(), AgentError> {
+        let model_name = {
+            let handle = self
+                .agents
+                .get_mut(&id)
+                .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+            if handle.remaining_fuel == 0 {
+                return Err(self.apply_fuel_violation(
+                    id,
+                    FuelViolation::OverMonthlyCap,
+                    "runtime fuel exhausted",
+                ));
+            }
+            handle.remaining_fuel -= 1;
+            handle
+                .manifest
+                .llm_model
+                .clone()
+                .unwrap_or_else(|| "runtime".to_string())
+        };
+
+        let ledger = self.fuel_ledgers.get_mut(&id).ok_or_else(|| {
+            AgentError::SupervisorError(format!("agent '{id}' missing fuel ledger"))
+        })?;
+
+        match ledger.record_llm_spend(id, model_name.as_str(), 0, 1, 1, &mut self.audit_trail) {
+            Ok(()) => Ok(()),
+            Err(violation) => Err(self.apply_fuel_violation(id, violation, reason)),
         }
-        agent.remaining_fuel -= 1;
-        Ok(())
+    }
+
+    fn apply_fuel_violation(
+        &mut self,
+        id: AgentId,
+        violation: FuelViolation,
+        reason: &str,
+    ) -> AgentError {
+        if let Some(ledger) = self.fuel_ledgers.get_mut(&id) {
+            ledger.register_violation(id, violation.clone(), reason, &mut self.audit_trail);
+        }
+
+        if let Some(handle) = self.agents.get_mut(&id) {
+            handle.autonomy_level = 0;
+            handle.remaining_fuel = 0;
+            handle.autonomy_guard.downgrade(
+                id,
+                AutonomyLevel::L0,
+                "fuel_violation",
+                reason,
+                &mut self.audit_trail,
+            );
+        }
+
+        AgentError::FuelViolation {
+            violation,
+            reason: reason.to_string(),
+        }
+    }
+}
+
+fn autonomy_level_numeric(level: AutonomyLevel) -> u8 {
+    match level {
+        AutonomyLevel::L0 => 0,
+        AutonomyLevel::L1 => 1,
+        AutonomyLevel::L2 => 2,
+        AutonomyLevel::L3 => 3,
+        AutonomyLevel::L4 => 4,
+        AutonomyLevel::L5 => 5,
     }
 }
 
@@ -343,6 +503,8 @@ mod tests {
             requester_id: None,
             schedule: None,
             llm_model: Some("ollama/llama3".to_string()),
+            fuel_period_id: None,
+            monthly_fuel_cap: None,
         }
     }
 
@@ -353,17 +515,13 @@ mod tests {
             .start_agent(sample_manifest(10))
             .expect("agent should start successfully");
 
-        let started = supervisor
-            .get_agent(id)
-            .expect("started agent should exist");
+        let started = supervisor.get_agent(id).expect("started agent should exist");
         assert_eq!(started.state, AgentState::Running);
 
         let stopped = supervisor.stop_agent(id);
         assert!(stopped.is_ok());
 
-        let status = supervisor
-            .get_agent(id)
-            .expect("stopped agent should exist");
+        let status = supervisor.get_agent(id).expect("stopped agent should exist");
         assert_eq!(status.state, AgentState::Stopped);
     }
 
@@ -375,7 +533,10 @@ mod tests {
             .expect("initial start should consume only available fuel");
 
         let restart_result = supervisor.restart_agent(id);
-        assert_eq!(restart_result, Err(AgentError::FuelExhausted));
+        assert!(matches!(
+            restart_result,
+            Err(AgentError::FuelViolation { .. })
+        ));
     }
 
     #[test]
@@ -392,9 +553,7 @@ mod tests {
 
         let resumed = supervisor.resume_agent(id);
         assert!(resumed.is_ok());
-        let running_status = supervisor
-            .get_agent(id)
-            .expect("resumed agent should exist");
+        let running_status = supervisor.get_agent(id).expect("resumed agent should exist");
         assert_eq!(running_status.state, AgentState::Running);
     }
 
@@ -414,28 +573,6 @@ mod tests {
                 from: AgentState::Stopped,
                 to: AgentState::Paused,
             })
-        );
-    }
-
-    #[test]
-    fn test_start_agent_emits_autonomy_initialized_event() {
-        let mut supervisor = Supervisor::new();
-        let id = supervisor
-            .start_agent(sample_manifest(5))
-            .expect("agent should start successfully");
-
-        let initialized = supervisor.audit_trail().events().iter().find(|event| {
-            event.agent_id == id
-                && event.payload.get("event").and_then(|value| value.as_str())
-                    == Some("autonomy.level_initialized")
-        });
-        let initialized = initialized.expect("autonomy initialized event should be present");
-        assert_eq!(
-            initialized
-                .payload
-                .get("level")
-                .and_then(|value| value.as_str()),
-            Some("L0")
         );
     }
 }

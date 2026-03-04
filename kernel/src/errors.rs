@@ -1,3 +1,4 @@
+use crate::fuel_hardening::FuelViolation;
 use crate::lifecycle::AgentState;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -5,7 +6,14 @@ use std::fmt::{Display, Formatter};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AgentError {
     FuelExhausted,
-    InvalidTransition { from: AgentState, to: AgentState },
+    FuelViolation {
+        violation: FuelViolation,
+        reason: String,
+    },
+    InvalidTransition {
+        from: AgentState,
+        to: AgentState,
+    },
     ManifestError(String),
     CapabilityDenied(String),
     ApprovalRequired { request_id: String },
@@ -17,6 +25,9 @@ impl Display for AgentError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             AgentError::FuelExhausted => write!(f, "fuel budget exhausted"),
+            AgentError::FuelViolation { violation, reason } => {
+                write!(f, "fuel violation '{violation:?}': {reason}")
+            }
             AgentError::InvalidTransition { from, to } => {
                 write!(f, "invalid state transition from '{from}' to '{to}'")
             }
@@ -45,6 +56,7 @@ pub enum ErrorStrategy {
 pub fn on_error(error: &AgentError) -> ErrorStrategy {
     match error {
         AgentError::FuelExhausted
+        | AgentError::FuelViolation { .. }
         | AgentError::CapabilityDenied(_)
         | AgentError::ApprovalRequired { .. }
         | AgentError::KeyDestroyed(_) => ErrorStrategy::Escalate,
@@ -56,11 +68,16 @@ pub fn on_error(error: &AgentError) -> ErrorStrategy {
 #[cfg(test)]
 mod tests {
     use super::{on_error, AgentError, ErrorStrategy};
+    use crate::fuel_hardening::FuelViolation;
     use crate::lifecycle::AgentState;
 
     #[test]
     fn test_error_display() {
         let fuel = AgentError::FuelExhausted;
+        let violation = AgentError::FuelViolation {
+            violation: FuelViolation::OverMonthlyCap,
+            reason: "cap exceeded".to_string(),
+        };
         let transition = AgentError::InvalidTransition {
             from: AgentState::Created,
             to: AgentState::Paused,
@@ -73,6 +90,10 @@ mod tests {
         let supervisor = AgentError::SupervisorError("agent not found".to_string());
 
         assert_eq!(fuel.to_string(), "fuel budget exhausted");
+        assert_eq!(
+            violation.to_string(),
+            "fuel violation 'OverMonthlyCap': cap exceeded"
+        );
         assert_eq!(
             transition.to_string(),
             "invalid state transition from 'Created' to 'Paused'"
