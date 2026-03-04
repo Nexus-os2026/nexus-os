@@ -1,5 +1,8 @@
 use nexus_kernel::audit::AuditTrail;
 use nexus_kernel::autonomy::{AutonomyGuard, AutonomyLevel};
+use nexus_kernel::consent::{
+    ApprovalQueue, ConsentPolicyEngine, ConsentRuntime, GovernedOperation, HitlTier,
+};
 use nexus_kernel::errors::AgentError;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -310,12 +313,23 @@ fn context_with_caps() -> WorkflowContext {
     let capabilities = ["workflow.execute".to_string()]
         .into_iter()
         .collect::<HashSet<_>>();
+    let mut policy = ConsentPolicyEngine::default();
+    policy.set_policy(
+        GovernedOperation::TerminalCommand,
+        HitlTier::Tier0,
+        Vec::new(),
+    );
     WorkflowContext {
         capabilities,
         fuel_remaining: 1_000,
         agent_id: Uuid::new_v4(),
         autonomy_guard: AutonomyGuard::new(AutonomyLevel::L1),
         audit_trail: AuditTrail::new(),
+        consent_runtime: ConsentRuntime::new(
+            policy,
+            ApprovalQueue::in_memory(),
+            "workflow.tests".to_string(),
+        ),
     }
 }
 
