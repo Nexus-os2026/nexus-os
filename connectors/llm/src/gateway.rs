@@ -3,6 +3,7 @@ use crate::providers::{
 };
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::errors::AgentError;
+use nexus_kernel::safety_supervisor::{OperatingMode, SafetyAction, SafetySupervisor};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -101,6 +102,7 @@ pub struct GovernedLlmGateway<P: LlmProvider> {
     provider: P,
     audit_trail: AuditTrail,
     oracle_events: Vec<OracleEvent>,
+    safety_supervisor: SafetySupervisor,
 }
 
 impl<P: LlmProvider> GovernedLlmGateway<P> {
@@ -109,7 +111,12 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
             provider,
             audit_trail: AuditTrail::new(),
             oracle_events: Vec::new(),
+            safety_supervisor: SafetySupervisor::default(),
         }
+    }
+
+    pub fn safety_mode(&self, agent_id: Uuid) -> OperatingMode {
+        self.safety_supervisor.mode_for_agent(agent_id)
     }
 
     pub fn query(
@@ -119,6 +126,8 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
         max_tokens: u32,
         model: &str,
     ) -> Result<LlmResponse, AgentError> {
+        let audit_len_before = self.audit_trail.events().len();
+
         if !agent.capabilities.contains("llm.query") {
             return Err(AgentError::CapabilityDenied("llm.query".to_string()));
         }
@@ -160,6 +169,24 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
         let _ = self
             .audit_trail
             .append_event(agent.agent_id, EventType::LlmCall, payload);
+
+        let audit_len_after = self.audit_trail.events().len();
+        let audit_events_added = audit_len_after.saturating_sub(audit_len_before);
+        let token_denominator = f64::from(response.token_count.max(1));
+        let governance_overhead_pct = (audit_events_added as f64 / token_denominator) * 100.0;
+
+        let safety_action = self.safety_supervisor.observe_llm_response(
+            agent.agent_id,
+            latency_ms,
+            governance_overhead_pct,
+            &mut self.audit_trail,
+        );
+        if let SafetyAction::Halted { reason, report_id } = safety_action {
+            return Err(AgentError::SupervisorError(format!(
+                "safety supervisor halted llm call for agent '{}': {} (report_id={})",
+                agent.agent_id, reason, report_id
+            )));
+        }
 
         self.oracle_events.push(OracleEvent {
             agent_id: agent.agent_id,
@@ -209,6 +236,7 @@ mod tests {
     };
     use crate::providers::{LlmProvider, LlmResponse, MockProvider};
     use nexus_kernel::errors::AgentError;
+    use nexus_kernel::safety_supervisor::OperatingMode;
     use std::collections::HashSet;
     use uuid::Uuid;
 
@@ -368,5 +396,52 @@ mod tests {
         };
         let provider = select_provider(&config);
         assert_eq!(provider.name(), "ollama");
+    }
+
+    #[test]
+    fn test_safety_kpi_events_are_emitted() {
+        let provider = MockProvider::new();
+        let mut gateway = GovernedLlmGateway::new(provider);
+        let mut context = AgentRuntimeContext {
+            agent_id: Uuid::new_v4(),
+            capabilities: capabilities(&["llm.query"]),
+            fuel_remaining: 1_000,
+        };
+
+        let query_result = gateway.query(&mut context, "safety kpi probe", 20, "mock-1");
+        assert!(query_result.is_ok());
+
+        let has_kpi_event = gateway.audit_trail().events().iter().any(|event| {
+            event
+                .payload
+                .get("event_kind")
+                .and_then(|value| value.as_str())
+                == Some("safety.kpi_checked")
+        });
+        assert!(has_kpi_event);
+    }
+
+    #[test]
+    fn test_safety_halts_after_three_consecutive_critical_overhead_violations() {
+        let provider = MockProvider::new();
+        let mut gateway = GovernedLlmGateway::new(provider);
+        let agent_id = Uuid::new_v4();
+        let mut context = AgentRuntimeContext {
+            agent_id,
+            capabilities: capabilities(&["llm.query"]),
+            fuel_remaining: 1_000,
+        };
+
+        let first = gateway.query(&mut context, "tiny", 1, "mock-1");
+        let second = gateway.query(&mut context, "tiny", 1, "mock-1");
+        let third = gateway.query(&mut context, "tiny", 1, "mock-1");
+
+        assert!(first.is_ok());
+        assert!(second.is_ok());
+        assert!(matches!(third, Err(AgentError::SupervisorError(_))));
+        assert!(matches!(
+            gateway.safety_mode(agent_id),
+            OperatingMode::Halted(_)
+        ));
     }
 }
