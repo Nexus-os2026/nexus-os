@@ -2,6 +2,7 @@
 
 pub mod audit;
 pub mod config;
+pub mod distributed;
 pub mod errors;
 pub mod lifecycle;
 pub mod manifest;
