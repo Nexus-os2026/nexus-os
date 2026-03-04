@@ -2,6 +2,17 @@
 
 All notable changes to NEXUS OS are documented here.
 
+## v5.0.0 - Human-Centric & Hardware-Hardened
+
+- Autonomy Levels (L0-L5) with hard-gating at kernel chokepoints
+- Human-in-the-Loop tiering (Tier0-Tier3) with two-person rule
+- PII Redaction engine at LLM gateway boundary
+- Hardware-backed security abstraction (TPM/Enclave/TEE stubs)
+- Economic fuel model with monthly budgets + anomaly detection
+- Safety supervisor with 3-strike halt + incident reports
+- Kill gates with per-subsystem freeze/halt/escalation
+- Distributed interface scaffolding (traits + local defaults)
+
 ## v2.0.0 - Autonomous Digital Worker Platform
 
 ### Agent Platform Expansion

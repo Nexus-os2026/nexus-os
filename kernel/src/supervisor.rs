@@ -73,7 +73,7 @@ impl Supervisor {
             consent_runtime,
             autonomy_level: autonomy_level_numeric(autonomy_level),
             state: AgentState::Created,
-            remaining_fuel: monthly_cap.min(u64::MAX),
+            remaining_fuel: monthly_cap,
         };
 
         self.agents.insert(id, handle);

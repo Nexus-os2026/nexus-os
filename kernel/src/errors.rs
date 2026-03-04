@@ -16,7 +16,9 @@ pub enum AgentError {
     },
     ManifestError(String),
     CapabilityDenied(String),
-    ApprovalRequired { request_id: String },
+    ApprovalRequired {
+        request_id: String,
+    },
     SupervisorError(String),
     KeyDestroyed(String),
 }

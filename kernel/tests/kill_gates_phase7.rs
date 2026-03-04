@@ -11,8 +11,13 @@ fn sample_manifest(fuel_budget: u64) -> AgentManifest {
         version: "0.1.0".to_string(),
         capabilities: vec!["llm.query".to_string()],
         fuel_budget,
+        autonomy_level: None,
+        consent_policy_path: None,
+        requester_id: None,
         schedule: None,
         llm_model: Some("mock-1".to_string()),
+        fuel_period_id: None,
+        monthly_fuel_cap: None,
     }
 }
 

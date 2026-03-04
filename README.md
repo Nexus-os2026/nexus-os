@@ -1,4 +1,5 @@
 [![CI](https://github.com/nexai-lang/nexus-os/actions/workflows/ci.yml/badge.svg)](https://github.com/nexai-lang/nexus-os/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-5.0.0-blue.svg)](CHANGELOG.md)
 
 # NexusOS
 **The Autonomous Digital Worker Platform**

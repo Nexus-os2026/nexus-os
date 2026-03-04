@@ -232,9 +232,9 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
         );
 
         let started = Instant::now();
-        let response = self
-            .provider
-            .query(redaction_result.outbound_prompt.as_str(), max_tokens, model)?;
+        let response =
+            self.provider
+                .query(redaction_result.outbound_prompt.as_str(), max_tokens, model)?;
         let latency_ms = started.elapsed().as_millis() as u64;
 
         let actual_tokens = u64::from(response.token_count);

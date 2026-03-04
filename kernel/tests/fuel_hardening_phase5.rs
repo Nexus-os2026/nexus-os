@@ -35,9 +35,11 @@ fn phase5_exhaustion_triggers_autonomy_downgrade() {
         version: "0.1.0".to_string(),
         capabilities: vec!["llm.query".to_string()],
         fuel_budget: 1,
+        autonomy_level: Some(3),
+        consent_policy_path: None,
+        requester_id: None,
         schedule: None,
         llm_model: Some("mock-1".to_string()),
-        autonomy_level: Some(3),
         fuel_period_id: Some("2026-03".to_string()),
         monthly_fuel_cap: Some(1),
     };
