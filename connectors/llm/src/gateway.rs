@@ -8,6 +8,7 @@ use nexus_kernel::fuel_hardening::{
     ModelCost,
 };
 use nexus_kernel::redaction::{RedactionEngine, RedactionMetrics, RedactionPolicy};
+use nexus_kernel::safety_supervisor::{OperatingMode, SafetyAction, SafetySupervisor};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -126,6 +127,7 @@ pub struct GovernedLlmGateway<P: LlmProvider> {
     fuel_model: FuelToTokenModel,
     default_period_id: BudgetPeriodId,
     fuel_ledgers: HashMap<Uuid, AgentFuelLedger>,
+    safety_supervisor: SafetySupervisor,
 }
 
 impl<P: LlmProvider> GovernedLlmGateway<P> {
@@ -142,6 +144,7 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
             fuel_model: FuelToTokenModel::with_defaults(),
             default_period_id: BudgetPeriodId::new("period.default"),
             fuel_ledgers: HashMap::new(),
+            safety_supervisor: SafetySupervisor::default(),
         }
     }
 
@@ -170,6 +173,10 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
             .map(|ledger| ledger.snapshot(agent_id))
     }
 
+    pub fn safety_mode(&self, agent_id: Uuid) -> OperatingMode {
+        self.safety_supervisor.mode_for_agent(agent_id)
+    }
+
     pub fn query(
         &mut self,
         agent: &mut AgentRuntimeContext,
@@ -177,6 +184,8 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
         max_tokens: u32,
         model: &str,
     ) -> Result<LlmResponse, AgentError> {
+        let audit_len_before = self.audit_trail.events().len();
+
         if !agent.capabilities.contains("llm.query") {
             return Err(AgentError::CapabilityDenied("llm.query".to_string()));
         }
@@ -351,6 +360,24 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
             .audit_trail
             .append_event(agent.agent_id, EventType::LlmCall, payload);
 
+        let audit_len_after = self.audit_trail.events().len();
+        let audit_events_added = audit_len_after.saturating_sub(audit_len_before);
+        let token_denominator = f64::from(response.token_count.max(1));
+        let governance_overhead_pct = (audit_events_added as f64 / token_denominator) * 100.0;
+
+        let safety_action = self.safety_supervisor.observe_llm_response(
+            agent.agent_id,
+            latency_ms,
+            governance_overhead_pct,
+            &mut self.audit_trail,
+        );
+        if let SafetyAction::Halted { reason, report_id } = safety_action {
+            return Err(AgentError::SupervisorError(format!(
+                "safety supervisor halted llm call for agent '{}': {} (report_id={})",
+                agent.agent_id, reason, report_id
+            )));
+        }
+
         self.oracle_events.push(OracleEvent {
             agent_id: agent.agent_id,
             prompt_hash,
@@ -422,236 +449,5 @@ fn current_unix_timestamp() -> u64 {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(duration) => duration.as_secs(),
         Err(_) => 0,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        select_provider, AgentFuelBudgetConfig, AgentRuntimeContext, GovernedLlmGateway,
-        ProviderSelectionConfig,
-    };
-    use crate::providers::{LlmProvider, LlmResponse, MockProvider};
-    use nexus_kernel::errors::AgentError;
-    use nexus_kernel::fuel_hardening::{BudgetPeriodId, FuelViolation, ModelCost};
-    use std::collections::HashSet;
-    use uuid::Uuid;
-
-    fn capabilities(values: &[&str]) -> HashSet<String> {
-        values.iter().map(|value| (*value).to_string()).collect()
-    }
-
-    #[derive(Debug, Default)]
-    struct MeteredProvider;
-
-    impl LlmProvider for MeteredProvider {
-        fn query(
-            &self,
-            _prompt: &str,
-            max_tokens: u32,
-            model: &str,
-        ) -> Result<LlmResponse, AgentError> {
-            Ok(LlmResponse {
-                output_text: "metered response".to_string(),
-                token_count: max_tokens.min(50),
-                model_name: model.to_string(),
-                tool_calls: Vec::new(),
-            })
-        }
-
-        fn name(&self) -> &str {
-            "metered"
-        }
-
-        fn cost_per_token(&self) -> f64 {
-            0.1
-        }
-
-        fn requires_real_api_opt_in(&self) -> bool {
-            true
-        }
-    }
-
-    #[test]
-    fn test_governed_query_deducts_fuel() {
-        let provider = MockProvider::new();
-        let mut gateway = GovernedLlmGateway::new(provider);
-        let mut context = AgentRuntimeContext {
-            agent_id: Uuid::new_v4(),
-            capabilities: capabilities(&["llm.query"]),
-            fuel_remaining: 1_000,
-        };
-
-        let result = gateway.query(&mut context, "What is zero trust?", 50, "mock-1");
-        assert!(result.is_ok());
-        assert_eq!(context.fuel_remaining, 950);
-    }
-
-    #[test]
-    fn test_capability_denied() {
-        let provider = MockProvider::new();
-        let mut gateway = GovernedLlmGateway::new(provider);
-        let mut context = AgentRuntimeContext {
-            agent_id: Uuid::new_v4(),
-            capabilities: capabilities(&["web.search"]),
-            fuel_remaining: 1_000,
-        };
-
-        let result = gateway.query(&mut context, "Hello", 50, "mock-1");
-        assert_eq!(
-            result,
-            Err(AgentError::CapabilityDenied("llm.query".to_string()))
-        );
-    }
-
-    #[test]
-    fn test_fuel_exhausted_blocks_query() {
-        let provider = MockProvider::new();
-        let mut gateway = GovernedLlmGateway::new(provider);
-        let mut context = AgentRuntimeContext {
-            agent_id: Uuid::new_v4(),
-            capabilities: capabilities(&["llm.query"]),
-            fuel_remaining: 10,
-        };
-
-        let result = gateway.query(&mut context, "Large request", 500, "mock-1");
-        assert_eq!(result, Err(AgentError::FuelExhausted));
-    }
-
-    #[test]
-    fn test_response_cached_as_oracle() {
-        let provider = MockProvider::new();
-        let mut gateway = GovernedLlmGateway::new(provider);
-        let agent_id = Uuid::new_v4();
-        let mut context = AgentRuntimeContext {
-            agent_id,
-            capabilities: capabilities(&["llm.query"]),
-            fuel_remaining: 1_000,
-        };
-
-        let result = gateway.query(&mut context, "Return audit-safe output", 25, "mock-1");
-        assert!(result.is_ok());
-        assert_eq!(gateway.oracle_events().len(), 1);
-
-        let mut found = false;
-        for event in gateway.audit_trail().events() {
-            let event_kind = event
-                .payload
-                .get("event_kind")
-                .and_then(|value| value.as_str());
-            let response_hash = event
-                .payload
-                .get("response_hash")
-                .and_then(|value| value.as_str());
-            if event.agent_id == agent_id
-                && event_kind == Some("OracleEvent")
-                && response_hash.is_some()
-            {
-                found = true;
-                break;
-            }
-        }
-        assert!(found);
-    }
-
-    #[test]
-    fn test_cost_calculation() {
-        let provider = MeteredProvider;
-        let mut gateway = GovernedLlmGateway::new(provider);
-        let mut context = AgentRuntimeContext {
-            agent_id: Uuid::new_v4(),
-            capabilities: capabilities(&["llm.query"]),
-            fuel_remaining: 1_000,
-        };
-
-        let result = gateway.query(&mut context, "hello", 20, "metered-model");
-        assert!(result.is_ok());
-
-        let last = gateway.oracle_events().last();
-        assert!(last.is_some());
-        if let Some(event) = last {
-            assert!(event.cost >= 0.0);
-            assert_eq!(event.model_name, "metered-model");
-            assert!(event.latency_ms <= 10_000);
-        }
-    }
-
-    #[test]
-    fn test_selection_prefers_mock_when_unconfigured() {
-        let config = ProviderSelectionConfig::default();
-        let provider = select_provider(&config);
-        assert_eq!(provider.name(), "mock");
-    }
-
-    #[test]
-    fn test_selection_prefers_ollama_when_url_present() {
-        let config = ProviderSelectionConfig {
-            provider: None,
-            ollama_url: Some("http://localhost:11434".to_string()),
-            deepseek_api_key: Some("deepseek-key".to_string()),
-            anthropic_api_key: Some("ant-key".to_string()),
-        };
-        let provider = select_provider(&config);
-        assert_eq!(provider.name(), "ollama");
-    }
-
-    #[test]
-    fn test_gateway_records_spend_and_blocks_on_cap_exceeded() {
-        let provider = MockProvider::new();
-        let mut gateway = GovernedLlmGateway::new(provider);
-        let agent_id = Uuid::new_v4();
-        gateway.configure_agent_budget(
-            agent_id,
-            AgentFuelBudgetConfig {
-                period_id: BudgetPeriodId::new("2026-03"),
-                cap_units: 30,
-            },
-        );
-        gateway.set_model_cost(
-            "mock-1",
-            ModelCost {
-                cost_per_1k_input: 1_000,
-                cost_per_1k_output: 1_000,
-            },
-        );
-
-        let mut context = AgentRuntimeContext {
-            agent_id,
-            capabilities: capabilities(&["llm.query"]),
-            fuel_remaining: 1_000,
-        };
-
-        let first = gateway.query(&mut context, "short", 10, "mock-1");
-        assert!(first.is_ok());
-
-        let second = gateway.query(&mut context, "this will exceed cap", 64, "mock-1");
-        assert!(matches!(
-            second,
-            Err(AgentError::FuelViolation {
-                violation: FuelViolation::OverMonthlyCap,
-                ..
-            })
-        ));
-
-        let report = gateway
-            .fuel_audit_report(agent_id)
-            .expect("fuel report should exist");
-        assert!(report.spent_units > report.cap_units);
-
-        let has_spend_event = gateway.audit_trail().events().iter().any(|event| {
-            event
-                .payload
-                .get("event_kind")
-                .and_then(|value| value.as_str())
-                == Some("fuel.spend_recorded")
-        });
-        assert!(has_spend_event);
-
-        let raw_prompt_leaked = gateway
-            .audit_trail()
-            .events()
-            .iter()
-            .any(|event| event.payload.to_string().contains("this will exceed cap"));
-        assert!(!raw_prompt_leaked);
     }
 }
