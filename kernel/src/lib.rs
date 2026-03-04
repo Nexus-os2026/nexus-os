@@ -3,6 +3,7 @@
 pub mod audit;
 pub mod config;
 pub mod errors;
+pub mod kill_gates;
 pub mod lifecycle;
 pub mod manifest;
 pub mod orchestration;
