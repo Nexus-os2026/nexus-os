@@ -2,7 +2,7 @@
 
 All notable changes to NEXUS OS are documented here.
 
-## v5.0.0 - Human-Centric & Hardware-Hardened
+## v3.0.0 - Human-Centric & Hardware-Hardened
 
 - Autonomy Levels (L0-L5) with hard-gating at kernel chokepoints
 - Human-in-the-Loop tiering (Tier0-Tier3) with two-person rule
