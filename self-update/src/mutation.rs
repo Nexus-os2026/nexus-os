@@ -2,6 +2,7 @@ use crate::patch_lang::{
     apply_patch, parse_patch, validate_patch, PatchLangError, PatchProgram, RuntimePatchState,
 };
 use nexus_kernel::audit::{AuditTrail, EventType};
+use nexus_kernel::autonomy::{AutonomyGuard, AutonomyLevel};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -12,6 +13,7 @@ use uuid::Uuid;
 pub enum MutationError {
     PatchNotFound(String),
     VerifierBoundaryViolation,
+    AutonomyDenied(String),
     ValidationFailed(String),
     ReplayFailed(String),
     ReplayRequired,
@@ -25,6 +27,7 @@ impl std::fmt::Display for MutationError {
             MutationError::VerifierBoundaryViolation => {
                 write!(f, "patch violates fixed verifier boundary")
             }
+            MutationError::AutonomyDenied(reason) => write!(f, "autonomy denied: {reason}"),
             MutationError::ValidationFailed(reason) => write!(f, "validation failed: {reason}"),
             MutationError::ReplayFailed(reason) => write!(f, "A/B replay failed: {reason}"),
             MutationError::ReplayRequired => write!(f, "A/B replay must pass before approval"),
@@ -62,14 +65,22 @@ struct MutationRecord {
 pub struct MutationLifecycle {
     state: RuntimePatchState,
     audit_trail: AuditTrail,
+    autonomy_guard: AutonomyGuard,
+    actor_id: Uuid,
     records: HashMap<String, MutationRecord>,
 }
 
 impl MutationLifecycle {
     pub fn new() -> Self {
+        Self::with_autonomy_level(AutonomyLevel::L0)
+    }
+
+    pub fn with_autonomy_level(level: AutonomyLevel) -> Self {
         Self {
             state: RuntimePatchState::default(),
             audit_trail: AuditTrail::new(),
+            autonomy_guard: AutonomyGuard::new(level),
+            actor_id: Uuid::nil(),
             records: HashMap::new(),
         }
     }
@@ -190,6 +201,10 @@ impl MutationLifecycle {
     }
 
     pub fn apply(&mut self, patch_id: &str) -> Result<(), MutationError> {
+        self.autonomy_guard
+            .require_self_modification(self.actor_id, &mut self.audit_trail)
+            .map_err(|error| MutationError::AutonomyDenied(error.to_string()))?;
+
         let patch = {
             let record = self
                 .records
@@ -302,10 +317,11 @@ fn sha256_hex(input: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::{MutationLifecycle, ReplayCase, ReplayExpectation};
+    use nexus_kernel::autonomy::AutonomyLevel;
 
     #[test]
     fn test_mutation_lifecycle() {
-        let mut lifecycle = MutationLifecycle::new();
+        let mut lifecycle = MutationLifecycle::with_autonomy_level(AutonomyLevel::L4);
         let patch_id = lifecycle
             .propose(
                 r#"
