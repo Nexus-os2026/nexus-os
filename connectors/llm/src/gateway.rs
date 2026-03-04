@@ -3,6 +3,7 @@ use crate::providers::{
 };
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::errors::AgentError;
+use nexus_kernel::redaction::{RedactionEngine, RedactionMetrics, RedactionPolicy};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -101,14 +102,20 @@ pub struct GovernedLlmGateway<P: LlmProvider> {
     provider: P,
     audit_trail: AuditTrail,
     oracle_events: Vec<OracleEvent>,
+    redaction_engine: RedactionEngine,
 }
 
 impl<P: LlmProvider> GovernedLlmGateway<P> {
     pub fn new(provider: P) -> Self {
+        Self::with_redaction_policy(provider, RedactionPolicy::default())
+    }
+
+    pub fn with_redaction_policy(provider: P, policy: RedactionPolicy) -> Self {
         Self {
             provider,
             audit_trail: AuditTrail::new(),
             oracle_events: Vec::new(),
+            redaction_engine: RedactionEngine::new(policy),
         }
     }
 
@@ -131,8 +138,43 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
             }
         }
 
+        let redaction_result = self.redaction_engine.process_prompt(
+            "llm.query",
+            "strict",
+            vec![agent.agent_id.to_string(), model.to_string()],
+            prompt,
+        );
+        let _ = self.audit_trail.append_event(
+            agent.agent_id,
+            EventType::LlmCall,
+            json!({
+                "event_kind": "redaction.scanned",
+                "operation": "llm.query",
+                "mode": format!("{:?}", self.redaction_engine.policy().mode),
+                "counts_by_kind": redaction_result.summary.counts_by_kind,
+                "payload_hash": redaction_result.payload_hash_hex,
+                "context_ids": redaction_result.envelope.context_ids,
+                "total_findings": redaction_result.summary.total_findings
+            }),
+        );
+        let _ = self.audit_trail.append_event(
+            agent.agent_id,
+            EventType::LlmCall,
+            json!({
+                "event_kind": "redaction.applied",
+                "operation": "llm.query",
+                "required_action": "send_redacted_only",
+                "counts_by_kind": redaction_result.summary.counts_by_kind,
+                "payload_hash": redaction_result.payload_hash_hex,
+                "redacted_hash": redaction_result.redacted_hash_hex,
+                "prompt_envelope_hash": redaction_result.outbound_prompt_hash_hex
+            }),
+        );
+
         let started = Instant::now();
-        let response = self.provider.query(prompt, max_tokens, model)?;
+        let response =
+            self.provider
+                .query(redaction_result.outbound_prompt.as_str(), max_tokens, model)?;
         let latency_ms = started.elapsed().as_millis() as u64;
 
         let actual_tokens = u64::from(response.token_count);
@@ -142,7 +184,7 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
         agent.fuel_remaining -= actual_tokens;
 
         let cost = f64::from(response.token_count) * self.provider.cost_per_token();
-        let prompt_hash = sha256_hex(prompt.as_bytes());
+        let prompt_hash = redaction_result.outbound_prompt_hash_hex;
         let response_hash = sha256_hex(response.output_text.as_bytes());
         let timestamp = current_unix_timestamp();
 
@@ -186,6 +228,14 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
 
     pub fn oracle_events(&self) -> &[OracleEvent] {
         &self.oracle_events
+    }
+
+    pub fn redaction_metrics(&self) -> &RedactionMetrics {
+        self.redaction_engine.metrics()
+    }
+
+    pub fn redaction_zero_pii_leakage_kpi(&self) -> bool {
+        self.redaction_engine.metrics().zero_pii_leakage_kpi()
     }
 }
 

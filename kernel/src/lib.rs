@@ -9,4 +9,5 @@ pub mod lifecycle;
 pub mod manifest;
 pub mod orchestration;
 pub mod privacy;
+pub mod redaction;
 pub mod supervisor;
