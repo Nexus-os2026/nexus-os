@@ -2,6 +2,7 @@ use crate::patch_lang::{
     apply_patch, parse_patch, validate_patch, PatchLangError, PatchProgram, RuntimePatchState,
 };
 use nexus_kernel::audit::{AuditTrail, EventType};
+use nexus_kernel::kill_gates::{GateStatus, KillGateRegistry};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -16,6 +17,8 @@ pub enum MutationError {
     ReplayFailed(String),
     ReplayRequired,
     HumanApprovalRequired,
+    KillGateFrozen(&'static str),
+    KillGateHalted(&'static str),
 }
 
 impl std::fmt::Display for MutationError {
@@ -30,6 +33,12 @@ impl std::fmt::Display for MutationError {
             MutationError::ReplayRequired => write!(f, "A/B replay must pass before approval"),
             MutationError::HumanApprovalRequired => {
                 write!(f, "human approval is required before apply")
+            }
+            MutationError::KillGateFrozen(subsystem) => {
+                write!(f, "kill gate is frozen for subsystem '{subsystem}'")
+            }
+            MutationError::KillGateHalted(subsystem) => {
+                write!(f, "kill gate is halted for subsystem '{subsystem}'")
             }
         }
     }
@@ -63,6 +72,8 @@ pub struct MutationLifecycle {
     state: RuntimePatchState,
     audit_trail: AuditTrail,
     records: HashMap<String, MutationRecord>,
+    kill_gates: KillGateRegistry,
+    agent_id: Uuid,
 }
 
 impl MutationLifecycle {
@@ -71,7 +82,14 @@ impl MutationLifecycle {
             state: RuntimePatchState::default(),
             audit_trail: AuditTrail::new(),
             records: HashMap::new(),
+            kill_gates: KillGateRegistry::default(),
+            agent_id: Uuid::nil(),
         }
+    }
+
+    pub fn with_agent_id(mut self, agent_id: Uuid) -> Self {
+        self.agent_id = agent_id;
+        self
     }
 
     pub fn propose(
@@ -93,7 +111,7 @@ impl MutationLifecycle {
         );
 
         let _ = self.audit_trail.append_event(
-            Uuid::nil(),
+            self.agent_id,
             EventType::UserAction,
             json!({
                 "event": "mutation_proposed",
@@ -114,7 +132,7 @@ impl MutationLifecycle {
         record.validated = true;
 
         let _ = self.audit_trail.append_event(
-            Uuid::nil(),
+            self.agent_id,
             EventType::UserAction,
             json!({
                 "event": "mutation_validated",
@@ -144,7 +162,12 @@ impl MutationLifecycle {
 
         let mut patched_state = self.state.clone();
         apply_patch(&patch, &mut patched_state).map_err(map_patch_error)?;
-        run_replay_checks(&patched_state, corpus)?;
+        if let Err(error) = run_replay_checks(&patched_state, corpus) {
+            let _ =
+                self.kill_gates
+                    .check_gate("mutation", 1.0, self.agent_id, &mut self.audit_trail);
+            return Err(error);
+        }
 
         let record = self
             .records
@@ -153,7 +176,7 @@ impl MutationLifecycle {
         record.replay_passed = true;
 
         let _ = self.audit_trail.append_event(
-            Uuid::nil(),
+            self.agent_id,
             EventType::UserAction,
             json!({
                 "event": "mutation_replay_passed",
@@ -178,7 +201,7 @@ impl MutationLifecycle {
         record.approved_by_human = true;
 
         let _ = self.audit_trail.append_event(
-            Uuid::nil(),
+            self.agent_id,
             EventType::UserAction,
             json!({
                 "event": "mutation_approved",
@@ -190,6 +213,12 @@ impl MutationLifecycle {
     }
 
     pub fn apply(&mut self, patch_id: &str) -> Result<(), MutationError> {
+        match self.kill_gates.gate_status("mutation") {
+            Some(GateStatus::Frozen) => return Err(MutationError::KillGateFrozen("mutation")),
+            Some(GateStatus::Halted) => return Err(MutationError::KillGateHalted("mutation")),
+            _ => {}
+        }
+
         let patch = {
             let record = self
                 .records
@@ -211,7 +240,7 @@ impl MutationLifecycle {
         record.applied = true;
 
         let _ = self.audit_trail.append_event(
-            Uuid::nil(),
+            self.agent_id,
             EventType::StateChange,
             json!({
                 "event": "mutation_attested",
@@ -239,6 +268,10 @@ impl MutationLifecycle {
 
     pub fn audit_trail(&self) -> &AuditTrail {
         &self.audit_trail
+    }
+
+    pub fn mutation_gate_status(&self) -> Option<GateStatus> {
+        self.kill_gates.gate_status("mutation")
     }
 }
 

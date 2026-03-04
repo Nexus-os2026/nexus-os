@@ -1,8 +1,12 @@
 use crate::audit::{AuditTrail, EventType};
+use crate::config::{config_path, load_config_from_path};
 use crate::errors::AgentError;
+use crate::kill_gates::{GateStatus, KillGateConfig};
 use crate::lifecycle::{transition_state, AgentState};
 use crate::manifest::AgentManifest;
-use crate::safety_supervisor::{KpiKind, OperatingMode, SafetyAction, SafetySupervisor};
+use crate::safety_supervisor::{
+    default_thresholds, KpiKind, OperatingMode, SafetyAction, SafetySupervisor,
+};
 use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -35,12 +39,53 @@ pub struct Supervisor {
 
 impl Supervisor {
     pub fn new() -> Self {
+        let kill_gate_config = Self::load_kill_gate_config();
         Self {
             agents: HashMap::new(),
             audit_trail: AuditTrail::new(),
-            safety_supervisor: SafetySupervisor::default(),
+            safety_supervisor: SafetySupervisor::with_kill_gates_config(
+                default_thresholds(),
+                10,
+                &kill_gate_config,
+            ),
             operation_count: HashMap::new(),
             error_count: HashMap::new(),
+        }
+    }
+
+    fn load_kill_gate_config() -> KillGateConfig {
+        let path = config_path();
+        if !path.exists() {
+            return KillGateConfig::default();
+        }
+
+        match load_config_from_path(path.as_path()) {
+            Ok(config) => KillGateConfig {
+                screen_poster_freeze_threshold: f64::from(
+                    config.kill_gates.screen_poster_freeze_bps,
+                ) / 100.0,
+                screen_poster_halt_threshold: f64::from(config.kill_gates.screen_poster_halt_bps)
+                    / 100.0,
+                mutation_freeze_threshold: f64::from(config.kill_gates.mutation_freeze_signal),
+                mutation_halt_threshold: if config.kill_gates.mutation_halt_signal == u32::MAX {
+                    f64::INFINITY
+                } else {
+                    f64::from(config.kill_gates.mutation_halt_signal)
+                },
+                cluster_freeze_threshold: f64::from(config.kill_gates.cluster_freeze_signal),
+                cluster_halt_threshold: if config.kill_gates.cluster_halt_signal == u32::MAX {
+                    f64::INFINITY
+                } else {
+                    f64::from(config.kill_gates.cluster_halt_signal)
+                },
+                bft_freeze_threshold: if config.kill_gates.bft_freeze_signal == u32::MAX {
+                    f64::INFINITY
+                } else {
+                    f64::from(config.kill_gates.bft_freeze_signal)
+                },
+                bft_halt_threshold: f64::from(config.kill_gates.bft_halt_signal),
+            },
+            Err(_) => KillGateConfig::default(),
         }
     }
 
@@ -253,6 +298,115 @@ impl Supervisor {
         self.apply_safety_action(id, action)
     }
 
+    pub fn record_subsystem_metric(
+        &mut self,
+        id: AgentId,
+        kind: KpiKind,
+        value: f64,
+    ) -> Result<(), AgentError> {
+        if !self.agents.contains_key(&id) {
+            return Err(AgentError::SupervisorError(format!(
+                "agent '{id}' not found"
+            )));
+        }
+
+        let action = self
+            .safety_supervisor
+            .heartbeat(id, &[(kind, value)], &mut self.audit_trail);
+        self.apply_safety_action(id, action)
+    }
+
+    pub fn subsystem_gate_status(&self, subsystem: &str) -> Option<GateStatus> {
+        self.safety_supervisor.kill_gate_status(subsystem)
+    }
+
+    pub fn manual_freeze_subsystem(
+        &mut self,
+        id: AgentId,
+        subsystem: &str,
+        operator_id: &str,
+    ) -> Result<(), AgentError> {
+        if !self.agents.contains_key(&id) {
+            return Err(AgentError::SupervisorError(format!(
+                "agent '{id}' not found"
+            )));
+        }
+
+        self.safety_supervisor
+            .manual_freeze_subsystem(subsystem, operator_id, id, &mut self.audit_trail)
+            .map_err(|error| AgentError::SupervisorError(error.to_string()))?;
+        Ok(())
+    }
+
+    pub fn manual_halt_subsystem(
+        &mut self,
+        id: AgentId,
+        subsystem: &str,
+        operator_id: &str,
+    ) -> Result<(), AgentError> {
+        if !self.agents.contains_key(&id) {
+            return Err(AgentError::SupervisorError(format!(
+                "agent '{id}' not found"
+            )));
+        }
+
+        let action = self
+            .safety_supervisor
+            .manual_halt_subsystem(subsystem, operator_id, id, &mut self.audit_trail)
+            .map_err(|error| AgentError::SupervisorError(error.to_string()))?;
+        self.apply_safety_action(id, action)
+    }
+
+    pub fn manual_unfreeze_subsystem(
+        &mut self,
+        id: AgentId,
+        subsystem: &str,
+        operator_id: &str,
+        hitl_tier: u8,
+    ) -> Result<(), AgentError> {
+        if !self.agents.contains_key(&id) {
+            return Err(AgentError::SupervisorError(format!(
+                "agent '{id}' not found"
+            )));
+        }
+
+        self.safety_supervisor
+            .manual_unfreeze_subsystem(subsystem, operator_id, hitl_tier, id, &mut self.audit_trail)
+            .map_err(|error| AgentError::SupervisorError(error.to_string()))?;
+        Ok(())
+    }
+
+    pub fn manual_halt_agent(
+        &mut self,
+        id: AgentId,
+        operator_id: &str,
+        reason: &str,
+    ) -> Result<(), AgentError> {
+        if !self.agents.contains_key(&id) {
+            return Err(AgentError::SupervisorError(format!(
+                "agent '{id}' not found"
+            )));
+        }
+
+        let _ = self.audit_trail.append_event(
+            id,
+            EventType::Error,
+            json!({
+                "event_kind": "killgate.halted",
+                "subsystem": "agent_runtime",
+                "reason": reason,
+                "by": operator_id,
+            }),
+        );
+
+        let action = self.safety_supervisor.force_halt(
+            id,
+            format!("manual override halt by {operator_id}: {reason}"),
+            &mut self.audit_trail,
+        );
+        self.apply_safety_action(id, action)
+    }
+
     fn finalize_operation(
         &mut self,
         id: AgentId,
@@ -304,6 +458,10 @@ impl Supervisor {
             (KpiKind::FuelBurnRate, budget_ratio_pct),
             (KpiKind::AgentErrorRate, error_rate_pct),
             (KpiKind::BudgetCompliance, budget_ratio_pct),
+            (KpiKind::BanRate, 0.0),
+            (KpiKind::ReplayMismatch, 0.0),
+            (KpiKind::Divergence, 0.0),
+            (KpiKind::QuorumInvariant, 0.0),
         ]
     }
 
