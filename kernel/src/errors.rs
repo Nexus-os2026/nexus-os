@@ -8,6 +8,7 @@ pub enum AgentError {
     InvalidTransition { from: AgentState, to: AgentState },
     ManifestError(String),
     CapabilityDenied(String),
+    ApprovalRequired { request_id: String },
     SupervisorError(String),
     KeyDestroyed(String),
 }
@@ -22,6 +23,9 @@ impl Display for AgentError {
             AgentError::ManifestError(reason) => write!(f, "manifest error: {reason}"),
             AgentError::CapabilityDenied(capability) => {
                 write!(f, "capability denied: '{capability}' is not allowed")
+            }
+            AgentError::ApprovalRequired { request_id } => {
+                write!(f, "approval required: request_id='{request_id}'")
             }
             AgentError::SupervisorError(reason) => write!(f, "supervisor error: {reason}"),
             AgentError::KeyDestroyed(key_id) => write!(f, "key '{key_id}' has been destroyed"),
@@ -42,6 +46,7 @@ pub fn on_error(error: &AgentError) -> ErrorStrategy {
     match error {
         AgentError::FuelExhausted
         | AgentError::CapabilityDenied(_)
+        | AgentError::ApprovalRequired { .. }
         | AgentError::KeyDestroyed(_) => ErrorStrategy::Escalate,
         AgentError::InvalidTransition { .. } | AgentError::ManifestError(_) => ErrorStrategy::Skip,
         AgentError::SupervisorError(_) => ErrorStrategy::Retry { max_attempts: 3 },
@@ -62,6 +67,9 @@ mod tests {
         };
         let manifest = AgentError::ManifestError("missing field: name".to_string());
         let capability = AgentError::CapabilityDenied("web.search".to_string());
+        let approval = AgentError::ApprovalRequired {
+            request_id: "req-123".to_string(),
+        };
         let supervisor = AgentError::SupervisorError("agent not found".to_string());
 
         assert_eq!(fuel.to_string(), "fuel budget exhausted");
@@ -73,6 +81,10 @@ mod tests {
         assert_eq!(
             capability.to_string(),
             "capability denied: 'web.search' is not allowed"
+        );
+        assert_eq!(
+            approval.to_string(),
+            "approval required: request_id='req-123'"
         );
         assert_eq!(supervisor.to_string(), "supervisor error: agent not found");
     }
