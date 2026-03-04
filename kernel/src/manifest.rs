@@ -27,6 +27,9 @@ pub struct AgentManifest {
     pub fuel_budget: u64,
     pub schedule: Option<String>,
     pub llm_model: Option<String>,
+    pub autonomy_level: Option<u8>,
+    pub fuel_period_id: Option<String>,
+    pub monthly_fuel_cap: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,6 +40,9 @@ struct RawManifest {
     fuel_budget: Option<u64>,
     schedule: Option<String>,
     llm_model: Option<String>,
+    autonomy_level: Option<u8>,
+    fuel_period_id: Option<String>,
+    monthly_fuel_cap: Option<u64>,
 }
 
 pub fn parse_manifest(input: &str) -> Result<AgentManifest, AgentError> {
@@ -66,6 +72,9 @@ pub fn parse_manifest(input: &str) -> Result<AgentManifest, AgentError> {
         AgentError::ManifestError("missing required field: fuel_budget".to_string())
     })?;
     validate_fuel_budget(fuel_budget)?;
+    validate_autonomy_level(raw.autonomy_level)?;
+    validate_fuel_period_id(raw.fuel_period_id.as_deref())?;
+    validate_monthly_fuel_cap(raw.monthly_fuel_cap)?;
 
     Ok(AgentManifest {
         name,
@@ -74,6 +83,9 @@ pub fn parse_manifest(input: &str) -> Result<AgentManifest, AgentError> {
         fuel_budget,
         schedule: raw.schedule,
         llm_model: raw.llm_model,
+        autonomy_level: raw.autonomy_level,
+        fuel_period_id: raw.fuel_period_id,
+        monthly_fuel_cap: raw.monthly_fuel_cap,
     })
 }
 
@@ -130,6 +142,35 @@ fn validate_fuel_budget(fuel_budget: u64) -> Result<(), AgentError> {
     Ok(())
 }
 
+fn validate_autonomy_level(level: Option<u8>) -> Result<(), AgentError> {
+    match level {
+        Some(value) if value > 5 => Err(AgentError::ManifestError(
+            "autonomy_level must be in range 0..=5".to_string(),
+        )),
+        _ => Ok(()),
+    }
+}
+
+fn validate_fuel_period_id(period_id: Option<&str>) -> Result<(), AgentError> {
+    if let Some(period_id) = period_id {
+        if period_id.trim().is_empty() {
+            return Err(AgentError::ManifestError(
+                "fuel_period_id cannot be empty".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_monthly_fuel_cap(monthly_fuel_cap: Option<u64>) -> Result<(), AgentError> {
+    if monthly_fuel_cap == Some(0) {
+        return Err(AgentError::ManifestError(
+            "monthly_fuel_cap must be greater than 0".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{parse_manifest, AgentManifest};
@@ -161,6 +202,9 @@ llm_model = "claude-sonnet-4-5"
             fuel_budget: 10_000,
             schedule: Some("*/10 * * * *".to_string()),
             llm_model: Some("claude-sonnet-4-5".to_string()),
+            autonomy_level: None,
+            fuel_period_id: None,
+            monthly_fuel_cap: None,
         };
         assert_eq!(manifest, expected);
     }
@@ -199,5 +243,19 @@ fuel_budget = 0
 
         let zero_fuel_error = parse_manifest(zero_fuel);
         assert!(matches!(zero_fuel_error, Err(AgentError::ManifestError(_))));
+    }
+
+    #[test]
+    fn test_reject_invalid_autonomy_level() {
+        let invalid_autonomy = r#"
+name = "valid-name"
+version = "0.1.0"
+capabilities = ["web.search"]
+fuel_budget = 100
+autonomy_level = 9
+"#;
+
+        let parsed = parse_manifest(invalid_autonomy);
+        assert!(matches!(parsed, Err(AgentError::ManifestError(_))));
     }
 }
