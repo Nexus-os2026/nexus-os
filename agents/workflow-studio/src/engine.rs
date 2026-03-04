@@ -1,9 +1,12 @@
 use crate::nodes::{NodeErrorStrategy, NodeKind, Workflow, WorkflowConnection, WorkflowNode};
 use nexus_kernel::audit::AuditTrail;
 use nexus_kernel::autonomy::{AutonomyGuard, AutonomyLevel};
+use nexus_kernel::consent::{
+    ApprovalQueue, ConsentPolicyEngine, ConsentRuntime, GovernedOperation,
+};
 use nexus_kernel::errors::AgentError;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 use std::thread;
@@ -16,6 +19,7 @@ pub struct WorkflowContext {
     pub agent_id: uuid::Uuid,
     pub autonomy_guard: AutonomyGuard,
     pub audit_trail: AuditTrail,
+    pub consent_runtime: ConsentRuntime,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -168,6 +172,21 @@ impl WorkflowEngine {
                 let node_input =
                     build_node_input(&node, incoming.get(&node_id), &outputs, &initial_input);
                 let fuel_before = context.fuel_remaining;
+                let operation = operation_for_node(&node);
+                let payload = serde_json::to_vec(&json!({
+                    "node_id": node.id.as_str(),
+                    "kind": format!("{:?}", node.kind),
+                }))
+                .unwrap_or_default();
+                context
+                    .consent_runtime
+                    .enforce_operation(
+                        operation,
+                        context.agent_id,
+                        payload.as_slice(),
+                        &mut context.audit_trail,
+                    )
+                    .map_err(AgentError::from)?;
                 context
                     .autonomy_guard
                     .require_tool_call(context.agent_id, &mut context.audit_trail)
@@ -526,6 +545,17 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
+fn operation_for_node(node: &WorkflowNode) -> GovernedOperation {
+    match node.kind {
+        NodeKind::Action(action) => match action {
+            crate::nodes::ActionNode::PostToSocial => GovernedOperation::SocialPostPublish,
+            crate::nodes::ActionNode::RunCode => GovernedOperation::TerminalCommand,
+            _ => GovernedOperation::ToolCall,
+        },
+        _ => GovernedOperation::ToolCall,
+    }
+}
+
 impl Default for WorkflowContext {
     fn default() -> Self {
         Self {
@@ -534,6 +564,11 @@ impl Default for WorkflowContext {
             agent_id: uuid::Uuid::nil(),
             autonomy_guard: AutonomyGuard::new(AutonomyLevel::L0),
             audit_trail: AuditTrail::new(),
+            consent_runtime: ConsentRuntime::new(
+                ConsentPolicyEngine::default(),
+                ApprovalQueue::in_memory(),
+                "workflow.engine".to_string(),
+            ),
         }
     }
 }

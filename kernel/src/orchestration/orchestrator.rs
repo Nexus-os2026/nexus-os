@@ -1,5 +1,8 @@
 use crate::audit::{AuditTrail, EventType};
 use crate::autonomy::{AutonomyGuard, AutonomyLevel};
+use crate::consent::{
+    ApprovalQueue, ApprovalRequest, ConsentPolicyEngine, ConsentRuntime, GovernedOperation,
+};
 use crate::errors::AgentError;
 use crate::lifecycle::{transition_state, AgentState};
 use crate::orchestration::messaging::{AgentId, TeamId, TeamMessage, TeamMessageBus};
@@ -46,6 +49,7 @@ pub struct Orchestrator {
     bus: TeamMessageBus,
     audit_trail: AuditTrail,
     autonomy_guard: AutonomyGuard,
+    consent_runtime: ConsentRuntime,
 }
 
 impl Orchestrator {
@@ -59,10 +63,28 @@ impl Orchestrator {
             bus: TeamMessageBus::new(),
             audit_trail: AuditTrail::new(),
             autonomy_guard: AutonomyGuard::new(level),
+            consent_runtime: ConsentRuntime::new(
+                ConsentPolicyEngine::default(),
+                ApprovalQueue::in_memory(),
+                "orchestrator".to_string(),
+            ),
         }
     }
 
     pub fn create_team(&mut self, roles: &[AgentRole]) -> Result<TeamId, AgentError> {
+        let payload = serde_json::to_vec(
+            &roles
+                .iter()
+                .map(|role| role.canonical_rank())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap_or_default();
+        self.consent_runtime.enforce_operation(
+            GovernedOperation::MultiAgentOrchestrate,
+            Uuid::nil(),
+            payload.as_slice(),
+            &mut self.audit_trail,
+        )?;
         self.autonomy_guard
             .require_multi_agent(Uuid::nil(), &mut self.audit_trail)?;
         if roles.is_empty() {
@@ -176,6 +198,20 @@ impl Orchestrator {
     pub fn autonomy_guard(&self) -> &AutonomyGuard {
         &self.autonomy_guard
     }
+
+    pub fn approve_consent(
+        &mut self,
+        request_id: &str,
+        approver_id: &str,
+    ) -> Result<(), AgentError> {
+        self.consent_runtime
+            .approve(request_id, approver_id, &mut self.audit_trail)?;
+        Ok(())
+    }
+
+    pub fn pending_consent_requests(&self) -> Vec<ApprovalRequest> {
+        self.consent_runtime.pending_requests()
+    }
 }
 
 fn build_role_task(role: AgentRole, task: &str) -> String {
@@ -201,11 +237,25 @@ pub fn canonical_merge_messages(mut messages: Vec<TeamMessage>) -> Vec<TeamMessa
 mod tests {
     use super::Orchestrator;
     use crate::autonomy::AutonomyLevel;
+    use crate::errors::AgentError;
     use crate::orchestration::roles::AgentRole;
 
     #[test]
     fn test_team_creation() {
         let mut orchestrator = Orchestrator::with_autonomy_level(AutonomyLevel::L2);
+        let initial = orchestrator.create_team(&[
+            AgentRole::Researcher,
+            AgentRole::Writer,
+            AgentRole::Publisher,
+        ]);
+        let request_id = match initial {
+            Err(AgentError::ApprovalRequired { request_id }) => request_id,
+            other => panic!("expected approval required, got: {other:?}"),
+        };
+        orchestrator
+            .approve_consent(request_id.as_str(), "approver.a")
+            .expect("approval should succeed");
+
         let team_id = orchestrator.create_team(&[
             AgentRole::Researcher,
             AgentRole::Writer,
@@ -229,6 +279,19 @@ mod tests {
     #[test]
     fn test_task_distribution() {
         let mut orchestrator = Orchestrator::with_autonomy_level(AutonomyLevel::L2);
+        let initial = orchestrator.create_team(&[
+            AgentRole::Researcher,
+            AgentRole::Writer,
+            AgentRole::Publisher,
+        ]);
+        let request_id = match initial {
+            Err(AgentError::ApprovalRequired { request_id }) => request_id,
+            other => panic!("expected approval required, got: {other:?}"),
+        };
+        orchestrator
+            .approve_consent(request_id.as_str(), "approver.a")
+            .expect("approval should succeed");
+
         let team_id = orchestrator.create_team(&[
             AgentRole::Researcher,
             AgentRole::Writer,

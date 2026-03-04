@@ -27,6 +27,8 @@ pub struct AgentManifest {
     pub capabilities: Vec<String>,
     pub fuel_budget: u64,
     pub autonomy_level: Option<u8>,
+    pub consent_policy_path: Option<String>,
+    pub requester_id: Option<String>,
     pub schedule: Option<String>,
     pub llm_model: Option<String>,
 }
@@ -38,6 +40,8 @@ struct RawManifest {
     capabilities: Option<Vec<String>>,
     fuel_budget: Option<u64>,
     autonomy_level: Option<u8>,
+    consent_policy_path: Option<String>,
+    requester_id: Option<String>,
     schedule: Option<String>,
     llm_model: Option<String>,
 }
@@ -70,6 +74,8 @@ pub fn parse_manifest(input: &str) -> Result<AgentManifest, AgentError> {
     })?;
     validate_fuel_budget(fuel_budget)?;
     let autonomy_level = parse_autonomy_level(raw.autonomy_level)?;
+    let consent_policy_path = parse_optional_non_empty(raw.consent_policy_path);
+    let requester_id = parse_optional_non_empty(raw.requester_id);
 
     Ok(AgentManifest {
         name,
@@ -77,6 +83,8 @@ pub fn parse_manifest(input: &str) -> Result<AgentManifest, AgentError> {
         capabilities,
         fuel_budget,
         autonomy_level,
+        consent_policy_path,
+        requester_id,
         schedule: raw.schedule,
         llm_model: raw.llm_model,
     })
@@ -146,6 +154,12 @@ fn parse_autonomy_level(value: Option<u8>) -> Result<Option<u8>, AgentError> {
     Ok(Some(value))
 }
 
+fn parse_optional_non_empty(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{parse_manifest, AgentManifest};
@@ -176,6 +190,8 @@ llm_model = "claude-sonnet-4-5"
             ],
             fuel_budget: 10_000,
             autonomy_level: None,
+            consent_policy_path: None,
+            requester_id: None,
             schedule: Some("*/10 * * * *".to_string()),
             llm_model: Some("claude-sonnet-4-5".to_string()),
         };
@@ -226,9 +242,16 @@ version = "0.1.0"
 capabilities = ["web.search"]
 fuel_budget = 100
 autonomy_level = 2
+consent_policy_path = "/tmp/consent.toml"
+requester_id = "agent.alpha"
 "#;
 
         let parsed = parse_manifest(toml).expect("manifest with autonomy level should parse");
         assert_eq!(parsed.autonomy_level, Some(2));
+        assert_eq!(
+            parsed.consent_policy_path,
+            Some("/tmp/consent.toml".to_string())
+        );
+        assert_eq!(parsed.requester_id, Some("agent.alpha".to_string()));
     }
 }

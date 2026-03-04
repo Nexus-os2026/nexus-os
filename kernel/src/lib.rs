@@ -3,6 +3,7 @@
 pub mod audit;
 pub mod autonomy;
 pub mod config;
+pub mod consent;
 pub mod errors;
 pub mod lifecycle;
 pub mod manifest;

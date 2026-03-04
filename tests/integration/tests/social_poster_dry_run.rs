@@ -93,6 +93,8 @@ fn test_social_poster_dry_run() {
         ],
         fuel_budget: 10_000,
         autonomy_level: Some(1),
+        consent_policy_path: None,
+        requester_id: None,
         schedule: Some("0 9 * * *".to_string()),
         llm_model: Some("claude-sonnet-4-5".to_string()),
         config: SocialPosterConfig {

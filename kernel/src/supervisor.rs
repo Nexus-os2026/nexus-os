@@ -1,5 +1,6 @@
 use crate::audit::AuditTrail;
 use crate::autonomy::{AutonomyGuard, AutonomyLevel};
+use crate::consent::{ApprovalRequest, ConsentRuntime, GovernedOperation};
 use crate::errors::AgentError;
 use crate::lifecycle::{transition_state, AgentState};
 use crate::manifest::AgentManifest;
@@ -14,6 +15,7 @@ pub struct AgentHandle {
     pub id: AgentId,
     pub manifest: AgentManifest,
     pub autonomy_guard: AutonomyGuard,
+    pub consent_runtime: ConsentRuntime,
     pub state: AgentState,
     pub remaining_fuel: u64,
 }
@@ -42,10 +44,16 @@ impl Supervisor {
     pub fn start_agent(&mut self, manifest: AgentManifest) -> Result<AgentId, AgentError> {
         let id = Uuid::new_v4();
         let autonomy_level = AutonomyLevel::from_manifest(manifest.autonomy_level);
+        let consent_runtime = ConsentRuntime::from_manifest(
+            manifest.consent_policy_path.as_deref(),
+            manifest.requester_id.as_deref(),
+            manifest.name.as_str(),
+        )?;
         let mut handle = AgentHandle {
             id,
             remaining_fuel: manifest.fuel_budget,
             autonomy_guard: AutonomyGuard::new(autonomy_level),
+            consent_runtime,
             manifest,
             state: AgentState::Created,
         };
@@ -175,6 +183,15 @@ impl Supervisor {
             .get_mut(&id)
             .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
         handle
+            .consent_runtime
+            .enforce_operation(
+                GovernedOperation::ToolCall,
+                id,
+                b"supervisor.tool_call",
+                &mut self.audit_trail,
+            )
+            .map_err(AgentError::from)?;
+        handle
             .autonomy_guard
             .require_tool_call(id, &mut self.audit_trail)
             .map_err(AgentError::from)
@@ -185,6 +202,15 @@ impl Supervisor {
             .agents
             .get_mut(&id)
             .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        handle
+            .consent_runtime
+            .enforce_operation(
+                GovernedOperation::MultiAgentOrchestrate,
+                id,
+                b"supervisor.multi_agent",
+                &mut self.audit_trail,
+            )
+            .map_err(AgentError::from)?;
         handle
             .autonomy_guard
             .require_multi_agent(id, &mut self.audit_trail)
@@ -197,6 +223,15 @@ impl Supervisor {
             .get_mut(&id)
             .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
         handle
+            .consent_runtime
+            .enforce_operation(
+                GovernedOperation::SelfMutationApply,
+                id,
+                b"supervisor.self_modification",
+                &mut self.audit_trail,
+            )
+            .map_err(AgentError::from)?;
+        handle
             .autonomy_guard
             .require_self_modification(id, &mut self.audit_trail)
             .map_err(AgentError::from)
@@ -208,9 +243,77 @@ impl Supervisor {
             .get_mut(&id)
             .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
         handle
+            .consent_runtime
+            .enforce_operation(
+                GovernedOperation::DistributedEnable,
+                id,
+                b"supervisor.distributed",
+                &mut self.audit_trail,
+            )
+            .map_err(AgentError::from)?;
+        handle
             .autonomy_guard
             .require_distributed(id, &mut self.audit_trail)
             .map_err(AgentError::from)
+    }
+
+    pub fn require_consent(
+        &mut self,
+        id: AgentId,
+        operation: GovernedOperation,
+        payload: &[u8],
+    ) -> Result<(), AgentError> {
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        handle
+            .consent_runtime
+            .enforce_operation(operation, id, payload, &mut self.audit_trail)
+            .map_err(AgentError::from)
+    }
+
+    pub fn approve_consent(
+        &mut self,
+        id: AgentId,
+        request_id: &str,
+        approver_id: &str,
+    ) -> Result<(), AgentError> {
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        handle
+            .consent_runtime
+            .approve(request_id, approver_id, &mut self.audit_trail)
+            .map_err(AgentError::from)
+    }
+
+    pub fn deny_consent(
+        &mut self,
+        id: AgentId,
+        request_id: &str,
+        approver_id: &str,
+    ) -> Result<(), AgentError> {
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        handle
+            .consent_runtime
+            .deny(request_id, approver_id, &mut self.audit_trail)
+            .map_err(AgentError::from)
+    }
+
+    pub fn pending_consent_requests(
+        &self,
+        id: AgentId,
+    ) -> Result<Vec<ApprovalRequest>, AgentError> {
+        let handle = self
+            .agents
+            .get(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        Ok(handle.consent_runtime.pending_requests())
     }
 
     fn consume_fuel(agent: &mut AgentHandle) -> Result<(), AgentError> {
@@ -236,6 +339,8 @@ mod tests {
             capabilities: vec!["web.search".to_string(), "llm.query".to_string()],
             fuel_budget,
             autonomy_level: None,
+            consent_policy_path: None,
+            requester_id: None,
             schedule: None,
             llm_model: Some("ollama/llama3".to_string()),
         }

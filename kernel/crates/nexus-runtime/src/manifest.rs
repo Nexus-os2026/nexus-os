@@ -9,6 +9,8 @@ pub struct AgentManifest {
     pub capabilities: Vec<Capability>,
     pub fuel_budget: u64,
     pub autonomy_level: Option<u8>,
+    pub consent_policy_path: Option<String>,
+    pub requester_id: Option<String>,
     pub schedule: String,
     pub llm_model: String,
 }
@@ -77,6 +79,8 @@ struct RawManifest {
     capabilities: Vec<String>,
     fuel_budget: Option<u64>,
     autonomy_level: Option<u8>,
+    consent_policy_path: Option<String>,
+    requester_id: Option<String>,
     schedule: Option<String>,
     llm_model: Option<String>,
 }
@@ -112,6 +116,8 @@ impl TryFrom<RawManifest> for AgentManifest {
             None => return Err(ManifestError::MissingField { field: "fuel_budget" }),
         };
         let autonomy_level = validate_autonomy_level(raw.autonomy_level)?;
+        let consent_policy_path = optional_non_empty(raw.consent_policy_path);
+        let requester_id = optional_non_empty(raw.requester_id);
 
         let schedule = require_non_empty(raw.schedule, "schedule")?;
         let llm_model = require_non_empty(raw.llm_model, "llm_model")?;
@@ -122,6 +128,8 @@ impl TryFrom<RawManifest> for AgentManifest {
             capabilities,
             fuel_budget,
             autonomy_level,
+            consent_policy_path,
+            requester_id,
             schedule,
             llm_model,
         })
@@ -254,6 +262,12 @@ fn validate_autonomy_level(value: Option<u8>) -> Result<Option<u8>, ManifestErro
     Ok(Some(level))
 }
 
+fn optional_non_empty(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{parse_manifest, Capability, ManifestError};
@@ -276,6 +290,8 @@ llm_model = "gpt-5-mini"
                 assert_eq!(manifest.version, "0.1.0");
                 assert_eq!(manifest.fuel_budget, 500);
                 assert_eq!(manifest.autonomy_level, None);
+                assert_eq!(manifest.consent_policy_path, None);
+                assert_eq!(manifest.requester_id, None);
                 assert_eq!(manifest.schedule, "*/5 * * * *");
                 assert_eq!(manifest.llm_model, "gpt-5-mini");
                 assert_eq!(
@@ -426,6 +442,27 @@ llm_model = "gpt-5"
 
         let result = parse_manifest(input).expect("manifest with autonomy_level should parse");
         assert_eq!(result.autonomy_level, Some(3));
+    }
+
+    #[test]
+    fn parses_optional_consent_fields() {
+        let input = r#"
+name = "agent.kappa"
+version = "1.0.0"
+capabilities = []
+fuel_budget = 100
+consent_policy_path = "/etc/nexus/consent.toml"
+requester_id = "agent.kappa"
+schedule = "@daily"
+llm_model = "gpt-5"
+"#;
+
+        let result = parse_manifest(input).expect("manifest with consent fields should parse");
+        assert_eq!(
+            result.consent_policy_path,
+            Some("/etc/nexus/consent.toml".to_string())
+        );
+        assert_eq!(result.requester_id, Some("agent.kappa".to_string()));
     }
 
     #[test]
