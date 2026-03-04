@@ -3,6 +3,10 @@ use crate::patch_lang::{
 };
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::autonomy::{AutonomyGuard, AutonomyLevel};
+use nexus_kernel::consent::{
+    ApprovalQueue, ApprovalRequest, ConsentError, ConsentPolicyEngine, ConsentRuntime,
+    GovernedOperation,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -14,6 +18,8 @@ pub enum MutationError {
     PatchNotFound(String),
     VerifierBoundaryViolation,
     AutonomyDenied(String),
+    ApprovalRequired(String),
+    ConsentDenied(String),
     ValidationFailed(String),
     ReplayFailed(String),
     ReplayRequired,
@@ -28,6 +34,10 @@ impl std::fmt::Display for MutationError {
                 write!(f, "patch violates fixed verifier boundary")
             }
             MutationError::AutonomyDenied(reason) => write!(f, "autonomy denied: {reason}"),
+            MutationError::ApprovalRequired(request_id) => {
+                write!(f, "approval required: request_id='{request_id}'")
+            }
+            MutationError::ConsentDenied(reason) => write!(f, "consent denied: {reason}"),
             MutationError::ValidationFailed(reason) => write!(f, "validation failed: {reason}"),
             MutationError::ReplayFailed(reason) => write!(f, "A/B replay failed: {reason}"),
             MutationError::ReplayRequired => write!(f, "A/B replay must pass before approval"),
@@ -66,6 +76,7 @@ pub struct MutationLifecycle {
     state: RuntimePatchState,
     audit_trail: AuditTrail,
     autonomy_guard: AutonomyGuard,
+    consent_runtime: ConsentRuntime,
     actor_id: Uuid,
     records: HashMap<String, MutationRecord>,
 }
@@ -80,6 +91,11 @@ impl MutationLifecycle {
             state: RuntimePatchState::default(),
             audit_trail: AuditTrail::new(),
             autonomy_guard: AutonomyGuard::new(level),
+            consent_runtime: ConsentRuntime::new(
+                ConsentPolicyEngine::default(),
+                ApprovalQueue::in_memory(),
+                "mutation.lifecycle".to_string(),
+            ),
             actor_id: Uuid::nil(),
             records: HashMap::new(),
         }
@@ -215,6 +231,14 @@ impl MutationLifecycle {
             }
             record.patch.clone()
         };
+        self.consent_runtime
+            .enforce_operation(
+                GovernedOperation::SelfMutationApply,
+                self.actor_id,
+                patch.source.as_bytes(),
+                &mut self.audit_trail,
+            )
+            .map_err(map_consent_error)?;
 
         apply_patch(&patch, &mut self.state).map_err(map_patch_error)?;
 
@@ -255,6 +279,30 @@ impl MutationLifecycle {
     pub fn audit_trail(&self) -> &AuditTrail {
         &self.audit_trail
     }
+
+    pub fn pending_consent_requests(&self) -> Vec<ApprovalRequest> {
+        self.consent_runtime.pending_requests()
+    }
+
+    pub fn approve_consent(
+        &mut self,
+        request_id: &str,
+        approver_id: &str,
+    ) -> Result<(), MutationError> {
+        self.consent_runtime
+            .approve(request_id, approver_id, &mut self.audit_trail)
+            .map_err(map_consent_error)
+    }
+
+    pub fn deny_consent(
+        &mut self,
+        request_id: &str,
+        approver_id: &str,
+    ) -> Result<(), MutationError> {
+        self.consent_runtime
+            .deny(request_id, approver_id, &mut self.audit_trail)
+            .map_err(map_consent_error)
+    }
 }
 
 impl Default for MutationLifecycle {
@@ -267,6 +315,15 @@ fn map_patch_error(error: PatchLangError) -> MutationError {
     match error {
         PatchLangError::VerifierBoundaryViolation => MutationError::VerifierBoundaryViolation,
         other => MutationError::ValidationFailed(other.to_string()),
+    }
+}
+
+fn map_consent_error(error: ConsentError) -> MutationError {
+    match error {
+        ConsentError::ApprovalRequired { request_id, .. } => {
+            MutationError::ApprovalRequired(request_id)
+        }
+        other => MutationError::ConsentDenied(other.to_string()),
     }
 }
 
@@ -316,7 +373,7 @@ fn sha256_hex(input: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{MutationLifecycle, ReplayCase, ReplayExpectation};
+    use super::{MutationError, MutationLifecycle, ReplayCase, ReplayExpectation};
     use nexus_kernel::autonomy::AutonomyLevel;
 
     #[test]
@@ -360,6 +417,23 @@ param.retry_backoff = 1.5
         let approved = lifecycle.approve(patch_id.as_str(), true);
         assert!(approved.is_ok());
 
+        let request_id = match lifecycle.apply(patch_id.as_str()) {
+            Err(MutationError::ApprovalRequired(request_id)) => request_id,
+            other => panic!("expected approval requirement, got: {other:?}"),
+        };
+
+        assert!(lifecycle
+            .approve_consent(request_id.as_str(), "approver.a")
+            .is_ok());
+        let still_blocked = lifecycle.apply(patch_id.as_str());
+        assert!(matches!(
+            still_blocked,
+            Err(MutationError::ApprovalRequired(_))
+        ));
+
+        assert!(lifecycle
+            .approve_consent(request_id.as_str(), "approver.b")
+            .is_ok());
         let applied = lifecycle.apply(patch_id.as_str());
         assert!(applied.is_ok());
         assert!(lifecycle.has_attestation(patch_id.as_str()));
