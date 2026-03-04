@@ -14,6 +14,8 @@ pub struct NexusConfig {
     pub messaging: MessagingConfig,
     pub voice: VoiceConfig,
     pub privacy: PrivacyConfig,
+    #[serde(default)]
+    pub kill_gates: KillGatesConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -62,6 +64,33 @@ pub struct PrivacyConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct KillGatesConfig {
+    pub screen_poster_freeze_bps: u32,
+    pub screen_poster_halt_bps: u32,
+    pub mutation_freeze_signal: u32,
+    pub mutation_halt_signal: u32,
+    pub cluster_freeze_signal: u32,
+    pub cluster_halt_signal: u32,
+    pub bft_freeze_signal: u32,
+    pub bft_halt_signal: u32,
+}
+
+impl Default for KillGatesConfig {
+    fn default() -> Self {
+        Self {
+            screen_poster_freeze_bps: 200,
+            screen_poster_halt_bps: 500,
+            mutation_freeze_signal: 1,
+            mutation_halt_signal: u32::MAX,
+            cluster_freeze_signal: 1,
+            cluster_halt_signal: u32::MAX,
+            bft_freeze_signal: u32::MAX,
+            bft_halt_signal: 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct EncryptedConfigEnvelope {
     version: u8,
     key_id: String,
@@ -105,6 +134,7 @@ impl Default for NexusConfig {
                 telemetry: false,
                 audit_retention_days: 365,
             },
+            kill_gates: KillGatesConfig::default(),
         }
     }
 }

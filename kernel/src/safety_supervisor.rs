@@ -1,4 +1,5 @@
 use crate::audit::{AuditEvent, AuditTrail, EventType};
+use crate::kill_gates::{GateStatus, KillGateConfig, KillGateError, KillGateRegistry};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -18,6 +19,10 @@ pub enum KpiKind {
     FuelBurnRate,
     AgentErrorRate,
     BudgetCompliance,
+    BanRate,
+    ReplayMismatch,
+    Divergence,
+    QuorumInvariant,
 }
 
 impl KpiKind {
@@ -29,6 +34,10 @@ impl KpiKind {
             KpiKind::FuelBurnRate => "fuel_burn_rate",
             KpiKind::AgentErrorRate => "agent_error_rate",
             KpiKind::BudgetCompliance => "budget_compliance",
+            KpiKind::BanRate => "ban_rate",
+            KpiKind::ReplayMismatch => "replay_mismatch",
+            KpiKind::Divergence => "divergence",
+            KpiKind::QuorumInvariant => "quorum_invariant",
         }
     }
 }
@@ -111,6 +120,7 @@ pub struct SafetySupervisor {
     incident_reports: HashMap<AgentId, Vec<IncidentReport>>,
     tool_call_heartbeat_every: u32,
     tool_call_counter: HashMap<AgentId, u32>,
+    kill_gates: KillGateRegistry,
 }
 
 impl Default for SafetySupervisor {
@@ -121,6 +131,18 @@ impl Default for SafetySupervisor {
 
 impl SafetySupervisor {
     pub fn new(thresholds: Vec<KpiThreshold>, tool_call_heartbeat_every: u32) -> Self {
+        Self::with_kill_gates_config(
+            thresholds,
+            tool_call_heartbeat_every,
+            &KillGateConfig::default(),
+        )
+    }
+
+    pub fn with_kill_gates_config(
+        thresholds: Vec<KpiThreshold>,
+        tool_call_heartbeat_every: u32,
+        kill_gate_config: &KillGateConfig,
+    ) -> Self {
         Self {
             thresholds,
             violation_counter: HashMap::new(),
@@ -130,6 +152,7 @@ impl SafetySupervisor {
             incident_reports: HashMap::new(),
             tool_call_heartbeat_every: tool_call_heartbeat_every.max(1),
             tool_call_counter: HashMap::new(),
+            kill_gates: KillGateRegistry::from_config(kill_gate_config),
         }
     }
 
@@ -176,6 +199,8 @@ impl SafetySupervisor {
         }
 
         let mut violations = Vec::new();
+        let mut first_frozen_subsystem = None::<String>;
+        let mut first_halted_subsystem = None::<String>;
         for (kind, value) in readings {
             let status = self.check_kpi(*kind, *value);
             let threshold = self.threshold_for(*kind).cloned();
@@ -205,6 +230,38 @@ impl SafetySupervisor {
                     critical_value,
                 });
             }
+
+            for (subsystem, gate_status) in
+                self.kill_gates.check_metric(*kind, *value, agent_id, audit)
+            {
+                match gate_status {
+                    GateStatus::Open => {}
+                    GateStatus::Frozen => {
+                        if first_frozen_subsystem.is_none() {
+                            first_frozen_subsystem = Some(subsystem);
+                        }
+                    }
+                    GateStatus::Halted => {
+                        if first_halted_subsystem.is_none() {
+                            first_halted_subsystem = Some(subsystem);
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(subsystem) = first_halted_subsystem {
+            return self.force_halt(
+                agent_id,
+                format!("kill gate halted subsystem '{subsystem}'"),
+                audit,
+            );
+        }
+
+        if let Some(subsystem) = first_frozen_subsystem {
+            let reason = format!("kill gate froze subsystem '{subsystem}'");
+            self.set_mode(agent_id, OperatingMode::Degraded(reason.clone()), audit);
+            return SafetyAction::Degraded { reason };
         }
 
         if violations.is_empty() {
@@ -225,6 +282,88 @@ impl SafetySupervisor {
         }
 
         self.record_violation(agent_id, selected, audit)
+    }
+
+    pub fn kill_gate_status(&self, subsystem: &str) -> Option<GateStatus> {
+        self.kill_gates.gate_status(subsystem)
+    }
+
+    pub fn manual_freeze_subsystem(
+        &mut self,
+        subsystem: &str,
+        operator_id: &str,
+        agent_id: AgentId,
+        audit: &mut AuditTrail,
+    ) -> Result<GateStatus, KillGateError> {
+        let status = self
+            .kill_gates
+            .manual_freeze(subsystem, operator_id, agent_id, audit)?;
+        if status == GateStatus::Frozen {
+            self.set_mode(
+                agent_id,
+                OperatingMode::Degraded(format!("manual freeze for subsystem '{subsystem}'")),
+                audit,
+            );
+        }
+        Ok(status)
+    }
+
+    pub fn manual_halt_subsystem(
+        &mut self,
+        subsystem: &str,
+        operator_id: &str,
+        agent_id: AgentId,
+        audit: &mut AuditTrail,
+    ) -> Result<SafetyAction, KillGateError> {
+        let status = self
+            .kill_gates
+            .manual_halt(subsystem, operator_id, agent_id, audit)?;
+        if status == GateStatus::Halted {
+            return Ok(self.force_halt(
+                agent_id,
+                format!("manual halt for subsystem '{subsystem}'"),
+                audit,
+            ));
+        }
+        Ok(SafetyAction::Continue)
+    }
+
+    pub fn manual_unfreeze_subsystem(
+        &mut self,
+        subsystem: &str,
+        operator_id: &str,
+        hitl_tier: u8,
+        agent_id: AgentId,
+        audit: &mut AuditTrail,
+    ) -> Result<GateStatus, KillGateError> {
+        self.kill_gates
+            .manual_unfreeze(subsystem, operator_id, hitl_tier, agent_id, audit)
+    }
+
+    pub fn force_halt(
+        &mut self,
+        agent_id: AgentId,
+        reason: String,
+        audit: &mut AuditTrail,
+    ) -> SafetyAction {
+        self.set_mode(agent_id, OperatingMode::Halted(reason.clone()), audit);
+        let report = self.generate_incident_report_internal(agent_id, "halted", audit);
+        let violations = self.violation_counter.get(&agent_id).copied().unwrap_or(0);
+        let _ = audit.append_event(
+            agent_id,
+            EventType::Error,
+            json!({
+                "event_kind": "safety.agent_halted",
+                "agent_id": agent_id,
+                "violations": violations,
+                "report_id": report.report_id,
+            }),
+        );
+
+        SafetyAction::Halted {
+            reason,
+            report_id: report.report_id,
+        }
     }
 
     pub fn observe_tool_call(
@@ -351,23 +490,7 @@ impl SafetySupervisor {
                     "three-strike safety halt triggered by {}",
                     violation.kind.as_str()
                 );
-                self.set_mode(agent_id, OperatingMode::Halted(reason.clone()), audit);
-                let report = self.generate_incident_report_internal(agent_id, "halted", audit);
-                let _ = audit.append_event(
-                    agent_id,
-                    EventType::Error,
-                    json!({
-                        "event_kind": "safety.agent_halted",
-                        "agent_id": agent_id,
-                        "violations": count,
-                        "report_id": report.report_id,
-                    }),
-                );
-
-                SafetyAction::Halted {
-                    reason,
-                    report_id: report.report_id,
-                }
+                self.force_halt(agent_id, reason, audit)
             }
         }
     }
@@ -565,6 +688,26 @@ pub fn default_thresholds() -> Vec<KpiThreshold> {
             kind: KpiKind::BudgetCompliance,
             warn_value: 90.0,
             critical_value: 100.0,
+        },
+        KpiThreshold {
+            kind: KpiKind::BanRate,
+            warn_value: 2.0,
+            critical_value: 5.0,
+        },
+        KpiThreshold {
+            kind: KpiKind::ReplayMismatch,
+            warn_value: 1.0,
+            critical_value: 1.0,
+        },
+        KpiThreshold {
+            kind: KpiKind::Divergence,
+            warn_value: 1.0,
+            critical_value: 1.0,
+        },
+        KpiThreshold {
+            kind: KpiKind::QuorumInvariant,
+            warn_value: 1.0,
+            critical_value: 1.0,
         },
     ]
 }

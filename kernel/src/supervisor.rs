@@ -7,6 +7,7 @@ use crate::fuel_hardening::{
 };
 use crate::lifecycle::{transition_state, AgentState};
 use crate::manifest::AgentManifest;
+use crate::safety_supervisor::{KpiKind, SafetyAction, SafetySupervisor};
 use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -36,6 +37,7 @@ pub struct Supervisor {
     agents: HashMap<AgentId, AgentHandle>,
     fuel_ledgers: HashMap<AgentId, AgentFuelLedger>,
     audit_trail: AuditTrail,
+    safety_supervisor: SafetySupervisor,
 }
 
 impl Supervisor {
@@ -44,6 +46,7 @@ impl Supervisor {
             agents: HashMap::new(),
             fuel_ledgers: HashMap::new(),
             audit_trail: AuditTrail::new(),
+            safety_supervisor: SafetySupervisor::default(),
         }
     }
 
@@ -264,6 +267,92 @@ impl Supervisor {
         &self.audit_trail
     }
 
+    pub fn record_subsystem_metric(
+        &mut self,
+        id: AgentId,
+        kind: KpiKind,
+        value: f64,
+    ) -> Result<(), AgentError> {
+        if !self.agents.contains_key(&id) {
+            return Err(AgentError::SupervisorError(format!(
+                "agent '{id}' not found"
+            )));
+        }
+        let action = self
+            .safety_supervisor
+            .heartbeat(id, &[(kind, value)], &mut self.audit_trail);
+        self.apply_safety_action(id, action)
+    }
+
+    pub fn subsystem_gate_status(&self, subsystem: &str) -> Option<crate::kill_gates::GateStatus> {
+        self.safety_supervisor.kill_gate_status(subsystem)
+    }
+
+    pub fn manual_freeze_subsystem(
+        &mut self,
+        id: AgentId,
+        subsystem: &str,
+        operator_id: &str,
+    ) -> Result<(), AgentError> {
+        if !self.agents.contains_key(&id) {
+            return Err(AgentError::SupervisorError(format!(
+                "agent '{id}' not found"
+            )));
+        }
+        self.safety_supervisor
+            .manual_freeze_subsystem(subsystem, operator_id, id, &mut self.audit_trail)
+            .map_err(|error| AgentError::SupervisorError(error.to_string()))?;
+        Ok(())
+    }
+
+    pub fn manual_unfreeze_subsystem(
+        &mut self,
+        id: AgentId,
+        subsystem: &str,
+        operator_id: &str,
+        hitl_tier: u8,
+    ) -> Result<(), AgentError> {
+        if !self.agents.contains_key(&id) {
+            return Err(AgentError::SupervisorError(format!(
+                "agent '{id}' not found"
+            )));
+        }
+        self.safety_supervisor
+            .manual_unfreeze_subsystem(subsystem, operator_id, hitl_tier, id, &mut self.audit_trail)
+            .map_err(|error| AgentError::SupervisorError(error.to_string()))?;
+        Ok(())
+    }
+
+    pub fn manual_halt_agent(
+        &mut self,
+        id: AgentId,
+        operator_id: &str,
+        reason: &str,
+    ) -> Result<(), AgentError> {
+        if !self.agents.contains_key(&id) {
+            return Err(AgentError::SupervisorError(format!(
+                "agent '{id}' not found"
+            )));
+        }
+
+        let _ = self.audit_trail.append_event(
+            id,
+            EventType::Error,
+            json!({
+                "event_kind": "killgate.halted",
+                "subsystem": "agent_runtime",
+                "reason": reason,
+                "by": operator_id,
+            }),
+        );
+        let action = self.safety_supervisor.force_halt(
+            id,
+            format!("manual override halt by {operator_id}: {reason}"),
+            &mut self.audit_trail,
+        );
+        self.apply_safety_action(id, action)
+    }
+
     pub fn require_tool_call(&mut self, id: AgentId) -> Result<(), AgentError> {
         let handle = self
             .agents
@@ -458,6 +547,45 @@ impl Supervisor {
         AgentError::FuelViolation {
             violation,
             reason: reason.to_string(),
+        }
+    }
+
+    fn apply_safety_action(&mut self, id: AgentId, action: SafetyAction) -> Result<(), AgentError> {
+        match action {
+            SafetyAction::Continue => Ok(()),
+            SafetyAction::Degraded { reason } => {
+                let _ = self.audit_trail.append_event(
+                    id,
+                    EventType::UserAction,
+                    json!({
+                        "event_kind": "safety.degraded_notice",
+                        "agent_id": id,
+                        "reason": reason,
+                    }),
+                );
+                Ok(())
+            }
+            SafetyAction::Halted { reason, report_id } => {
+                if let Some(agent) = self.agents.get_mut(&id) {
+                    match agent.state {
+                        AgentState::Running | AgentState::Paused | AgentState::Starting => {
+                            if let Ok(next) = transition_state(agent.state, AgentState::Stopping) {
+                                agent.state = next;
+                            }
+                            if let Ok(next) = transition_state(agent.state, AgentState::Stopped) {
+                                agent.state = next;
+                            } else {
+                                agent.state = AgentState::Stopped;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                Err(AgentError::SupervisorError(format!(
+                    "safety supervisor halted agent '{id}': {reason} (report_id={report_id})"
+                )))
+            }
         }
     }
 }

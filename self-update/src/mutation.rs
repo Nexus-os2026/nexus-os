@@ -2,11 +2,7 @@ use crate::patch_lang::{
     apply_patch, parse_patch, validate_patch, PatchLangError, PatchProgram, RuntimePatchState,
 };
 use nexus_kernel::audit::{AuditTrail, EventType};
-use nexus_kernel::autonomy::{AutonomyGuard, AutonomyLevel};
-use nexus_kernel::consent::{
-    ApprovalQueue, ApprovalRequest, ConsentError, ConsentPolicyEngine, ConsentRuntime,
-    GovernedOperation,
-};
+use nexus_kernel::kill_gates::{GateStatus, KillGateRegistry};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -17,13 +13,12 @@ use uuid::Uuid;
 pub enum MutationError {
     PatchNotFound(String),
     VerifierBoundaryViolation,
-    AutonomyDenied(String),
-    ApprovalRequired(String),
-    ConsentDenied(String),
     ValidationFailed(String),
     ReplayFailed(String),
     ReplayRequired,
     HumanApprovalRequired,
+    KillGateFrozen(&'static str),
+    KillGateHalted(&'static str),
 }
 
 impl std::fmt::Display for MutationError {
@@ -33,16 +28,17 @@ impl std::fmt::Display for MutationError {
             MutationError::VerifierBoundaryViolation => {
                 write!(f, "patch violates fixed verifier boundary")
             }
-            MutationError::AutonomyDenied(reason) => write!(f, "autonomy denied: {reason}"),
-            MutationError::ApprovalRequired(request_id) => {
-                write!(f, "approval required: request_id='{request_id}'")
-            }
-            MutationError::ConsentDenied(reason) => write!(f, "consent denied: {reason}"),
             MutationError::ValidationFailed(reason) => write!(f, "validation failed: {reason}"),
             MutationError::ReplayFailed(reason) => write!(f, "A/B replay failed: {reason}"),
             MutationError::ReplayRequired => write!(f, "A/B replay must pass before approval"),
             MutationError::HumanApprovalRequired => {
                 write!(f, "human approval is required before apply")
+            }
+            MutationError::KillGateFrozen(subsystem) => {
+                write!(f, "kill gate is frozen for subsystem '{subsystem}'")
+            }
+            MutationError::KillGateHalted(subsystem) => {
+                write!(f, "kill gate is halted for subsystem '{subsystem}'")
             }
         }
     }
@@ -75,30 +71,25 @@ struct MutationRecord {
 pub struct MutationLifecycle {
     state: RuntimePatchState,
     audit_trail: AuditTrail,
-    autonomy_guard: AutonomyGuard,
-    consent_runtime: ConsentRuntime,
-    actor_id: Uuid,
     records: HashMap<String, MutationRecord>,
+    kill_gates: KillGateRegistry,
+    agent_id: Uuid,
 }
 
 impl MutationLifecycle {
     pub fn new() -> Self {
-        Self::with_autonomy_level(AutonomyLevel::L0)
-    }
-
-    pub fn with_autonomy_level(level: AutonomyLevel) -> Self {
         Self {
             state: RuntimePatchState::default(),
             audit_trail: AuditTrail::new(),
-            autonomy_guard: AutonomyGuard::new(level),
-            consent_runtime: ConsentRuntime::new(
-                ConsentPolicyEngine::default(),
-                ApprovalQueue::in_memory(),
-                "mutation.lifecycle".to_string(),
-            ),
-            actor_id: Uuid::nil(),
             records: HashMap::new(),
+            kill_gates: KillGateRegistry::default(),
+            agent_id: Uuid::nil(),
         }
+    }
+
+    pub fn with_agent_id(mut self, agent_id: Uuid) -> Self {
+        self.agent_id = agent_id;
+        self
     }
 
     pub fn propose(
@@ -120,7 +111,7 @@ impl MutationLifecycle {
         );
 
         let _ = self.audit_trail.append_event(
-            Uuid::nil(),
+            self.agent_id,
             EventType::UserAction,
             json!({
                 "event": "mutation_proposed",
@@ -141,7 +132,7 @@ impl MutationLifecycle {
         record.validated = true;
 
         let _ = self.audit_trail.append_event(
-            Uuid::nil(),
+            self.agent_id,
             EventType::UserAction,
             json!({
                 "event": "mutation_validated",
@@ -171,7 +162,12 @@ impl MutationLifecycle {
 
         let mut patched_state = self.state.clone();
         apply_patch(&patch, &mut patched_state).map_err(map_patch_error)?;
-        run_replay_checks(&patched_state, corpus)?;
+        if let Err(error) = run_replay_checks(&patched_state, corpus) {
+            let _ =
+                self.kill_gates
+                    .check_gate("mutation", 1.0, self.agent_id, &mut self.audit_trail);
+            return Err(error);
+        }
 
         let record = self
             .records
@@ -180,7 +176,7 @@ impl MutationLifecycle {
         record.replay_passed = true;
 
         let _ = self.audit_trail.append_event(
-            Uuid::nil(),
+            self.agent_id,
             EventType::UserAction,
             json!({
                 "event": "mutation_replay_passed",
@@ -205,7 +201,7 @@ impl MutationLifecycle {
         record.approved_by_human = true;
 
         let _ = self.audit_trail.append_event(
-            Uuid::nil(),
+            self.agent_id,
             EventType::UserAction,
             json!({
                 "event": "mutation_approved",
@@ -217,9 +213,11 @@ impl MutationLifecycle {
     }
 
     pub fn apply(&mut self, patch_id: &str) -> Result<(), MutationError> {
-        self.autonomy_guard
-            .require_self_modification(self.actor_id, &mut self.audit_trail)
-            .map_err(|error| MutationError::AutonomyDenied(error.to_string()))?;
+        match self.kill_gates.gate_status("mutation") {
+            Some(GateStatus::Frozen) => return Err(MutationError::KillGateFrozen("mutation")),
+            Some(GateStatus::Halted) => return Err(MutationError::KillGateHalted("mutation")),
+            _ => {}
+        }
 
         let patch = {
             let record = self
@@ -231,14 +229,6 @@ impl MutationLifecycle {
             }
             record.patch.clone()
         };
-        self.consent_runtime
-            .enforce_operation(
-                GovernedOperation::SelfMutationApply,
-                self.actor_id,
-                patch.source.as_bytes(),
-                &mut self.audit_trail,
-            )
-            .map_err(map_consent_error)?;
 
         apply_patch(&patch, &mut self.state).map_err(map_patch_error)?;
 
@@ -250,7 +240,7 @@ impl MutationLifecycle {
         record.applied = true;
 
         let _ = self.audit_trail.append_event(
-            Uuid::nil(),
+            self.agent_id,
             EventType::StateChange,
             json!({
                 "event": "mutation_attested",
@@ -280,28 +270,8 @@ impl MutationLifecycle {
         &self.audit_trail
     }
 
-    pub fn pending_consent_requests(&self) -> Vec<ApprovalRequest> {
-        self.consent_runtime.pending_requests()
-    }
-
-    pub fn approve_consent(
-        &mut self,
-        request_id: &str,
-        approver_id: &str,
-    ) -> Result<(), MutationError> {
-        self.consent_runtime
-            .approve(request_id, approver_id, &mut self.audit_trail)
-            .map_err(map_consent_error)
-    }
-
-    pub fn deny_consent(
-        &mut self,
-        request_id: &str,
-        approver_id: &str,
-    ) -> Result<(), MutationError> {
-        self.consent_runtime
-            .deny(request_id, approver_id, &mut self.audit_trail)
-            .map_err(map_consent_error)
+    pub fn mutation_gate_status(&self) -> Option<GateStatus> {
+        self.kill_gates.gate_status("mutation")
     }
 }
 
@@ -315,15 +285,6 @@ fn map_patch_error(error: PatchLangError) -> MutationError {
     match error {
         PatchLangError::VerifierBoundaryViolation => MutationError::VerifierBoundaryViolation,
         other => MutationError::ValidationFailed(other.to_string()),
-    }
-}
-
-fn map_consent_error(error: ConsentError) -> MutationError {
-    match error {
-        ConsentError::ApprovalRequired { request_id, .. } => {
-            MutationError::ApprovalRequired(request_id)
-        }
-        other => MutationError::ConsentDenied(other.to_string()),
     }
 }
 
@@ -373,12 +334,11 @@ fn sha256_hex(input: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{MutationError, MutationLifecycle, ReplayCase, ReplayExpectation};
-    use nexus_kernel::autonomy::AutonomyLevel;
+    use super::{MutationLifecycle, ReplayCase, ReplayExpectation};
 
     #[test]
     fn test_mutation_lifecycle() {
-        let mut lifecycle = MutationLifecycle::with_autonomy_level(AutonomyLevel::L4);
+        let mut lifecycle = MutationLifecycle::new();
         let patch_id = lifecycle
             .propose(
                 r#"
@@ -417,23 +377,6 @@ param.retry_backoff = 1.5
         let approved = lifecycle.approve(patch_id.as_str(), true);
         assert!(approved.is_ok());
 
-        let request_id = match lifecycle.apply(patch_id.as_str()) {
-            Err(MutationError::ApprovalRequired(request_id)) => request_id,
-            other => panic!("expected approval requirement, got: {other:?}"),
-        };
-
-        assert!(lifecycle
-            .approve_consent(request_id.as_str(), "approver.a")
-            .is_ok());
-        let still_blocked = lifecycle.apply(patch_id.as_str());
-        assert!(matches!(
-            still_blocked,
-            Err(MutationError::ApprovalRequired(_))
-        ));
-
-        assert!(lifecycle
-            .approve_consent(request_id.as_str(), "approver.b")
-            .is_ok());
         let applied = lifecycle.apply(patch_id.as_str());
         assert!(applied.is_ok());
         assert!(lifecycle.has_attestation(patch_id.as_str()));

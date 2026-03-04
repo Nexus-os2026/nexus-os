@@ -7,6 +7,7 @@ pub mod consent;
 pub mod errors;
 pub mod fuel_hardening;
 pub mod hardware_security;
+pub mod kill_gates;
 pub mod lifecycle;
 pub mod manifest;
 pub mod orchestration;
