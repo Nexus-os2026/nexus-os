@@ -7,9 +7,16 @@ license.workspace = true
 [lib]
 path = "src/lib.rs"
 
+[features]
+default = []
+hardware-tpm = []
+hardware-secure-enclave = []
+hardware-tee = []
+
 [dependencies]
 aes-gcm = "0.10"
 regex = "1.11"
+ed25519-dalek = "2.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"

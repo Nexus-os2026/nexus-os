@@ -5,6 +5,7 @@ pub mod autonomy;
 pub mod config;
 pub mod consent;
 pub mod errors;
+pub mod hardware_security;
 pub mod lifecycle;
 pub mod manifest;
 pub mod orchestration;
