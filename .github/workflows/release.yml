@@ -52,19 +52,18 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "=== bundle tree ==="
-          Get-ChildItem -Recurse app\src-tauri\target\release\bundle -ErrorAction SilentlyContinue | Select-Object FullName
+          Get-ChildItem -Recurse target\release\bundle -ErrorAction SilentlyContinue | Select-Object FullName
 
       - name: Discover and normalize Windows artifacts
         id: collect_windows
         shell: pwsh
         run: |
           $version = "${env:GITHUB_REF_NAME}" -replace '^v([0-9]+\.[0-9]+\.[0-9]+).*$','$1'
-          $bundleRoot = "app/src-tauri/target/release/bundle"
+          $bundleRoot = "target/release/bundle"
           $outDir = "release-artifacts"
           New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
-          $nsisExe = Get-ChildItem -Path $bundleRoot -Recurse -File -Filter *.exe -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -match '\\nsis\\' } |
+          $nsisExe = Get-ChildItem "target/release/bundle/nsis/*.exe" -ErrorAction SilentlyContinue |
             Sort-Object FullName |
             Select-Object -First 1
 
@@ -72,7 +71,7 @@ jobs:
             $dest = "${outDir}/NexusOS_${version}_x64-setup.exe"
             Copy-Item $nsisExe.FullName $dest -Force
           } else {
-            $msi = Get-ChildItem -Path $bundleRoot -Recurse -File -Filter *.msi -ErrorAction SilentlyContinue |
+            $msi = Get-ChildItem "target/release/bundle/msi/*.msi" -ErrorAction SilentlyContinue |
               Sort-Object FullName |
               Select-Object -First 1
             if ($msi) {
@@ -145,7 +144,7 @@ jobs:
         run: |
           pwd
           echo "=== bundle tree ==="
-          ls -R app/src-tauri/target/release/bundle || true
+          ls -R target/release/bundle || true
 
       - name: Discover and normalize Linux artifacts
         id: collect_linux
@@ -153,7 +152,7 @@ jobs:
         run: |
           set -euo pipefail
           version="$(echo "${GITHUB_REF_NAME}" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+).*$/\1/')"
-          bundle_root="app/src-tauri/target/release/bundle"
+          bundle_root="target/release/bundle"
           mkdir -p release-artifacts
 
           deb_file="$(find "${bundle_root}" -type f -name '*.deb' | LC_ALL=C sort | head -n 1)"
@@ -210,7 +209,7 @@ jobs:
         run: |
           pwd
           echo "=== bundle tree ==="
-          ls -R app/src-tauri/target/release/bundle || true
+          ls -R target/release/bundle || true
 
       - name: Discover and normalize macOS artifacts
         id: collect_macos
@@ -218,7 +217,7 @@ jobs:
         run: |
           set -euo pipefail
           version="$(echo "${GITHUB_REF_NAME}" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+).*$/\1/')"
-          bundle_root="app/src-tauri/target/release/bundle"
+          bundle_root="target/release/bundle"
           mkdir -p release-artifacts
 
           dmg_file="$(find "${bundle_root}" -type f -name '*.dmg' | LC_ALL=C sort | head -n 1)"
