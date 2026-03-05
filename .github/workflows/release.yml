@@ -30,7 +30,12 @@ jobs:
       - name: Discover and normalize Windows artifacts
         shell: pwsh
         run: |
-          $version = "${env:GITHUB_REF_NAME}" -replace '^v', ''
+          $refName = "${env:GITHUB_REF_NAME}"
+          if ($refName -match '^v([0-9]+\.[0-9]+\.[0-9]+)') {
+            $version = $Matches[1]
+          } else {
+            $version = ($refName -replace '[^A-Za-z0-9._-]', '-')
+          }
           $root = $env:GITHUB_WORKSPACE
           $bundleRoot = Join-Path $root "target\release\bundle"
           $stage = Join-Path $root "dist-release\windows"
@@ -101,15 +106,31 @@ jobs:
           node-version: 20
       - run: cargo build --release
       - run: cd app && npm install && npm run tauri build
+      - name: Print bundle tree (Linux)
+        run: |
+          echo "=== bundle tree ==="
+          ls -R target/release/bundle || true
       - name: Normalize Linux package name
         run: |
-          VERSION="$(echo "${GITHUB_REF_NAME}" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+).*$/\1/')"
-          DEB_FILE="$(ls app/src-tauri/target/release/bundle/deb/*.deb | head -n 1)"
-          cp "${DEB_FILE}" "app/src-tauri/target/release/bundle/deb/nexus-os_${VERSION}_amd64.deb"
+          VERSION="$(echo "${GITHUB_REF_NAME}" | sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p')"
+          if [ -z "${VERSION}" ]; then
+            VERSION="$(echo "${GITHUB_REF_NAME}" | tr '/ ' '--' | tr -cd '[:alnum:]._-')"
+          fi
+          BUNDLE_ROOT="target/release/bundle"
+          OUT_DIR="dist-release/linux"
+          mkdir -p "${OUT_DIR}"
+          DEB_FILE="$(find "${BUNDLE_ROOT}" -type f -name '*.deb' | LC_ALL=C sort | head -n 1)"
+          if [ -z "${DEB_FILE}" ]; then
+            echo "No .deb produced. Check Tauri bundle targets."
+            ls -R "${BUNDLE_ROOT}" || true
+            exit 1
+          fi
+          cp "${DEB_FILE}" "${OUT_DIR}/nexus-os_${VERSION}_amd64.deb"
       - uses: actions/upload-artifact@v4
         with:
           name: NexusOS-Linux
-          path: app/src-tauri/target/release/bundle/deb/nexus-os_*_amd64.deb
+          path: dist-release/linux/nexus-os_*_amd64.deb
+          if-no-files-found: error
 
   build-macos:
     runs-on: macos-latest
@@ -123,15 +144,31 @@ jobs:
           node-version: 20
       - run: cargo build --release
       - run: cd app && npm install && npm run tauri build
+      - name: Print bundle tree (macOS)
+        run: |
+          echo "=== bundle tree ==="
+          ls -R target/release/bundle || true
       - name: Normalize macOS package name
         run: |
-          VERSION="$(echo "${GITHUB_REF_NAME}" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+).*$/\1/')"
-          DMG_FILE="$(ls app/src-tauri/target/release/bundle/dmg/*.dmg | head -n 1)"
-          cp "${DMG_FILE}" "app/src-tauri/target/release/bundle/dmg/NexusOS_${VERSION}_aarch64.dmg"
+          VERSION="$(echo "${GITHUB_REF_NAME}" | sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p')"
+          if [ -z "${VERSION}" ]; then
+            VERSION="$(echo "${GITHUB_REF_NAME}" | tr '/ ' '--' | tr -cd '[:alnum:]._-')"
+          fi
+          BUNDLE_ROOT="target/release/bundle"
+          OUT_DIR="dist-release/macos"
+          mkdir -p "${OUT_DIR}"
+          DMG_FILE="$(find "${BUNDLE_ROOT}" -type f -name '*.dmg' | LC_ALL=C sort | head -n 1)"
+          if [ -z "${DMG_FILE}" ]; then
+            echo "No .dmg produced. Check Tauri bundle targets."
+            ls -R "${BUNDLE_ROOT}" || true
+            exit 1
+          fi
+          cp "${DMG_FILE}" "${OUT_DIR}/NexusOS_${VERSION}_aarch64.dmg"
       - uses: actions/upload-artifact@v4
         with:
           name: NexusOS-macOS
-          path: app/src-tauri/target/release/bundle/dmg/NexusOS_*_aarch64.dmg
+          path: dist-release/macos/NexusOS_*_aarch64.dmg
+          if-no-files-found: error
 
   create-release:
     needs: [build-windows, build-linux, build-macos]
