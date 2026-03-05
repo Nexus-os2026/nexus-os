@@ -62,7 +62,12 @@ export function Sidebar({ items, activeId, onSelect, version }: SidebarProps): J
 
       <div className="nexus-sidebar-bottom">
         <span className="nexus-avatar">◉</span>
-        {expanded ? <p className="nexus-version">NEXUS {version}</p> : null}
+        {expanded ? (
+          <p className="nexus-version">
+            <span className="nexus-health-dot" />
+            NEXUS {version}
+          </p>
+        ) : null}
       </div>
     </aside>
   );

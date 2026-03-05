@@ -1,515 +1,208 @@
-import { useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import "./workflows.css";
 
-type PaletteKind =
-  | "Schedule"
-  | "Webhook"
-  | "File Change"
-  | "Email Received"
-  | "Manual"
-  | "LLM Query"
-  | "Web Search"
-  | "Post to Social"
-  | "Send Email"
-  | "Create File"
-  | "Run Code"
-  | "HTTP Request"
-  | "Database Query"
-  | "If/Else"
-  | "Switch"
-  | "Loop"
-  | "Merge"
-  | "Wait"
-  | "Error Handler"
-  | "Summarize"
-  | "Classify"
-  | "Extract Data"
-  | "Generate Content"
-  | "Analyze Image"
-  | "Transcribe Audio";
-
-interface PaletteGroup {
+interface WorkflowDef {
+  id: string;
   name: string;
-  items: PaletteKind[];
+  description: string;
+  nodeCount: number;
+  lastRun: { status: "success" | "failed" | "never"; when: string; detail?: string };
+  nodes: { name: string; status: "success" | "failed" | "pending" | "idle" }[];
 }
 
-interface CanvasNode {
-  id: string;
-  kind: PaletteKind;
-  label: string;
-  x: number;
-  y: number;
-  configJson: string;
+interface RunHistoryEntry {
+  workflow: string;
+  startedAt: string;
+  duration: string;
+  status: "success" | "failed";
+  nodesCompleted: string;
 }
 
-interface CanvasConnection {
-  id: string;
-  from: string;
-  to: string;
-}
-
-type NodeRunState = "idle" | "running" | "success" | "error";
-
-const PALETTE: PaletteGroup[] = [
+const WORKFLOWS: WorkflowDef[] = [
   {
-    name: "Trigger",
-    items: ["Schedule", "Webhook", "File Change", "Email Received", "Manual"]
-  },
-  {
-    name: "Action",
-    items: [
-      "LLM Query",
-      "Web Search",
-      "Post to Social",
-      "Send Email",
-      "Create File",
-      "Run Code",
-      "HTTP Request",
-      "Database Query"
+    id: "wf-social",
+    name: "Daily Social Post Pipeline",
+    description: "Research trending topics -> Generate content -> Human approval -> Post to X, Instagram, Facebook",
+    nodeCount: 5,
+    lastRun: { status: "success", when: "2 hours ago" },
+    nodes: [
+      { name: "Research Topics", status: "success" },
+      { name: "Generate Content", status: "success" },
+      { name: "Quality Gate", status: "success" },
+      { name: "Human Approval", status: "success" },
+      { name: "Publish Posts", status: "success" }
     ]
   },
   {
-    name: "Logic",
-    items: ["If/Else", "Switch", "Loop", "Merge", "Wait", "Error Handler"]
+    id: "wf-review",
+    name: "Code Review Pipeline",
+    description: "Watch repo -> Scan changes -> Analyze architecture -> Write review -> Submit PR comments",
+    nodeCount: 8,
+    lastRun: { status: "success", when: "30 min ago" },
+    nodes: [
+      { name: "Watch Repo", status: "success" },
+      { name: "Fetch Diff", status: "success" },
+      { name: "Scan Changes", status: "success" },
+      { name: "Architecture Check", status: "success" },
+      { name: "Security Scan", status: "success" },
+      { name: "Style Lint", status: "success" },
+      { name: "Write Review", status: "success" },
+      { name: "Submit Comments", status: "success" }
+    ]
   },
   {
-    name: "AI",
-    items: ["Summarize", "Classify", "Extract Data", "Generate Content", "Analyze Image", "Transcribe Audio"]
+    id: "wf-research",
+    name: "Content Research & Publish",
+    description: "Brave search -> Extract insights -> Draft article -> Compliance check -> Publish to CMS",
+    nodeCount: 6,
+    lastRun: { status: "failed", when: "1 day ago", detail: "node 4: compliance_check timeout" },
+    nodes: [
+      { name: "Brave Search", status: "success" },
+      { name: "Extract Facts", status: "success" },
+      { name: "Draft Article", status: "success" },
+      { name: "Compliance Check", status: "failed" },
+      { name: "Review Gate", status: "idle" },
+      { name: "Publish CMS", status: "idle" }
+    ]
+  },
+  {
+    id: "wf-analytics",
+    name: "Weekly Analytics Report",
+    description: "Collect metrics -> Evaluate performance -> Generate charts -> Email stakeholders",
+    nodeCount: 4,
+    lastRun: { status: "never", when: "Never run" },
+    nodes: [
+      { name: "Collect Metrics", status: "idle" },
+      { name: "Evaluate Perf", status: "idle" },
+      { name: "Generate Charts", status: "idle" },
+      { name: "Email Report", status: "idle" }
+    ]
   }
 ];
 
-function makeNodeId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `node-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-}
+const RUN_HISTORY: RunHistoryEntry[] = [
+  { workflow: "Daily Social Post Pipeline", startedAt: "2026-03-05 07:00", duration: "2m 14s", status: "success", nodesCompleted: "5/5" },
+  { workflow: "Code Review Pipeline", startedAt: "2026-03-05 09:30", duration: "1m 48s", status: "success", nodesCompleted: "8/8" },
+  { workflow: "Daily Social Post Pipeline", startedAt: "2026-03-04 07:00", duration: "2m 02s", status: "success", nodesCompleted: "5/5" },
+  { workflow: "Content Research & Publish", startedAt: "2026-03-04 14:00", duration: "4m 51s", status: "failed", nodesCompleted: "3/6" },
+  { workflow: "Code Review Pipeline", startedAt: "2026-03-04 11:15", duration: "1m 33s", status: "success", nodesCompleted: "8/8" },
+  { workflow: "Daily Social Post Pipeline", startedAt: "2026-03-03 07:00", duration: "2m 22s", status: "success", nodesCompleted: "5/5" },
+  { workflow: "Code Review Pipeline", startedAt: "2026-03-03 16:45", duration: "1m 55s", status: "success", nodesCompleted: "8/8" },
+  { workflow: "Content Research & Publish", startedAt: "2026-03-02 10:00", duration: "3m 12s", status: "success", nodesCompleted: "6/6" },
+  { workflow: "Daily Social Post Pipeline", startedAt: "2026-03-02 07:00", duration: "2m 08s", status: "success", nodesCompleted: "5/5" },
+  { workflow: "Code Review Pipeline", startedAt: "2026-03-01 13:20", duration: "2m 01s", status: "success", nodesCompleted: "8/8" }
+];
 
-function makeConnectionId(from: string, to: string): string {
-  return `${from}->${to}`;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+function nodeStatusColor(status: string): string {
+  if (status === "success") return "var(--green)";
+  if (status === "failed") return "var(--red)";
+  if (status === "pending") return "var(--amber)";
+  return "var(--text-muted)";
 }
 
 export function Workflows(): JSX.Element {
-  const canvasRef = useRef<HTMLDivElement | null>(null);
-  const [nodes, setNodes] = useState<CanvasNode[]>([]);
-  const [connections, setConnections] = useState<CanvasConnection[]>([]);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [pendingOutputNode, setPendingOutputNode] = useState<string | null>(null);
-  const [runState, setRunState] = useState<Record<string, NodeRunState>>({});
-  const [logs, setLogs] = useState<string[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
-
-  const selectedNode = useMemo(
-    () => nodes.find((node) => node.id === selectedNodeId) ?? null,
-    [nodes, selectedNodeId]
-  );
-
-  const nodeById = useMemo(() => {
-    const map = new Map<string, CanvasNode>();
-    for (const node of nodes) {
-      map.set(node.id, node);
-    }
-    return map;
-  }, [nodes]);
-
-  const connectionPaths = useMemo(() => {
-    return connections
-      .map((connection) => {
-        const fromNode = nodeById.get(connection.from);
-        const toNode = nodeById.get(connection.to);
-        if (!fromNode || !toNode) {
-          return null;
-        }
-        const fromX = fromNode.x + 180;
-        const fromY = fromNode.y + 42;
-        const toX = toNode.x;
-        const toY = toNode.y + 42;
-        const midX = (fromX + toX) / 2;
-        return {
-          id: connection.id,
-          d: `M ${fromX} ${fromY} C ${midX} ${fromY}, ${midX} ${toY}, ${toX} ${toY}`
-        };
-      })
-      .filter((value): value is { id: string; d: string } => value !== null);
-  }, [connections, nodeById]);
-
-  const miniMapNodes = useMemo(() => {
-    const maxX = Math.max(1, ...nodes.map((node) => node.x + 180));
-    const maxY = Math.max(1, ...nodes.map((node) => node.y + 84));
-    return nodes.map((node) => ({
-      ...node,
-      miniX: (node.x / maxX) * 170,
-      miniY: (node.y / maxY) * 98
-    }));
-  }, [nodes]);
-
-  function appendLog(entry: string): void {
-    setLogs((previous) => [`${new Date().toLocaleTimeString()} ${entry}`, ...previous].slice(0, 120));
-  }
-
-  function handlePaletteDragStart(event: React.DragEvent<HTMLButtonElement>, kind: PaletteKind): void {
-    event.dataTransfer.setData("application/nexus-node-kind", kind);
-    event.dataTransfer.effectAllowed = "copy";
-  }
-
-  function handleNodeDragStart(event: React.DragEvent<HTMLDivElement>, nodeId: string): void {
-    event.dataTransfer.setData("application/nexus-node-move", nodeId);
-    event.dataTransfer.effectAllowed = "move";
-  }
-
-  function handleCanvasDragOver(event: React.DragEvent<HTMLDivElement>): void {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-  }
-
-  function handleCanvasDrop(event: React.DragEvent<HTMLDivElement>): void {
-    event.preventDefault();
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return;
-    }
-
-    const rect = canvas.getBoundingClientRect();
-    const x = clamp(event.clientX - rect.left - 90, 12, rect.width - 196);
-    const y = clamp(event.clientY - rect.top - 22, 12, rect.height - 108);
-
-    const moveNodeId = event.dataTransfer.getData("application/nexus-node-move");
-    if (moveNodeId.length > 0) {
-      setNodes((previous) =>
-        previous.map((node) =>
-          node.id === moveNodeId
-            ? {
-                ...node,
-                x,
-                y
-              }
-            : node
-        )
-      );
-      return;
-    }
-
-    const kind = event.dataTransfer.getData("application/nexus-node-kind") as PaletteKind;
-    if (!kind) {
-      return;
-    }
-
-    const node: CanvasNode = {
-      id: makeNodeId(),
-      kind,
-      label: kind,
-      x,
-      y,
-      configJson: "{}"
-    };
-    setNodes((previous) => [...previous, node]);
-    setRunState((previous) => ({ ...previous, [node.id]: "idle" }));
-    appendLog(`Added node ${node.label}`);
-  }
-
-  function handleConnectOutput(nodeId: string): void {
-    setPendingOutputNode(nodeId);
-    appendLog(`Selected output from ${nodeId}`);
-  }
-
-  function handleConnectInput(nodeId: string): void {
-    if (!pendingOutputNode || pendingOutputNode === nodeId) {
-      return;
-    }
-
-    const connectionId = makeConnectionId(pendingOutputNode, nodeId);
-    setConnections((previous) => {
-      if (previous.some((connection) => connection.id === connectionId)) {
-        return previous;
-      }
-      return [...previous, { id: connectionId, from: pendingOutputNode, to: nodeId }];
-    });
-    appendLog(`Connected ${pendingOutputNode} -> ${nodeId}`);
-    setPendingOutputNode(null);
-  }
-
-  function updateSelectedNodeConfig(nextConfigJson: string): void {
-    if (!selectedNodeId) {
-      return;
-    }
-    setNodes((previous) =>
-      previous.map((node) =>
-        node.id === selectedNodeId
-          ? {
-              ...node,
-              configJson: nextConfigJson
-            }
-          : node
-      )
-    );
-  }
-
-  function updateSelectedNodeLabel(nextLabel: string): void {
-    if (!selectedNodeId) {
-      return;
-    }
-    setNodes((previous) =>
-      previous.map((node) =>
-        node.id === selectedNodeId
-          ? {
-              ...node,
-              label: nextLabel
-            }
-          : node
-      )
-    );
-  }
-
-  async function runWorkflow(): Promise<void> {
-    if (nodes.length === 0 || isRunning) {
-      return;
-    }
-
-    const levels = buildExecutionLevels(nodes, connections);
-    if (!levels) {
-      appendLog("Execution aborted: graph has unresolved cycle or orphaned dependencies.");
-      return;
-    }
-
-    setIsRunning(true);
-    setLogs([]);
-    setRunState(Object.fromEntries(nodes.map((node) => [node.id, "idle" as NodeRunState])));
-    appendLog("Workflow execution started.");
-
-    try {
-      for (const level of levels) {
-        setRunState((previous) => {
-          const next = { ...previous };
-          for (const nodeId of level) {
-            next[nodeId] = "running";
-          }
-          return next;
-        });
-
-        await Promise.all(
-          level.map(async (nodeId) => {
-            const node = nodeById.get(nodeId);
-            if (!node) {
-              return;
-            }
-            appendLog(`Running ${node.label} (${node.kind})`);
-            await new Promise((resolve) => setTimeout(resolve, 220 + Math.floor(Math.random() * 380)));
-            setRunState((previous) => ({ ...previous, [nodeId]: "success" }));
-            appendLog(`Completed ${node.label}`);
-          })
-        );
-      }
-
-      appendLog("Workflow execution completed.");
-    } finally {
-      setIsRunning(false);
-    }
-  }
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   return (
-    <section className="workflow-studio">
-      <header className="workflow-header">
+    <section className="wf-engine">
+      <header className="wf-header">
         <div>
-          <h2 className="workflow-title">WORKFLOW STUDIO // VISUAL DAG AUTOMATION</h2>
-          <p className="workflow-subtitle">Drag nodes, connect outputs to inputs, run and inspect logs in real time.</p>
+          <h2 className="wf-title">WORKFLOW ENGINE // {WORKFLOWS.length} WORKFLOWS</h2>
+          <p className="wf-subtitle">Visual DAG automation pipelines with execution history</p>
         </div>
-        <div className="workflow-header-actions">
-          <button type="button" className="workflow-btn" onClick={() => setPendingOutputNode(null)}>
-            Clear Wire
-          </button>
-          <button type="button" className="workflow-btn workflow-btn-primary" onClick={() => void runWorkflow()} disabled={isRunning || nodes.length === 0}>
-            {isRunning ? "Running..." : "Run Workflow"}
-          </button>
-        </div>
+        <button type="button" className="wf-create-btn">+ CREATE WORKFLOW</button>
       </header>
 
-      <div className="workflow-body">
-        <aside className="workflow-palette" aria-label="node palette">
-          {PALETTE.map((group) => (
-            <section key={group.name} className="workflow-palette-group">
-              <h3>{group.name}</h3>
-              <div className="workflow-palette-items">
-                {group.items.map((kind) => (
-                  <button
-                    key={kind}
-                    type="button"
-                    draggable
-                    onDragStart={(event) => handlePaletteDragStart(event, kind)}
-                    className="workflow-palette-item"
-                  >
-                    {kind}
-                  </button>
-                ))}
-              </div>
-            </section>
-          ))}
-        </aside>
-
-        <div className="workflow-canvas-shell">
-          <div
-            ref={canvasRef}
-            className="workflow-canvas"
-            onDragOver={handleCanvasDragOver}
-            onDrop={handleCanvasDrop}
-            aria-label="workflow canvas"
-          >
-            <svg className="workflow-connections" width="100%" height="100%" aria-hidden="true">
-              {connectionPaths.map((path) => (
-                <path key={path.id} d={path.d} />
-              ))}
-            </svg>
-
-            {nodes.map((node) => (
-              <div
-                key={node.id}
-                className={`workflow-node ${selectedNodeId === node.id ? "selected" : ""} ${runState[node.id] ?? "idle"}`}
-                style={{ left: node.x, top: node.y }}
-                draggable
-                onDragStart={(event) => handleNodeDragStart(event, node.id)}
-                onClick={() => setSelectedNodeId(node.id)}
-              >
-                <div className="workflow-node-head">
-                  <strong>{node.label}</strong>
-                  <span>{node.kind}</span>
+      <div className="wf-grid">
+        {WORKFLOWS.map((wf) => {
+          const expanded = expandedId === wf.id;
+          const statusClass = wf.lastRun.status === "success" ? "success" : wf.lastRun.status === "failed" ? "failed" : "never";
+          return (
+            <article key={wf.id} className={`wf-card ${statusClass}`}>
+              <div className={`wf-card-status-bar ${statusClass}`} />
+              <div className="wf-card-body">
+                <h3 className="wf-card-name">{wf.name}</h3>
+                <p className="wf-card-desc">{wf.description}</p>
+                <div className="wf-card-meta">
+                  <span className="wf-card-nodes">{wf.nodeCount} nodes</span>
+                  <span className="wf-card-separator">|</span>
+                  <span className={`wf-card-run-status ${statusClass}`}>
+                    {wf.lastRun.status === "success" && "Last run: Success \u2713"}
+                    {wf.lastRun.status === "failed" && "Last run: Failed \u2717"}
+                    {wf.lastRun.status === "never" && "Never run"}
+                  </span>
+                  <span className="wf-card-separator">|</span>
+                  <span className="wf-card-when">{wf.lastRun.when}</span>
                 </div>
-                <div className="workflow-node-actions">
+                {wf.lastRun.detail && (
+                  <p className="wf-card-detail">{wf.lastRun.detail}</p>
+                )}
+                <div className="wf-card-actions">
+                  <button type="button" className="wf-action-btn wf-action-run">Run Now</button>
+                  <button type="button" className="wf-action-btn wf-action-edit">Edit</button>
                   <button
                     type="button"
-                    className={`workflow-port ${pendingOutputNode === node.id ? "pending" : ""}`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleConnectOutput(node.id);
-                    }}
+                    className="wf-action-btn wf-action-logs"
+                    onClick={() => setExpandedId(expanded ? null : wf.id)}
                   >
-                    Out
-                  </button>
-                  <button
-                    type="button"
-                    className="workflow-port"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleConnectInput(node.id);
-                    }}
-                  >
-                    In
+                    {expanded ? "Hide Flow" : "Show Flow"}
                   </button>
                 </div>
               </div>
-            ))}
-
-            <aside className="workflow-minimap" aria-label="mini map">
-              <h4>Mini-map</h4>
-              <div className="workflow-minimap-canvas">
-                <svg width="100%" height="100%" aria-hidden="true">
-                  {connections.map((connection) => {
-                    const fromNode = miniMapNodes.find((node) => node.id === connection.from);
-                    const toNode = miniMapNodes.find((node) => node.id === connection.to);
-                    if (!fromNode || !toNode) {
-                      return null;
-                    }
-                    return (
-                      <line
-                        key={connection.id}
-                        x1={fromNode.miniX + 12}
-                        y1={fromNode.miniY + 8}
-                        x2={toNode.miniX + 12}
-                        y2={toNode.miniY + 8}
-                      />
-                    );
-                  })}
-                </svg>
-                {miniMapNodes.map((node) => (
-                  <span
-                    key={node.id}
-                    className="workflow-minimap-node"
-                    style={{ left: node.miniX, top: node.miniY }}
-                    title={node.label}
-                  />
-                ))}
-              </div>
-            </aside>
-          </div>
-
-          <section className="workflow-log-panel" aria-label="execution logs">
-            <h3>Execution Log</h3>
-            <div>
-              {logs.length === 0 ? <p>No run logs yet.</p> : null}
-              {logs.map((line, index) => (
-                <p key={`${line}-${index}`}>{line}</p>
-              ))}
-            </div>
-          </section>
-        </div>
-
-        <aside className="workflow-config" aria-label="node configuration">
-          <h3>Node Settings</h3>
-          {!selectedNode ? <p>Select a node to edit label and config.</p> : null}
-          {selectedNode ? (
-            <>
-              <label>
-                Label
-                <input value={selectedNode.label} onChange={(event) => updateSelectedNodeLabel(event.target.value)} />
-              </label>
-              <label>
-                Config JSON
-                <textarea
-                  value={selectedNode.configJson}
-                  onChange={(event) => updateSelectedNodeConfig(event.target.value)}
-                  rows={10}
-                />
-              </label>
-            </>
-          ) : null}
-        </aside>
+              {expanded && (
+                <div className="wf-node-flow">
+                  {wf.nodes.map((node, idx) => (
+                    <div key={node.name} className="wf-node-item">
+                      <div
+                        className="wf-node-box"
+                        style={{ borderColor: nodeStatusColor(node.status) }}
+                      >
+                        <span className="wf-node-dot" style={{ background: nodeStatusColor(node.status) }} />
+                        <span className="wf-node-label">{node.name}</span>
+                      </div>
+                      {idx < wf.nodes.length - 1 && (
+                        <span className="wf-node-arrow">&rarr;</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </article>
+          );
+        })}
       </div>
+
+      <section className="wf-history">
+        <h3 className="wf-history-title">EXECUTION HISTORY</h3>
+        <div className="wf-history-table-wrap">
+          <table className="wf-history-table">
+            <thead>
+              <tr>
+                <th>Workflow</th>
+                <th>Started</th>
+                <th>Duration</th>
+                <th>Status</th>
+                <th>Nodes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {RUN_HISTORY.map((entry, idx) => (
+                <tr key={idx} className={idx % 2 === 0 ? "even" : "odd"}>
+                  <td>{entry.workflow}</td>
+                  <td className="mono">{entry.startedAt}</td>
+                  <td className="mono">{entry.duration}</td>
+                  <td>
+                    <span className={`wf-status-pill ${entry.status}`}>
+                      {entry.status === "success" ? "Success \u2713" : "Failed \u2717"}
+                    </span>
+                  </td>
+                  <td className="mono">{entry.nodesCompleted}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </section>
   );
-}
-
-function buildExecutionLevels(nodes: CanvasNode[], connections: CanvasConnection[]): string[][] | null {
-  const indegree = new Map<string, number>();
-  const outgoing = new Map<string, string[]>();
-
-  for (const node of nodes) {
-    indegree.set(node.id, 0);
-    outgoing.set(node.id, []);
-  }
-
-  for (const connection of connections) {
-    outgoing.set(connection.from, [...(outgoing.get(connection.from) ?? []), connection.to]);
-    indegree.set(connection.to, (indegree.get(connection.to) ?? 0) + 1);
-  }
-
-  let ready = [...indegree.entries()]
-    .filter(([, degree]) => degree === 0)
-    .map(([nodeId]) => nodeId)
-    .sort();
-
-  const levels: string[][] = [];
-  const visited = new Set<string>();
-
-  while (ready.length > 0) {
-    const level = [...ready];
-    levels.push(level);
-    ready = [];
-
-    for (const nodeId of level) {
-      visited.add(nodeId);
-      for (const neighbor of outgoing.get(nodeId) ?? []) {
-        const nextDegree = (indegree.get(neighbor) ?? 1) - 1;
-        indegree.set(neighbor, nextDegree);
-        if (nextDegree === 0) {
-          ready.push(neighbor);
-        }
-      }
-    }
-
-    ready.sort();
-  }
-
-  return visited.size === nodes.length ? levels : null;
 }

@@ -99,6 +99,17 @@
 
 .page-transition__layer {
   min-height: inherit;
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.page-transition-out .page-transition__layer {
+  opacity: 0.3;
+  transform: translateY(4px);
+}
+
+.page-transition-in .page-transition__layer {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .page-transition__cyber-wipe,
@@ -625,6 +636,7 @@
   background: linear-gradient(160deg, rgba(4, 11, 20, 0.82), rgba(8, 20, 37, 0.56));
   border-radius: 0.8rem;
   padding: 0.58rem 0.66rem;
+  overflow: visible;
 }
 
 .mission-viz-card-wide {
