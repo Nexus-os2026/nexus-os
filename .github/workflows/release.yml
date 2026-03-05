@@ -1,6 +1,7 @@
 name: NexusOS Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'v*'
@@ -21,17 +22,57 @@ jobs:
           node-version: 20
       - run: cargo build --release
       - run: cd app && npm install && npm run tauri build
-      - name: Normalize Windows installer name
+      - name: Print bundle tree (Windows)
         shell: pwsh
         run: |
-          $version = "${env:GITHUB_REF_NAME}" -replace '^v([0-9]+\.[0-9]+\.[0-9]+).*$','$1'
-          $exe = Get-ChildItem "app/src-tauri/target/release/bundle/nsis/*.exe" | Select-Object -First 1
-          if (-not $exe) { throw "NSIS installer not found" }
-          Copy-Item $exe.FullName "app/src-tauri/target/release/bundle/nsis/NexusOS_${version}_x64-setup.exe" -Force
+          Write-Host "=== bundle tree ==="
+          Get-ChildItem -Recurse target\release\bundle -ErrorAction SilentlyContinue | Select-Object FullName
+      - name: Discover and normalize Windows artifacts
+        shell: pwsh
+        run: |
+          $version = "${env:GITHUB_REF_NAME}" -replace '^v', ''
+          $root = $env:GITHUB_WORKSPACE
+          $bundleRoot = Join-Path $root "target\release\bundle"
+          $stage = Join-Path $root "dist-release\windows"
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+
+          Write-Host "Listing bundle directory:"
+          Get-ChildItem -Recurse $bundleRoot -ErrorAction SilentlyContinue | Select-Object FullName
+
+          $files = Get-ChildItem -Path $bundleRoot -Recurse -File -Include *.exe,*.msi -ErrorAction SilentlyContinue
+          if (-not $files -or $files.Count -eq 0) {
+            $files = Get-ChildItem -Path $root -Recurse -File -Include *.exe,*.msi -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match '\\target\\release\\bundle\\' }
+          }
+
+          $exe = $files | Where-Object { $_.Extension -ieq ".exe" } | Sort-Object FullName | Select-Object -First 1
+          $msi = $files | Where-Object { $_.Extension -ieq ".msi" } | Sort-Object FullName | Select-Object -First 1
+
+          Write-Host "Discovered artifacts:"
+          $files | Sort-Object FullName | ForEach-Object { Write-Host $_.FullName }
+
+          if (-not $exe -and -not $msi) {
+            Write-Error "No Windows installers found under target/release/bundle."
+            Get-ChildItem -Recurse $bundleRoot -ErrorAction SilentlyContinue | Select-Object FullName
+            exit 1
+          }
+
+          if ($exe) {
+            Copy-Item $exe.FullName (Join-Path $stage "NexusOS_${version}_windows_x64-setup.exe") -Force
+          }
+          if ($msi) {
+            Copy-Item $msi.FullName (Join-Path $stage "NexusOS_${version}_windows_x64.msi") -Force
+          }
+
+          Write-Host "Normalized files:"
+          Get-ChildItem -Path $stage -File | Select-Object FullName
       - uses: actions/upload-artifact@v4
         with:
           name: NexusOS-Windows
-          path: app/src-tauri/target/release/bundle/nsis/NexusOS_*_x64-setup.exe
+          path: |
+            dist-release/windows/*.exe
+            dist-release/windows/*.msi
+          if-no-files-found: error
 
   build-linux:
     runs-on: ubuntu-latest
