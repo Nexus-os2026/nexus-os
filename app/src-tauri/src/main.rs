@@ -21,6 +21,11 @@ use std::sync::{Arc, Mutex};
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
 ))]
+use tauri::Emitter;
+#[cfg(all(
+    feature = "tauri-runtime",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
 #[cfg(not(target_os = "linux"))]
 use tauri::Manager;
 use uuid::Uuid;
@@ -505,10 +510,156 @@ pub fn pull_ollama_model(model_name: String, base_url: Option<String>) -> Result
     let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
     let provider = OllamaProvider::new(&url);
     provider
-        .pull_model(&model_name, |_status, _completed, _total| {
-            // In Tauri context, progress is polled via list_models
+        .pull_model(&model_name, |_status, _completed, _total| {})
+        .map_err(|e| e.to_string())
+}
+
+/// Pull a model with throttled progress events (max ~3/sec).
+/// The callback is only invoked every 300ms for progress updates,
+/// but always fires immediately for "success" and error statuses.
+pub fn pull_ollama_model_throttled<F>(
+    model_name: String,
+    base_url: Option<String>,
+    mut on_event: F,
+) -> Result<String, String>
+where
+    F: FnMut(ModelPullProgress),
+{
+    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let provider = OllamaProvider::new(&url);
+    let model_id = model_name.clone();
+    let mut last_emit = std::time::Instant::now()
+        .checked_sub(std::time::Duration::from_secs(1))
+        .unwrap_or_else(std::time::Instant::now);
+
+    provider
+        .pull_model(&model_name, |status, completed, total| {
+            // Always emit terminal statuses immediately
+            if status == "success" || status.contains("error") {
+                let percent = if status == "success" { 100 } else { 0 };
+                on_event(ModelPullProgress {
+                    model: model_id.clone(),
+                    status: status.to_string(),
+                    percent,
+                    completed_bytes: completed,
+                    total_bytes: total,
+                    error: if status.contains("error") {
+                        Some(status.to_string())
+                    } else {
+                        None
+                    },
+                });
+                return;
+            }
+
+            // Throttle: skip if <300ms since last emit
+            let now = std::time::Instant::now();
+            if now.duration_since(last_emit).as_millis() < 300 {
+                return;
+            }
+            last_emit = now;
+
+            let percent = if total > 0 {
+                ((completed as f64 / total as f64) * 100.0).round() as u32
+            } else {
+                0
+            };
+
+            on_event(ModelPullProgress {
+                model: model_id.clone(),
+                status: status.to_string(),
+                percent: percent.min(99),
+                completed_bytes: completed,
+                total_bytes: total,
+                error: None,
+            });
         })
         .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelPullProgress {
+    pub model: String,
+    pub status: String,
+    pub percent: u32,
+    pub completed_bytes: u64,
+    pub total_bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Ensure Ollama server is running. Returns true if already running or started.
+pub fn ensure_ollama(base_url: Option<String>) -> Result<bool, String> {
+    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let provider = OllamaProvider::new(&url);
+
+    // Check if already running
+    if provider.health_check().unwrap_or(false) {
+        return Ok(true);
+    }
+
+    // Try to start ollama serve in the background
+    let started = Command::new("ollama")
+        .arg("serve")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+
+    if started.is_err() {
+        return Err("Ollama is not installed. Please install it from https://ollama.ai".to_string());
+    }
+
+    // Wait up to 8 seconds for it to come online
+    for _ in 0..16 {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        if provider.health_check().unwrap_or(false) {
+            return Ok(true);
+        }
+    }
+
+    Err("Ollama was started but did not respond within 8 seconds".to_string())
+}
+
+/// Check if ollama binary is available on PATH.
+pub fn is_ollama_installed() -> bool {
+    Command::new("ollama")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Delete a model from Ollama.
+pub fn delete_ollama_model(model_name: String, base_url: Option<String>) -> Result<(), String> {
+    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let endpoint = format!("{}/api/delete", url.trim_end_matches('/'));
+    let body = json!({ "name": model_name });
+    let encoded = serde_json::to_string(&body).map_err(|e| e.to_string())?;
+
+    let output = Command::new("curl")
+        .args(["-sS", "-X", "DELETE"])
+        .arg("-H")
+        .arg("content-type: application/json")
+        .arg("-d")
+        .arg(&encoded)
+        .arg(&endpoint)
+        .output()
+        .map_err(|e| format!("Failed to run curl: {e}"))?;
+
+    if !output.status.success() {
+        return Err("Failed to delete model".to_string());
+    }
+    Ok(())
+}
+
+/// Check if setup has been completed (hardware detected).
+pub fn is_setup_complete() -> bool {
+    match load_config() {
+        Ok(cfg) => !cfg.hardware.gpu.is_empty() && cfg.hardware.gpu != "none",
+        Err(_) => false,
+    }
 }
 
 pub fn run_setup_wizard(ollama_url: Option<String>) -> Result<SetupResult, String> {
@@ -687,6 +838,47 @@ mod runtime {
         super::pull_ollama_model(model_name, base_url)
     }
 
+    /// Pull a model on a background thread with throttled progress events.
+    /// The Tauri async runtime keeps the main thread free while we block here.
+    #[tauri::command]
+    async fn pull_model(
+        window: tauri::Window,
+        model_name: String,
+        base_url: Option<String>,
+    ) -> Result<String, String> {
+        let (tx, rx) = std::sync::mpsc::channel::<Result<String, String>>();
+        std::thread::spawn(move || {
+            let result =
+                super::pull_ollama_model_throttled(model_name, base_url, |progress| {
+                    let _ = window.emit("model-pull-progress", &progress);
+                });
+            let _ = tx.send(result);
+        });
+        // recv() blocks this async task's thread, but Tauri runs async commands
+        // on a thread pool so the main/UI thread stays responsive.
+        rx.recv().unwrap_or(Err("Download thread terminated unexpectedly".to_string()))
+    }
+
+    #[tauri::command]
+    fn ensure_ollama(base_url: Option<String>) -> Result<bool, String> {
+        super::ensure_ollama(base_url)
+    }
+
+    #[tauri::command]
+    fn is_ollama_installed() -> bool {
+        super::is_ollama_installed()
+    }
+
+    #[tauri::command]
+    fn delete_model(model_name: String, base_url: Option<String>) -> Result<(), String> {
+        super::delete_ollama_model(model_name, base_url)
+    }
+
+    #[tauri::command]
+    fn is_setup_complete() -> bool {
+        super::is_setup_complete()
+    }
+
     #[tauri::command]
     fn run_setup_wizard(ollama_url: Option<String>) -> Result<SetupResult, String> {
         super::run_setup_wizard(ollama_url)
@@ -763,6 +955,11 @@ mod runtime {
                 detect_hardware,
                 check_ollama,
                 pull_ollama_model,
+                pull_model,
+                ensure_ollama,
+                is_ollama_installed,
+                delete_model,
+                is_setup_complete,
                 run_setup_wizard,
             ])
             .run(tauri::generate_context!())

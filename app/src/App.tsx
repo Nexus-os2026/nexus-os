@@ -2,14 +2,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   checkOllama,
   createAgent,
+  deleteModel,
   detectHardware,
+  ensureOllama,
   getAuditLog,
   getConfig,
   hasDesktopRuntime,
+  isOllamaInstalled,
   jarvisStatus,
   listAgents,
   pauseAgent,
-  pullOllamaModel,
+  pullModel,
   resumeAgent,
   runSetupWizard,
   saveConfig,
@@ -255,6 +258,8 @@ export default function App(): JSX.Element {
   const [appReady, setAppReady] = useState(false);
   const [splashVisible, setSplashVisible] = useState(true);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [ollamaConnected, setOllamaConnected] = useState(false);
+  const [ollamaModels, setOllamaModels] = useState<OllamaStatus["models"]>([]);
   const [overlay, setOverlay] = useState<VoiceOverlayState>({
     visible: false,
     listening: false,
@@ -325,6 +330,14 @@ export default function App(): JSX.Element {
         setConfig(loadedConfig);
         applyVoiceState(voice);
 
+        // Refresh Ollama status in background
+        checkOllama().then((status) => {
+          if (!cancelled) {
+            setOllamaConnected(status.connected);
+            setOllamaModels(status.models);
+          }
+        }).catch(() => {});
+
         // Check if first-run setup is needed
         const needsSetup = !loadedConfig.hardware?.gpu || loadedConfig.hardware.gpu.length === 0;
         if (needsSetup) {
@@ -393,6 +406,28 @@ export default function App(): JSX.Element {
       phase: state.overlay_visible ? "listening" : "idle",
       amplitude: state.overlay_visible ? 0.42 : 0.18
     }));
+  }
+
+  async function refreshOllamaStatus(): Promise<void> {
+    try {
+      const status = await checkOllama();
+      setOllamaConnected(status.connected);
+      setOllamaModels(status.models);
+    } catch {
+      setOllamaConnected(false);
+      setOllamaModels([]);
+    }
+  }
+
+  async function handleDeleteModel(name: string): Promise<void> {
+    try {
+      await deleteModel(name);
+      await refreshOllamaStatus();
+      play("success");
+    } catch (error) {
+      setRuntimeError(`Failed to delete model: ${formatError(error)}`);
+      play("error");
+    }
   }
 
   async function refreshDesktopData(): Promise<void> {
@@ -831,6 +866,11 @@ export default function App(): JSX.Element {
         onSave={() => {
           void handleSaveConfig();
         }}
+        ollamaConnected={ollamaConnected}
+        ollamaModels={ollamaModels}
+        onDeleteModel={runtimeMode === "desktop" ? handleDeleteModel : undefined}
+        onRerunSetup={() => setShowSetupWizard(true)}
+        onRefreshOllama={runtimeMode === "desktop" ? refreshOllamaStatus : undefined}
       />
     );
   }
@@ -955,8 +995,16 @@ export default function App(): JSX.Element {
             if (runtimeMode === "desktop") return checkOllama(url);
             return { connected: false, base_url: url ?? "http://localhost:11434", models: [] };
           }}
+          onEnsureOllama={async () => {
+            if (runtimeMode === "desktop") return ensureOllama();
+            return false;
+          }}
+          onIsOllamaInstalled={async () => {
+            if (runtimeMode === "desktop") return isOllamaInstalled();
+            return false;
+          }}
           onPullModel={async (model: string) => {
-            if (runtimeMode === "desktop") return pullOllamaModel(model);
+            if (runtimeMode === "desktop") return pullModel(model);
             return "success";
           }}
           onComplete={(hw, ollamaStatus) => {

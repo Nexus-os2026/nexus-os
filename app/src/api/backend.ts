@@ -124,3 +124,36 @@ export function runSetupWizard(ollamaUrl?: string): Promise<SetupResult> {
     ollama_url: ollamaUrl
   });
 }
+
+export function pullModel(modelName: string, baseUrl?: string): Promise<string> {
+  return invokeDesktop<string>("pull_model", {
+    modelName,
+    model_name: modelName,
+    baseUrl,
+    base_url: baseUrl
+  });
+}
+
+export function ensureOllama(baseUrl?: string): Promise<boolean> {
+  return invokeDesktop<boolean>("ensure_ollama", {
+    baseUrl,
+    base_url: baseUrl
+  });
+}
+
+export function isOllamaInstalled(): Promise<boolean> {
+  return invokeDesktop<boolean>("is_ollama_installed");
+}
+
+export function deleteModel(modelName: string, baseUrl?: string): Promise<void> {
+  return invokeDesktop<void>("delete_model", {
+    modelName,
+    model_name: modelName,
+    baseUrl,
+    base_url: baseUrl
+  });
+}
+
+export function isSetupComplete(): Promise<boolean> {
+  return invokeDesktop<boolean>("is_setup_complete");
+}

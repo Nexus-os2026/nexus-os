@@ -287,6 +287,7 @@
   box-shadow: 0 0 12px rgba(0, 255, 213, 0.5);
   animation: download-pulse 2s ease-in-out infinite;
   width: 60%;
+  transition: width 0.3s ease;
 }
 
 @keyframes download-pulse {
@@ -368,6 +369,14 @@
   filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.6));
 }
 
+.setup-ollama-section {
+  margin-bottom: 1rem;
+}
+
+.setup-ollama-section .setup-btn {
+  margin-top: 0.5rem;
+}
+
 .setup-error {
   margin-top: 0.8rem;
   padding: 0.5rem 0.75rem;
@@ -376,6 +385,45 @@
   color: #fca5a5;
   font-family: var(--font-mono);
   font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.setup-error-dismiss {
+  background: none;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.setup-error-dismiss:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.setup-model-progress {
+  width: 100%;
+}
+
+.setup-model-progress .setup-download-bar {
+  margin-top: 0.3rem;
+}
+
+.setup-model-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.setup-model-error-text {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: #fca5a5;
 }
 
 .setup-wizard-footer {

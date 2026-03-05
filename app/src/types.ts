@@ -144,3 +144,12 @@ export interface AgentLlmConfig {
   temperature: number;
   max_tokens: number;
 }
+
+export interface ModelPullProgress {
+  model: string;
+  status: string;
+  percent: number;
+  completed_bytes: number;
+  total_bytes: number;
+  error?: string;
+}

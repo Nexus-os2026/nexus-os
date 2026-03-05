@@ -590,6 +590,56 @@
   gap: 0.5rem;
 }
 
+.st-ollama-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+}
+
+.st-ollama-dot.connected {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
+}
+
+.st-ollama-dot.disconnected {
+  background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+}
+
+.st-models-installed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.st-models-installed-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid rgba(0, 255, 213, 0.06);
+  font-size: 0.78rem;
+}
+
+.st-models-installed-name {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.st-models-installed-size {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.st-btn-sm {
+  padding: 0.2rem 0.55rem;
+  font-size: 0.65rem;
+}
+
 @media (max-width: 700px) {
   .st-row {
     flex-direction: column;

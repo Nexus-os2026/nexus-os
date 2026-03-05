@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import "./settings.css";
-import type { NexusConfig } from "../types";
+import type { NexusConfig, OllamaModelInfo } from "../types";
 
 interface SettingsProps {
   config: NexusConfig;
@@ -11,6 +11,11 @@ interface SettingsProps {
   uiSoundVolume: number;
   onUiSoundEnabledChange: (value: boolean) => void;
   onUiSoundVolumeChange: (value: number) => void;
+  ollamaConnected?: boolean;
+  ollamaModels?: OllamaModelInfo[];
+  onDeleteModel?: (name: string) => Promise<void>;
+  onRerunSetup?: () => void;
+  onRefreshOllama?: () => Promise<void>;
 }
 
 type SettingsSection = "general" | "api" | "privacy" | "voice" | "models" | "about";
@@ -31,7 +36,12 @@ export function Settings({
   uiSoundEnabled,
   uiSoundVolume,
   onUiSoundEnabledChange,
-  onUiSoundVolumeChange
+  onUiSoundVolumeChange,
+  ollamaConnected,
+  ollamaModels,
+  onDeleteModel,
+  onRerunSetup,
+  onRefreshOllama
 }: SettingsProps): JSX.Element {
   const [section, setSection] = useState<SettingsSection>("general");
   const [showKeys, setShowKeys] = useState(false);
@@ -329,7 +339,10 @@ export function Settings({
               </div>
               <div className="st-models-hw-item">
                 <span className="st-models-hw-label">Ollama</span>
-                <span className="st-models-hw-value">{config.ollama?.status || "unknown"}</span>
+                <span className="st-models-hw-value">
+                  <span className={`st-ollama-dot ${ollamaConnected ? "connected" : "disconnected"}`} />
+                  {ollamaConnected ? "Connected" : config.ollama?.status || "disconnected"}
+                </span>
               </div>
             </div>
 
@@ -349,6 +362,33 @@ export function Settings({
               </div>
             </div>
 
+            {ollamaModels && ollamaModels.length > 0 && (
+              <>
+                <h3 className="st-card-title" style={{ marginTop: "1rem" }}>Installed Ollama Models</h3>
+                <div className="st-models-installed-list">
+                  {ollamaModels.map((m) => (
+                    <div key={m.name} className="st-models-installed-item">
+                      <span className="st-models-installed-name">{m.name}</span>
+                      <span className="st-models-installed-size">
+                        {m.size >= 1_000_000_000
+                          ? `${(m.size / 1_000_000_000).toFixed(1)} GB`
+                          : `${(m.size / 1_000_000).toFixed(0)} MB`}
+                      </span>
+                      {onDeleteModel && (
+                        <button
+                          type="button"
+                          className="st-btn st-btn-red st-btn-sm"
+                          onClick={() => { void onDeleteModel(m.name); }}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
             {config.agents && Object.keys(config.agents).length > 0 && (
               <>
                 <h3 className="st-card-title" style={{ marginTop: "1rem" }}>Agent Configurations</h3>
@@ -366,8 +406,13 @@ export function Settings({
             )}
 
             <div className="st-models-actions">
-              <button type="button" className="st-btn st-btn-ghost" onClick={onSave}>
-                {saving ? "Saving..." : "Re-run Setup Wizard"}
+              {onRefreshOllama && (
+                <button type="button" className="st-btn st-btn-ghost" onClick={() => { void onRefreshOllama(); }}>
+                  Refresh Ollama
+                </button>
+              )}
+              <button type="button" className="st-btn st-btn-blue" onClick={onRerunSetup ?? onSave}>
+                Re-run Setup Wizard
               </button>
             </div>
           </div>
