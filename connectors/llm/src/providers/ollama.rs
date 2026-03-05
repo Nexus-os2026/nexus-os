@@ -111,6 +111,78 @@ impl OllamaProvider {
         Ok(models)
     }
 
+    /// Stream a chat completion via Ollama's OpenAI-compatible endpoint.
+    /// Uses `/v1/chat/completions` with SSE streaming.
+    /// The `on_token` callback receives each text chunk as it arrives.
+    /// Returns the full accumulated response text.
+    pub fn chat_stream<F>(
+        &self,
+        messages: &[Value],
+        model: &str,
+        on_token: F,
+    ) -> Result<String, AgentError>
+    where
+        F: FnMut(&str),
+    {
+        let endpoint = format!(
+            "{}/v1/chat/completions",
+            self.base_url.trim_end_matches('/')
+        );
+        let body = json!({
+            "model": model,
+            "messages": messages,
+            "stream": true,
+            "temperature": 0.7,
+        });
+        let encoded = serde_json::to_string(&body).map_err(|e| {
+            AgentError::SupervisorError(format!("failed to encode chat body: {e}"))
+        })?;
+
+        let child = Command::new("curl")
+            .args(["-sS", "-N", "-X", "POST", "-m", "300"])
+            .arg("-H")
+            .arg("content-type: application/json")
+            .arg("-d")
+            .arg(&encoded)
+            .arg(&endpoint)
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| AgentError::SupervisorError(format!("curl spawn failed: {e}")))?;
+
+        let stdout = child
+            .stdout
+            .ok_or_else(|| AgentError::SupervisorError("no stdout from curl".to_string()))?;
+
+        let reader = BufReader::new(stdout);
+        let mut full_response = String::new();
+        let mut on_token = on_token;
+
+        for line in reader.lines() {
+            let line = line.map_err(|e| {
+                AgentError::SupervisorError(format!("read error during chat: {e}"))
+            })?;
+            let trimmed = line.trim();
+            if trimmed.is_empty() || !trimmed.starts_with("data: ") {
+                continue;
+            }
+            let data = &trimmed[6..];
+            if data == "[DONE]" {
+                break;
+            }
+            if let Ok(obj) = serde_json::from_str::<Value>(data) {
+                if let Some(token) = obj
+                    .pointer("/choices/0/delta/content")
+                    .and_then(Value::as_str)
+                {
+                    full_response.push_str(token);
+                    on_token(token);
+                }
+            }
+        }
+
+        Ok(full_response)
+    }
+
     /// Pull a model from Ollama registry. Returns final status.
     /// The `on_progress` callback is called with (status, completed_bytes, total_bytes).
     pub fn pull_model<F>(&self, model_name: &str, mut on_progress: F) -> Result<String, AgentError>

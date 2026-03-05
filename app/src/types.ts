@@ -153,3 +153,22 @@ export interface ModelPullProgress {
   total_bytes: number;
   error?: string;
 }
+
+export interface AvailableModel {
+  id: string;
+  name: string;
+  size_gb: number;
+  context: string;
+  capabilities: string[];
+  recommended: boolean;
+  tag: string;
+  installed: boolean;
+  description: string;
+}
+
+export interface ChatTokenEvent {
+  token: string;
+  full: string;
+  done: boolean;
+  error?: string;
+}

@@ -431,3 +431,175 @@
   border-top: 1px solid rgba(0, 255, 213, 0.1);
   text-align: center;
 }
+
+/* Wide card for model browser */
+.setup-wizard-card-wide {
+  max-width: 720px;
+}
+
+/* System bar */
+.setup-system-bar {
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+  border: 1px solid rgba(0, 255, 213, 0.15);
+  background: rgba(0, 255, 213, 0.04);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
+}
+
+/* Model capabilities badges */
+.setup-model-caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.6rem;
+}
+
+.setup-cap-badge {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid rgba(0, 255, 213, 0.2);
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
+}
+
+.setup-model-card.recommended {
+  border-color: rgba(0, 255, 213, 0.35);
+  background: rgba(0, 255, 213, 0.03);
+}
+
+.setup-model-card-size {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* Compact model list (for All Qwen 3.5 / Installed) */
+.setup-model-list {
+  margin-bottom: 1rem;
+}
+
+.setup-model-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid rgba(0, 255, 213, 0.06);
+  font-size: 0.75rem;
+}
+
+.setup-model-row:hover {
+  background: rgba(0, 255, 213, 0.02);
+}
+
+.setup-model-row-name {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  min-width: 120px;
+}
+
+.setup-model-row-size {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  min-width: 60px;
+  text-align: right;
+}
+
+.setup-model-row-tag {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.setup-model-row-action {
+  min-width: 80px;
+  text-align: right;
+}
+
+.setup-model-row-dl {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.setup-row-bar {
+  display: inline-block;
+  height: 4px;
+  width: 0%;
+  max-width: 50px;
+  background: linear-gradient(90deg, #10b981, #00ffd5);
+  transition: width 0.3s ease;
+}
+
+.setup-row-pct {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-secondary);
+}
+
+.setup-check {
+  color: #6ee7b7;
+  font-weight: bold;
+}
+
+.setup-btn-sm {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid;
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+
+.setup-btn-sm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Agent assignment list */
+.setup-agent-list {
+  margin-bottom: 1rem;
+}
+
+.setup-agent-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid rgba(0, 255, 213, 0.06);
+}
+
+.setup-agent-icon {
+  font-size: 1.1rem;
+  width: 28px;
+  text-align: center;
+}
+
+.setup-agent-name {
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  min-width: 140px;
+}
+
+.setup-agent-select {
+  flex: 1;
+  background: rgba(5, 10, 18, 0.8);
+  border: 1px solid rgba(0, 255, 213, 0.2);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+}
+
+.setup-agent-select:focus {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: 0 0 8px rgba(0, 255, 213, 0.2);
+}

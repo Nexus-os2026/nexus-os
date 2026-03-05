@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentSummary,
   AuditEventRow,
+  AvailableModel,
   ChatResponse,
   HardwareInfo,
   NexusConfig,
@@ -156,4 +157,25 @@ export function deleteModel(modelName: string, baseUrl?: string): Promise<void> 
 
 export function isSetupComplete(): Promise<boolean> {
   return invokeDesktop<boolean>("is_setup_complete");
+}
+
+export function listAvailableModels(): Promise<AvailableModel[]> {
+  return invokeDesktop<AvailableModel[]>("list_available_models");
+}
+
+export function chatWithOllama(
+  messages: Array<{ role: string; content: string }>,
+  model: string,
+  baseUrl?: string
+): Promise<string> {
+  return invokeDesktop<string>("chat_with_ollama", {
+    messages,
+    model,
+    baseUrl,
+    base_url: baseUrl
+  });
+}
+
+export function setAgentModel(agent: string, model: string): Promise<void> {
+  return invokeDesktop<void>("set_agent_model", { agent, model });
 }

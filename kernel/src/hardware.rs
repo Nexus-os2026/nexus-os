@@ -188,7 +188,7 @@ fn detect_gpu() -> (String, u64) {
             for line in text.lines() {
                 let lower = line.to_lowercase();
                 if lower.contains("vga") || lower.contains("3d controller") {
-                    if let Some(name_part) = line.split(':').last() {
+                    if let Some(name_part) = line.split(':').next_back() {
                         return (name_part.trim().to_string(), 0);
                     }
                 }

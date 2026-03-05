@@ -99,7 +99,7 @@ impl Default for KillGatesConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HardwareConfig {
     #[serde(default)]
     pub gpu: String,
@@ -109,17 +109,6 @@ pub struct HardwareConfig {
     pub ram_mb: u64,
     #[serde(default)]
     pub detected_at: String,
-}
-
-impl Default for HardwareConfig {
-    fn default() -> Self {
-        Self {
-            gpu: String::new(),
-            vram_mb: 0,
-            ram_mb: 0,
-            detected_at: String::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -143,21 +132,12 @@ impl Default for OllamaConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ModelsConfig {
     #[serde(default)]
     pub primary: String,
     #[serde(default)]
     pub fast: String,
-}
-
-impl Default for ModelsConfig {
-    fn default() -> Self {
-        Self {
-            primary: String::new(),
-            fast: String::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  chatWithOllama,
   checkOllama,
   createAgent,
   deleteModel,
@@ -11,12 +12,14 @@ import {
   isOllamaInstalled,
   jarvisStatus,
   listAgents,
+  listAvailableModels,
   pauseAgent,
   pullModel,
   resumeAgent,
   runSetupWizard,
   saveConfig,
   sendChat,
+  setAgentModel,
   startAgent,
   startJarvisMode,
   stopAgent,
@@ -43,6 +46,7 @@ import type {
   AuditEventRow,
   ChatMessage,
   ChatResponse,
+  ChatTokenEvent,
   ConnectionStatus,
   HardwareInfo,
   NexusConfig,
@@ -554,26 +558,23 @@ export default function App(): JSX.Element {
     }
   }
 
-  async function streamAssistantMessage(id: string, text: string, model: string): Promise<void> {
-    const chunks = text.split(" ");
-    let current = "";
-    for (let index = 0; index < chunks.length; index += 1) {
-      current = current.length === 0 ? chunks[index] : `${current} ${chunks[index]}`;
-      const done = index === chunks.length - 1;
-      setMessages((prev) =>
-        prev.map((message) =>
-          message.id === id
-            ? {
-                ...message,
-                content: current,
-                model,
-                streaming: !done
-              }
-            : message
-        )
-      );
-      await sleep(done ? 0 : 16);
-    }
+  const AGENT_PROMPTS: Record<string, string> = {
+    "": "You are NexusOS, a governed AI operating system. You help users with coding, design, automation, and content. Be concise and helpful.",
+    "agent-coder": "You are the NexusOS Coder Agent. You write clean code in Rust, TypeScript, and Python. You analyze architecture, review code, fix bugs, and run tests. Show code in fenced blocks.",
+    "agent-designer": "You are the NexusOS Designer Agent. You create UI components, design systems, and design tokens. Output React/TypeScript.",
+    "agent-screen-poster": "You are the NexusOS Screen Poster Agent. You draft social media posts for X, Instagram, Facebook, Reddit. Optimize for engagement.",
+    "agent-web-builder": "You are the NexusOS Web Builder Agent. You generate websites from descriptions using React and modern web tech.",
+    "agent-workflow-studio": "You are the NexusOS Workflow Studio Agent. You design automation pipelines with DAG nodes, retries, and checkpoints.",
+    "agent-self-improve": "You are the NexusOS Self-Improve Agent. You analyze performance metrics and optimize prompts.",
+  };
+
+  function getModelForAgent(agentId: string): string {
+    // Look up model from config agents map
+    const agentKey = agentId.replace("agent-", "").replace("-", "_");
+    const agentConfig = config.agents?.[agentKey];
+    if (agentConfig?.model) return agentConfig.model;
+    // Fallback to default model
+    return config.llm.default_model || "qwen3.5:9b";
   }
 
   async function handleSend(): Promise<void> {
@@ -602,6 +603,7 @@ export default function App(): JSX.Element {
 
     setIsSending(true);
     const assistantId = makeId();
+    const model = getModelForAgent(selectedAgent);
     setMessages((prev) => [
       ...prev,
       {
@@ -609,35 +611,111 @@ export default function App(): JSX.Element {
         role: "assistant",
         content: "",
         timestamp: Date.now(),
+        model,
         streaming: true
       }
     ]);
 
-    try {
-      const response = runtimeMode === "desktop" ? await sendChat(input) : mockChatReply(input);
-      await streamAssistantMessage(assistantId, response.text, response.model);
-      setRuntimeError(null);
-      setOverlay((prev) => ({ ...prev, phase: "speaking", amplitude: 0.5 }));
-      play("notification");
-      bumpActivity();
-    } catch (error) {
-      setMessages((prev) =>
-        prev.map((message) =>
-          message.id === assistantId
-            ? {
-                ...message,
-                content: `Request failed: ${formatError(error)}`,
-                model: "system",
-                streaming: false
-              }
-            : message
-        )
-      );
-      setRuntimeError(`Chat request failed: ${formatError(error)}`);
-      play("error");
-    } finally {
-      setIsSending(false);
-      setOverlay((prev) => ({ ...prev, phase: prev.listening ? "listening" : "idle", amplitude: 0.18 }));
+    if (runtimeMode === "desktop") {
+      // REAL Ollama streaming chat
+      const systemPrompt = AGENT_PROMPTS[selectedAgent] || AGENT_PROMPTS[""];
+      const apiMessages = [
+        { role: "system", content: systemPrompt },
+        ...messages.filter(m => m.role === "user" || m.role === "assistant").slice(-20).map(m => ({
+          role: m.role,
+          content: m.content
+        })),
+        { role: "user", content: input }
+      ];
+
+      // Listen for streaming tokens
+      let unlisten: (() => void) | undefined;
+      let fullText = "";
+      try {
+        const eventMod = await import("@tauri-apps/api/event");
+        unlisten = await eventMod.listen<ChatTokenEvent>("chat-token", (event) => {
+          const { full, done } = event.payload;
+          fullText = full;
+
+          if (done) {
+            // Final setState ONCE when streaming is complete
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, content: fullText, streaming: false } : m
+              )
+            );
+          } else {
+            // Update content via setState — throttled at 50ms on backend side
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, content: full } : m
+              )
+            );
+          }
+        });
+
+        await chatWithOllama(apiMessages, model);
+        setRuntimeError(null);
+        setOverlay((prev) => ({ ...prev, phase: "speaking", amplitude: 0.5 }));
+        play("notification");
+        bumpActivity();
+      } catch (error) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === assistantId
+              ? {
+                  ...message,
+                  content: `Error: Could not reach ${model}. ${formatError(error)}`,
+                  model: "system",
+                  streaming: false
+                }
+              : message
+          )
+        );
+        setRuntimeError(`Chat request failed: ${formatError(error)}`);
+        play("error");
+      } finally {
+        unlisten?.();
+        setIsSending(false);
+        setOverlay((prev) => ({ ...prev, phase: prev.listening ? "listening" : "idle", amplitude: 0.18 }));
+      }
+    } else {
+      // Mock mode fallback
+      try {
+        const response = mockChatReply(input);
+        // Simulate streaming word-by-word
+        const chunks = response.text.split(" ");
+        let current = "";
+        for (let index = 0; index < chunks.length; index += 1) {
+          current = current.length === 0 ? chunks[index] : `${current} ${chunks[index]}`;
+          const done = index === chunks.length - 1;
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? { ...message, content: current, model: response.model, streaming: !done }
+                : message
+            )
+          );
+          await sleep(done ? 0 : 16);
+        }
+        setRuntimeError(null);
+        setOverlay((prev) => ({ ...prev, phase: "speaking", amplitude: 0.5 }));
+        play("notification");
+        bumpActivity();
+      } catch (error) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === assistantId
+              ? { ...message, content: `Request failed: ${formatError(error)}`, model: "system", streaming: false }
+              : message
+          )
+        );
+        setRuntimeError(`Chat request failed: ${formatError(error)}`);
+        play("error");
+      } finally {
+        setIsSending(false);
+        setOverlay((prev) => ({ ...prev, phase: prev.listening ? "listening" : "idle", amplitude: 0.18 }));
+      }
     }
   }
 
@@ -1006,6 +1084,13 @@ export default function App(): JSX.Element {
           onPullModel={async (model: string) => {
             if (runtimeMode === "desktop") return pullModel(model);
             return "success";
+          }}
+          onListAvailableModels={async () => {
+            if (runtimeMode === "desktop") return listAvailableModels();
+            return [];
+          }}
+          onSetAgentModel={async (agent: string, model: string) => {
+            if (runtimeMode === "desktop") return setAgentModel(agent, model);
           }}
           onComplete={(hw, ollamaStatus) => {
             void handleSetupComplete(hw, ollamaStatus);
