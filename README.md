@@ -55,7 +55,7 @@ Note: add desktop dashboard, workflow canvas, and audit replay captures in the n
 ## Tech Stack
 
 Rust (kernel) + TypeScript/React (desktop app via Tauri) + Python (voice/ML)  
-120+ tests | CI/CD on GitHub Actions | 28 milestone versions
+200+ tests | CI/CD on GitHub Actions | 28 milestone versions
 
 ## Documentation
 

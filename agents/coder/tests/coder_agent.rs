@@ -77,10 +77,10 @@ fn test_scan_rust_project() {
     assert!(
         project.test_files.iter().any(|path| {
             has_component(path.as_str(), "connectors")
-                && has_component(path.as_str(), "core")
-                && has_suffix_components(path.as_str(), &["tests", "placeholder.rs"])
+                && has_component(path.as_str(), "llm")
+                && has_suffix_components(path.as_str(), &["tests", "fuel_gateway_phase5.rs"])
         }),
-        "expected connector core test file in scan results"
+        "expected connector llm test file in scan results"
     );
 }
 

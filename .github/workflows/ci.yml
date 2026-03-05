@@ -51,6 +51,26 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
 
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend dependencies
+        run: cd app && npm ci
+
+      - name: TypeScript check
+        run: cd app && npx tsc --noEmit
+
+      - name: Build frontend
+        run: cd app && npx vite build
+
   test-macos:
     runs-on: macos-latest
     steps:
