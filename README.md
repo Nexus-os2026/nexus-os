@@ -100,8 +100,25 @@ Checklist (expected paths):
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [SECURITY.md](SECURITY.md)
 
+ ci/fix-windows-release-artifact-discovery
+Rust (kernel) + TypeScript/React (desktop app via Tauri) + Python (voice/ML)  
+200+ tests | CI/CD on GitHub Actions | 28 milestone versions
+
+## Documentation
+
+- [User Guide](docs/USER_GUIDE.md)
+- [Developer Guide](docs/DEVELOPER_GUIDE.md)
+- [Threat Model](docs/THREAT_MODEL.md)
+- [Privacy Design](PRIVACY_DESIGN.md)
+- [Changelog](CHANGELOG.md)
+
+## Built By
+
+Created by Devil — a self-taught developer who built an entire governed agent operating system from scratch.
+=======
 ## Maintainers
 Maintained by the NEXAI Lab community.
+ main
 
 ## License
 This project is licensed under the MIT License. See [LICENSE](LICENSE).

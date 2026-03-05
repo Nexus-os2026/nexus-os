@@ -135,7 +135,8 @@ fn compute_hash(
         payload,
     };
 
-    let serialized = serde_json::to_vec(&canonical).unwrap_or_default();
+    let serialized = serde_json::to_vec(&canonical)
+        .expect("audit event serialization must not fail for integrity");
 
     let mut hasher = Sha256::new();
     hasher.update(previous_hash.as_bytes());
