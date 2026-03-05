@@ -59,32 +59,35 @@ jobs:
         shell: pwsh
         run: |
           $version = "${env:GITHUB_REF_NAME}" -replace '^v([0-9]+\.[0-9]+\.[0-9]+).*$','$1'
-          $bundleRoot = "target/release/bundle"
+          $bundle = "target/release/bundle"
           $outDir = "release-artifacts"
           New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
-          $nsisExe = Get-ChildItem "target/release/bundle/nsis/*.exe" -ErrorAction SilentlyContinue |
+          Write-Host "Listing bundle directory:"
+          Get-ChildItem -Recurse $bundle -ErrorAction SilentlyContinue | Select-Object FullName
+
+          $exe = Get-ChildItem $bundle -Recurse -Filter *.exe -ErrorAction SilentlyContinue |
+            Sort-Object FullName |
+            Select-Object -First 1
+          $msi = Get-ChildItem $bundle -Recurse -Filter *.msi -ErrorAction SilentlyContinue |
             Sort-Object FullName |
             Select-Object -First 1
 
-          if ($nsisExe) {
-            $dest = "${outDir}/NexusOS_${version}_x64-setup.exe"
-            Copy-Item $nsisExe.FullName $dest -Force
-          } else {
-            $msi = Get-ChildItem "target/release/bundle/msi/*.msi" -ErrorAction SilentlyContinue |
-              Sort-Object FullName |
-              Select-Object -First 1
-            if ($msi) {
-              $dest = "${outDir}/NexusOS_${version}_x64.msi"
-              Copy-Item $msi.FullName $dest -Force
-            } else {
-              Write-Host "No NSIS .exe or MSI artifact found. Bundle tree:"
-              Get-ChildItem -Recurse $bundleRoot -ErrorAction SilentlyContinue | Select-Object FullName
-              throw "No Windows installer produced. Check Tauri bundle targets."
-            }
+          if (-not $exe -and -not $msi) {
+            Write-Error "No Windows installers found."
+            Get-ChildItem -Recurse $bundle -ErrorAction SilentlyContinue | Select-Object FullName
+            exit 1
           }
 
-          $normalized = Get-ChildItem $outDir -File -Include *.exe,*.msi -ErrorAction SilentlyContinue |
+          if ($exe) {
+            Copy-Item $exe.FullName "${outDir}/NexusOS_${version}_windows.exe" -Force
+          }
+          if ($msi) {
+            Copy-Item $msi.FullName "${outDir}/NexusOS_${version}_windows.msi" -Force
+          }
+
+          $normalized = Get-ChildItem $outDir -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -in ".exe", ".msi" } |
             Sort-Object FullName |
             ForEach-Object { $_.FullName }
           if (-not $normalized -or $normalized.Count -eq 0) {
