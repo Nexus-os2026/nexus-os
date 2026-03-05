@@ -1,15 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { History } from "../components/chat/History";
 import { Suggestions } from "../components/chat/Suggestions";
 import { VoiceVisualizer, type VoiceVisualizerState } from "../components/chat/VoiceVisualizer";
 import "./chat.css";
-import type { ChatMessage } from "../types";
+import type { AgentSummary, ChatMessage } from "../types";
 
 interface ChatProps {
   messages: ChatMessage[];
   draft: string;
   isRecording: boolean;
   isSending: boolean;
+  agents: AgentSummary[];
+  selectedAgent: string;
+  onAgentChange: (agentId: string) => void;
   onDraftChange: (value: string) => void;
   onSend: () => void;
   onToggleMic: () => void;
@@ -81,12 +84,16 @@ export function Chat({
   draft,
   isRecording,
   isSending,
+  agents,
+  selectedAgent,
+  onAgentChange,
   onDraftChange,
   onSend,
   onToggleMic
 }: ChatProps): JSX.Element {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0.14);
+  const streamRef = useRef<HTMLDivElement>(null);
 
   const assistantStreaming = useMemo(
     () => messages.some((message) => message.role === "assistant" && message.streaming),
@@ -94,7 +101,7 @@ export function Chat({
   );
   const visualizerState = deriveVisualizerState(isRecording, isSending, assistantStreaming);
   const historyEntries = useMemo(() => deriveHistory(messages), [messages]);
-  const showSuggestions = draft.trim().length === 0;
+  const showSuggestions = draft.trim().length === 0 && messages.length <= 1;
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -104,6 +111,12 @@ export function Chat({
       window.clearInterval(interval);
     };
   }, [visualizerState]);
+
+  useEffect(() => {
+    if (streamRef.current) {
+      streamRef.current.scrollTop = streamRef.current.scrollHeight;
+    }
+  }, [messages]);
 
   return (
     <section className="jarvis-chat-shell">
@@ -115,18 +128,43 @@ export function Chat({
           <span className="jarvis-status-dot" />
           <h2 className="jarvis-title">NEXUS CORE // ACTIVE</h2>
         </div>
-        <button
-          type="button"
-          className="jarvis-history-button"
-          onClick={() => setHistoryOpen((open) => !open)}
-        >
-          HISTORY
-        </button>
+        <div className="jarvis-chat-header__right">
+          <select
+            className="jarvis-agent-select"
+            value={selectedAgent}
+            onChange={(event) => onAgentChange(event.target.value)}
+          >
+            <option value="">All Agents</option>
+            {agents.map((agent) => (
+              <option key={agent.id} value={agent.id}>
+                {agent.name} ({agent.status})
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="jarvis-clear-btn"
+            onClick={() => onDraftChange("")}
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            className="jarvis-history-button"
+            onClick={() => setHistoryOpen((open) => !open)}
+          >
+            HISTORY
+          </button>
+        </div>
       </header>
 
-      <main className="jarvis-chat-stream">
+      <main className="jarvis-chat-stream" ref={streamRef}>
         {messages.length === 0 ? (
           <article className="jarvis-message jarvis-message-assistant">
+            <div className="jarvis-msg-agent-header">
+              <span className="jarvis-msg-agent-icon">N</span>
+              <span className="jarvis-msg-agent-name">NexusOS</span>
+            </div>
             <p className="nexus-msg-typewriter">
               Awaiting command input. Try: create an agent for daily system audits.
             </p>
@@ -136,18 +174,34 @@ export function Chat({
           messages.map((message) => (
             <article
               key={message.id}
-              className={`jarvis-message-wrap ${message.role === "user" ? "right" : "left"}`}
+              className={`jarvis-message-wrap ${message.role === "user" ? "right" : "left"} fade-slide-up`}
             >
               <div className={bubbleClass(message.role)}>
-                <p
-                  className={
-                    message.role === "assistant" && !message.streaming
-                      ? "nexus-msg-typewriter"
-                      : undefined
-                  }
-                >
-                  {message.content || (message.streaming ? "…" : "")}
-                </p>
+                {message.role === "assistant" && (
+                  <div className="jarvis-msg-agent-header">
+                    <span className="jarvis-msg-agent-icon">N</span>
+                    <span className="jarvis-msg-agent-name">
+                      {message.model === "system" ? "System" : "NexusOS"}
+                    </span>
+                  </div>
+                )}
+                {message.streaming && !message.content ? (
+                  <div className="jarvis-typing-indicator">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                ) : (
+                  <p
+                    className={
+                      message.role === "assistant" && !message.streaming
+                        ? "nexus-msg-typewriter"
+                        : undefined
+                    }
+                  >
+                    {message.content || (message.streaming ? "..." : "")}
+                  </p>
+                )}
                 <span className="jarvis-message-time">
                   {formatMilitaryTime(message.timestamp)}
                   {message.model ? ` // ${message.model}` : ""}
@@ -155,6 +209,21 @@ export function Chat({
               </div>
             </article>
           ))
+        )}
+        {isSending && (
+          <article className="jarvis-message-wrap left fade-slide-up">
+            <div className="jarvis-message jarvis-message-assistant">
+              <div className="jarvis-msg-agent-header">
+                <span className="jarvis-msg-agent-icon">N</span>
+                <span className="jarvis-msg-agent-name">NexusOS</span>
+              </div>
+              <div className="jarvis-typing-indicator">
+                <span />
+                <span />
+                <span />
+              </div>
+            </div>
+          </article>
         )}
       </main>
 
@@ -179,13 +248,21 @@ export function Chat({
             >
               <span className="jarvis-mic-ring ring-one" />
               <span className="jarvis-mic-ring ring-two" />
-              <span className="jarvis-mic-core">{isRecording ? "◉" : "◎"}</span>
+              <span className="jarvis-mic-core">{isRecording ? "REC" : "MIC"}</span>
             </button>
 
             <div className="jarvis-input-shell">
               <textarea
                 value={draft}
                 onChange={(event) => onDraftChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    if (!isSending) {
+                      onSend();
+                    }
+                  }
+                }}
                 placeholder="Transmit directive to NexusOS..."
                 rows={2}
                 className="jarvis-input"
@@ -193,8 +270,8 @@ export function Chat({
             </div>
 
             <button type="submit" disabled={isSending} className="jarvis-send-button">
+              <span className="jarvis-send-arrow">&#x27A4;</span>
               <span>SEND</span>
-              <span aria-hidden="true">➤</span>
             </button>
           </div>
 
@@ -204,19 +281,6 @@ export function Chat({
               onDraftChange(value);
             }}
           />
-
-          {isSending ? (
-            <div className="jarvis-thinking">
-              <span>NEXUS is thinking...</span>
-              <span className="dna-spinner" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-                <span />
-              </span>
-              <span className="jarvis-thinking-scan" />
-            </div>
-          ) : null}
         </form>
       </footer>
 

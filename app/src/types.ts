@@ -70,6 +70,10 @@ export interface NexusConfig {
   messaging: MessagingConfig;
   voice: VoiceConfig;
   privacy: PrivacyConfig;
+  hardware?: HardwareConfig;
+  ollama?: OllamaConfigSection;
+  models?: ModelsConfig;
+  agents?: Record<string, AgentLlmConfig>;
 }
 
 export interface ChatResponse {
@@ -90,3 +94,81 @@ export interface ChatMessage {
 }
 
 export type ConnectionStatus = "connected" | "mock";
+
+export interface HardwareInfo {
+  gpu: string;
+  vram_mb: number;
+  ram_mb: number;
+  detected_at: string;
+  tier: string;
+  recommended_primary: string;
+  recommended_fast: string;
+}
+
+export interface OllamaModelInfo {
+  name: string;
+  size: number;
+}
+
+export interface OllamaStatus {
+  connected: boolean;
+  base_url: string;
+  models: OllamaModelInfo[];
+}
+
+export interface SetupResult {
+  hardware: HardwareInfo;
+  ollama: OllamaStatus;
+  config_saved: boolean;
+}
+
+export interface HardwareConfig {
+  gpu: string;
+  vram_mb: number;
+  ram_mb: number;
+  detected_at: string;
+}
+
+export interface OllamaConfigSection {
+  base_url: string;
+  status: string;
+}
+
+export interface ModelsConfig {
+  primary: string;
+  fast: string;
+}
+
+export interface AgentLlmConfig {
+  model: string;
+  temperature: number;
+  max_tokens: number;
+}
+
+export interface ModelPullProgress {
+  model: string;
+  status: string;
+  percent: number;
+  completed_bytes: number;
+  total_bytes: number;
+  error?: string;
+}
+
+export interface AvailableModel {
+  id: string;
+  name: string;
+  size_gb: number;
+  context: string;
+  capabilities: string[];
+  recommended: boolean;
+  tag: string;
+  installed: boolean;
+  description: string;
+}
+
+export interface ChatTokenEvent {
+  token: string;
+  full: string;
+  done: boolean;
+  error?: string;
+}

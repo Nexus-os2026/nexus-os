@@ -1,27 +1,31 @@
 :root {
   /* Backgrounds */
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #0d1117;
-  --bg-panel: rgba(13, 17, 23, 0.85);
-  --bg-glass: rgba(0, 240, 255, 0.03);
+  --bg-primary: #050a12;
+  --bg-secondary: #0a1628;
+  --bg-card: #0d1f3c;
+  --bg-elevated: #132744;
+  --bg-panel: rgba(13, 31, 60, 0.85);
+  --bg-glass: rgba(0, 255, 213, 0.03);
 
   /* Accents */
-  --cyan: #00f0ff;
-  --cyan-dim: #00f0ff33;
-  --cyan-glow: 0 0 20px rgba(0, 240, 255, 0.3);
-  --blue: #0080ff;
-  --red: #ff0040;
-  --amber: #ffaa00;
-  --green: #00ff88;
+  --cyan: #00ffd5;
+  --cyan-dim: #00ffd580;
+  --cyan-glow: 0 0 20px rgba(0, 255, 213, 0.3);
+  --blue: #3b82f6;
+  --green: #10b981;
+  --amber: #f59e0b;
+  --red: #ef4444;
+  --purple: #8b5cf6;
 
   /* Text */
-  --text-primary: #e0e0e0;
-  --text-secondary: #8892a0;
-  --text-accent: #00f0ff;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #475569;
+  --text-accent: #00ffd5;
 
   /* Borders */
-  --border: rgba(0, 240, 255, 0.1);
-  --border-active: rgba(0, 240, 255, 0.4);
+  --border: rgba(0, 255, 213, 0.1);
+  --border-active: rgba(0, 255, 213, 0.4);
 
   /* Fonts */
   --font-display: "Orbitron", sans-serif;
@@ -30,9 +34,9 @@
 }
 
 body {
-  background: radial-gradient(circle at 20% 0%, rgba(0, 128, 255, 0.15), transparent 28%),
-    radial-gradient(circle at 78% 100%, rgba(0, 240, 255, 0.09), transparent 32%),
-    linear-gradient(150deg, var(--bg-primary) 0%, var(--bg-secondary) 48%, #060b12 100%);
+  background: radial-gradient(circle at 20% 0%, rgba(0, 255, 213, 0.1), transparent 28%),
+    radial-gradient(circle at 78% 100%, rgba(59, 130, 246, 0.08), transparent 32%),
+    linear-gradient(150deg, var(--bg-primary) 0%, var(--bg-secondary) 48%, #030710 100%);
   color: var(--text-primary);
   font-family: var(--font-body);
 }

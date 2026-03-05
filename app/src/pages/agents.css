@@ -1,13 +1,14 @@
 .mission-control {
   position: relative;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto auto 1fr auto;
   gap: 0.85rem;
   height: calc(100vh - 10rem);
-  border: 1px solid rgba(0, 240, 255, 0.2);
-  background: linear-gradient(155deg, rgba(10, 10, 15, 0.94), rgba(13, 17, 23, 0.86));
+  border: 1px solid rgba(0, 255, 213, 0.2);
+  background: linear-gradient(155deg, rgba(5, 10, 18, 0.94), rgba(10, 22, 40, 0.86));
   backdrop-filter: blur(12px);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .mission-grid-overlay {
@@ -165,8 +166,8 @@
 }
 
 .agent-gauge {
-  width: 88px;
-  height: 88px;
+  width: 72px;
+  height: 72px;
 }
 
 .agent-gauge-bg {
@@ -744,9 +745,97 @@
   }
 }
 
+.mission-stats-ribbon {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.65rem;
+  padding: 0 1rem;
+}
+
+.mission-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  background: linear-gradient(145deg, rgba(13, 31, 60, 0.7), rgba(5, 10, 18, 0.8));
+  backdrop-filter: blur(8px);
+}
+
+.mission-stat-icon {
+  font-size: 1.4rem;
+  color: var(--cyan);
+}
+
+.mission-stat-value {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.mission-stat-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mission-fuel-bars {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.4rem 0;
+}
+
+.mission-fuel-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 42px;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.mission-fuel-name {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mission-fuel-track {
+  height: 10px;
+  border: 1px solid var(--border);
+  background: rgba(5, 10, 18, 0.7);
+  overflow: hidden;
+}
+
+.mission-fuel-fill {
+  height: 100%;
+  transition: width 400ms ease;
+  box-shadow: 0 0 10px rgba(0, 255, 213, 0.3);
+}
+
+.mission-fuel-pct {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-primary);
+  text-align: right;
+}
+
 @media (max-width: 800px) {
   .mission-control {
     height: calc(100vh - 8rem);
+  }
+
+  .mission-stats-ribbon {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .create-progress {

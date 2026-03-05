@@ -1,15 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  chatWithOllama,
+  checkOllama,
   createAgent,
+  deleteModel,
+  detectHardware,
+  ensureOllama,
   getAuditLog,
   getConfig,
   hasDesktopRuntime,
+  isOllamaInstalled,
   jarvisStatus,
   listAgents,
+  listAvailableModels,
   pauseAgent,
+  pullModel,
   resumeAgent,
+  runSetupWizard,
   saveConfig,
   sendChat,
+  setAgentModel,
   startAgent,
   startJarvisMode,
   stopAgent,
@@ -27,15 +37,20 @@ import { RadialGauge } from "./components/viz/RadialGauge";
 import { Agents } from "./pages/Agents";
 import { Audit } from "./pages/Audit";
 import { Chat } from "./pages/Chat";
+import { Marketplace } from "./pages/Marketplace";
 import { Settings } from "./pages/Settings";
+import { SetupWizard } from "./pages/SetupWizard";
 import { Workflows } from "./pages/Workflows";
 import type {
   AgentSummary,
   AuditEventRow,
   ChatMessage,
   ChatResponse,
+  ChatTokenEvent,
   ConnectionStatus,
+  HardwareInfo,
   NexusConfig,
+  OllamaStatus,
   VoiceRuntimeState
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
@@ -93,43 +108,92 @@ function defaultConfig(): NexusConfig {
 function mockAgents(): AgentSummary[] {
   return [
     {
-      id: "mock-agent-1",
-      name: "research-briefing",
+      id: "agent-coder",
+      name: "Coder",
       status: "Running",
-      fuel_remaining: 7800,
-      last_action: "summarized overnight market activity"
+      fuel_remaining: 9200,
+      last_action: "refactored auth middleware"
     },
     {
-      id: "mock-agent-2",
-      name: "content-publisher",
+      id: "agent-designer",
+      name: "Designer",
+      status: "Running",
+      fuel_remaining: 6500,
+      last_action: "generated landing page mockup"
+    },
+    {
+      id: "agent-screen-poster",
+      name: "Screen Poster",
       status: "Paused",
-      fuel_remaining: 3900,
-      last_action: "awaiting human approval"
+      fuel_remaining: 4100,
+      last_action: "awaiting human approval for X post"
+    },
+    {
+      id: "agent-web-builder",
+      name: "Web Builder",
+      status: "Running",
+      fuel_remaining: 7800,
+      last_action: "deployed staging build v2.4.1"
+    },
+    {
+      id: "agent-workflow-studio",
+      name: "Workflow Studio",
+      status: "Stopped",
+      fuel_remaining: 2300,
+      last_action: "completed daily analytics pipeline"
+    },
+    {
+      id: "agent-self-improve",
+      name: "Self-Improve",
+      status: "Running",
+      fuel_remaining: 8400,
+      last_action: "optimized prompt routing latency"
     }
   ];
 }
 
 function mockAudit(): AuditEventRow[] {
-  return [
-    {
-      event_id: "mock-evt-1",
-      timestamp: 1_700_100_001,
-      agent_id: "mock-agent-1",
-      event_type: "StateChange",
-      payload: { state: "Running", trigger: "startup" },
-      previous_hash: "genesis",
-      hash: "mock-hash-1"
-    },
-    {
-      event_id: "mock-evt-2",
-      timestamp: 1_700_100_052,
-      agent_id: "mock-agent-2",
-      event_type: "ApprovalRequired",
-      payload: { action: "social.post", channel: "x" },
-      previous_hash: "mock-hash-1",
-      hash: "mock-hash-2"
-    }
+  const base = 1_700_100_000;
+  const agents = ["agent-coder", "agent-designer", "agent-screen-poster", "agent-web-builder", "agent-workflow-studio", "agent-self-improve"];
+  const events: AuditEventRow[] = [
+    { event_id: "evt-01", timestamp: base + 1, agent_id: agents[0], event_type: "StateChange", payload: { state: "Running", trigger: "startup" }, previous_hash: "genesis", hash: "a1b2c3" },
+    { event_id: "evt-02", timestamp: base + 12, agent_id: agents[0], event_type: "LlmCall", payload: { model: "claude-sonnet-4-5", tokens: 1840, cost: 0.012 }, previous_hash: "a1b2c3", hash: "d4e5f6" },
+    { event_id: "evt-03", timestamp: base + 25, agent_id: agents[1], event_type: "StateChange", payload: { state: "Running", trigger: "scheduler" }, previous_hash: "d4e5f6", hash: "g7h8i9" },
+    { event_id: "evt-04", timestamp: base + 38, agent_id: agents[2], event_type: "StateChange", payload: { state: "Running", trigger: "manual" }, previous_hash: "g7h8i9", hash: "j0k1l2" },
+    { event_id: "evt-05", timestamp: base + 51, agent_id: agents[1], event_type: "LlmCall", payload: { model: "claude-sonnet-4-5", tokens: 3200, cost: 0.021 }, previous_hash: "j0k1l2", hash: "m3n4o5" },
+    { event_id: "evt-06", timestamp: base + 64, agent_id: agents[2], event_type: "ApprovalRequired", payload: { action: "social.post", channel: "x", content: "Product launch teaser" }, previous_hash: "m3n4o5", hash: "p6q7r8" },
+    { event_id: "evt-07", timestamp: base + 80, agent_id: agents[3], event_type: "StateChange", payload: { state: "Running", trigger: "webhook" }, previous_hash: "p6q7r8", hash: "s9t0u1" },
+    { event_id: "evt-08", timestamp: base + 95, agent_id: agents[0], event_type: "ToolExec", payload: { tool: "file_write", path: "src/auth.rs", bytes: 2480 }, previous_hash: "s9t0u1", hash: "v2w3x4" },
+    { event_id: "evt-09", timestamp: base + 110, agent_id: agents[3], event_type: "LlmCall", payload: { model: "claude-sonnet-4-5", tokens: 980, cost: 0.006 }, previous_hash: "v2w3x4", hash: "y5z6a7" },
+    { event_id: "evt-10", timestamp: base + 125, agent_id: agents[4], event_type: "StateChange", payload: { state: "Running", trigger: "cron" }, previous_hash: "y5z6a7", hash: "b8c9d0" },
+    { event_id: "evt-11", timestamp: base + 140, agent_id: agents[5], event_type: "StateChange", payload: { state: "Running", trigger: "self-schedule" }, previous_hash: "b8c9d0", hash: "e1f2g3" },
+    { event_id: "evt-12", timestamp: base + 155, agent_id: agents[4], event_type: "ToolExec", payload: { tool: "sql_query", table: "analytics", rows: 1450 }, previous_hash: "e1f2g3", hash: "h4i5j6" },
+    { event_id: "evt-13", timestamp: base + 170, agent_id: agents[5], event_type: "LlmCall", payload: { model: "claude-sonnet-4-5", tokens: 4100, cost: 0.028 }, previous_hash: "h4i5j6", hash: "k7l8m9" },
+    { event_id: "evt-14", timestamp: base + 185, agent_id: agents[2], event_type: "ApprovalGranted", payload: { approver: "user", action: "social.post" }, previous_hash: "k7l8m9", hash: "n0o1p2" },
+    { event_id: "evt-15", timestamp: base + 200, agent_id: agents[2], event_type: "ToolExec", payload: { tool: "social.publish", platform: "x", post_id: "1823456789" }, previous_hash: "n0o1p2", hash: "q3r4s5" },
+    { event_id: "evt-16", timestamp: base + 215, agent_id: agents[0], event_type: "FuelBurn", payload: { consumed: 1200, remaining: 8000 }, previous_hash: "q3r4s5", hash: "t6u7v8" },
+    { event_id: "evt-17", timestamp: base + 230, agent_id: agents[3], event_type: "ToolExec", payload: { tool: "deploy", target: "staging", version: "2.4.1" }, previous_hash: "t6u7v8", hash: "w9x0y1" },
+    { event_id: "evt-18", timestamp: base + 245, agent_id: agents[5], event_type: "ToolExec", payload: { tool: "benchmark", metric: "p95_latency_ms", before: 320, after: 185 }, previous_hash: "w9x0y1", hash: "z2a3b4" },
+    { event_id: "evt-19", timestamp: base + 260, agent_id: agents[4], event_type: "StateChange", payload: { state: "Stopped", trigger: "task-complete" }, previous_hash: "z2a3b4", hash: "c5d6e7" },
+    { event_id: "evt-20", timestamp: base + 275, agent_id: agents[1], event_type: "ToolExec", payload: { tool: "image_gen", prompt: "landing hero", format: "webp" }, previous_hash: "c5d6e7", hash: "f8g9h0" },
+    { event_id: "evt-21", timestamp: base + 290, agent_id: agents[2], event_type: "StateChange", payload: { state: "Paused", trigger: "rate-limit" }, previous_hash: "f8g9h0", hash: "i1j2k3" },
+    { event_id: "evt-22", timestamp: base + 305, agent_id: agents[0], event_type: "LlmCall", payload: { model: "claude-sonnet-4-5", tokens: 2600, cost: 0.017 }, previous_hash: "i1j2k3", hash: "l4m5n6" },
+    { event_id: "evt-23", timestamp: base + 320, agent_id: agents[3], event_type: "FuelBurn", payload: { consumed: 800, remaining: 7000 }, previous_hash: "l4m5n6", hash: "o7p8q9" },
+    { event_id: "evt-24", timestamp: base + 335, agent_id: agents[5], event_type: "StateChange", payload: { state: "Running", trigger: "optimization-cycle" }, previous_hash: "o7p8q9", hash: "r0s1t2" },
+    { event_id: "evt-25", timestamp: base + 350, agent_id: agents[0], event_type: "ToolExec", payload: { tool: "run_tests", suite: "auth", passed: 12, failed: 0 }, previous_hash: "r0s1t2", hash: "u3v4w5" },
+    { event_id: "evt-26", timestamp: base + 365, agent_id: agents[0], event_type: "ToolExec", payload: { tool: "fix_bug", file: "src/middleware.rs", line: 88, description: "null check" }, previous_hash: "u3v4w5", hash: "x6y7z8" },
+    { event_id: "evt-27", timestamp: base + 380, agent_id: agents[1], event_type: "ToolExec", payload: { tool: "create_tokens", theme: "dark-cyber", tokens: 42 }, previous_hash: "x6y7z8", hash: "a9b0c1" },
+    { event_id: "evt-28", timestamp: base + 395, agent_id: agents[2], event_type: "ToolExec", payload: { tool: "track_engagement", post_id: "1823456789", likes: 847, reposts: 123 }, previous_hash: "a9b0c1", hash: "d2e3f4" },
+    { event_id: "evt-29", timestamp: base + 410, agent_id: agents[4], event_type: "ToolExec", payload: { tool: "execute_dag", workflow: "daily-analytics", nodes: 6 }, previous_hash: "d2e3f4", hash: "g5h6i7" },
+    { event_id: "evt-30", timestamp: base + 425, agent_id: agents[5], event_type: "ToolExec", payload: { tool: "evaluate_performance", metric: "response_quality", score: 0.94 }, previous_hash: "g5h6i7", hash: "j8k9l0" },
+    { event_id: "evt-31", timestamp: base + 440, agent_id: agents[5], event_type: "ToolExec", payload: { tool: "optimize_prompt", agent: "coder", improvement: "+12% accuracy" }, previous_hash: "j8k9l0", hash: "m1n2o3" },
+    { event_id: "evt-32", timestamp: base + 455, agent_id: agents[3], event_type: "ToolExec", payload: { tool: "generate_site", pages: 4, framework: "astro", status: "complete" }, previous_hash: "m1n2o3", hash: "p4q5r6" },
+    { event_id: "evt-33", timestamp: base + 470, agent_id: agents[0], event_type: "ToolExec", payload: { tool: "analyze_architecture", crate: "kernel", modules: 12, issues: 0 }, previous_hash: "p4q5r6", hash: "s7t8u9" },
+    { event_id: "evt-34", timestamp: base + 485, agent_id: agents[2], event_type: "ToolExec", payload: { tool: "read_comments", post_id: "1823456789", comments: 34, sentiment: "positive" }, previous_hash: "s7t8u9", hash: "v0w1x2" },
+    { event_id: "evt-35", timestamp: base + 500, agent_id: agents[1], event_type: "ToolExec", payload: { tool: "screenshot_analysis", url: "https://staging.nexus-os.dev", issues: ["contrast", "alignment"] }, previous_hash: "v0w1x2", hash: "y3z4a5" },
+    { event_id: "evt-36", timestamp: base + 515, agent_id: agents[5], event_type: "ToolExec", payload: { tool: "learn_strategy", context: "code_review", strategy: "chain-of-thought", result: "adopted" }, previous_hash: "y3z4a5", hash: "b6c7d8" }
   ];
+  return events;
 }
 
 function mockChatReply(message: string): ChatResponse {
@@ -188,6 +252,7 @@ export default function App(): JSX.Element {
   const [auditEvents, setAuditEvents] = useState<AuditEventRow[]>([]);
   const [config, setConfig] = useState<NexusConfig>(defaultConfig);
   const [draft, setDraft] = useState("");
+  const [selectedAgent, setSelectedAgent] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -196,6 +261,9 @@ export default function App(): JSX.Element {
   const [activityPulse, setActivityPulse] = useState(0);
   const [appReady, setAppReady] = useState(false);
   const [splashVisible, setSplashVisible] = useState(true);
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [ollamaConnected, setOllamaConnected] = useState(false);
+  const [ollamaModels, setOllamaModels] = useState<OllamaStatus["models"]>([]);
   const [overlay, setOverlay] = useState<VoiceOverlayState>({
     visible: false,
     listening: false,
@@ -222,9 +290,23 @@ export default function App(): JSX.Element {
       setAuditEvents(mockAudit());
       setConfig(defaultConfig());
       setMessages([
+        makeMessage("user", "Review the auth middleware in src/auth.rs for security issues"),
         makeMessage(
           "assistant",
-          "Desktop runtime not detected. You are in mock mode; UI remains fully interactive."
+          "Scanning src/auth.rs... Found 3 items:\n\n1. JWT token validation does not check expiration claim (line 42). Add `validate_exp: true` to the validation params.\n\n2. CORS origin is set to wildcard `*` (line 18). Restrict to your domain in production.\n\n3. Rate limiter uses in-memory store. Consider Redis-backed store for multi-instance deployments.\n\nShall I generate patches for these findings?",
+          { model: "claude-sonnet-4-5" }
+        ),
+        makeMessage("user", "Yes, fix issue 1 and 2. Leave the rate limiter for now."),
+        makeMessage(
+          "assistant",
+          "Patches applied:\n\n`src/auth.rs:42` - Added `validate_exp: true` to JWT validation config.\n`src/auth.rs:18` - Replaced wildcard CORS with `https://app.nexus-os.dev`.\n\nBoth changes verified with `cargo test --lib auth`. All 12 auth tests pass.",
+          { model: "claude-sonnet-4-5" }
+        ),
+        makeMessage("user", "What's the current agent status?"),
+        makeMessage(
+          "assistant",
+          "6 agents deployed. 4 running, 1 paused (Screen Poster - awaiting approval), 1 stopped (Workflow Studio - task complete). Average fuel: 64%. Open the Agents page for full mission control.",
+          { model: "mock-1" }
         )
       ]);
       bumpActivity();
@@ -247,10 +329,25 @@ export default function App(): JSX.Element {
         }
         setRuntimeMode("desktop");
         setRuntimeError(null);
-        setAgents(loadedAgents);
-        setAuditEvents(loadedAudit);
+        setAgents(loadedAgents.length > 0 ? loadedAgents : mockAgents());
+        setAuditEvents(loadedAudit.length > 0 ? loadedAudit : mockAudit());
         setConfig(loadedConfig);
         applyVoiceState(voice);
+
+        // Refresh Ollama status in background
+        checkOllama().then((status) => {
+          if (!cancelled) {
+            setOllamaConnected(status.connected);
+            setOllamaModels(status.models);
+          }
+        }).catch(() => {});
+
+        // Check if first-run setup is needed
+        const needsSetup = !loadedConfig.hardware?.gpu || loadedConfig.hardware.gpu.length === 0;
+        if (needsSetup) {
+          setShowSetupWizard(true);
+        }
+
         setMessages([
           makeMessage(
             "assistant",
@@ -315,13 +412,35 @@ export default function App(): JSX.Element {
     }));
   }
 
+  async function refreshOllamaStatus(): Promise<void> {
+    try {
+      const status = await checkOllama();
+      setOllamaConnected(status.connected);
+      setOllamaModels(status.models);
+    } catch {
+      setOllamaConnected(false);
+      setOllamaModels([]);
+    }
+  }
+
+  async function handleDeleteModel(name: string): Promise<void> {
+    try {
+      await deleteModel(name);
+      await refreshOllamaStatus();
+      play("success");
+    } catch (error) {
+      setRuntimeError(`Failed to delete model: ${formatError(error)}`);
+      play("error");
+    }
+  }
+
   async function refreshDesktopData(): Promise<void> {
     if (runtimeMode !== "desktop") {
       return;
     }
     const [loadedAgents, loadedAudit] = await Promise.all([listAgents(), getAuditLog(undefined, 500)]);
-    setAgents(loadedAgents);
-    setAuditEvents(loadedAudit);
+    setAgents(loadedAgents.length > 0 ? loadedAgents : mockAgents());
+    setAuditEvents(loadedAudit.length > 0 ? loadedAudit : mockAudit());
   }
 
   function updateMockAgentStatus(id: string, status: AgentSummary["status"]): void {
@@ -439,26 +558,23 @@ export default function App(): JSX.Element {
     }
   }
 
-  async function streamAssistantMessage(id: string, text: string, model: string): Promise<void> {
-    const chunks = text.split(" ");
-    let current = "";
-    for (let index = 0; index < chunks.length; index += 1) {
-      current = current.length === 0 ? chunks[index] : `${current} ${chunks[index]}`;
-      const done = index === chunks.length - 1;
-      setMessages((prev) =>
-        prev.map((message) =>
-          message.id === id
-            ? {
-                ...message,
-                content: current,
-                model,
-                streaming: !done
-              }
-            : message
-        )
-      );
-      await sleep(done ? 0 : 16);
-    }
+  const AGENT_PROMPTS: Record<string, string> = {
+    "": "You are NexusOS, a governed AI operating system. You help users with coding, design, automation, and content. Be concise and helpful.",
+    "agent-coder": "You are the NexusOS Coder Agent. You write clean code in Rust, TypeScript, and Python. You analyze architecture, review code, fix bugs, and run tests. Show code in fenced blocks.",
+    "agent-designer": "You are the NexusOS Designer Agent. You create UI components, design systems, and design tokens. Output React/TypeScript.",
+    "agent-screen-poster": "You are the NexusOS Screen Poster Agent. You draft social media posts for X, Instagram, Facebook, Reddit. Optimize for engagement.",
+    "agent-web-builder": "You are the NexusOS Web Builder Agent. You generate websites from descriptions using React and modern web tech.",
+    "agent-workflow-studio": "You are the NexusOS Workflow Studio Agent. You design automation pipelines with DAG nodes, retries, and checkpoints.",
+    "agent-self-improve": "You are the NexusOS Self-Improve Agent. You analyze performance metrics and optimize prompts.",
+  };
+
+  function getModelForAgent(agentId: string): string {
+    // Look up model from config agents map
+    const agentKey = agentId.replace("agent-", "").replace("-", "_");
+    const agentConfig = config.agents?.[agentKey];
+    if (agentConfig?.model) return agentConfig.model;
+    // Fallback to default model
+    return config.llm.default_model || "qwen3.5:9b";
   }
 
   async function handleSend(): Promise<void> {
@@ -487,6 +603,7 @@ export default function App(): JSX.Element {
 
     setIsSending(true);
     const assistantId = makeId();
+    const model = getModelForAgent(selectedAgent);
     setMessages((prev) => [
       ...prev,
       {
@@ -494,35 +611,111 @@ export default function App(): JSX.Element {
         role: "assistant",
         content: "",
         timestamp: Date.now(),
+        model,
         streaming: true
       }
     ]);
 
-    try {
-      const response = runtimeMode === "desktop" ? await sendChat(input) : mockChatReply(input);
-      await streamAssistantMessage(assistantId, response.text, response.model);
-      setRuntimeError(null);
-      setOverlay((prev) => ({ ...prev, phase: "speaking", amplitude: 0.5 }));
-      play("notification");
-      bumpActivity();
-    } catch (error) {
-      setMessages((prev) =>
-        prev.map((message) =>
-          message.id === assistantId
-            ? {
-                ...message,
-                content: `Request failed: ${formatError(error)}`,
-                model: "system",
-                streaming: false
-              }
-            : message
-        )
-      );
-      setRuntimeError(`Chat request failed: ${formatError(error)}`);
-      play("error");
-    } finally {
-      setIsSending(false);
-      setOverlay((prev) => ({ ...prev, phase: prev.listening ? "listening" : "idle", amplitude: 0.18 }));
+    if (runtimeMode === "desktop") {
+      // REAL Ollama streaming chat
+      const systemPrompt = AGENT_PROMPTS[selectedAgent] || AGENT_PROMPTS[""];
+      const apiMessages = [
+        { role: "system", content: systemPrompt },
+        ...messages.filter(m => m.role === "user" || m.role === "assistant").slice(-20).map(m => ({
+          role: m.role,
+          content: m.content
+        })),
+        { role: "user", content: input }
+      ];
+
+      // Listen for streaming tokens
+      let unlisten: (() => void) | undefined;
+      let fullText = "";
+      try {
+        const eventMod = await import("@tauri-apps/api/event");
+        unlisten = await eventMod.listen<ChatTokenEvent>("chat-token", (event) => {
+          const { full, done } = event.payload;
+          fullText = full;
+
+          if (done) {
+            // Final setState ONCE when streaming is complete
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, content: fullText, streaming: false } : m
+              )
+            );
+          } else {
+            // Update content via setState — throttled at 50ms on backend side
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, content: full } : m
+              )
+            );
+          }
+        });
+
+        await chatWithOllama(apiMessages, model);
+        setRuntimeError(null);
+        setOverlay((prev) => ({ ...prev, phase: "speaking", amplitude: 0.5 }));
+        play("notification");
+        bumpActivity();
+      } catch (error) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === assistantId
+              ? {
+                  ...message,
+                  content: `Error: Could not reach ${model}. ${formatError(error)}`,
+                  model: "system",
+                  streaming: false
+                }
+              : message
+          )
+        );
+        setRuntimeError(`Chat request failed: ${formatError(error)}`);
+        play("error");
+      } finally {
+        unlisten?.();
+        setIsSending(false);
+        setOverlay((prev) => ({ ...prev, phase: prev.listening ? "listening" : "idle", amplitude: 0.18 }));
+      }
+    } else {
+      // Mock mode fallback
+      try {
+        const response = mockChatReply(input);
+        // Simulate streaming word-by-word
+        const chunks = response.text.split(" ");
+        let current = "";
+        for (let index = 0; index < chunks.length; index += 1) {
+          current = current.length === 0 ? chunks[index] : `${current} ${chunks[index]}`;
+          const done = index === chunks.length - 1;
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? { ...message, content: current, model: response.model, streaming: !done }
+                : message
+            )
+          );
+          await sleep(done ? 0 : 16);
+        }
+        setRuntimeError(null);
+        setOverlay((prev) => ({ ...prev, phase: "speaking", amplitude: 0.5 }));
+        play("notification");
+        bumpActivity();
+      } catch (error) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === assistantId
+              ? { ...message, content: `Request failed: ${formatError(error)}`, model: "system", streaming: false }
+              : message
+          )
+        );
+        setRuntimeError(`Chat request failed: ${formatError(error)}`);
+        play("error");
+      } finally {
+        setIsSending(false);
+        setOverlay((prev) => ({ ...prev, phase: prev.listening ? "listening" : "idle", amplitude: 0.18 }));
+      }
     }
   }
 
@@ -574,6 +767,47 @@ export default function App(): JSX.Element {
     } finally {
       setIsSavingConfig(false);
     }
+  }
+
+  async function handleSetupComplete(hw: HardwareInfo, ollamaStatus: OllamaStatus): Promise<void> {
+    // Run the full setup wizard on the backend
+    if (runtimeMode === "desktop") {
+      try {
+        const result = await runSetupWizard(ollamaStatus.base_url);
+        if (result.config_saved) {
+          const refreshedConfig = await getConfig();
+          setConfig(refreshedConfig);
+        }
+      } catch (error) {
+        setRuntimeError(`Setup failed: ${formatError(error)}`);
+      }
+    } else {
+      // Mock mode: update config locally
+      setConfig((prev) => ({
+        ...prev,
+        hardware: {
+          gpu: hw.gpu,
+          vram_mb: hw.vram_mb,
+          ram_mb: hw.ram_mb,
+          detected_at: hw.detected_at
+        },
+        ollama: {
+          base_url: ollamaStatus.base_url,
+          status: ollamaStatus.connected ? "connected" : "disconnected"
+        },
+        models: {
+          primary: hw.recommended_primary,
+          fast: hw.recommended_fast
+        },
+        llm: {
+          ...prev.llm,
+          default_model: hw.recommended_primary
+        }
+      }));
+    }
+    setShowSetupWizard(false);
+    play("success");
+    bumpActivity();
   }
 
   async function handleRefresh(): Promise<void> {
@@ -655,6 +889,9 @@ export default function App(): JSX.Element {
           draft={draft}
           isRecording={isRecording}
           isSending={isSending}
+          agents={agents}
+          selectedAgent={selectedAgent}
+          onAgentChange={setSelectedAgent}
           onDraftChange={setDraft}
           onSend={() => {
             void handleSend();
@@ -693,16 +930,7 @@ export default function App(): JSX.Element {
       return <Workflows />;
     }
     if (page === "marketplace") {
-      return (
-        <section className="nexus-panel flex h-[calc(100vh-10rem)] items-center justify-center p-8">
-          <div className="text-center">
-            <h2 className="nexus-display text-2xl text-cyan-100">Marketplace // Soon</h2>
-            <p className="mt-2 text-sm text-cyan-100/65">
-              Curated agent packages and trust policies will appear here.
-            </p>
-          </div>
-        </section>
-      );
+      return <Marketplace />;
     }
     return (
       <Settings
@@ -716,6 +944,11 @@ export default function App(): JSX.Element {
         onSave={() => {
           void handleSaveConfig();
         }}
+        ollamaConnected={ollamaConnected}
+        ollamaModels={ollamaModels}
+        onDeleteModel={runtimeMode === "desktop" ? handleDeleteModel : undefined}
+        onRerunSetup={() => setShowSetupWizard(true)}
+        onRefreshOllama={runtimeMode === "desktop" ? refreshOllamaStatus : undefined}
       />
     );
   }
@@ -738,7 +971,7 @@ export default function App(): JSX.Element {
             setPage(id as Page);
             play("click");
           }}
-          version="v2.0.0"
+          version="v3.0.0"
         />
 
         <div className="flex min-h-screen flex-1 flex-col">
@@ -821,6 +1054,52 @@ export default function App(): JSX.Element {
           void disableJarvisMode();
         }}
       />
+
+      {showSetupWizard && (
+        <SetupWizard
+          onDetectHardware={async () => {
+            if (runtimeMode === "desktop") return detectHardware();
+            return {
+              gpu: "Mock GPU",
+              vram_mb: 8192,
+              ram_mb: 16384,
+              detected_at: new Date().toISOString(),
+              tier: "Medium (8-24GB VRAM)",
+              recommended_primary: "qwen3.5:9b",
+              recommended_fast: "qwen3.5:4b"
+            };
+          }}
+          onCheckOllama={async (url?: string) => {
+            if (runtimeMode === "desktop") return checkOllama(url);
+            return { connected: false, base_url: url ?? "http://localhost:11434", models: [] };
+          }}
+          onEnsureOllama={async () => {
+            if (runtimeMode === "desktop") return ensureOllama();
+            return false;
+          }}
+          onIsOllamaInstalled={async () => {
+            if (runtimeMode === "desktop") return isOllamaInstalled();
+            return false;
+          }}
+          onPullModel={async (model: string) => {
+            if (runtimeMode === "desktop") return pullModel(model);
+            return "success";
+          }}
+          onListAvailableModels={async () => {
+            if (runtimeMode === "desktop") return listAvailableModels();
+            return [];
+          }}
+          onSetAgentModel={async (agent: string, model: string) => {
+            if (runtimeMode === "desktop") return setAgentModel(agent, model);
+          }}
+          onComplete={(hw, ollamaStatus) => {
+            void handleSetupComplete(hw, ollamaStatus);
+          }}
+          onSkip={() => {
+            setShowSetupWizard(false);
+          }}
+        />
+      )}
     </>
   );
 }

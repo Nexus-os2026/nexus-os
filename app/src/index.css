@@ -60,7 +60,7 @@ h3 {
 
 @layer components {
   .nexus-shell {
-    @apply relative min-h-screen;
+    @apply relative flex min-h-screen;
   }
 
   .nexus-shell::before {

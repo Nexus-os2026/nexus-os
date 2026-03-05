@@ -64,6 +64,35 @@
   font-size: 0.9rem;
 }
 
+.jarvis-chat-header__right {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.jarvis-agent-select {
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  background: rgba(0, 10, 20, 0.85);
+  color: var(--text-accent);
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+  letter-spacing: 0.06em;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  outline: none;
+  min-width: 10rem;
+}
+
+.jarvis-agent-select:focus {
+  border-color: rgba(0, 240, 255, 0.7);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.15);
+}
+
+.jarvis-agent-select option {
+  background: #0a0e14;
+  color: #e0f4ff;
+}
+
 .jarvis-history-button {
   border: 1px solid rgba(0, 240, 255, 0.45);
   background: rgba(0, 240, 255, 0.05);
@@ -481,6 +510,91 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+.jarvis-msg-agent-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.jarvis-msg-agent-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--cyan), var(--blue));
+  color: var(--bg-primary);
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.jarvis-msg-agent-name {
+  color: var(--text-accent);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.jarvis-message-assistant {
+  border-left: 3px solid var(--cyan);
+}
+
+.jarvis-typing-indicator {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.3rem 0;
+}
+
+.jarvis-typing-indicator span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cyan);
+  opacity: 0.5;
+  animation: jarvis-typing-pulse 1.2s ease-in-out infinite;
+}
+
+.jarvis-typing-indicator span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.jarvis-typing-indicator span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes jarvis-typing-pulse {
+  0%, 60%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.jarvis-clear-btn {
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.08);
+  color: #fca5a5;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  transition: border-color 180ms ease;
+}
+
+.jarvis-clear-btn:hover {
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
+.jarvis-send-arrow {
+  font-size: 1rem;
 }
 
 @media (max-width: 820px) {

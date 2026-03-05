@@ -27,12 +27,12 @@ function statusTone(status: AgentSummary["status"]): "running" | "paused" | "sto
 
 function gaugeColor(percentage: number): string {
   if (percentage > 50) {
-    return "#00f0ff";
+    return "#00ffd5";
   }
   if (percentage > 20) {
-    return "#ffaa00";
+    return "#f59e0b";
   }
-  return "#ff0040";
+  return "#ef4444";
 }
 
 function fuelPercentage(fuelRemaining: number): number {

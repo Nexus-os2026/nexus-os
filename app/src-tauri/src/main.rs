@@ -1,17 +1,27 @@
 use nexus_connectors_llm::gateway::{
     select_provider, AgentRuntimeContext, GovernedLlmGateway, ProviderSelectionConfig,
 };
+use nexus_connectors_llm::providers::OllamaProvider;
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
-use nexus_kernel::config::{load_config, save_config as save_nexus_config, NexusConfig};
+use nexus_kernel::config::{
+    load_config, save_config as save_nexus_config, AgentLlmConfig, HardwareConfig, ModelsConfig,
+    NexusConfig, OllamaConfig,
+};
 use nexus_kernel::errors::AgentError;
+use nexus_kernel::hardware::{recommend_agent_configs, HardwareProfile};
 use nexus_kernel::manifest::AgentManifest;
 use nexus_kernel::supervisor::{AgentId, Supervisor};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
+#[cfg(all(
+    feature = "tauri-runtime",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
+use tauri::Emitter;
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -421,6 +431,491 @@ fn agent_error(error: AgentError) -> String {
     error.to_string()
 }
 
+// ── Setup Wizard Types ──
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HardwareInfo {
+    pub gpu: String,
+    pub vram_mb: u64,
+    pub ram_mb: u64,
+    pub detected_at: String,
+    pub tier: String,
+    pub recommended_primary: String,
+    pub recommended_fast: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OllamaStatus {
+    pub connected: bool,
+    pub base_url: String,
+    pub models: Vec<OllamaModelInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OllamaModelInfo {
+    pub name: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SetupResult {
+    pub hardware: HardwareInfo,
+    pub ollama: OllamaStatus,
+    pub config_saved: bool,
+}
+
+// ── Setup Wizard Functions ──
+
+pub fn detect_hardware() -> Result<HardwareInfo, String> {
+    let hw = HardwareProfile::detect();
+    let tier = hw.recommended_tier();
+    Ok(HardwareInfo {
+        gpu: hw.gpu,
+        vram_mb: hw.vram_mb,
+        ram_mb: hw.ram_mb,
+        detected_at: hw.detected_at,
+        tier: tier.label().to_string(),
+        recommended_primary: tier.primary_model().to_string(),
+        recommended_fast: tier.fast_model().to_string(),
+    })
+}
+
+pub fn check_ollama(base_url: Option<String>) -> Result<OllamaStatus, String> {
+    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let provider = OllamaProvider::new(&url);
+
+    let connected = provider.health_check().unwrap_or(false);
+    let models = if connected {
+        provider
+            .list_models()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|m| OllamaModelInfo {
+                name: m.name,
+                size: m.size,
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    Ok(OllamaStatus {
+        connected,
+        base_url: url,
+        models,
+    })
+}
+
+pub fn pull_ollama_model(model_name: String, base_url: Option<String>) -> Result<String, String> {
+    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let provider = OllamaProvider::new(&url);
+    provider
+        .pull_model(&model_name, |_status, _completed, _total| {})
+        .map_err(|e| e.to_string())
+}
+
+/// Pull a model with throttled progress events (max ~3/sec).
+/// The callback is only invoked every 300ms for progress updates,
+/// but always fires immediately for "success" and error statuses.
+pub fn pull_ollama_model_throttled<F>(
+    model_name: String,
+    base_url: Option<String>,
+    mut on_event: F,
+) -> Result<String, String>
+where
+    F: FnMut(ModelPullProgress),
+{
+    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let provider = OllamaProvider::new(&url);
+    let model_id = model_name.clone();
+    let mut last_emit = std::time::Instant::now()
+        .checked_sub(std::time::Duration::from_secs(1))
+        .unwrap_or_else(std::time::Instant::now);
+
+    provider
+        .pull_model(&model_name, |status, completed, total| {
+            // Always emit terminal statuses immediately
+            if status == "success" || status.contains("error") {
+                let percent = if status == "success" { 100 } else { 0 };
+                on_event(ModelPullProgress {
+                    model: model_id.clone(),
+                    status: status.to_string(),
+                    percent,
+                    completed_bytes: completed,
+                    total_bytes: total,
+                    error: if status.contains("error") {
+                        Some(status.to_string())
+                    } else {
+                        None
+                    },
+                });
+                return;
+            }
+
+            // Throttle: skip if <300ms since last emit
+            let now = std::time::Instant::now();
+            if now.duration_since(last_emit).as_millis() < 300 {
+                return;
+            }
+            last_emit = now;
+
+            let percent = if total > 0 {
+                ((completed as f64 / total as f64) * 100.0).round() as u32
+            } else {
+                0
+            };
+
+            on_event(ModelPullProgress {
+                model: model_id.clone(),
+                status: status.to_string(),
+                percent: percent.min(99),
+                completed_bytes: completed,
+                total_bytes: total,
+                error: None,
+            });
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelPullProgress {
+    pub model: String,
+    pub status: String,
+    pub percent: u32,
+    pub completed_bytes: u64,
+    pub total_bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Ensure Ollama server is running. Returns true if already running or started.
+pub fn ensure_ollama(base_url: Option<String>) -> Result<bool, String> {
+    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let provider = OllamaProvider::new(&url);
+
+    // Check if already running
+    if provider.health_check().unwrap_or(false) {
+        return Ok(true);
+    }
+
+    // Try to start ollama serve in the background
+    let started = Command::new("ollama")
+        .arg("serve")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+
+    if started.is_err() {
+        return Err("Ollama is not installed. Please install it from https://ollama.ai".to_string());
+    }
+
+    // Wait up to 8 seconds for it to come online
+    for _ in 0..16 {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        if provider.health_check().unwrap_or(false) {
+            return Ok(true);
+        }
+    }
+
+    Err("Ollama was started but did not respond within 8 seconds".to_string())
+}
+
+/// Check if ollama binary is available on PATH.
+pub fn is_ollama_installed() -> bool {
+    Command::new("ollama")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Delete a model from Ollama.
+pub fn delete_ollama_model(model_name: String, base_url: Option<String>) -> Result<(), String> {
+    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let endpoint = format!("{}/api/delete", url.trim_end_matches('/'));
+    let body = json!({ "name": model_name });
+    let encoded = serde_json::to_string(&body).map_err(|e| e.to_string())?;
+
+    let output = Command::new("curl")
+        .args(["-sS", "-X", "DELETE"])
+        .arg("-H")
+        .arg("content-type: application/json")
+        .arg("-d")
+        .arg(&encoded)
+        .arg(&endpoint)
+        .output()
+        .map_err(|e| format!("Failed to run curl: {e}"))?;
+
+    if !output.status.success() {
+        return Err("Failed to delete model".to_string());
+    }
+    Ok(())
+}
+
+/// Available model entry for the model browser.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AvailableModel {
+    pub id: String,
+    pub name: String,
+    pub size_gb: f64,
+    pub context: String,
+    pub capabilities: Vec<String>,
+    pub recommended: bool,
+    pub tag: String,
+    pub installed: bool,
+    pub description: String,
+}
+
+/// List all Qwen 3.5 models with hardware-aware recommendations.
+pub fn list_available_models() -> Result<Vec<AvailableModel>, String> {
+    let hw = HardwareProfile::detect();
+    let vram = hw.vram_mb;
+    let ram = hw.ram_mb;
+
+    let provider = OllamaProvider::new("http://localhost:11434");
+    let installed_names: Vec<String> = provider
+        .list_models()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|m| m.name)
+        .collect();
+
+    let has = |id: &str| installed_names.iter().any(|n| n == id);
+
+    let mut models = vec![
+        AvailableModel {
+            id: "qwen3.5:0.8b".into(),
+            name: "Qwen 3.5 0.8B".into(),
+            size_gb: 1.0,
+            context: "256K".into(),
+            capabilities: vec!["Text".into(), "Vision".into(), "Tools".into()],
+            recommended: false,
+            tag: "Ultra-light".into(),
+            installed: has("qwen3.5:0.8b"),
+            description: "Smallest model — runs on anything".into(),
+        },
+        AvailableModel {
+            id: "qwen3.5:2b".into(),
+            name: "Qwen 3.5 2B".into(),
+            size_gb: 2.7,
+            context: "256K".into(),
+            capabilities: vec!["Text".into(), "Vision".into(), "Tools".into(), "Thinking".into()],
+            recommended: false,
+            tag: "Lightweight".into(),
+            installed: has("qwen3.5:2b"),
+            description: "Fast responses, great for quick tasks".into(),
+        },
+        AvailableModel {
+            id: "qwen3.5:4b".into(),
+            name: "Qwen 3.5 4B".into(),
+            size_gb: 3.4,
+            context: "256K".into(),
+            capabilities: vec!["Text".into(), "Vision".into(), "Code".into(), "Tools".into(), "Thinking".into()],
+            recommended: false,
+            tag: "Balanced".into(),
+            installed: has("qwen3.5:4b"),
+            description: "Good balance of speed and quality".into(),
+        },
+        AvailableModel {
+            id: "qwen3.5:9b".into(),
+            name: "Qwen 3.5 9B".into(),
+            size_gb: 6.6,
+            context: "256K".into(),
+            capabilities: vec!["Text".into(), "Vision".into(), "Code".into(), "Reasoning".into(), "Tools".into(), "Thinking".into()],
+            recommended: false,
+            tag: "Recommended".into(),
+            installed: has("qwen3.5:9b"),
+            description: "Best quality for consumer GPUs".into(),
+        },
+        AvailableModel {
+            id: "qwen3.5:27b".into(),
+            name: "Qwen 3.5 27B".into(),
+            size_gb: 17.0,
+            context: "256K".into(),
+            capabilities: vec!["Text".into(), "Vision".into(), "Code".into(), "Reasoning".into(), "Tools".into(), "Thinking".into()],
+            recommended: false,
+            tag: "High-end".into(),
+            installed: has("qwen3.5:27b"),
+            description: "Premium quality — needs 24GB+ VRAM or 32GB+ RAM".into(),
+        },
+        AvailableModel {
+            id: "qwen3.5:35b".into(),
+            name: "Qwen 3.5 35B MoE".into(),
+            size_gb: 24.0,
+            context: "256K".into(),
+            capabilities: vec!["Text".into(), "Vision".into(), "Code".into(), "Reasoning".into(), "Tools".into(), "Thinking".into()],
+            recommended: false,
+            tag: "MoE — only 3B active".into(),
+            installed: has("qwen3.5:35b"),
+            description: "35B total but only 3B active — fast with enough RAM".into(),
+        },
+    ];
+
+    // Mark recommendations based on hardware
+    for m in &mut models {
+        match m.id.as_str() {
+            "qwen3.5:9b" if vram >= 8000 => {
+                m.recommended = true;
+                m.tag = format!("Recommended for your {}MB VRAM", vram);
+                m.description = format!("Best model for your {}MB VRAM — fits perfectly", vram);
+            }
+            "qwen3.5:4b" if (4000..8000).contains(&vram) => {
+                m.recommended = true;
+                m.tag = "Recommended for your GPU".into();
+            }
+            "qwen3.5:4b" if vram >= 8000 => {
+                m.tag = "Fast companion".into();
+                m.description = "Use alongside 9B for quick background tasks".into();
+            }
+            "qwen3.5:35b" if ram >= 48000 => {
+                m.recommended = true;
+                m.tag = format!("Bonus — your {}GB RAM enables this", ram / 1024);
+                m.description = "MoE model with GPU+RAM offload — premium quality".into();
+            }
+            "qwen3.5:27b" if vram >= 20000 => {
+                m.recommended = true;
+                m.tag = "Best for your GPU".into();
+            }
+            "qwen3.5:27b" if vram < 20000 && ram < 32000 => {
+                m.tag = "Too large for your system".into();
+            }
+            _ => {}
+        }
+    }
+
+    // Add already-installed non-qwen3.5 models
+    for name in &installed_names {
+        if !models.iter().any(|m| m.id == *name) {
+            models.push(AvailableModel {
+                id: name.clone(),
+                name: name.replace([':', '-'], " "),
+                size_gb: 0.0,
+                context: "varies".into(),
+                capabilities: vec!["Text".into()],
+                recommended: false,
+                tag: "Already installed".into(),
+                installed: true,
+                description: "Previously downloaded model".into(),
+            });
+        }
+    }
+
+    Ok(models)
+}
+
+/// Stream a chat completion through Ollama. Returns the full response text.
+/// The `on_token` callback is called with each token for streaming to the frontend.
+pub fn chat_with_ollama_streaming<F>(
+    messages: Vec<serde_json::Value>,
+    model: String,
+    base_url: Option<String>,
+    mut on_token: F,
+) -> Result<String, String>
+where
+    F: FnMut(&str),
+{
+    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let provider = OllamaProvider::new(&url);
+
+    // Ensure Ollama is running first
+    if !provider.health_check().unwrap_or(false) {
+        return Err("Ollama is not running. Start it with: ollama serve".into());
+    }
+
+    provider
+        .chat_stream(&messages, &model, |token| {
+            on_token(token);
+        })
+        .map_err(|e| e.to_string())
+}
+
+/// Save agent-to-model assignment in config.
+pub fn set_agent_model(agent: String, model: String) -> Result<(), String> {
+    let mut config = load_config().map_err(|e| e.to_string())?;
+    let entry = config.agents.entry(agent).or_insert(AgentLlmConfig {
+        model: String::new(),
+        temperature: 0.7,
+        max_tokens: 4096,
+    });
+    entry.model = model;
+    save_nexus_config(&config).map_err(|e| e.to_string())
+}
+
+/// Check if setup has been completed (hardware detected).
+pub fn is_setup_complete() -> bool {
+    match load_config() {
+        Ok(cfg) => !cfg.hardware.gpu.is_empty() && cfg.hardware.gpu != "none",
+        Err(_) => false,
+    }
+}
+
+pub fn run_setup_wizard(ollama_url: Option<String>) -> Result<SetupResult, String> {
+    let hw_info = detect_hardware()?;
+    let ollama_status = check_ollama(ollama_url.clone())?;
+
+    // Build and save config
+    let mut config = load_config().map_err(|e| e.to_string())?;
+
+    config.hardware = HardwareConfig {
+        gpu: hw_info.gpu.clone(),
+        vram_mb: hw_info.vram_mb,
+        ram_mb: hw_info.ram_mb,
+        detected_at: hw_info.detected_at.clone(),
+    };
+
+    config.ollama = OllamaConfig {
+        base_url: ollama_status.base_url.clone(),
+        status: if ollama_status.connected {
+            "connected".to_string()
+        } else {
+            "disconnected".to_string()
+        },
+    };
+    config.llm.ollama_url = ollama_status.base_url.clone();
+
+    config.models = ModelsConfig {
+        primary: hw_info.recommended_primary.clone(),
+        fast: hw_info.recommended_fast.clone(),
+    };
+
+    // Set default model to the recommended primary
+    if ollama_status.connected {
+        config.llm.default_model = hw_info.recommended_primary.clone();
+    }
+
+    // Apply agent configs
+    let hw = HardwareProfile {
+        gpu: hw_info.gpu.clone(),
+        vram_mb: hw_info.vram_mb,
+        ram_mb: hw_info.ram_mb,
+        detected_at: hw_info.detected_at.clone(),
+    };
+    let tier = hw.recommended_tier();
+    let agent_configs = recommend_agent_configs(tier);
+    let mut agents_map = BTreeMap::new();
+    for (name, ac) in &agent_configs {
+        agents_map.insert(
+            name.to_string(),
+            AgentLlmConfig {
+                model: ac.model.clone(),
+                temperature: ac.temperature,
+                max_tokens: ac.max_tokens,
+            },
+        );
+    }
+    config.agents = agents_map;
+
+    let config_saved = save_nexus_config(&config).is_ok();
+
+    Ok(SetupResult {
+        hardware: hw_info,
+        ollama: ollama_status,
+        config_saved,
+    })
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -517,6 +1012,137 @@ mod runtime {
         super::tray_status(state.inner())
     }
 
+    #[tauri::command]
+    fn detect_hardware() -> Result<HardwareInfo, String> {
+        super::detect_hardware()
+    }
+
+    #[tauri::command]
+    fn check_ollama(base_url: Option<String>) -> Result<OllamaStatus, String> {
+        super::check_ollama(base_url)
+    }
+
+    #[tauri::command]
+    fn pull_ollama_model(model_name: String, base_url: Option<String>) -> Result<String, String> {
+        super::pull_ollama_model(model_name, base_url)
+    }
+
+    /// Pull a model on a background thread with throttled progress events.
+    /// The Tauri async runtime keeps the main thread free while we block here.
+    #[tauri::command]
+    async fn pull_model(
+        window: tauri::Window,
+        model_name: String,
+        base_url: Option<String>,
+    ) -> Result<String, String> {
+        let (tx, rx) = std::sync::mpsc::channel::<Result<String, String>>();
+        std::thread::spawn(move || {
+            let result =
+                super::pull_ollama_model_throttled(model_name, base_url, |progress| {
+                    let _ = window.emit("model-pull-progress", &progress);
+                });
+            let _ = tx.send(result);
+        });
+        // recv() blocks this async task's thread, but Tauri runs async commands
+        // on a thread pool so the main/UI thread stays responsive.
+        rx.recv().unwrap_or(Err("Download thread terminated unexpectedly".to_string()))
+    }
+
+    #[tauri::command]
+    fn ensure_ollama(base_url: Option<String>) -> Result<bool, String> {
+        super::ensure_ollama(base_url)
+    }
+
+    #[tauri::command]
+    fn is_ollama_installed() -> bool {
+        super::is_ollama_installed()
+    }
+
+    #[tauri::command]
+    fn delete_model(model_name: String, base_url: Option<String>) -> Result<(), String> {
+        super::delete_ollama_model(model_name, base_url)
+    }
+
+    #[tauri::command]
+    fn is_setup_complete() -> bool {
+        super::is_setup_complete()
+    }
+
+    #[tauri::command]
+    fn run_setup_wizard(ollama_url: Option<String>) -> Result<SetupResult, String> {
+        super::run_setup_wizard(ollama_url)
+    }
+
+    #[tauri::command]
+    fn list_available_models() -> Result<Vec<super::AvailableModel>, String> {
+        super::list_available_models()
+    }
+
+    /// Stream chat via Ollama's OpenAI-compatible endpoint.
+    /// Emits `chat-token` events with throttling, returns full text.
+    #[tauri::command]
+    async fn chat_with_ollama(
+        window: tauri::Window,
+        messages: Vec<serde_json::Value>,
+        model: String,
+        base_url: Option<String>,
+    ) -> Result<String, String> {
+        let (tx, rx) = std::sync::mpsc::channel::<Result<String, String>>();
+        std::thread::spawn(move || {
+            let mut last_emit = std::time::Instant::now()
+                .checked_sub(std::time::Duration::from_secs(1))
+                .unwrap_or_else(std::time::Instant::now);
+            let mut full = String::new();
+
+            let result = super::chat_with_ollama_streaming(
+                messages,
+                model,
+                base_url,
+                |token| {
+                    full.push_str(token);
+
+                    // Throttle: emit at most every 50ms
+                    let now = std::time::Instant::now();
+                    if now.duration_since(last_emit).as_millis() >= 50 {
+                        let _ = window.emit("chat-token", serde_json::json!({
+                            "token": token,
+                            "full": &full,
+                            "done": false,
+                        }));
+                        last_emit = now;
+                    }
+                },
+            );
+
+            match &result {
+                Ok(text) => {
+                    let _ = window.emit("chat-token", serde_json::json!({
+                        "token": "",
+                        "full": text,
+                        "done": true,
+                    }));
+                }
+                Err(e) => {
+                    let _ = window.emit("chat-token", serde_json::json!({
+                        "token": "",
+                        "full": "",
+                        "done": true,
+                        "error": e,
+                    }));
+                }
+            }
+
+            let _ = tx.send(result);
+        });
+        rx.recv()
+            .unwrap_or(Err("Chat thread terminated unexpectedly".to_string()))
+    }
+
+    #[tauri::command]
+    fn set_agent_model(agent: String, model: String) -> Result<(), String> {
+        super::set_agent_model(agent, model)
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -585,6 +1211,18 @@ mod runtime {
                 jarvis_status,
                 transcribe_push_to_talk,
                 tray_status,
+                detect_hardware,
+                check_ollama,
+                pull_ollama_model,
+                pull_model,
+                ensure_ollama,
+                is_ollama_installed,
+                delete_model,
+                is_setup_complete,
+                run_setup_wizard,
+                list_available_models,
+                chat_with_ollama,
+                set_agent_model,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");

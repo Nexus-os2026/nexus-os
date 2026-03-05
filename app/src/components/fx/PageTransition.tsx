@@ -9,9 +9,9 @@ interface PageTransitionProps {
 type TransitionPhase = "idle" | "out" | "in";
 
 export function PageTransition({ pageKey, children }: PageTransitionProps): JSX.Element {
-  const [renderedChildren, setRenderedChildren] = useState(children);
   const [phase, setPhase] = useState<TransitionPhase>("idle");
   const prevKeyRef = useRef(pageKey);
+  const timerRef = useRef<number>(0);
 
   useEffect(() => {
     if (prevKeyRef.current === pageKey) {
@@ -19,31 +19,25 @@ export function PageTransition({ pageKey, children }: PageTransitionProps): JSX.
     }
     prevKeyRef.current = pageKey;
 
+    // Clear any pending timers from previous transitions
+    window.clearTimeout(timerRef.current);
+
     setPhase("out");
-    const swapTimer = window.setTimeout(() => {
-      setRenderedChildren(children);
+    timerRef.current = window.setTimeout(() => {
       setPhase("in");
+      timerRef.current = window.setTimeout(() => {
+        setPhase("idle");
+      }, 230);
     }, 170);
 
-    const settleTimer = window.setTimeout(() => {
-      setPhase("idle");
-    }, 400);
-
     return () => {
-      window.clearTimeout(swapTimer);
-      window.clearTimeout(settleTimer);
+      window.clearTimeout(timerRef.current);
     };
-  }, [children, pageKey]);
-
-  useEffect(() => {
-    if (phase === "idle") {
-      setRenderedChildren(children);
-    }
-  }, [children, phase]);
+  }, [pageKey]);
 
   return (
     <div className={`page-transition page-transition-${phase}`}>
-      <div className="page-transition__layer">{renderedChildren}</div>
+      <div className="page-transition__layer">{children}</div>
       <div className="page-transition__cyber-wipe" aria-hidden="true" />
       <div className="page-transition__data-dissolve" aria-hidden="true" />
     </div>

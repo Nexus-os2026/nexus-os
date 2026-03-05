@@ -2199,6 +2199,7 @@ dependencies = [
  "clap",
  "coding-agent",
  "nexus-connectors-core",
+ "nexus-connectors-llm",
  "nexus-kernel",
  "self-improve-agent",
  "social-poster-agent",

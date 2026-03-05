@@ -129,6 +129,11 @@ export function Agents({
     setDetailOpen(true);
   }
 
+  const totalTasks = auditEvents.length;
+  const averageFuel = agents.length > 0
+    ? Math.round(agents.reduce((sum, a) => sum + Math.max(0, Math.min(100, a.fuel_remaining / 100)), 0) / agents.length)
+    : 0;
+
   return (
     <section className="mission-control">
       <div className="mission-grid-overlay" />
@@ -148,6 +153,37 @@ export function Agents({
           </button>
         </div>
       </header>
+
+      <div className="mission-stats-ribbon">
+        <div className="mission-stat-card">
+          <span className="mission-stat-icon">&#x2B22;</span>
+          <div>
+            <span className="mission-stat-value">{agents.length}</span>
+            <span className="mission-stat-label">Total Agents</span>
+          </div>
+        </div>
+        <div className="mission-stat-card">
+          <span className="mission-stat-icon" style={{ color: "var(--green)" }}>&#x25C9;</span>
+          <div>
+            <span className="mission-stat-value">{activeCount}</span>
+            <span className="mission-stat-label">Active</span>
+          </div>
+        </div>
+        <div className="mission-stat-card">
+          <span className="mission-stat-icon" style={{ color: "var(--blue)" }}>&#x2726;</span>
+          <div>
+            <span className="mission-stat-value">{totalTasks}</span>
+            <span className="mission-stat-label">Events Today</span>
+          </div>
+        </div>
+        <div className="mission-stat-card">
+          <span className="mission-stat-icon" style={{ color: "var(--amber)" }}>&#x26A1;</span>
+          <div>
+            <span className="mission-stat-value">{averageFuel}%</span>
+            <span className="mission-stat-label">Avg Fuel</span>
+          </div>
+        </div>
+      </div>
 
       <main className="mission-agent-grid">
         {agents.length === 0 ? (
@@ -177,14 +213,23 @@ export function Agents({
             <p className="mission-viz-title">Agent Fuel Matrix</p>
             <PulseRing active={activeCount > 0} />
           </div>
-          <div className="mission-viz-gauges">
-            {agents.slice(0, 3).map((agent) => (
-              <RadialGauge
-                key={agent.id}
-                value={Math.max(0, Math.min(100, Math.round(agent.fuel_remaining / 100)))}
-                label={agent.name.slice(0, 10)}
-              />
-            ))}
+          <div className="mission-fuel-bars">
+            {agents.map((agent) => {
+              const pct = Math.max(0, Math.min(100, Math.round(agent.fuel_remaining / 100)));
+              const barColor = pct > 50 ? "var(--green)" : pct > 20 ? "var(--amber)" : "var(--red)";
+              return (
+                <div key={agent.id} className="mission-fuel-row">
+                  <span className="mission-fuel-name">{agent.name}</span>
+                  <div className="mission-fuel-track">
+                    <div
+                      className="mission-fuel-fill"
+                      style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${barColor}, ${barColor}88)` }}
+                    />
+                  </div>
+                  <span className="mission-fuel-pct">{pct}%</span>
+                </div>
+              );
+            })}
           </div>
         </div>
         <div className="mission-viz-card mission-viz-card-wide">
