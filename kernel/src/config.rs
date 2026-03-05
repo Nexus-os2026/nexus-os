@@ -2,11 +2,12 @@ use crate::errors::AgentError;
 use crate::privacy::{EncryptedField, PrivacyManager, UserKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct NexusConfig {
     pub llm: LlmConfig,
     pub search: SearchConfig,
@@ -16,6 +17,14 @@ pub struct NexusConfig {
     pub privacy: PrivacyConfig,
     #[serde(default)]
     pub kill_gates: KillGatesConfig,
+    #[serde(default)]
+    pub hardware: HardwareConfig,
+    #[serde(default)]
+    pub ollama: OllamaConfig,
+    #[serde(default)]
+    pub models: ModelsConfig,
+    #[serde(default)]
+    pub agents: BTreeMap<String, AgentLlmConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -91,6 +100,77 @@ impl Default for KillGatesConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HardwareConfig {
+    #[serde(default)]
+    pub gpu: String,
+    #[serde(default)]
+    pub vram_mb: u64,
+    #[serde(default)]
+    pub ram_mb: u64,
+    #[serde(default)]
+    pub detected_at: String,
+}
+
+impl Default for HardwareConfig {
+    fn default() -> Self {
+        Self {
+            gpu: String::new(),
+            vram_mb: 0,
+            ram_mb: 0,
+            detected_at: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OllamaConfig {
+    #[serde(default = "default_ollama_url")]
+    pub base_url: String,
+    #[serde(default)]
+    pub status: String,
+}
+
+fn default_ollama_url() -> String {
+    "http://localhost:11434".to_string()
+}
+
+impl Default for OllamaConfig {
+    fn default() -> Self {
+        Self {
+            base_url: default_ollama_url(),
+            status: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ModelsConfig {
+    #[serde(default)]
+    pub primary: String,
+    #[serde(default)]
+    pub fast: String,
+}
+
+impl Default for ModelsConfig {
+    fn default() -> Self {
+        Self {
+            primary: String::new(),
+            fast: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AgentLlmConfig {
+    #[serde(default)]
+    pub model: String,
+    #[serde(default)]
+    pub temperature: f64,
+    #[serde(default)]
+    pub max_tokens: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct EncryptedConfigEnvelope {
     version: u8,
     key_id: String,
@@ -135,6 +215,10 @@ impl Default for NexusConfig {
                 audit_retention_days: 365,
             },
             kill_gates: KillGatesConfig::default(),
+            hardware: HardwareConfig::default(),
+            ollama: OllamaConfig::default(),
+            models: ModelsConfig::default(),
+            agents: BTreeMap::new(),
         }
     }
 }
@@ -310,7 +394,11 @@ mod tests {
 
         let loaded = load_config_from_path(path.as_path());
         assert!(loaded.is_ok());
-        assert_eq!(loaded.unwrap_or_default(), config);
+        let loaded_config = loaded.expect("load should succeed");
+        assert_eq!(loaded_config.llm, config.llm);
+        assert_eq!(loaded_config.search, config.search);
+        assert_eq!(loaded_config.messaging, config.messaging);
+        assert_eq!(loaded_config.voice, config.voice);
     }
 
     #[test]

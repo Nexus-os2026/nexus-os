@@ -4,6 +4,7 @@ pub mod audit;
 pub mod autonomy;
 pub mod config;
 pub mod consent;
+pub mod hardware;
 pub mod distributed;
 pub mod errors;
 pub mod fuel_hardening;

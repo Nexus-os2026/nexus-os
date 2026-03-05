@@ -499,6 +499,97 @@
   cursor: not-allowed;
 }
 
+/* Models section */
+
+.st-models-hw-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+}
+
+.st-models-hw-item {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid rgba(0, 255, 213, 0.12);
+  background: rgba(5, 10, 18, 0.5);
+}
+
+.st-models-hw-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 0.15rem;
+}
+
+.st-models-hw-value {
+  font-size: 0.78rem;
+  color: var(--text-primary);
+}
+
+.st-models-assigned {
+  margin-bottom: 0.75rem;
+}
+
+.st-models-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid rgba(0, 255, 213, 0.06);
+}
+
+.st-models-row-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.st-models-row-value {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-accent);
+}
+
+.st-models-agents {
+  margin-bottom: 0.75rem;
+}
+
+.st-models-agent-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid rgba(0, 255, 213, 0.06);
+  font-size: 0.72rem;
+}
+
+.st-models-agent-name {
+  font-family: var(--font-display);
+  color: var(--text-primary);
+  min-width: 100px;
+  letter-spacing: 0.06em;
+}
+
+.st-models-agent-model {
+  font-family: var(--font-mono);
+  color: var(--text-accent);
+  flex: 1;
+}
+
+.st-models-agent-param {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.st-models-actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
 @media (max-width: 700px) {
   .st-row {
     flex-direction: column;

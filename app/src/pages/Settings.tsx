@@ -13,7 +13,7 @@ interface SettingsProps {
   onUiSoundVolumeChange: (value: number) => void;
 }
 
-type SettingsSection = "general" | "api" | "privacy" | "voice" | "about";
+type SettingsSection = "general" | "api" | "privacy" | "voice" | "models" | "about";
 type ServiceStatus = "unknown" | "testing" | "ok" | "error";
 
 interface ApiKeyDef {
@@ -93,7 +93,7 @@ export function Settings({
       </header>
 
       <nav className="st-nav">
-        {(["general", "api", "privacy", "voice", "about"] as SettingsSection[]).map((s) => (
+        {(["general", "api", "privacy", "voice", "models", "about"] as SettingsSection[]).map((s) => (
           <button
             key={s}
             type="button"
@@ -307,6 +307,68 @@ export function Settings({
             <div className="st-row">
               <div><p className="st-row-label">Test Voice</p></div>
               <button type="button" className="st-btn st-btn-ghost">Test Voice</button>
+            </div>
+          </div>
+        )}
+
+        {section === "models" && (
+          <div className="st-card">
+            <h3 className="st-card-title">Hardware Profile</h3>
+            <div className="st-models-hw-grid">
+              <div className="st-models-hw-item">
+                <span className="st-models-hw-label">GPU</span>
+                <span className="st-models-hw-value">{config.hardware?.gpu || "Not detected"}</span>
+              </div>
+              <div className="st-models-hw-item">
+                <span className="st-models-hw-label">VRAM</span>
+                <span className="st-models-hw-value">{config.hardware?.vram_mb ? `${config.hardware.vram_mb} MB` : "N/A"}</span>
+              </div>
+              <div className="st-models-hw-item">
+                <span className="st-models-hw-label">RAM</span>
+                <span className="st-models-hw-value">{config.hardware?.ram_mb ? `${config.hardware.ram_mb} MB` : "N/A"}</span>
+              </div>
+              <div className="st-models-hw-item">
+                <span className="st-models-hw-label">Ollama</span>
+                <span className="st-models-hw-value">{config.ollama?.status || "unknown"}</span>
+              </div>
+            </div>
+
+            <h3 className="st-card-title" style={{ marginTop: "1rem" }}>Assigned Models</h3>
+            <div className="st-models-assigned">
+              <div className="st-models-row">
+                <span className="st-models-row-label">Primary</span>
+                <span className="st-models-row-value">{config.models?.primary || "Not set"}</span>
+              </div>
+              <div className="st-models-row">
+                <span className="st-models-row-label">Fast</span>
+                <span className="st-models-row-value">{config.models?.fast || "Not set"}</span>
+              </div>
+              <div className="st-models-row">
+                <span className="st-models-row-label">Default</span>
+                <span className="st-models-row-value">{config.llm.default_model}</span>
+              </div>
+            </div>
+
+            {config.agents && Object.keys(config.agents).length > 0 && (
+              <>
+                <h3 className="st-card-title" style={{ marginTop: "1rem" }}>Agent Configurations</h3>
+                <div className="st-models-agents">
+                  {Object.entries(config.agents).map(([name, ac]) => (
+                    <div key={name} className="st-models-agent-row">
+                      <span className="st-models-agent-name">{name}</span>
+                      <span className="st-models-agent-model">{ac.model}</span>
+                      <span className="st-models-agent-param">temp={ac.temperature}</span>
+                      <span className="st-models-agent-param">max={ac.max_tokens}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div className="st-models-actions">
+              <button type="button" className="st-btn st-btn-ghost" onClick={onSave}>
+                {saving ? "Saving..." : "Re-run Setup Wizard"}
+              </button>
             </div>
           </div>
         )}

@@ -3,7 +3,10 @@ import type {
   AgentSummary,
   AuditEventRow,
   ChatResponse,
+  HardwareInfo,
   NexusConfig,
+  OllamaStatus,
+  SetupResult,
   VoiceRuntimeState
 } from "../types";
 
@@ -96,4 +99,28 @@ export function stopJarvisMode(): Promise<VoiceRuntimeState> {
 
 export function jarvisStatus(): Promise<VoiceRuntimeState> {
   return invokeDesktop<VoiceRuntimeState>("jarvis_status");
+}
+
+export function detectHardware(): Promise<HardwareInfo> {
+  return invokeDesktop<HardwareInfo>("detect_hardware");
+}
+
+export function checkOllama(baseUrl?: string): Promise<OllamaStatus> {
+  return invokeDesktop<OllamaStatus>("check_ollama", { baseUrl, base_url: baseUrl });
+}
+
+export function pullOllamaModel(modelName: string, baseUrl?: string): Promise<string> {
+  return invokeDesktop<string>("pull_ollama_model", {
+    modelName,
+    model_name: modelName,
+    baseUrl,
+    base_url: baseUrl
+  });
+}
+
+export function runSetupWizard(ollamaUrl?: string): Promise<SetupResult> {
+  return invokeDesktop<SetupResult>("run_setup_wizard", {
+    ollamaUrl,
+    ollama_url: ollamaUrl
+  });
 }

@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  checkOllama,
   createAgent,
+  detectHardware,
   getAuditLog,
   getConfig,
   hasDesktopRuntime,
   jarvisStatus,
   listAgents,
   pauseAgent,
+  pullOllamaModel,
   resumeAgent,
+  runSetupWizard,
   saveConfig,
   sendChat,
   startAgent,
@@ -29,6 +33,7 @@ import { Audit } from "./pages/Audit";
 import { Chat } from "./pages/Chat";
 import { Marketplace } from "./pages/Marketplace";
 import { Settings } from "./pages/Settings";
+import { SetupWizard } from "./pages/SetupWizard";
 import { Workflows } from "./pages/Workflows";
 import type {
   AgentSummary,
@@ -36,7 +41,9 @@ import type {
   ChatMessage,
   ChatResponse,
   ConnectionStatus,
+  HardwareInfo,
   NexusConfig,
+  OllamaStatus,
   VoiceRuntimeState
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
@@ -247,6 +254,7 @@ export default function App(): JSX.Element {
   const [activityPulse, setActivityPulse] = useState(0);
   const [appReady, setAppReady] = useState(false);
   const [splashVisible, setSplashVisible] = useState(true);
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
   const [overlay, setOverlay] = useState<VoiceOverlayState>({
     visible: false,
     listening: false,
@@ -316,6 +324,13 @@ export default function App(): JSX.Element {
         setAuditEvents(loadedAudit.length > 0 ? loadedAudit : mockAudit());
         setConfig(loadedConfig);
         applyVoiceState(voice);
+
+        // Check if first-run setup is needed
+        const needsSetup = !loadedConfig.hardware?.gpu || loadedConfig.hardware.gpu.length === 0;
+        if (needsSetup) {
+          setShowSetupWizard(true);
+        }
+
         setMessages([
           makeMessage(
             "assistant",
@@ -641,6 +656,47 @@ export default function App(): JSX.Element {
     }
   }
 
+  async function handleSetupComplete(hw: HardwareInfo, ollamaStatus: OllamaStatus): Promise<void> {
+    // Run the full setup wizard on the backend
+    if (runtimeMode === "desktop") {
+      try {
+        const result = await runSetupWizard(ollamaStatus.base_url);
+        if (result.config_saved) {
+          const refreshedConfig = await getConfig();
+          setConfig(refreshedConfig);
+        }
+      } catch (error) {
+        setRuntimeError(`Setup failed: ${formatError(error)}`);
+      }
+    } else {
+      // Mock mode: update config locally
+      setConfig((prev) => ({
+        ...prev,
+        hardware: {
+          gpu: hw.gpu,
+          vram_mb: hw.vram_mb,
+          ram_mb: hw.ram_mb,
+          detected_at: hw.detected_at
+        },
+        ollama: {
+          base_url: ollamaStatus.base_url,
+          status: ollamaStatus.connected ? "connected" : "disconnected"
+        },
+        models: {
+          primary: hw.recommended_primary,
+          fast: hw.recommended_fast
+        },
+        llm: {
+          ...prev.llm,
+          default_model: hw.recommended_primary
+        }
+      }));
+    }
+    setShowSetupWizard(false);
+    play("success");
+    bumpActivity();
+  }
+
   async function handleRefresh(): Promise<void> {
     if (runtimeMode !== "desktop") {
       setAgents(mockAgents());
@@ -880,6 +936,37 @@ export default function App(): JSX.Element {
           void disableJarvisMode();
         }}
       />
+
+      {showSetupWizard && (
+        <SetupWizard
+          onDetectHardware={async () => {
+            if (runtimeMode === "desktop") return detectHardware();
+            return {
+              gpu: "Mock GPU",
+              vram_mb: 8192,
+              ram_mb: 16384,
+              detected_at: new Date().toISOString(),
+              tier: "Medium (8-24GB VRAM)",
+              recommended_primary: "qwen3.5:9b",
+              recommended_fast: "qwen3.5:4b"
+            };
+          }}
+          onCheckOllama={async (url?: string) => {
+            if (runtimeMode === "desktop") return checkOllama(url);
+            return { connected: false, base_url: url ?? "http://localhost:11434", models: [] };
+          }}
+          onPullModel={async (model: string) => {
+            if (runtimeMode === "desktop") return pullOllamaModel(model);
+            return "success";
+          }}
+          onComplete={(hw, ollamaStatus) => {
+            void handleSetupComplete(hw, ollamaStatus);
+          }}
+          onSkip={() => {
+            setShowSetupWizard(false);
+          }}
+        />
+      )}
     </>
   );
 }

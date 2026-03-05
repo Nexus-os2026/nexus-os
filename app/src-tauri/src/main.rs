@@ -1,14 +1,19 @@
 use nexus_connectors_llm::gateway::{
     select_provider, AgentRuntimeContext, GovernedLlmGateway, ProviderSelectionConfig,
 };
+use nexus_connectors_llm::providers::OllamaProvider;
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
-use nexus_kernel::config::{load_config, save_config as save_nexus_config, NexusConfig};
+use nexus_kernel::config::{
+    load_config, save_config as save_nexus_config, AgentLlmConfig, HardwareConfig, ModelsConfig,
+    NexusConfig, OllamaConfig,
+};
 use nexus_kernel::errors::AgentError;
+use nexus_kernel::hardware::{recommend_agent_configs, HardwareProfile};
 use nexus_kernel::manifest::AgentManifest;
 use nexus_kernel::supervisor::{AgentId, Supervisor};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -421,6 +426,156 @@ fn agent_error(error: AgentError) -> String {
     error.to_string()
 }
 
+// ── Setup Wizard Types ──
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HardwareInfo {
+    pub gpu: String,
+    pub vram_mb: u64,
+    pub ram_mb: u64,
+    pub detected_at: String,
+    pub tier: String,
+    pub recommended_primary: String,
+    pub recommended_fast: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OllamaStatus {
+    pub connected: bool,
+    pub base_url: String,
+    pub models: Vec<OllamaModelInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OllamaModelInfo {
+    pub name: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SetupResult {
+    pub hardware: HardwareInfo,
+    pub ollama: OllamaStatus,
+    pub config_saved: bool,
+}
+
+// ── Setup Wizard Functions ──
+
+pub fn detect_hardware() -> Result<HardwareInfo, String> {
+    let hw = HardwareProfile::detect();
+    let tier = hw.recommended_tier();
+    Ok(HardwareInfo {
+        gpu: hw.gpu,
+        vram_mb: hw.vram_mb,
+        ram_mb: hw.ram_mb,
+        detected_at: hw.detected_at,
+        tier: tier.label().to_string(),
+        recommended_primary: tier.primary_model().to_string(),
+        recommended_fast: tier.fast_model().to_string(),
+    })
+}
+
+pub fn check_ollama(base_url: Option<String>) -> Result<OllamaStatus, String> {
+    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let provider = OllamaProvider::new(&url);
+
+    let connected = provider.health_check().unwrap_or(false);
+    let models = if connected {
+        provider
+            .list_models()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|m| OllamaModelInfo {
+                name: m.name,
+                size: m.size,
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    Ok(OllamaStatus {
+        connected,
+        base_url: url,
+        models,
+    })
+}
+
+pub fn pull_ollama_model(model_name: String, base_url: Option<String>) -> Result<String, String> {
+    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let provider = OllamaProvider::new(&url);
+    provider
+        .pull_model(&model_name, |_status, _completed, _total| {
+            // In Tauri context, progress is polled via list_models
+        })
+        .map_err(|e| e.to_string())
+}
+
+pub fn run_setup_wizard(ollama_url: Option<String>) -> Result<SetupResult, String> {
+    let hw_info = detect_hardware()?;
+    let ollama_status = check_ollama(ollama_url.clone())?;
+
+    // Build and save config
+    let mut config = load_config().map_err(|e| e.to_string())?;
+
+    config.hardware = HardwareConfig {
+        gpu: hw_info.gpu.clone(),
+        vram_mb: hw_info.vram_mb,
+        ram_mb: hw_info.ram_mb,
+        detected_at: hw_info.detected_at.clone(),
+    };
+
+    config.ollama = OllamaConfig {
+        base_url: ollama_status.base_url.clone(),
+        status: if ollama_status.connected {
+            "connected".to_string()
+        } else {
+            "disconnected".to_string()
+        },
+    };
+    config.llm.ollama_url = ollama_status.base_url.clone();
+
+    config.models = ModelsConfig {
+        primary: hw_info.recommended_primary.clone(),
+        fast: hw_info.recommended_fast.clone(),
+    };
+
+    // Set default model to the recommended primary
+    if ollama_status.connected {
+        config.llm.default_model = hw_info.recommended_primary.clone();
+    }
+
+    // Apply agent configs
+    let hw = HardwareProfile {
+        gpu: hw_info.gpu.clone(),
+        vram_mb: hw_info.vram_mb,
+        ram_mb: hw_info.ram_mb,
+        detected_at: hw_info.detected_at.clone(),
+    };
+    let tier = hw.recommended_tier();
+    let agent_configs = recommend_agent_configs(tier);
+    let mut agents_map = BTreeMap::new();
+    for (name, ac) in &agent_configs {
+        agents_map.insert(
+            name.to_string(),
+            AgentLlmConfig {
+                model: ac.model.clone(),
+                temperature: ac.temperature,
+                max_tokens: ac.max_tokens,
+            },
+        );
+    }
+    config.agents = agents_map;
+
+    let config_saved = save_nexus_config(&config).is_ok();
+
+    Ok(SetupResult {
+        hardware: hw_info,
+        ollama: ollama_status,
+        config_saved,
+    })
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -517,6 +672,26 @@ mod runtime {
         super::tray_status(state.inner())
     }
 
+    #[tauri::command]
+    fn detect_hardware() -> Result<HardwareInfo, String> {
+        super::detect_hardware()
+    }
+
+    #[tauri::command]
+    fn check_ollama(base_url: Option<String>) -> Result<OllamaStatus, String> {
+        super::check_ollama(base_url)
+    }
+
+    #[tauri::command]
+    fn pull_ollama_model(model_name: String, base_url: Option<String>) -> Result<String, String> {
+        super::pull_ollama_model(model_name, base_url)
+    }
+
+    #[tauri::command]
+    fn run_setup_wizard(ollama_url: Option<String>) -> Result<SetupResult, String> {
+        super::run_setup_wizard(ollama_url)
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -585,6 +760,10 @@ mod runtime {
                 jarvis_status,
                 transcribe_push_to_talk,
                 tray_status,
+                detect_hardware,
+                check_ollama,
+                pull_ollama_model,
+                run_setup_wizard,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
