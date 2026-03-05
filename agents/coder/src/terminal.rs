@@ -1,4 +1,9 @@
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
+use nexus_kernel::autonomy::{AutonomyGuard, AutonomyLevel};
+use nexus_kernel::consent::{
+    ApprovalQueue, ApprovalRequest, ConsentError, ConsentPolicyEngine, ConsentRuntime,
+    GovernedOperation,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashSet;
@@ -58,6 +63,9 @@ pub struct OutputChunk {
 pub enum CommandError {
     CapabilityDenied(String),
     CommandBlocked(String),
+    AutonomyDenied(String),
+    ApprovalRequired(String),
+    ConsentDenied(String),
     ExecutionFailed(String),
     Timeout(String),
 }
@@ -69,6 +77,11 @@ impl Display for CommandError {
                 write!(f, "capability denied: {capability}")
             }
             CommandError::CommandBlocked(reason) => write!(f, "command blocked: {reason}"),
+            CommandError::AutonomyDenied(reason) => write!(f, "autonomy denied: {reason}"),
+            CommandError::ApprovalRequired(request_id) => {
+                write!(f, "approval required: request_id='{request_id}'")
+            }
+            CommandError::ConsentDenied(reason) => write!(f, "consent denied: {reason}"),
             CommandError::ExecutionFailed(reason) => write!(f, "execution failed: {reason}"),
             CommandError::Timeout(reason) => write!(f, "command timed out: {reason}"),
         }
@@ -82,24 +95,52 @@ pub struct TerminalExecutor {
     capabilities: HashSet<String>,
     audit_trail: AuditTrail,
     agent_id: Uuid,
+    autonomy_guard: AutonomyGuard,
+    consent_runtime: ConsentRuntime,
 }
 
 impl Default for TerminalExecutor {
     fn default() -> Self {
-        Self::with_capabilities(
+        Self::with_capabilities_and_autonomy(
             [TERMINAL_EXECUTE_CAPABILITY.to_string()]
                 .into_iter()
                 .collect(),
+            AutonomyLevel::L0,
         )
     }
 }
 
 impl TerminalExecutor {
     pub fn with_capabilities(capabilities: HashSet<String>) -> Self {
+        Self::with_capabilities_and_autonomy(capabilities, AutonomyLevel::L0)
+    }
+
+    pub fn with_capabilities_and_autonomy(
+        capabilities: HashSet<String>,
+        level: AutonomyLevel,
+    ) -> Self {
+        Self::with_capabilities_autonomy_and_consent(
+            capabilities,
+            level,
+            ConsentRuntime::new(
+                ConsentPolicyEngine::default(),
+                ApprovalQueue::in_memory(),
+                "terminal.executor".to_string(),
+            ),
+        )
+    }
+
+    pub fn with_capabilities_autonomy_and_consent(
+        capabilities: HashSet<String>,
+        level: AutonomyLevel,
+        consent_runtime: ConsentRuntime,
+    ) -> Self {
         Self {
             capabilities,
             audit_trail: AuditTrail::new(),
             agent_id: Uuid::new_v4(),
+            autonomy_guard: AutonomyGuard::new(level),
+            consent_runtime,
         }
     }
 
@@ -122,6 +163,31 @@ impl TerminalExecutor {
     where
         F: FnMut(OutputChunk),
     {
+        if let Err(error) = self
+            .autonomy_guard
+            .require_tool_call(self.agent_id, &mut self.audit_trail)
+        {
+            let denied = CommandError::AutonomyDenied(error.to_string());
+            self.log_error(command, working_dir.as_ref(), &denied, "", "", 0);
+            return Err(denied);
+        }
+
+        if let Err(error) = self.consent_runtime.enforce_operation(
+            GovernedOperation::TerminalCommand,
+            self.agent_id,
+            command.as_bytes(),
+            &mut self.audit_trail,
+        ) {
+            let denied = match error {
+                ConsentError::ApprovalRequired { request_id, .. } => {
+                    CommandError::ApprovalRequired(request_id)
+                }
+                other => CommandError::ConsentDenied(other.to_string()),
+            };
+            self.log_error(command, working_dir.as_ref(), &denied, "", "", 0);
+            return Err(denied);
+        }
+
         if !self.capabilities.contains(TERMINAL_EXECUTE_CAPABILITY) {
             let error = CommandError::CapabilityDenied(TERMINAL_EXECUTE_CAPABILITY.to_string());
             self.log_error(command, working_dir.as_ref(), &error, "", "", 0);
@@ -240,6 +306,30 @@ impl TerminalExecutor {
 
     pub fn audit_events(&self) -> &[AuditEvent] {
         self.audit_trail.events()
+    }
+
+    pub fn pending_approvals(&self) -> Vec<ApprovalRequest> {
+        self.consent_runtime.pending_requests()
+    }
+
+    pub fn approve_request(
+        &mut self,
+        request_id: &str,
+        approver_id: &str,
+    ) -> Result<(), CommandError> {
+        self.consent_runtime
+            .approve(request_id, approver_id, &mut self.audit_trail)
+            .map_err(|error| CommandError::ConsentDenied(error.to_string()))
+    }
+
+    pub fn deny_request(
+        &mut self,
+        request_id: &str,
+        approver_id: &str,
+    ) -> Result<(), CommandError> {
+        self.consent_runtime
+            .deny(request_id, approver_id, &mut self.audit_trail)
+            .map_err(|error| CommandError::ConsentDenied(error.to_string()))
     }
 
     fn log_error(

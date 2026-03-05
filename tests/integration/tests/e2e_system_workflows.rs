@@ -3,6 +3,11 @@ use coder_agent::fix_loop::{fix_until_pass, FixResult};
 use coder_agent::scanner::scan_project;
 use coder_agent::test_runner::run_tests;
 use coder_agent::writer::FileChange as CoderFileChange;
+use nexus_kernel::audit::AuditTrail;
+use nexus_kernel::autonomy::{AutonomyGuard, AutonomyLevel};
+use nexus_kernel::consent::{
+    ApprovalQueue, ConsentPolicyEngine, ConsentRuntime, GovernedOperation, HitlTier,
+};
 use screen_poster_agent::approval::{
     ApprovalDecision, ApprovalError, HumanApprovalGate, InMemoryApprovalChannel,
 };
@@ -14,6 +19,7 @@ use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::fs;
 use tempfile::tempdir;
+use uuid::Uuid;
 use web_builder_agent::codegen::{generate_website, FileChange as WebFileChange};
 use web_builder_agent::interpreter::interpret;
 use workflow_studio_agent::engine::{WorkflowContext, WorkflowEngine};
@@ -162,6 +168,22 @@ fn test_integration_workflow_execution() {
             .into_iter()
             .collect::<HashSet<_>>(),
         fuel_remaining: 200,
+        agent_id: Uuid::new_v4(),
+        autonomy_guard: AutonomyGuard::new(AutonomyLevel::L1),
+        audit_trail: AuditTrail::new(),
+        consent_runtime: {
+            let mut policy = ConsentPolicyEngine::default();
+            policy.set_policy(
+                GovernedOperation::TerminalCommand,
+                HitlTier::Tier0,
+                Vec::new(),
+            );
+            ConsentRuntime::new(
+                policy,
+                ApprovalQueue::in_memory(),
+                "workflow.integration".to_string(),
+            )
+        },
     };
 
     let engine = WorkflowEngine::default();

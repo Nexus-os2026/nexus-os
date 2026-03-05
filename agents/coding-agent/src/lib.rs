@@ -1,6 +1,8 @@
 //! Governed coding agent runtime for repository-aware test/fix iterations.
 
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
+use nexus_kernel::autonomy::{AutonomyGuard, AutonomyLevel};
+use nexus_kernel::consent::{ApprovalRequest, ConsentRuntime, GovernedOperation};
 use nexus_kernel::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -36,6 +38,12 @@ pub struct CodingAgentManifest {
     pub version: String,
     pub capabilities: Vec<String>,
     pub fuel_budget: u64,
+    #[serde(default)]
+    pub autonomy_level: Option<u8>,
+    #[serde(default)]
+    pub consent_policy_path: Option<String>,
+    #[serde(default)]
+    pub requester_id: Option<String>,
     pub schedule: Option<String>,
     pub llm_model: Option<String>,
     pub config: CodingAgentConfig,
@@ -132,6 +140,8 @@ pub struct CodingAgent {
     dry_run: bool,
     agent_id: Uuid,
     audit_trail: AuditTrail,
+    autonomy_guard: AutonomyGuard,
+    consent_runtime: Option<ConsentRuntime>,
     fuel_consumed: u64,
     modified_files: BTreeSet<String>,
 }
@@ -152,11 +162,15 @@ impl CodingAgent {
         dependencies: CodingDependencies,
     ) -> Self {
         Self {
+            autonomy_guard: AutonomyGuard::new(AutonomyLevel::from_manifest(
+                manifest.autonomy_level,
+            )),
             manifest,
             dependencies,
             dry_run,
             agent_id: Uuid::new_v4(),
             audit_trail: AuditTrail::new(),
+            consent_runtime: None,
             fuel_consumed: 0,
             modified_files: BTreeSet::new(),
         }
@@ -175,6 +189,7 @@ impl CodingAgent {
                 "max_iterations": self.manifest.config.max_iterations,
                 "schedule": self.manifest.schedule,
                 "llm_model": self.manifest.llm_model,
+                "autonomy_level": self.autonomy_guard.level().as_str(),
             }),
         );
 
@@ -182,6 +197,10 @@ impl CodingAgent {
         let max_iterations = self.manifest.config.max_iterations.max(1);
 
         for iteration in 1..=max_iterations {
+            self.require_operation(
+                GovernedOperation::ToolCall,
+                format!("plan:{iteration}").as_bytes(),
+            )?;
             self.charge_fuel(FUEL_COST_PLAN)?;
             let plan = self.dependencies.planner.plan(PlanningContext {
                 iteration,
@@ -204,6 +223,7 @@ impl CodingAgent {
             );
 
             for path in &plan.read_paths {
+                self.require_operation(GovernedOperation::ToolCall, path.as_bytes())?;
                 self.ensure_capability(CAP_FS_READ)?;
                 self.charge_fuel(FUEL_COST_READ)?;
                 let content = self.dependencies.io.read_file(path.as_str())?;
@@ -220,6 +240,7 @@ impl CodingAgent {
             }
 
             for write in &plan.writes {
+                self.require_operation(GovernedOperation::ToolCall, write.path.as_bytes())?;
                 self.ensure_capability(CAP_FS_WRITE)?;
                 if !self.dependencies.approval.approve_write(write, iteration) {
                     self.audit_trail.append_event(
@@ -261,10 +282,12 @@ impl CodingAgent {
             }
 
             self.ensure_capability(CAP_PROCESS_EXEC)?;
+            let test_command = self.manifest.config.test_command.clone();
+            self.require_operation(GovernedOperation::ToolCall, test_command.as_bytes())?;
             if !self
                 .dependencies
                 .approval
-                .approve_test_run(self.manifest.config.test_command.as_str(), iteration)
+                .approve_test_run(test_command.as_str(), iteration)
             {
                 self.audit_trail.append_event(
                     self.agent_id,
@@ -273,7 +296,7 @@ impl CodingAgent {
                         "step": "approval_denied",
                         "iteration": iteration,
                         "type": "test_run",
-                        "command": self.manifest.config.test_command,
+                        "command": test_command,
                     }),
                 );
                 return Err(AgentError::SupervisorError(
@@ -282,17 +305,14 @@ impl CodingAgent {
             }
 
             self.charge_fuel(FUEL_COST_TEST_RUN)?;
-            let test_result = self
-                .dependencies
-                .io
-                .run_tests(self.manifest.config.test_command.as_str())?;
+            let test_result = self.dependencies.io.run_tests(test_command.as_str())?;
             self.audit_trail.append_event(
                 self.agent_id,
                 EventType::ToolCall,
                 json!({
                     "step": "test",
                     "iteration": iteration,
-                    "command": self.manifest.config.test_command,
+                    "command": test_command,
                     "success": test_result.success,
                     "exit_code": test_result.exit_code,
                     "stdout_bytes": test_result.stdout.len(),
@@ -378,6 +398,73 @@ impl CodingAgent {
         }
         self.fuel_consumed += amount;
         Ok(())
+    }
+
+    fn require_operation(
+        &mut self,
+        operation: GovernedOperation,
+        payload: &[u8],
+    ) -> Result<(), AgentError> {
+        let agent_id = self.agent_id;
+        self.autonomy_guard
+            .require_tool_call(self.agent_id, &mut self.audit_trail)
+            .map_err(AgentError::from)?;
+        self.with_consent_runtime(|runtime, audit_trail| {
+            runtime
+                .enforce_operation(operation, agent_id, payload, audit_trail)
+                .map_err(AgentError::from)
+        })
+    }
+
+    fn ensure_consent_runtime(&mut self) -> Result<(), AgentError> {
+        if self.consent_runtime.is_none() {
+            self.consent_runtime = Some(ConsentRuntime::from_manifest(
+                self.manifest.consent_policy_path.as_deref(),
+                self.manifest.requester_id.as_deref(),
+                self.manifest.name.as_str(),
+            )?);
+        }
+        Ok(())
+    }
+
+    fn with_consent_runtime<T>(
+        &mut self,
+        f: impl FnOnce(&mut ConsentRuntime, &mut AuditTrail) -> Result<T, AgentError>,
+    ) -> Result<T, AgentError> {
+        self.ensure_consent_runtime()?;
+        let mut runtime = self.consent_runtime.take().ok_or_else(|| {
+            AgentError::SupervisorError("consent runtime was not initialized".to_string())
+        })?;
+        let result = f(&mut runtime, &mut self.audit_trail);
+        self.consent_runtime = Some(runtime);
+        result
+    }
+
+    pub fn pending_approvals(&self) -> Vec<ApprovalRequest> {
+        match &self.consent_runtime {
+            Some(runtime) => runtime.pending_requests(),
+            None => Vec::new(),
+        }
+    }
+
+    pub fn approve_request(
+        &mut self,
+        request_id: &str,
+        approver_id: &str,
+    ) -> Result<(), AgentError> {
+        self.with_consent_runtime(|runtime, audit_trail| {
+            runtime
+                .approve(request_id, approver_id, audit_trail)
+                .map_err(AgentError::from)
+        })
+    }
+
+    pub fn deny_request(&mut self, request_id: &str, approver_id: &str) -> Result<(), AgentError> {
+        self.with_consent_runtime(|runtime, audit_trail| {
+            runtime
+                .deny(request_id, approver_id, audit_trail)
+                .map_err(AgentError::from)
+        })
     }
 }
 
@@ -702,6 +789,9 @@ mod tests {
                 .map(|item| (*item).to_string())
                 .collect(),
             fuel_budget,
+            autonomy_level: Some(1),
+            consent_policy_path: None,
+            requester_id: None,
             schedule: None,
             llm_model: Some("claude-sonnet-4-5".to_string()),
             config: CodingAgentConfig {

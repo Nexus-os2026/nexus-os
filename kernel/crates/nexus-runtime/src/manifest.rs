@@ -8,6 +8,9 @@ pub struct AgentManifest {
     pub version: String,
     pub capabilities: Vec<Capability>,
     pub fuel_budget: u64,
+    pub autonomy_level: Option<u8>,
+    pub consent_policy_path: Option<String>,
+    pub requester_id: Option<String>,
     pub schedule: String,
     pub llm_model: String,
 }
@@ -75,6 +78,9 @@ struct RawManifest {
     #[serde(default)]
     capabilities: Vec<String>,
     fuel_budget: Option<u64>,
+    autonomy_level: Option<u8>,
+    consent_policy_path: Option<String>,
+    requester_id: Option<String>,
     schedule: Option<String>,
     llm_model: Option<String>,
 }
@@ -109,6 +115,9 @@ impl TryFrom<RawManifest> for AgentManifest {
             Some(value) => value,
             None => return Err(ManifestError::MissingField { field: "fuel_budget" }),
         };
+        let autonomy_level = validate_autonomy_level(raw.autonomy_level)?;
+        let consent_policy_path = optional_non_empty(raw.consent_policy_path);
+        let requester_id = optional_non_empty(raw.requester_id);
 
         let schedule = require_non_empty(raw.schedule, "schedule")?;
         let llm_model = require_non_empty(raw.llm_model, "llm_model")?;
@@ -118,6 +127,9 @@ impl TryFrom<RawManifest> for AgentManifest {
             version,
             capabilities,
             fuel_budget,
+            autonomy_level,
+            consent_policy_path,
+            requester_id,
             schedule,
             llm_model,
         })
@@ -237,6 +249,25 @@ fn validate_capabilities(values: Vec<String>) -> Result<Vec<Capability>, Manifes
     Ok(parsed)
 }
 
+fn validate_autonomy_level(value: Option<u8>) -> Result<Option<u8>, ManifestError> {
+    let Some(level) = value else {
+        return Ok(None);
+    };
+    if level > 5 {
+        return Err(ManifestError::InvalidField {
+            field: "autonomy_level",
+            reason: "must be one of 0, 1, 2, 3, 4, 5".to_string(),
+        });
+    }
+    Ok(Some(level))
+}
+
+fn optional_non_empty(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{parse_manifest, Capability, ManifestError};
@@ -258,6 +289,9 @@ llm_model = "gpt-5-mini"
                 assert_eq!(manifest.name, "agent.alpha");
                 assert_eq!(manifest.version, "0.1.0");
                 assert_eq!(manifest.fuel_budget, 500);
+                assert_eq!(manifest.autonomy_level, None);
+                assert_eq!(manifest.consent_policy_path, None);
+                assert_eq!(manifest.requester_id, None);
                 assert_eq!(manifest.schedule, "*/5 * * * *");
                 assert_eq!(manifest.llm_model, "gpt-5-mini");
                 assert_eq!(
@@ -391,6 +425,66 @@ llm_model = "gpt-5"
             }
             Ok(_) => panic!("expected fuel budget validation to fail"),
             Err(other) => panic!("expected fuel budget error, got: {other}"),
+        }
+    }
+
+    #[test]
+    fn parses_autonomy_level_when_in_range() {
+        let input = r#"
+name = "agent.theta"
+version = "1.0.0"
+capabilities = []
+fuel_budget = 100
+autonomy_level = 3
+schedule = "@daily"
+llm_model = "gpt-5"
+"#;
+
+        let result = parse_manifest(input).expect("manifest with autonomy_level should parse");
+        assert_eq!(result.autonomy_level, Some(3));
+    }
+
+    #[test]
+    fn parses_optional_consent_fields() {
+        let input = r#"
+name = "agent.kappa"
+version = "1.0.0"
+capabilities = []
+fuel_budget = 100
+consent_policy_path = "/etc/nexus/consent.toml"
+requester_id = "agent.kappa"
+schedule = "@daily"
+llm_model = "gpt-5"
+"#;
+
+        let result = parse_manifest(input).expect("manifest with consent fields should parse");
+        assert_eq!(
+            result.consent_policy_path,
+            Some("/etc/nexus/consent.toml".to_string())
+        );
+        assert_eq!(result.requester_id, Some("agent.kappa".to_string()));
+    }
+
+    #[test]
+    fn rejects_out_of_range_autonomy_level() {
+        let input = r#"
+name = "agent.iota"
+version = "1.0.0"
+capabilities = []
+fuel_budget = 100
+autonomy_level = 9
+schedule = "@daily"
+llm_model = "gpt-5"
+"#;
+
+        let result = parse_manifest(input);
+        match result {
+            Err(ManifestError::InvalidField { field, reason }) => {
+                assert_eq!(field, "autonomy_level");
+                assert!(reason.contains("must be one of 0, 1, 2, 3, 4, 5"));
+            }
+            Ok(_) => panic!("expected autonomy_level validation to fail"),
+            Err(other) => panic!("expected autonomy_level validation error, got: {other}"),
         }
     }
 

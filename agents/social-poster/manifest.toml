@@ -2,6 +2,7 @@ name = "social-poster"
 version = "1.0.0"
 capabilities = ["web.search", "web.read", "llm.query", "social.x.post"]
 fuel_budget = 10000
+autonomy_level = 1
 schedule = "0 9 * * *"
 llm_model = "claude-sonnet-4-5"
 

@@ -3,6 +3,7 @@ use crate::navigator::{NavigationResult, PlatformNavigator, SocialPlatform};
 use crate::stealth::{gaussian_action_delays_ms, typing_delays_ms, SessionGuard, StealthProfile};
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
 use nexus_kernel::errors::AgentError;
+use nexus_kernel::kill_gates::{GateStatus, KillGateRegistry};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::thread;
@@ -61,6 +62,8 @@ where
     audit_trail: AuditTrail,
     agent_id: Uuid,
     sleep_enabled: bool,
+    kill_gates: KillGateRegistry,
+    ban_rate_percent: f64,
 }
 
 impl<B, V, R, P> ScreenPosterEngine<B, V, R, P>
@@ -82,6 +85,8 @@ where
             audit_trail: AuditTrail::new(),
             agent_id: Uuid::new_v4(),
             sleep_enabled: false,
+            kill_gates: KillGateRegistry::default(),
+            ban_rate_percent: 0.0,
         }
     }
 
@@ -90,11 +95,35 @@ where
         self
     }
 
+    pub fn with_ban_rate_percent(mut self, value: f64) -> Self {
+        self.ban_rate_percent = value.max(0.0);
+        self
+    }
+
     pub fn post(
         &mut self,
         approved_draft: &ApprovedDraft,
         platform: SocialPlatform,
     ) -> Result<PostResult, AgentError> {
+        match self.kill_gates.check_gate(
+            "screen_poster",
+            self.ban_rate_percent,
+            self.agent_id,
+            &mut self.audit_trail,
+        ) {
+            GateStatus::Open => {}
+            GateStatus::Frozen => {
+                return Err(AgentError::SupervisorError(
+                    "screen_poster kill gate frozen due to ban-rate threshold".to_string(),
+                ))
+            }
+            GateStatus::Halted => {
+                return Err(AgentError::SupervisorError(
+                    "screen_poster kill gate halted due to ban-rate threshold".to_string(),
+                ))
+            }
+        }
+
         let now_secs = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_secs())

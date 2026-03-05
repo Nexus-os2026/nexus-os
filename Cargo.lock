@@ -410,7 +410,7 @@ checksum = "3a822ea5bc7590f9d40f1ba12c0dc3c2760f3482c6984db1573ad11031420831"
 
 [[package]]
 name = "coder-agent"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-kernel",
@@ -422,7 +422,7 @@ dependencies = [
 
 [[package]]
 name = "coding-agent"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-kernel",
  "serde",
@@ -730,7 +730,7 @@ dependencies = [
 
 [[package]]
 name = "designer-agent"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-kernel",
@@ -2168,7 +2168,7 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "nexus-adaptation"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-analytics",
  "nexus-connectors-llm",
@@ -2182,7 +2182,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-analytics"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-connectors-social",
  "nexus-connectors-web",
@@ -2194,7 +2194,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-cli"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "clap",
  "coding-agent",
@@ -2207,7 +2207,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-connectors-core"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "aes-gcm",
  "nexus-kernel",
@@ -2219,7 +2219,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-connectors-llm"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-kernel",
  "reqwest 0.12.28",
@@ -2231,7 +2231,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-connectors-messaging"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-kernel",
@@ -2245,7 +2245,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-connectors-social"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-kernel",
@@ -2256,7 +2256,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-connectors-web"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "base64 0.22.1",
  "hmac",
@@ -2276,7 +2276,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-content"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-kernel",
@@ -2288,7 +2288,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-control"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-connectors-llm",
@@ -2301,7 +2301,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-desktop-backend"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-connectors-llm",
@@ -2318,7 +2318,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-factory"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-connectors-llm",
@@ -2334,7 +2334,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-integration"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "coder-agent",
  "coding-agent",
@@ -2359,9 +2359,11 @@ dependencies = [
 
 [[package]]
 name = "nexus-kernel"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "aes-gcm",
+ "ed25519-dalek",
+ "regex",
  "serde",
  "serde_json",
  "sha2",
@@ -2371,7 +2373,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-marketplace"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "ed25519-dalek",
  "hex",
@@ -2396,7 +2398,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-research"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-connectors-web",
@@ -2408,7 +2410,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-self-update"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "ed25519-dalek",
  "nexus-connectors-core",
@@ -2423,7 +2425,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-workflows"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-connectors-social",
@@ -3603,7 +3605,7 @@ dependencies = [
 
 [[package]]
 name = "screen-poster-agent"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-kernel",
@@ -3653,7 +3655,7 @@ dependencies = [
 
 [[package]]
 name = "self-improve-agent"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-kernel",
@@ -3920,7 +3922,7 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
 name = "social-poster-agent"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-connectors-web",
@@ -5065,7 +5067,7 @@ dependencies = [
 
 [[package]]
 name = "web-builder-agent"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-kernel",
@@ -5747,7 +5749,7 @@ dependencies = [
 
 [[package]]
 name = "workflow-studio-agent"
-version = "2.0.0"
+version = "3.0.0"
 dependencies = [
  "nexus-kernel",
  "serde",

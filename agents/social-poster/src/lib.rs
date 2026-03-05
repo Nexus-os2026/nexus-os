@@ -10,7 +10,9 @@ use nexus_connectors_web::WebAgentContext;
 use nexus_content::compliance::{check_compliance, ComplianceDecision};
 use nexus_content::generator::{ContentGenerator, PlatformContent, SocialPlatform};
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
+use nexus_kernel::autonomy::{AutonomyGuard, AutonomyLevel};
 use nexus_kernel::config::load_config;
+use nexus_kernel::consent::{ApprovalRequest, ConsentRuntime, GovernedOperation};
 use nexus_kernel::errors::AgentError;
 use serde::Deserialize;
 use serde_json::json;
@@ -35,6 +37,12 @@ pub struct SocialPosterManifest {
     pub version: String,
     pub capabilities: Vec<String>,
     pub fuel_budget: u64,
+    #[serde(default)]
+    pub autonomy_level: Option<u8>,
+    #[serde(default)]
+    pub consent_policy_path: Option<String>,
+    #[serde(default)]
+    pub requester_id: Option<String>,
     pub schedule: Option<String>,
     pub llm_model: Option<String>,
     pub config: SocialPosterConfig,
@@ -119,6 +127,8 @@ pub struct SocialPosterAgent {
     dry_run: bool,
     agent_id: Uuid,
     audit_trail: AuditTrail,
+    autonomy_guard: AutonomyGuard,
+    consent_runtime: Option<ConsentRuntime>,
 }
 
 impl SocialPosterAgent {
@@ -143,11 +153,15 @@ impl SocialPosterAgent {
         dependencies: PipelineDependencies,
     ) -> Self {
         Self {
+            autonomy_guard: AutonomyGuard::new(AutonomyLevel::from_manifest(
+                manifest.autonomy_level,
+            )),
             manifest,
             dependencies,
             dry_run,
             agent_id: Uuid::new_v4(),
             audit_trail: AuditTrail::new(),
+            consent_runtime: None,
         }
     }
 
@@ -163,11 +177,13 @@ impl SocialPosterAgent {
                 "schedule": self.manifest.schedule,
                 "topic": self.manifest.config.topic,
                 "posts_per_day": self.manifest.config.posts_per_day,
-                "dry_run": self.dry_run
+                "dry_run": self.dry_run,
+                "autonomy_level": self.autonomy_guard.level().as_str(),
             }),
         );
 
         let search_query = format!("latest {} news", self.manifest.config.topic);
+        self.require_operation(GovernedOperation::ToolCall, search_query.as_bytes())?;
         let search_results = self.dependencies.search.search(search_query.as_str(), 8)?;
         self.audit_trail.append_event(
             self.agent_id,
@@ -181,6 +197,7 @@ impl SocialPosterAgent {
 
         let mut key_points = Vec::new();
         for result in search_results.into_iter().take(3) {
+            self.require_operation(GovernedOperation::ToolCall, result.url.as_bytes())?;
             let content = self.dependencies.reader.read(result.url.as_str())?;
             let summary = summarize(content.text.as_str(), 220);
             self.audit_trail.append_event(
@@ -205,7 +222,8 @@ impl SocialPosterAgent {
         };
 
         let posts_target = self.manifest.config.posts_per_day.max(1);
-        for platform_label in &self.manifest.config.platforms {
+        let platforms = self.manifest.config.platforms.clone();
+        for platform_label in platforms {
             let Some(platform) = parse_platform(platform_label.as_str()) else {
                 self.audit_trail.append_event(
                     self.agent_id,
@@ -213,7 +231,7 @@ impl SocialPosterAgent {
                     json!({
                         "step": "platform",
                         "status": "unsupported",
-                        "platform": platform_label
+                        "platform": platform_label.as_str()
                     }),
                 );
                 continue;
@@ -222,6 +240,7 @@ impl SocialPosterAgent {
             for slot in 0..posts_target {
                 let generation_topic =
                     format!("{}. Key points: {}", self.manifest.config.topic, synthesis);
+                self.require_operation(GovernedOperation::ToolCall, generation_topic.as_bytes())?;
                 let generated = self.dependencies.generator.generate(
                     platform,
                     generation_topic.as_str(),
@@ -232,7 +251,7 @@ impl SocialPosterAgent {
                     EventType::LlmCall,
                     json!({
                         "step": "generate",
-                        "platform": platform_label,
+                        "platform": platform_label.as_str(),
                         "slot": slot,
                         "length": generated.text.chars().count()
                     }),
@@ -244,7 +263,7 @@ impl SocialPosterAgent {
                     EventType::ToolCall,
                     json!({
                         "step": "review",
-                        "platform": platform_label,
+                        "platform": platform_label.as_str(),
                         "slot": slot,
                         "decision": format!("{compliance:?}")
                     }),
@@ -269,7 +288,7 @@ impl SocialPosterAgent {
                         json!({
                             "step": "publish",
                             "mode": "dry-run",
-                            "platform": platform_label,
+                            "platform": platform_label.as_str(),
                             "slot": slot,
                             "content": generated.text
                         }),
@@ -280,6 +299,10 @@ impl SocialPosterAgent {
 
                 match platform {
                     SocialPlatform::X => {
+                        self.require_operation(
+                            GovernedOperation::SocialPostPublish,
+                            generated.text.as_bytes(),
+                        )?;
                         let publish_result = self
                             .dependencies
                             .publisher
@@ -290,7 +313,7 @@ impl SocialPosterAgent {
                             json!({
                                 "step": "publish",
                                 "mode": "live",
-                                "platform": platform_label,
+                                "platform": platform_label.as_str(),
                                 "slot": slot,
                                 "tweet_id": publish_result.tweet_id
                             }),
@@ -306,7 +329,7 @@ impl SocialPosterAgent {
                                 "step": "publish",
                                 "status": "skipped",
                                 "reason": "platform publisher not wired yet",
-                                "platform": platform_label
+                                "platform": platform_label.as_str()
                             }),
                         );
                     }
@@ -331,6 +354,73 @@ impl SocialPosterAgent {
             dry_run: self.dry_run,
             publish_calls: self.dependencies.publisher.publish_calls(),
             audit_events: self.audit_trail.events().to_vec(),
+        })
+    }
+
+    fn require_operation(
+        &mut self,
+        operation: GovernedOperation,
+        payload: &[u8],
+    ) -> Result<(), AgentError> {
+        let agent_id = self.agent_id;
+        self.autonomy_guard
+            .require_tool_call(self.agent_id, &mut self.audit_trail)
+            .map_err(AgentError::from)?;
+        self.with_consent_runtime(|runtime, audit_trail| {
+            runtime
+                .enforce_operation(operation, agent_id, payload, audit_trail)
+                .map_err(AgentError::from)
+        })
+    }
+
+    fn ensure_consent_runtime(&mut self) -> Result<(), AgentError> {
+        if self.consent_runtime.is_none() {
+            self.consent_runtime = Some(ConsentRuntime::from_manifest(
+                self.manifest.consent_policy_path.as_deref(),
+                self.manifest.requester_id.as_deref(),
+                self.manifest.name.as_str(),
+            )?);
+        }
+        Ok(())
+    }
+
+    fn with_consent_runtime<T>(
+        &mut self,
+        f: impl FnOnce(&mut ConsentRuntime, &mut AuditTrail) -> Result<T, AgentError>,
+    ) -> Result<T, AgentError> {
+        self.ensure_consent_runtime()?;
+        let mut runtime = self.consent_runtime.take().ok_or_else(|| {
+            AgentError::SupervisorError("consent runtime was not initialized".to_string())
+        })?;
+        let result = f(&mut runtime, &mut self.audit_trail);
+        self.consent_runtime = Some(runtime);
+        result
+    }
+
+    pub fn pending_approvals(&self) -> Vec<ApprovalRequest> {
+        match &self.consent_runtime {
+            Some(runtime) => runtime.pending_requests(),
+            None => Vec::new(),
+        }
+    }
+
+    pub fn approve_request(
+        &mut self,
+        request_id: &str,
+        approver_id: &str,
+    ) -> Result<(), AgentError> {
+        self.with_consent_runtime(|runtime, audit_trail| {
+            runtime
+                .approve(request_id, approver_id, audit_trail)
+                .map_err(AgentError::from)
+        })
+    }
+
+    pub fn deny_request(&mut self, request_id: &str, approver_id: &str) -> Result<(), AgentError> {
+        self.with_consent_runtime(|runtime, audit_trail| {
+            runtime
+                .deny(request_id, approver_id, audit_trail)
+                .map_err(AgentError::from)
         })
     }
 }

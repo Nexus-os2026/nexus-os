@@ -3,6 +3,7 @@ use coder_agent::git::auto_commit;
 use coder_agent::init::init_project_in;
 use coder_agent::terminal::{CommandError, TerminalExecutor, TERMINAL_EXECUTE_CAPABILITY};
 use coder_agent::writer::FileChange;
+use nexus_kernel::autonomy::AutonomyLevel;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
@@ -24,17 +25,34 @@ fn test_safe_command_execution() {
 
     let mut capabilities = HashSet::new();
     capabilities.insert(TERMINAL_EXECUTE_CAPABILITY.to_string());
-    let mut executor = TerminalExecutor::with_capabilities(capabilities);
+    let mut executor =
+        TerminalExecutor::with_capabilities_and_autonomy(capabilities, AutonomyLevel::L1);
+
+    let request_id =
+        match executor.execute("cargo test", project.path(), Some(Duration::from_secs(120))) {
+            Err(CommandError::ApprovalRequired(request_id)) => request_id,
+            other => panic!("expected approval request for terminal command, got: {other:?}"),
+        };
+    executor
+        .approve_request(request_id.as_str(), "approver.a")
+        .expect("approval should succeed");
 
     let result = executor
         .execute("cargo test", project.path(), Some(Duration::from_secs(120)))
-        .expect("cargo test should execute successfully");
+        .expect("cargo test should execute successfully after approval");
     assert_eq!(result.exit_code, 0);
     assert!(
         result.stdout.contains("test result"),
         "expected cargo test output in stdout"
     );
 
+    let blocked_request = match executor.execute("rm -rf /", project.path(), None) {
+        Err(CommandError::ApprovalRequired(request_id)) => request_id,
+        other => panic!("expected approval request for destructive command, got: {other:?}"),
+    };
+    executor
+        .approve_request(blocked_request.as_str(), "approver.a")
+        .expect("approval should succeed");
     let blocked = executor.execute("rm -rf /", project.path(), None);
     assert!(matches!(blocked, Err(CommandError::CommandBlocked(_))));
 }
