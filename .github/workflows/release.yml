@@ -4,22 +4,81 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
+ci/windows-artifact-fix
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Build Rust release
+        run: cargo build --release
+
+      - name: Install app dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Build Tauri bundles (nsis preferred, msi fallback)
+        shell: pwsh
+        working-directory: app
+        run: |
+          npm run tauri build -- --bundles nsis
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "NSIS build failed, retrying MSI build..."
+            npm run tauri build -- --bundles msi
+            if ($LASTEXITCODE -ne 0) {
+              throw "Tauri build failed for both NSIS and MSI bundle targets."
+            }
+          }
+
+      - name: Print bundle tree (Windows)
+        shell: pwsh
+        run: |
+          Write-Host "=== bundle tree ==="
+          Get-ChildItem -Recurse target\release\bundle -ErrorAction SilentlyContinue | Select-Object FullName
+
+      - name: Discover and normalize Windows artifacts
+        id: collect_windows
+        shell: pwsh
+        run: |
+          $version = "${env:GITHUB_REF_NAME}" -replace '^v([0-9]+\.[0-9]+\.[0-9]+).*$','$1'
+          $bundle = "target/release/bundle"
+          $outDir = "release-artifacts"
+          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+
+          Write-Host "Listing bundle directory:"
+          Get-ChildItem -Recurse $bundle -ErrorAction SilentlyContinue | Select-Object FullName
+
+          $exe = Get-ChildItem $bundle -Recurse -Filter *.exe -ErrorAction SilentlyContinue |
+            Sort-Object FullName |
+            Select-Object -First 1
+          $msi = Get-ChildItem $bundle -Recurse -Filter *.msi -ErrorAction SilentlyContinue |
+            Sort-Object FullName |
+            Select-Object -First 1
+
+          if (-not $exe -and -not $msi) {
+            Write-Error "No Windows installers found."
+            Get-ChildItem -Recurse $bundle -ErrorAction SilentlyContinue | Select-Object FullName
+
       - run: cargo build --release
       - run: cd app && npm install && npm run tauri build
       - name: Print bundle tree (Windows)
@@ -59,10 +118,36 @@ jobs:
           if (-not $exe -and -not $msi) {
             Write-Error "No Windows installers found under target/release/bundle."
             Get-ChildItem -Recurse $bundleRoot -ErrorAction SilentlyContinue | Select-Object FullName
+            
+            main
             exit 1
           }
 
           if ($exe) {
+ci/windows-artifact-fix
+            Copy-Item $exe.FullName "${outDir}/NexusOS_${version}_windows.exe" -Force
+          }
+          if ($msi) {
+            Copy-Item $msi.FullName "${outDir}/NexusOS_${version}_windows.msi" -Force
+          }
+
+          $normalized = Get-ChildItem $outDir -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -in ".exe", ".msi" } |
+            Sort-Object FullName |
+            ForEach-Object { $_.FullName }
+          if (-not $normalized -or $normalized.Count -eq 0) {
+            throw "Normalization produced no Windows artifacts."
+          }
+          "files<<EOF" >> $env:GITHUB_OUTPUT
+          $normalized | ForEach-Object { $_ >> $env:GITHUB_OUTPUT }
+          "EOF" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexusOS-Windows
+          path: ${{ steps.collect_windows.outputs.files }}
+
             Copy-Item $exe.FullName (Join-Path $stage "NexusOS_${version}_windows_x64-setup.exe") -Force
           }
           if ($msi) {
@@ -77,33 +162,86 @@ jobs:
           path: |
             dist-release/windows/*.exe
             dist-release/windows/*.msi
+ main
           if-no-files-found: error
 
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libglib2.0-dev \
             libgtk-3-dev \
-            libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev \
-            glib-2.0 \
-            pkg-config
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - uses: actions/setup-node@v4
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            libayatana-appindicator3-dev \
+            patchelf \
+            pkg-config \
+            build-essential
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
+ci/windows-artifact-fix
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Build Rust release
+        run: cargo build --release
+
+      - name: Install app dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Build Tauri bundles (deb)
+        working-directory: app
+        run: npm run tauri build -- --bundles deb
+
+      - name: Print bundle tree (Linux)
+        run: |
+          pwd
+          echo "=== bundle tree ==="
+          ls -R target/release/bundle || true
+
+      - name: Discover and normalize Linux artifacts
+        id: collect_linux
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(echo "${GITHUB_REF_NAME}" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+).*$/\1/')"
+          bundle_root="target/release/bundle"
+          mkdir -p release-artifacts
+
+          deb_file="$(find "${bundle_root}" -type f -name '*.deb' | LC_ALL=C sort | head -n 1)"
+          if [ -z "${deb_file}" ]; then
+            echo "No .deb produced. Check Tauri bundle targets." >&2
+            ls -R "${bundle_root}" || true
+            exit 1
+          fi
+
+          out="release-artifacts/nexus-os_${version}_amd64.deb"
+          cp "${deb_file}" "${out}"
+
+          {
+            echo "files<<EOF"
+            echo "${out}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexusOS-Linux
+          path: ${{ steps.collect_linux.outputs.files }}
+
       - run: cargo build --release
       - run: cd app && npm install && npm run tauri build
       - name: Print bundle tree (Linux)
@@ -130,18 +268,74 @@ jobs:
         with:
           name: NexusOS-Linux
           path: dist-release/linux/nexus-os_*_amd64.deb
+ main
           if-no-files-found: error
 
   build-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
+ci/windows-artifact-fix
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Build Rust release
+        run: cargo build --release
+
+      - name: Install app dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Build Tauri bundles (dmg)
+        working-directory: app
+        run: npm run tauri build -- --bundles dmg
+
+      - name: Print bundle tree (macOS)
+        run: |
+          pwd
+          echo "=== bundle tree ==="
+          ls -R target/release/bundle || true
+
+      - name: Discover and normalize macOS artifacts
+        id: collect_macos
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(echo "${GITHUB_REF_NAME}" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+).*$/\1/')"
+          bundle_root="target/release/bundle"
+          mkdir -p release-artifacts
+
+          dmg_file="$(find "${bundle_root}" -type f -name '*.dmg' | LC_ALL=C sort | head -n 1)"
+          if [ -z "${dmg_file}" ]; then
+            echo "No .dmg produced. Check Tauri bundle targets." >&2
+            ls -R "${bundle_root}" || true
+            exit 1
+          fi
+
+          out="release-artifacts/NexusOS_${version}_universal.dmg"
+          cp "${dmg_file}" "${out}"
+
+          {
+            echo "files<<EOF"
+            echo "${out}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexusOS-macOS
+          path: ${{ steps.collect_macos.outputs.files }}
+
       - run: cargo build --release
       - run: cd app && npm install && npm run tauri build
       - name: Print bundle tree (macOS)
@@ -168,41 +362,36 @@ jobs:
         with:
           name: NexusOS-macOS
           path: dist-release/macos/NexusOS_*_aarch64.dmg
+main
           if-no-files-found: error
 
   create-release:
     needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Show downloaded artifacts
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libglib2.0-dev \
-            libgtk-3-dev \
-            libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev \
-            glib-2.0 \
-            pkg-config
-      - uses: actions/download-artifact@v4
-      - uses: softprops/action-gh-release@v1
+          pwd
+          ls -R
+
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
         with:
+          fail_on_unmatched_files: false
           files: |
+            NexusOS-Windows/*.msi
             NexusOS-Windows/*.exe
             NexusOS-Linux/*.deb
             NexusOS-macOS/*.dmg
           body: |
-            ## NexusOS v1.0.0
+            ## NexusOS ${{ github.ref_name }}
 
             **The AI agent OS that proves what it did.**
 
             ### Downloads
-            - **Windows**: NexusOS_1.0.0_x64-setup.exe
-            - **macOS**: NexusOS_1.0.0_aarch64.dmg
-            - **Linux**: nexus-os_1.0.0_amd64.deb
+            - **Windows**: `NexusOS_<version>_x64-setup.exe` or `NexusOS_<version>_x64.msi`
+            - **macOS**: `NexusOS_<version>_universal.dmg`
+            - **Linux**: `nexus-os_<version>_amd64.deb`
