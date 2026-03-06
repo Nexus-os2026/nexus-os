@@ -238,6 +238,46 @@
   color: #9fd2ff;
 }
 
+.agent-action-btn.delete {
+  border-color: rgba(255, 0, 64, 0.45);
+  color: #ff6b6b;
+  margin-left: auto;
+}
+
+.agent-action-btn.delete:hover {
+  border-color: rgba(255, 0, 64, 0.8);
+  background: rgba(255, 0, 64, 0.15);
+}
+
+.agent-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.agent-type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  border-radius: 2px;
+}
+
+.agent-type-badge.system {
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  background: rgba(0, 240, 255, 0.08);
+  color: #00f0ff;
+}
+
+.agent-type-badge.custom {
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  background: rgba(168, 85, 247, 0.1);
+  color: #c084fc;
+}
+
 .agent-status-badge {
   display: inline-flex;
   align-items: center;

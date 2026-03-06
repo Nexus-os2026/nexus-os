@@ -6,6 +6,7 @@ export interface AgentSummary {
   status: AgentStatus;
   fuel_remaining: number;
   last_action: string;
+  isSystem?: boolean;
 }
 
 export interface AuditEventRow {

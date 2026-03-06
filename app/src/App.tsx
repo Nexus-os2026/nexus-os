@@ -127,51 +127,72 @@ const MOCK_AGENT_IDS = {
   selfImprove: "a0000000-0000-4000-8000-000000000006",
 };
 
-function mockAgents(): AgentSummary[] {
+const CORE_AGENT_IDS = new Set(Object.values(MOCK_AGENT_IDS));
+
+function coreAgents(): AgentSummary[] {
   return [
     {
       id: MOCK_AGENT_IDS.coder,
       name: "Coder",
       status: "Running",
       fuel_remaining: 9200,
-      last_action: "refactored auth middleware"
+      last_action: "refactored auth middleware",
+      isSystem: true
     },
     {
       id: MOCK_AGENT_IDS.designer,
       name: "Designer",
       status: "Running",
       fuel_remaining: 6500,
-      last_action: "generated landing page mockup"
+      last_action: "generated landing page mockup",
+      isSystem: true
     },
     {
       id: MOCK_AGENT_IDS.screenPoster,
       name: "Screen Poster",
       status: "Paused",
       fuel_remaining: 4100,
-      last_action: "awaiting human approval for X post"
+      last_action: "awaiting human approval for X post",
+      isSystem: true
     },
     {
       id: MOCK_AGENT_IDS.webBuilder,
       name: "Web Builder",
       status: "Running",
       fuel_remaining: 7800,
-      last_action: "deployed staging build v2.4.1"
+      last_action: "deployed staging build v2.4.1",
+      isSystem: true
     },
     {
       id: MOCK_AGENT_IDS.workflowStudio,
       name: "Workflow Studio",
       status: "Stopped",
       fuel_remaining: 2300,
-      last_action: "completed daily analytics pipeline"
+      last_action: "completed daily analytics pipeline",
+      isSystem: true
     },
     {
       id: MOCK_AGENT_IDS.selfImprove,
       name: "Self-Improve",
       status: "Running",
       fuel_remaining: 8400,
-      last_action: "optimized prompt routing latency"
+      last_action: "optimized prompt routing latency",
+      isSystem: true
     }
   ];
+}
+
+function mockAgents(): AgentSummary[] {
+  return coreAgents();
+}
+
+/** Merge core agents with loaded agents, ensuring core agents are always present */
+function ensureCoreAgents(loaded: AgentSummary[]): AgentSummary[] {
+  const loadedIds = new Set(loaded.map((a) => a.id));
+  const missing = coreAgents().filter((a) => !loadedIds.has(a.id));
+  // Mark loaded agents that match core IDs as system agents
+  const tagged = loaded.map((a) => CORE_AGENT_IDS.has(a.id) ? { ...a, isSystem: true } : a);
+  return [...missing, ...tagged];
 }
 
 function mockAudit(): AuditEventRow[] {
@@ -352,7 +373,7 @@ export default function App(): JSX.Element {
         }
         setRuntimeMode("desktop");
         setRuntimeError(null);
-        setAgents(loadedAgents.length > 0 ? loadedAgents : mockAgents());
+        setAgents(ensureCoreAgents(loadedAgents));
         setAuditEvents(loadedAudit.length > 0 ? loadedAudit : mockAudit());
         setConfig(loadedConfig);
         applyVoiceState(voice);
@@ -462,7 +483,7 @@ export default function App(): JSX.Element {
       return;
     }
     const [loadedAgents, loadedAudit] = await Promise.all([listAgents(), getAuditLog(undefined, 500)]);
-    setAgents(loadedAgents.length > 0 ? loadedAgents : mockAgents());
+    setAgents(ensureCoreAgents(loadedAgents));
     setAuditEvents(loadedAudit.length > 0 ? loadedAudit : mockAudit());
   }
 
@@ -579,6 +600,16 @@ export default function App(): JSX.Element {
       setRuntimeError(`Unable to create agent: ${formatError(error)}`);
       play("error");
     }
+  }
+
+  function handleDeleteAgent(id: string): void {
+    // Never allow deleting core system agents
+    if (CORE_AGENT_IDS.has(id)) {
+      return;
+    }
+    setAgents((prev) => prev.filter((a) => a.id !== id));
+    play("click");
+    bumpActivity();
   }
 
   const AGENT_PROMPTS: Record<string, string> = {
@@ -949,6 +980,7 @@ export default function App(): JSX.Element {
           onCreate={(manifestJson) => {
             void handleCreateAgent(manifestJson);
           }}
+          onDelete={handleDeleteAgent}
         />
       );
     }

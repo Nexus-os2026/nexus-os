@@ -10,6 +10,7 @@ interface AgentCardProps {
   onPause: (agentId: string) => void;
   onStop: (agentId: string) => void;
   onLogs: (agentId: string) => void;
+  onDelete: (agentId: string) => void;
 }
 
 function statusTone(status: AgentSummary["status"]): "running" | "paused" | "stopped" | "idle" {
@@ -78,7 +79,8 @@ export function AgentCard({
   onStart,
   onPause,
   onStop,
-  onLogs
+  onLogs,
+  onDelete
 }: AgentCardProps): JSX.Element {
   const percentage = fuelPercentage(agent.fuel_remaining);
   const stroke = gaugeColor(percentage);
@@ -107,10 +109,15 @@ export function AgentCard({
             <Avatar agentName={agent.name} role={role} state={avatarState} />
             <h3 className="agent-card-title">{agent.name}</h3>
           </div>
-          <span className={`agent-status-badge ${tone}`}>
-            <span className="agent-status-dot" />
-            {agent.status}
-          </span>
+          <div className="agent-badge-row">
+            <span className={`agent-type-badge ${agent.isSystem ? "system" : "custom"}`}>
+              {agent.isSystem ? "SYSTEM" : "CUSTOM"}
+            </span>
+            <span className={`agent-status-badge ${tone}`}>
+              <span className="agent-status-dot" />
+              {agent.status}
+            </span>
+          </div>
         </div>
 
         <div className="agent-card-gauge-wrap">
@@ -176,6 +183,20 @@ export function AgentCard({
         >
           Logs
         </button>
+        {!agent.isSystem && (
+          <button
+            type="button"
+            className="agent-action-btn delete"
+            onClick={(event) => {
+              event.stopPropagation();
+              if (window.confirm(`Delete agent "${agent.name}"? This cannot be undone.`)) {
+                onDelete(agent.id);
+              }
+            }}
+          >
+            Delete
+          </button>
+        )}
       </div>
     </article>
   );
