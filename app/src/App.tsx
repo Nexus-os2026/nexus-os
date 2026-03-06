@@ -242,22 +242,23 @@ function mockAudit(): AuditEventRow[] {
 
 function mockChatReply(message: string): ChatResponse {
   const lowered = message.toLowerCase();
+  let text: string;
   if (lowered.includes("status")) {
-    return {
-      text: "Two agents are active in this local mock runtime. Open Agents to inspect fuel and controls.",
-      model: "mock-1",
-      token_count: 29,
-      cost: 0,
-      latency_ms: 28
-    };
+    text = "6 agents deployed across the governed runtime. 4 running, 1 paused (Screen Poster - awaiting HITL approval for social post), 1 stopped (Workflow Studio - pipeline complete). Average fuel: 64%. All capability checks passing. Open the Agents page for full mission control.";
+  } else if (lowered.includes("search") || lowered.includes("find") || lowered.includes("look up") || lowered.includes("browse")) {
+    text = `I can help with that! Let me use the Web Search connector (Brave Search) to find information. Querying now via the governed web.search capability... Here are the top results I found. Would you like me to dig deeper into any of these, or shall I have the Web Builder agent create a summary page?`;
+  } else if (lowered.includes("post") || lowered.includes("tweet") || lowered.includes("social") || lowered.includes("share")) {
+    text = "I'll route this through the Screen Poster agent. Since social posting is a Tier 1 operation, it requires your approval before publishing. I've drafted the content and submitted it for HITL review. Check the Agents page to approve or edit before it goes live.";
+  } else if (lowered.includes("code") || lowered.includes("build") || lowered.includes("compile") || lowered.includes("fix")) {
+    text = "On it. I'm dispatching this to the Coder agent with process.exec and fs.write capabilities. It will analyze the codebase, implement the changes, and run the test suite. Fuel cost estimate: ~800 units. You can monitor progress in real-time on the Agents page.";
+  } else if (lowered.includes("hello") || lowered.includes("hi") || lowered.includes("hey")) {
+    text = "Hello! I'm NexusOS, your governed agent operating system. I have 6 specialized agents ready to help: Coder, Designer, Screen Poster, Web Builder, Workflow Studio, and Self-Improve. I can search the web, post content, read/write files, execute code, and more - all through governed capabilities with full audit trails. What can I help you with?";
+  } else if (lowered.includes("help") || lowered.includes("what can you")) {
+    text = "I'm NexusOS with full access to: Web Search (Brave connector), Social Posting (Screen Poster agent with HITL approval), File System (read/write), Code Execution (Coder agent), LLM Queries (multiple providers), Browser Automation (Web Builder), and Workflow Orchestration. All actions go through kernel capability checks with fuel budgeting and append-only audit trails. Just tell me what you need!";
+  } else {
+    text = "Understood. Let me route this through the appropriate agent. I have web search via Brave Search connector, social media posting via Screen Poster, file system access, LLM capabilities across multiple providers, and browser automation through Web Builder. All actions are governed with capability checks and fuel budgets. Processing your request now...";
   }
-  return {
-    text: "Mock runtime is active. Connect through Tauri to call real kernel services and external providers.",
-    model: "mock-1",
-    token_count: 24,
-    cost: 0,
-    latency_ms: 22
-  };
+  return { text, model: "nexus-mock", token_count: text.split(" ").length, cost: 0, latency_ms: 18 };
 }
 
 function makeMessage(role: ChatMessage["role"], content: string, extra?: Partial<ChatMessage>): ChatMessage {

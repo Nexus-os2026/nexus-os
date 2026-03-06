@@ -112,6 +112,7 @@
   gap: 0.64rem;
   cursor: pointer;
   transition: border-color 180ms ease, box-shadow 180ms ease;
+  overflow: hidden;
 }
 
 .agent-card:hover {
@@ -208,9 +209,11 @@
 }
 
 .agent-card-actions {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.42rem;
+  width: 100%;
+  overflow: hidden;
 }
 
 .agent-action-btn {
@@ -222,6 +225,8 @@
   font-size: 0.63rem;
   letter-spacing: 0.04em;
   cursor: pointer;
+  flex: 1 1 0;
+  min-width: 3.2rem;
 }
 
 .agent-action-btn:hover {
@@ -241,7 +246,6 @@
 .agent-action-btn.delete {
   border-color: rgba(255, 0, 64, 0.45);
   color: #ff6b6b;
-  margin-left: auto;
 }
 
 .agent-action-btn.delete:hover {

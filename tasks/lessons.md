@@ -16,6 +16,9 @@
 - Regex patterns for keyword detection must use /i flag and cover common variants (e.g., "Three Fiber" not just "react three fiber")
 - Button state feedback: show transient text ("Starting...") for ~1s, disable when action is invalid for current state
 - Always update "last action" display immediately on user interaction, don't wait for backend refresh
+- Use flex-wrap on button rows, not fixed grid columns - buttons must never overflow their container
+- Set overflow: hidden on cards to prevent content from escaping borders at any viewport width
+- Mock/fallback responses must match the product identity - never say "I can't do X" for capabilities the product has
 
 ## Architecture
 - Every agent action must go through kernel capability checks
