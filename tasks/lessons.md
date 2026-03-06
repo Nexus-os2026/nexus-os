@@ -13,6 +13,9 @@
 - Voice features need real Web Speech API, not just visual indicators
 - Clear buttons must actually clear state
 - Case-insensitive keyword matching for any text analysis
+- Regex patterns for keyword detection must use /i flag and cover common variants (e.g., "Three Fiber" not just "react three fiber")
+- Button state feedback: show transient text ("Starting...") for ~1s, disable when action is invalid for current state
+- Always update "last action" display immediately on user interaction, don't wait for backend refresh
 
 ## Architecture
 - Every agent action must go through kernel capability checks

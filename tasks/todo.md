@@ -3,9 +3,9 @@
 ## Current Sprint
 - [ ] Wire real agent execution to Tauri backend
 - [ ] Connect LLM gateway to actual Ollama/cloud providers
-- [ ] Real system stats in header (CPU/RAM via sysinfo)
-- [ ] Smart capability detection case-insensitive fix
-- [ ] Agent button state management (disable Start when Running, etc)
+- [x] Real system stats in header (CPU/RAM via sysinfo)
+- [x] Smart capability detection case-insensitive fix
+- [x] Agent button state management (disable Start when Running, etc)
 
 ## Completed
 - [x] Phase 1: Hardening (benchmarks, replay evidence, circuit breakers)

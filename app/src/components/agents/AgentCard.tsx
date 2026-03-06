@@ -90,11 +90,15 @@ export function AgentCard({
   const dashOffset = circumference * (1 - percentage / 100);
   const tone = statusTone(agent.status);
   const [pendingAction, setPendingAction] = useState<"starting" | "stopping" | "pausing" | null>(null);
+  const [localAction, setLocalAction] = useState<string | null>(null);
 
   // Clear transient label when agent status actually changes
   useEffect(() => {
     if (pendingAction) {
-      const timer = setTimeout(() => setPendingAction(null), 1500);
+      const timer = setTimeout(() => {
+        setPendingAction(null);
+        setLocalAction(null);
+      }, 1000);
       return () => clearTimeout(timer);
     }
   }, [pendingAction]);
@@ -102,9 +106,11 @@ export function AgentCard({
   const isRunning = agent.status === "Running" || agent.status === "Starting";
   const isStopped = agent.status === "Stopped" || agent.status === "Destroyed" || agent.status === "Created";
 
-  const eventLine = latestEvent
-    ? `${formatEventTimestamp(latestEvent.timestamp)} // ${summarizePayload(latestEvent.payload)}`
-    : `${new Date().toLocaleTimeString("en-GB", { hour12: false })} // ${agent.last_action}`;
+  const eventLine = localAction
+    ? `${new Date().toLocaleTimeString("en-GB", { hour12: false })} // ${localAction}`
+    : latestEvent
+      ? `${formatEventTimestamp(latestEvent.timestamp)} // ${summarizePayload(latestEvent.payload)}`
+      : `${new Date().toLocaleTimeString("en-GB", { hour12: false })} // ${agent.last_action}`;
   const role = inferRole(agent.name);
   const avatarState = tone === "running" ? "running" : tone === "paused" ? "paused" : tone === "stopped" ? "stopped" : "idle";
 
@@ -163,6 +169,7 @@ export function AgentCard({
           onClick={(event) => {
             event.stopPropagation();
             setPendingAction("starting");
+            setLocalAction("Start requested");
             onStart(agent.id);
           }}
         >
@@ -175,6 +182,7 @@ export function AgentCard({
           onClick={(event) => {
             event.stopPropagation();
             setPendingAction("pausing");
+            setLocalAction("Pause requested");
             onPause(agent.id);
           }}
         >
@@ -187,6 +195,7 @@ export function AgentCard({
           onClick={(event) => {
             event.stopPropagation();
             setPendingAction("stopping");
+            setLocalAction("Stop requested");
             onStop(agent.id);
           }}
         >
