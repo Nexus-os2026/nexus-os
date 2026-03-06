@@ -25,3 +25,10 @@
 - Fuel budget checked before execution, not after
 - Audit trail is append-only - never modify events
 - Mock data is okay for UI development but must be clearly labeled
+
+## CI / Workflows
+- Always check for merge conflict markers after merging branches — leftover `<<<<<<< branch` / `>>>>>>> main` markers in YAML break CI silently
+- The release.yml had unresolved merge conflict markers from the `ci/windows-artifact-fix` branch, causing duplicate steps and bare text in YAML that GitHub Actions rejects
+- After any architecture migration (renaming crates, changing versions), grep all workflow files for old names/versions
+- Validate YAML files locally before pushing: `python3 -c "import yaml; yaml.safe_load(open('file.yml'))"`
+- Keep workflow files clean: each build job should have exactly one set of build/normalize/upload steps, not duplicates from both sides of a merge conflict

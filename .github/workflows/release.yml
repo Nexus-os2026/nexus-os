@@ -26,7 +26,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-ci/windows-artifact-fix
           cache: npm
           cache-dependency-path: app/package-lock.json
 
@@ -78,53 +77,10 @@ ci/windows-artifact-fix
           if (-not $exe -and -not $msi) {
             Write-Error "No Windows installers found."
             Get-ChildItem -Recurse $bundle -ErrorAction SilentlyContinue | Select-Object FullName
-
-      - run: cargo build --release
-      - run: cd app && npm install && npm run tauri build
-      - name: Print bundle tree (Windows)
-        shell: pwsh
-        run: |
-          Write-Host "=== bundle tree ==="
-          Get-ChildItem -Recurse target\release\bundle -ErrorAction SilentlyContinue | Select-Object FullName
-      - name: Discover and normalize Windows artifacts
-        shell: pwsh
-        run: |
-          $refName = "${env:GITHUB_REF_NAME}"
-          if ($refName -match '^v([0-9]+\.[0-9]+\.[0-9]+)') {
-            $version = $Matches[1]
-          } else {
-            $version = ($refName -replace '[^A-Za-z0-9._-]', '-')
-          }
-          $root = $env:GITHUB_WORKSPACE
-          $bundleRoot = Join-Path $root "target\release\bundle"
-          $stage = Join-Path $root "dist-release\windows"
-          New-Item -ItemType Directory -Path $stage -Force | Out-Null
-
-          Write-Host "Listing bundle directory:"
-          Get-ChildItem -Recurse $bundleRoot -ErrorAction SilentlyContinue | Select-Object FullName
-
-          $files = Get-ChildItem -Path $bundleRoot -Recurse -File -Include *.exe,*.msi -ErrorAction SilentlyContinue
-          if (-not $files -or $files.Count -eq 0) {
-            $files = Get-ChildItem -Path $root -Recurse -File -Include *.exe,*.msi -ErrorAction SilentlyContinue |
-              Where-Object { $_.FullName -match '\\target\\release\\bundle\\' }
-          }
-
-          $exe = $files | Where-Object { $_.Extension -ieq ".exe" } | Sort-Object FullName | Select-Object -First 1
-          $msi = $files | Where-Object { $_.Extension -ieq ".msi" } | Sort-Object FullName | Select-Object -First 1
-
-          Write-Host "Discovered artifacts:"
-          $files | Sort-Object FullName | ForEach-Object { Write-Host $_.FullName }
-
-          if (-not $exe -and -not $msi) {
-            Write-Error "No Windows installers found under target/release/bundle."
-            Get-ChildItem -Recurse $bundleRoot -ErrorAction SilentlyContinue | Select-Object FullName
-            
-            main
             exit 1
           }
 
           if ($exe) {
-ci/windows-artifact-fix
             Copy-Item $exe.FullName "${outDir}/NexusOS_${version}_windows.exe" -Force
           }
           if ($msi) {
@@ -147,23 +103,6 @@ ci/windows-artifact-fix
         with:
           name: NexusOS-Windows
           path: ${{ steps.collect_windows.outputs.files }}
-
-            Copy-Item $exe.FullName (Join-Path $stage "NexusOS_${version}_windows_x64-setup.exe") -Force
-          }
-          if ($msi) {
-            Copy-Item $msi.FullName (Join-Path $stage "NexusOS_${version}_windows_x64.msi") -Force
-          }
-
-          Write-Host "Normalized files:"
-          Get-ChildItem -Path $stage -File | Select-Object FullName
-      - uses: actions/upload-artifact@v4
-        with:
-          name: NexusOS-Windows
-          path: |
-            dist-release/windows/*.exe
-            dist-release/windows/*.msi
- main
-          if-no-files-found: error
 
   build-linux:
     runs-on: ubuntu-latest
@@ -190,7 +129,6 @@ ci/windows-artifact-fix
         uses: actions/setup-node@v4
         with:
           node-version: 20
-ci/windows-artifact-fix
           cache: npm
           cache-dependency-path: app/package-lock.json
 
@@ -242,35 +180,6 @@ ci/windows-artifact-fix
           name: NexusOS-Linux
           path: ${{ steps.collect_linux.outputs.files }}
 
-      - run: cargo build --release
-      - run: cd app && npm install && npm run tauri build
-      - name: Print bundle tree (Linux)
-        run: |
-          echo "=== bundle tree ==="
-          ls -R target/release/bundle || true
-      - name: Normalize Linux package name
-        run: |
-          VERSION="$(echo "${GITHUB_REF_NAME}" | sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p')"
-          if [ -z "${VERSION}" ]; then
-            VERSION="$(echo "${GITHUB_REF_NAME}" | tr '/ ' '--' | tr -cd '[:alnum:]._-')"
-          fi
-          BUNDLE_ROOT="target/release/bundle"
-          OUT_DIR="dist-release/linux"
-          mkdir -p "${OUT_DIR}"
-          DEB_FILE="$(find "${BUNDLE_ROOT}" -type f -name '*.deb' | LC_ALL=C sort | head -n 1)"
-          if [ -z "${DEB_FILE}" ]; then
-            echo "No .deb produced. Check Tauri bundle targets."
-            ls -R "${BUNDLE_ROOT}" || true
-            exit 1
-          fi
-          cp "${DEB_FILE}" "${OUT_DIR}/nexus-os_${VERSION}_amd64.deb"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: NexusOS-Linux
-          path: dist-release/linux/nexus-os_*_amd64.deb
- main
-          if-no-files-found: error
-
   build-macos:
     runs-on: macos-latest
     steps:
@@ -284,7 +193,6 @@ ci/windows-artifact-fix
         uses: actions/setup-node@v4
         with:
           node-version: 20
-ci/windows-artifact-fix
           cache: npm
           cache-dependency-path: app/package-lock.json
 
@@ -335,35 +243,6 @@ ci/windows-artifact-fix
         with:
           name: NexusOS-macOS
           path: ${{ steps.collect_macos.outputs.files }}
-
-      - run: cargo build --release
-      - run: cd app && npm install && npm run tauri build
-      - name: Print bundle tree (macOS)
-        run: |
-          echo "=== bundle tree ==="
-          ls -R target/release/bundle || true
-      - name: Normalize macOS package name
-        run: |
-          VERSION="$(echo "${GITHUB_REF_NAME}" | sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+).*$/\1/p')"
-          if [ -z "${VERSION}" ]; then
-            VERSION="$(echo "${GITHUB_REF_NAME}" | tr '/ ' '--' | tr -cd '[:alnum:]._-')"
-          fi
-          BUNDLE_ROOT="target/release/bundle"
-          OUT_DIR="dist-release/macos"
-          mkdir -p "${OUT_DIR}"
-          DMG_FILE="$(find "${BUNDLE_ROOT}" -type f -name '*.dmg' | LC_ALL=C sort | head -n 1)"
-          if [ -z "${DMG_FILE}" ]; then
-            echo "No .dmg produced. Check Tauri bundle targets."
-            ls -R "${BUNDLE_ROOT}" || true
-            exit 1
-          fi
-          cp "${DMG_FILE}" "${OUT_DIR}/NexusOS_${VERSION}_aarch64.dmg"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: NexusOS-macOS
-          path: dist-release/macos/NexusOS_*_aarch64.dmg
-main
-          if-no-files-found: error
 
   create-release:
     needs: [build-windows, build-linux, build-macos]
