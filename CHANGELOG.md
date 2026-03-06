@@ -2,6 +2,40 @@
 
 All notable changes to NEXUS OS are documented here.
 
+## v5.0.0 - Production Ready
+
+### Sandbox and Networking
+- WASM-ready agent sandbox with memory limits, time limits, and governed host functions
+- TCP transport for distributed nodes with length-framed messages, exponential backoff retry, and connection management
+
+### CLI Completeness
+- 24 CLI commands across 8 subsystems: agent, audit, cluster, marketplace, compliance, delegation, benchmark, finetune
+- Structured JSON output mode on every command
+
+### Desktop UI Overhaul
+- Command Center with live agent grid, status indicators, fuel bars, and Start/Stop/Kill controls
+- Audit Timeline with color-coded events, filtering, and federation cross-reference badges
+- Marketplace Browser with search, verified badges, and install flow
+- Compliance Dashboard with SOC2 control status cards and report generation
+- Cluster Status with node health, heartbeat tracking, and quorum indicators
+- Trust Dashboard with per-agent trust scores, autonomy levels, and promotion/demotion badges
+
+### Documentation
+- Architecture guide with layered system diagram
+- SDK tutorial for building governed agents from scratch
+- Deployment guide for single-node and cluster setups
+- Security hardening checklist with 9 sections and verification commands
+- Complete API reference for all public types across every crate
+
+### End-to-End Integration Tests
+- Full governance pipeline: manifest to capability check to fuel to audit to evidence bundle verification
+- Circuit breaker failover with provider routing
+- Marketplace publish, install, and tamper detection
+- RBAC permission boundaries with SOC2 compliance report
+- Adaptive governance promotion and demotion lifecycle
+- Capability delegation with fuel limits and governed channel collaboration
+- Cloud tenant lifecycle with API keys and usage metering
+
 ## v4.0.0 - Governed Distributed Agent Platform
 
 ### Phase 1: Hardening and Evidence
