@@ -3,7 +3,7 @@ use coder_agent::git::auto_commit;
 use coder_agent::init::init_project_in;
 use coder_agent::terminal::{CommandError, TerminalExecutor, TERMINAL_EXECUTE_CAPABILITY};
 use coder_agent::writer::FileChange;
-use nexus_kernel::autonomy::AutonomyLevel;
+use nexus_sdk::autonomy::AutonomyLevel;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;

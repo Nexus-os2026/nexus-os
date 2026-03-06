@@ -2,8 +2,7 @@ use crate::audit::{AuditTrail, EventType};
 use crate::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
+use thiserror::Error;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
@@ -60,8 +59,9 @@ impl AutonomyLevel {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum AutonomyError {
+    #[error("autonomy denied action '{action}' (required={}, current={}){}", required.as_str(), current.as_str(), downgraded_to.map(|l| format!(" downgraded_to={}", l.as_str())).unwrap_or_default())]
     Denied {
         required: AutonomyLevel,
         current: AutonomyLevel,
@@ -69,37 +69,6 @@ pub enum AutonomyError {
         downgraded_to: Option<AutonomyLevel>,
     },
 }
-
-impl Display for AutonomyError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AutonomyError::Denied {
-                required,
-                current,
-                action,
-                downgraded_to,
-            } => match downgraded_to {
-                Some(level) => write!(
-                    f,
-                    "autonomy denied action '{}' (required={}, current={}) downgraded_to={}",
-                    action,
-                    required.as_str(),
-                    current.as_str(),
-                    level.as_str()
-                ),
-                None => write!(
-                    f,
-                    "autonomy denied action '{}' (required={}, current={})",
-                    action,
-                    required.as_str(),
-                    current.as_str()
-                ),
-            },
-        }
-    }
-}
-
-impl Error for AutonomyError {}
 
 impl From<AutonomyError> for AgentError {
     fn from(value: AutonomyError) -> Self {

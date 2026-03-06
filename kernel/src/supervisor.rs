@@ -5,6 +5,7 @@ use crate::errors::AgentError;
 use crate::fuel_hardening::{
     AgentFuelLedger, BudgetPeriodId, BurnAnomalyDetector, FuelAuditReport, FuelViolation,
 };
+use crate::kill_gates::KillGateError;
 use crate::lifecycle::{transition_state, AgentState};
 use crate::manifest::AgentManifest;
 use crate::safety_supervisor::{KpiKind, SafetyAction, SafetySupervisor};
@@ -301,7 +302,7 @@ impl Supervisor {
         }
         self.safety_supervisor
             .manual_freeze_subsystem(subsystem, operator_id, id, &mut self.audit_trail)
-            .map_err(|error| AgentError::SupervisorError(error.to_string()))?;
+            .map_err(|error: KillGateError| AgentError::SupervisorError(error.to_string()))?;
         Ok(())
     }
 
@@ -319,7 +320,7 @@ impl Supervisor {
         }
         self.safety_supervisor
             .manual_unfreeze_subsystem(subsystem, operator_id, hitl_tier, id, &mut self.audit_trail)
-            .map_err(|error| AgentError::SupervisorError(error.to_string()))?;
+            .map_err(|error: KillGateError| AgentError::SupervisorError(error.to_string()))?;
         Ok(())
     }
 

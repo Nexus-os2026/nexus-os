@@ -1,9 +1,9 @@
 //! Governed coding agent runtime for repository-aware test/fix iterations.
 
-use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
-use nexus_kernel::autonomy::{AutonomyGuard, AutonomyLevel};
-use nexus_kernel::consent::{ApprovalRequest, ConsentRuntime, GovernedOperation};
-use nexus_kernel::errors::AgentError;
+use nexus_sdk::audit::{AuditEvent, AuditTrail, EventType};
+use nexus_sdk::autonomy::{AutonomyGuard, AutonomyLevel};
+use nexus_sdk::consent::{ApprovalRequest, ConsentRuntime, GovernedOperation};
+use nexus_sdk::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -777,7 +777,7 @@ mod tests {
         CodingDependencies, CodingIoProxy, CodingPlanner, DenyAllApprovalGate, IterationPlan,
         PlanningContext, ProposedWrite, TestExecution,
     };
-    use nexus_kernel::errors::AgentError;
+    use nexus_sdk::errors::AgentError;
     use std::collections::VecDeque;
 
     fn sample_manifest(fuel_budget: u64, capabilities: &[&str]) -> CodingAgentManifest {

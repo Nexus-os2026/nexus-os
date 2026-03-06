@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{Display, Formatter};
 use std::fs;
 use std::path::{Path, PathBuf};
+use thiserror::Error;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
@@ -261,81 +261,36 @@ pub struct ApprovalDecision {
     pub decision_seq: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ConsentError {
+    #[error("approval required for operation '{}' at tier '{}' (request_id='{}')", operation.as_str(), required_tier.as_str(), request_id)]
     ApprovalRequired {
         request_id: String,
         operation: GovernedOperation,
         required_tier: HitlTier,
     },
-    RequestDenied {
-        request_id: String,
-    },
+    #[error("approval request '{request_id}' has been denied")]
+    RequestDenied { request_id: String },
+    #[error("approval request '{0}' not found")]
     RequestNotFound(String),
+    #[error("approver '{approver_id}' already recorded for request '{request_id}'")]
     DuplicateApprover {
         request_id: String,
         approver_id: String,
     },
+    #[error("approver '{approver_id}' is not allowed for request '{request_id}'")]
     ApproverNotAllowed {
         request_id: String,
         approver_id: String,
     },
+    #[error("approver '{approver_id}' cannot self-approve request '{request_id}'")]
     SelfApprovalRejected {
         request_id: String,
         approver_id: String,
     },
+    #[error("approval queue storage error: {0}")]
     QueueStorage(String),
 }
-
-impl Display for ConsentError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ConsentError::ApprovalRequired {
-                request_id,
-                operation,
-                required_tier,
-            } => write!(
-                f,
-                "approval required for operation '{}' at tier '{}' (request_id='{}')",
-                operation.as_str(),
-                required_tier.as_str(),
-                request_id
-            ),
-            ConsentError::RequestDenied { request_id } => {
-                write!(f, "approval request '{request_id}' has been denied")
-            }
-            ConsentError::RequestNotFound(request_id) => {
-                write!(f, "approval request '{request_id}' not found")
-            }
-            ConsentError::DuplicateApprover {
-                request_id,
-                approver_id,
-            } => write!(
-                f,
-                "approver '{approver_id}' already recorded for request '{request_id}'"
-            ),
-            ConsentError::ApproverNotAllowed {
-                request_id,
-                approver_id,
-            } => write!(
-                f,
-                "approver '{approver_id}' is not allowed for request '{request_id}'"
-            ),
-            ConsentError::SelfApprovalRejected {
-                request_id,
-                approver_id,
-            } => write!(
-                f,
-                "approver '{approver_id}' cannot self-approve request '{request_id}'"
-            ),
-            ConsentError::QueueStorage(reason) => {
-                write!(f, "approval queue storage error: {reason}")
-            }
-        }
-    }
-}
-
-impl std::error::Error for ConsentError {}
 
 impl From<ConsentError> for AgentError {
     fn from(value: ConsentError) -> Self {

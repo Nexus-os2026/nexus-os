@@ -161,8 +161,12 @@ fn recompute_event_hash(event: &crate::audit::AuditEvent) -> String {
         payload: &event.payload,
     };
 
-    let serialized =
-        serde_json::to_vec(&canonical).expect("event hash serialization must not fail");
+    let serialized = match serde_json::to_vec(&canonical) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return String::new();
+        }
+    };
 
     let mut hasher = Sha256::new();
     hasher.update(event.previous_hash.as_bytes());
@@ -192,7 +196,12 @@ fn recompute_bundle_digest(bundle: &EvidenceBundle) -> String {
         exported_at: bundle.exported_at,
     };
 
-    let canonical = serde_json::to_vec(&input).expect("bundle digest serialization must not fail");
+    let canonical = match serde_json::to_vec(&input) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return String::new();
+        }
+    };
 
     let mut hasher = Sha256::new();
     hasher.update(&canonical);

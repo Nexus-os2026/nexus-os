@@ -2,7 +2,7 @@ use crate::knowledge::{KnowledgeBase, KnowledgeCategory, KnowledgeEntry};
 use crate::learner::{StrategyInsights, StrategyLearner};
 use crate::prompt_optimizer::{PromptOptimizer, PromptOutcome};
 use crate::tracker::{OutcomeResult, PerformanceTracker, TaskMetrics, TaskType, TrackedOutcome};
-use nexus_kernel::errors::AgentError;
+use nexus_sdk::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};

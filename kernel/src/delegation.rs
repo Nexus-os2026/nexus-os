@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use thiserror::Error;
 use uuid::Uuid;
 
 fn unix_now() -> u64 {
@@ -50,27 +51,20 @@ impl DelegationGrant {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum DelegationError {
+    #[error("grantor does not own capability: {0}")]
     CapabilityNotOwned(String),
+    #[error("delegation depth exceeded")]
     DepthExceeded,
+    #[error("delegation grant expired")]
     Expired,
+    #[error("delegation grant revoked")]
     Revoked,
+    #[error("delegated fuel budget exhausted")]
     FuelExhausted,
+    #[error("delegation grant not found")]
     NotFound,
-}
-
-impl std::fmt::Display for DelegationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::CapabilityNotOwned(c) => write!(f, "grantor does not own capability: {c}"),
-            Self::DepthExceeded => write!(f, "delegation depth exceeded"),
-            Self::Expired => write!(f, "delegation grant expired"),
-            Self::Revoked => write!(f, "delegation grant revoked"),
-            Self::FuelExhausted => write!(f, "delegated fuel budget exhausted"),
-            Self::NotFound => write!(f, "delegation grant not found"),
-        }
-    }
 }
 
 #[derive(Debug)]

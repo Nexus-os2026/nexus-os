@@ -1,5 +1,5 @@
 use crate::scanner::ProjectMap;
-use nexus_kernel::errors::AgentError;
+use nexus_sdk::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};

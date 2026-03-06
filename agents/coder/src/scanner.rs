@@ -1,4 +1,4 @@
-use nexus_kernel::errors::AgentError;
+use nexus_sdk::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;

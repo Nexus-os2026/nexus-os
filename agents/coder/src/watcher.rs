@@ -1,4 +1,4 @@
-use nexus_kernel::errors::AgentError;
+use nexus_sdk::errors::AgentError;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};

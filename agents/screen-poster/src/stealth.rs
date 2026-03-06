@@ -1,4 +1,4 @@
-use rand::rngs::{StdRng, ThreadRng};
+use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
@@ -171,11 +171,6 @@ fn typing_delays_ms_with_rng<R: Rng + ?Sized>(
     }
 
     delays
-}
-
-#[allow(dead_code)]
-fn _thread_rng() -> ThreadRng {
-    rand::thread_rng()
 }
 
 fn gaussian_sample<R: Rng + ?Sized>(mean: f64, std_dev: f64, rng: &mut R) -> f64 {

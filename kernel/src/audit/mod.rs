@@ -137,8 +137,12 @@ fn compute_hash(
         payload,
     };
 
-    let serialized = serde_json::to_vec(&canonical)
-        .expect("audit event serialization must not fail for integrity");
+    // Fallback to hashing the debug representation if serialization fails,
+    // preserving hash-chain continuity without panicking.
+    let serialized = match serde_json::to_vec(&canonical) {
+        Ok(bytes) => bytes,
+        Err(_) => format!("{event_id}:{timestamp}:{agent_id}:{event_type:?}").into_bytes(),
+    };
 
     let mut hasher = Sha256::new();
     hasher.update(previous_hash.as_bytes());

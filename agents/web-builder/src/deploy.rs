@@ -1,5 +1,5 @@
-use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
-use nexus_kernel::errors::AgentError;
+use nexus_sdk::audit::{AuditEvent, AuditTrail, EventType};
+use nexus_sdk::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::Path;

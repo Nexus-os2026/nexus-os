@@ -1,52 +1,29 @@
 use crate::fuel_hardening::FuelViolation;
 use crate::lifecycle::AgentState;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
+use thiserror::Error;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum AgentError {
+    #[error("fuel budget exhausted")]
     FuelExhausted,
+    #[error("fuel violation '{violation:?}': {reason}")]
     FuelViolation {
         violation: FuelViolation,
         reason: String,
     },
-    InvalidTransition {
-        from: AgentState,
-        to: AgentState,
-    },
+    #[error("invalid state transition from '{from}' to '{to}'")]
+    InvalidTransition { from: AgentState, to: AgentState },
+    #[error("manifest error: {0}")]
     ManifestError(String),
+    #[error("capability denied: '{0}' is not allowed")]
     CapabilityDenied(String),
-    ApprovalRequired {
-        request_id: String,
-    },
+    #[error("approval required: request_id='{request_id}'")]
+    ApprovalRequired { request_id: String },
+    #[error("supervisor error: {0}")]
     SupervisorError(String),
+    #[error("key '{0}' has been destroyed")]
     KeyDestroyed(String),
 }
-
-impl Display for AgentError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AgentError::FuelExhausted => write!(f, "fuel budget exhausted"),
-            AgentError::FuelViolation { violation, reason } => {
-                write!(f, "fuel violation '{violation:?}': {reason}")
-            }
-            AgentError::InvalidTransition { from, to } => {
-                write!(f, "invalid state transition from '{from}' to '{to}'")
-            }
-            AgentError::ManifestError(reason) => write!(f, "manifest error: {reason}"),
-            AgentError::CapabilityDenied(capability) => {
-                write!(f, "capability denied: '{capability}' is not allowed")
-            }
-            AgentError::ApprovalRequired { request_id } => {
-                write!(f, "approval required: request_id='{request_id}'")
-            }
-            AgentError::SupervisorError(reason) => write!(f, "supervisor error: {reason}"),
-            AgentError::KeyDestroyed(key_id) => write!(f, "key '{key_id}' has been destroyed"),
-        }
-    }
-}
-
-impl Error for AgentError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ErrorStrategy {

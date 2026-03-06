@@ -1,4 +1,4 @@
-use nexus_kernel::errors::AgentError;
+use nexus_sdk::errors::AgentError;
 use screen_poster_agent::approval::{
     ApprovalDecision, ApprovalError, ApprovedDraft, HumanApprovalGate, InMemoryApprovalChannel,
 };

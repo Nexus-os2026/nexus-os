@@ -183,25 +183,14 @@ fn current_unix_timestamp() -> u64 {
         .unwrap_or(0)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BundleError {
+    #[error("cannot export empty audit trail")]
     EmptyTrail,
+    #[error("integrity violation: {0}")]
     IntegrityViolation(String),
+    #[error("format error: {0}")]
     FormatError(String),
+    #[error("verification failed: {}", .0.join("; "))]
     VerificationFailed(Vec<String>),
 }
-
-impl std::fmt::Display for BundleError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BundleError::EmptyTrail => write!(f, "cannot export empty audit trail"),
-            BundleError::IntegrityViolation(msg) => write!(f, "integrity violation: {msg}"),
-            BundleError::FormatError(msg) => write!(f, "format error: {msg}"),
-            BundleError::VerificationFailed(issues) => {
-                write!(f, "verification failed: {}", issues.join("; "))
-            }
-        }
-    }
-}
-
-impl std::error::Error for BundleError {}

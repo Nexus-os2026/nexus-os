@@ -2,10 +2,18 @@
 //!
 //! Provides the `NexusAgent` trait, `AgentContext` for capability-gated operations,
 //! `ManifestBuilder` for fluent manifest construction, and `TestHarness` for testing.
+//!
+//! Agent crates should depend on `nexus-sdk` (not `nexus-kernel` directly) and use
+//! the prelude for common imports:
+//!
+//! ```rust,ignore
+//! use nexus_sdk::prelude::*;
+//! ```
 
 pub mod agent_trait;
 pub mod context;
 pub mod manifest;
+pub mod prelude;
 pub mod sandbox;
 pub mod testing;
 
@@ -17,3 +25,16 @@ pub use sandbox::{
     SandboxRuntime,
 };
 pub use testing::TestHarness;
+
+// Re-export core kernel modules at SDK top level for convenience.
+pub use nexus_kernel::audit;
+pub use nexus_kernel::autonomy;
+pub use nexus_kernel::config;
+pub use nexus_kernel::consent;
+pub use nexus_kernel::errors;
+pub use nexus_kernel::fuel_hardening;
+pub use nexus_kernel::kill_gates;
+pub use nexus_kernel::lifecycle;
+pub use nexus_kernel::manifest as kernel_manifest;
+pub use nexus_kernel::redaction;
+pub use nexus_kernel::supervisor;

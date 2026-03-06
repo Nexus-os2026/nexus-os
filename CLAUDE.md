@@ -5,7 +5,7 @@
 ## Project Identity
 
 - Name: Nexus OS
-- Version: 3.0.0
+- Version: 5.0.0
 - Tagline: Don't trust. Verify.
 - Repo: https://github.com/nexai-lang/nexus-os
 - License: MIT

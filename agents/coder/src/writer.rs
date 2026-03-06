@@ -2,8 +2,8 @@ use crate::context::CodeContext;
 use crate::scanner::{Language, ProjectMap};
 use nexus_connectors_llm::gateway::{AgentRuntimeContext, GovernedLlmGateway};
 use nexus_connectors_llm::providers::{LlmProvider, MockProvider};
-use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
-use nexus_kernel::errors::AgentError;
+use nexus_sdk::audit::{AuditEvent, AuditTrail, EventType};
+use nexus_sdk::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashSet;
@@ -239,7 +239,7 @@ pub fn detect_style(project_map: &ProjectMap) -> Result<StyleProfile, AgentError
 fn generated_connector_template(indent: &str) -> String {
     format!(
         "use crate::connector::{{Connector, HealthStatus, RetryPolicy}};\n\
-         use nexus_kernel::errors::AgentError;\n\n\
+         use nexus_sdk::errors::AgentError;\n\n\
          #[derive(Debug, Clone, Default)]\n\
          pub struct GeneratedConnector;\n\n\
          impl Connector for GeneratedConnector {{\n\

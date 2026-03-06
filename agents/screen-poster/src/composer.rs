@@ -1,8 +1,8 @@
 use crate::navigator::SocialPlatform;
 use nexus_connectors_llm::gateway::{AgentRuntimeContext, GovernedLlmGateway};
 use nexus_connectors_llm::providers::{LlmProvider, MockProvider};
-use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
-use nexus_kernel::errors::AgentError;
+use nexus_sdk::audit::{AuditEvent, AuditTrail, EventType};
+use nexus_sdk::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashSet;

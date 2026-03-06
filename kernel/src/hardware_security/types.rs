@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::error::Error;
-use std::fmt::{Display, Formatter};
+use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum KeyPurpose {
@@ -42,52 +41,28 @@ pub struct AttestationReport {
     pub protocol_version: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum KeyError {
+    #[error("key backend '{0}' is not available")]
     NotAvailable(&'static str),
+    #[error("key handle '{0}' not found")]
     KeyNotFound(String),
+    #[error("key purpose mismatch: expected '{}', actual '{}'", expected.as_str(), actual.as_str())]
     PurposeMismatch {
         expected: KeyPurpose,
         actual: KeyPurpose,
     },
+    #[error("approval required for '{}': required {required}, provided {provided}", purpose.as_str())]
     ApprovalRequired {
         required: u8,
         provided: u8,
         purpose: KeyPurpose,
     },
+    #[error("invalid key material: {0}")]
     InvalidKeyMaterial(String),
+    #[error("key backend failure: {0}")]
     BackendFailure(String),
 }
-
-impl Display for KeyError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            KeyError::NotAvailable(backend) => {
-                write!(f, "key backend '{backend}' is not available")
-            }
-            KeyError::KeyNotFound(id) => write!(f, "key handle '{id}' not found"),
-            KeyError::PurposeMismatch { expected, actual } => write!(
-                f,
-                "key purpose mismatch: expected '{}', actual '{}'",
-                expected.as_str(),
-                actual.as_str()
-            ),
-            KeyError::ApprovalRequired {
-                required,
-                provided,
-                purpose,
-            } => write!(
-                f,
-                "approval required for '{}': required {required}, provided {provided}",
-                purpose.as_str()
-            ),
-            KeyError::InvalidKeyMaterial(reason) => write!(f, "invalid key material: {reason}"),
-            KeyError::BackendFailure(reason) => write!(f, "key backend failure: {reason}"),
-        }
-    }
-}
-
-impl Error for KeyError {}
 
 pub trait KeyBackend: Send {
     fn backend_name(&self) -> &'static str;

@@ -1,9 +1,9 @@
-use nexus_kernel::audit::AuditTrail;
-use nexus_kernel::autonomy::{AutonomyGuard, AutonomyLevel};
-use nexus_kernel::consent::{
+use nexus_sdk::audit::AuditTrail;
+use nexus_sdk::autonomy::{AutonomyGuard, AutonomyLevel};
+use nexus_sdk::consent::{
     ApprovalQueue, ConsentPolicyEngine, ConsentRuntime, GovernedOperation, HitlTier,
 };
-use nexus_kernel::errors::AgentError;
+use nexus_sdk::errors::AgentError;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;

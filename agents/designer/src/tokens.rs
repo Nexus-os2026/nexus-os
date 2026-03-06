@@ -1,4 +1,4 @@
-use nexus_kernel::errors::AgentError;
+use nexus_sdk::errors::AgentError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

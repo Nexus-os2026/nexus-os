@@ -9,7 +9,7 @@ use reqwest::blocking::Client;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
@@ -421,11 +421,6 @@ struct TelegramUser {
 #[derive(Debug, Deserialize)]
 struct TelegramVoice {
     file_id: String,
-}
-
-#[allow(dead_code)]
-fn _assert_path_is_absolute(path: &Path) -> bool {
-    path.is_absolute()
 }
 
 #[cfg(test)]

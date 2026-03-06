@@ -1,4 +1,4 @@
-use nexus_kernel::errors::AgentError;
+use nexus_sdk::errors::AgentError;
 use serde::{Deserialize, Serialize};
 
 pub const PLAYWRIGHT_VERSION: &str = "0.12";

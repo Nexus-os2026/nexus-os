@@ -1,5 +1,5 @@
 use crate::writer::FileChange;
-use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
+use nexus_sdk::audit::{AuditEvent, AuditTrail, EventType};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::{BTreeSet, HashMap};

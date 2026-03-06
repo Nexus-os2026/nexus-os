@@ -4,7 +4,7 @@ use coder_agent::fix_loop::{fix_until_pass_with, ErrorFixer, TestExecutor};
 use coder_agent::scanner::{detect_language, scan_project, Language};
 use coder_agent::test_runner::{TestError, TestFramework, TestResult};
 use coder_agent::writer::{detect_style, NamingConvention};
-use nexus_kernel::errors::AgentError;
+use nexus_sdk::errors::AgentError;
 use std::path::{Component, Path, PathBuf};
 use tempfile::tempdir;
 

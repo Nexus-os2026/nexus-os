@@ -1,7 +1,7 @@
 use crate::tracker::{OutcomeResult, PerformanceTracker, TaskType};
 use nexus_connectors_llm::gateway::{AgentRuntimeContext, GovernedLlmGateway};
 use nexus_connectors_llm::providers::{LlmProvider, MockProvider};
-use nexus_kernel::errors::AgentError;
+use nexus_sdk::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use uuid::Uuid;

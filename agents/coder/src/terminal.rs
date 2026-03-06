@@ -1,6 +1,6 @@
-use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
-use nexus_kernel::autonomy::{AutonomyGuard, AutonomyLevel};
-use nexus_kernel::consent::{
+use nexus_sdk::audit::{AuditEvent, AuditTrail, EventType};
+use nexus_sdk::autonomy::{AutonomyGuard, AutonomyLevel};
+use nexus_sdk::consent::{
     ApprovalQueue, ApprovalRequest, ConsentError, ConsentPolicyEngine, ConsentRuntime,
     GovernedOperation,
 };

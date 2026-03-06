@@ -1,10 +1,8 @@
 use crate::nodes::{NodeErrorStrategy, NodeKind, Workflow, WorkflowConnection, WorkflowNode};
-use nexus_kernel::audit::AuditTrail;
-use nexus_kernel::autonomy::{AutonomyGuard, AutonomyLevel};
-use nexus_kernel::consent::{
-    ApprovalQueue, ConsentPolicyEngine, ConsentRuntime, GovernedOperation,
-};
-use nexus_kernel::errors::AgentError;
+use nexus_sdk::audit::AuditTrail;
+use nexus_sdk::autonomy::{AutonomyGuard, AutonomyLevel};
+use nexus_sdk::consent::{ApprovalQueue, ConsentPolicyEngine, ConsentRuntime, GovernedOperation};
+use nexus_sdk::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};

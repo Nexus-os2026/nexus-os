@@ -1,6 +1,6 @@
 # Nexus OS Architecture Guide
 
-> Version 4.0.0 | Don't trust. Verify.
+> Version 5.0.0 | Don't trust. Verify.
 
 ## Overview
 

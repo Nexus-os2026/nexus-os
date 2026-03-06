@@ -1,9 +1,9 @@
 use crate::approval::ApprovedDraft;
 use crate::navigator::{NavigationResult, PlatformNavigator, SocialPlatform};
 use crate::stealth::{gaussian_action_delays_ms, typing_delays_ms, SessionGuard, StealthProfile};
-use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
-use nexus_kernel::errors::AgentError;
-use nexus_kernel::kill_gates::{GateStatus, KillGateRegistry};
+use nexus_sdk::audit::{AuditEvent, AuditTrail, EventType};
+use nexus_sdk::errors::AgentError;
+use nexus_sdk::kill_gates::{GateStatus, KillGateRegistry};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::thread;

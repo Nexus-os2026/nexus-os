@@ -80,22 +80,13 @@ impl EscalationLevel {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum KillGateError {
+    #[error("unknown subsystem '{0}'")]
     UnknownSubsystem(String),
+    #[error("HITL Tier3 is required to unfreeze")]
     Tier3Required,
 }
-
-impl std::fmt::Display for KillGateError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            KillGateError::UnknownSubsystem(name) => write!(f, "unknown subsystem '{name}'"),
-            KillGateError::Tier3Required => write!(f, "HITL Tier3 is required to unfreeze"),
-        }
-    }
-}
-
-impl std::error::Error for KillGateError {}
 
 #[derive(Debug, Clone)]
 pub struct KillGateRegistry {

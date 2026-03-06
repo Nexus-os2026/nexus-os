@@ -1,6 +1,6 @@
 //! Governed inter-agent messaging channels with rate limiting and audit logging.
 
-use nexus_kernel::audit::{AuditTrail, EventType};
+use nexus_sdk::audit::{AuditTrail, EventType};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::VecDeque;
