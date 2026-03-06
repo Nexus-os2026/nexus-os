@@ -28,8 +28,10 @@ fn bench_input_sanitization(c: &mut Criterion) {
 fn bench_output_validation(c: &mut Criterion) {
     let agent_id = Uuid::new_v4();
     let response = "tool_call: web.search\ntool_call: llm.query\nDone.";
-    let capabilities: HashSet<String> =
-        ["web.search", "llm.query"].iter().map(|s| s.to_string()).collect();
+    let capabilities: HashSet<String> = ["web.search", "llm.query"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
     c.bench_function("gateway_output_validation", |b| {
         b.iter(|| {

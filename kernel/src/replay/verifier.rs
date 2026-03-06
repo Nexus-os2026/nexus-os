@@ -50,8 +50,7 @@ pub fn verify_bundle(
     let chain_integrity = check_hash_chain(bundle, &mut issues);
 
     // -- Check 2: manifest hash matches capabilities --
-    let manifest_capabilities_match =
-        check_manifest_capabilities(bundle, manifest, &mut issues);
+    let manifest_capabilities_match = check_manifest_capabilities(bundle, manifest, &mut issues);
 
     // -- Check 3: fuel_consumed <= fuel_budget --
     let fuel_within_budget = check_fuel_budget(bundle, &mut issues);
@@ -98,8 +97,7 @@ pub fn verify_file(
 
 // ── Check 1: hash-chain integrity ──────────────────────────────────
 
-const GENESIS_HASH: &str =
-    "0000000000000000000000000000000000000000000000000000000000000000";
+const GENESIS_HASH: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
 fn check_hash_chain(bundle: &EvidenceBundle, issues: &mut Vec<String>) -> bool {
     let mut expected_previous = GENESIS_HASH.to_string();
@@ -107,9 +105,7 @@ fn check_hash_chain(bundle: &EvidenceBundle, issues: &mut Vec<String>) -> bool {
 
     for (idx, event) in bundle.audit_events.iter().enumerate() {
         if event.previous_hash != expected_previous {
-            issues.push(format!(
-                "chain: event[{idx}] previous_hash mismatch"
-            ));
+            issues.push(format!("chain: event[{idx}] previous_hash mismatch"));
             valid = false;
         }
 
@@ -165,8 +161,8 @@ fn recompute_event_hash(event: &crate::audit::AuditEvent) -> String {
         payload: &event.payload,
     };
 
-    let serialized = serde_json::to_vec(&canonical)
-        .expect("event hash serialization must not fail");
+    let serialized =
+        serde_json::to_vec(&canonical).expect("event hash serialization must not fail");
 
     let mut hasher = Sha256::new();
     hasher.update(event.previous_hash.as_bytes());
@@ -196,8 +192,7 @@ fn recompute_bundle_digest(bundle: &EvidenceBundle) -> String {
         exported_at: bundle.exported_at,
     };
 
-    let canonical = serde_json::to_vec(&input)
-        .expect("bundle digest serialization must not fail");
+    let canonical = serde_json::to_vec(&input).expect("bundle digest serialization must not fail");
 
     let mut hasher = Sha256::new();
     hasher.update(&canonical);
@@ -226,8 +221,7 @@ fn check_manifest_capabilities(
         }
 
         // Verify the policy snapshot capabilities match the manifest
-        let manifest_caps: HashSet<&str> =
-            m.capabilities.iter().map(String::as_str).collect();
+        let manifest_caps: HashSet<&str> = m.capabilities.iter().map(String::as_str).collect();
         let snapshot_caps: HashSet<&str> = bundle
             .policy_snapshot
             .capabilities
@@ -310,10 +304,7 @@ fn check_approvals(bundle: &EvidenceBundle, issues: &mut Vec<String>) -> bool {
 
 // ── Check 5: monotonic event ordering ──────────────────────────────
 
-fn check_monotonic_ordering(
-    bundle: &EvidenceBundle,
-    issues: &mut Vec<String>,
-) -> bool {
+fn check_monotonic_ordering(bundle: &EvidenceBundle, issues: &mut Vec<String>) -> bool {
     let mut valid = true;
     for window in bundle.audit_events.windows(2) {
         if window[1].timestamp < window[0].timestamp {
@@ -334,9 +325,7 @@ mod tests {
     use crate::autonomy::AutonomyLevel;
     use crate::consent::{ApprovalDecision, ApprovalVerdict, GovernedOperation};
     use crate::manifest::AgentManifest;
-    use crate::replay::bundle::{
-        ApprovalRecord, EvidenceBundle, PolicySnapshot,
-    };
+    use crate::replay::bundle::{ApprovalRecord, EvidenceBundle, PolicySnapshot};
     use crate::replay::format::EvidenceFile;
     use serde_json::json;
     use uuid::Uuid;
@@ -426,15 +415,12 @@ mod tests {
 
         // Serialize to file
         let file = EvidenceFile::from_bundle(bundle.clone());
-        let path = std::env::temp_dir().join(format!(
-            "nexus-rt-test-{}.nexus-evidence",
-            Uuid::new_v4()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("nexus-rt-test-{}.nexus-evidence", Uuid::new_v4()));
         file.write_to_file(&path).expect("write should succeed");
 
         // Deserialize and verify
-        let report =
-            verify_file(&path, Some(&manifest)).expect("verify_file should succeed");
+        let report = verify_file(&path, Some(&manifest)).expect("verify_file should succeed");
 
         assert_eq!(report.verdict, VerificationVerdict::Valid);
         assert!(report.chain_integrity);
@@ -529,7 +515,10 @@ mod tests {
         assert_eq!(report.verdict, VerificationVerdict::Invalid);
         assert!(!report.approvals_present);
         assert!(
-            report.issues.iter().any(|i| i.contains("no approval record")),
+            report
+                .issues
+                .iter()
+                .any(|i| i.contains("no approval record")),
             "expected approval issue, got: {:?}",
             report.issues
         );

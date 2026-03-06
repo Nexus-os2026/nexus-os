@@ -1,12 +1,12 @@
 use nexus_connectors_core::validation::{
     validate_anthropic_key, validate_brave_key, validate_telegram_token,
 };
+use nexus_connectors_llm::providers::OllamaProvider;
 use nexus_kernel::config::{
     load_config, load_config_from_path, save_config, AgentLlmConfig, HardwareConfig, ModelsConfig,
     NexusConfig, OllamaConfig,
 };
 use nexus_kernel::hardware::{recommend_agent_configs, HardwareProfile};
-use nexus_connectors_llm::providers::OllamaProvider;
 use std::io::{self, Write};
 use std::path::Path;
 
@@ -33,17 +33,45 @@ pub fn render_setup_check(config: &NexusConfig) -> String {
         "NEXUS setup status".to_string(),
         String::new(),
         "--- Hardware ---".to_string(),
-        format!("GPU: {}", if config.hardware.gpu.is_empty() { "not detected" } else { config.hardware.gpu.as_str() }),
+        format!(
+            "GPU: {}",
+            if config.hardware.gpu.is_empty() {
+                "not detected"
+            } else {
+                config.hardware.gpu.as_str()
+            }
+        ),
         format!("VRAM: {} MB", config.hardware.vram_mb),
         format!("RAM: {} MB", config.hardware.ram_mb),
         String::new(),
         "--- Ollama ---".to_string(),
         format!("URL: {}", config.ollama.base_url),
-        format!("Status: {}", if config.ollama.status.is_empty() { "unknown" } else { config.ollama.status.as_str() }),
+        format!(
+            "Status: {}",
+            if config.ollama.status.is_empty() {
+                "unknown"
+            } else {
+                config.ollama.status.as_str()
+            }
+        ),
         String::new(),
         "--- Models ---".to_string(),
-        format!("Primary: {}", if config.models.primary.is_empty() { "not set" } else { config.models.primary.as_str() }),
-        format!("Fast: {}", if config.models.fast.is_empty() { "not set" } else { config.models.fast.as_str() }),
+        format!(
+            "Primary: {}",
+            if config.models.primary.is_empty() {
+                "not set"
+            } else {
+                config.models.primary.as_str()
+            }
+        ),
+        format!(
+            "Fast: {}",
+            if config.models.fast.is_empty() {
+                "not set"
+            } else {
+                config.models.fast.as_str()
+            }
+        ),
     ];
 
     if !config.agents.is_empty() {
@@ -59,11 +87,17 @@ pub fn render_setup_check(config: &NexusConfig) -> String {
 
     lines.push(String::new());
     lines.push("--- API Keys ---".to_string());
-    lines.push(format!("Anthropic: {}", status(&config.llm.anthropic_api_key)));
+    lines.push(format!(
+        "Anthropic: {}",
+        status(&config.llm.anthropic_api_key)
+    ));
     lines.push(format!("OpenAI: {}", status(&config.llm.openai_api_key)));
     lines.push(format!("Brave: {}", status(&config.search.brave_api_key)));
     lines.push(format!("X: {}", status(&config.social.x_api_key)));
-    lines.push(format!("Telegram: {}", status(&config.messaging.telegram_bot_token)));
+    lines.push(format!(
+        "Telegram: {}",
+        status(&config.messaging.telegram_bot_token)
+    ));
 
     lines.join("\n")
 }
@@ -91,11 +125,12 @@ fn run_setup_interactive() -> Result<String, String> {
 
     // Step 2: Ollama Connection
     println!("Step 2: Checking Ollama...");
-    let ollama_url = if ask_yes_no("Use custom Ollama URL? (default: http://localhost:11434) (y/n)")? {
-        ask_value("Ollama URL")?
-    } else {
-        "http://localhost:11434".to_string()
-    };
+    let ollama_url =
+        if ask_yes_no("Use custom Ollama URL? (default: http://localhost:11434) (y/n)")? {
+            ask_value("Ollama URL")?
+        } else {
+            "http://localhost:11434".to_string()
+        };
 
     let provider = OllamaProvider::new(&ollama_url);
     let ollama_connected = match provider.health_check() {
@@ -104,14 +139,21 @@ fn run_setup_interactive() -> Result<String, String> {
             true
         }
         _ => {
-            println!("  Ollama not reachable at {}. You can start it later.", ollama_url);
+            println!(
+                "  Ollama not reachable at {}. You can start it later.",
+                ollama_url
+            );
             false
         }
     };
 
     config.ollama = OllamaConfig {
         base_url: ollama_url.clone(),
-        status: if ollama_connected { "connected".to_string() } else { "disconnected".to_string() },
+        status: if ollama_connected {
+            "connected".to_string()
+        } else {
+            "disconnected".to_string()
+        },
     };
     config.llm.ollama_url = ollama_url;
     println!();
@@ -139,7 +181,10 @@ fn run_setup_interactive() -> Result<String, String> {
             },
         );
     }
-    println!("  Configured {} agent model assignments", agent_configs.len());
+    println!(
+        "  Configured {} agent model assignments",
+        agent_configs.len()
+    );
     println!();
 
     // Step 4: Download models

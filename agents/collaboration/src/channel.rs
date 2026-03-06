@@ -25,7 +25,13 @@ pub struct AgentMessage {
 }
 
 impl AgentMessage {
-    pub fn new(from: Uuid, to: Uuid, message_type: &str, payload: Value, requires_ack: bool) -> Self {
+    pub fn new(
+        from: Uuid,
+        to: Uuid,
+        message_type: &str,
+        payload: Value,
+        requires_ack: bool,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
             from,
@@ -106,7 +112,9 @@ impl GovernedChannel {
 
         // Validate message type
         if !self.allowed_message_types.contains(&msg.message_type) {
-            return Err(ChannelError::MessageTypeNotAllowed(msg.message_type.clone()));
+            return Err(ChannelError::MessageTypeNotAllowed(
+                msg.message_type.clone(),
+            ));
         }
 
         // Check rate limit — reset window if minute has elapsed
@@ -179,8 +187,8 @@ mod tests {
                 "status".to_string(),
                 "escalation".to_string(),
             ],
-            10, // max 10 per minute
-            5,  // 5 fuel per message
+            10,  // max 10 per minute
+            5,   // 5 fuel per message
             100, // 100 fuel budget
         )
     }
@@ -191,7 +199,13 @@ mod tests {
         let receiver = Uuid::new_v4();
         let mut ch = make_channel(sender, receiver);
 
-        let msg = AgentMessage::new(sender, receiver, "task_request", json!({"task": "build"}), false);
+        let msg = AgentMessage::new(
+            sender,
+            receiver,
+            "task_request",
+            json!({"task": "build"}),
+            false,
+        );
         assert!(ch.send(msg).is_ok());
 
         let received = ch.recv().unwrap();
@@ -219,7 +233,9 @@ mod tests {
         let msg = AgentMessage::new(sender, receiver, "forbidden_type", json!({}), false);
         assert_eq!(
             ch.send(msg),
-            Err(ChannelError::MessageTypeNotAllowed("forbidden_type".to_string()))
+            Err(ChannelError::MessageTypeNotAllowed(
+                "forbidden_type".to_string()
+            ))
         );
     }
 
@@ -228,14 +244,7 @@ mod tests {
         let sender = Uuid::new_v4();
         let receiver = Uuid::new_v4();
         // max 3 per minute, plenty of fuel
-        let mut ch = GovernedChannel::new(
-            sender,
-            receiver,
-            vec!["status".to_string()],
-            3,
-            1,
-            1000,
-        );
+        let mut ch = GovernedChannel::new(sender, receiver, vec!["status".to_string()], 3, 1, 1000);
 
         for _ in 0..3 {
             let msg = AgentMessage::new(sender, receiver, "status", json!({}), false);
@@ -268,14 +277,7 @@ mod tests {
         let sender = Uuid::new_v4();
         let receiver = Uuid::new_v4();
         // Only 4 fuel, cost is 5
-        let mut ch = GovernedChannel::new(
-            sender,
-            receiver,
-            vec!["status".to_string()],
-            100,
-            5,
-            4,
-        );
+        let mut ch = GovernedChannel::new(sender, receiver, vec!["status".to_string()], 100, 5, 4);
 
         let msg = AgentMessage::new(sender, receiver, "status", json!({}), false);
         assert_eq!(

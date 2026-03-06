@@ -1,0 +1,96 @@
+.mb-hub { padding: 1.5rem; }
+.mb-header { margin-bottom: 1.25rem; }
+.mb-title { font-family: var(--font-display, "JetBrains Mono", monospace); font-size: 1.1rem; color: #e0f2fe; letter-spacing: 0.08em; }
+.mb-subtitle { font-size: 0.8rem; color: rgba(165, 243, 252, 0.6); margin-top: 0.25rem; }
+
+.mb-search-bar { margin-bottom: 1.25rem; }
+.mb-search {
+  width: 100%;
+  max-width: 480px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 0.5rem;
+  color: #e0f2fe;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  font-family: var(--font-display, monospace);
+}
+.mb-search::placeholder { color: rgba(165, 243, 252, 0.35); }
+
+.mb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+
+.mb-card {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.15);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  transition: border-color 0.2s;
+}
+.mb-card:hover { border-color: rgba(56, 189, 248, 0.4); }
+
+.mb-card-top { display: flex; align-items: center; gap: 0.5rem; }
+.mb-card-name { font-size: 1rem; font-weight: 600; color: #e0f2fe; }
+.mb-verified-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.mb-card-meta { display: flex; gap: 0.75rem; font-size: 0.7rem; }
+.mb-card-author { color: rgba(165, 243, 252, 0.6); }
+.mb-card-version { color: rgba(165, 243, 252, 0.4); font-family: monospace; }
+
+.mb-card-desc { font-size: 0.8rem; color: #cbd5e1; line-height: 1.4; }
+
+.mb-card-tags { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.mb-tag {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.25rem;
+  background: rgba(56, 189, 248, 0.1);
+  color: #67e8f9;
+  border: 1px solid rgba(56, 189, 248, 0.15);
+}
+
+.mb-card-footer { margin-top: auto; }
+.mb-install-btn {
+  padding: 0.35rem 1rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  border-radius: 0.4rem;
+  background: rgba(15, 23, 42, 0.6);
+  color: #22d3ee;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.mb-install-btn:hover { background: rgba(34, 211, 238, 0.15); border-color: rgba(34, 211, 238, 0.5); }
+
+.mb-installed-badge {
+  display: inline-block;
+  padding: 0.35rem 1rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-radius: 0.4rem;
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.mb-empty { color: rgba(165, 243, 252, 0.4); font-size: 0.85rem; grid-column: 1 / -1; text-align: center; padding: 2rem; }

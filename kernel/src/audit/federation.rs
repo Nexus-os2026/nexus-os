@@ -121,7 +121,11 @@ impl FederatedAuditTrail {
     }
 
     /// Verify a remote node's events: check chain integrity and that hashes match cross-references.
-    pub fn verify_remote(&self, remote_node_id: Uuid, remote_events: &[AuditEvent]) -> FederationVerifyResult {
+    pub fn verify_remote(
+        &self,
+        remote_node_id: Uuid,
+        remote_events: &[AuditEvent],
+    ) -> FederationVerifyResult {
         // Find all cross-references we have for this remote node
         let our_refs: Vec<&CrossRef> = self
             .federated_events
@@ -153,10 +157,8 @@ impl FederatedAuditTrail {
         }
 
         // Then check that every cross-reference hash appears in the verified remote chain
-        let remote_hashes: std::collections::HashSet<&str> = remote_events
-            .iter()
-            .map(|e| e.hash.as_str())
-            .collect();
+        let remote_hashes: std::collections::HashSet<&str> =
+            remote_events.iter().map(|e| e.hash.as_str()).collect();
 
         for cr in &our_refs {
             if !remote_hashes.contains(cr.remote_chain_hash.as_str()) {
@@ -177,7 +179,9 @@ impl FederatedAuditTrail {
         let cross_references: Vec<CrossRef> = self
             .federated_events
             .iter()
-            .filter(|fe| fe.local_event.timestamp >= start_time && fe.local_event.timestamp <= end_time)
+            .filter(|fe| {
+                fe.local_event.timestamp >= start_time && fe.local_event.timestamp <= end_time
+            })
             .flat_map(|fe| fe.cross_references.iter().cloned())
             .collect();
 
@@ -235,8 +239,13 @@ fn compute_proof_digest(refs: &[CrossRef]) -> String {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FederationVerifyResult {
-    Verified { cross_refs_checked: usize },
-    Mismatch { expected_hash: String, observed_at: u64 },
+    Verified {
+        cross_refs_checked: usize,
+    },
+    Mismatch {
+        expected_hash: String,
+        observed_at: u64,
+    },
     NoCrossReferences,
 }
 
@@ -283,7 +292,12 @@ mod tests {
 
         // Verify: B verifies A's events against its cross-references
         let result = node_b.verify_remote(node_a_id, node_a.trail().events());
-        assert!(matches!(result, FederationVerifyResult::Verified { cross_refs_checked: 1 }));
+        assert!(matches!(
+            result,
+            FederationVerifyResult::Verified {
+                cross_refs_checked: 1
+            }
+        ));
     }
 
     #[test]

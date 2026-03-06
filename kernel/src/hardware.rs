@@ -299,9 +299,7 @@ fn chrono_iso8601_now() -> String {
                 m += 1;
             }
             let day = remaining + 1;
-            format!(
-                "{y:04}-{m:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}Z"
-            )
+            format!("{y:04}-{m:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}Z")
         }
         Err(_) => "1970-01-01T00:00:00Z".to_string(),
     }

@@ -134,9 +134,8 @@ impl OllamaProvider {
             "stream": true,
             "temperature": 0.7,
         });
-        let encoded = serde_json::to_string(&body).map_err(|e| {
-            AgentError::SupervisorError(format!("failed to encode chat body: {e}"))
-        })?;
+        let encoded = serde_json::to_string(&body)
+            .map_err(|e| AgentError::SupervisorError(format!("failed to encode chat body: {e}")))?;
 
         let child = Command::new("curl")
             .args(["-sS", "-N", "-X", "POST", "-m", "300"])
@@ -158,9 +157,8 @@ impl OllamaProvider {
         let mut on_token = on_token;
 
         for line in reader.lines() {
-            let line = line.map_err(|e| {
-                AgentError::SupervisorError(format!("read error during chat: {e}"))
-            })?;
+            let line = line
+                .map_err(|e| AgentError::SupervisorError(format!("read error during chat: {e}")))?;
             let trimmed = line.trim();
             if trimmed.is_empty() || !trimmed.starts_with("data: ") {
                 continue;
@@ -191,9 +189,8 @@ impl OllamaProvider {
     {
         let endpoint = format!("{}/api/pull", self.base_url.trim_end_matches('/'));
         let body = json!({ "name": model_name, "stream": true });
-        let encoded_body = serde_json::to_string(&body).map_err(|e| {
-            AgentError::SupervisorError(format!("failed to encode pull body: {e}"))
-        })?;
+        let encoded_body = serde_json::to_string(&body)
+            .map_err(|e| AgentError::SupervisorError(format!("failed to encode pull body: {e}")))?;
 
         let child = Command::new("curl")
             .args(["-sS", "-N", "-X", "POST"])
@@ -214,9 +211,8 @@ impl OllamaProvider {
         let mut last_status = "unknown".to_string();
 
         for line in reader.lines() {
-            let line = line.map_err(|e| {
-                AgentError::SupervisorError(format!("read error during pull: {e}"))
-            })?;
+            let line = line
+                .map_err(|e| AgentError::SupervisorError(format!("read error during pull: {e}")))?;
             if line.trim().is_empty() {
                 continue;
             }
@@ -260,16 +256,16 @@ fn curl_post_json_get(endpoint: &str) -> Result<(u16, Value), AgentError> {
         AgentError::SupervisorError("missing status marker in curl response".to_string())
     })?;
 
-    let status = status_raw.trim().parse::<u16>().map_err(|e| {
-        AgentError::SupervisorError(format!("invalid HTTP status: {e}"))
-    })?;
+    let status = status_raw
+        .trim()
+        .parse::<u16>()
+        .map_err(|e| AgentError::SupervisorError(format!("invalid HTTP status: {e}")))?;
 
     let response_json = if body_raw.trim().is_empty() {
         Value::Null
     } else {
-        serde_json::from_str::<Value>(body_raw).map_err(|e| {
-            AgentError::SupervisorError(format!("failed to parse JSON: {e}"))
-        })?
+        serde_json::from_str::<Value>(body_raw)
+            .map_err(|e| AgentError::SupervisorError(format!("failed to parse JSON: {e}")))?
     };
 
     Ok((status, response_json))

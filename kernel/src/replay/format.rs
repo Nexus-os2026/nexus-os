@@ -143,7 +143,10 @@ mod tests {
 
         assert_eq!(deserialized.magic, MAGIC_HEADER);
         assert_eq!(deserialized.bundle.bundle_id, bundle.bundle_id);
-        assert_eq!(deserialized.bundle.audit_events.len(), bundle.audit_events.len());
+        assert_eq!(
+            deserialized.bundle.audit_events.len(),
+            bundle.audit_events.len()
+        );
         assert_eq!(deserialized.bundle.bundle_digest, bundle.bundle_digest);
         assert_eq!(deserialized.bundle.run_id, bundle.run_id);
         assert_eq!(deserialized.bundle.manifest_hash, bundle.manifest_hash);
@@ -160,8 +163,10 @@ mod tests {
     fn file_round_trip() {
         let bundle = make_bundle();
         let file = EvidenceFile::from_bundle(bundle.clone());
-        let path = std::env::temp_dir()
-            .join(format!("nexus-evidence-test-{}.nexus-evidence", Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!(
+            "nexus-evidence-test-{}.nexus-evidence",
+            Uuid::new_v4()
+        ));
 
         file.write_to_file(&path).expect("write should succeed");
         let loaded = EvidenceFile::read_from_file(&path).expect("read should succeed");

@@ -152,12 +152,7 @@ mod tests {
         let peer_id = peer.id;
         transport.register_node(peer_id);
 
-        let mut mgr = MembershipManager::new(
-            local,
-            MembershipConfig::default(),
-            1,
-            transport,
-        );
+        let mut mgr = MembershipManager::new(local, MembershipConfig::default(), 1, transport);
 
         mgr.join(peer.clone());
         assert_eq!(mgr.active_nodes().len(), 2);
@@ -206,10 +201,7 @@ mod tests {
         mgr.check_health();
         mgr.check_health();
         mgr.check_health();
-        assert_eq!(
-            mgr.cluster_view().get_state(peer_id),
-            Some(NodeState::Down)
-        );
+        assert_eq!(mgr.cluster_view().get_state(peer_id), Some(NodeState::Down));
     }
 
     // Re-create the peer node with same id for the join call

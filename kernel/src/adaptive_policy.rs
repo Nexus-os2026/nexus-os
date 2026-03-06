@@ -104,9 +104,12 @@ impl AdaptiveGovernor {
     }
 
     pub fn register(&mut self, agent_id: Uuid, base_autonomy: u8, max_autonomy: u8) {
-        self.records.insert(agent_id, AgentTrackRecord::new(agent_id));
-        self.policies
-            .insert(agent_id, AdaptivePolicy::new(agent_id, base_autonomy, max_autonomy));
+        self.records
+            .insert(agent_id, AgentTrackRecord::new(agent_id));
+        self.policies.insert(
+            agent_id,
+            AdaptivePolicy::new(agent_id, base_autonomy, max_autonomy),
+        );
     }
 
     pub fn record_run(
@@ -289,10 +292,7 @@ mod tests {
         }
 
         let change = gov.evaluate(agent);
-        assert_eq!(
-            change,
-            AutonomyChange::Promote { from: 1, to: 2 }
-        );
+        assert_eq!(change, AutonomyChange::Promote { from: 1, to: 2 });
     }
 
     #[test]

@@ -140,12 +140,11 @@ impl FineTuningManager {
         id
     }
 
-    pub fn approve_job(
-        &mut self,
-        job_id: Uuid,
-        approver_id: Uuid,
-    ) -> Result<(), FineTuningError> {
-        let job = self.jobs.get_mut(&job_id).ok_or(FineTuningError::NotFound)?;
+    pub fn approve_job(&mut self, job_id: Uuid, approver_id: Uuid) -> Result<(), FineTuningError> {
+        let job = self
+            .jobs
+            .get_mut(&job_id)
+            .ok_or(FineTuningError::NotFound)?;
 
         if job.status != JobStatus::Pending {
             return Err(FineTuningError::InvalidTransition {
@@ -177,7 +176,10 @@ impl FineTuningManager {
         approver_id: Uuid,
         reason: &str,
     ) -> Result<(), FineTuningError> {
-        let job = self.jobs.get_mut(&job_id).ok_or(FineTuningError::NotFound)?;
+        let job = self
+            .jobs
+            .get_mut(&job_id)
+            .ok_or(FineTuningError::NotFound)?;
 
         if job.status != JobStatus::Pending {
             return Err(FineTuningError::InvalidTransition {
@@ -206,7 +208,10 @@ impl FineTuningManager {
     }
 
     pub fn start_training(&mut self, job_id: Uuid) -> Result<(), FineTuningError> {
-        let job = self.jobs.get_mut(&job_id).ok_or(FineTuningError::NotFound)?;
+        let job = self
+            .jobs
+            .get_mut(&job_id)
+            .ok_or(FineTuningError::NotFound)?;
 
         if job.status != JobStatus::Approved {
             return Err(FineTuningError::InvalidTransition {
@@ -235,7 +240,10 @@ impl FineTuningManager {
         job_id: Uuid,
         check_results: Vec<CheckResult>,
     ) -> Result<(), FineTuningError> {
-        let job = self.jobs.get_mut(&job_id).ok_or(FineTuningError::NotFound)?;
+        let job = self
+            .jobs
+            .get_mut(&job_id)
+            .ok_or(FineTuningError::NotFound)?;
 
         if job.status != JobStatus::Training {
             return Err(FineTuningError::InvalidTransition {
@@ -343,7 +351,13 @@ mod tests {
         let user = Uuid::new_v4();
         let approver = Uuid::new_v4();
 
-        let job_id = mgr.create_job("llama-3", "sha256:abc123", make_config(), make_checks(), user);
+        let job_id = mgr.create_job(
+            "llama-3",
+            "sha256:abc123",
+            make_config(),
+            make_checks(),
+            user,
+        );
         assert_eq!(mgr.get_job(job_id).unwrap().status, JobStatus::Pending);
 
         mgr.approve_job(job_id, approver).unwrap();
@@ -355,9 +369,21 @@ mod tests {
         assert_eq!(mgr.get_job(job_id).unwrap().status, JobStatus::Training);
 
         let results = vec![
-            CheckResult { check: "PiiCheck".to_string(), passed: true, details: "No PII found".to_string() },
-            CheckResult { check: "HarmCheck".to_string(), passed: true, details: "Clean".to_string() },
-            CheckResult { check: "AccuracyCheck".to_string(), passed: true, details: "0.95 > 0.9".to_string() },
+            CheckResult {
+                check: "PiiCheck".to_string(),
+                passed: true,
+                details: "No PII found".to_string(),
+            },
+            CheckResult {
+                check: "HarmCheck".to_string(),
+                passed: true,
+                details: "Clean".to_string(),
+            },
+            CheckResult {
+                check: "AccuracyCheck".to_string(),
+                passed: true,
+                details: "0.95 > 0.9".to_string(),
+            },
         ];
         mgr.run_safety_evaluation(job_id, results).unwrap();
         assert_eq!(mgr.get_job(job_id).unwrap().status, JobStatus::Completed);
@@ -370,7 +396,8 @@ mod tests {
         let approver = Uuid::new_v4();
 
         let job_id = mgr.create_job("gpt-4", "sha256:def456", make_config(), make_checks(), user);
-        mgr.reject_job(job_id, approver, "Insufficient data quality").unwrap();
+        mgr.reject_job(job_id, approver, "Insufficient data quality")
+            .unwrap();
 
         let job = mgr.get_job(job_id).unwrap();
         assert!(matches!(job.status, JobStatus::Rejected { .. }));
@@ -385,12 +412,18 @@ mod tests {
 
         // Still Pending — should fail
         let result = mgr.start_training(job_id);
-        assert!(matches!(result, Err(FineTuningError::InvalidTransition { .. })));
+        assert!(matches!(
+            result,
+            Err(FineTuningError::InvalidTransition { .. })
+        ));
 
         // Reject it, then try to start — should also fail
         mgr.reject_job(job_id, user, "no").unwrap();
         let result = mgr.start_training(job_id);
-        assert!(matches!(result, Err(FineTuningError::InvalidTransition { .. })));
+        assert!(matches!(
+            result,
+            Err(FineTuningError::InvalidTransition { .. })
+        ));
     }
 
     #[test]
@@ -404,9 +437,21 @@ mod tests {
         mgr.start_training(job_id).unwrap();
 
         let results = vec![
-            CheckResult { check: "PiiCheck".to_string(), passed: true, details: "ok".to_string() },
-            CheckResult { check: "HarmCheck".to_string(), passed: false, details: "harmful content detected".to_string() },
-            CheckResult { check: "AccuracyCheck".to_string(), passed: true, details: "ok".to_string() },
+            CheckResult {
+                check: "PiiCheck".to_string(),
+                passed: true,
+                details: "ok".to_string(),
+            },
+            CheckResult {
+                check: "HarmCheck".to_string(),
+                passed: false,
+                details: "harmful content detected".to_string(),
+            },
+            CheckResult {
+                check: "AccuracyCheck".to_string(),
+                passed: true,
+                details: "ok".to_string(),
+            },
         ];
         mgr.run_safety_evaluation(job_id, results).unwrap();
 
@@ -434,9 +479,11 @@ mod tests {
         mgr.start_training(job_id).unwrap();
         // 3 events: + training_started
 
-        let results = vec![
-            CheckResult { check: "PiiCheck".to_string(), passed: true, details: "ok".to_string() },
-        ];
+        let results = vec![CheckResult {
+            check: "PiiCheck".to_string(),
+            passed: true,
+            details: "ok".to_string(),
+        }];
         mgr.run_safety_evaluation(job_id, results).unwrap();
         // 4 events: + evaluation_passed
 
@@ -448,12 +495,15 @@ mod tests {
             .iter()
             .map(|e| e.payload.get("event").unwrap().as_str().unwrap())
             .collect();
-        assert_eq!(event_names, vec![
-            "fine_tuning.job_created",
-            "fine_tuning.job_approved",
-            "fine_tuning.training_started",
-            "fine_tuning.evaluation_passed",
-        ]);
+        assert_eq!(
+            event_names,
+            vec![
+                "fine_tuning.job_created",
+                "fine_tuning.job_approved",
+                "fine_tuning.training_started",
+                "fine_tuning.evaluation_passed",
+            ]
+        );
     }
 
     #[test]
@@ -467,7 +517,10 @@ mod tests {
 
         // Already approved — cannot approve again
         let result = mgr.approve_job(job_id, approver);
-        assert!(matches!(result, Err(FineTuningError::InvalidTransition { .. })));
+        assert!(matches!(
+            result,
+            Err(FineTuningError::InvalidTransition { .. })
+        ));
     }
 
     #[test]

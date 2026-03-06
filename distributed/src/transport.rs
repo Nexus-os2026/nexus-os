@@ -26,7 +26,12 @@ pub enum MessageKind {
 pub trait Transport: Send + Sync {
     fn send(&self, msg: Message) -> Result<(), TransportError>;
     fn recv(&self, node_id: Uuid) -> Result<Vec<Message>, TransportError>;
-    fn broadcast(&self, from: Uuid, kind: MessageKind, payload: Vec<u8>) -> Result<(), TransportError>;
+    fn broadcast(
+        &self,
+        from: Uuid,
+        kind: MessageKind,
+        payload: Vec<u8>,
+    ) -> Result<(), TransportError>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,10 +97,15 @@ impl Transport for LocalTransport {
         let inbox = inboxes
             .get_mut(&node_id)
             .ok_or(TransportError::NodeNotFound(node_id))?;
-        Ok(inbox.drain(..).collect())
+        Ok(std::mem::take(inbox))
     }
 
-    fn broadcast(&self, from: Uuid, kind: MessageKind, payload: Vec<u8>) -> Result<(), TransportError> {
+    fn broadcast(
+        &self,
+        from: Uuid,
+        kind: MessageKind,
+        payload: Vec<u8>,
+    ) -> Result<(), TransportError> {
         let registered = self.registered.lock().expect("lock poisoned").clone();
         for node_id in registered {
             if node_id != from {

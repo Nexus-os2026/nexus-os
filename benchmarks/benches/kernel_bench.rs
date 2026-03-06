@@ -63,14 +63,7 @@ fn bench_fuel_record_spend(c: &mut Criterion) {
                 BurnAnomalyDetector::default(),
             );
             for _ in 0..100 {
-                let _ = ledger.record_llm_spend(
-                    agent_id,
-                    "mock-1",
-                    100,
-                    50,
-                    10,
-                    &mut audit,
-                );
+                let _ = ledger.record_llm_spend(agent_id, "mock-1", 100, 50, 10, &mut audit);
             }
             black_box(&ledger);
         });
@@ -158,7 +151,12 @@ fn bench_redaction_apply(c: &mut Criterion) {
     let findings = RedactionEngine::scan(text);
 
     c.bench_function("redaction_apply", |b| {
-        b.iter(|| black_box(RedactionEngine::apply(black_box(text), black_box(&findings))));
+        b.iter(|| {
+            black_box(RedactionEngine::apply(
+                black_box(text),
+                black_box(&findings),
+            ))
+        });
     });
 }
 

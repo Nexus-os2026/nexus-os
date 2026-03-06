@@ -58,8 +58,7 @@ impl Blackboard {
     }
 
     pub fn grant_access(&mut self, agent_id: Uuid, key: &str, level: AccessLevel) {
-        self.acl
-            .insert((agent_id, key.to_string()), level);
+        self.acl.insert((agent_id, key.to_string()), level);
     }
 
     fn get_access(&self, agent_id: Uuid, key: &str) -> Option<AccessLevel> {
@@ -179,7 +178,10 @@ mod tests {
         assert_eq!(bb.read(owner, "data").unwrap(), &json!("updated"));
 
         // Writer cannot delete
-        assert_eq!(bb.delete(writer, "data"), Err(BlackboardError::AccessDenied));
+        assert_eq!(
+            bb.delete(writer, "data"),
+            Err(BlackboardError::AccessDenied)
+        );
     }
 
     #[test]

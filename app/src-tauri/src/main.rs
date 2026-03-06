@@ -606,7 +606,9 @@ pub fn ensure_ollama(base_url: Option<String>) -> Result<bool, String> {
         .spawn();
 
     if started.is_err() {
-        return Err("Ollama is not installed. Please install it from https://ollama.ai".to_string());
+        return Err(
+            "Ollama is not installed. Please install it from https://ollama.ai".to_string(),
+        );
     }
 
     // Wait up to 8 seconds for it to come online
@@ -701,7 +703,12 @@ pub fn list_available_models() -> Result<Vec<AvailableModel>, String> {
             name: "Qwen 3.5 2B".into(),
             size_gb: 2.7,
             context: "256K".into(),
-            capabilities: vec!["Text".into(), "Vision".into(), "Tools".into(), "Thinking".into()],
+            capabilities: vec![
+                "Text".into(),
+                "Vision".into(),
+                "Tools".into(),
+                "Thinking".into(),
+            ],
             recommended: false,
             tag: "Lightweight".into(),
             installed: has("qwen3.5:2b"),
@@ -712,7 +719,13 @@ pub fn list_available_models() -> Result<Vec<AvailableModel>, String> {
             name: "Qwen 3.5 4B".into(),
             size_gb: 3.4,
             context: "256K".into(),
-            capabilities: vec!["Text".into(), "Vision".into(), "Code".into(), "Tools".into(), "Thinking".into()],
+            capabilities: vec![
+                "Text".into(),
+                "Vision".into(),
+                "Code".into(),
+                "Tools".into(),
+                "Thinking".into(),
+            ],
             recommended: false,
             tag: "Balanced".into(),
             installed: has("qwen3.5:4b"),
@@ -723,7 +736,14 @@ pub fn list_available_models() -> Result<Vec<AvailableModel>, String> {
             name: "Qwen 3.5 9B".into(),
             size_gb: 6.6,
             context: "256K".into(),
-            capabilities: vec!["Text".into(), "Vision".into(), "Code".into(), "Reasoning".into(), "Tools".into(), "Thinking".into()],
+            capabilities: vec![
+                "Text".into(),
+                "Vision".into(),
+                "Code".into(),
+                "Reasoning".into(),
+                "Tools".into(),
+                "Thinking".into(),
+            ],
             recommended: false,
             tag: "Recommended".into(),
             installed: has("qwen3.5:9b"),
@@ -734,7 +754,14 @@ pub fn list_available_models() -> Result<Vec<AvailableModel>, String> {
             name: "Qwen 3.5 27B".into(),
             size_gb: 17.0,
             context: "256K".into(),
-            capabilities: vec!["Text".into(), "Vision".into(), "Code".into(), "Reasoning".into(), "Tools".into(), "Thinking".into()],
+            capabilities: vec![
+                "Text".into(),
+                "Vision".into(),
+                "Code".into(),
+                "Reasoning".into(),
+                "Tools".into(),
+                "Thinking".into(),
+            ],
             recommended: false,
             tag: "High-end".into(),
             installed: has("qwen3.5:27b"),
@@ -745,7 +772,14 @@ pub fn list_available_models() -> Result<Vec<AvailableModel>, String> {
             name: "Qwen 3.5 35B MoE".into(),
             size_gb: 24.0,
             context: "256K".into(),
-            capabilities: vec!["Text".into(), "Vision".into(), "Code".into(), "Reasoning".into(), "Tools".into(), "Thinking".into()],
+            capabilities: vec![
+                "Text".into(),
+                "Vision".into(),
+                "Code".into(),
+                "Reasoning".into(),
+                "Tools".into(),
+                "Thinking".into(),
+            ],
             recommended: false,
             tag: "MoE — only 3B active".into(),
             installed: has("qwen3.5:35b"),
@@ -1037,15 +1071,15 @@ mod runtime {
     ) -> Result<String, String> {
         let (tx, rx) = std::sync::mpsc::channel::<Result<String, String>>();
         std::thread::spawn(move || {
-            let result =
-                super::pull_ollama_model_throttled(model_name, base_url, |progress| {
-                    let _ = window.emit("model-pull-progress", &progress);
-                });
+            let result = super::pull_ollama_model_throttled(model_name, base_url, |progress| {
+                let _ = window.emit("model-pull-progress", &progress);
+            });
             let _ = tx.send(result);
         });
         // recv() blocks this async task's thread, but Tauri runs async commands
         // on a thread pool so the main/UI thread stays responsive.
-        rx.recv().unwrap_or(Err("Download thread terminated unexpectedly".to_string()))
+        rx.recv()
+            .unwrap_or(Err("Download thread terminated unexpectedly".to_string()))
     }
 
     #[tauri::command]
@@ -1094,41 +1128,45 @@ mod runtime {
                 .unwrap_or_else(std::time::Instant::now);
             let mut full = String::new();
 
-            let result = super::chat_with_ollama_streaming(
-                messages,
-                model,
-                base_url,
-                |token| {
-                    full.push_str(token);
+            let result = super::chat_with_ollama_streaming(messages, model, base_url, |token| {
+                full.push_str(token);
 
-                    // Throttle: emit at most every 50ms
-                    let now = std::time::Instant::now();
-                    if now.duration_since(last_emit).as_millis() >= 50 {
-                        let _ = window.emit("chat-token", serde_json::json!({
+                // Throttle: emit at most every 50ms
+                let now = std::time::Instant::now();
+                if now.duration_since(last_emit).as_millis() >= 50 {
+                    let _ = window.emit(
+                        "chat-token",
+                        serde_json::json!({
                             "token": token,
                             "full": &full,
                             "done": false,
-                        }));
-                        last_emit = now;
-                    }
-                },
-            );
+                        }),
+                    );
+                    last_emit = now;
+                }
+            });
 
             match &result {
                 Ok(text) => {
-                    let _ = window.emit("chat-token", serde_json::json!({
-                        "token": "",
-                        "full": text,
-                        "done": true,
-                    }));
+                    let _ = window.emit(
+                        "chat-token",
+                        serde_json::json!({
+                            "token": "",
+                            "full": text,
+                            "done": true,
+                        }),
+                    );
                 }
                 Err(e) => {
-                    let _ = window.emit("chat-token", serde_json::json!({
-                        "token": "",
-                        "full": "",
-                        "done": true,
-                        "error": e,
-                    }));
+                    let _ = window.emit(
+                        "chat-token",
+                        serde_json::json!({
+                            "token": "",
+                            "full": "",
+                            "done": true,
+                            "error": e,
+                        }),
+                    );
                 }
             }
 

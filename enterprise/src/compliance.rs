@@ -68,7 +68,11 @@ pub fn generate_soc2_report(
                 e.payload
                     .get("action")
                     .and_then(|v| v.as_str())
-                    .is_some_and(|a| a.contains("capability") || a.contains("tool_call") || a.contains("llm_query"))
+                    .is_some_and(|a| {
+                        a.contains("capability")
+                            || a.contains("tool_call")
+                            || a.contains("llm_query")
+                    })
             })
             .count() as u64;
 
@@ -173,9 +177,7 @@ pub fn generate_soc2_report(
             ControlStatus::Satisfied
         } else {
             ControlStatus::PartiallyMet {
-                gaps: vec![
-                    "No safety supervisor events found in the reporting period".to_string(),
-                ],
+                gaps: vec!["No safety supervisor events found in the reporting period".to_string()],
             }
         },
     };
@@ -270,15 +272,7 @@ mod tests {
     #[test]
     fn soc2_report_generates_all_5_controls() {
         let trail = trail_with_events();
-        let report = generate_soc2_report(
-            &trail,
-            true,
-            true,
-            true,
-            "Nexus Corp",
-            0,
-            u64::MAX,
-        );
+        let report = generate_soc2_report(&trail, true, true, true, "Nexus Corp", 0, u64::MAX);
 
         assert_eq!(report.organization, "Nexus Corp");
         assert_eq!(report.sections.len(), 1);
@@ -290,21 +284,16 @@ mod tests {
             .iter()
             .map(|c| c.control_id.as_str())
             .collect();
-        assert_eq!(control_ids, vec!["CC6.1", "CC6.2", "CC6.3", "CC7.1", "CC7.2"]);
+        assert_eq!(
+            control_ids,
+            vec!["CC6.1", "CC6.2", "CC6.3", "CC7.1", "CC7.2"]
+        );
     }
 
     #[test]
     fn controls_satisfied_when_features_active() {
         let trail = trail_with_events();
-        let report = generate_soc2_report(
-            &trail,
-            true,
-            true,
-            true,
-            "Test Org",
-            0,
-            u64::MAX,
-        );
+        let report = generate_soc2_report(&trail, true, true, true, "Test Org", 0, u64::MAX);
 
         let controls = &report.sections[0].controls;
 
@@ -331,15 +320,7 @@ mod tests {
     #[test]
     fn controls_not_met_when_features_missing() {
         let trail = AuditTrail::new();
-        let report = generate_soc2_report(
-            &trail,
-            false,
-            false,
-            false,
-            "Empty Org",
-            0,
-            u64::MAX,
-        );
+        let report = generate_soc2_report(&trail, false, false, false, "Empty Org", 0, u64::MAX);
 
         let controls = &report.sections[0].controls;
 
@@ -350,10 +331,16 @@ mod tests {
         assert!(matches!(controls[1].status, ControlStatus::NotMet { .. }));
 
         // CC6.3: no events
-        assert!(matches!(controls[2].status, ControlStatus::PartiallyMet { .. }));
+        assert!(matches!(
+            controls[2].status,
+            ControlStatus::PartiallyMet { .. }
+        ));
 
         // CC7.1: no safety events
-        assert!(matches!(controls[3].status, ControlStatus::PartiallyMet { .. }));
+        assert!(matches!(
+            controls[3].status,
+            ControlStatus::PartiallyMet { .. }
+        ));
 
         // CC7.2: fuel not enabled
         assert!(matches!(controls[4].status, ControlStatus::NotMet { .. }));
@@ -365,15 +352,7 @@ mod tests {
         let start = 1_000_000;
         let end = 2_000_000;
 
-        let report = generate_soc2_report(
-            &trail,
-            true,
-            true,
-            true,
-            "Period Test",
-            start,
-            end,
-        );
+        let report = generate_soc2_report(&trail, true, true, true, "Period Test", start, end);
 
         assert_eq!(report.period_start, start);
         assert_eq!(report.period_end, end);
@@ -393,15 +372,7 @@ mod tests {
         // Tamper the trail
         trail.events_mut()[1].payload = json!({"tampered": true});
 
-        let report = generate_soc2_report(
-            &trail,
-            true,
-            true,
-            true,
-            "Tampered Org",
-            0,
-            u64::MAX,
-        );
+        let report = generate_soc2_report(&trail, true, true, true, "Tampered Org", 0, u64::MAX);
 
         let cc6_3 = &report.sections[0].controls[2];
         assert_eq!(cc6_3.control_id, "CC6.3");

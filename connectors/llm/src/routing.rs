@@ -103,9 +103,8 @@ impl ProviderRouter {
             }
         }
 
-        Err(last_error.unwrap_or_else(|| {
-            AgentError::SupervisorError("AllProvidersUnavailable".to_string())
-        }))
+        Err(last_error
+            .unwrap_or_else(|| AgentError::SupervisorError("AllProvidersUnavailable".to_string())))
     }
 
     fn provider_order(&mut self) -> Vec<usize> {

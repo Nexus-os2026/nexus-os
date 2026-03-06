@@ -144,11 +144,9 @@ impl ReplicationManager {
 
     fn apply_event(&mut self, event: AuditEvent) {
         // Re-append using the trail's method to maintain local chain integrity.
-        let _ = self.trail.append_event(
-            event.agent_id,
-            event.event_type,
-            event.payload,
-        );
+        let _ = self
+            .trail
+            .append_event(event.agent_id, event.event_type, event.payload);
         self.applied_version += 1;
     }
 }

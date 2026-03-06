@@ -52,10 +52,7 @@ mod tests {
     #[test]
     fn harness_creates_working_context() {
         let mut ctx = TestHarness::new()
-            .with_capabilities(vec![
-                "llm.query".to_string(),
-                "fs.read".to_string(),
-            ])
+            .with_capabilities(vec!["llm.query".to_string(), "fs.read".to_string()])
             .with_fuel(500)
             .build_context();
 
@@ -87,9 +84,7 @@ mod tests {
     #[test]
     fn harness_custom_agent_id() {
         let id = Uuid::new_v4();
-        let ctx = TestHarness::new()
-            .with_agent_id(id)
-            .build_context();
+        let ctx = TestHarness::new().with_agent_id(id).build_context();
         assert_eq!(ctx.agent_id(), id);
     }
 

@@ -15,7 +15,9 @@ impl std::fmt::Display for ManifestVerifyError {
         match self {
             ManifestVerifyError::InvalidPublicKey => write!(f, "invalid public key"),
             ManifestVerifyError::InvalidSignature => write!(f, "invalid signature bytes"),
-            ManifestVerifyError::SignatureMismatch => write!(f, "signature does not match manifest"),
+            ManifestVerifyError::SignatureMismatch => {
+                write!(f, "signature does not match manifest")
+            }
         }
     }
 }
@@ -90,8 +92,7 @@ mod tests {
         let hash = "test-hash";
         let sig = sign_manifest(hash, &key);
 
-        let result =
-            verify_manifest_signature(hash, &sig, &other_key.verifying_key().to_bytes());
+        let result = verify_manifest_signature(hash, &sig, &other_key.verifying_key().to_bytes());
         assert_eq!(result, Err(ManifestVerifyError::SignatureMismatch));
     }
 

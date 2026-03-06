@@ -70,11 +70,8 @@ pub fn install_agent(
         .ok_or(InstallError::PackageNotFound)?;
 
     // Verify materials hash
-    let computed_hash = bundle_materials_hash(
-        &bundle.manifest_toml,
-        &bundle.agent_code,
-        &bundle.metadata,
-    )?;
+    let computed_hash =
+        bundle_materials_hash(&bundle.manifest_toml, &bundle.agent_code, &bundle.metadata)?;
     if computed_hash != bundle.attestation.materials_sha256 {
         return Err(InstallError::MaterialsHashMismatch);
     }
@@ -112,7 +109,9 @@ pub fn uninstall_agent(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::package::{create_unsigned_bundle, sign_package, PackageMetadata, SignedPackageBundle};
+    use crate::package::{
+        create_unsigned_bundle, sign_package, PackageMetadata, SignedPackageBundle,
+    };
     use ed25519_dalek::SigningKey;
 
     fn make_signed_bundle(key: &SigningKey) -> SignedPackageBundle {

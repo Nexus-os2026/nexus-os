@@ -179,7 +179,10 @@ impl DelegationEngine {
         grant_id: Uuid,
         amount: u64,
     ) -> Result<(), DelegationError> {
-        let grant = self.grants.get_mut(&grant_id).ok_or(DelegationError::NotFound)?;
+        let grant = self
+            .grants
+            .get_mut(&grant_id)
+            .ok_or(DelegationError::NotFound)?;
 
         if grant.revoked {
             return Err(DelegationError::Revoked);
@@ -197,7 +200,10 @@ impl DelegationEngine {
 
     /// Revoke a grant and cascade to any grants derived from it.
     pub fn revoke(&mut self, grant_id: Uuid) -> Result<(), DelegationError> {
-        let grant = self.grants.get_mut(&grant_id).ok_or(DelegationError::NotFound)?;
+        let grant = self
+            .grants
+            .get_mut(&grant_id)
+            .ok_or(DelegationError::NotFound)?;
         grant.revoked = true;
 
         let grantee = grant.grantee;
@@ -264,7 +270,14 @@ mod tests {
         let b = Uuid::new_v4();
         let c = Uuid::new_v4();
 
-        engine.register_agent(a, vec!["llm.query".to_string(), "file.read".to_string(), "file.write".to_string()]);
+        engine.register_agent(
+            a,
+            vec![
+                "llm.query".to_string(),
+                "file.read".to_string(),
+                "file.write".to_string(),
+            ],
+        );
         engine.register_agent(b, vec![]);
         engine.register_agent(c, vec![]);
 
@@ -313,26 +326,30 @@ mod tests {
         let (mut engine, a, b, c) = setup_engine();
 
         // A -> B (depth 1, chain [A])
-        let _ab = engine.delegate(
-            a,
-            b,
-            vec!["llm.query".to_string()],
-            DelegationConstraints {
-                max_depth: 2, // allow transitive
-                ..Default::default()
-            },
-        ).unwrap();
+        let _ab = engine
+            .delegate(
+                a,
+                b,
+                vec!["llm.query".to_string()],
+                DelegationConstraints {
+                    max_depth: 2, // allow transitive
+                    ..Default::default()
+                },
+            )
+            .unwrap();
 
         // B -> C (depth 2, chain [A, B])
-        let bc = engine.delegate(
-            b,
-            c,
-            vec!["llm.query".to_string()],
-            DelegationConstraints {
-                max_depth: 2,
-                ..Default::default()
-            },
-        ).unwrap();
+        let bc = engine
+            .delegate(
+                b,
+                c,
+                vec!["llm.query".to_string()],
+                DelegationConstraints {
+                    max_depth: 2,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
 
         assert_eq!(bc.chain, vec![a, b]);
         assert!(engine.has_capability(c, "llm.query"));
@@ -343,15 +360,17 @@ mod tests {
         let (mut engine, a, b, c) = setup_engine();
 
         // A -> B with max_depth=1
-        engine.delegate(
-            a,
-            b,
-            vec!["llm.query".to_string()],
-            DelegationConstraints {
-                max_depth: 1,
-                ..Default::default()
-            },
-        ).unwrap();
+        engine
+            .delegate(
+                a,
+                b,
+                vec!["llm.query".to_string()],
+                DelegationConstraints {
+                    max_depth: 1,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
 
         // B -> C should fail: chain would be [A, B] = depth 2, but max_depth=1
         let result = engine.delegate(
@@ -371,26 +390,30 @@ mod tests {
         let (mut engine, a, b, c) = setup_engine();
 
         // A -> B
-        let ab = engine.delegate(
-            a,
-            b,
-            vec!["llm.query".to_string()],
-            DelegationConstraints {
-                max_depth: 2,
-                ..Default::default()
-            },
-        ).unwrap();
+        let ab = engine
+            .delegate(
+                a,
+                b,
+                vec!["llm.query".to_string()],
+                DelegationConstraints {
+                    max_depth: 2,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
 
         // B -> C
-        let bc = engine.delegate(
-            b,
-            c,
-            vec!["llm.query".to_string()],
-            DelegationConstraints {
-                max_depth: 2,
-                ..Default::default()
-            },
-        ).unwrap();
+        let bc = engine
+            .delegate(
+                b,
+                c,
+                vec!["llm.query".to_string()],
+                DelegationConstraints {
+                    max_depth: 2,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
 
         assert!(engine.has_capability(b, "llm.query"));
         assert!(engine.has_capability(c, "llm.query"));
@@ -411,15 +434,17 @@ mod tests {
         let (mut engine, a, b, _) = setup_engine();
 
         // Create a grant that expires immediately (0 duration)
-        let grant = engine.delegate(
-            a,
-            b,
-            vec!["file.read".to_string()],
-            DelegationConstraints {
-                max_duration_secs: 0,
-                ..Default::default()
-            },
-        ).unwrap();
+        let grant = engine
+            .delegate(
+                a,
+                b,
+                vec!["file.read".to_string()],
+                DelegationConstraints {
+                    max_duration_secs: 0,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
 
         // The grant is already expired since expires_at = now + 0
         let expired = engine.expire_grants();
@@ -431,15 +456,17 @@ mod tests {
     fn fuel_tracking_on_delegated_grant() {
         let (mut engine, a, b, _) = setup_engine();
 
-        let grant = engine.delegate(
-            a,
-            b,
-            vec!["llm.query".to_string()],
-            DelegationConstraints {
-                max_fuel: 100,
-                ..Default::default()
-            },
-        ).unwrap();
+        let grant = engine
+            .delegate(
+                a,
+                b,
+                vec!["llm.query".to_string()],
+                DelegationConstraints {
+                    max_fuel: 100,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
 
         // Consume some fuel
         assert!(engine.consume_delegated_fuel(grant.id, 50).is_ok());
@@ -454,15 +481,17 @@ mod tests {
     fn fuel_exhaustion_blocks_further_use() {
         let (mut engine, a, b, _) = setup_engine();
 
-        let grant = engine.delegate(
-            a,
-            b,
-            vec!["llm.query".to_string()],
-            DelegationConstraints {
-                max_fuel: 100,
-                ..Default::default()
-            },
-        ).unwrap();
+        let grant = engine
+            .delegate(
+                a,
+                b,
+                vec!["llm.query".to_string()],
+                DelegationConstraints {
+                    max_fuel: 100,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
 
         assert!(engine.consume_delegated_fuel(grant.id, 90).is_ok());
         // Trying to use 20 more would exceed 100
@@ -493,12 +522,14 @@ mod tests {
         assert!(!engine.has_capability(b, "llm.query"));
 
         // Delegate to B
-        engine.delegate(
-            a,
-            b,
-            vec!["llm.query".to_string()],
-            DelegationConstraints::default(),
-        ).unwrap();
+        engine
+            .delegate(
+                a,
+                b,
+                vec!["llm.query".to_string()],
+                DelegationConstraints::default(),
+            )
+            .unwrap();
 
         // B now has llm.query via delegation
         assert!(engine.has_capability(b, "llm.query"));
@@ -510,19 +541,23 @@ mod tests {
     fn active_grants_for_agent() {
         let (mut engine, a, b, _) = setup_engine();
 
-        engine.delegate(
-            a,
-            b,
-            vec!["llm.query".to_string()],
-            DelegationConstraints::default(),
-        ).unwrap();
+        engine
+            .delegate(
+                a,
+                b,
+                vec!["llm.query".to_string()],
+                DelegationConstraints::default(),
+            )
+            .unwrap();
 
-        let revokable = engine.delegate(
-            a,
-            b,
-            vec!["file.read".to_string()],
-            DelegationConstraints::default(),
-        ).unwrap();
+        let revokable = engine
+            .delegate(
+                a,
+                b,
+                vec!["file.read".to_string()],
+                DelegationConstraints::default(),
+            )
+            .unwrap();
 
         assert_eq!(engine.active_grants_for(b).len(), 2);
 
@@ -533,19 +568,24 @@ mod tests {
     #[test]
     fn revoke_nonexistent_returns_not_found() {
         let mut engine = DelegationEngine::new();
-        assert_eq!(engine.revoke(Uuid::new_v4()), Err(DelegationError::NotFound));
+        assert_eq!(
+            engine.revoke(Uuid::new_v4()),
+            Err(DelegationError::NotFound)
+        );
     }
 
     #[test]
     fn consume_fuel_on_revoked_grant_fails() {
         let (mut engine, a, b, _) = setup_engine();
 
-        let grant = engine.delegate(
-            a,
-            b,
-            vec!["llm.query".to_string()],
-            DelegationConstraints::default(),
-        ).unwrap();
+        let grant = engine
+            .delegate(
+                a,
+                b,
+                vec!["llm.query".to_string()],
+                DelegationConstraints::default(),
+            )
+            .unwrap();
 
         engine.revoke(grant.id).unwrap();
         assert_eq!(

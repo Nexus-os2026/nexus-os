@@ -25,6 +25,13 @@ screen-poster-agent = { path = "../../agents/screen-poster" }
 web-builder-agent = { path = "../../agents/web-builder" }
 workflow-studio-agent = { path = "../../agents/workflow-studio" }
 self-improve-agent = { path = "../../agents/self-improve" }
+nexus-sdk = { path = "../../sdk" }
+nexus-distributed = { path = "../../distributed" }
+nexus-enterprise = { path = "../../enterprise" }
+nexus-marketplace = { path = "../../marketplace" }
+nexus-cloud = { path = "../../cloud" }
+nexus-collaboration = { path = "../../agents/collaboration" }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
 serde_json = "1.0"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 tempfile = "3.13"

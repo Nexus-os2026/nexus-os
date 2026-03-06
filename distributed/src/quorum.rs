@@ -274,6 +274,7 @@ impl QuorumEngine {
 
     /// For testing: propose with a manually specified created_at timestamp.
     #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
     fn propose_with_timestamp(
         &mut self,
         agent_id: Uuid,
@@ -540,9 +541,7 @@ mod tests {
         let propose_event = audit
             .events()
             .iter()
-            .find(|e| {
-                e.payload.get("event").and_then(|v| v.as_str()) == Some("quorum.proposed")
-            })
+            .find(|e| e.payload.get("event").and_then(|v| v.as_str()) == Some("quorum.proposed"))
             .expect("propose must create audit event");
         assert_eq!(
             propose_event
@@ -582,15 +581,10 @@ mod tests {
         let outcome_event = audit
             .events()
             .iter()
-            .find(|e| {
-                e.payload.get("event").and_then(|v| v.as_str()) == Some("quorum.outcome")
-            })
+            .find(|e| e.payload.get("event").and_then(|v| v.as_str()) == Some("quorum.outcome"))
             .expect("outcome must create audit event");
         assert_eq!(
-            outcome_event
-                .payload
-                .get("result")
-                .and_then(|v| v.as_str()),
+            outcome_event.payload.get("result").and_then(|v| v.as_str()),
             Some("approved")
         );
 

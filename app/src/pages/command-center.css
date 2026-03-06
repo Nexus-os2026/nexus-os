@@ -1,0 +1,59 @@
+.cc-hub { padding: 1.5rem; }
+.cc-header { margin-bottom: 1.5rem; }
+.cc-title { font-family: var(--font-display, "JetBrains Mono", monospace); font-size: 1.1rem; color: #e0f2fe; letter-spacing: 0.08em; }
+.cc-subtitle { font-size: 0.8rem; color: rgba(165, 243, 252, 0.6); margin-top: 0.25rem; }
+
+.cc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
+
+.cc-card {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.15);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: border-color 0.2s;
+}
+.cc-card:hover { border-color: rgba(56, 189, 248, 0.4); }
+
+.cc-card-top { display: flex; justify-content: space-between; align-items: center; }
+.cc-card-name-row { display: flex; align-items: center; gap: 0.5rem; }
+.cc-status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 8px currentColor; }
+.cc-card-name { font-size: 1rem; font-weight: 600; color: #e0f2fe; }
+.cc-card-status { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(165, 243, 252, 0.5); }
+
+.cc-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(165, 243, 252, 0.45); }
+.cc-value { font-size: 0.8rem; color: #a5f3fc; font-family: var(--font-display, monospace); }
+
+.cc-card-autonomy { display: flex; justify-content: space-between; align-items: center; }
+.cc-card-fuel { display: flex; flex-direction: column; gap: 0.25rem; }
+.cc-fuel-header { display: flex; justify-content: space-between; align-items: center; }
+.cc-fuel-track { height: 6px; background: rgba(30, 41, 59, 0.8); border-radius: 3px; overflow: hidden; }
+.cc-fuel-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+
+.cc-card-audit { display: flex; flex-direction: column; gap: 0.15rem; }
+.cc-audit-text { font-size: 0.75rem; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-audit-time { font-size: 0.65rem; color: rgba(165, 243, 252, 0.4); font-family: monospace; }
+
+.cc-card-actions { display: flex; gap: 0.5rem; margin-top: auto; }
+.cc-btn {
+  flex: 1;
+  padding: 0.35rem 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 0.4rem;
+  background: rgba(15, 23, 42, 0.6);
+  color: #a5f3fc;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cc-btn:hover:not(:disabled) { background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.4); }
+.cc-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.cc-btn-start { border-color: rgba(34, 211, 238, 0.3); }
+.cc-btn-stop { border-color: rgba(245, 158, 11, 0.3); }
+.cc-btn-kill { border-color: rgba(239, 68, 68, 0.3); color: #fca5a5; }
+.cc-btn-kill:hover:not(:disabled) { background: rgba(239, 68, 68, 0.15); }

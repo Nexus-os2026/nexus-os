@@ -179,7 +179,11 @@ mod tests {
             "Full stack",
             vec![
                 ("Backend", vec!["code".to_string()], 50),
-                ("UI Design", vec!["design".to_string(), "css".to_string()], 40),
+                (
+                    "UI Design",
+                    vec!["design".to_string(), "css".to_string()],
+                    40,
+                ),
             ],
         );
 
@@ -266,12 +270,19 @@ mod tests {
         let mut orch = Orchestrator::new();
         let generalist = Uuid::new_v4();
         let specialist = Uuid::new_v4();
-        orch.register_agent(generalist, vec!["code".to_string(), "test".to_string(), "deploy".to_string()]);
+        orch.register_agent(
+            generalist,
+            vec!["code".to_string(), "test".to_string(), "deploy".to_string()],
+        );
         orch.register_agent(specialist, vec!["code".to_string()]);
 
         let mut task = orch.decompose(
             "Complex",
-            vec![("Full pipeline", vec!["code".to_string(), "test".to_string(), "deploy".to_string()], 100)],
+            vec![(
+                "Full pipeline",
+                vec!["code".to_string(), "test".to_string(), "deploy".to_string()],
+                100,
+            )],
         );
 
         let assigned = orch.assign(&mut task);

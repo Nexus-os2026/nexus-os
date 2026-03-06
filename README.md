@@ -1,124 +1,171 @@
 [![CI](https://github.com/nexai-lang/nexus-os/actions/workflows/ci.yml/badge.svg)](https://github.com/nexai-lang/nexus-os/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-4.0.0-blue.svg)](CHANGELOG.md)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-# NexusOS
-Governed deterministic agent OS with audit + replay.
+# Nexus OS
+
+**Governed AI Agent Operating System**
 
 > Don't trust. Verify.
 
-## Status
-| Area | Summary |
-| --- | --- |
-| What works today | Hash-chained audit trail and governed runtime checks in the Rust kernel |
-| What works today | Human-in-the-loop approval tiers and queue-backed consent flow |
-| What works today | Redaction-first LLM gateway with fuel/budget accounting hooks |
-| Experimental | Hardware security backend abstractions (TPM / enclave / TEE stubs) |
-| Experimental | Multi-provider LLM routing/fallback paths still being hardened |
-| Experimental | Distributed interfaces are local-only scaffolding (no networking/consensus yet) |
-| Planned | Cross-node replication and quorum-backed distributed execution |
-| Planned | Production installer/signing pipeline for broad end-user distribution |
-| Planned | Published benchmark suite and replay evidence bundles for every release |
+Nexus OS is a Rust-based operating system for AI agents where every action passes through capability checks, fuel metering, and cryptographic audit trails. Agents don't get trust by default -- they earn it through track records, and lose it through violations.
 
-## Problem and Thesis
-Autonomous systems are useful only when their behavior can be constrained, replayed, and audited. NexusOS treats governance as a runtime requirement: deterministic decision paths, explicit approvals for sensitive operations, and tamper-evident evidence trails. The design goal is not maximum autonomy; it is controllable autonomy with reproducible outcomes.
+## Feature Matrix
 
-## Research Areas
-- Deterministic Replay: same inputs and policy state should reproduce the same governed decisions.
-- Capability Security: agents operate inside explicit permission and policy boundaries.
-- Human-in-the-loop Approvals: risky transitions require verifiable operator consent.
-- Evidence Bundles: audit-chain events and policy decisions remain compliance-ready.
+| Category | Feature | Status |
+|----------|---------|--------|
+| **Governance** | Capability-based access control | Stable |
+| **Governance** | 6-level autonomy system (L0-L5) | Stable |
+| **Governance** | Fuel metering with anomaly detection | Stable |
+| **Governance** | Human-in-the-loop approval gates | Stable |
+| **Governance** | Adaptive trust scoring + auto-promotion/demotion | Stable |
+| **Governance** | Transitive delegation with cascade revocation | Stable |
+| **Audit** | Hash-chained append-only audit trail | Stable |
+| **Audit** | Deterministic replay with evidence bundles | Stable |
+| **Audit** | PII redaction at LLM gateway boundary | Stable |
+| **Distributed** | TCP transport with length-prefix framing | Stable |
+| **Distributed** | Audit replication across nodes | Stable |
+| **Distributed** | Quorum-based governance voting | Stable |
+| **Distributed** | SWIM-style membership protocol | Stable |
+| **Enterprise** | Role-based access control (RBAC) | Stable |
+| **Enterprise** | SOC 2 Type II compliance reporting | Stable |
+| **Marketplace** | Signed agent bundles with trust scoring | Stable |
+| **Marketplace** | Security scanning + manifest verification | Stable |
+| **Desktop** | Tauri shell with 9 interactive pages | Stable |
+| **CLI** | 24 commands across 8 subsystems | Stable |
+| **Safety** | Kill gates for emergency shutdown | Stable |
+| **Safety** | Zero unsafe Rust (`unsafe_code = "forbid"`) | Enforced |
 
 ## Architecture
+
 ```mermaid
 graph TD
-  K[Kernel (Rust)] --> P[Policy/Governance Layer]
-  P --> A[Audit Chain + Replay]
-  K --> G[Governed LLM Gateway]
-  K --> S[Supervisor + Safety Controls]
-  D[Desktop Shell (Tauri + TypeScript)] --> K
-  V[Voice Module (local)] --> K
+    UI[Desktop UI - Tauri + React] --> CLI[CLI Layer - 24 commands]
+    CLI --> ENT[Enterprise - RBAC + Compliance]
+    CLI --> MKT[Marketplace - Registry + Trust]
+    ENT --> K[Kernel]
+    MKT --> K
+    UI --> K
+
+    K --> SUP[Supervisor - Agent Lifecycle]
+    K --> AUT[Autonomy Guard - L0 to L5]
+    K --> AUD[Audit Trail - Hash-Chained]
+    K --> FUEL[Fuel Metering - Anomaly Detection]
+    K --> DEL[Delegation - Transitive + Revocable]
+    K --> ADAPT[Adaptive Policy - Trust Scoring]
+    K --> CON[Consent - HITL Approval]
+    K --> PRIV[Privacy - PII Redaction]
+
+    DIST[Distributed Layer] --> REP[Replication]
+    DIST --> QUO[Quorum Voting]
+    DIST --> MEM[Membership - SWIM]
+    DIST --> TCP[TCP Transport]
+
+    K --> DIST
+    SDK[Agent SDK] --> K
 ```
 
 ## Quickstart
-### Prerequisites
-- Rust stable toolchain
-- Node.js 20+ and npm
-- Platform dependencies required by Tauri (see workflow files for Linux packages)
 
-### Local build and verification
+### Prerequisites
+
+- Rust 1.75+ stable toolchain
+- Node.js 20+ and npm
+- Platform dependencies for Tauri (see CI workflow for Linux packages)
+
+### Build and Verify
+
 ```bash
 git clone https://github.com/nexai-lang/nexus-os.git
 cd nexus-os
 
+# Build and test
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 
-cd app
-npm ci
-npm run build
+# Build desktop UI
+cd app && npm ci && npm run build
 ```
 
-### Run desktop shell (development)
+### Run Desktop Shell
+
 ```bash
 cd app
 npm run tauri dev
 ```
 
-### Planned distribution
-Installer availability depends on release workflow outputs for tagged versions. If a platform installer is missing for a tag, build from source using the steps above.
-
-## Proof Artifacts
-- [THREAT_MODEL.md](THREAT_MODEL.md)
-- [PRIVACY_DESIGN.md](PRIVACY_DESIGN.md)
-- [COMPLIANCE.md](COMPLIANCE.md)
-- [SECURITY.md](SECURITY.md)
-- [CHANGELOG.md](CHANGELOG.md)
-
-## Reproducibility
-Use the exact commands below from repository root:
+### CLI Usage
 
 ```bash
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --all-features
+# Agent management
+nexus agent list
+nexus agent start --id my-agent
+nexus agent status --id my-agent
 
-cd app && npm ci && npm run build
-cd ../voice && python3 -m pytest -v
+# Audit verification
+nexus audit verify
+nexus audit show
+
+# Cluster operations
+nexus cluster status
+nexus cluster join --seed 10.0.1.10:9090
+
+# Marketplace
+nexus marketplace search "code generator"
+nexus marketplace install agent-coder
+
+# Compliance
+nexus compliance report
+nexus compliance status
 ```
 
-## Screenshots
-Screenshots coming soon.
+## Workspace Crates
 
-Checklist (expected paths):
-- [ ] `docs/screenshots/command-center.png`
-- [ ] `docs/screenshots/governance-audit-timeline.png`
-- [ ] `docs/screenshots/hitl-approval-queue.png`
-- [ ] `docs/screenshots/redaction-and-fuel-dashboard.png`
-
-## Contributing and Security
-- [CONTRIBUTING.md](CONTRIBUTING.md)
-- [SECURITY.md](SECURITY.md)
-
- ci/fix-windows-release-artifact-discovery
-Rust (kernel) + TypeScript/React (desktop app via Tauri) + Python (voice/ML)  
-200+ tests | CI/CD on GitHub Actions | 28 milestone versions
+| Crate | Purpose |
+|-------|---------|
+| `kernel` | Core governance runtime -- capability checks, fuel, audit, autonomy |
+| `sdk` | Agent development SDK -- NexusAgent trait, AgentContext, TestHarness |
+| `distributed` | Cross-node networking -- TCP transport, replication, quorum, membership |
+| `enterprise` | RBAC and SOC 2 compliance reporting |
+| `marketplace` | Agent package registry, trust scoring, security scanning |
+| `cli` | 24-command CLI covering all subsystems |
+| `app` | Tauri desktop shell with React/TypeScript frontend |
+| `connectors/*` | External service connectors (web, social, messaging, LLM) |
+| `agents/*` | 9 built-in agents (coder, designer, web-builder, etc.) |
+| `benchmarks` | Performance benchmark suite |
 
 ## Documentation
 
-- [User Guide](docs/USER_GUIDE.md)
-- [Developer Guide](docs/DEVELOPER_GUIDE.md)
-- [Threat Model](docs/THREAT_MODEL.md)
-- [Privacy Design](PRIVACY_DESIGN.md)
-- [Changelog](CHANGELOG.md)
+| Document | Description |
+|----------|-------------|
+| [Architecture Guide](docs/ARCHITECTURE.md) | Layered system design, module reference, governance pipeline |
+| [SDK Tutorial](docs/SDK_TUTORIAL.md) | Build your first governed agent step-by-step |
+| [Deployment Guide](docs/DEPLOYMENT.md) | Single node and cluster setup, configuration reference |
+| [Security Hardening](docs/SECURITY_HARDENING.md) | Production hardening checklist with verification commands |
+| [API Reference](docs/API_REFERENCE.md) | Complete public type and function reference |
+| [User Guide](docs/USER_GUIDE.md) | End-user guide for the desktop application |
+| [Developer Guide](docs/DEVELOPER_GUIDE.md) | Contributing and development workflow |
+| [Threat Model](docs/THREAT_MODEL.md) | Attack surfaces and mitigations |
+| [Performance](docs/PERFORMANCE.md) | Benchmark results and optimization notes |
+
+## Security Invariants
+
+These are enforced at the code level and must never be violated:
+
+1. Every agent action goes through kernel capability checks
+2. Fuel budget checked **before** execution, not after
+3. Audit trail is append-only with hash-chain integrity
+4. PII redaction at LLM gateway boundary
+5. HITL approval mandatory for Tier 1+ operations
+6. `unsafe_code = "forbid"` -- zero unsafe Rust
+7. All tests must pass before merging
+8. Agents declare capabilities in TOML manifests
 
 ## Built By
 
-Created by Devil — a self-taught developer who built an entire governed agent operating system from scratch.
-=======
-## Maintainers
-Maintained by the NEXAI Lab community.
- main
+Created by Devil -- a self-taught developer who built an entire governed agent operating system from scratch.
 
 ## License
+
 This project is licensed under the MIT License. See [LICENSE](LICENSE).

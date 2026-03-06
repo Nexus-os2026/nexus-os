@@ -1,0 +1,66 @@
+.at-hub { padding: 1.5rem; }
+.at-header { margin-bottom: 1.25rem; }
+.at-title { font-family: var(--font-display, "JetBrains Mono", monospace); font-size: 1.1rem; color: #e0f2fe; letter-spacing: 0.08em; }
+.at-subtitle { font-size: 0.8rem; color: rgba(165, 243, 252, 0.6); margin-top: 0.25rem; }
+
+.at-filters { display: flex; gap: 0.75rem; margin-bottom: 1.25rem; }
+.at-select {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 0.4rem;
+  color: #a5f3fc;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  font-family: var(--font-display, monospace);
+}
+
+.at-timeline { display: flex; flex-direction: column; gap: 0; position: relative; }
+
+.at-event { display: flex; gap: 1rem; position: relative; }
+.at-event-line {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 20px;
+  flex-shrink: 0;
+  position: relative;
+}
+.at-event-line::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  bottom: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  background: rgba(56, 189, 248, 0.12);
+}
+.at-event:last-child .at-event-line::after { display: none; }
+
+.at-event-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  z-index: 1;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.at-event-card {
+  flex: 1;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(56, 189, 248, 0.1);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  transition: border-color 0.2s;
+}
+.at-event-card:hover { border-color: rgba(56, 189, 248, 0.3); }
+
+.at-event-top { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
+.at-event-time { font-size: 0.65rem; color: rgba(165, 243, 252, 0.4); font-family: monospace; }
+.at-event-agent { font-size: 0.75rem; color: #e0f2fe; font-weight: 600; }
+.at-event-type { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
+.at-federation-badge { font-size: 0.85rem; margin-left: 0.25rem; cursor: help; }
+
+.at-event-summary { font-size: 0.8rem; color: #cbd5e1; line-height: 1.4; }

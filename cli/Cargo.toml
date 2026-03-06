@@ -15,6 +15,6 @@ nexus-connectors-llm = { path = "../connectors/llm" }
 coding-agent = { path = "../agents/coding-agent" }
 social-poster-agent = { path = "../agents/social-poster" }
 self-improve-agent = { path = "../agents/self-improve" }
-
-[dev-dependencies]
-uuid = { version = "1.10", features = ["v4"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.10", features = ["v4", "serde"] }

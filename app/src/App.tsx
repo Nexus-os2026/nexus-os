@@ -41,6 +41,12 @@ import { Marketplace } from "./pages/Marketplace";
 import { Settings } from "./pages/Settings";
 import { SetupWizard } from "./pages/SetupWizard";
 import { Workflows } from "./pages/Workflows";
+import CommandCenter from "./pages/CommandCenter";
+import AuditTimeline from "./pages/AuditTimeline";
+import MarketplaceBrowser from "./pages/MarketplaceBrowser";
+import ComplianceDashboard from "./pages/ComplianceDashboard";
+import ClusterStatusPage from "./pages/ClusterStatus";
+import TrustDashboard from "./pages/TrustDashboard";
 import type {
   AgentSummary,
   AuditEventRow,
@@ -55,15 +61,21 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings";
+type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "compliance" | "cluster" | "trust";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
   { id: "chat", label: "Chat", icon: "⌁", shortcut: "Alt+1" },
   { id: "agents", label: "Agents", icon: "⬢", shortcut: "Alt+2" },
+  { id: "command-center", label: "Command", icon: "⊞", shortcut: "" },
   { id: "audit", label: "Audit", icon: "⧉", shortcut: "Alt+3" },
+  { id: "audit-timeline", label: "Timeline", icon: "⏱", shortcut: "" },
   { id: "workflows", label: "Workflows", icon: "⎇", shortcut: "Alt+4" },
   { id: "marketplace", label: "Marketplace", icon: "◈", shortcut: "Alt+5" },
+  { id: "marketplace-browser", label: "Registry", icon: "⬡", shortcut: "" },
+  { id: "compliance", label: "Compliance", icon: "⛨", shortcut: "" },
+  { id: "cluster", label: "Cluster", icon: "⬣", shortcut: "" },
+  { id: "trust", label: "Trust", icon: "◉", shortcut: "" },
   { id: "settings", label: "Settings", icon: "⚙", shortcut: "Alt+6" }
 ];
 
@@ -931,6 +943,24 @@ export default function App(): JSX.Element {
     }
     if (page === "marketplace") {
       return <Marketplace />;
+    }
+    if (page === "command-center") {
+      return <CommandCenter />;
+    }
+    if (page === "audit-timeline") {
+      return <AuditTimeline />;
+    }
+    if (page === "marketplace-browser") {
+      return <MarketplaceBrowser />;
+    }
+    if (page === "compliance") {
+      return <ComplianceDashboard />;
+    }
+    if (page === "cluster") {
+      return <ClusterStatusPage />;
+    }
+    if (page === "trust") {
+      return <TrustDashboard />;
     }
     return (
       <Settings

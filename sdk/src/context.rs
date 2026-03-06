@@ -169,11 +169,7 @@ mod tests {
 
     #[test]
     fn capability_check_blocks_unauthorized() {
-        let ctx = AgentContext::new(
-            Uuid::new_v4(),
-            vec!["fs.read".to_string()],
-            1000,
-        );
+        let ctx = AgentContext::new(Uuid::new_v4(), vec!["fs.read".to_string()], 1000);
 
         assert!(ctx.require_capability("fs.read").is_ok());
         assert!(matches!(
@@ -184,11 +180,7 @@ mod tests {
 
     #[test]
     fn fuel_deduction_and_exhaustion() {
-        let mut ctx = AgentContext::new(
-            Uuid::new_v4(),
-            vec!["llm.query".to_string()],
-            15,
-        );
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec!["llm.query".to_string()], 15);
 
         // First query costs 10
         assert!(ctx.llm_query("test", 100).is_ok());
@@ -204,7 +196,11 @@ mod tests {
     fn operations_emit_audit_events() {
         let mut ctx = AgentContext::new(
             Uuid::new_v4(),
-            vec!["llm.query".to_string(), "fs.read".to_string(), "fs.write".to_string()],
+            vec![
+                "llm.query".to_string(),
+                "fs.read".to_string(),
+                "fs.write".to_string(),
+            ],
             1000,
         );
 
@@ -219,11 +215,7 @@ mod tests {
 
     #[test]
     fn read_file_checks_capability() {
-        let mut ctx = AgentContext::new(
-            Uuid::new_v4(),
-            vec!["llm.query".to_string()],
-            1000,
-        );
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec!["llm.query".to_string()], 1000);
 
         let result = ctx.read_file("/etc/passwd");
         assert!(matches!(result, Err(AgentError::CapabilityDenied(_))));

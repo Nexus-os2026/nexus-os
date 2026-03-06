@@ -31,8 +31,7 @@ impl Permission {
     /// Check if this permission grants the given action on the given resource.
     /// Supports glob matching: "agent:*" matches "agent:coder", "agent:designer", etc.
     pub fn matches(&self, resource: &str, action: &str) -> bool {
-        if !self.actions.contains(&action.to_string()) && !self.actions.contains(&"*".to_string())
-        {
+        if !self.actions.contains(&action.to_string()) && !self.actions.contains(&"*".to_string()) {
             return false;
         }
         glob_match(&self.resource, resource)
@@ -61,15 +60,15 @@ impl RbacEngine {
     pub fn new() -> Self {
         let mut role_permissions = HashMap::new();
 
-        role_permissions.insert(
-            Role::Owner,
-            vec![Permission::new("*", &["*"])],
-        );
+        role_permissions.insert(Role::Owner, vec![Permission::new("*", &["*"])]);
 
         role_permissions.insert(
             Role::Admin,
             vec![
-                Permission::new("agent:*", &["read", "write", "execute", "approve", "delete"]),
+                Permission::new(
+                    "agent:*",
+                    &["read", "write", "execute", "approve", "delete"],
+                ),
                 Permission::new("audit:*", &["read"]),
                 Permission::new("config:*", &["read", "write"]),
                 Permission::new("user:*", &["read", "write"]),
@@ -103,12 +102,7 @@ impl RbacEngine {
             ],
         );
 
-        role_permissions.insert(
-            Role::Auditor,
-            vec![
-                Permission::new("audit:*", &["read"]),
-            ],
-        );
+        role_permissions.insert(Role::Auditor, vec![Permission::new("audit:*", &["read"])]);
 
         Self {
             role_permissions,
@@ -152,7 +146,10 @@ impl RbacEngine {
     }
 
     pub fn list_role_permissions(&self, role: Role) -> Vec<Permission> {
-        self.role_permissions.get(&role).cloned().unwrap_or_default()
+        self.role_permissions
+            .get(&role)
+            .cloned()
+            .unwrap_or_default()
     }
 }
 

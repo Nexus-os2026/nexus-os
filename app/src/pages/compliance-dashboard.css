@@ -1,0 +1,65 @@
+.cd-hub { padding: 1.5rem; }
+.cd-header { margin-bottom: 1.25rem; }
+.cd-title { font-family: var(--font-display, "JetBrains Mono", monospace); font-size: 1.1rem; color: #e0f2fe; letter-spacing: 0.08em; }
+.cd-subtitle { font-size: 0.8rem; color: rgba(165, 243, 252, 0.6); margin-top: 0.25rem; }
+
+.cd-summary {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(56, 189, 248, 0.1);
+  border-radius: 0.75rem;
+  flex-wrap: wrap;
+}
+.cd-summary-bar { flex: 1; min-width: 200px; height: 8px; background: rgba(30, 41, 59, 0.8); border-radius: 4px; overflow: hidden; }
+.cd-summary-fill { height: 100%; background: #22c55e; border-radius: 4px; transition: width 0.4s; }
+.cd-summary-text { font-size: 0.8rem; color: #cbd5e1; }
+.cd-summary-count { color: #e0f2fe; font-weight: 600; }
+.cd-generate-btn {
+  padding: 0.4rem 1rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  border-radius: 0.4rem;
+  background: rgba(15, 23, 42, 0.6);
+  color: #22d3ee;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cd-generate-btn:hover { background: rgba(34, 211, 238, 0.15); border-color: rgba(34, 211, 238, 0.5); }
+
+.cd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1rem; }
+
+.cd-card {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.15);
+  border-left: 4px solid;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  transition: border-color 0.2s;
+}
+.cd-card:hover { border-right-color: rgba(56, 189, 248, 0.35); border-top-color: rgba(56, 189, 248, 0.35); border-bottom-color: rgba(56, 189, 248, 0.35); }
+
+.cd-card-top { display: flex; justify-content: space-between; align-items: center; }
+.cd-control-id { font-family: var(--font-display, monospace); font-size: 0.9rem; font-weight: 700; color: #e0f2fe; }
+.cd-status-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.3rem;
+}
+
+.cd-card-desc { font-size: 0.8rem; color: #cbd5e1; line-height: 1.45; }
+
+.cd-card-footer { margin-top: auto; }
+.cd-evidence-count { font-size: 0.7rem; color: rgba(165, 243, 252, 0.5); font-family: monospace; }

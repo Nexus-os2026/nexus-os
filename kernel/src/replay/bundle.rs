@@ -61,8 +61,7 @@ pub struct EvidenceBundle {
 
 /// Compute the SHA-256 manifest hash from the canonical TOML representation.
 pub fn compute_manifest_hash(manifest: &AgentManifest) -> String {
-    let canonical = serde_json::to_vec(manifest)
-        .expect("manifest serialization must not fail");
+    let canonical = serde_json::to_vec(manifest).expect("manifest serialization must not fail");
     let mut hasher = Sha256::new();
     hasher.update(&canonical);
     format!("{:x}", hasher.finalize())
@@ -98,10 +97,7 @@ impl EvidenceBundle {
             ));
         }
 
-        let chain_root_hash = events
-            .last()
-            .map(|e| e.hash.clone())
-            .unwrap_or_default();
+        let chain_root_hash = events.last().map(|e| e.hash.clone()).unwrap_or_default();
 
         let manifest_hash = compute_manifest_hash(manifest);
 
@@ -170,8 +166,7 @@ fn compute_bundle_digest(
         exported_at,
     };
 
-    let canonical = serde_json::to_vec(&input)
-        .expect("bundle digest serialization must not fail");
+    let canonical = serde_json::to_vec(&input).expect("bundle digest serialization must not fail");
 
     let mut hasher = Sha256::new();
     hasher.update(&canonical);

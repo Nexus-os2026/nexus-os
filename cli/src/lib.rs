@@ -7,6 +7,8 @@ use self_improve_agent::prompt_optimizer::PromptOutcome;
 use self_improve_agent::r#loop::{run_once_with_storage, AgentRunObservation, ImprovementStatus};
 use self_improve_agent::tracker::{OutcomeResult, TaskMetrics, TaskType};
 use social_poster_agent::run_social_poster_from_manifest;
+pub mod commands;
+pub mod router;
 pub mod setup;
 use std::fs;
 use std::path::{Path, PathBuf};

@@ -51,7 +51,8 @@
 ## Roadmap
 
 See .claude/roadmap/ for implementation plans:
-- 01-v3x-hardening.md (CURRENT - benchmarks, replay evidence, installers, LLM hardening)
-- 02-v4-distributed.md (cross-node replication, quorum, federated audit, marketplace)
-- 03-v5-ecosystem.md (plugin SDK, enterprise RBAC/SSO, cloud scaffolding)
-- 04-v6-intelligence.md (multi-agent collaboration, delegation, adaptive governance)
+- 01-v3x-hardening.md (DONE - benchmarks, replay evidence, installers, LLM hardening)
+- 02-v4-distributed.md (DONE - cross-node replication, quorum, federated audit, marketplace)
+- 03-v5-ecosystem.md (DONE - plugin SDK, enterprise RBAC/SSO, cloud scaffolding)
+- 04-v6-intelligence.md (DONE - multi-agent collaboration, delegation, adaptive governance)
+- 05-v5-production-ready.md (NEXT - WASM sandbox, real networking, CLI, desktop UI, docs, E2E tests)

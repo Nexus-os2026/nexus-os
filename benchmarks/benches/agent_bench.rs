@@ -47,5 +47,9 @@ fn bench_autonomy_level_lookup(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_manifest_parse_varied, bench_autonomy_level_lookup,);
+criterion_group!(
+    benches,
+    bench_manifest_parse_varied,
+    bench_autonomy_level_lookup,
+);
 criterion_main!(benches);
