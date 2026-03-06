@@ -8,6 +8,7 @@ import type {
   NexusConfig,
   OllamaStatus,
   SetupResult,
+  SystemInfo,
   VoiceRuntimeState
 } from "../types";
 
@@ -178,4 +179,8 @@ export function chatWithOllama(
 
 export function setAgentModel(agent: string, model: string): Promise<void> {
   return invokeDesktop<void>("set_agent_model", { agent, model });
+}
+
+export function getSystemInfo(): Promise<SystemInfo> {
+  return invokeDesktop<SystemInfo>("get_system_info");
 }

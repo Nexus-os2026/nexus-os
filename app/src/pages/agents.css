@@ -249,6 +249,12 @@
   background: rgba(255, 0, 64, 0.15);
 }
 
+.agent-action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .agent-badge-row {
   display: flex;
   align-items: center;

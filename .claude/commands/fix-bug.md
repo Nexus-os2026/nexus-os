@@ -1,0 +1,1 @@
+A bug has been reported: "$ARGUMENTS". Investigate by reading relevant source files, checking logs if available, and tracing the issue to its root cause. Fix it with minimal code changes. Run tests to verify the fix. Update tasks/lessons.md with what went wrong and how to prevent it. Do NOT ask clarifying questions - just investigate and fix.

@@ -1,0 +1,1 @@
+Read tasks/lessons.md and review all lessons learned. Then check if the current codebase has any instances where these lessons are being violated. Report findings and fix any violations found.

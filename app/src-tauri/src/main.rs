@@ -109,6 +109,43 @@ impl AppState {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemInfo {
+    pub cpu_usage_percent: f32,
+    pub ram_used_gb: f64,
+    pub ram_total_gb: f64,
+    pub cpu_name: String,
+}
+
+pub fn get_system_info() -> Result<SystemInfo, String> {
+    use sysinfo::System;
+    let mut sys = System::new();
+    sys.refresh_cpu_usage();
+    // Brief sleep to let CPU usage settle, then re-read
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    sys.refresh_cpu_usage();
+    sys.refresh_memory();
+
+    let cpu_usage = if sys.cpus().is_empty() {
+        0.0
+    } else {
+        sys.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() / sys.cpus().len() as f32
+    };
+
+    let cpu_name = sys
+        .cpus()
+        .first()
+        .map(|c| c.brand().to_string())
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    Ok(SystemInfo {
+        cpu_usage_percent: (cpu_usage * 10.0).round() / 10.0,
+        ram_used_gb: (sys.used_memory() as f64 / 1_073_741_824.0 * 10.0).round() / 10.0,
+        ram_total_gb: (sys.total_memory() as f64 / 1_073_741_824.0 * 10.0).round() / 10.0,
+        cpu_name,
+    })
+}
+
 pub fn start_jarvis_mode(state: &AppState) -> Result<VoiceRuntimeState, String> {
     let mut voice = match state.voice.lock() {
         Ok(guard) => guard,
@@ -1181,6 +1218,11 @@ mod runtime {
         super::set_agent_model(agent, model)
     }
 
+    #[tauri::command]
+    fn get_system_info() -> Result<SystemInfo, String> {
+        super::get_system_info()
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -1261,6 +1303,7 @@ mod runtime {
                 list_available_models,
                 chat_with_ollama,
                 set_agent_model,
+                get_system_info,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");

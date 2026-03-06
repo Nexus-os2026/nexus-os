@@ -56,3 +56,37 @@ See .claude/roadmap/ for implementation plans:
 - 03-v5-ecosystem.md (DONE - plugin SDK, enterprise RBAC/SSO, cloud scaffolding)
 - 04-v6-intelligence.md (DONE - multi-agent collaboration, delegation, adaptive governance)
 - 05-v5-production-ready.md (NEXT - WASM sandbox, real networking, CLI, desktop UI, docs, E2E tests)
+
+## Workflow Rules
+
+### Plan First
+- Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions)
+- If something goes sideways, STOP and re-plan - don't keep pushing
+- Write plans to tasks/todo.md with checkable items before implementing
+- Verify plan before starting implementation
+
+### Self-Improvement Loop
+- After ANY correction from the user: update tasks/lessons.md with the pattern
+- Write rules that prevent the same mistake from recurring
+- Review lessons at session start for the relevant project
+
+### Verification Before Done
+- Never mark a task complete without proving it works
+- Run tests, check logs, demonstrate correctness
+- Ask yourself: Would a staff engineer approve this?
+- Diff behavior between main and your changes when relevant
+
+### Subagent Strategy
+- Use subagents for research, exploration, and parallel analysis
+- Keep the main context window clean and focused
+- One task per subagent for focused execution
+
+### Autonomous Bug Fixing
+- When given a bug report: just fix it, don't ask for hand-holding
+- Point at logs, errors, failing tests, then resolve them
+- Go fix failing CI tests without being told how
+
+### Core Principles
+- Simplicity First: make every change as simple as possible, impact minimal code
+- No Laziness: find root causes, no temporary fixes, senior developer standards
+- Minimal Impact: changes should only touch what's necessary, avoid introducing bugs

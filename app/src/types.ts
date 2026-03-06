@@ -173,3 +173,10 @@ export interface ChatTokenEvent {
   done: boolean;
   error?: string;
 }
+
+export interface SystemInfo {
+  cpu_usage_percent: number;
+  ram_used_gb: number;
+  ram_total_gb: number;
+  cpu_name: string;
+}

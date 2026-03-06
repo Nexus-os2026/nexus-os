@@ -28,16 +28,17 @@ const CAPABILITIES: CapabilityOption[] = [
 ];
 
 const CAPABILITY_KEYWORDS: { keywords: RegExp; capabilities: string[] }[] = [
-  { keywords: /3d|three\.?js|r3f|webgl|render|scene|shader|glsl/i, capabilities: ["gpu.render", "fs.read", "fs.write"] },
-  { keywords: /web|react|html|css|site|page|frontend/i, capabilities: ["web.build", "fs.read", "fs.write"] },
+  { keywords: /3d|three[\s.-]?js|r3f|react three fiber|webgl|render|scene|shader|glsl|camera\s*path|catmullrom/i, capabilities: ["gpu.render", "fs.read", "fs.write"] },
+  { keywords: /web|react|html|css|site|page|frontend|component|builder/i, capabilities: ["web.build", "fs.read", "fs.write"] },
   { keywords: /search|browse|scrape|crawl|fetch/i, capabilities: ["web.search"] },
-  { keywords: /llm|ai|generate|prompt|gpt|claude|model|query/i, capabilities: ["llm.query"] },
+  { keywords: /llm|ai\b|generate|prompt|gpt|claude|model|query/i, capabilities: ["llm.query"] },
   { keywords: /post|social|tweet|instagram|share|publish/i, capabilities: ["social.post", "social.read"] },
   { keywords: /message|telegram|notify|alert|chat/i, capabilities: ["messaging.send"] },
   { keywords: /code|compile|test|build|debug|git|terminal/i, capabilities: ["process.exec", "fs.read", "fs.write"] },
   { keywords: /image|screenshot|vision|camera|capture/i, capabilities: ["vision.analyze"] },
-  { keywords: /scroll|animation|gsap|camera path/i, capabilities: ["gpu.render", "fs.read", "fs.write"] },
-  { keywords: /marketplace|plugin|install/i, capabilities: ["marketplace.publish"] },
+  { keywords: /scroll|animation|gsap|orchestrat/i, capabilities: ["gpu.render", "fs.read", "fs.write"] },
+  { keywords: /marketplace|plugin|modular|install/i, capabilities: ["marketplace.publish"] },
+  { keywords: /upload|file|save|load|read|write/i, capabilities: ["fs.read", "fs.write"] },
 ];
 
 function detectCapabilities(desc: string): Record<string, boolean> {

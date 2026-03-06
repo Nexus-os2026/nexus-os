@@ -1,0 +1,1 @@
+Write a detailed implementation plan for "$ARGUMENTS" to tasks/todo.md. Break it into checkable items. Identify files to modify. Estimate complexity. List tests needed. Do NOT start implementing until the user confirms the plan.

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { AgentSummary, AuditEventRow } from "../../types";
 import { Avatar } from "./Avatar";
 
@@ -88,6 +89,18 @@ export function AgentCard({
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference * (1 - percentage / 100);
   const tone = statusTone(agent.status);
+  const [pendingAction, setPendingAction] = useState<"starting" | "stopping" | "pausing" | null>(null);
+
+  // Clear transient label when agent status actually changes
+  useEffect(() => {
+    if (pendingAction) {
+      const timer = setTimeout(() => setPendingAction(null), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [pendingAction]);
+
+  const isRunning = agent.status === "Running" || agent.status === "Starting";
+  const isStopped = agent.status === "Stopped" || agent.status === "Destroyed" || agent.status === "Created";
 
   const eventLine = latestEvent
     ? `${formatEventTimestamp(latestEvent.timestamp)} // ${summarizePayload(latestEvent.payload)}`
@@ -146,32 +159,38 @@ export function AgentCard({
         <button
           type="button"
           className="agent-action-btn"
+          disabled={isRunning || pendingAction === "starting"}
           onClick={(event) => {
             event.stopPropagation();
+            setPendingAction("starting");
             onStart(agent.id);
           }}
         >
-          Start
+          {pendingAction === "starting" ? "Starting..." : "Start"}
         </button>
         <button
           type="button"
           className="agent-action-btn"
+          disabled={!isRunning || pendingAction === "pausing"}
           onClick={(event) => {
             event.stopPropagation();
+            setPendingAction("pausing");
             onPause(agent.id);
           }}
         >
-          Pause
+          {pendingAction === "pausing" ? "Pausing..." : "Pause"}
         </button>
         <button
           type="button"
           className="agent-action-btn danger"
+          disabled={isStopped || pendingAction === "stopping"}
           onClick={(event) => {
             event.stopPropagation();
+            setPendingAction("stopping");
             onStop(agent.id);
           }}
         >
-          Stop
+          {pendingAction === "stopping" ? "Stopping..." : "Stop"}
         </button>
         <button
           type="button"

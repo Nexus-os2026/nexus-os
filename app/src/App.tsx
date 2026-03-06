@@ -19,6 +19,7 @@ import {
   runSetupWizard,
   saveConfig,
   sendChat,
+  getSystemInfo,
   setAgentModel,
   startAgent,
   startJarvisMode,
@@ -33,7 +34,7 @@ import { PageTransition } from "./components/fx/PageTransition";
 import { Sidebar, type SidebarItem } from "./components/layout/Sidebar";
 import { VoiceOverlay, type VoiceOverlayState } from "./components/VoiceOverlay";
 import { PulseRing } from "./components/viz/PulseRing";
-import { RadialGauge } from "./components/viz/RadialGauge";
+import type { SystemInfo } from "./types";
 import { Agents } from "./pages/Agents";
 import { Audit } from "./pages/Audit";
 import { Chat } from "./pages/Chat";
@@ -438,13 +439,19 @@ export default function App(): JSX.Element {
     () => agents.filter((agent) => agent.status === "Running").length,
     [agents]
   );
-  const averageFuel = useMemo(() => {
-    if (agents.length === 0) {
-      return 0;
+  const [sysInfo, setSysInfo] = useState<SystemInfo | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    function poll(): void {
+      getSystemInfo()
+        .then((info) => { if (active) setSysInfo(info); })
+        .catch(() => {});
     }
-    const total = agents.reduce((sum, agent) => sum + Math.max(0, Math.min(100, agent.fuel_remaining / 100)), 0);
-    return total / agents.length;
-  }, [agents]);
+    poll();
+    const id = setInterval(poll, 3000);
+    return () => { active = false; clearInterval(id); };
+  }, []);
 
   function applyVoiceState(state: VoiceRuntimeState): void {
     setOverlay((prev) => ({
@@ -1072,7 +1079,11 @@ export default function App(): JSX.Element {
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="hidden items-center gap-3 md:flex">
-                    <RadialGauge value={averageFuel} label="Avg Fuel" size={88} />
+                    <span className="font-mono text-xs text-cyan-300 whitespace-nowrap">
+                      {sysInfo
+                        ? `CPU: ${sysInfo.cpu_usage_percent}% | RAM: ${sysInfo.ram_used_gb}/${sysInfo.ram_total_gb} GB`
+                        : "CPU: --% | RAM: --/-- GB"}
+                    </span>
                     <PulseRing active={runningAgents > 0} size={44} />
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs">
