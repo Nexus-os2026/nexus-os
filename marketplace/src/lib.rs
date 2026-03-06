@@ -1,5 +1,7 @@
 //! Agent Marketplace primitives for signed bundle publication and installation.
 
+pub mod install;
+pub mod manifest_verify;
 pub mod package;
 pub mod registry;
 pub mod scanner;

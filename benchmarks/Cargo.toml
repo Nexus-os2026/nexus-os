@@ -1,0 +1,29 @@
+[package]
+name = "nexus-benchmarks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+nexus-kernel = { path = "../kernel" }
+nexus-connectors-llm = { path = "../connectors/llm" }
+criterion = { version = "0.5", features = ["html_reports"] }
+serde_json = "1.0"
+uuid = { version = "1.10", features = ["v4"] }
+
+[[bench]]
+name = "kernel_bench"
+harness = false
+
+[[bench]]
+name = "gateway_bench"
+harness = false
+
+[[bench]]
+name = "agent_bench"
+harness = false
+
+[[bench]]
+name = "replay_bench"
+harness = false
