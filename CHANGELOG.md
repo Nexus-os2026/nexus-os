@@ -2,6 +2,34 @@
 
 All notable changes to NEXUS OS are documented here.
 
+## v4.0.0 - Governed Distributed Agent Platform
+
+### Phase 1: Hardening and Evidence
+- Criterion benchmark suite across kernel, gateway, agent, and replay modules
+- Replay evidence bundles with standalone 5-check verifier (hash-chain integrity, manifest match, fuel bounds, approval coverage, monotonic ordering)
+- Circuit breaker state machine (Closed/Open/HalfOpen) for LLM provider fault tolerance
+- Provider routing engine with 4 strategies: Priority, RoundRobin, LowestLatency, CostOptimized
+
+### Phase 2: Distributed Governance
+- Cross-node replication with heartbeat failure detection and delta/full-sync modes
+- Quorum-backed execution engine with propose/vote/timeout lifecycle for multi-party consensus
+- Federated audit chains with cross-node hash references and tamper detection
+- Agent marketplace with Ed25519 manifest signature verification and provenance checking
+
+### Phase 3: Ecosystem and Enterprise
+- Plugin SDK: NexusAgent trait, governed AgentContext, ManifestBuilder, TestHarness for third-party agent development
+- Enterprise RBAC with 6 roles (Owner/Admin/Operator/Developer/Viewer/Auditor) and glob-matched permissions
+- SOC2 Type II compliance report generator mapping 5 controls (CC6.1-CC7.2) to Nexus OS audit primitives
+- Cloud multi-tenancy with plan-based resource limits, SHA-256 hashed API keys, and usage metering
+
+### Phase 4: Agent Intelligence
+- Multi-agent collaboration: governed channels with rate limiting, orchestrator with capability-based task assignment, ACL-gated blackboard
+- Capability delegation with transitive trust chains, cascade revocation, and fuel-bounded grants
+- Adaptive governance with trust score computation, human-gated promotions, and automatic demotions
+- Governed fine-tuning with safety check pipeline (PII/Harm/Accuracy/Alignment) and full audit trail
+
+90 test suites. Zero failures. All features governed, audited, capability-gated.
+
 ## v3.0.0 - Human-Centric & Hardware-Hardened
 
 - Autonomy Levels (L0-L5) with hard-gating at kernel chokepoints
