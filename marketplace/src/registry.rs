@@ -92,6 +92,14 @@ impl MarketplaceRegistry {
         Ok(package.clone())
     }
 
+    pub fn get(&self, package_id: &str) -> Option<&SignedPackageBundle> {
+        self.packages.get(package_id)
+    }
+
+    pub fn remove(&mut self, package_id: &str) -> bool {
+        self.packages.remove(package_id).is_some()
+    }
+
     pub fn upsert_signed(&mut self, package: SignedPackageBundle) {
         self.packages.insert(package.package_id.clone(), package);
     }

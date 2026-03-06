@@ -1,0 +1,11 @@
+[package]
+name = "nexus-collaboration"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+nexus-kernel = { path = "../../kernel" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.10", features = ["v4", "serde"] }

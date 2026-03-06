@@ -27,6 +27,12 @@ members = [
   "self-update",
   "tests/integration",
   "app/src-tauri",
+  "benchmarks",
+  "distributed",
+  "sdk",
+  "enterprise",
+  "cloud",
+  "agents/collaboration",
 ]
 
 [workspace.package]
