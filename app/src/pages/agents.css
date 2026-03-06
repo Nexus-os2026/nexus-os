@@ -691,6 +691,29 @@
   color: #ff0040;
 }
 
+.create-autodetect-note {
+  margin: 0 0 0.5rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.7rem;
+  color: #00f0ff;
+  background: rgba(0, 240, 255, 0.06);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+}
+
+.create-model-label {
+  display: block;
+  margin-top: 0.75rem;
+  margin-bottom: 0.3rem;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .create-slider {
   width: 100%;
   accent-color: #00f0ff;
