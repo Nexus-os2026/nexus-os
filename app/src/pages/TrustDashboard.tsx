@@ -13,12 +13,12 @@ interface AgentTrust {
 }
 
 const MOCK_TRUST: AgentTrust[] = [
-  { id: "agent-coder", name: "Coder", trustScore: 0.94, autonomyLevel: 3, totalRuns: 142, successRate: 0.96, violations: 0, promotionPending: true, demotionPending: false },
-  { id: "agent-designer", name: "Designer", trustScore: 0.78, autonomyLevel: 2, totalRuns: 67, successRate: 0.88, violations: 1, promotionPending: false, demotionPending: false },
-  { id: "agent-screen-poster", name: "Screen Poster", trustScore: 0.65, autonomyLevel: 2, totalRuns: 89, successRate: 0.82, violations: 2, promotionPending: false, demotionPending: false },
-  { id: "agent-web-builder", name: "Web Builder", trustScore: 0.85, autonomyLevel: 3, totalRuns: 54, successRate: 0.91, violations: 0, promotionPending: false, demotionPending: false },
-  { id: "agent-workflow-studio", name: "Workflow Studio", trustScore: 0.22, autonomyLevel: 1, totalRuns: 31, successRate: 0.58, violations: 5, promotionPending: false, demotionPending: true },
-  { id: "agent-self-improve", name: "Self-Improve", trustScore: 0.91, autonomyLevel: 4, totalRuns: 203, successRate: 0.95, violations: 0, promotionPending: true, demotionPending: false },
+  { id: "a0000000-0000-4000-8000-000000000001", name: "Coder", trustScore: 0.94, autonomyLevel: 3, totalRuns: 142, successRate: 0.96, violations: 0, promotionPending: true, demotionPending: false },
+  { id: "a0000000-0000-4000-8000-000000000002", name: "Designer", trustScore: 0.78, autonomyLevel: 2, totalRuns: 67, successRate: 0.88, violations: 1, promotionPending: false, demotionPending: false },
+  { id: "a0000000-0000-4000-8000-000000000003", name: "Screen Poster", trustScore: 0.65, autonomyLevel: 2, totalRuns: 89, successRate: 0.82, violations: 2, promotionPending: false, demotionPending: false },
+  { id: "a0000000-0000-4000-8000-000000000004", name: "Web Builder", trustScore: 0.85, autonomyLevel: 3, totalRuns: 54, successRate: 0.91, violations: 0, promotionPending: false, demotionPending: false },
+  { id: "a0000000-0000-4000-8000-000000000005", name: "Workflow Studio", trustScore: 0.22, autonomyLevel: 1, totalRuns: 31, successRate: 0.58, violations: 5, promotionPending: false, demotionPending: true },
+  { id: "a0000000-0000-4000-8000-000000000006", name: "Self-Improve", trustScore: 0.91, autonomyLevel: 4, totalRuns: 203, successRate: 0.95, violations: 0, promotionPending: true, demotionPending: false },
 ];
 
 const AUTONOMY_LABELS = ["L0 Inert", "L1 Suggest", "L2 Act+Approve", "L3 Act+Report", "L4 Autonomous", "L5 Full"];

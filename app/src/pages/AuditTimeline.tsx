@@ -19,18 +19,18 @@ const EVENT_COLORS: Record<string, string> = {
 };
 
 const MOCK_EVENTS: TimelineEvent[] = [
-  { id: "te-01", timestamp: 1700100470, agentName: "Coder", agentId: "agent-coder", eventType: "AgentAction", summary: "Fixed null check in middleware.rs:88", hasCrossNodeRef: false },
-  { id: "te-02", timestamp: 1700100460, agentName: "Workflow Studio", agentId: "agent-workflow-studio", eventType: "SystemEvent", summary: "Task complete: daily analytics pipeline", hasCrossNodeRef: false },
-  { id: "te-03", timestamp: 1700100455, agentName: "Self-Improve", agentId: "agent-self-improve", eventType: "AgentAction", summary: "Optimized prompt routing: +12% accuracy", hasCrossNodeRef: true },
-  { id: "te-04", timestamp: 1700100430, agentName: "Web Builder", agentId: "agent-web-builder", eventType: "AgentAction", summary: "Deployed staging build v2.4.1", hasCrossNodeRef: false },
-  { id: "te-05", timestamp: 1700100410, agentName: "Screen Poster", agentId: "agent-screen-poster", eventType: "PolicyDecision", summary: "Approval required for X post: product launch teaser", hasCrossNodeRef: false },
-  { id: "te-06", timestamp: 1700100395, agentName: "Screen Poster", agentId: "agent-screen-poster", eventType: "UserAction", summary: "Human approved social post for X", hasCrossNodeRef: true },
-  { id: "te-07", timestamp: 1700100380, agentName: "Designer", agentId: "agent-designer", eventType: "AgentAction", summary: "Generated landing page mockup (webp)", hasCrossNodeRef: false },
-  { id: "te-08", timestamp: 1700100350, agentName: "Coder", agentId: "agent-coder", eventType: "AgentAction", summary: "Ran auth test suite: 12 passed, 0 failed", hasCrossNodeRef: false },
-  { id: "te-09", timestamp: 1700100320, agentName: "Coder", agentId: "agent-coder", eventType: "SystemEvent", summary: "Fuel burn: 1200 consumed, 8000 remaining", hasCrossNodeRef: false },
-  { id: "te-10", timestamp: 1700100290, agentName: "Self-Improve", agentId: "agent-self-improve", eventType: "PolicyDecision", summary: "Trust score evaluation: 0.94 (above promotion threshold)", hasCrossNodeRef: true },
-  { id: "te-11", timestamp: 1700100260, agentName: "Workflow Studio", agentId: "agent-workflow-studio", eventType: "AgentAction", summary: "Executed DAG: daily-analytics (6 nodes)", hasCrossNodeRef: false },
-  { id: "te-12", timestamp: 1700100230, agentName: "Designer", agentId: "agent-designer", eventType: "AgentAction", summary: "Created 42 design tokens for dark-cyber theme", hasCrossNodeRef: false },
+  { id: "te-01", timestamp: 1700100470, agentName: "Coder", agentId: "a0000000-0000-4000-8000-000000000001", eventType: "AgentAction", summary: "Fixed null check in middleware.rs:88", hasCrossNodeRef: false },
+  { id: "te-02", timestamp: 1700100460, agentName: "Workflow Studio", agentId: "a0000000-0000-4000-8000-000000000005", eventType: "SystemEvent", summary: "Task complete: daily analytics pipeline", hasCrossNodeRef: false },
+  { id: "te-03", timestamp: 1700100455, agentName: "Self-Improve", agentId: "a0000000-0000-4000-8000-000000000006", eventType: "AgentAction", summary: "Optimized prompt routing: +12% accuracy", hasCrossNodeRef: true },
+  { id: "te-04", timestamp: 1700100430, agentName: "Web Builder", agentId: "a0000000-0000-4000-8000-000000000004", eventType: "AgentAction", summary: "Deployed staging build v2.4.1", hasCrossNodeRef: false },
+  { id: "te-05", timestamp: 1700100410, agentName: "Screen Poster", agentId: "a0000000-0000-4000-8000-000000000003", eventType: "PolicyDecision", summary: "Approval required for X post: product launch teaser", hasCrossNodeRef: false },
+  { id: "te-06", timestamp: 1700100395, agentName: "Screen Poster", agentId: "a0000000-0000-4000-8000-000000000003", eventType: "UserAction", summary: "Human approved social post for X", hasCrossNodeRef: true },
+  { id: "te-07", timestamp: 1700100380, agentName: "Designer", agentId: "a0000000-0000-4000-8000-000000000002", eventType: "AgentAction", summary: "Generated landing page mockup (webp)", hasCrossNodeRef: false },
+  { id: "te-08", timestamp: 1700100350, agentName: "Coder", agentId: "a0000000-0000-4000-8000-000000000001", eventType: "AgentAction", summary: "Ran auth test suite: 12 passed, 0 failed", hasCrossNodeRef: false },
+  { id: "te-09", timestamp: 1700100320, agentName: "Coder", agentId: "a0000000-0000-4000-8000-000000000001", eventType: "SystemEvent", summary: "Fuel burn: 1200 consumed, 8000 remaining", hasCrossNodeRef: false },
+  { id: "te-10", timestamp: 1700100290, agentName: "Self-Improve", agentId: "a0000000-0000-4000-8000-000000000006", eventType: "PolicyDecision", summary: "Trust score evaluation: 0.94 (above promotion threshold)", hasCrossNodeRef: true },
+  { id: "te-11", timestamp: 1700100260, agentName: "Workflow Studio", agentId: "a0000000-0000-4000-8000-000000000005", eventType: "AgentAction", summary: "Executed DAG: daily-analytics (6 nodes)", hasCrossNodeRef: false },
+  { id: "te-12", timestamp: 1700100230, agentName: "Designer", agentId: "a0000000-0000-4000-8000-000000000002", eventType: "AgentAction", summary: "Created 42 design tokens for dark-cyber theme", hasCrossNodeRef: false },
 ];
 
 const EVENT_TYPES = ["All", "AgentAction", "UserAction", "SystemEvent", "PolicyDecision"];

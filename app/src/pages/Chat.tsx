@@ -5,6 +5,15 @@ import { VoiceVisualizer, type VoiceVisualizerState } from "../components/chat/V
 import "./chat.css";
 import type { AgentSummary, ChatMessage } from "../types";
 
+const MODEL_OPTIONS = [
+  { value: "mock", label: "Mock (Testing)" },
+  { value: "qwen3.5:9b", label: "qwen3.5:9b (Local)" },
+  { value: "ollama", label: "ollama (Local)" },
+  { value: "claude-sonnet", label: "Claude Sonnet (Cloud)" },
+  { value: "claude-haiku", label: "Claude Haiku (Cloud)" },
+  { value: "gpt-4", label: "GPT-4 (Cloud)" }
+];
+
 interface ChatProps {
   messages: ChatMessage[];
   draft: string;
@@ -12,10 +21,13 @@ interface ChatProps {
   isSending: boolean;
   agents: AgentSummary[];
   selectedAgent: string;
+  selectedModel: string;
   onAgentChange: (agentId: string) => void;
+  onModelChange: (model: string) => void;
   onDraftChange: (value: string) => void;
   onSend: () => void;
   onToggleMic: () => void;
+  onClearMessages: () => void;
 }
 
 interface HistoryEntry {
@@ -86,10 +98,13 @@ export function Chat({
   isSending,
   agents,
   selectedAgent,
+  selectedModel,
   onAgentChange,
+  onModelChange,
   onDraftChange,
   onSend,
-  onToggleMic
+  onToggleMic,
+  onClearMessages
 }: ChatProps): JSX.Element {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0.14);
@@ -130,6 +145,17 @@ export function Chat({
         </div>
         <div className="jarvis-chat-header__right">
           <select
+            className="jarvis-model-select"
+            value={selectedModel}
+            onChange={(event) => onModelChange(event.target.value)}
+          >
+            {MODEL_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <select
             className="jarvis-agent-select"
             value={selectedAgent}
             onChange={(event) => onAgentChange(event.target.value)}
@@ -144,7 +170,10 @@ export function Chat({
           <button
             type="button"
             className="jarvis-clear-btn"
-            onClick={() => onDraftChange("")}
+            onClick={() => {
+              onClearMessages();
+              onAgentChange("");
+            }}
           >
             Clear
           </button>
@@ -210,7 +239,7 @@ export function Chat({
             </article>
           ))
         )}
-        {isSending && (
+        {isSending && !messages.some((m) => m.role === "assistant" && m.streaming) && (
           <article className="jarvis-message-wrap left fade-slide-up">
             <div className="jarvis-message jarvis-message-assistant">
               <div className="jarvis-msg-agent-header">
@@ -228,7 +257,7 @@ export function Chat({
       </main>
 
       <footer className="jarvis-chat-footer">
-        <VoiceVisualizer state={visualizerState} level={audioLevel} />
+        {isRecording && <VoiceVisualizer state={visualizerState} level={audioLevel} />}
 
         <form
           className="jarvis-input-form"

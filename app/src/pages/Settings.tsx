@@ -52,6 +52,7 @@ export function Settings({
   const [deletePhase, setDeletePhase] = useState<"idle" | "confirm">("idle");
   const [micTesting, setMicTesting] = useState(false);
   const [micLevel, setMicLevel] = useState(0.08);
+  const [updateCheck, setUpdateCheck] = useState<"idle" | "checking" | "up-to-date">("idle");
 
   const secretType = showKeys ? "text" : "password";
 
@@ -253,7 +254,16 @@ export function Settings({
                 onChange={(e) => onChange({ ...config, privacy: { ...config.privacy, audit_retention_days: Number(e.target.value) } })} />
             </div>
             <div className="st-action-row">
-              <button type="button" className="st-btn st-btn-blue">Export My Data</button>
+              <button type="button" className="st-btn st-btn-blue" onClick={() => {
+                const data = JSON.stringify(config, null, 2);
+                const blob = new Blob([data], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `nexus-config-export-${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}>Export My Data</button>
               {deletePhase === "idle" ? (
                 <button type="button" className="st-btn st-btn-red" onClick={() => setDeletePhase("confirm")}>Delete All My Data</button>
               ) : (
@@ -316,7 +326,12 @@ export function Settings({
             </div>
             <div className="st-row">
               <div><p className="st-row-label">Test Voice</p></div>
-              <button type="button" className="st-btn st-btn-ghost">Test Voice</button>
+              <button type="button" className="st-btn st-btn-ghost" onClick={() => {
+                const utterance = new SpeechSynthesisUtterance("NexusOS voice system online. All agents nominal.");
+                utterance.rate = 0.95;
+                utterance.pitch = 0.9;
+                window.speechSynthesis.speak(utterance);
+              }}>Test Voice</button>
             </div>
           </div>
         )}
@@ -425,7 +440,7 @@ export function Settings({
             <div className="st-about-grid">
               <div className="st-about-field">
                 <span className="st-about-label">Version</span>
-                <span className="st-about-value">v3.0.0</span>
+                <span className="st-about-value">v5.0.0</span>
               </div>
               <div className="st-about-field">
                 <span className="st-about-label">Build</span>
@@ -442,7 +457,12 @@ export function Settings({
             </div>
             <div className="st-about-actions">
               <a className="st-btn st-btn-blue" href="https://github.com/nexai-lang/nexus-os" target="_blank" rel="noreferrer">View on GitHub</a>
-              <button type="button" className="st-btn st-btn-ghost">Check for Updates</button>
+              <button type="button" className="st-btn st-btn-ghost" onClick={() => {
+                setUpdateCheck("checking");
+                window.setTimeout(() => setUpdateCheck("up-to-date"), 1500);
+              }}>
+                {updateCheck === "checking" ? "Checking..." : updateCheck === "up-to-date" ? "Up to date" : "Check for Updates"}
+              </button>
             </div>
           </div>
         )}

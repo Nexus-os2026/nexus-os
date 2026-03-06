@@ -7,21 +7,21 @@ interface AuditProps {
 }
 
 const AGENT_NAMES: Record<string, string> = {
-  "agent-coder": "Coder",
-  "agent-designer": "Designer",
-  "agent-screen-poster": "Screen Poster",
-  "agent-web-builder": "Web Builder",
-  "agent-workflow-studio": "Workflow Studio",
-  "agent-self-improve": "Self-Improve"
+  "a0000000-0000-4000-8000-000000000001": "Coder",
+  "a0000000-0000-4000-8000-000000000002": "Designer",
+  "a0000000-0000-4000-8000-000000000003": "Screen Poster",
+  "a0000000-0000-4000-8000-000000000004": "Web Builder",
+  "a0000000-0000-4000-8000-000000000005": "Workflow Studio",
+  "a0000000-0000-4000-8000-000000000006": "Self-Improve"
 };
 
 const AGENT_COLORS: Record<string, string> = {
-  "agent-coder": "#3b82f6",
-  "agent-designer": "#8b5cf6",
-  "agent-screen-poster": "#10b981",
-  "agent-web-builder": "#f59e0b",
-  "agent-workflow-studio": "#00ffd5",
-  "agent-self-improve": "#ef4444"
+  "a0000000-0000-4000-8000-000000000001": "#3b82f6",
+  "a0000000-0000-4000-8000-000000000002": "#8b5cf6",
+  "a0000000-0000-4000-8000-000000000003": "#10b981",
+  "a0000000-0000-4000-8000-000000000004": "#f59e0b",
+  "a0000000-0000-4000-8000-000000000005": "#00ffd5",
+  "a0000000-0000-4000-8000-000000000006": "#ef4444"
 };
 
 type StatusType = "Success" | "Failed" | "Pending";

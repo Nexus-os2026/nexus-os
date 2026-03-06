@@ -1,3 +1,4 @@
+import { useState } from "react";
 import "./compliance-dashboard.css";
 
 interface ComplianceControl {
@@ -30,6 +31,28 @@ const STATUS_BG: Record<string, string> = {
 export default function ComplianceDashboard(): JSX.Element {
   const satisfied = SOC2_CONTROLS.filter((c) => c.status === "Satisfied").length;
   const total = SOC2_CONTROLS.length;
+  const [reportGenerated, setReportGenerated] = useState(false);
+
+  function handleGenerateReport(): void {
+    const lines = [
+      "SOC 2 Type II Compliance Report",
+      `Generated: ${new Date().toISOString()}`,
+      `Framework: Trust Services Criteria`,
+      "",
+      `Overall: ${satisfied}/${total} controls satisfied`,
+      "",
+      ...SOC2_CONTROLS.map((c) => `${c.id} - ${c.status} (${c.evidenceCount} evidence items) - ${c.description}`),
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `nexus-soc2-report-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setReportGenerated(true);
+    window.setTimeout(() => setReportGenerated(false), 3000);
+  }
 
   return (
     <section className="cd-hub">
@@ -45,7 +68,9 @@ export default function ComplianceDashboard(): JSX.Element {
         <p className="cd-summary-text">
           <span className="cd-summary-count">{satisfied}</span> of <span className="cd-summary-count">{total}</span> controls satisfied
         </p>
-        <button type="button" className="cd-generate-btn">Generate Report</button>
+        <button type="button" className="cd-generate-btn" onClick={handleGenerateReport}>
+          {reportGenerated ? "Report Downloaded" : "Generate Report"}
+        </button>
       </div>
 
       <div className="cd-grid">

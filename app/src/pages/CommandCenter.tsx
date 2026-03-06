@@ -13,12 +13,12 @@ interface CommandAgent {
 }
 
 const MOCK_AGENTS: CommandAgent[] = [
-  { id: "agent-coder", name: "Coder", status: "running", autonomy: 3, fuelRemaining: 9200, fuelBudget: 10000, lastAuditEvent: "ToolExec: fix_bug", lastAuditTimestamp: 1700100470 },
-  { id: "agent-screen-poster", name: "Screen Poster", status: "paused", autonomy: 2, fuelRemaining: 4100, fuelBudget: 10000, lastAuditEvent: "ApprovalRequired: social.post", lastAuditTimestamp: 1700100410 },
-  { id: "agent-web-builder", name: "Web Builder", status: "running", autonomy: 3, fuelRemaining: 7800, fuelBudget: 10000, lastAuditEvent: "ToolExec: deploy staging", lastAuditTimestamp: 1700100430 },
-  { id: "agent-workflow-studio", name: "Workflow Studio", status: "stopped", autonomy: 1, fuelRemaining: 2300, fuelBudget: 10000, lastAuditEvent: "StateChange: Stopped", lastAuditTimestamp: 1700100460 },
-  { id: "agent-self-improve", name: "Self-Improve", status: "running", autonomy: 4, fuelRemaining: 8400, fuelBudget: 10000, lastAuditEvent: "ToolExec: optimize_prompt", lastAuditTimestamp: 1700100455 },
-  { id: "agent-designer", name: "Designer", status: "running", autonomy: 2, fuelRemaining: 6500, fuelBudget: 10000, lastAuditEvent: "ToolExec: image_gen", lastAuditTimestamp: 1700100380 },
+  { id: "a0000000-0000-4000-8000-000000000001", name: "Coder", status: "running", autonomy: 3, fuelRemaining: 9200, fuelBudget: 10000, lastAuditEvent: "ToolExec: fix_bug", lastAuditTimestamp: 1700100470 },
+  { id: "a0000000-0000-4000-8000-000000000003", name: "Screen Poster", status: "paused", autonomy: 2, fuelRemaining: 4100, fuelBudget: 10000, lastAuditEvent: "ApprovalRequired: social.post", lastAuditTimestamp: 1700100410 },
+  { id: "a0000000-0000-4000-8000-000000000004", name: "Web Builder", status: "running", autonomy: 3, fuelRemaining: 7800, fuelBudget: 10000, lastAuditEvent: "ToolExec: deploy staging", lastAuditTimestamp: 1700100430 },
+  { id: "a0000000-0000-4000-8000-000000000005", name: "Workflow Studio", status: "stopped", autonomy: 1, fuelRemaining: 2300, fuelBudget: 10000, lastAuditEvent: "StateChange: Stopped", lastAuditTimestamp: 1700100460 },
+  { id: "a0000000-0000-4000-8000-000000000006", name: "Self-Improve", status: "running", autonomy: 4, fuelRemaining: 8400, fuelBudget: 10000, lastAuditEvent: "ToolExec: optimize_prompt", lastAuditTimestamp: 1700100455 },
+  { id: "a0000000-0000-4000-8000-000000000002", name: "Designer", status: "running", autonomy: 2, fuelRemaining: 6500, fuelBudget: 10000, lastAuditEvent: "ToolExec: image_gen", lastAuditTimestamp: 1700100380 },
 ];
 
 const STATUS_COLORS: Record<string, string> = {
@@ -98,7 +98,15 @@ export default function CommandCenter(): JSX.Element {
                   disabled={agent.status === "running"}
                   onClick={() => setStatus(agent.id, "running")}
                 >
-                  Start
+                  {agent.status === "paused" ? "Resume" : "Start"}
+                </button>
+                <button
+                  type="button"
+                  className="cc-btn cc-btn-stop"
+                  disabled={agent.status === "paused" || agent.status === "stopped"}
+                  onClick={() => setStatus(agent.id, "paused")}
+                >
+                  Pause
                 </button>
                 <button
                   type="button"
@@ -111,6 +119,7 @@ export default function CommandCenter(): JSX.Element {
                 <button
                   type="button"
                   className="cc-btn cc-btn-kill"
+                  disabled={agent.status === "stopped"}
                   onClick={() => setStatus(agent.id, "stopped")}
                 >
                   Kill

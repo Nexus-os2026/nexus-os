@@ -117,45 +117,55 @@ function defaultConfig(): NexusConfig {
   };
 }
 
+// Stable mock agent IDs — deterministic UUIDs so all pages reference the same agents
+const MOCK_AGENT_IDS = {
+  coder: "a0000000-0000-4000-8000-000000000001",
+  designer: "a0000000-0000-4000-8000-000000000002",
+  screenPoster: "a0000000-0000-4000-8000-000000000003",
+  webBuilder: "a0000000-0000-4000-8000-000000000004",
+  workflowStudio: "a0000000-0000-4000-8000-000000000005",
+  selfImprove: "a0000000-0000-4000-8000-000000000006",
+};
+
 function mockAgents(): AgentSummary[] {
   return [
     {
-      id: "agent-coder",
+      id: MOCK_AGENT_IDS.coder,
       name: "Coder",
       status: "Running",
       fuel_remaining: 9200,
       last_action: "refactored auth middleware"
     },
     {
-      id: "agent-designer",
+      id: MOCK_AGENT_IDS.designer,
       name: "Designer",
       status: "Running",
       fuel_remaining: 6500,
       last_action: "generated landing page mockup"
     },
     {
-      id: "agent-screen-poster",
+      id: MOCK_AGENT_IDS.screenPoster,
       name: "Screen Poster",
       status: "Paused",
       fuel_remaining: 4100,
       last_action: "awaiting human approval for X post"
     },
     {
-      id: "agent-web-builder",
+      id: MOCK_AGENT_IDS.webBuilder,
       name: "Web Builder",
       status: "Running",
       fuel_remaining: 7800,
       last_action: "deployed staging build v2.4.1"
     },
     {
-      id: "agent-workflow-studio",
+      id: MOCK_AGENT_IDS.workflowStudio,
       name: "Workflow Studio",
       status: "Stopped",
       fuel_remaining: 2300,
       last_action: "completed daily analytics pipeline"
     },
     {
-      id: "agent-self-improve",
+      id: MOCK_AGENT_IDS.selfImprove,
       name: "Self-Improve",
       status: "Running",
       fuel_remaining: 8400,
@@ -166,7 +176,7 @@ function mockAgents(): AgentSummary[] {
 
 function mockAudit(): AuditEventRow[] {
   const base = 1_700_100_000;
-  const agents = ["agent-coder", "agent-designer", "agent-screen-poster", "agent-web-builder", "agent-workflow-studio", "agent-self-improve"];
+  const agents = [MOCK_AGENT_IDS.coder, MOCK_AGENT_IDS.designer, MOCK_AGENT_IDS.screenPoster, MOCK_AGENT_IDS.webBuilder, MOCK_AGENT_IDS.workflowStudio, MOCK_AGENT_IDS.selfImprove];
   const events: AuditEventRow[] = [
     { event_id: "evt-01", timestamp: base + 1, agent_id: agents[0], event_type: "StateChange", payload: { state: "Running", trigger: "startup" }, previous_hash: "genesis", hash: "a1b2c3" },
     { event_id: "evt-02", timestamp: base + 12, agent_id: agents[0], event_type: "LlmCall", payload: { model: "claude-sonnet-4-5", tokens: 1840, cost: 0.012 }, previous_hash: "a1b2c3", hash: "d4e5f6" },
@@ -265,6 +275,7 @@ export default function App(): JSX.Element {
   const [config, setConfig] = useState<NexusConfig>(defaultConfig);
   const [draft, setDraft] = useState("");
   const [selectedAgent, setSelectedAgent] = useState("");
+  const [selectedModel, setSelectedModel] = useState("mock");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -572,12 +583,12 @@ export default function App(): JSX.Element {
 
   const AGENT_PROMPTS: Record<string, string> = {
     "": "You are NexusOS, a governed AI operating system. You help users with coding, design, automation, and content. Be concise and helpful.",
-    "agent-coder": "You are the NexusOS Coder Agent. You write clean code in Rust, TypeScript, and Python. You analyze architecture, review code, fix bugs, and run tests. Show code in fenced blocks.",
-    "agent-designer": "You are the NexusOS Designer Agent. You create UI components, design systems, and design tokens. Output React/TypeScript.",
-    "agent-screen-poster": "You are the NexusOS Screen Poster Agent. You draft social media posts for X, Instagram, Facebook, Reddit. Optimize for engagement.",
-    "agent-web-builder": "You are the NexusOS Web Builder Agent. You generate websites from descriptions using React and modern web tech.",
-    "agent-workflow-studio": "You are the NexusOS Workflow Studio Agent. You design automation pipelines with DAG nodes, retries, and checkpoints.",
-    "agent-self-improve": "You are the NexusOS Self-Improve Agent. You analyze performance metrics and optimize prompts.",
+    [MOCK_AGENT_IDS.coder]: "You are the NexusOS Coder Agent. You write clean code in Rust, TypeScript, and Python. You analyze architecture, review code, fix bugs, and run tests. Show code in fenced blocks.",
+    [MOCK_AGENT_IDS.designer]: "You are the NexusOS Designer Agent. You create UI components, design systems, and design tokens. Output React/TypeScript.",
+    [MOCK_AGENT_IDS.screenPoster]: "You are the NexusOS Screen Poster Agent. You draft social media posts for X, Instagram, Facebook, Reddit. Optimize for engagement.",
+    [MOCK_AGENT_IDS.webBuilder]: "You are the NexusOS Web Builder Agent. You generate websites from descriptions using React and modern web tech.",
+    [MOCK_AGENT_IDS.workflowStudio]: "You are the NexusOS Workflow Studio Agent. You design automation pipelines with DAG nodes, retries, and checkpoints.",
+    [MOCK_AGENT_IDS.selfImprove]: "You are the NexusOS Self-Improve Agent. You analyze performance metrics and optimize prompts.",
   };
 
   function getModelForAgent(agentId: string): string {
@@ -615,7 +626,7 @@ export default function App(): JSX.Element {
 
     setIsSending(true);
     const assistantId = makeId();
-    const model = getModelForAgent(selectedAgent);
+    const model = selectedModel === "mock" ? getModelForAgent(selectedAgent) : selectedModel;
     setMessages((prev) => [
       ...prev,
       {
@@ -903,13 +914,19 @@ export default function App(): JSX.Element {
           isSending={isSending}
           agents={agents}
           selectedAgent={selectedAgent}
+          selectedModel={selectedModel}
           onAgentChange={setSelectedAgent}
+          onModelChange={setSelectedModel}
           onDraftChange={setDraft}
           onSend={() => {
             void handleSend();
           }}
           onToggleMic={() => {
             void handleToggleMic();
+          }}
+          onClearMessages={() => {
+            setMessages([]);
+            setDraft("");
           }}
         />
       );
@@ -1001,7 +1018,7 @@ export default function App(): JSX.Element {
             setPage(id as Page);
             play("click");
           }}
-          version="v3.0.0"
+          version="v5.0.0"
         />
 
         <div className="flex min-h-screen flex-1 flex-col">
@@ -1082,6 +1099,10 @@ export default function App(): JSX.Element {
         state={overlay}
         onDismiss={() => {
           void disableJarvisMode();
+        }}
+        onTranscript={(text) => {
+          setOverlay((prev) => ({ ...prev, transcription: text }));
+          setDraft(text);
         }}
       />
 

@@ -102,19 +102,57 @@ function nodeStatusColor(status: string): string {
 
 export function Workflows(): JSX.Element {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [workflows, setWorkflows] = useState<WorkflowDef[]>(WORKFLOWS);
+  const [runHistory, setRunHistory] = useState<RunHistoryEntry[]>(RUN_HISTORY);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  function handleRunNow(wfId: string): void {
+    const wf = workflows.find((w) => w.id === wfId);
+    if (!wf) return;
+    setWorkflows((prev) =>
+      prev.map((w) =>
+        w.id === wfId
+          ? { ...w, lastRun: { status: "success", when: "just now" }, nodes: w.nodes.map((n) => ({ ...n, status: "success" as const })) }
+          : w
+      )
+    );
+    const now = new Date();
+    const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    setRunHistory((prev) => [
+      { workflow: wf.name, startedAt: ts, duration: `${Math.floor(Math.random() * 3) + 1}m ${Math.floor(Math.random() * 59)}s`, status: "success", nodesCompleted: `${wf.nodeCount}/${wf.nodeCount}` },
+      ...prev
+    ]);
+  }
+
+  function handleCreateWorkflow(): void {
+    const id = `wf-new-${Date.now()}`;
+    const newWf: WorkflowDef = {
+      id,
+      name: "New Workflow",
+      description: "Untitled workflow -- click Edit to configure",
+      nodeCount: 2,
+      lastRun: { status: "never", when: "Never run" },
+      nodes: [
+        { name: "Start", status: "idle" },
+        { name: "End", status: "idle" }
+      ]
+    };
+    setWorkflows((prev) => [...prev, newWf]);
+    setEditingId(id);
+  }
 
   return (
     <section className="wf-engine">
       <header className="wf-header">
         <div>
-          <h2 className="wf-title">WORKFLOW ENGINE // {WORKFLOWS.length} WORKFLOWS</h2>
+          <h2 className="wf-title">WORKFLOW ENGINE // {workflows.length} WORKFLOWS</h2>
           <p className="wf-subtitle">Visual DAG automation pipelines with execution history</p>
         </div>
-        <button type="button" className="wf-create-btn">+ CREATE WORKFLOW</button>
+        <button type="button" className="wf-create-btn" onClick={handleCreateWorkflow}>+ CREATE WORKFLOW</button>
       </header>
 
       <div className="wf-grid">
-        {WORKFLOWS.map((wf) => {
+        {workflows.map((wf) => {
           const expanded = expandedId === wf.id;
           const statusClass = wf.lastRun.status === "success" ? "success" : wf.lastRun.status === "failed" ? "failed" : "never";
           return (
@@ -138,8 +176,10 @@ export function Workflows(): JSX.Element {
                   <p className="wf-card-detail">{wf.lastRun.detail}</p>
                 )}
                 <div className="wf-card-actions">
-                  <button type="button" className="wf-action-btn wf-action-run">Run Now</button>
-                  <button type="button" className="wf-action-btn wf-action-edit">Edit</button>
+                  <button type="button" className="wf-action-btn wf-action-run" onClick={() => handleRunNow(wf.id)}>Run Now</button>
+                  <button type="button" className="wf-action-btn wf-action-edit" onClick={() => setEditingId(editingId === wf.id ? null : wf.id)}>
+                    {editingId === wf.id ? "Done" : "Edit"}
+                  </button>
                   <button
                     type="button"
                     className="wf-action-btn wf-action-logs"
@@ -186,7 +226,7 @@ export function Workflows(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {RUN_HISTORY.map((entry, idx) => (
+              {runHistory.map((entry, idx) => (
                 <tr key={idx} className={idx % 2 === 0 ? "even" : "odd"}>
                   <td>{entry.workflow}</td>
                   <td className="mono">{entry.startedAt}</td>
