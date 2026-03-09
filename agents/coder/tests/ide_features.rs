@@ -20,17 +20,24 @@ fn test_safe_command_execution() {
     let mut executor =
         TerminalExecutor::with_capabilities_and_autonomy(capabilities, AutonomyLevel::L1);
 
-    let request_id =
-        match executor.execute("cargo --version", project.path(), Some(Duration::from_secs(10))) {
-            Err(CommandError::ApprovalRequired(request_id)) => request_id,
-            other => panic!("expected approval request for terminal command, got: {other:?}"),
-        };
+    let request_id = match executor.execute(
+        "cargo --version",
+        project.path(),
+        Some(Duration::from_secs(10)),
+    ) {
+        Err(CommandError::ApprovalRequired(request_id)) => request_id,
+        other => panic!("expected approval request for terminal command, got: {other:?}"),
+    };
     executor
         .approve_request(request_id.as_str(), "approver.a")
         .expect("approval should succeed");
 
     let result = executor
-        .execute("cargo --version", project.path(), Some(Duration::from_secs(10)))
+        .execute(
+            "cargo --version",
+            project.path(),
+            Some(Duration::from_secs(10)),
+        )
         .expect("cargo --version should execute successfully after approval");
     assert_eq!(result.exit_code, 0);
     assert!(
