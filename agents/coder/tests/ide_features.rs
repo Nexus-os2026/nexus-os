@@ -11,7 +11,9 @@ use std::process::Command;
 use std::time::Duration;
 use tempfile::tempdir;
 
+// Requires shell environment, skipped in minimal CI containers
 #[test]
+#[ignore]
 fn test_safe_command_execution() {
     let project = tempdir().expect("tempdir must be created");
 
