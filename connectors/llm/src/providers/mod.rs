@@ -7,11 +7,15 @@ use std::process::Command;
 
 pub mod claude;
 pub mod deepseek;
+#[cfg(feature = "local-slm")]
+pub mod local_slm;
 pub mod mock;
 pub mod ollama;
 
 pub use claude::ClaudeProvider;
 pub use deepseek::DeepSeekProvider;
+#[cfg(feature = "local-slm")]
+pub use local_slm::LocalSlmProvider;
 pub use mock::MockProvider;
 pub use ollama::OllamaProvider;
 

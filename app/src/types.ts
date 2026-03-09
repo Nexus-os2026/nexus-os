@@ -1,12 +1,18 @@
 export type AgentStatus = "Created" | "Starting" | "Running" | "Paused" | "Stopping" | "Stopped" | "Destroyed";
 
+export type SandboxRuntime = "wasmtime" | "in-process" | "none";
+
 export interface AgentSummary {
   id: string;
   name: string;
   status: AgentStatus;
   fuel_remaining: number;
+  fuel_budget?: number;
   last_action: string;
   isSystem?: boolean;
+  sandbox_runtime?: SandboxRuntime;
+  memory_usage_bytes?: number;
+  capabilities?: string[];
 }
 
 export interface AuditEventRow {
@@ -179,4 +185,52 @@ export interface SystemInfo {
   ram_used_gb: number;
   ram_total_gb: number;
   cpu_name: string;
+}
+
+export type GovernanceRouting = "local" | "cloud" | "fallback";
+
+export interface SlmStatus {
+  loaded: boolean;
+  model_id: string | null;
+  ram_usage_mb: number;
+  avg_latency_ms: number;
+  total_queries: number;
+  governance_routing: GovernanceRouting;
+}
+
+export type RiskLevel = "low" | "medium" | "high" | "critical";
+
+export interface ResourceImpact {
+  disk_bytes_delta: number;
+  fuel_cost: number;
+  llm_calls: number;
+  network_calls: number;
+  file_operations: number;
+}
+
+export interface ActionPreviewItem {
+  type: "file_change" | "network_call" | "data_modification" | "llm_call";
+  path?: string;
+  change_kind?: string;
+  size_before?: number;
+  size_after?: number;
+  preview?: string;
+  target?: string;
+  method?: string;
+  estimated_bytes?: number;
+  resource?: string;
+  description?: string;
+  prompt_len?: number;
+  max_tokens?: number;
+  estimated_fuel?: number;
+}
+
+export interface SimulationPreview {
+  simulation_id: string;
+  agent_id: string;
+  operation: string;
+  predicted_changes: ActionPreviewItem[];
+  resource_impact: ResourceImpact;
+  risk_level: RiskLevel;
+  summary: string;
 }

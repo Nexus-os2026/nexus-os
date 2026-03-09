@@ -21,6 +21,14 @@ pub enum MessageKind {
     DeltaSync,
     JoinRequest,
     LeaveNotice,
+    /// Announce latest chain state: latest_hash + sequence_number in payload.
+    GossipAnnounce,
+    /// Request blocks in a sequence range: from_sequence + to_sequence in payload.
+    GossipRequestBlocks,
+    /// Send serialized blocks in response to a request.
+    GossipSendBlocks,
+    /// Alert that a block at a given sequence has mismatched hash.
+    GossipTamperAlert,
 }
 
 pub trait Transport: Send + Sync {

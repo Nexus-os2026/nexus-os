@@ -55,7 +55,8 @@ See .claude/roadmap/ for implementation plans:
 - 02-v4-distributed.md (DONE - cross-node replication, quorum, federated audit, marketplace)
 - 03-v5-ecosystem.md (DONE - plugin SDK, enterprise RBAC/SSO, cloud scaffolding)
 - 04-v6-intelligence.md (DONE - multi-agent collaboration, delegation, adaptive governance)
-- 05-v5-production-ready.md (NEXT - WASM sandbox, real networking, CLI, desktop UI, docs, E2E tests)
+- 05-v5-production-ready.md (DONE - WASM sandbox, real networking, CLI, desktop UI, docs, E2E tests)
+- 06-v6-next-era.md (NEXT - real Wasm sandboxing, speculative execution, local SLM, distributed audit, permission dashboard)
 
 ## Workflow Rules
 

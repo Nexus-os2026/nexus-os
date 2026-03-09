@@ -15,16 +15,26 @@ pub mod context;
 pub mod manifest;
 pub mod prelude;
 pub mod sandbox;
+pub mod shadow_sandbox;
 pub mod testing;
+pub mod wasm_agent;
+pub mod wasm_signature;
+pub mod wasmtime_host_functions;
+pub mod wasmtime_sandbox;
 
 pub use agent_trait::{AgentOutput, NexusAgent};
-pub use context::AgentContext;
+pub use context::{AgentContext, ContextSideEffect};
 pub use manifest::ManifestBuilder;
 pub use sandbox::{
     HostCallResult, HostFunction, InProcessSandbox, SandboxConfig, SandboxError, SandboxResult,
     SandboxRuntime,
 };
 pub use testing::TestHarness;
+pub use shadow_sandbox::{SafetyVerdict, ShadowResult, ShadowSandbox, SideEffect, ThreatDetector};
+pub use wasm_agent::WasmAgent;
+pub use wasm_signature::{SignaturePolicy, SignatureVerification};
+pub use wasmtime_host_functions::{SpeculativeDecision, SpeculativePolicy};
+pub use wasmtime_sandbox::{WasmAgentState, WasmtimeSandbox};
 
 // Re-export core kernel modules at SDK top level for convenience.
 pub use nexus_kernel::audit;

@@ -19,4 +19,5 @@ pub mod privacy;
 pub mod redaction;
 pub mod replay;
 pub mod safety_supervisor;
+pub mod speculative;
 pub mod supervisor;

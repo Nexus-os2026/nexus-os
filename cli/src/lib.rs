@@ -27,6 +27,14 @@ pub enum TopLevelCommand {
         #[command(subcommand)]
         command: AgentCommand,
     },
+    Sandbox {
+        #[command(subcommand)]
+        command: SandboxCommand,
+    },
+    Simulation {
+        #[command(subcommand)]
+        command: SimulationCommand,
+    },
     Voice {
         #[command(subcommand)]
         command: VoiceCommand,
@@ -38,6 +46,14 @@ pub enum TopLevelCommand {
     SelfImprove {
         #[command(subcommand)]
         command: SelfImproveCommand,
+    },
+    Model {
+        #[command(subcommand)]
+        command: ModelCommand,
+    },
+    Governance {
+        #[command(subcommand)]
+        command: GovernanceCommand,
     },
 }
 
@@ -80,6 +96,18 @@ pub enum VoiceCommand {
 }
 
 #[derive(Debug, Subcommand)]
+pub enum SandboxCommand {
+    /// Show sandbox runtime status: runtime type, active agents, fuel usage, memory, capabilities
+    Status,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SimulationCommand {
+    /// Show speculative execution engine status: pending simulations, risk levels
+    Status,
+}
+
+#[derive(Debug, Subcommand)]
 pub enum SelfImproveCommand {
     Run {
         #[arg(long)]
@@ -87,12 +115,45 @@ pub enum SelfImproveCommand {
     },
 }
 
+#[derive(Debug, Subcommand)]
+pub enum ModelCommand {
+    /// List available and downloaded local SLM models
+    List,
+    /// Download a model from HuggingFace
+    Download {
+        model_id: String,
+    },
+    /// Load a downloaded model into memory
+    Load {
+        model_id: String,
+    },
+    /// Unload the active model from memory
+    Unload,
+    /// Show loaded model status, RAM usage, and inference stats
+    Status,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum GovernanceCommand {
+    /// Run a governance task locally (pii_detection, prompt_safety, capability_risk, content_classification)
+    Test {
+        /// Task type: pii_detection, prompt_safety, capability_risk, content_classification
+        task_type: String,
+        /// Input text to evaluate
+        input: String,
+    },
+}
+
 pub fn execute_command(cli: Cli) -> Result<String, String> {
     match cli.command {
         TopLevelCommand::Agent { command } => execute_agent_command(command),
+        TopLevelCommand::Sandbox { command } => execute_sandbox_command(command),
+        TopLevelCommand::Simulation { command } => execute_simulation_command(command),
         TopLevelCommand::Voice { command } => execute_voice_command(command),
         TopLevelCommand::Setup { check } => setup::run_setup(check),
         TopLevelCommand::SelfImprove { command } => execute_self_improve_command(command),
+        TopLevelCommand::Model { command } => execute_model_command(command),
+        TopLevelCommand::Governance { command } => execute_governance_command(command),
     }
 }
 
@@ -113,6 +174,138 @@ pub fn execute_agent_command(command: AgentCommand) -> Result<String, String> {
             Ok(format!("Showing audit trail for agent '{agent_id}'"))
         }
     }
+}
+
+pub fn execute_sandbox_command(command: SandboxCommand) -> Result<String, String> {
+    match command {
+        SandboxCommand::Status => sandbox_status(),
+    }
+}
+
+fn sandbox_status() -> Result<String, String> {
+    use nexus_kernel::supervisor::Supervisor;
+
+    let supervisor = Supervisor::new();
+
+    let mut output = String::new();
+    output.push_str("Nexus OS Sandbox Status\n");
+    output.push_str("=======================\n\n");
+    output.push_str("Runtime:   wasmtime v27 (real wasm isolation)\n");
+    output.push_str("Policy:    AllowUnsigned (configurable per agent)\n");
+    output.push_str("Engine:    shared Arc<Engine>, one Store per agent\n\n");
+
+    // Query registered agents from supervisor's health check
+    let agents = supervisor.health_check();
+    if agents.is_empty() {
+        output.push_str("Active Agents: (none registered)\n\n");
+        output.push_str("  Use 'nexus agent create <manifest>' to register an agent.\n");
+    } else {
+        output.push_str(&format!("Active Agents: {}\n", agents.len()));
+        output.push_str(&format!(
+            "{:<38} {:<12} {:<10} {}\n",
+            "AGENT ID", "STATUS", "FUEL", "MEMORY"
+        ));
+        output.push_str(&format!("{}\n", "-".repeat(72)));
+
+        for agent in &agents {
+            // Show capabilities if we can access the full handle
+            let caps_display = supervisor
+                .get_agent(agent.id)
+                .map(|h| {
+                    let caps: Vec<&str> = h
+                        .manifest
+                        .capabilities
+                        .iter()
+                        .take(3)
+                        .map(|s| s.as_str())
+                        .collect();
+                    let suffix = if h.manifest.capabilities.len() > 3 {
+                        format!(", +{} more", h.manifest.capabilities.len() - 3)
+                    } else {
+                        String::new()
+                    };
+                    format!("  caps: {}{}", caps.join(", "), suffix)
+                })
+                .unwrap_or_default();
+
+            output.push_str(&format!(
+                "{:<38} {:<12} {:<10} {}\n",
+                agent.id,
+                format!("{:?}", agent.state),
+                agent.remaining_fuel,
+                "isolated",
+            ));
+            if !caps_display.is_empty() {
+                output.push_str(&format!("  {caps_display}\n"));
+            }
+        }
+    }
+
+    output.push_str("\nSandbox Features:\n");
+    output.push_str("  Memory isolation:     Store-per-agent (wasmtime StoreLimits)\n");
+    output.push_str("  Fuel metering:        1 nexus unit = 10,000 wasm instructions\n");
+    output.push_str("  Host functions:       nexus_log, nexus_emit_audit, nexus_llm_query,\n");
+    output.push_str("                        nexus_fs_read, nexus_fs_write, nexus_request_approval\n");
+    output.push_str("  Signature policy:     Ed25519 (configurable: RequireSigned / AllowUnsigned)\n");
+    output.push_str("  Kill gate:            SafetySupervisor three-strike rule\n");
+
+    Ok(output)
+}
+
+pub fn execute_simulation_command(command: SimulationCommand) -> Result<String, String> {
+    match command {
+        SimulationCommand::Status => simulation_status(),
+    }
+}
+
+fn simulation_status() -> Result<String, String> {
+    use nexus_kernel::supervisor::Supervisor;
+
+    let supervisor = Supervisor::new();
+
+    let mut output = String::new();
+    output.push_str("Nexus OS Speculative Execution Engine\n");
+    output.push_str("=====================================\n\n");
+    output.push_str("Engine:          SpeculativeEngine (shadow simulation)\n");
+    output.push_str("Auto-simulate:   Tier2+ operations (TerminalCommand, SocialPost, SelfMutation, Distributed)\n");
+    output.push_str("Risk levels:     Low, Medium, High, Critical\n\n");
+
+    let pending = supervisor.pending_simulations();
+    if pending.is_empty() {
+        output.push_str("Pending Simulations: (none)\n\n");
+        output.push_str("  Simulations are created automatically when Tier2+ operations\n");
+        output.push_str("  require approval. Use 'nexus agent start <id>' to trigger.\n");
+    } else {
+        output.push_str(&format!("Pending Simulations: {}\n", pending.len()));
+        output.push_str(&format!(
+            "{:<20} {:<24} {:<10} {:<8} {}\n",
+            "REQUEST ID", "OPERATION", "RISK", "FUEL", "SUMMARY"
+        ));
+        output.push_str(&format!("{}\n", "-".repeat(90)));
+        for (req_id, result) in &pending {
+            output.push_str(&format!(
+                "{:<20} {:<24} {:<10} {:<8} {}\n",
+                req_id,
+                result.operation.as_str(),
+                result.risk_level.as_str(),
+                result.resource_impact.fuel_cost,
+                &result.summary[..result.summary.len().min(40)],
+            ));
+        }
+    }
+
+    output.push_str("\nSimulation Triggers:\n");
+    output.push_str("  Tier0 (auto-allow):      No simulation\n");
+    output.push_str("  Tier1 (log-only):         No simulation\n");
+    output.push_str("  Tier2 (1 approver):       Auto-simulate before approval\n");
+    output.push_str("  Tier3 (2 approvers):      Auto-simulate before approval\n\n");
+    output.push_str("Risk Derivation:\n");
+    output.push_str("  Low:      Tier0-1 at any autonomy level\n");
+    output.push_str("  Medium:   Tier2 at L0-L3\n");
+    output.push_str("  High:     Tier2 at L4-L5\n");
+    output.push_str("  Critical: Tier3 at any autonomy level\n");
+
+    Ok(output)
 }
 
 fn start_agent(agent_id: &str, dry_run: bool) -> Result<String, String> {
@@ -273,6 +466,48 @@ pub fn create_agent_from_manifest_str(content: &str) -> Result<String, String> {
         "Agent '{}' created successfully (fuel: {})",
         manifest.name, manifest.fuel_budget
     ))
+}
+
+pub fn execute_model_command(command: ModelCommand) -> Result<String, String> {
+    let output = match command {
+        ModelCommand::List => router::route(commands::CliCommand::ModelList),
+        ModelCommand::Download { model_id } => {
+            router::route(commands::CliCommand::ModelDownload { model_id })
+        }
+        ModelCommand::Load { model_id } => {
+            router::route(commands::CliCommand::ModelLoad { model_id })
+        }
+        ModelCommand::Unload => router::route(commands::CliCommand::ModelUnload),
+        ModelCommand::Status => router::route(commands::CliCommand::ModelStatus),
+    };
+    if output.success {
+        let mut result = output.message;
+        if let Some(data) = output.data {
+            result.push('\n');
+            result.push_str(&serde_json::to_string_pretty(&data).unwrap_or_default());
+        }
+        Ok(result)
+    } else {
+        Err(output.message)
+    }
+}
+
+pub fn execute_governance_command(command: GovernanceCommand) -> Result<String, String> {
+    let output = match command {
+        GovernanceCommand::Test { task_type, input } => {
+            router::route(commands::CliCommand::GovernanceTest { task_type, input })
+        }
+    };
+    if output.success {
+        let mut result = output.message;
+        if let Some(data) = output.data {
+            result.push('\n');
+            result.push_str(&serde_json::to_string_pretty(&data).unwrap_or_default());
+        }
+        Ok(result)
+    } else {
+        Err(output.message)
+    }
 }
 
 pub fn execute_voice_command(command: VoiceCommand) -> Result<String, String> {

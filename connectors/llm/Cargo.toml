@@ -11,6 +11,14 @@ path = "src/lib.rs"
 default = []
 real-claude = ["dep:reqwest"]
 real-api-tests = []
+local-slm = [
+    "dep:candle-core",
+    "dep:candle-nn",
+    "dep:candle-transformers",
+    "dep:tokenizers",
+    "dep:hf-hub",
+    "dep:safetensors",
+]
 
 [dependencies]
 nexus-kernel = { path = "../../kernel" }
@@ -19,3 +27,14 @@ serde_json = "1.0"
 sha2 = "0.10"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"], optional = true }
+
+# Local SLM dependencies (behind "local-slm" feature flag)
+candle-core = { version = "0.8", optional = true }
+candle-nn = { version = "0.8", optional = true }
+candle-transformers = { version = "0.8", optional = true }
+tokenizers = { version = "0.20", optional = true, default-features = false, features = ["onig"] }
+hf-hub = { version = "0.3", optional = true }
+safetensors = { version = "0.4", optional = true }
+
+[dev-dependencies]
+nexus-sdk = { path = "../../sdk" }

@@ -9,6 +9,7 @@ use crate::kill_gates::KillGateError;
 use crate::lifecycle::{transition_state, AgentState};
 use crate::manifest::AgentManifest;
 use crate::safety_supervisor::{KpiKind, SafetyAction, SafetySupervisor};
+use crate::speculative::{SimulationResult, SpeculativeEngine};
 use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -39,6 +40,7 @@ pub struct Supervisor {
     fuel_ledgers: HashMap<AgentId, AgentFuelLedger>,
     audit_trail: AuditTrail,
     safety_supervisor: SafetySupervisor,
+    speculative_engine: SpeculativeEngine,
 }
 
 impl Supervisor {
@@ -48,6 +50,7 @@ impl Supervisor {
             fuel_ledgers: HashMap::new(),
             audit_trail: AuditTrail::new(),
             safety_supervisor: SafetySupervisor::default(),
+            speculative_engine: SpeculativeEngine::new(),
         }
     }
 
@@ -493,6 +496,99 @@ impl Supervisor {
         Ok(handle.consent_runtime.pending_requests())
     }
 
+    /// Request consent with automatic speculative simulation for Tier2+ operations.
+    ///
+    /// When the operation requires approval and would normally block, the engine
+    /// forks a shadow state, simulates the action, and attaches the preview to
+    /// the approval request so the human reviewer sees predicted outcomes.
+    pub fn require_consent_with_simulation(
+        &mut self,
+        id: AgentId,
+        operation: GovernedOperation,
+        payload: &[u8],
+    ) -> Result<(), AgentError> {
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+
+        let tier = handle.consent_runtime.policy_engine().required_tier(operation);
+
+        let result = handle
+            .consent_runtime
+            .enforce_operation(operation, id, payload, &mut self.audit_trail);
+
+        match result {
+            Err(crate::consent::ConsentError::ApprovalRequired {
+                request_id,
+                operation: op,
+                required_tier,
+            }) => {
+                // Auto-simulate for Tier2+ operations
+                if SpeculativeEngine::should_simulate(tier) {
+                    let handle = self.agents.get(&id).unwrap();
+                    let snapshot = self.speculative_engine.fork_state(
+                        id,
+                        handle.remaining_fuel,
+                        AutonomyLevel::from_numeric(handle.autonomy_level).unwrap_or_default(),
+                        handle.manifest.capabilities.clone(),
+                        self.audit_trail.events().len(),
+                    );
+                    let sim_result = self.speculative_engine.simulate(
+                        &snapshot,
+                        op,
+                        required_tier,
+                        payload,
+                        &mut self.audit_trail,
+                    );
+                    self.speculative_engine
+                        .attach_to_request(&request_id, sim_result.simulation_id);
+                }
+                Err(AgentError::ApprovalRequired { request_id })
+            }
+            Err(e) => Err(AgentError::from(e)),
+            Ok(()) => {
+                // Action was auto-approved — commit any prior simulation if one existed
+                Ok(())
+            }
+        }
+    }
+
+    /// Approve consent and commit the associated simulation.
+    pub fn approve_consent_with_simulation(
+        &mut self,
+        id: AgentId,
+        request_id: &str,
+        approver_id: &str,
+    ) -> Result<(), AgentError> {
+        self.approve_consent(id, request_id, approver_id)?;
+        self.speculative_engine.commit(request_id);
+        Ok(())
+    }
+
+    /// Deny consent and rollback the associated simulation.
+    pub fn deny_consent_with_simulation(
+        &mut self,
+        id: AgentId,
+        request_id: &str,
+        approver_id: &str,
+    ) -> Result<(), AgentError> {
+        self.deny_consent(id, request_id, approver_id)?;
+        self.speculative_engine
+            .rollback(request_id, &mut self.audit_trail);
+        Ok(())
+    }
+
+    /// Get the simulation preview for a pending approval request.
+    pub fn simulation_for_request(&self, request_id: &str) -> Option<&SimulationResult> {
+        self.speculative_engine.get_for_request(request_id)
+    }
+
+    /// List all pending speculative simulations.
+    pub fn pending_simulations(&self) -> Vec<(&str, &SimulationResult)> {
+        self.speculative_engine.pending_simulations()
+    }
+
     fn consume_fuel(&mut self, id: AgentId, reason: &str) -> Result<(), AgentError> {
         let model_name = {
             let handle = self
@@ -599,5 +695,193 @@ fn autonomy_level_numeric(level: AutonomyLevel) -> u8 {
         AutonomyLevel::L3 => 3,
         AutonomyLevel::L4 => 4,
         AutonomyLevel::L5 => 5,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::consent::GovernedOperation;
+    use crate::manifest::AgentManifest;
+
+    fn test_manifest() -> AgentManifest {
+        AgentManifest {
+            name: "test-agent".to_string(),
+            version: "1.0.0".to_string(),
+            capabilities: vec!["llm.query".to_string(), "fs.read".to_string()],
+            fuel_budget: 10000,
+            autonomy_level: Some(2),
+            consent_policy_path: None,
+            requester_id: None,
+            schedule: None,
+            llm_model: None,
+            fuel_period_id: None,
+            monthly_fuel_cap: None,
+        }
+    }
+
+    fn setup_supervisor_with_agent() -> (Supervisor, AgentId) {
+        let mut sup = Supervisor::new();
+        let id = sup.start_agent(test_manifest()).unwrap();
+        (sup, id)
+    }
+
+    #[test]
+    fn require_consent_with_simulation_tier1_no_simulation() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+        // ToolCall defaults to Tier1 → auto-approved, no simulation
+        let result = sup.require_consent_with_simulation(
+            id,
+            GovernedOperation::ToolCall,
+            b"test",
+        );
+        assert!(result.is_ok());
+        assert!(sup.pending_simulations().is_empty());
+    }
+
+    #[test]
+    fn require_consent_with_simulation_tier2_creates_simulation() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+        // TerminalCommand defaults to Tier2 → requires approval → triggers simulation
+        let result = sup.require_consent_with_simulation(
+            id,
+            GovernedOperation::TerminalCommand,
+            b"rm -rf /tmp/test",
+        );
+        // Should fail with ApprovalRequired
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AgentError::ApprovalRequired { request_id } => {
+                // Simulation should be attached to this request
+                let sim = sup.simulation_for_request(&request_id);
+                assert!(sim.is_some(), "simulation should be attached to request");
+                let sim = sim.unwrap();
+                assert_eq!(sim.operation, GovernedOperation::TerminalCommand);
+                assert!(!sim.predicted_changes.is_empty());
+                assert!(sim.resource_impact.fuel_cost > 0);
+            }
+            other => panic!("expected ApprovalRequired, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn require_consent_with_simulation_tier3_creates_critical_simulation() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+        let result = sup.require_consent_with_simulation(
+            id,
+            GovernedOperation::SelfMutationApply,
+            b"mutation payload",
+        );
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AgentError::ApprovalRequired { request_id } => {
+                let sim = sup.simulation_for_request(&request_id).unwrap();
+                assert_eq!(
+                    sim.risk_level,
+                    crate::speculative::RiskLevel::Critical,
+                    "Tier3 should produce Critical risk"
+                );
+            }
+            other => panic!("expected ApprovalRequired, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn approve_consent_with_simulation_commits() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+        let result = sup.require_consent_with_simulation(
+            id,
+            GovernedOperation::TerminalCommand,
+            b"echo hello",
+        );
+        let request_id = match result.unwrap_err() {
+            AgentError::ApprovalRequired { request_id } => request_id,
+            other => panic!("expected ApprovalRequired, got: {other:?}"),
+        };
+
+        assert!(sup.simulation_for_request(&request_id).is_some());
+
+        // Approve the consent
+        sup.approve_consent_with_simulation(id, &request_id, "admin")
+            .unwrap();
+
+        // Simulation should be cleaned up
+        assert!(sup.simulation_for_request(&request_id).is_none());
+    }
+
+    #[test]
+    fn deny_consent_with_simulation_rollbacks() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+        let result = sup.require_consent_with_simulation(
+            id,
+            GovernedOperation::SocialPostPublish,
+            b"post content",
+        );
+        let request_id = match result.unwrap_err() {
+            AgentError::ApprovalRequired { request_id } => request_id,
+            other => panic!("expected ApprovalRequired, got: {other:?}"),
+        };
+
+        assert!(sup.simulation_for_request(&request_id).is_some());
+
+        // Deny the consent
+        sup.deny_consent_with_simulation(id, &request_id, "admin")
+            .unwrap();
+
+        // Simulation should be cleaned up
+        assert!(sup.simulation_for_request(&request_id).is_none());
+    }
+
+    #[test]
+    fn pending_simulations_lists_multiple() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+
+        // Create two pending simulations
+        let _ = sup.require_consent_with_simulation(
+            id,
+            GovernedOperation::TerminalCommand,
+            b"cmd1",
+        );
+        let _ = sup.require_consent_with_simulation(
+            id,
+            GovernedOperation::SocialPostPublish,
+            b"post",
+        );
+
+        let pending = sup.pending_simulations();
+        assert_eq!(pending.len(), 2);
+    }
+
+    #[test]
+    fn simulation_does_not_modify_agent_fuel() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+        let fuel_before = sup.agents.get(&id).unwrap().remaining_fuel;
+
+        let _ = sup.require_consent_with_simulation(
+            id,
+            GovernedOperation::TerminalCommand,
+            b"heavy command",
+        );
+
+        let fuel_after = sup.agents.get(&id).unwrap().remaining_fuel;
+        assert_eq!(fuel_before, fuel_after, "simulation must not consume real fuel");
+    }
+
+    #[test]
+    fn simulation_audit_trail_records_event() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+        let events_before = sup.audit_trail.events().len();
+
+        let _ = sup.require_consent_with_simulation(
+            id,
+            GovernedOperation::TerminalCommand,
+            b"test",
+        );
+
+        // Simulation should add audit events (consent request + simulation record)
+        assert!(
+            sup.audit_trail.events().len() > events_before,
+            "simulation should append audit events"
+        );
     }
 }

@@ -66,6 +66,12 @@ pub enum CliCommand {
         agent_id: Uuid,
     },
 
+    // Sandbox commands
+    SandboxStatus,
+
+    // Simulation commands
+    SimulationStatus,
+
     // Benchmark commands
     BenchmarkRun,
     BenchmarkReport,
@@ -80,6 +86,40 @@ pub enum CliCommand {
     },
     FinetuneStatus {
         job_id: Uuid,
+    },
+
+    // Model commands (local SLM management)
+    ModelList,
+    ModelDownload {
+        model_id: String,
+    },
+    ModelLoad {
+        model_id: String,
+    },
+    ModelUnload,
+    ModelStatus,
+
+    // Distributed audit commands
+    AuditVerifyChain,
+    AuditVerifyEvent {
+        event_id: Uuid,
+    },
+    AuditDistributedStatus,
+    AuditComplianceReport,
+
+    // Device pairing commands
+    DevicePair {
+        code: String,
+    },
+    DeviceList,
+    DeviceRevoke {
+        node_id: Uuid,
+    },
+
+    // Governance commands
+    GovernanceTest {
+        task_type: String,
+        input: String,
     },
 }
 
@@ -203,6 +243,8 @@ mod tests {
             CliCommand::DelegationList {
                 agent_id: Uuid::new_v4(),
             },
+            CliCommand::SandboxStatus,
+            CliCommand::SimulationStatus,
             CliCommand::BenchmarkRun,
             CliCommand::BenchmarkReport,
             CliCommand::FinetuneCreate {
@@ -215,7 +257,33 @@ mod tests {
             CliCommand::FinetuneStatus {
                 job_id: Uuid::new_v4(),
             },
+            CliCommand::ModelList,
+            CliCommand::ModelDownload {
+                model_id: "tinyllama-1.1b".to_string(),
+            },
+            CliCommand::ModelLoad {
+                model_id: "tinyllama-1.1b".to_string(),
+            },
+            CliCommand::ModelUnload,
+            CliCommand::ModelStatus,
+            CliCommand::AuditVerifyChain,
+            CliCommand::AuditVerifyEvent {
+                event_id: Uuid::new_v4(),
+            },
+            CliCommand::AuditDistributedStatus,
+            CliCommand::AuditComplianceReport,
+            CliCommand::DevicePair {
+                code: "abc123".to_string(),
+            },
+            CliCommand::DeviceList,
+            CliCommand::DeviceRevoke {
+                node_id: Uuid::new_v4(),
+            },
+            CliCommand::GovernanceTest {
+                task_type: "pii_detection".to_string(),
+                input: "test input".to_string(),
+            },
         ];
-        assert_eq!(_cmds.len(), 24);
+        assert_eq!(_cmds.len(), 39);
     }
 }

@@ -13,6 +13,58 @@
 - [x] Phase 3: Ecosystem (SDK, enterprise, cloud)
 - [x] Phase 4: Intelligence (collaboration, delegation, adaptive, fine-tuning)
 - [x] Phase 5: Production (sandbox, networking, CLI, UI, docs, E2E tests)
+- [x] Phase 6.1: Real Wasm Agent Sandboxing (COMPLETE)
+  - WasmtimeSandbox implementing SandboxRuntime trait (wasmtime v27, store-per-agent isolation)
+  - 6 governance-gated host functions delegating through AgentContext (nexus_log, nexus_emit_audit, nexus_llm_query, nexus_fs_read, nexus_fs_write, nexus_request_approval)
+  - Fuel sync with AgentFuelLedger via deduct_wasm_fuel() (1 Nexus fuel = 10,000 wasmtime instructions, round-up)
+  - SafetySupervisor kill_with_reason() integration for descriptive halt reasons
+  - WasmAgent NexusAgent adapter with checkpoint/restore lifecycle
+  - Ed25519 signature verification before wasm compilation (SignaturePolicy: RequireSigned/AllowUnsigned)
+  - `nexus sandbox status` CLI command (25 total CLI commands)
+  - Tauri desktop "Isolated (wasmtime)" badge + fuel usage indicator per agent
+  - 50 new tests (492 total) with zero regressions
+- [x] Phase 6.2: Speculative Execution — Shadow Simulation (COMPLETE - ALL GAPS CLOSED)
+  - SpeculativeEngine in kernel/src/speculative.rs: fork_state, simulate, present_preview, commit/rollback
+  - RiskLevel enum (Low/Medium/High/Critical) synthesized from HitlTier + AutonomyLevel
+  - StateSnapshot: frozen agent state for isolated simulation
+  - SimulationResult: predicted_changes (FileChange, NetworkCall, DataModification, LlmCall), resource_impact, risk_level
+  - Auto-simulation: Tier2+ operations trigger simulation before approval request
+  - Supervisor integration: require_consent_with_simulation(), approve/deny_consent_with_simulation()
+  - simulation_for_request() accessor links simulations to approval requests
+  - `nexus simulation status` CLI command (26 total CLI commands)
+  - SpeculativePreview UI component with risk badge, change list, resource impact, approve/reject buttons
+  - SimulationPreview TypeScript types (RiskLevel, ResourceImpact, ActionPreviewItem, SimulationPreview)
+  - Gap 1 CLOSED: ShadowSandbox forking — disposable wasm sandbox clones AgentContext, runs in isolation, collects SideEffects
+  - Gap 2 CLOSED: Recording mode — AgentContext.enable_recording() captures ContextSideEffect log instead of executing
+  - Gap 3 CLOSED: Host function interception — SpeculativePolicy + check_speculation() gate all 4 host functions (llm_query, fs_read, fs_write, request_approval); Block returns -6, HumanReview returns -7, no policy = exact 6.1 behavior
+  - Gap 4 CLOSED: ThreatDetector with 4 detection categories: (1) path traversal (../, /etc/, /sys/, /proc/), (2) prompt injection (12 patterns), (3) capability escalation (vs manifest), (4) excessive resource (>80% fuel budget). Wired into speculation interception — Dangerous escalates to Block, Suspicious escalates to HumanReview
+  - 10 integration tests in sdk/tests/speculative_shadow_tests.rs exercising full pipeline
+  - 562 total tests with zero regressions
+- [x] Phase 6.3: Local SLM Integration (COMPLETE)
+  - LocalSlmProvider implementing LlmProvider trait with 3-param query(prompt, max_tokens, model)
+  - ModelRegistry with discover/load/unload lifecycle, RAM check, task recommendation
+  - GovernanceSlm with PII detection, prompt safety, capability risk assessment, content classification
+  - GovernanceVerdict enum: Clean, PiiDetected, PromptUnsafe, HighRisk, Sensitive, Inconclusive
+  - Governance-aware ProviderRouter: TaskType (General/Governance), route_task/route_governance prefers local-slm
+  - ML-enhanced ThreatDetector: scan_side_effects_ml() alongside pattern-matching scan_side_effects()
+  - MlScanner trait in SDK for governance model abstraction without circular deps
+  - Feature flag `local-slm` for candle-core/candle-nn/candle-transformers/tokenizers/hf-hub/safetensors
+  - CLI commands: `nexus model list/download/load/unload/status`, `nexus governance test` (32 total CLI commands)
+  - Tauri desktop SlmStatusBadge: model loaded state, latency indicator, governance routing (LOCAL/CLOUD/FALLBACK)
+  - 15 integration tests in connectors/llm/tests/local_slm_integration_tests.rs
+  - 717 total tests with zero regressions
+- [x] Phase 6.4: Distributed Immutable Audit (COMPLETE)
+  - AuditBlock with SHA-256 content-addressable hash chain and Ed25519 signatures
+  - ContentAddressedStore (in-memory) and FileAuditStore (file-backed) persistence
+  - AuditChain with append_block, append_verified_block, verify_integrity, verify_chain, verify_event
+  - TamperResult enum (Clean, ChainBroken, SignatureInvalid, SequenceGap, HashMismatch)
+  - DevicePairingManager with Ed25519 keypair gen/persist, pairing codes, accept/revoke/list
+  - GossipProtocol for block sync between paired devices with tamper detection
+  - VerificationEngine for cross-device verification, chain integrity, SOC2 compliance reports
+  - BlockBatchSink trait in kernel — events flow from AuditTrail through batcher into distributed AuditBlocks
+  - 4 integration tests: 3-chain gossip sync, tamper detection, 3-of-3 verification, kernel→block UUID preservation
+  - CLI commands: audit verify-chain/verify-event/distributed-status/compliance-report, device pair/list/revoke (39 total)
+  - Tauri desktop DistributedAudit page: chain block visualization, device sync status, tamper alert banner
 - [x] Full UI audit: 19 fixes across 12 files
 - [x] Core agents always present with SYSTEM/CUSTOM badges
 - [x] Smart capability auto-detection in agent factory

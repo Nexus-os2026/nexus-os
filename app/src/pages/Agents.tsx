@@ -3,11 +3,11 @@ import { ActivityFeed } from "../components/agents/ActivityFeed";
 import { AgentCard } from "../components/agents/AgentCard";
 import { AgentDetail, type AgentDetailTab } from "../components/agents/AgentDetail";
 import { CreateAgent } from "../components/agents/CreateAgent";
+import { SlmStatusBadge } from "../components/agents/SlmStatusBadge";
 import { HeatMap } from "../components/viz/HeatMap";
 import { NeuralGraph } from "../components/viz/NeuralGraph";
 import { PulseRing } from "../components/viz/PulseRing";
-import { RadialGauge } from "../components/viz/RadialGauge";
-import type { AgentSummary, AuditEventRow } from "../types";
+import type { AgentSummary, AuditEventRow, SlmStatus } from "../types";
 import "./agents.css";
 
 interface AgentsProps {
@@ -42,6 +42,15 @@ export function Agents({
   const [showCreate, setShowCreate] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<AgentDetailTab>("overview");
+
+  const [slmStatus] = useState<SlmStatus>({
+    loaded: false,
+    model_id: null,
+    ram_usage_mb: 0,
+    avg_latency_ms: 0,
+    total_queries: 0,
+    governance_routing: "cloud",
+  });
 
   const activeCount = useMemo(
     () => agents.filter((agent) => agent.status === "Running" || agent.status === "Starting").length,
@@ -185,6 +194,7 @@ export function Agents({
             <span className="mission-stat-label">Avg Fuel</span>
           </div>
         </div>
+        <SlmStatusBadge status={slmStatus} />
       </div>
 
       <main className="mission-agent-grid">

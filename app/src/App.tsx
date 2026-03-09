@@ -48,6 +48,7 @@ import MarketplaceBrowser from "./pages/MarketplaceBrowser";
 import ComplianceDashboard from "./pages/ComplianceDashboard";
 import ClusterStatusPage from "./pages/ClusterStatus";
 import TrustDashboard from "./pages/TrustDashboard";
+import DistributedAudit from "./pages/DistributedAudit";
 import type {
   AgentSummary,
   AuditEventRow,
@@ -62,7 +63,7 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "compliance" | "cluster" | "trust";
+type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "compliance" | "cluster" | "trust" | "distributed-audit";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -77,6 +78,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "compliance", label: "Compliance", icon: "⛨", shortcut: "" },
   { id: "cluster", label: "Cluster", icon: "⬣", shortcut: "" },
   { id: "trust", label: "Trust", icon: "◉", shortcut: "" },
+  { id: "distributed-audit", label: "Chain", icon: "⛓", shortcut: "" },
   { id: "settings", label: "Settings", icon: "⚙", shortcut: "Alt+6" }
 ];
 
@@ -137,48 +139,72 @@ function coreAgents(): AgentSummary[] {
       name: "Coder",
       status: "Running",
       fuel_remaining: 9200,
+      fuel_budget: 10000,
       last_action: "refactored auth middleware",
-      isSystem: true
+      isSystem: true,
+      sandbox_runtime: "wasmtime",
+      memory_usage_bytes: 131072,
+      capabilities: ["llm.query", "fs.read", "fs.write"]
     },
     {
       id: MOCK_AGENT_IDS.designer,
       name: "Designer",
       status: "Running",
       fuel_remaining: 6500,
+      fuel_budget: 10000,
       last_action: "generated landing page mockup",
-      isSystem: true
+      isSystem: true,
+      sandbox_runtime: "wasmtime",
+      memory_usage_bytes: 98304,
+      capabilities: ["llm.query", "fs.read"]
     },
     {
       id: MOCK_AGENT_IDS.screenPoster,
       name: "Screen Poster",
       status: "Paused",
       fuel_remaining: 4100,
+      fuel_budget: 10000,
       last_action: "awaiting human approval for X post",
-      isSystem: true
+      isSystem: true,
+      sandbox_runtime: "wasmtime",
+      memory_usage_bytes: 65536,
+      capabilities: ["llm.query", "fs.read", "request_approval"]
     },
     {
       id: MOCK_AGENT_IDS.webBuilder,
       name: "Web Builder",
       status: "Running",
       fuel_remaining: 7800,
+      fuel_budget: 10000,
       last_action: "deployed staging build v2.4.1",
-      isSystem: true
+      isSystem: true,
+      sandbox_runtime: "wasmtime",
+      memory_usage_bytes: 196608,
+      capabilities: ["llm.query", "fs.read", "fs.write"]
     },
     {
       id: MOCK_AGENT_IDS.workflowStudio,
       name: "Workflow Studio",
       status: "Stopped",
       fuel_remaining: 2300,
+      fuel_budget: 10000,
       last_action: "completed daily analytics pipeline",
-      isSystem: true
+      isSystem: true,
+      sandbox_runtime: "wasmtime",
+      memory_usage_bytes: 0,
+      capabilities: ["llm.query", "fs.read"]
     },
     {
       id: MOCK_AGENT_IDS.selfImprove,
       name: "Self-Improve",
       status: "Running",
       fuel_remaining: 8400,
+      fuel_budget: 10000,
       last_action: "optimized prompt routing latency",
-      isSystem: true
+      isSystem: true,
+      sandbox_runtime: "wasmtime",
+      memory_usage_bytes: 114688,
+      capabilities: ["llm.query", "fs.read", "fs.write", "request_approval"]
     }
   ];
 }
@@ -1018,6 +1044,9 @@ export default function App(): JSX.Element {
     }
     if (page === "trust") {
       return <TrustDashboard />;
+    }
+    if (page === "distributed-audit") {
+      return <DistributedAudit />;
     }
     return (
       <Settings

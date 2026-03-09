@@ -132,6 +132,9 @@ export function AgentCard({
             <span className={`agent-type-badge ${agent.isSystem ? "system" : "custom"}`}>
               {agent.isSystem ? "SYSTEM" : "CUSTOM"}
             </span>
+            {agent.sandbox_runtime === "wasmtime" && (
+              <span className="agent-isolation-badge wasmtime">Isolated (wasmtime)</span>
+            )}
             <span className={`agent-status-badge ${tone}`}>
               <span className="agent-status-dot" />
               {agent.status}
@@ -156,8 +159,24 @@ export function AgentCard({
             </text>
           </svg>
           <span className="agent-gauge-sub">Fuel</span>
+          {agent.fuel_budget != null && agent.fuel_budget > 0 && (
+            <span className="agent-fuel-usage">
+              {agent.fuel_remaining} / {agent.fuel_budget}
+            </span>
+          )}
         </div>
       </header>
+
+      {agent.memory_usage_bytes != null && agent.memory_usage_bytes > 0 && (
+        <p className="agent-card-mem">
+          Mem: {(agent.memory_usage_bytes / 1024).toFixed(0)} KB
+          {agent.capabilities && agent.capabilities.length > 0 && (
+            <> | Caps: {agent.capabilities.slice(0, 3).join(", ")}
+              {agent.capabilities.length > 3 && ` +${agent.capabilities.length - 3}`}
+            </>
+          )}
+        </p>
+      )}
 
       <p className="agent-card-last">Last action: {eventLine}</p>
 
