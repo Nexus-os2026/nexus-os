@@ -5,6 +5,13 @@ rust-tests:
   stage: test
   image: rust:latest
   before_script:
+    - apt-get update && apt-get install -y
+        libgtk-3-dev
+        libwebkit2gtk-4.0-dev
+        libayatana-appindicator3-dev
+        librsvg2-dev
+        libssl-dev
+        pkg-config
     - rustup target add wasm32-wasip1
     - rustup component add rustfmt clippy
   script:
