@@ -26,6 +26,7 @@ import type {
   PermissionRiskLevel,
   PermissionUpdate,
 } from "../types";
+import { CapabilityRequestModal } from "../components/agents/CapabilityRequestModal";
 import "./permission-dashboard.css";
 
 // ── Icon mapping ──
@@ -477,48 +478,15 @@ export function PermissionDashboard({
 
       {/* Capability Request Modal */}
       {requestModalCap && (
-        <div className="perm-modal-backdrop" onClick={() => setRequestModalCap(null)}>
-          <div className="perm-modal perm-request-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Capability Request</h3>
-            <p className="perm-request-reason">Reason: {requestModalCap.reason}</p>
-            <div className="perm-request-comparison">
-              <div className="perm-request-col">
-                <h4>Current Permissions</h4>
-                <ul>
-                  {requestModalCap.current_capabilities.map((c) => (
-                    <li key={c} className="perm-request-cap">{c}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="perm-request-arrow">&rarr;</div>
-              <div className="perm-request-col">
-                <h4>Requested Permissions</h4>
-                <ul>
-                  {requestModalCap.requested_capabilities.map((c) => (
-                    <li key={c} className={`perm-request-cap ${!requestModalCap.current_capabilities.includes(c) ? "perm-request-new" : ""}`}>
-                      {c} {!requestModalCap.current_capabilities.includes(c) && <span className="perm-new-badge">NEW</span>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-            <div className={`perm-request-risk ${RISK_LABELS[requestModalCap.risk_level].className}`}>
-              Risk: {RISK_LABELS[requestModalCap.risk_level].label}
-            </div>
-            <details className="perm-request-explain">
-              <summary>What does this mean?</summary>
-              <p>Granting "{requestModalCap.requested_capability}" allows this agent to perform the associated action. Review the risk level before approving.</p>
-            </details>
-            <div className="perm-modal-actions">
-              <button className="perm-modal-cancel" onClick={() => setRequestModalCap(null)}>Deny</button>
-              <button className="perm-modal-confirm" onClick={async () => {
-                await handleToggle(requestModalCap.requested_capability, true);
-                setRequestModalCap(null);
-                loadData();
-              }}>Approve</button>
-            </div>
-          </div>
-        </div>
+        <CapabilityRequestModal
+          request={requestModalCap}
+          onApprove={async (capKey) => {
+            await handleToggle(capKey, true);
+            setRequestModalCap(null);
+            loadData();
+          }}
+          onDeny={() => setRequestModalCap(null)}
+        />
       )}
 
       {/* Permission Categories */}

@@ -467,6 +467,10 @@ impl PermissionManager {
             }),
         );
 
+        // Flush to distributed audit immediately — permission changes are
+        // high-value events that should not wait for the batch threshold.
+        audit_trail.flush_batcher();
+
         // Build updated manifest
         let mut updated = manifest.clone();
         updated.capabilities = new_caps;
