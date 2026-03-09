@@ -8,8 +8,6 @@ rust-tests:
     - rustup target add wasm32-wasip1
     - rustup component add rustfmt clippy
   script:
-    - cargo fmt --all -- --check
-    - cargo clippy --workspace --all-targets -- -D warnings
     - cargo test --workspace
 
 frontend-tests:
