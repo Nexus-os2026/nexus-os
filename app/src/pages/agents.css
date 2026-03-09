@@ -243,6 +243,11 @@
   color: #9fd2ff;
 }
 
+.agent-action-btn.permissions {
+  border-color: rgba(0, 200, 212, 0.45);
+  color: #00f0ff;
+}
+
 .agent-action-btn.delete {
   border-color: rgba(255, 0, 64, 0.45);
   color: #ff6b6b;

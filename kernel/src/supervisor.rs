@@ -8,6 +8,9 @@ use crate::fuel_hardening::{
 use crate::kill_gates::KillGateError;
 use crate::lifecycle::{transition_state, AgentState};
 use crate::manifest::AgentManifest;
+use crate::permissions::{
+    CapabilityRequest, PermissionCategory, PermissionHistoryEntry, PermissionManager,
+};
 use crate::safety_supervisor::{KpiKind, SafetyAction, SafetySupervisor};
 use crate::speculative::{SimulationResult, SpeculativeEngine};
 use serde_json::json;
@@ -41,6 +44,7 @@ pub struct Supervisor {
     audit_trail: AuditTrail,
     safety_supervisor: SafetySupervisor,
     speculative_engine: SpeculativeEngine,
+    permission_manager: PermissionManager,
 }
 
 impl Supervisor {
@@ -51,6 +55,7 @@ impl Supervisor {
             audit_trail: AuditTrail::new(),
             safety_supervisor: SafetySupervisor::default(),
             speculative_engine: SpeculativeEngine::new(),
+            permission_manager: PermissionManager::new(),
         }
     }
 
@@ -512,11 +517,15 @@ impl Supervisor {
             .get_mut(&id)
             .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
 
-        let tier = handle.consent_runtime.policy_engine().required_tier(operation);
-
-        let result = handle
+        let tier = handle
             .consent_runtime
-            .enforce_operation(operation, id, payload, &mut self.audit_trail);
+            .policy_engine()
+            .required_tier(operation);
+
+        let result =
+            handle
+                .consent_runtime
+                .enforce_operation(operation, id, payload, &mut self.audit_trail);
 
         match result {
             Err(crate::consent::ConsentError::ApprovalRequired {
@@ -587,6 +596,149 @@ impl Supervisor {
     /// List all pending speculative simulations.
     pub fn pending_simulations(&self) -> Vec<(&str, &SimulationResult)> {
         self.speculative_engine.pending_simulations()
+    }
+
+    // ── Permission Dashboard API ──
+
+    /// Get all permission categories for an agent (for the permission dashboard).
+    pub fn get_agent_permissions(
+        &self,
+        id: AgentId,
+    ) -> Result<Vec<PermissionCategory>, AgentError> {
+        let handle = self
+            .agents
+            .get(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        Ok(self
+            .permission_manager
+            .get_permissions(id, &handle.manifest))
+    }
+
+    /// Update a single permission for an agent — modifies real capabilities.
+    pub fn update_agent_permission(
+        &mut self,
+        id: AgentId,
+        capability_key: &str,
+        enabled: bool,
+        changed_by: &str,
+        reason: Option<&str>,
+    ) -> Result<(), AgentError> {
+        let manifest = {
+            let handle = self
+                .agents
+                .get(&id)
+                .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+            handle.manifest.clone()
+        };
+
+        let updated = self.permission_manager.update_permission(
+            id,
+            &manifest,
+            capability_key,
+            enabled,
+            changed_by,
+            reason,
+            &mut self.audit_trail,
+        )?;
+
+        // Apply updated manifest to the agent handle
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        handle.manifest = updated;
+        Ok(())
+    }
+
+    /// Bulk update permissions for an agent.
+    pub fn bulk_update_agent_permissions(
+        &mut self,
+        id: AgentId,
+        updates: &[(String, bool)],
+        changed_by: &str,
+        reason: Option<&str>,
+    ) -> Result<(), AgentError> {
+        let manifest = {
+            let handle = self
+                .agents
+                .get(&id)
+                .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+            handle.manifest.clone()
+        };
+
+        let updated = self.permission_manager.bulk_update_permissions(
+            id,
+            &manifest,
+            updates,
+            changed_by,
+            reason,
+            &mut self.audit_trail,
+        )?;
+
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        handle.manifest = updated;
+        Ok(())
+    }
+
+    /// Get permission change history for an agent.
+    pub fn get_permission_history(
+        &self,
+        id: AgentId,
+    ) -> Result<Vec<PermissionHistoryEntry>, AgentError> {
+        if !self.agents.contains_key(&id) {
+            return Err(AgentError::SupervisorError(format!(
+                "agent '{id}' not found"
+            )));
+        }
+        Ok(self.permission_manager.get_history(id))
+    }
+
+    /// Get pending capability requests for an agent.
+    pub fn get_capability_requests(
+        &self,
+        id: AgentId,
+    ) -> Result<Vec<CapabilityRequest>, AgentError> {
+        if !self.agents.contains_key(&id) {
+            return Err(AgentError::SupervisorError(format!(
+                "agent '{id}' not found"
+            )));
+        }
+        Ok(self.permission_manager.get_capability_requests(id))
+    }
+
+    /// Lock a capability so users cannot toggle it.
+    pub fn lock_agent_capability(
+        &mut self,
+        id: AgentId,
+        capability_key: &str,
+    ) -> Result<(), AgentError> {
+        if !self.agents.contains_key(&id) {
+            return Err(AgentError::SupervisorError(format!(
+                "agent '{id}' not found"
+            )));
+        }
+        self.permission_manager
+            .lock_capability(id, capability_key, &mut self.audit_trail);
+        Ok(())
+    }
+
+    /// Unlock a capability for user toggling.
+    pub fn unlock_agent_capability(
+        &mut self,
+        id: AgentId,
+        capability_key: &str,
+    ) -> Result<(), AgentError> {
+        if !self.agents.contains_key(&id) {
+            return Err(AgentError::SupervisorError(format!(
+                "agent '{id}' not found"
+            )));
+        }
+        self.permission_manager
+            .unlock_capability(id, capability_key, &mut self.audit_trail);
+        Ok(())
     }
 
     fn consume_fuel(&mut self, id: AgentId, reason: &str) -> Result<(), AgentError> {
@@ -730,11 +882,7 @@ mod tests {
     fn require_consent_with_simulation_tier1_no_simulation() {
         let (mut sup, id) = setup_supervisor_with_agent();
         // ToolCall defaults to Tier1 → auto-approved, no simulation
-        let result = sup.require_consent_with_simulation(
-            id,
-            GovernedOperation::ToolCall,
-            b"test",
-        );
+        let result = sup.require_consent_with_simulation(id, GovernedOperation::ToolCall, b"test");
         assert!(result.is_ok());
         assert!(sup.pending_simulations().is_empty());
     }
@@ -837,16 +985,10 @@ mod tests {
         let (mut sup, id) = setup_supervisor_with_agent();
 
         // Create two pending simulations
-        let _ = sup.require_consent_with_simulation(
-            id,
-            GovernedOperation::TerminalCommand,
-            b"cmd1",
-        );
-        let _ = sup.require_consent_with_simulation(
-            id,
-            GovernedOperation::SocialPostPublish,
-            b"post",
-        );
+        let _ =
+            sup.require_consent_with_simulation(id, GovernedOperation::TerminalCommand, b"cmd1");
+        let _ =
+            sup.require_consent_with_simulation(id, GovernedOperation::SocialPostPublish, b"post");
 
         let pending = sup.pending_simulations();
         assert_eq!(pending.len(), 2);
@@ -864,7 +1006,10 @@ mod tests {
         );
 
         let fuel_after = sup.agents.get(&id).unwrap().remaining_fuel;
-        assert_eq!(fuel_before, fuel_after, "simulation must not consume real fuel");
+        assert_eq!(
+            fuel_before, fuel_after,
+            "simulation must not consume real fuel"
+        );
     }
 
     #[test]
@@ -872,11 +1017,8 @@ mod tests {
         let (mut sup, id) = setup_supervisor_with_agent();
         let events_before = sup.audit_trail.events().len();
 
-        let _ = sup.require_consent_with_simulation(
-            id,
-            GovernedOperation::TerminalCommand,
-            b"test",
-        );
+        let _ =
+            sup.require_consent_with_simulation(id, GovernedOperation::TerminalCommand, b"test");
 
         // Simulation should add audit events (consent request + simulation record)
         assert!(

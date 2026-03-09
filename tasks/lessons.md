@@ -62,6 +62,15 @@
 - Diverged chains for tamper testing: don't directly mutate `content_hash` on a private field; instead, build a chain with genuinely different events at the same sequence — produces naturally different hashes
 - BlockBatchSink trait pattern prevents circular deps: kernel defines the interface, distributed crate implements it — kernel never depends on distributed
 
+## Visual Permission Dashboard (Phase 6.5)
+- Unicode escapes (`\u{1F512}`) in JSX text content cause TS1351 — wrap in expression `{"\u{1F512}"}` or use the JS escape form `"\uD83D\uDD12"`
+- `replace_all` edits can corrupt unrelated occurrences of the same string — always check side effects when replacing a common pattern globally
+- `#[allow(clippy::too_many_arguments)]` is acceptable for kernel methods that need agent_id + manifest + capability_key + enabled + changed_by + reason + audit_trail — splitting into a builder pattern would over-engineer an internal API
+- `map_or(false, |x| ...)` should be `is_some_and(|x| ...)` in modern Rust — clippy catches this as `unnecessary_map_or`
+- Permission system design: keep PermissionManager stateless for capabilities (reads from manifest), stateful only for locks and history — avoids sync issues between manager state and actual manifest capabilities
+- Critical permissions need role-based gating (admin vs user) — don't let regular users enable `process.exec` or other Critical-risk capabilities
+- Optimistic UI updates need careful revert logic — store previous state, apply change immediately, revert on backend error
+
 ## CI / Workflows
 - Always check for merge conflict markers after merging branches — leftover `<<<<<<< branch` / `>>>>>>> main` markers in YAML break CI silently
 - The release.yml had unresolved merge conflict markers from the `ci/windows-artifact-fix` branch, causing duplicate steps and bare text in YAML that GitHub Actions rejects

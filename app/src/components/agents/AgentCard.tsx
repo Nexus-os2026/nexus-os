@@ -12,6 +12,7 @@ interface AgentCardProps {
   onStop: (agentId: string) => void;
   onLogs: (agentId: string) => void;
   onDelete: (agentId: string) => void;
+  onPermissions?: (agentId: string) => void;
 }
 
 function statusTone(status: AgentSummary["status"]): "running" | "paused" | "stopped" | "idle" {
@@ -81,7 +82,8 @@ export function AgentCard({
   onPause,
   onStop,
   onLogs,
-  onDelete
+  onDelete,
+  onPermissions
 }: AgentCardProps): JSX.Element {
   const percentage = fuelPercentage(agent.fuel_remaining);
   const stroke = gaugeColor(percentage);
@@ -230,6 +232,18 @@ export function AgentCard({
         >
           Logs
         </button>
+        {onPermissions && (
+          <button
+            type="button"
+            className="agent-action-btn permissions"
+            onClick={(event) => {
+              event.stopPropagation();
+              onPermissions(agent.id);
+            }}
+          >
+            Perms
+          </button>
+        )}
         {!agent.isSystem && (
           <button
             type="button"

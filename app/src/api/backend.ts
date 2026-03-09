@@ -3,10 +3,14 @@ import type {
   AgentSummary,
   AuditEventRow,
   AvailableModel,
+  CapabilityRequest,
   ChatResponse,
   HardwareInfo,
   NexusConfig,
   OllamaStatus,
+  PermissionCategory,
+  PermissionHistoryEntry,
+  PermissionUpdate,
   SetupResult,
   SystemInfo,
   VoiceRuntimeState
@@ -183,4 +187,45 @@ export function setAgentModel(agent: string, model: string): Promise<void> {
 
 export function getSystemInfo(): Promise<SystemInfo> {
   return invokeDesktop<SystemInfo>("get_system_info");
+}
+
+// ── Permission Dashboard API ──
+
+export function getAgentPermissions(agentId: string): Promise<PermissionCategory[]> {
+  return invokeDesktop<PermissionCategory[]>("get_agent_permissions", agentArgs(agentId));
+}
+
+export function updateAgentPermission(
+  agentId: string,
+  capabilityKey: string,
+  enabled: boolean
+): Promise<void> {
+  return invokeDesktop<void>("update_agent_permission", {
+    agentId,
+    agent_id: agentId,
+    capabilityKey,
+    capability_key: capabilityKey,
+    enabled
+  });
+}
+
+export function getPermissionHistory(agentId: string): Promise<PermissionHistoryEntry[]> {
+  return invokeDesktop<PermissionHistoryEntry[]>("get_permission_history", agentArgs(agentId));
+}
+
+export function getCapabilityRequest(agentId: string): Promise<CapabilityRequest[]> {
+  return invokeDesktop<CapabilityRequest[]>("get_capability_request", agentArgs(agentId));
+}
+
+export function bulkUpdatePermissions(
+  agentId: string,
+  updates: PermissionUpdate[],
+  reason?: string
+): Promise<void> {
+  return invokeDesktop<void>("bulk_update_permissions", {
+    agentId,
+    agent_id: agentId,
+    updates,
+    reason: reason ?? null
+  });
 }

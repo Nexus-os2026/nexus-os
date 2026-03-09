@@ -49,6 +49,7 @@ import ComplianceDashboard from "./pages/ComplianceDashboard";
 import ClusterStatusPage from "./pages/ClusterStatus";
 import TrustDashboard from "./pages/TrustDashboard";
 import DistributedAudit from "./pages/DistributedAudit";
+import { PermissionDashboard } from "./pages/PermissionDashboard";
 import type {
   AgentSummary,
   AuditEventRow,
@@ -63,7 +64,7 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "compliance" | "cluster" | "trust" | "distributed-audit";
+type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -342,6 +343,7 @@ export default function App(): JSX.Element {
     transcription: "",
     responseText: ""
   });
+  const [permissionAgentId, setPermissionAgentId] = useState<string>("");
   const pushToTalk = useRef<PushToTalk | null>(null);
   const previousPageRef = useRef<Page>(page);
   const { enabled: uiSoundEnabled, volume: uiSoundVolume, setEnabled: setUiSoundEnabled, setVolume: setUiSoundVolume, play } =
@@ -1015,6 +1017,23 @@ export default function App(): JSX.Element {
             void handleCreateAgent(manifestJson);
           }}
           onDelete={handleDeleteAgent}
+          onPermissions={(id) => {
+            setPermissionAgentId(id);
+            setPage("permissions");
+          }}
+        />
+      );
+    }
+    if (page === "permissions") {
+      const permAgent = agents.find((a) => a.id === permissionAgentId);
+      return (
+        <PermissionDashboard
+          agentId={permissionAgentId}
+          agentName={permAgent?.name ?? "Agent"}
+          fuelRemaining={permAgent?.fuel_remaining}
+          fuelBudget={permAgent?.fuel_budget ?? 10000}
+          memoryUsageBytes={permAgent?.memory_usage_bytes}
+          onBack={() => setPage("agents")}
         />
       );
     }

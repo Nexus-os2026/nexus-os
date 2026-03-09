@@ -184,7 +184,8 @@ impl SpeculativeEngine {
             audit_event_count,
             snapshot_id: Uuid::new_v4(),
         };
-        self.snapshots.insert(snapshot.snapshot_id, snapshot.clone());
+        self.snapshots
+            .insert(snapshot.snapshot_id, snapshot.clone());
         snapshot
     }
 
@@ -281,9 +282,7 @@ impl SpeculativeEngine {
     pub fn pending_simulations(&self) -> Vec<(&str, &SimulationResult)> {
         self.pending_for_request
             .iter()
-            .filter_map(|(req_id, sid)| {
-                self.results.get(sid).map(|r| (req_id.as_str(), r))
-            })
+            .filter_map(|(req_id, sid)| self.results.get(sid).map(|r| (req_id.as_str(), r)))
             .collect()
     }
 
@@ -311,9 +310,11 @@ impl SpeculativeEngine {
                     if let Some(action) = value.get("action").and_then(|a| a.as_str()) {
                         match action {
                             "llm_query" => {
-                                let prompt_len =
-                                    value.get("prompt_len").and_then(|v| v.as_u64()).unwrap_or(100)
-                                        as usize;
+                                let prompt_len = value
+                                    .get("prompt_len")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(100)
+                                    as usize;
                                 let max_tokens = value
                                     .get("max_tokens")
                                     .and_then(|v| v.as_u64())
@@ -334,10 +335,7 @@ impl SpeculativeEngine {
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("unknown")
                                     .to_string();
-                                let size = value
-                                    .get("size")
-                                    .and_then(|v| v.as_u64())
-                                    .unwrap_or(0);
+                                let size = value.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
                                 changes.push(ActionPreview::FileChange(FileChange {
                                     path,
                                     change_kind: ChangeKind::Create,
@@ -525,7 +523,13 @@ mod tests {
     fn fork_state_creates_snapshot() {
         let mut engine = SpeculativeEngine::new();
         let agent_id = Uuid::new_v4();
-        let snap = engine.fork_state(agent_id, 5000, AutonomyLevel::L2, vec!["llm.query".into()], 10);
+        let snap = engine.fork_state(
+            agent_id,
+            5000,
+            AutonomyLevel::L2,
+            vec!["llm.query".into()],
+            10,
+        );
         assert_eq!(snap.agent_id, agent_id);
         assert_eq!(snap.fuel_remaining, 5000);
         assert_eq!(snap.autonomy_level, AutonomyLevel::L2);
@@ -571,9 +575,10 @@ mod tests {
         );
 
         assert_eq!(result.resource_impact.network_calls, 1);
-        let has_network = result.predicted_changes.iter().any(|c| {
-            matches!(c, ActionPreview::NetworkCall(_))
-        });
+        let has_network = result
+            .predicted_changes
+            .iter()
+            .any(|c| matches!(c, ActionPreview::NetworkCall(_)));
         assert!(has_network);
     }
 
@@ -600,7 +605,13 @@ mod tests {
         let mut engine = SpeculativeEngine::new();
         let mut audit = AuditTrail::new();
         let agent_id = Uuid::new_v4();
-        let snap = engine.fork_state(agent_id, 5000, AutonomyLevel::L2, vec!["llm.query".into()], 0);
+        let snap = engine.fork_state(
+            agent_id,
+            5000,
+            AutonomyLevel::L2,
+            vec!["llm.query".into()],
+            0,
+        );
 
         let payload = serde_json::json!({
             "action": "llm_query",
@@ -760,9 +771,10 @@ mod tests {
             &mut audit,
         );
 
-        let has_fuel_warning = result.predicted_changes.iter().any(|c| {
-            matches!(c, ActionPreview::DataModification(dm) if dm.resource == "fuel")
-        });
+        let has_fuel_warning = result
+            .predicted_changes
+            .iter()
+            .any(|c| matches!(c, ActionPreview::DataModification(dm) if dm.resource == "fuel"));
         assert!(has_fuel_warning);
     }
 
@@ -773,8 +785,20 @@ mod tests {
         let agent_id = Uuid::new_v4();
         let snap = engine.fork_state(agent_id, 5000, AutonomyLevel::L2, vec![], 0);
 
-        let r1 = engine.simulate(&snap, GovernedOperation::TerminalCommand, HitlTier::Tier2, b"cmd1", &mut audit);
-        let r2 = engine.simulate(&snap, GovernedOperation::SocialPostPublish, HitlTier::Tier2, b"post", &mut audit);
+        let r1 = engine.simulate(
+            &snap,
+            GovernedOperation::TerminalCommand,
+            HitlTier::Tier2,
+            b"cmd1",
+            &mut audit,
+        );
+        let r2 = engine.simulate(
+            &snap,
+            GovernedOperation::SocialPostPublish,
+            HitlTier::Tier2,
+            b"post",
+            &mut audit,
+        );
 
         engine.attach_to_request("req-a", r1.simulation_id);
         engine.attach_to_request("req-b", r2.simulation_id);

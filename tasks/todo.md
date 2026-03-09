@@ -53,6 +53,15 @@
   - Tauri desktop SlmStatusBadge: model loaded state, latency indicator, governance routing (LOCAL/CLOUD/FALLBACK)
   - 15 integration tests in connectors/llm/tests/local_slm_integration_tests.rs
   - 717 total tests with zero regressions
+- [x] Phase 6.5: Visual Permission Dashboard (COMPLETE)
+  - PermissionManager in kernel/src/permissions.rs: risk levels, categories, history, locking, bulk operations
+  - 6 permission categories (filesystem, network, ai, system, social, messaging) with 11 capability keys
+  - PermissionRiskLevel enum (Low/Medium/High/Critical) with admin-only enforcement for Critical
+  - Supervisor integration: 7 new public methods (get/update/bulk/history/requests/lock/unlock)
+  - Tauri commands: 5 permission endpoints wired to invoke_handler
+  - PermissionDashboard React page: toggle switches, risk badges, bulk actions, history timeline, capability request modal
+  - Optimistic UI updates with revert on failure, confirmation modals for High/Critical changes
+  - 30 new tests (13 integration + 14 unit + 3 existing), 804 total tests with zero regressions
 - [x] Phase 6.4: Distributed Immutable Audit (COMPLETE)
   - AuditBlock with SHA-256 content-addressable hash chain and Ed25519 signatures
   - ContentAddressedStore (in-memory) and FileAuditStore (file-backed) persistence

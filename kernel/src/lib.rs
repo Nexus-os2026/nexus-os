@@ -15,6 +15,7 @@ pub mod kill_gates;
 pub mod lifecycle;
 pub mod manifest;
 pub mod orchestration;
+pub mod permissions;
 pub mod privacy;
 pub mod redaction;
 pub mod replay;

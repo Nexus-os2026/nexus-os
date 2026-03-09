@@ -10,6 +10,10 @@ use nexus_kernel::config::{
 use nexus_kernel::errors::AgentError;
 use nexus_kernel::hardware::{recommend_agent_configs, HardwareProfile};
 use nexus_kernel::manifest::AgentManifest;
+use nexus_kernel::permissions::{
+    CapabilityRequest as KernelCapabilityRequest, PermissionCategory as KernelPermissionCategory,
+    PermissionHistoryEntry as KernelPermissionHistoryEntry,
+};
 use nexus_kernel::supervisor::{AgentId, Supervisor};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -914,6 +918,113 @@ pub fn set_agent_model(agent: String, model: String) -> Result<(), String> {
     save_nexus_config(&config).map_err(|e| e.to_string())
 }
 
+// ── Permission Dashboard Commands ──
+
+/// A single permission update for bulk operations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PermissionUpdate {
+    pub capability_key: String,
+    pub enabled: bool,
+}
+
+pub fn get_agent_permissions(
+    state: &AppState,
+    agent_id: String,
+) -> Result<Vec<KernelPermissionCategory>, String> {
+    let parsed = parse_agent_id(agent_id.as_str())?;
+    let supervisor = match state.supervisor.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    supervisor
+        .get_agent_permissions(parsed)
+        .map_err(agent_error)
+}
+
+pub fn update_agent_permission(
+    state: &AppState,
+    agent_id: String,
+    capability_key: String,
+    enabled: bool,
+) -> Result<(), String> {
+    let parsed = parse_agent_id(agent_id.as_str())?;
+    let mut supervisor = match state.supervisor.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    supervisor
+        .update_agent_permission(parsed, &capability_key, enabled, "user", None)
+        .map_err(agent_error)?;
+    state.log_event(
+        parsed,
+        EventType::UserAction,
+        json!({
+            "event": "update_agent_permission",
+            "capability": capability_key,
+            "enabled": enabled,
+        }),
+    );
+    Ok(())
+}
+
+pub fn get_permission_history(
+    state: &AppState,
+    agent_id: String,
+) -> Result<Vec<KernelPermissionHistoryEntry>, String> {
+    let parsed = parse_agent_id(agent_id.as_str())?;
+    let supervisor = match state.supervisor.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    supervisor
+        .get_permission_history(parsed)
+        .map_err(agent_error)
+}
+
+pub fn get_capability_request(
+    state: &AppState,
+    agent_id: String,
+) -> Result<Vec<KernelCapabilityRequest>, String> {
+    let parsed = parse_agent_id(agent_id.as_str())?;
+    let supervisor = match state.supervisor.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    supervisor
+        .get_capability_requests(parsed)
+        .map_err(agent_error)
+}
+
+pub fn bulk_update_permissions(
+    state: &AppState,
+    agent_id: String,
+    updates: Vec<PermissionUpdate>,
+    reason: Option<String>,
+) -> Result<(), String> {
+    let parsed = parse_agent_id(agent_id.as_str())?;
+    let mut supervisor = match state.supervisor.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    let update_pairs: Vec<(String, bool)> = updates
+        .iter()
+        .map(|u| (u.capability_key.clone(), u.enabled))
+        .collect();
+    supervisor
+        .bulk_update_agent_permissions(parsed, &update_pairs, "user", reason.as_deref())
+        .map_err(agent_error)?;
+    state.log_event(
+        parsed,
+        EventType::UserAction,
+        json!({
+            "event": "bulk_update_permissions",
+            "updates": updates.len(),
+            "reason": reason,
+        }),
+    );
+    Ok(())
+}
+
 /// Check if setup has been completed (hardware detected).
 pub fn is_setup_complete() -> bool {
     match load_config() {
@@ -1223,6 +1334,52 @@ mod runtime {
         super::get_system_info()
     }
 
+    // ── Permission Dashboard Commands ──
+
+    #[tauri::command]
+    fn get_agent_permissions(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<Vec<KernelPermissionCategory>, String> {
+        super::get_agent_permissions(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn update_agent_permission(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        capability_key: String,
+        enabled: bool,
+    ) -> Result<(), String> {
+        super::update_agent_permission(state.inner(), agent_id, capability_key, enabled)
+    }
+
+    #[tauri::command]
+    fn get_permission_history(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<Vec<KernelPermissionHistoryEntry>, String> {
+        super::get_permission_history(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn get_capability_request(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<Vec<KernelCapabilityRequest>, String> {
+        super::get_capability_request(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn bulk_update_permissions(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        updates: Vec<super::PermissionUpdate>,
+        reason: Option<String>,
+    ) -> Result<(), String> {
+        super::bulk_update_permissions(state.inner(), agent_id, updates, reason)
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -1304,6 +1461,11 @@ mod runtime {
                 chat_with_ollama,
                 set_agent_model,
                 get_system_info,
+                get_agent_permissions,
+                update_agent_permission,
+                get_permission_history,
+                get_capability_request,
+                bulk_update_permissions,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");

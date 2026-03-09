@@ -19,6 +19,7 @@ interface AgentsProps {
   onStop: (id: string) => void;
   onCreate: (manifestJson: string) => void;
   onDelete: (id: string) => void;
+  onPermissions?: (id: string) => void;
 }
 
 function makeActivityEntry(event: AuditEventRow, agentName: string): string {
@@ -36,7 +37,8 @@ export function Agents({
   onPause,
   onStop,
   onCreate,
-  onDelete
+  onDelete,
+  onPermissions
 }: AgentsProps): JSX.Element {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(agents[0]?.id ?? null);
   const [showCreate, setShowCreate] = useState(false);
@@ -215,6 +217,7 @@ export function Agents({
               onStop={onStop}
               onLogs={(id) => openDetail(id, "logs")}
               onDelete={onDelete}
+              onPermissions={onPermissions}
             />
           ))
         )}

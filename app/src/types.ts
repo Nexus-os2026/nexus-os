@@ -234,3 +234,49 @@ export interface SimulationPreview {
   risk_level: RiskLevel;
   summary: string;
 }
+
+// ── Permission Dashboard Types ──
+
+export type PermissionRiskLevel = "low" | "medium" | "high" | "critical";
+
+export interface Permission {
+  capability_key: string;
+  display_name: string;
+  description: string;
+  risk_level: PermissionRiskLevel;
+  enabled: boolean;
+  granted_by: string;
+  granted_at: number;
+  can_user_toggle: boolean;
+}
+
+export interface PermissionCategory {
+  id: string;
+  display_name: string;
+  icon: string;
+  permissions: Permission[];
+}
+
+export type PermissionActionType = "granted" | "revoked" | "escalated" | "downgraded" | "locked_by_admin" | "unlocked_by_admin";
+
+export interface PermissionHistoryEntry {
+  capability_key: string;
+  action: PermissionActionType;
+  changed_by: string;
+  timestamp: number;
+  reason: string | null;
+}
+
+export interface CapabilityRequest {
+  agent_id: string;
+  requested_capability: string;
+  reason: string;
+  risk_level: PermissionRiskLevel;
+  current_capabilities: string[];
+  requested_capabilities: string[];
+}
+
+export interface PermissionUpdate {
+  capability_key: string;
+  enabled: boolean;
+}
