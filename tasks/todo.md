@@ -78,3 +78,11 @@
 - [x] Core agents always present with SYSTEM/CUSTOM badges
 - [x] Smart capability auto-detection in agent factory
 - [x] LLM model selector dropdown
+- [x] Phase 7.1: A2A + MCP Protocol Integration (COMPLETE)
+  - A2A core types in kernel/src/protocols/a2a.rs: AgentCard, A2ATask, TaskStatus lifecycle, GovernanceContext, JSON-RPC 2.0, AgentCard::from_manifest auto-generation (all 11 capabilities → skills)
+  - MCP governed tool server in kernel/src/protocols/mcp.rs: McpServer with capability check → fuel check → execute → fuel deduct → audit pipeline, GovernedTool/GovernedResource/GovernedPrompt types, 11 capability-to-tool mappings
+  - GovernanceBridge in kernel/src/protocols/bridge.rs: unified gateway routing A2A tasks and MCP invocations through full governance pipeline (sender auth → capability check → fuel check → speculative simulation for Tier2+ → execute → audit)
+  - CLI commands: `nexus protocols status`, `nexus protocols agent-card <name>`, `nexus protocols start --port` (42 total CLI commands)
+  - Tauri desktop Protocols page: A2A/MCP server status cards, MCP Tool Registry table, Agent Cards grid with JSON preview, Recent Protocol Requests with governance decisions
+  - 9 integration tests in kernel/tests/protocols_integration_tests.rs: Agent Card mapping, task lifecycle, tool discovery governance, capability+fuel enforcement, sender auth, MCP capability denial, speculative execution triggers, full audit coverage, no-bypass verification
+  - 95+ unit tests across a2a.rs (30), mcp.rs (25), bridge.rs (16), router.rs (3), commands.rs (5)

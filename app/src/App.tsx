@@ -50,6 +50,7 @@ import ClusterStatusPage from "./pages/ClusterStatus";
 import TrustDashboard from "./pages/TrustDashboard";
 import DistributedAudit from "./pages/DistributedAudit";
 import { PermissionDashboard } from "./pages/PermissionDashboard";
+import Protocols from "./pages/Protocols";
 import type {
   AgentSummary,
   AuditEventRow,
@@ -64,7 +65,7 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions";
+type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -80,6 +81,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "cluster", label: "Cluster", icon: "⬣", shortcut: "" },
   { id: "trust", label: "Trust", icon: "◉", shortcut: "" },
   { id: "distributed-audit", label: "Chain", icon: "⛓", shortcut: "" },
+  { id: "protocols", label: "Protocols", icon: "⌬", shortcut: "Alt+6" },
   { id: "permissions", label: "Permissions", icon: "⛊", shortcut: "Alt+7" },
   { id: "settings", label: "Settings", icon: "⚙", shortcut: "Alt+8" }
 ];
@@ -1101,6 +1103,9 @@ export default function App(): JSX.Element {
     }
     if (page === "trust") {
       return <TrustDashboard />;
+    }
+    if (page === "protocols") {
+      return <Protocols />;
     }
     if (page === "distributed-audit") {
       return <DistributedAudit />;

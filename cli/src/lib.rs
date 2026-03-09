@@ -55,6 +55,10 @@ pub enum TopLevelCommand {
         #[command(subcommand)]
         command: GovernanceCommand,
     },
+    Protocols {
+        #[command(subcommand)]
+        command: ProtocolsCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -130,6 +134,23 @@ pub enum ModelCommand {
 }
 
 #[derive(Debug, Subcommand)]
+pub enum ProtocolsCommand {
+    /// Show A2A and MCP protocol server status and endpoints
+    Status,
+    /// Display an agent's A2A Agent Card
+    AgentCard {
+        /// Agent name to generate the card for
+        agent_name: String,
+    },
+    /// Start the HTTP protocol gateway
+    Start {
+        /// Port to listen on
+        #[arg(long, default_value = "3000")]
+        port: u16,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 pub enum GovernanceCommand {
     /// Run a governance task locally (pii_detection, prompt_safety, capability_risk, content_classification)
     Test {
@@ -150,6 +171,7 @@ pub fn execute_command(cli: Cli) -> Result<String, String> {
         TopLevelCommand::SelfImprove { command } => execute_self_improve_command(command),
         TopLevelCommand::Model { command } => execute_model_command(command),
         TopLevelCommand::Governance { command } => execute_governance_command(command),
+        TopLevelCommand::Protocols { command } => execute_protocols_command(command),
     }
 }
 
@@ -496,6 +518,28 @@ pub fn execute_governance_command(command: GovernanceCommand) -> Result<String, 
     let output = match command {
         GovernanceCommand::Test { task_type, input } => {
             router::route(commands::CliCommand::GovernanceTest { task_type, input })
+        }
+    };
+    if output.success {
+        let mut result = output.message;
+        if let Some(data) = output.data {
+            result.push('\n');
+            result.push_str(&serde_json::to_string_pretty(&data).unwrap_or_default());
+        }
+        Ok(result)
+    } else {
+        Err(output.message)
+    }
+}
+
+pub fn execute_protocols_command(command: ProtocolsCommand) -> Result<String, String> {
+    let output = match command {
+        ProtocolsCommand::Status => router::route(commands::CliCommand::ProtocolsStatus),
+        ProtocolsCommand::AgentCard { agent_name } => {
+            router::route(commands::CliCommand::ProtocolsAgentCard { agent_name })
+        }
+        ProtocolsCommand::Start { port } => {
+            router::route(commands::CliCommand::ProtocolsStart { port })
         }
     };
     if output.success {

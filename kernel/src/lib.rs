@@ -17,6 +17,7 @@ pub mod manifest;
 pub mod orchestration;
 pub mod permissions;
 pub mod privacy;
+pub mod protocols;
 pub mod redaction;
 pub mod replay;
 pub mod safety_supervisor;

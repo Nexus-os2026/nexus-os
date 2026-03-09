@@ -1098,6 +1098,154 @@ pub fn run_setup_wizard(ollama_url: Option<String>) -> Result<SetupResult, Strin
     })
 }
 
+// ── Protocols Dashboard Commands ──
+
+/// Protocol server status for the dashboard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProtocolsStatusRow {
+    pub a2a_status: String,
+    pub a2a_version: String,
+    pub a2a_peers: u32,
+    pub a2a_tasks_processed: u64,
+    pub mcp_status: String,
+    pub mcp_registered_tools: u32,
+    pub mcp_invocations: u64,
+    pub gateway_port: Option<u16>,
+    pub governance_bridge_active: bool,
+    pub audit_integrity: bool,
+}
+
+/// A protocol request log entry for the dashboard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProtocolRequestRow {
+    pub id: String,
+    pub timestamp: u64,
+    pub protocol: String,
+    pub method: String,
+    pub sender: String,
+    pub agent: String,
+    pub status: String,
+    pub fuel_consumed: u64,
+    pub governance_decision: String,
+}
+
+/// MCP tool entry for the dashboard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpToolRow {
+    pub name: String,
+    pub description: String,
+    pub agent: String,
+    pub fuel_cost: u64,
+    pub requires_hitl: bool,
+    pub invocations: u64,
+}
+
+/// Agent Card summary for the dashboard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentCardRow {
+    pub agent_name: String,
+    pub url: String,
+    pub skills_count: usize,
+    pub auth_scheme: String,
+    pub rate_limit_rpm: u64,
+    pub card_json: serde_json::Value,
+}
+
+pub fn get_protocols_status(state: &AppState) -> Result<ProtocolsStatusRow, String> {
+    let supervisor = match state.supervisor.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    let audit = match state.audit.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    let agent_count = supervisor.health_check().len() as u32;
+
+    Ok(ProtocolsStatusRow {
+        a2a_status: "stopped".to_string(),
+        a2a_version: "0.2.1".to_string(),
+        a2a_peers: 0,
+        a2a_tasks_processed: 0,
+        mcp_status: "stopped".to_string(),
+        mcp_registered_tools: agent_count * 3, // estimate: ~3 tools per agent
+        mcp_invocations: 0,
+        gateway_port: None,
+        governance_bridge_active: false,
+        audit_integrity: audit.verify_integrity(),
+    })
+}
+
+pub fn get_protocols_requests(_state: &AppState) -> Result<Vec<ProtocolRequestRow>, String> {
+    // Return recent protocol requests — empty until gateway is started
+    Ok(Vec::new())
+}
+
+pub fn get_mcp_tools(state: &AppState) -> Result<Vec<McpToolRow>, String> {
+    use nexus_kernel::protocols::mcp::McpServer;
+
+    let supervisor = match state.supervisor.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    let mut rows = Vec::new();
+    for agent_status in supervisor.health_check() {
+        if let Some(handle) = supervisor.get_agent(agent_status.id) {
+            let mut mcp = McpServer::new();
+            mcp.register_agent(agent_status.id, handle.manifest.clone());
+            if let Ok(tools) = mcp.list_tools(agent_status.id) {
+                for tool in tools {
+                    rows.push(McpToolRow {
+                        name: tool.name,
+                        description: tool.description.unwrap_or_default(),
+                        agent: handle.manifest.name.clone(),
+                        fuel_cost: tool.governance.estimated_fuel_cost,
+                        requires_hitl: tool.governance.requires_hitl,
+                        invocations: 0,
+                    });
+                }
+            }
+        }
+    }
+    Ok(rows)
+}
+
+pub fn get_agent_cards(state: &AppState) -> Result<Vec<AgentCardRow>, String> {
+    use nexus_kernel::protocols::a2a::AgentCard;
+
+    let supervisor = match state.supervisor.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    let mut rows = Vec::new();
+    for agent_status in supervisor.health_check() {
+        if let Some(handle) = supervisor.get_agent(agent_status.id) {
+            let card = AgentCard::from_manifest(&handle.manifest, "http://localhost:3000");
+            let card_json = serde_json::to_value(&card).unwrap_or_default();
+            let auth_scheme = if card.authentication.is_empty() {
+                "none".to_string()
+            } else {
+                card.authentication
+                    .iter()
+                    .map(|a| a.scheme_type.clone())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            rows.push(AgentCardRow {
+                agent_name: card.name.clone(),
+                url: card.url.clone(),
+                skills_count: card.skills.len(),
+                auth_scheme,
+                rate_limit_rpm: card.rate_limit_rpm.unwrap_or(0),
+                card_json,
+            });
+        }
+    }
+    Ok(rows)
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1380,6 +1528,34 @@ mod runtime {
         super::bulk_update_permissions(state.inner(), agent_id, updates, reason)
     }
 
+    // ── Protocols Dashboard Commands ──
+
+    #[tauri::command]
+    fn get_protocols_status(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<super::ProtocolsStatusRow, String> {
+        super::get_protocols_status(state.inner())
+    }
+
+    #[tauri::command]
+    fn get_protocols_requests(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<super::ProtocolRequestRow>, String> {
+        super::get_protocols_requests(state.inner())
+    }
+
+    #[tauri::command]
+    fn get_mcp_tools(state: tauri::State<'_, AppState>) -> Result<Vec<super::McpToolRow>, String> {
+        super::get_mcp_tools(state.inner())
+    }
+
+    #[tauri::command]
+    fn get_agent_cards(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<super::AgentCardRow>, String> {
+        super::get_agent_cards(state.inner())
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -1466,6 +1642,10 @@ mod runtime {
                 get_permission_history,
                 get_capability_request,
                 bulk_update_permissions,
+                get_protocols_status,
+                get_protocols_requests,
+                get_mcp_tools,
+                get_agent_cards,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");

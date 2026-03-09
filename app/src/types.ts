@@ -280,3 +280,48 @@ export interface PermissionUpdate {
   capability_key: string;
   enabled: boolean;
 }
+
+// ── Protocols Dashboard Types ──
+
+export interface ProtocolsStatus {
+  a2a_status: string;
+  a2a_version: string;
+  a2a_peers: number;
+  a2a_tasks_processed: number;
+  mcp_status: string;
+  mcp_registered_tools: number;
+  mcp_invocations: number;
+  gateway_port: number | null;
+  governance_bridge_active: boolean;
+  audit_integrity: boolean;
+}
+
+export interface ProtocolRequest {
+  id: string;
+  timestamp: number;
+  protocol: string;
+  method: string;
+  sender: string;
+  agent: string;
+  status: string;
+  fuel_consumed: number;
+  governance_decision: string;
+}
+
+export interface McpTool {
+  name: string;
+  description: string;
+  agent: string;
+  fuel_cost: number;
+  requires_hitl: boolean;
+  invocations: number;
+}
+
+export interface AgentCardSummary {
+  agent_name: string;
+  url: string;
+  skills_count: number;
+  auth_scheme: string;
+  rate_limit_rpm: number;
+  card_json: Record<string, unknown>;
+}

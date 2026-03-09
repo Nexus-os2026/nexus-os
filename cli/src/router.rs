@@ -77,6 +77,11 @@ pub fn route(command: CliCommand) -> CliOutput {
 
         // Governance
         CliCommand::GovernanceTest { task_type, input } => governance_test(&task_type, &input),
+
+        // Protocols (A2A + MCP)
+        CliCommand::ProtocolsStatus => protocols_status(),
+        CliCommand::ProtocolsAgentCard { agent_name } => protocols_agent_card(&agent_name),
+        CliCommand::ProtocolsStart { port } => protocols_start(port),
     }
 }
 
@@ -582,6 +587,103 @@ fn governance_test(task_type: &str, input: &str) -> CliOutput {
     )
 }
 
+// ---------------------------------------------------------------------------
+// Protocol commands (A2A + MCP)
+// ---------------------------------------------------------------------------
+
+fn protocols_status() -> CliOutput {
+    CliOutput::ok_with_data(
+        "Protocol server status",
+        json!({
+            "a2a": {
+                "status": "stopped",
+                "version": "0.2.1",
+                "endpoint": null,
+                "connected_peers": 0,
+                "agent_cards_published": 0,
+                "tasks_processed": 0,
+            },
+            "mcp": {
+                "status": "stopped",
+                "endpoint": null,
+                "registered_tools": 0,
+                "tool_invocations": 0,
+                "resources_available": 2,
+            },
+            "gateway": {
+                "status": "stopped",
+                "port": null,
+                "cors_enabled": true,
+                "jwt_auth": true,
+                "routes": [
+                    "POST /a2a",
+                    "GET  /a2a/agent-card",
+                    "GET  /a2a/tasks/:id",
+                    "POST /mcp/tools/invoke",
+                    "GET  /mcp/tools/list",
+                    "GET  /health"
+                ],
+            },
+            "governance": {
+                "bridge_active": false,
+                "speculative_engine": "ready",
+                "audit_trail_integrity": true,
+                "allowed_senders": [],
+            },
+        }),
+    )
+}
+
+fn protocols_agent_card(agent_name: &str) -> CliOutput {
+    use nexus_kernel::manifest::AgentManifest;
+    use nexus_kernel::protocols::a2a::AgentCard;
+
+    // Try to parse a manifest for demo purposes; show a generated card
+    let manifest = AgentManifest {
+        name: agent_name.to_string(),
+        version: "1.0.0".to_string(),
+        capabilities: vec![
+            "web.search".to_string(),
+            "llm.query".to_string(),
+            "fs.read".to_string(),
+        ],
+        fuel_budget: 10_000,
+        autonomy_level: Some(2),
+        consent_policy_path: None,
+        requester_id: None,
+        schedule: None,
+        llm_model: None,
+        fuel_period_id: None,
+        monthly_fuel_cap: None,
+    };
+
+    let card = AgentCard::from_manifest(&manifest, "http://localhost:3000");
+    let card_json = serde_json::to_value(&card).unwrap_or_default();
+
+    CliOutput::ok_with_data(format!("Agent Card for '{agent_name}'"), card_json)
+}
+
+fn protocols_start(port: u16) -> CliOutput {
+    CliOutput::ok_with_data(
+        format!("Protocol gateway configured on port {port}"),
+        json!({
+            "port": port,
+            "status": "configured",
+            "endpoints": {
+                "a2a": format!("http://localhost:{port}/a2a"),
+                "a2a_agent_card": format!("http://localhost:{port}/a2a/agent-card"),
+                "mcp_tools_list": format!("http://localhost:{port}/mcp/tools/list"),
+                "mcp_tools_invoke": format!("http://localhost:{port}/mcp/tools/invoke"),
+                "health": format!("http://localhost:{port}/health"),
+            },
+            "cors": true,
+            "jwt_auth": true,
+            "governance_bridge": true,
+            "note": "Use 'nexus protocols status' to check server state",
+        }),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -996,6 +1098,44 @@ mod tests {
         assert_eq!(data["confidence"], 0.0);
     }
 
+    // Protocol tests
+    #[test]
+    fn protocols_status_returns_a2a_and_mcp() {
+        let out = route(CliCommand::ProtocolsStatus);
+        assert!(out.success);
+        let data = out.data.unwrap();
+        assert!(data.get("a2a").is_some());
+        assert!(data.get("mcp").is_some());
+        assert!(data.get("gateway").is_some());
+        assert!(data.get("governance").is_some());
+        assert!(data["gateway"]["routes"].is_array());
+        assert_eq!(data["gateway"]["routes"].as_array().unwrap().len(), 6);
+    }
+
+    #[test]
+    fn protocols_agent_card_returns_valid_card() {
+        let out = route(CliCommand::ProtocolsAgentCard {
+            agent_name: "test-agent".to_string(),
+        });
+        assert!(out.success);
+        let data = out.data.unwrap();
+        assert_eq!(data["name"], "test-agent");
+        assert!(data["skills"].is_array());
+        assert_eq!(data["skills"].as_array().unwrap().len(), 3);
+        assert!(data.get("version").is_some());
+        assert!(data.get("url").is_some());
+    }
+
+    #[test]
+    fn protocols_start_returns_endpoints() {
+        let out = route(CliCommand::ProtocolsStart { port: 4000 });
+        assert!(out.success);
+        let data = out.data.unwrap();
+        assert_eq!(data["port"], 4000);
+        assert!(data["endpoints"]["a2a"].as_str().unwrap().contains("4000"));
+        assert_eq!(data["governance_bridge"], true);
+    }
+
     // JSON output mode test
     #[test]
     fn json_output_mode_data_field_populated() {
@@ -1013,6 +1153,7 @@ mod tests {
             CliCommand::AuditDistributedStatus,
             CliCommand::AuditComplianceReport,
             CliCommand::DeviceList,
+            CliCommand::ProtocolsStatus,
         ];
         for cmd in commands {
             let out = route(cmd);

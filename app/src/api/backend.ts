@@ -1,16 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AgentCardSummary,
   AgentSummary,
   AuditEventRow,
   AvailableModel,
   CapabilityRequest,
   ChatResponse,
   HardwareInfo,
+  McpTool,
   NexusConfig,
   OllamaStatus,
   PermissionCategory,
   PermissionHistoryEntry,
   PermissionUpdate,
+  ProtocolRequest,
+  ProtocolsStatus,
   SetupResult,
   SystemInfo,
   VoiceRuntimeState
@@ -228,4 +232,22 @@ export function bulkUpdatePermissions(
     updates,
     reason: reason ?? null
   });
+}
+
+// ── Protocols Dashboard API ──
+
+export function getProtocolsStatus(): Promise<ProtocolsStatus> {
+  return invokeDesktop<ProtocolsStatus>("get_protocols_status");
+}
+
+export function getProtocolsRequests(): Promise<ProtocolRequest[]> {
+  return invokeDesktop<ProtocolRequest[]>("get_protocols_requests");
+}
+
+export function getMcpTools(): Promise<McpTool[]> {
+  return invokeDesktop<McpTool[]>("get_mcp_tools");
+}
+
+export function getAgentCards(): Promise<AgentCardSummary[]> {
+  return invokeDesktop<AgentCardSummary[]>("get_agent_cards");
 }

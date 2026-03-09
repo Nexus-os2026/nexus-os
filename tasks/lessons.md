@@ -71,6 +71,14 @@
 - Critical permissions need role-based gating (admin vs user) — don't let regular users enable `process.exec` or other Critical-risk capabilities
 - Optimistic UI updates need careful revert logic — store previous state, apply change immediately, revert on backend error
 
+## Protocol Integration (Phase 7.1)
+- Sync kernel / async edge separation: keep all kernel types (GovernanceBridge, McpServer, A2ATask) fully synchronous; only the HTTP gateway crate uses tokio+axum. This prevents async infecting core governance logic.
+- Capability inference from free-text A2A payloads requires keyword matching as a best-effort strategy — no structured capability field in the A2A spec. Fall back to "llm.query" for unrecognized text.
+- MCP tool-level denials (CapabilityDenied from McpServer::invoke_tool) get audited in the MCP server's own AuditTrail, not the bridge's — integration tests must account for this dual-trail architecture when asserting audit event counts.
+- GovernanceContext.audit_hash is `Option<String>` not `String` — set to `None` initially, then `Some(event_id.to_string())` after the audit event is appended. This avoids empty string sentinel values.
+- When adding nav items to the UI sidebar, check for duplicate icons — "⬡" was already used by marketplace-browser; protocols got "⌬" instead.
+- Pre-existing test failures on main (e.g., `test_context_building` in coder-agent due to missing `github_connector.rs`) should be verified via git stash/pop cycle before assuming your changes caused them.
+
 ## CI / Workflows
 - Always check for merge conflict markers after merging branches — leftover `<<<<<<< branch` / `>>>>>>> main` markers in YAML break CI silently
 - The release.yml had unresolved merge conflict markers from the `ci/windows-artifact-fix` branch, causing duplicate steps and bare text in YAML that GitHub Actions rejects

@@ -1,0 +1,20 @@
+[package]
+name = "nexus-protocols"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+nexus-kernel = { path = "../kernel" }
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors"] }
+rmcp = { version = "1.1", features = ["server"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+jsonwebtoken = "9"
+uuid = { version = "1.10", features = ["v4", "serde"] }

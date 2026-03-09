@@ -121,6 +121,15 @@ pub enum CliCommand {
         task_type: String,
         input: String,
     },
+
+    // Protocol commands (A2A + MCP)
+    ProtocolsStatus,
+    ProtocolsAgentCard {
+        agent_name: String,
+    },
+    ProtocolsStart {
+        port: u16,
+    },
 }
 
 /// Structured output for every CLI command, supporting JSON mode.
@@ -283,7 +292,12 @@ mod tests {
                 task_type: "pii_detection".to_string(),
                 input: "test input".to_string(),
             },
+            CliCommand::ProtocolsStatus,
+            CliCommand::ProtocolsAgentCard {
+                agent_name: "test-agent".to_string(),
+            },
+            CliCommand::ProtocolsStart { port: 3000 },
         ];
-        assert_eq!(_cmds.len(), 39);
+        assert_eq!(_cmds.len(), 42);
     }
 }

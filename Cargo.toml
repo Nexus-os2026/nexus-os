@@ -33,6 +33,7 @@ members = [
   "enterprise",
   "cloud",
   "agents/collaboration",
+  "protocols",
 ]
 
 [workspace.package]
