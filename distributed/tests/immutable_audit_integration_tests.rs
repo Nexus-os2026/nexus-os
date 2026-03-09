@@ -224,9 +224,20 @@ fn tamper_detected_by_peer_via_gossip() {
     assert_eq!(chain_b.chain_length(), 2);
 
     // Verify hashes actually differ at sequence 1
-    let hash_a1 = chain_a.get_block_by_sequence(1).unwrap().content_hash.clone();
-    let hash_b1 = chain_b.get_block_by_sequence(1).unwrap().content_hash.clone();
-    assert_ne!(hash_a1, hash_b1, "chains must have different hashes at seq 1");
+    let hash_a1 = chain_a
+        .get_block_by_sequence(1)
+        .unwrap()
+        .content_hash
+        .clone();
+    let hash_b1 = chain_b
+        .get_block_by_sequence(1)
+        .unwrap()
+        .content_hash
+        .clone();
+    assert_ne!(
+        hash_a1, hash_b1,
+        "chains must have different hashes at seq 1"
+    );
 
     // Set up pairing
     let dir = tempdir("tamper");
@@ -235,16 +246,16 @@ fn tamper_detected_by_peer_via_gossip() {
     pair_managers(&mut mgr_a, &mut mgr_b);
 
     let mut gossip_a = GossipProtocol::new(transport.clone(), node_a, chain_a, mgr_a);
-    let mut gossip_b = GossipProtocol::new(transport.clone(), node_b, chain_b, mgr_b);
+    let gossip_b = GossipProtocol::new(transport.clone(), node_b, chain_b, mgr_b);
 
     // B announces with its tampered latest hash
     gossip_b.start_gossip_round().unwrap();
 
     // A processes and detects hash mismatch at sequence 1
     let actions = gossip_a.process_incoming(&vk).unwrap();
-    let tamper_detected = actions.iter().any(
-        |a| matches!(a, GossipAction::TamperDetected { sequence } if *sequence == 1),
-    );
+    let tamper_detected = actions
+        .iter()
+        .any(|a| matches!(a, GossipAction::TamperDetected { sequence } if *sequence == 1));
     assert!(
         tamper_detected,
         "expected tamper detection at sequence 1, got: {actions:?}"
@@ -373,7 +384,10 @@ fn kernel_events_flow_through_batcher_into_audit_blocks() {
 
     assert_eq!(trail.sealed_batch_count(), 2);
     assert_eq!(trail.pending_batch_count(), 2);
-    assert!(trail.verify_integrity(), "kernel audit chain should be valid");
+    assert!(
+        trail.verify_integrity(),
+        "kernel audit chain should be valid"
+    );
 
     // Flush remaining
     trail.flush_batcher();

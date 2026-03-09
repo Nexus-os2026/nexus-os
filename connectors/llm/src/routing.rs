@@ -25,21 +25,16 @@ pub enum RoutingStrategy {
 }
 
 /// Type of task being routed, used to select governance-aware routing.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TaskType {
     /// General-purpose LLM request — uses strategy-based routing only.
+    #[default]
     General,
     /// Governance task — prefers local SLM, falls back to strategy-based.
     Governance {
         /// The governance task category (e.g. "pii_detection", "prompt_safety").
         task_type: String,
     },
-}
-
-impl Default for TaskType {
-    fn default() -> Self {
-        Self::General
-    }
 }
 
 impl TaskType {

@@ -6,11 +6,9 @@
 
 use nexus_sdk::context::AgentContext;
 use nexus_sdk::sandbox::{SandboxConfig, SandboxRuntime};
-use nexus_sdk::wasm_signature::{
-    sign_wasm_bytes, test_keypair, SignaturePolicy, SignatureVerification,
-};
+use nexus_sdk::wasm_signature::{sign_wasm_bytes, test_keypair, SignaturePolicy};
 use nexus_sdk::wasmtime_sandbox::WasmtimeSandbox;
-use nexus_sdk::{AgentOutput, NexusAgent, WasmAgent};
+use nexus_sdk::{NexusAgent, WasmAgent};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -167,7 +165,10 @@ fn host_function_capability_granted() {
     // LLM query costs 10 fuel, plus wasm instruction fuel
     assert!(ctx.fuel_remaining() < 1000);
     // Should have the mock LLM response in outputs
-    assert!(result.outputs.iter().any(|o| o.contains("[mock-llm-response")));
+    assert!(result
+        .outputs
+        .iter()
+        .any(|o| o.contains("[mock-llm-response")));
 }
 
 #[test]
@@ -199,7 +200,10 @@ fn host_function_capability_denied_at_context_level() {
     // Module completes because it drops the error return code
     assert!(result.completed);
     // No mock LLM response should appear
-    assert!(!result.outputs.iter().any(|o| o.contains("[mock-llm-response")));
+    assert!(!result
+        .outputs
+        .iter()
+        .any(|o| o.contains("[mock-llm-response")));
 }
 
 #[test]
@@ -210,7 +214,10 @@ fn fs_read_capability_granted() {
 
     let result = sandbox.execute(&wasm, &mut ctx);
     assert!(result.completed);
-    assert!(result.outputs.iter().any(|o| o.contains("[mock-file-content")));
+    assert!(result
+        .outputs
+        .iter()
+        .any(|o| o.contains("[mock-file-content")));
 }
 
 // ===========================================================================
@@ -250,9 +257,10 @@ fn fuel_tracking_accurate() {
     assert!(ctx.fuel_remaining() < fuel_before);
 
     // Audit trail should have wasm_fuel_consumed event
-    let has_fuel_event = ctx.audit_trail().events().iter().any(|e| {
-        e.payload.get("action").and_then(|v| v.as_str()) == Some("wasm_fuel_consumed")
-    });
+    let has_fuel_event =
+        ctx.audit_trail().events().iter().any(|e| {
+            e.payload.get("action").and_then(|v| v.as_str()) == Some("wasm_fuel_consumed")
+        });
     assert!(has_fuel_event);
 }
 
@@ -298,7 +306,10 @@ fn memory_isolation_between_agents() {
     let mut sandbox_b = make_sandbox();
     let mut ctx_b = make_ctx(vec![], 1000);
     let result_b = sandbox_b.execute(&wasm_read, &mut ctx_b);
-    assert!(result_b.completed, "agent B should not see agent A's memory");
+    assert!(
+        result_b.completed,
+        "agent B should not see agent A's memory"
+    );
 }
 
 // ===========================================================================
@@ -388,10 +399,14 @@ fn audit_trail_captures_signature_check() {
 
     sandbox.execute(&minimal_wasm(), &mut ctx);
 
-    let has_sig_event = ctx.audit_trail().events().iter().any(|e| {
-        e.payload.get("action").and_then(|v| v.as_str()) == Some("wasm_signature_check")
-    });
-    assert!(has_sig_event, "should have a wasm_signature_check audit event");
+    let has_sig_event =
+        ctx.audit_trail().events().iter().any(|e| {
+            e.payload.get("action").and_then(|v| v.as_str()) == Some("wasm_signature_check")
+        });
+    assert!(
+        has_sig_event,
+        "should have a wasm_signature_check audit event"
+    );
 }
 
 #[test]
@@ -403,9 +418,11 @@ fn audit_trail_captures_host_function_calls() {
     sandbox.execute(&wasm, &mut ctx);
 
     // Should have LlmCall event from AgentContext::llm_query
-    let has_llm_event = ctx.audit_trail().events().iter().any(|e| {
-        e.payload.get("action").and_then(|v| v.as_str()) == Some("llm_query")
-    });
+    let has_llm_event = ctx
+        .audit_trail()
+        .events()
+        .iter()
+        .any(|e| e.payload.get("action").and_then(|v| v.as_str()) == Some("llm_query"));
     assert!(has_llm_event, "should have llm_query audit event");
 }
 
@@ -417,9 +434,10 @@ fn audit_trail_captures_fuel_consumption() {
 
     sandbox.execute(&wasm, &mut ctx);
 
-    let has_fuel_event = ctx.audit_trail().events().iter().any(|e| {
-        e.payload.get("action").and_then(|v| v.as_str()) == Some("wasm_fuel_consumed")
-    });
+    let has_fuel_event =
+        ctx.audit_trail().events().iter().any(|e| {
+            e.payload.get("action").and_then(|v| v.as_str()) == Some("wasm_fuel_consumed")
+        });
     assert!(has_fuel_event, "should have wasm_fuel_consumed audit event");
 }
 
@@ -454,7 +472,10 @@ fn signature_accepts_signed_module() {
     let mut ctx = make_ctx(vec![], 1000);
     let result = sandbox.execute(&signed, &mut ctx);
 
-    assert!(result.completed, "signed module should execute successfully");
+    assert!(
+        result.completed,
+        "signed module should execute successfully"
+    );
     assert!(result.outputs.contains(&"hello from wasm".to_string()));
 }
 
@@ -510,7 +531,10 @@ fn signature_allow_unsigned_still_runs() {
     let mut ctx = make_ctx(vec![], 1000);
     let result = sandbox.execute(&minimal_wasm(), &mut ctx);
 
-    assert!(result.completed, "unsigned module should run under AllowUnsigned");
+    assert!(
+        result.completed,
+        "unsigned module should run under AllowUnsigned"
+    );
 }
 
 #[test]
@@ -530,9 +554,7 @@ fn signature_audit_event_records_result() {
         .audit_trail()
         .events()
         .iter()
-        .find(|e| {
-            e.payload.get("action").and_then(|v| v.as_str()) == Some("wasm_signature_check")
-        })
+        .find(|e| e.payload.get("action").and_then(|v| v.as_str()) == Some("wasm_signature_check"))
         .expect("should have wasm_signature_check event");
 
     assert_eq!(
@@ -598,7 +620,10 @@ fn shared_engine_isolation() {
     assert!(!result_a.completed);
 
     let result_b = sandbox_b.execute(&hello_wasm(), &mut ctx_b);
-    assert!(result_b.completed, "crash in agent A must not affect agent B with shared engine");
+    assert!(
+        result_b.completed,
+        "crash in agent A must not affect agent B with shared engine"
+    );
 }
 
 // ===========================================================================
@@ -617,5 +642,8 @@ fn multiple_executions_accumulate_fuel() {
     sandbox.execute(&wasm, &mut ctx);
     let fuel_after_second = sandbox.fuel_consumed();
 
-    assert!(fuel_after_second > fuel_after_first, "fuel should accumulate across executions");
+    assert!(
+        fuel_after_second > fuel_after_first,
+        "fuel should accumulate across executions"
+    );
 }

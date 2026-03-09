@@ -120,13 +120,9 @@ pub enum ModelCommand {
     /// List available and downloaded local SLM models
     List,
     /// Download a model from HuggingFace
-    Download {
-        model_id: String,
-    },
+    Download { model_id: String },
     /// Load a downloaded model into memory
-    Load {
-        model_id: String,
-    },
+    Load { model_id: String },
     /// Unload the active model from memory
     Unload,
     /// Show loaded model status, RAM usage, and inference stats
@@ -245,8 +241,12 @@ fn sandbox_status() -> Result<String, String> {
     output.push_str("  Memory isolation:     Store-per-agent (wasmtime StoreLimits)\n");
     output.push_str("  Fuel metering:        1 nexus unit = 10,000 wasm instructions\n");
     output.push_str("  Host functions:       nexus_log, nexus_emit_audit, nexus_llm_query,\n");
-    output.push_str("                        nexus_fs_read, nexus_fs_write, nexus_request_approval\n");
-    output.push_str("  Signature policy:     Ed25519 (configurable: RequireSigned / AllowUnsigned)\n");
+    output.push_str(
+        "                        nexus_fs_read, nexus_fs_write, nexus_request_approval\n",
+    );
+    output.push_str(
+        "  Signature policy:     Ed25519 (configurable: RequireSigned / AllowUnsigned)\n",
+    );
     output.push_str("  Kill gate:            SafetySupervisor three-strike rule\n");
 
     Ok(output)

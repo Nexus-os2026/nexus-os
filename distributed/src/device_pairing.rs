@@ -67,14 +67,13 @@ mod hex {
     }
 
     pub fn decode(s: &str) -> Result<Vec<u8>, String> {
-        if s.len() % 2 != 0 {
+        if !s.len().is_multiple_of(2) {
             return Err("odd-length hex string".to_string());
         }
         (0..s.len())
             .step_by(2)
             .map(|i| {
-                u8::from_str_radix(&s[i..i + 2], 16)
-                    .map_err(|e| format!("invalid hex at {i}: {e}"))
+                u8::from_str_radix(&s[i..i + 2], 16).map_err(|e| format!("invalid hex at {i}: {e}"))
             })
             .collect()
     }
@@ -134,10 +133,9 @@ impl DevicePairingManager {
                     let content = fs::read_to_string(&path).map_err(|e| {
                         format!("failed to read pairing file '{}': {e}", path.display())
                     })?;
-                    let pairing: DevicePairing =
-                        serde_json::from_str(&content).map_err(|e| {
-                            format!("failed to parse pairing file '{}': {e}", path.display())
-                        })?;
+                    let pairing: DevicePairing = serde_json::from_str(&content).map_err(|e| {
+                        format!("failed to parse pairing file '{}': {e}", path.display())
+                    })?;
                     pairings.insert(pairing.remote_node, pairing);
                 }
             }
@@ -164,7 +162,7 @@ impl DevicePairingManager {
     /// Generate a one-time pairing code for this device.
     pub fn generate_pairing_code(&self) -> PairingCode {
         let nonce = Uuid::new_v4().as_bytes().to_vec(); // 16 random bytes
-        // Extend to 32 bytes for consistency
+                                                        // Extend to 32 bytes for consistency
         let mut nonce_32 = [0u8; 32];
         nonce_32[..16].copy_from_slice(&nonce);
         let extra = Uuid::new_v4();
@@ -309,11 +307,10 @@ fn load_or_generate_keypair(path: &Path) -> Result<SigningKey, String> {
         // Persist seed bytes
         if let Some(parent) = path.parent() {
             if !parent.exists() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| format!("failed to create key dir: {e}"))?;
+                fs::create_dir_all(parent).map_err(|e| format!("failed to create key dir: {e}"))?;
             }
         }
-        fs::write(path, &seed)
+        fs::write(path, seed)
             .map_err(|e| format!("failed to write keypair to '{}': {e}", path.display()))?;
 
         Ok(signing_key)
@@ -455,8 +452,7 @@ mod tests {
 
         // First open generates keypair
         let pub_key_1 = {
-            let mgr =
-                DevicePairingManager::open(node_id, &key_path, &pairings_dir).unwrap();
+            let mgr = DevicePairingManager::open(node_id, &key_path, &pairings_dir).unwrap();
             assert!(key_path.exists());
             assert_eq!(fs::read(&key_path).unwrap().len(), 32);
             mgr.public_key_bytes()
@@ -464,8 +460,7 @@ mod tests {
 
         // Second open loads same keypair
         let pub_key_2 = {
-            let mgr =
-                DevicePairingManager::open(node_id, &key_path, &pairings_dir).unwrap();
+            let mgr = DevicePairingManager::open(node_id, &key_path, &pairings_dir).unwrap();
             mgr.public_key_bytes()
         };
 
@@ -482,8 +477,7 @@ mod tests {
         let pairings_dir = dir.join("pairings");
         let local_id = Uuid::new_v4();
 
-        let mut mgr =
-            DevicePairingManager::open(local_id, &key_path, &pairings_dir).unwrap();
+        let mut mgr = DevicePairingManager::open(local_id, &key_path, &pairings_dir).unwrap();
 
         // Create two fake remote managers and pair both
         let (remote_a, dir_a) = make_manager("list_remote_a");

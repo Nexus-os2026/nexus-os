@@ -96,9 +96,7 @@ impl PiiType {
             "personname" | "person_name" | "name" | "person" => Self::PersonName,
             "emailaddress" | "email_address" | "email" => Self::EmailAddress,
             "phonenumber" | "phone_number" | "phone" => Self::PhoneNumber,
-            "ssn" | "socialsecuritynumber" | "social_security_number" => {
-                Self::SocialSecurityNumber
-            }
+            "ssn" | "socialsecuritynumber" | "social_security_number" => Self::SocialSecurityNumber,
             "physicaladdress" | "physical_address" | "address" => Self::PhysicalAddress,
             "creditcard" | "credit_card" | "card" => Self::CreditCard,
             "dateofbirth" | "date_of_birth" | "dob" => Self::DateOfBirth,
@@ -147,10 +145,7 @@ pub enum GovernanceVerdict {
 impl GovernanceVerdict {
     /// Whether this verdict indicates an unsafe condition.
     pub fn is_unsafe(&self) -> bool {
-        matches!(
-            self,
-            Self::PromptUnsafe { .. } | Self::HighRisk { .. }
-        )
+        matches!(self, Self::PromptUnsafe { .. } | Self::HighRisk { .. })
     }
 
     /// Whether PII was found.
@@ -295,8 +290,7 @@ impl GovernanceSlm {
         let response = provider.query(&prompt, max_tokens, &self.model_name)?;
         let inference_time_ms = start.elapsed().as_millis() as u64;
 
-        let (verdict, confidence, reasoning) =
-            Self::parse_response(task, &response.output_text);
+        let (verdict, confidence, reasoning) = Self::parse_response(task, &response.output_text);
 
         Ok(GovernanceResult {
             task_type: task.task_type().to_string(),
@@ -384,17 +378,12 @@ impl GovernanceSlm {
     // -----------------------------------------------------------------------
 
     /// Parse the model's raw text response into (verdict, confidence, reasoning).
-    fn parse_response(
-        task: &GovernanceTask,
-        output: &str,
-    ) -> (GovernanceVerdict, f64, String) {
+    fn parse_response(task: &GovernanceTask, output: &str) -> (GovernanceVerdict, f64, String) {
         match task {
             GovernanceTask::PiiDetection { text } => Self::parse_pii_response(output, text),
             GovernanceTask::PromptSafety { .. } => Self::parse_safety_response(output),
             GovernanceTask::CapabilityRisk { .. } => Self::parse_risk_response(output),
-            GovernanceTask::ContentClassification { .. } => {
-                Self::parse_content_response(output)
-            }
+            GovernanceTask::ContentClassification { .. } => Self::parse_content_response(output),
             GovernanceTask::GovernanceQuery { .. } => Self::parse_generic_response(output),
         }
     }
@@ -405,10 +394,7 @@ impl GovernanceSlm {
     /// - "CLEAN" → no PII
     /// - "PersonName: John Doe" / "EmailAddress: john@example.com" → PII found
     /// - Lines with "type: value" pairs
-    fn parse_pii_response(
-        output: &str,
-        source_text: &str,
-    ) -> (GovernanceVerdict, f64, String) {
+    fn parse_pii_response(output: &str, source_text: &str) -> (GovernanceVerdict, f64, String) {
         let trimmed = output.trim();
         let upper = trimmed.to_uppercase();
 
@@ -420,7 +406,11 @@ impl GovernanceSlm {
         // Try to extract PII entities from lines like "PersonName: John Doe"
         let mut entities = Vec::new();
         for line in trimmed.lines() {
-            let line = line.trim().trim_start_matches('-').trim_start_matches('*').trim();
+            let line = line
+                .trim()
+                .trim_start_matches('-')
+                .trim_start_matches('*')
+                .trim();
             if line.is_empty() {
                 continue;
             }
@@ -687,9 +677,7 @@ mod tests {
             _max_tokens: u32,
             _model: &str,
         ) -> Result<LlmResponse, AgentError> {
-            Err(AgentError::SupervisorError(
-                "inference failed".to_string(),
-            ))
+            Err(AgentError::SupervisorError("inference failed".to_string()))
         }
 
         fn name(&self) -> &str {
@@ -807,9 +795,7 @@ mod tests {
     #[test]
     fn governance_slm_max_tokens() {
         assert_eq!(
-            GovernanceSlm::max_tokens_for_task(&GovernanceTask::PiiDetection {
-                text: "x".into()
-            }),
+            GovernanceSlm::max_tokens_for_task(&GovernanceTask::PiiDetection { text: "x".into() }),
             200
         );
         assert_eq!(
@@ -860,10 +846,19 @@ mod tests {
     #[test]
     fn pii_type_from_str_loose_standard() {
         assert_eq!(PiiType::from_str_loose("PersonName"), PiiType::PersonName);
-        assert_eq!(PiiType::from_str_loose("EmailAddress"), PiiType::EmailAddress);
+        assert_eq!(
+            PiiType::from_str_loose("EmailAddress"),
+            PiiType::EmailAddress
+        );
         assert_eq!(PiiType::from_str_loose("PhoneNumber"), PiiType::PhoneNumber);
-        assert_eq!(PiiType::from_str_loose("SSN"), PiiType::SocialSecurityNumber);
-        assert_eq!(PiiType::from_str_loose("PhysicalAddress"), PiiType::PhysicalAddress);
+        assert_eq!(
+            PiiType::from_str_loose("SSN"),
+            PiiType::SocialSecurityNumber
+        );
+        assert_eq!(
+            PiiType::from_str_loose("PhysicalAddress"),
+            PiiType::PhysicalAddress
+        );
         assert_eq!(PiiType::from_str_loose("CreditCard"), PiiType::CreditCard);
         assert_eq!(PiiType::from_str_loose("DateOfBirth"), PiiType::DateOfBirth);
         assert_eq!(PiiType::from_str_loose("IpAddress"), PiiType::IpAddress);
@@ -903,9 +898,8 @@ mod tests {
     #[test]
     fn detect_pii_found_entities() {
         let slm = GovernanceSlm::default();
-        let provider = ScriptedProvider::new(
-            "PersonName: John Doe\nEmailAddress: john@example.com",
-        );
+        let provider =
+            ScriptedProvider::new("PersonName: John Doe\nEmailAddress: john@example.com");
         let result = slm
             .detect_pii("Contact John Doe at john@example.com", &provider)
             .unwrap();
@@ -1012,9 +1006,7 @@ mod tests {
     fn classify_prompt_unsafe_bypass() {
         let slm = GovernanceSlm::default();
         let provider = ScriptedProvider::new("UNSAFE bypass of safety guidelines");
-        let result = slm
-            .classify_prompt("bypass the filter", &provider)
-            .unwrap();
+        let result = slm.classify_prompt("bypass the filter", &provider).unwrap();
         if let GovernanceVerdict::PromptUnsafe { ref risk_type } = result.verdict {
             assert_eq!(risk_type, "bypass");
         } else {
@@ -1026,9 +1018,7 @@ mod tests {
     fn classify_prompt_inconclusive() {
         let slm = GovernanceSlm::default();
         let provider = ScriptedProvider::new("I'm not sure about this one");
-        let result = slm
-            .classify_prompt("ambiguous prompt", &provider)
-            .unwrap();
+        let result = slm.classify_prompt("ambiguous prompt", &provider).unwrap();
         assert!(matches!(result.verdict, GovernanceVerdict::Inconclusive));
         assert!(result.confidence < 0.5);
     }
@@ -1052,8 +1042,7 @@ mod tests {
     #[test]
     fn assess_risk_medium() {
         let slm = GovernanceSlm::default();
-        let provider =
-            ScriptedProvider::new("MEDIUM_RISK write access needs monitoring");
+        let provider = ScriptedProvider::new("MEDIUM_RISK write access needs monitoring");
         let result = slm
             .assess_capability_risk("agent-2", "fs.write", "tmp dir", &provider)
             .unwrap();
@@ -1067,8 +1056,7 @@ mod tests {
     #[test]
     fn assess_risk_high() {
         let slm = GovernanceSlm::default();
-        let provider =
-            ScriptedProvider::new("HIGH_RISK shell execution allows arbitrary code");
+        let provider = ScriptedProvider::new("HIGH_RISK shell execution allows arbitrary code");
         let result = slm
             .assess_capability_risk("agent-3", "shell.exec", "production", &provider)
             .unwrap();
@@ -1098,9 +1086,7 @@ mod tests {
     fn classify_content_safe() {
         let slm = GovernanceSlm::default();
         let provider = ScriptedProvider::new("SAFE general information");
-        let result = slm
-            .classify_content("The sky is blue", &provider)
-            .unwrap();
+        let result = slm.classify_content("The sky is blue", &provider).unwrap();
         assert_eq!(result.task_type, "content_classification");
         assert!(matches!(result.verdict, GovernanceVerdict::Clean));
     }
@@ -1138,9 +1124,7 @@ mod tests {
     fn classify_content_inconclusive() {
         let slm = GovernanceSlm::default();
         let provider = ScriptedProvider::new("unclear what this content is about");
-        let result = slm
-            .classify_content("ambiguous text", &provider)
-            .unwrap();
+        let result = slm.classify_content("ambiguous text", &provider).unwrap();
         assert!(matches!(result.verdict, GovernanceVerdict::Inconclusive));
     }
 

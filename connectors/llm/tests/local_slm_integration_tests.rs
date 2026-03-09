@@ -364,8 +364,10 @@ fn governance_prompt_injection_detected() {
 #[test]
 fn governance_capability_risk_assessment() {
     let gov = GovernanceSlm::new(0.7, "test-model".to_string());
-    let provider =
-        ScriptedProvider::new("mock", "HIGH_RISK - this capability allows arbitrary code execution");
+    let provider = ScriptedProvider::new(
+        "mock",
+        "HIGH_RISK - this capability allows arbitrary code execution",
+    );
 
     let result = gov
         .assess_capability_risk(
@@ -394,7 +396,10 @@ fn governance_content_classification() {
     let provider = ScriptedProvider::new("mock", "SENSITIVE personal_data");
 
     let result = gov
-        .classify_content("User profile with home address and phone number.", &provider)
+        .classify_content(
+            "User profile with home address and phone number.",
+            &provider,
+        )
         .unwrap();
 
     assert_eq!(result.task_type, "content_classification");
@@ -495,7 +500,9 @@ fn provider_router_falls_back_when_local_unavailable() {
     router.add_provider(Box::new(FailingProvider::new("local-slm")));
 
     let task = TaskType::governance("prompt_safety");
-    let result = router.route_task("check safety", 100, "test", &task).unwrap();
+    let result = router
+        .route_task("check safety", 100, "test", &task)
+        .unwrap();
 
     assert!(
         result.output_text.contains("cloud fallback"),
@@ -554,10 +561,7 @@ fn threat_detector_ml_catches_what_patterns_missed() {
 #[test]
 fn threat_detector_ml_detects_pii_in_file_write() {
     let detector = ThreatDetector::new(
-        vec![
-            "llm.query".to_string(),
-            "fs.write".to_string(),
-        ],
+        vec!["llm.query".to_string(), "fs.write".to_string()],
         10_000,
     );
     let scanner = MockMlScanner::new(false, true);

@@ -128,8 +128,7 @@ impl ThreatDetector {
                     total_fuel_consumed += fuel_cost;
                     // Rule 1: Path traversal detection
                     if let Some(indicator) = Self::check_path_traversal(path) {
-                        dangerous_reason =
-                            Some(format!("path traversal in file read: {path}"));
+                        dangerous_reason = Some(format!("path traversal in file read: {path}"));
                         indicators.push(indicator);
                     }
                 }
@@ -139,8 +138,7 @@ impl ThreatDetector {
                     total_fuel_consumed += fuel_cost;
                     // Rule 1: Path traversal detection
                     if let Some(indicator) = Self::check_path_traversal(path) {
-                        dangerous_reason =
-                            Some(format!("path traversal in file write: {path}"));
+                        dangerous_reason = Some(format!("path traversal in file write: {path}"));
                         indicators.push(indicator);
                     }
                 }
@@ -154,24 +152,24 @@ impl ThreatDetector {
         for effect in effects {
             match effect {
                 ContextSideEffect::LlmQuery { .. } => {
-                    if !self.manifest_capabilities.contains(&"llm.query".to_string()) {
-                        indicators.push(
-                            "capability escalation: llm.query not in manifest".to_string(),
-                        );
+                    if !self
+                        .manifest_capabilities
+                        .contains(&"llm.query".to_string())
+                    {
+                        indicators
+                            .push("capability escalation: llm.query not in manifest".to_string());
                     }
                 }
                 ContextSideEffect::FileRead { .. } => {
                     if !self.manifest_capabilities.contains(&"fs.read".to_string()) {
-                        indicators.push(
-                            "capability escalation: fs.read not in manifest".to_string(),
-                        );
+                        indicators
+                            .push("capability escalation: fs.read not in manifest".to_string());
                     }
                 }
                 ContextSideEffect::FileWrite { .. } => {
                     if !self.manifest_capabilities.contains(&"fs.write".to_string()) {
-                        indicators.push(
-                            "capability escalation: fs.write not in manifest".to_string(),
-                        );
+                        indicators
+                            .push("capability escalation: fs.write not in manifest".to_string());
                     }
                 }
                 _ => {}
@@ -255,10 +253,7 @@ impl ThreatDetector {
                         Ok(verdict) => {
                             if verdict.is_unsafe {
                                 ml_dangerous_reason.get_or_insert_with(|| {
-                                    format!(
-                                        "ML prompt injection detected: {}",
-                                        verdict.reason
-                                    )
+                                    format!("ML prompt injection detected: {}", verdict.reason)
                                 });
                                 ml_indicators.push(format!(
                                     "ml_prompt_injection: {} (confidence: {:.2})",
@@ -268,9 +263,7 @@ impl ThreatDetector {
                             prompt_verdicts.push(verdict);
                         }
                         Err(e) => {
-                            ml_indicators.push(format!(
-                                "ml_prompt_classify_error: {e}"
-                            ));
+                            ml_indicators.push(format!("ml_prompt_classify_error: {e}"));
                         }
                     }
 
@@ -286,9 +279,7 @@ impl ThreatDetector {
                             pii_verdicts.push(verdict);
                         }
                         Err(e) => {
-                            ml_indicators.push(format!(
-                                "ml_pii_detect_error: {e}"
-                            ));
+                            ml_indicators.push(format!("ml_pii_detect_error: {e}"));
                         }
                     }
 
@@ -297,10 +288,7 @@ impl ThreatDetector {
                         Ok(verdict) => {
                             if verdict.is_unsafe {
                                 ml_dangerous_reason.get_or_insert_with(|| {
-                                    format!(
-                                        "ML content safety violation: {}",
-                                        verdict.reason
-                                    )
+                                    format!("ML content safety violation: {}", verdict.reason)
                                 });
                                 ml_indicators.push(format!(
                                     "ml_unsafe_content: {} (confidence: {:.2})",
@@ -310,9 +298,7 @@ impl ThreatDetector {
                             content_verdicts.push(verdict);
                         }
                         Err(e) => {
-                            ml_indicators.push(format!(
-                                "ml_content_classify_error: {e}"
-                            ));
+                            ml_indicators.push(format!("ml_content_classify_error: {e}"));
                         }
                     }
                 }
@@ -333,9 +319,7 @@ impl ThreatDetector {
                                 pii_verdicts.push(verdict);
                             }
                             Err(e) => {
-                                ml_indicators.push(format!(
-                                    "ml_pii_detect_error: {e}"
-                                ));
+                                ml_indicators.push(format!("ml_pii_detect_error: {e}"));
                             }
                         }
                     }
@@ -646,10 +630,7 @@ impl ShadowSandbox {
         let events = self.shadow_ctx.audit_trail().events();
         for event in events.iter().skip(self.audit_count_at_fork) {
             let payload = &event.payload;
-            let action = payload
-                .get("action")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let action = payload.get("action").and_then(|v| v.as_str()).unwrap_or("");
 
             if action == "fuel_exhausted" {
                 side_effects.push(SideEffect::FuelExhausted {
@@ -680,7 +661,9 @@ impl ShadowSandbox {
             }
         }
 
-        let fuel_consumed = self.fuel_at_fork.saturating_sub(self.shadow_ctx.fuel_remaining());
+        let fuel_consumed = self
+            .fuel_at_fork
+            .saturating_sub(self.shadow_ctx.fuel_remaining());
 
         Some(ShadowResult {
             completed: sandbox_result.completed,
@@ -830,10 +813,15 @@ mod tests {
         let result = shadow.collect_results().unwrap();
         assert!(result.completed);
 
-        let has_log = result.side_effects.iter().any(|se| {
-            matches!(se, SideEffect::Log { message } if message == "shadow says hello")
-        });
-        assert!(has_log, "expected Log side-effect, got: {:?}", result.side_effects);
+        let has_log = result
+            .side_effects
+            .iter()
+            .any(|se| matches!(se, SideEffect::Log { message } if message == "shadow says hello"));
+        assert!(
+            has_log,
+            "expected Log side-effect, got: {:?}",
+            result.side_effects
+        );
     }
 
     #[test]
@@ -848,9 +836,20 @@ mod tests {
         assert!(result.completed);
 
         let has_llm = result.side_effects.iter().any(|se| {
-            matches!(se, SideEffect::LlmQuery { prompt_len: 12, max_tokens: 100, fuel_cost: 10 })
+            matches!(
+                se,
+                SideEffect::LlmQuery {
+                    prompt_len: 12,
+                    max_tokens: 100,
+                    fuel_cost: 10
+                }
+            )
         });
-        assert!(has_llm, "expected LlmQuery side-effect, got: {:?}", result.side_effects);
+        assert!(
+            has_llm,
+            "expected LlmQuery side-effect, got: {:?}",
+            result.side_effects
+        );
         assert!(result.fuel_consumed > 0);
     }
 
@@ -868,7 +867,11 @@ mod tests {
         let has_write = result.side_effects.iter().any(|se| {
             matches!(se, SideEffect::FileWrite { path, content_len: 14, .. } if path == "/tmp/shadow.txt")
         });
-        assert!(has_write, "expected FileWrite side-effect, got: {:?}", result.side_effects);
+        assert!(
+            has_write,
+            "expected FileWrite side-effect, got: {:?}",
+            result.side_effects
+        );
     }
 
     #[test]
@@ -1244,8 +1247,8 @@ mod tests {
     #[test]
     fn ml_scan_detects_prompt_injection() {
         let detector = ThreatDetector::new(vec!["llm.query".into()], 1000);
-        let scanner = MockMlScanner::all_safe()
-            .with_prompt_unsafe("injection attempt detected", 0.92);
+        let scanner =
+            MockMlScanner::all_safe().with_prompt_unsafe("injection attempt detected", 0.92);
         let effects = vec![ContextSideEffect::LlmQuery {
             prompt: "Sneaky injection that patterns miss".into(),
             max_tokens: 100,
@@ -1267,8 +1270,7 @@ mod tests {
     #[test]
     fn ml_scan_detects_pii_in_prompt() {
         let detector = ThreatDetector::new(vec!["llm.query".into()], 1000);
-        let scanner = MockMlScanner::all_safe()
-            .with_pii_detected("email address found", 0.88);
+        let scanner = MockMlScanner::all_safe().with_pii_detected("email address found", 0.88);
         let effects = vec![ContextSideEffect::LlmQuery {
             prompt: "Send to user@example.com".into(),
             max_tokens: 100,
@@ -1288,8 +1290,7 @@ mod tests {
     #[test]
     fn ml_scan_detects_unsafe_content() {
         let detector = ThreatDetector::new(vec!["llm.query".into()], 1000);
-        let scanner = MockMlScanner::all_safe()
-            .with_content_unsafe("harmful content", 0.91);
+        let scanner = MockMlScanner::all_safe().with_content_unsafe("harmful content", 0.91);
         let effects = vec![ContextSideEffect::LlmQuery {
             prompt: "Some harmful text".into(),
             max_tokens: 100,
@@ -1315,17 +1316,22 @@ mod tests {
         }];
 
         let result = detector.scan_side_effects_ml(&effects, &scanner);
-        assert!(matches!(result.pattern_verdict, SafetyVerdict::Dangerous { .. }));
+        assert!(matches!(
+            result.pattern_verdict,
+            SafetyVerdict::Dangerous { .. }
+        ));
         // Combined should still be Dangerous (pattern trumps)
-        assert!(matches!(result.combined_verdict, SafetyVerdict::Dangerous { .. }));
+        assert!(matches!(
+            result.combined_verdict,
+            SafetyVerdict::Dangerous { .. }
+        ));
     }
 
     #[test]
     fn ml_scan_combines_pattern_safe_with_ml_suspicious() {
         // Pattern says safe, ML finds PII (Suspicious)
         let detector = ThreatDetector::new(vec!["llm.query".into()], 1000);
-        let scanner = MockMlScanner::all_safe()
-            .with_pii_detected("SSN detected", 0.85);
+        let scanner = MockMlScanner::all_safe().with_pii_detected("SSN detected", 0.85);
         let effects = vec![ContextSideEffect::LlmQuery {
             prompt: "My SSN is 123-45-6789".into(),
             max_tokens: 100,
@@ -1334,16 +1340,21 @@ mod tests {
 
         let result = detector.scan_side_effects_ml(&effects, &scanner);
         assert_eq!(result.pattern_verdict, SafetyVerdict::Safe);
-        assert!(matches!(result.ml_verdict, SafetyVerdict::Suspicious { .. }));
-        assert!(matches!(result.combined_verdict, SafetyVerdict::Suspicious { .. }));
+        assert!(matches!(
+            result.ml_verdict,
+            SafetyVerdict::Suspicious { .. }
+        ));
+        assert!(matches!(
+            result.combined_verdict,
+            SafetyVerdict::Suspicious { .. }
+        ));
     }
 
     #[test]
     fn ml_scan_merges_both_suspicious() {
         // Pattern finds capability escalation (Suspicious), ML finds PII (Suspicious)
         let detector = ThreatDetector::new(vec![], 1000); // no capabilities → escalation
-        let scanner = MockMlScanner::all_safe()
-            .with_pii_detected("PII found", 0.80);
+        let scanner = MockMlScanner::all_safe().with_pii_detected("PII found", 0.80);
         let effects = vec![ContextSideEffect::LlmQuery {
             prompt: "harmless query".into(),
             max_tokens: 50,
@@ -1351,14 +1362,25 @@ mod tests {
         }];
 
         let result = detector.scan_side_effects_ml(&effects, &scanner);
-        assert!(matches!(result.pattern_verdict, SafetyVerdict::Suspicious { .. }));
-        assert!(matches!(result.ml_verdict, SafetyVerdict::Suspicious { .. }));
+        assert!(matches!(
+            result.pattern_verdict,
+            SafetyVerdict::Suspicious { .. }
+        ));
+        assert!(matches!(
+            result.ml_verdict,
+            SafetyVerdict::Suspicious { .. }
+        ));
         // Combined merges indicators from both
         if let SafetyVerdict::Suspicious { indicators } = &result.combined_verdict {
-            assert!(indicators.iter().any(|i| i.contains("capability escalation")));
+            assert!(indicators
+                .iter()
+                .any(|i| i.contains("capability escalation")));
             assert!(indicators.iter().any(|i| i.contains("ml_pii")));
         } else {
-            panic!("expected combined Suspicious, got: {:?}", result.combined_verdict);
+            panic!(
+                "expected combined Suspicious, got: {:?}",
+                result.combined_verdict
+            );
         }
     }
 
@@ -1427,8 +1449,7 @@ mod tests {
     #[test]
     fn ml_scan_file_write_pii_in_path() {
         let detector = ThreatDetector::new(vec!["fs.write".into()], 1000);
-        let scanner = MockMlScanner::all_safe()
-            .with_pii_detected("sensitive path", 0.75);
+        let scanner = MockMlScanner::all_safe().with_pii_detected("sensitive path", 0.75);
         let effects = vec![ContextSideEffect::FileWrite {
             path: "/data/users/john_doe_ssn.csv".into(),
             content_size: 500,
@@ -1459,7 +1480,10 @@ mod tests {
         let result = detector.scan_side_effects_ml(&effects, &scanner);
         // ML verdict should be Dangerous (injection trumps PII)
         assert!(matches!(result.ml_verdict, SafetyVerdict::Dangerous { .. }));
-        assert!(matches!(result.combined_verdict, SafetyVerdict::Dangerous { .. }));
+        assert!(matches!(
+            result.combined_verdict,
+            SafetyVerdict::Dangerous { .. }
+        ));
     }
 
     #[test]

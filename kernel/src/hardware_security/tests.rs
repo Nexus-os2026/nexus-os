@@ -1,7 +1,4 @@
-use super::{
-    KeyBackend, KeyBackendKind, KeyError, KeyManager, KeyManagerConfig, KeyPurpose,
-    RotationApproval,
-};
+use super::{KeyBackendKind, KeyError, KeyManager, KeyManagerConfig, KeyPurpose, RotationApproval};
 use crate::audit::AuditTrail;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use uuid::Uuid;

@@ -29,8 +29,8 @@ pub use sandbox::{
     HostCallResult, HostFunction, InProcessSandbox, SandboxConfig, SandboxError, SandboxResult,
     SandboxRuntime,
 };
-pub use testing::TestHarness;
 pub use shadow_sandbox::{SafetyVerdict, ShadowResult, ShadowSandbox, SideEffect, ThreatDetector};
+pub use testing::TestHarness;
 pub use wasm_agent::WasmAgent;
 pub use wasm_signature::{SignaturePolicy, SignatureVerification};
 pub use wasmtime_host_functions::{SpeculativeDecision, SpeculativePolicy};

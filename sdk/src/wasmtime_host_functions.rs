@@ -130,7 +130,7 @@ fn threat_scan_side_effect(
     };
 
     let detector = ThreatDetector::new(capabilities, fuel_budget);
-    let verdict = detector.scan_side_effects(&[effect.clone()]);
+    let verdict = detector.scan_side_effects(std::slice::from_ref(effect));
 
     match verdict {
         SafetyVerdict::Dangerous { .. } => SpeculativeDecision::Block,
@@ -185,9 +185,7 @@ fn read_wasm_str(
 /// - `nexus_fs_read(path_ptr, path_len) -> i32` — speculative gate + `ctx.read_file()`
 /// - `nexus_fs_write(path_ptr, path_len, content_ptr, content_len) -> i32` — speculative gate + `ctx.write_file()`
 /// - `nexus_request_approval(desc_ptr, desc_len) -> i32` — speculative gate + `ctx.request_approval()`
-pub fn link_host_functions(
-    linker: &mut Linker<WasmAgentState>,
-) -> Result<(), SandboxError> {
+pub fn link_host_functions(linker: &mut Linker<WasmAgentState>) -> Result<(), SandboxError> {
     link_nexus_log(linker)?;
     link_nexus_emit_audit(linker)?;
     link_nexus_llm_query(linker)?;
@@ -227,9 +225,7 @@ fn link_nexus_emit_audit(linker: &mut Linker<WasmAgentState>) -> Result<(), Sand
         .func_wrap(
             "nexus",
             "nexus_emit_audit",
-            |mut caller: wasmtime::Caller<'_, WasmAgentState>,
-             msg_ptr: i32,
-             msg_len: i32| {
+            |mut caller: wasmtime::Caller<'_, WasmAgentState>, msg_ptr: i32, msg_len: i32| {
                 let memory = match caller.get_export("memory") {
                     Some(wasmtime::Extern::Memory(mem)) => mem,
                     _ => return,
@@ -264,7 +260,10 @@ fn link_nexus_llm_query(linker: &mut Linker<WasmAgentState>) -> Result<(), Sandb
                 let state = caller.data_mut();
 
                 // Check allowed_host_functions first (sandbox-level gate)
-                if !state.allowed_host_functions.contains(&"llm_query".to_string()) {
+                if !state
+                    .allowed_host_functions
+                    .contains(&"llm_query".to_string())
+                {
                     state.host_calls_made += 1;
                     return -1; // CapabilityDenied
                 }
@@ -359,7 +358,10 @@ fn link_nexus_fs_read(linker: &mut Linker<WasmAgentState>) -> Result<(), Sandbox
                 let path = read_wasm_str(&caller, &memory, path_ptr, path_len);
                 let state = caller.data_mut();
 
-                if !state.allowed_host_functions.contains(&"fs_read".to_string()) {
+                if !state
+                    .allowed_host_functions
+                    .contains(&"fs_read".to_string())
+                {
                     state.host_calls_made += 1;
                     return -1;
                 }
@@ -451,7 +453,10 @@ fn link_nexus_fs_write(linker: &mut Linker<WasmAgentState>) -> Result<(), Sandbo
                 let content = read_wasm_str(&caller, &memory, content_ptr, content_len);
                 let state = caller.data_mut();
 
-                if !state.allowed_host_functions.contains(&"fs_write".to_string()) {
+                if !state
+                    .allowed_host_functions
+                    .contains(&"fs_write".to_string())
+                {
                     state.host_calls_made += 1;
                     return -1;
                 }
@@ -527,9 +532,7 @@ fn link_nexus_fs_write(linker: &mut Linker<WasmAgentState>) -> Result<(), Sandbo
 
 /// `nexus_request_approval(desc_ptr, desc_len) -> i32`
 /// Speculative gate + delegation to `AgentContext::request_approval()`.
-fn link_nexus_request_approval(
-    linker: &mut Linker<WasmAgentState>,
-) -> Result<(), SandboxError> {
+fn link_nexus_request_approval(linker: &mut Linker<WasmAgentState>) -> Result<(), SandboxError> {
     linker
         .func_wrap(
             "nexus",
@@ -604,9 +607,7 @@ fn link_nexus_request_approval(
                 0
             },
         )
-        .map_err(|e| {
-            SandboxError::ConfigError(format!("link nexus_request_approval: {e}"))
-        })?;
+        .map_err(|e| SandboxError::ConfigError(format!("link nexus_request_approval: {e}")))?;
     Ok(())
 }
 

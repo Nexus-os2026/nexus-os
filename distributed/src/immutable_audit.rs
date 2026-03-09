@@ -193,8 +193,8 @@ impl FileAuditStore {
         let mut store = ContentAddressedStore::new();
 
         if dir.is_dir() {
-            let entries = fs::read_dir(&dir)
-                .map_err(|e| format!("failed to read audit store dir: {e}"))?;
+            let entries =
+                fs::read_dir(&dir).map_err(|e| format!("failed to read audit store dir: {e}"))?;
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().and_then(|e| e.to_str()) == Some("json") {
@@ -588,8 +588,7 @@ mod tests {
         let (sk, _vk) = test_keypair();
         let events = make_events(3);
         let node_id = Uuid::new_v4();
-        let content_hash =
-            AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
+        let content_hash = AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
         let signature = sk.sign(content_hash.as_bytes());
 
         let block = AuditBlock {
@@ -610,8 +609,7 @@ mod tests {
         let (sk, _vk) = test_keypair();
         let events = make_events(2);
         let node_id = Uuid::new_v4();
-        let content_hash =
-            AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
+        let content_hash = AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
         let signature = sk.sign(content_hash.as_bytes());
 
         let mut block = AuditBlock {
@@ -634,8 +632,7 @@ mod tests {
         let (sk, vk) = test_keypair();
         let events = make_events(1);
         let node_id = Uuid::new_v4();
-        let content_hash =
-            AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
+        let content_hash = AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
         let signature = sk.sign(content_hash.as_bytes());
 
         let block = AuditBlock {
@@ -656,8 +653,7 @@ mod tests {
         let (sk, _vk) = test_keypair();
         let events = make_events(1);
         let node_id = Uuid::new_v4();
-        let content_hash =
-            AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
+        let content_hash = AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
         let signature = sk.sign(content_hash.as_bytes());
 
         let block = AuditBlock {
@@ -691,8 +687,7 @@ mod tests {
         let (sk, _vk) = test_keypair();
         let events = make_events(2);
         let node_id = Uuid::new_v4();
-        let content_hash =
-            AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
+        let content_hash = AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
         let signature = sk.sign(content_hash.as_bytes());
 
         let block = AuditBlock {
@@ -721,8 +716,7 @@ mod tests {
         let (sk, _vk) = test_keypair();
         let events = make_events(1);
         let node_id = Uuid::new_v4();
-        let content_hash =
-            AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
+        let content_hash = AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
         let signature = sk.sign(content_hash.as_bytes());
 
         let block = AuditBlock {
@@ -797,10 +791,7 @@ mod tests {
         assert!(chain.get_block_by_sequence(2).is_none());
 
         // Latest
-        assert_eq!(
-            chain.latest_block().unwrap().content_hash,
-            block2_hash
-        );
+        assert_eq!(chain.latest_block().unwrap().content_hash, block2_hash);
 
         // Integrity
         assert!(chain.verify_integrity(&vk));
@@ -875,8 +866,7 @@ mod tests {
         let (sk, _vk) = test_keypair();
         let events = make_events(3);
         let node_id = Uuid::new_v4();
-        let content_hash =
-            AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
+        let content_hash = AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
         let signature = sk.sign(content_hash.as_bytes());
 
         let block = AuditBlock {
@@ -970,8 +960,7 @@ mod tests {
         let (sk, _vk) = test_keypair();
         let events = make_events(1);
         let node_id = Uuid::new_v4();
-        let content_hash =
-            AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
+        let content_hash = AuditBlock::compute_hash(&events, GENESIS_HASH, node_id, 1000, 0);
         let signature = sk.sign(content_hash.as_bytes());
 
         let block = AuditBlock {

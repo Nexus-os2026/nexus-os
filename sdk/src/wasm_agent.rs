@@ -41,11 +41,7 @@ impl WasmAgent {
     }
 
     /// Create a new WasmAgent with a shared wasmtime engine (for multi-agent scenarios).
-    pub fn with_engine(
-        wasm_bytecode: Vec<u8>,
-        config: SandboxConfig,
-        engine: Arc<Engine>,
-    ) -> Self {
+    pub fn with_engine(wasm_bytecode: Vec<u8>, config: SandboxConfig, engine: Arc<Engine>) -> Self {
         Self {
             wasm_bytecode,
             sandbox: WasmtimeSandbox::new(config, engine),
@@ -94,9 +90,7 @@ impl NexusAgent for WasmAgent {
         let result = self.sandbox.execute(&self.wasm_bytecode, ctx);
 
         if result.killed {
-            let reason = result
-                .kill_reason
-                .unwrap_or_else(|| "unknown".to_string());
+            let reason = result.kill_reason.unwrap_or_else(|| "unknown".to_string());
             return Err(AgentError::SupervisorError(format!(
                 "agent killed: {reason}"
             )));
@@ -112,11 +106,7 @@ impl NexusAgent for WasmAgent {
         }
 
         let fuel_used = fuel_before.saturating_sub(ctx.fuel_remaining());
-        let outputs = result
-            .outputs
-            .into_iter()
-            .map(|s| json!(s))
-            .collect();
+        let outputs = result.outputs.into_iter().map(|s| json!(s)).collect();
 
         Ok(AgentOutput {
             status: "ok".to_string(),

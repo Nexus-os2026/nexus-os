@@ -11,18 +11,13 @@
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 
 /// Policy controlling whether unsigned wasm modules are accepted.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum SignaturePolicy {
     /// Reject unsigned modules — only signed + verified modules run.
+    #[default]
     RequireSigned,
     /// Allow unsigned modules (e.g. for development/testing).
     AllowUnsigned,
-}
-
-impl Default for SignaturePolicy {
-    fn default() -> Self {
-        Self::RequireSigned
-    }
 }
 
 /// Result of signature verification.
@@ -152,16 +147,14 @@ mod tests {
     #[test]
     fn unsigned_module_rejected_under_require_signed() {
         let wasm = wat::parse_str("(module)").unwrap();
-        let (result, _) =
-            verify_wasm_signature(&wasm, &[], &SignaturePolicy::RequireSigned);
+        let (result, _) = verify_wasm_signature(&wasm, &[], &SignaturePolicy::RequireSigned);
         assert_eq!(result, SignatureVerification::UnsignedRejected);
     }
 
     #[test]
     fn unsigned_module_allowed_under_allow_unsigned() {
         let wasm = wat::parse_str("(module)").unwrap();
-        let (result, _) =
-            verify_wasm_signature(&wasm, &[], &SignaturePolicy::AllowUnsigned);
+        let (result, _) = verify_wasm_signature(&wasm, &[], &SignaturePolicy::AllowUnsigned);
         assert_eq!(result, SignatureVerification::UnsignedAllowed);
     }
 
@@ -194,16 +187,14 @@ mod tests {
             signed[0] ^= 0xff;
         }
 
-        let (result, _) =
-            verify_wasm_signature(&signed, &[vk], &SignaturePolicy::RequireSigned);
+        let (result, _) = verify_wasm_signature(&signed, &[vk], &SignaturePolicy::RequireSigned);
         assert!(matches!(result, SignatureVerification::Invalid { .. }));
     }
 
     #[test]
     fn too_short_treated_as_unsigned() {
         let short = vec![0u8; 10]; // way too short for wasm + sig
-        let (result, _) =
-            verify_wasm_signature(&short, &[], &SignaturePolicy::AllowUnsigned);
+        let (result, _) = verify_wasm_signature(&short, &[], &SignaturePolicy::AllowUnsigned);
         assert_eq!(result, SignatureVerification::UnsignedAllowed);
     }
 }

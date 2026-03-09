@@ -53,7 +53,10 @@ impl std::fmt::Debug for LocalSlmProvider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LocalSlmProvider")
             .field("has_model", &self.is_available())
-            .field("sampling", &*self.sampling.read().unwrap_or_else(|e| e.into_inner()))
+            .field(
+                "sampling",
+                &*self.sampling.read().unwrap_or_else(|e| e.into_inner()),
+            )
             .finish()
     }
 }
@@ -96,10 +99,7 @@ impl LocalSlmProvider {
 
     /// Get the current sampling configuration.
     pub fn sampling_config(&self) -> SamplingConfig {
-        self.sampling
-            .read()
-            .map(|s| s.clone())
-            .unwrap_or_default()
+        self.sampling.read().map(|s| s.clone()).unwrap_or_default()
     }
 
     /// Whether a model is loaded and ready for inference.
@@ -237,11 +237,9 @@ impl LocalSlmProvider {
             let seq_len = current_ids.len();
             let last_logits = if logits.dims().len() == 2 {
                 // Shape: (seq_len, vocab_size)
-                logits
-                    .get(seq_len - 1)
-                    .map_err(|e| {
-                        AgentError::SupervisorError(format!("failed to index logits: {e}"))
-                    })?
+                logits.get(seq_len - 1).map_err(|e| {
+                    AgentError::SupervisorError(format!("failed to index logits: {e}"))
+                })?
             } else {
                 // Shape: (vocab_size,) — already a single position
                 logits
@@ -287,9 +285,7 @@ impl LocalSlmProvider {
 
     /// Infer vocab size from the weight map by looking for common embedding
     /// layer names.
-    fn infer_vocab_size(
-        weight_map: &std::collections::HashMap<&str, &Tensor>,
-    ) -> usize {
+    fn infer_vocab_size(weight_map: &std::collections::HashMap<&str, &Tensor>) -> usize {
         // Common names for the token embedding / LM head weight
         let candidates = [
             "lm_head.weight",
@@ -325,14 +321,10 @@ impl LocalSlmProvider {
 
         // Embedding lookup
         let embed_weight = Self::find_embedding_weight(weight_map).ok_or_else(|| {
-            AgentError::SupervisorError(
-                "no embedding weight found in model weights".to_string(),
-            )
+            AgentError::SupervisorError("no embedding weight found in model weights".to_string())
         })?;
 
-        let hidden = embed_weight
-            .index_select(input_ids, 0)
-            .map_err(map_err)?;
+        let hidden = embed_weight.index_select(input_ids, 0).map_err(map_err)?;
 
         // Apply any available transformer layers (simplified: just project
         // through dense layers we can find)
@@ -378,12 +370,8 @@ impl LocalSlmProvider {
                 current.matmul(&head_t).map_err(map_err)?
             } else {
                 // Dimension mismatch — produce uniform logits
-                Tensor::zeros(
-                    &[current.dims()[0], vocab_size],
-                    DType::F32,
-                    device,
-                )
-                .map_err(map_err)?
+                Tensor::zeros(&[current.dims()[0], vocab_size], DType::F32, device)
+                    .map_err(map_err)?
             }
         } else {
             // No LM head found — use embedding weight as tied LM head
@@ -393,12 +381,8 @@ impl LocalSlmProvider {
             if h_dim == w_dim {
                 current.matmul(&embed_t).map_err(map_err)?
             } else {
-                Tensor::zeros(
-                    &[current.dims()[0], vocab_size],
-                    DType::F32,
-                    device,
-                )
-                .map_err(map_err)?
+                Tensor::zeros(&[current.dims()[0], vocab_size], DType::F32, device)
+                    .map_err(map_err)?
             }
         };
 
@@ -479,13 +463,8 @@ impl LocalSlmProvider {
     }
 
     /// Sample a token from logits using temperature and top-p.
-    fn sample_token(
-        logits: &Tensor,
-        temperature: f64,
-        top_p: f64,
-    ) -> Result<u32, AgentError> {
-        let map_err =
-            |e: candle_core::Error| AgentError::SupervisorError(format!("sampling: {e}"));
+    fn sample_token(logits: &Tensor, temperature: f64, top_p: f64) -> Result<u32, AgentError> {
+        let map_err = |e: candle_core::Error| AgentError::SupervisorError(format!("sampling: {e}"));
 
         // Convert to f32 if needed
         let logits = if logits.dtype() != DType::F32 {
@@ -517,19 +496,16 @@ impl LocalSlmProvider {
         let scaled: Vec<f32> = logits_vec.iter().map(|&x| x / temp).collect();
 
         // Softmax
-        let max_val = scaled
-            .iter()
-            .cloned()
-            .fold(f32::NEG_INFINITY, f32::max);
+        let max_val = scaled.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
         let exp_vals: Vec<f32> = scaled.iter().map(|&x| (x - max_val).exp()).collect();
         let sum: f32 = exp_vals.iter().sum();
         let probs: Vec<f32> = exp_vals.iter().map(|&x| x / sum).collect();
 
         // Top-p (nucleus) filtering
-        let mut indexed_probs: Vec<(usize, f32)> =
-            probs.iter().copied().enumerate().collect();
-        indexed_probs
-            .sort_unstable_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+        let mut indexed_probs: Vec<(usize, f32)> = probs.iter().copied().enumerate().collect();
+        indexed_probs.sort_unstable_by(|(_, a), (_, b)| {
+            b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let mut cumulative = 0.0f32;
         let top_p_f32 = top_p as f32;
@@ -562,19 +538,12 @@ impl LocalSlmProvider {
 }
 
 impl LlmProvider for LocalSlmProvider {
-    fn query(
-        &self,
-        prompt: &str,
-        max_tokens: u32,
-        model: &str,
-    ) -> Result<LlmResponse, AgentError> {
+    fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
         // Get the active loaded model
         let active = self
             .active_model
             .read()
-            .map_err(|e| {
-                AgentError::SupervisorError(format!("active_model lock poisoned: {e}"))
-            })?;
+            .map_err(|e| AgentError::SupervisorError(format!("active_model lock poisoned: {e}")))?;
 
         let loaded = active.as_ref().ok_or_else(|| {
             AgentError::SupervisorError(
@@ -633,7 +602,9 @@ mod tests {
     use std::path::PathBuf;
 
     fn make_provider() -> LocalSlmProvider {
-        LocalSlmProvider::new(ModelRegistry::new(PathBuf::from("/tmp/nexus_test_nonexistent")))
+        LocalSlmProvider::new(ModelRegistry::new(PathBuf::from(
+            "/tmp/nexus_test_nonexistent",
+        )))
     }
 
     #[test]
@@ -799,13 +770,9 @@ mod tests {
         let context_ids = vec![1u32, 3]; // tokens 1 and 3 appeared
         let generated_ids = vec![];
 
-        let penalized = LocalSlmProvider::apply_repetition_penalty(
-            &logits,
-            &context_ids,
-            &generated_ids,
-            2.0,
-        )
-        .unwrap();
+        let penalized =
+            LocalSlmProvider::apply_repetition_penalty(&logits, &context_ids, &generated_ids, 2.0)
+                .unwrap();
 
         let vals: Vec<f32> = penalized.to_vec1().unwrap();
         // Token 0: unpenalized = 5.0

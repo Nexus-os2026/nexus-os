@@ -477,11 +477,7 @@ mod tests {
 
     #[test]
     fn disable_recording_resumes_normal_execution() {
-        let mut ctx = AgentContext::new(
-            Uuid::new_v4(),
-            vec!["llm.query".to_string()],
-            1000,
-        );
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec!["llm.query".to_string()], 1000);
         ctx.enable_recording();
         ctx.llm_query("recorded", 50).unwrap();
         assert_eq!(ctx.side_effects().len(), 1);

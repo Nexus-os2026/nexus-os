@@ -198,9 +198,9 @@ impl ModelRegistry {
             }
         }
         // Fall back to any discovered model that supports it and can be loaded.
-        self.available_models.iter().find(|m| {
-            m.recommended_tasks.iter().any(|t| t == task_type) && Self::can_load(m)
-        })
+        self.available_models
+            .iter()
+            .find(|m| m.recommended_tasks.iter().any(|t| t == task_type) && Self::can_load(m))
     }
 
     /// Check if the system has enough available RAM to load a model.
@@ -423,9 +423,7 @@ impl ModelRegistry {
                     }
                     "recommended_tasks" => {
                         // Parse simple array: ["a", "b", "c"]
-                        let inner = value
-                            .trim_start_matches('[')
-                            .trim_end_matches(']');
+                        let inner = value.trim_start_matches('[').trim_end_matches(']');
                         recommended_tasks = inner
                             .split(',')
                             .map(|s| s.trim().trim_matches('"').trim_matches('\'').to_string())
@@ -482,7 +480,10 @@ min_ram_mb = 2048
         assert_eq!(config.model_id, "microsoft/phi-4");
         assert_eq!(config.quantization, Quantization::Q4);
         assert_eq!(config.max_context_length, 4096);
-        assert_eq!(config.recommended_tasks, vec!["pii_detection", "prompt_safety"]);
+        assert_eq!(
+            config.recommended_tasks,
+            vec!["pii_detection", "prompt_safety"]
+        );
         assert_eq!(config.min_ram_mb, 2048);
     }
 
@@ -586,8 +587,7 @@ quantization = "F32"
 
     #[test]
     fn nonexistent_directory_returns_zero() {
-        let mut registry =
-            ModelRegistry::new(PathBuf::from("/tmp/nexus_nonexistent_dir_12345"));
+        let mut registry = ModelRegistry::new(PathBuf::from("/tmp/nexus_nonexistent_dir_12345"));
         assert_eq!(registry.discover(), 0);
     }
 

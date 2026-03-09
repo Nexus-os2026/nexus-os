@@ -138,32 +138,30 @@ impl<T: Transport> GossipProtocol<T> {
         let local_len = self.chain.chain_length() as u64;
 
         // Peer is ahead — request missing blocks
-        if announce.sequence_number >= local_len && local_len <= announce.sequence_number {
-            if announce.sequence_number >= local_len && (local_len == 0 || announce.sequence_number > local_len - 1) {
-                // Only request if peer actually has more blocks
-                if announce.sequence_number >= local_len && !(announce.latest_hash.is_empty() && local_len == 0) {
-                    let req = RequestBlocksPayload {
-                        from_sequence: local_len,
-                        to_sequence: announce.sequence_number,
-                    };
-                    let payload_bytes = serde_json::to_vec(&req)
-                        .map_err(|e| format!("serialize request: {e}"))?;
+        if announce.sequence_number >= local_len
+            && (local_len == 0 || announce.sequence_number > local_len - 1)
+            && !(announce.latest_hash.is_empty() && local_len == 0)
+        {
+            let req = RequestBlocksPayload {
+                from_sequence: local_len,
+                to_sequence: announce.sequence_number,
+            };
+            let payload_bytes =
+                serde_json::to_vec(&req).map_err(|e| format!("serialize request: {e}"))?;
 
-                    self.transport
-                        .send(Message {
-                            from: self.local_node_id,
-                            to: from,
-                            kind: MessageKind::GossipRequestBlocks,
-                            payload: payload_bytes,
-                        })
-                        .map_err(|e| format!("send request: {e}"))?;
+            self.transport
+                .send(Message {
+                    from: self.local_node_id,
+                    to: from,
+                    kind: MessageKind::GossipRequestBlocks,
+                    payload: payload_bytes,
+                })
+                .map_err(|e| format!("send request: {e}"))?;
 
-                    return Ok(GossipAction::RequestedBlocks {
-                        from_sequence: local_len,
-                        to_sequence: announce.sequence_number,
-                    });
-                }
-            }
+            return Ok(GossipAction::RequestedBlocks {
+                from_sequence: local_len,
+                to_sequence: announce.sequence_number,
+            });
         }
 
         // Same sequence — check for hash mismatch (tamper detection)
@@ -176,8 +174,8 @@ impl<T: Transport> GossipProtocol<T> {
                         actual_hash: announce.latest_hash.clone(),
                     };
 
-                    let payload_bytes = serde_json::to_vec(&alert)
-                        .map_err(|e| format!("serialize alert: {e}"))?;
+                    let payload_bytes =
+                        serde_json::to_vec(&alert).map_err(|e| format!("serialize alert: {e}"))?;
 
                     self.transport
                         .send(Message {
@@ -345,7 +343,10 @@ pub enum GossipAction {
     /// Chains are in sync, nothing to do.
     InSync,
     /// Requested missing blocks from peer.
-    RequestedBlocks { from_sequence: u64, to_sequence: u64 },
+    RequestedBlocks {
+        from_sequence: u64,
+        to_sequence: u64,
+    },
     /// Sent blocks to a peer.
     SentBlocks,
     /// Received and appended blocks from a peer.
@@ -422,18 +423,12 @@ mod tests {
         let (sk, vk) = test_keypair();
 
         // Set up pairing managers and pair them
-        let mgr_a = DevicePairingManager::open(
-            node_a,
-            dir_a.join("device.key"),
-            dir_a.join("pairings"),
-        )
-        .unwrap();
-        let mut mgr_b = DevicePairingManager::open(
-            node_b,
-            dir_b.join("device.key"),
-            dir_b.join("pairings"),
-        )
-        .unwrap();
+        let mgr_a =
+            DevicePairingManager::open(node_a, dir_a.join("device.key"), dir_a.join("pairings"))
+                .unwrap();
+        let mut mgr_b =
+            DevicePairingManager::open(node_b, dir_b.join("device.key"), dir_b.join("pairings"))
+                .unwrap();
 
         // B generates code, A accepts — but we need bidirectional pairing
         // A generates code for B to accept
@@ -442,12 +437,9 @@ mod tests {
 
         // For simplicity: create a second manager for A that accepts B's code
         let code_b = mgr_b.generate_pairing_code();
-        let mut mgr_a_mut = DevicePairingManager::open(
-            node_a,
-            dir_a.join("device.key"),
-            dir_a.join("pairings"),
-        )
-        .unwrap();
+        let mut mgr_a_mut =
+            DevicePairingManager::open(node_a, dir_a.join("device.key"), dir_a.join("pairings"))
+                .unwrap();
         mgr_a_mut.accept_pairing(&code_b.encode()).unwrap();
 
         let chain_a = AuditChain::new(node_a);
@@ -475,15 +467,21 @@ mod tests {
 
         // B processes: sees announce, requests blocks 0..2
         let actions = gossip_b.process_incoming(&vk).unwrap();
-        assert!(actions.iter().any(|a| matches!(a, GossipAction::RequestedBlocks { .. })));
+        assert!(actions
+            .iter()
+            .any(|a| matches!(a, GossipAction::RequestedBlocks { .. })));
 
         // A processes: sees request, sends blocks
         let actions = gossip_a.process_incoming(&vk).unwrap();
-        assert!(actions.iter().any(|a| matches!(a, GossipAction::SentBlocks)));
+        assert!(actions
+            .iter()
+            .any(|a| matches!(a, GossipAction::SentBlocks)));
 
         // B processes: receives blocks
         let actions = gossip_b.process_incoming(&vk).unwrap();
-        assert!(actions.iter().any(|a| matches!(a, GossipAction::ReceivedBlocks { count: 3 })));
+        assert!(actions
+            .iter()
+            .any(|a| matches!(a, GossipAction::ReceivedBlocks { count: 3 })));
 
         // B now has all 3 blocks
         assert_eq!(gossip_b.chain().chain_length(), 3);
@@ -527,7 +525,10 @@ mod tests {
         let actions = gossip_b.process_incoming(&vk).unwrap();
         assert!(actions.iter().any(|a| matches!(
             a,
-            GossipAction::RequestedBlocks { from_sequence: 2, to_sequence: 2 }
+            GossipAction::RequestedBlocks {
+                from_sequence: 2,
+                to_sequence: 2
+            }
         )));
 
         // A sends the missing block
@@ -535,7 +536,9 @@ mod tests {
 
         // B receives it
         let actions = gossip_b.process_incoming(&vk).unwrap();
-        assert!(actions.iter().any(|a| matches!(a, GossipAction::ReceivedBlocks { count: 1 })));
+        assert!(actions
+            .iter()
+            .any(|a| matches!(a, GossipAction::ReceivedBlocks { count: 1 })));
 
         assert_eq!(gossip_b.chain().chain_length(), 3);
 
@@ -567,7 +570,10 @@ mod tests {
         };
 
         let action = gossip_b.handle_announce(node_a_id, &announce).unwrap();
-        assert!(matches!(action, GossipAction::TamperDetected { sequence: 1 }));
+        assert!(matches!(
+            action,
+            GossipAction::TamperDetected { sequence: 1 }
+        ));
         assert_eq!(gossip_b.tamper_alerts.len(), 1);
         assert_eq!(gossip_b.tamper_alerts[0].actual_hash, "tampered_hash");
 
@@ -590,12 +596,9 @@ mod tests {
 
         let (_sk, _vk) = test_keypair();
 
-        let mgr_a = DevicePairingManager::open(
-            node_a,
-            dir.join("device.key"),
-            dir.join("pairings"),
-        )
-        .unwrap();
+        let mgr_a =
+            DevicePairingManager::open(node_a, dir.join("device.key"), dir.join("pairings"))
+                .unwrap();
 
         let chain_a = AuditChain::new(node_a);
         let mut gossip_a = GossipProtocol::new(transport, node_a, chain_a, mgr_a);

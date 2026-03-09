@@ -8,8 +8,8 @@
 
 use nexus_sdk::context::{AgentContext, ContextSideEffect};
 use nexus_sdk::sandbox::{SandboxConfig, SandboxRuntime};
-use nexus_sdk::shadow_sandbox::{SafetyVerdict, ShadowSandbox, SideEffect, ThreatDetector};
-use nexus_sdk::wasmtime_host_functions::{SpeculativeDecision, SpeculativePolicy};
+use nexus_sdk::shadow_sandbox::{SafetyVerdict, ShadowSandbox, ThreatDetector};
+use nexus_sdk::wasmtime_host_functions::SpeculativePolicy;
 use nexus_sdk::wasmtime_sandbox::WasmtimeSandbox;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -36,10 +36,6 @@ fn make_ctx(capabilities: Vec<&str>, fuel: u64) -> AgentContext {
 
 fn make_sandbox() -> WasmtimeSandbox {
     WasmtimeSandbox::with_defaults(SandboxConfig::default()).unwrap()
-}
-
-fn minimal_wasm() -> Vec<u8> {
-    wat::parse_str("(module)").unwrap()
 }
 
 fn llm_call_wasm() -> Vec<u8> {
@@ -168,13 +164,7 @@ fn shadow_fork_isolated_from_real_agent() {
 
 #[test]
 fn recording_mode_captures_without_executing() {
-    let mut ctx = make_ctx(
-        vec!["llm.query".to_string(), "fs.read".to_string(), "fs.write".to_string()]
-            .iter()
-            .map(|s| s.as_str())
-            .collect(),
-        1000,
-    );
+    let mut ctx = make_ctx(vec!["llm.query", "fs.read", "fs.write"], 1000);
     ctx.enable_recording();
 
     // Operations in recording mode push to side_effect_log
@@ -218,9 +208,9 @@ fn interception_blocks_dangerous_file_write_etc_shadow() {
 
     // The side-effect should be recorded in context (blocked by threat detector)
     let side_effects = ctx.side_effects();
-    let has_blocked_write = side_effects.iter().any(|se| {
-        matches!(se, ContextSideEffect::FileWrite { path, .. } if path == "/etc/shadow")
-    });
+    let has_blocked_write = side_effects
+        .iter()
+        .any(|se| matches!(se, ContextSideEffect::FileWrite { path, .. } if path == "/etc/shadow"));
     assert!(
         has_blocked_write,
         "should record blocked write to /etc/shadow, got: {:?}",
@@ -266,7 +256,10 @@ fn prompt_injection_detected_and_blocked() {
 
     // No mock LLM response should appear (intercepted before real execution)
     assert!(
-        !result.outputs.iter().any(|o| o.contains("[mock-llm-response")),
+        !result
+            .outputs
+            .iter()
+            .any(|o| o.contains("[mock-llm-response")),
         "intercepted query should not produce mock response"
     );
 }
@@ -465,9 +458,7 @@ fn excessive_fuel_flagged_as_suspicious() {
     match verdict {
         SafetyVerdict::Suspicious { ref indicators } => {
             assert!(
-                indicators
-                    .iter()
-                    .any(|i| i.contains("excessive resource")),
+                indicators.iter().any(|i| i.contains("excessive resource")),
                 "should flag excessive fuel, got: {:?}",
                 indicators
             );

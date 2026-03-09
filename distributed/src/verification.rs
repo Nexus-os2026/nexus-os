@@ -108,11 +108,7 @@ pub struct VerificationEngine {
 
 impl VerificationEngine {
     /// Create a new VerificationEngine.
-    pub fn new(
-        local_node_id: Uuid,
-        local_chain: AuditChain,
-        verifying_key: VerifyingKey,
-    ) -> Self {
+    pub fn new(local_node_id: Uuid, local_chain: AuditChain, verifying_key: VerifyingKey) -> Self {
         Self {
             local_node_id,
             local_chain,
@@ -141,10 +137,7 @@ impl VerificationEngine {
     ///
     /// Finds the block containing the event in the local chain, then checks
     /// each peer chain for the same block with matching content_hash.
-    pub fn verify_event_across_devices(
-        &self,
-        event_id: Uuid,
-    ) -> Result<CrossDeviceProof, String> {
+    pub fn verify_event_across_devices(&self, event_id: Uuid) -> Result<CrossDeviceProof, String> {
         // Find event in local chain
         let local_block = self
             .local_chain
@@ -171,11 +164,10 @@ impl VerificationEngine {
         });
 
         for (peer_id, peer_chain) in &self.peer_chains {
-            let (has_block, hash_matches) =
-                match peer_chain.get_block_by_sequence(block_seq) {
-                    Some(peer_block) => (true, peer_block.content_hash == block_hash),
-                    None => (false, false),
-                };
+            let (has_block, hash_matches) = match peer_chain.get_block_by_sequence(block_seq) {
+                Some(peer_block) => (true, peer_block.content_hash == block_hash),
+                None => (false, false),
+            };
 
             device_details.push(DeviceVerification {
                 node_id: *peer_id,
@@ -398,8 +390,7 @@ mod tests {
         let events = make_events(5);
         let target_event_id = events[2].event_id;
 
-        let (local_id, local_chain, peers) =
-            build_synced_chains(2, &[events, make_events(3)], &sk);
+        let (local_id, local_chain, peers) = build_synced_chains(2, &[events, make_events(3)], &sk);
 
         let mut engine = VerificationEngine::new(local_id, local_chain, vk);
         for (peer_id, peer_chain) in peers {

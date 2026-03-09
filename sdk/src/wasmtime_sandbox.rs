@@ -351,8 +351,7 @@ impl SandboxRuntime for WasmtimeSandbox {
             Err(e) => {
                 store.data_mut().agent_context = None;
                 drop(store);
-                let _ =
-                    std::mem::replace(ctx, Rc::try_unwrap(ctx_ref).ok().unwrap().into_inner());
+                let _ = std::mem::replace(ctx, Rc::try_unwrap(ctx_ref).ok().unwrap().into_inner());
                 return SandboxResult {
                     completed: false,
                     outputs: vec![format!("wasm instantiate error: {e}")],
@@ -500,13 +499,12 @@ mod tests {
         )
         .unwrap();
 
-        let mut sandbox =
-            WasmtimeSandbox::with_defaults(SandboxConfig {
-                memory_limit_bytes: 1024 * 1024,
-                execution_timeout_secs: 300,
-                allowed_host_functions: vec![],
-            })
-            .unwrap();
+        let mut sandbox = WasmtimeSandbox::with_defaults(SandboxConfig {
+            memory_limit_bytes: 1024 * 1024,
+            execution_timeout_secs: 300,
+            allowed_host_functions: vec![],
+        })
+        .unwrap();
         // Give very little fuel so it exhausts quickly
         let mut ctx = make_ctx(vec![], 1);
 
@@ -632,10 +630,7 @@ mod tests {
 
         // Audit trail should have a wasm_fuel_consumed event
         let has_wasm_fuel_event = ctx.audit_trail().events().iter().any(|e| {
-            e.payload
-                .get("action")
-                .and_then(|v| v.as_str())
-                == Some("wasm_fuel_consumed")
+            e.payload.get("action").and_then(|v| v.as_str()) == Some("wasm_fuel_consumed")
         });
         assert!(has_wasm_fuel_event);
     }
