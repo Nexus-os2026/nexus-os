@@ -80,7 +80,8 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "cluster", label: "Cluster", icon: "⬣", shortcut: "" },
   { id: "trust", label: "Trust", icon: "◉", shortcut: "" },
   { id: "distributed-audit", label: "Chain", icon: "⛓", shortcut: "" },
-  { id: "settings", label: "Settings", icon: "⚙", shortcut: "Alt+6" }
+  { id: "permissions", label: "Permissions", icon: "⛊", shortcut: "Alt+7" },
+  { id: "settings", label: "Settings", icon: "⚙", shortcut: "Alt+8" }
 ];
 
 function defaultConfig(): NexusConfig {
@@ -1026,6 +1027,43 @@ export default function App(): JSX.Element {
     }
     if (page === "permissions") {
       const permAgent = agents.find((a) => a.id === permissionAgentId);
+      if (!permAgent && agents.length > 0) {
+        return (
+          <div style={{ padding: "1.5rem", maxWidth: 800, margin: "0 auto" }}>
+            <h2 style={{ fontFamily: "var(--font-display, monospace)", color: "var(--text-primary, #e2e8f0)", marginBottom: "1rem" }}>
+              Permission Dashboard
+            </h2>
+            <p style={{ color: "var(--text-secondary, #94a3b8)", marginBottom: "1.5rem", fontSize: "0.9rem" }}>
+              Select an agent to manage its permissions.
+            </p>
+            <div style={{ display: "grid", gap: "0.6rem" }}>
+              {agents.map((a) => (
+                <button
+                  key={a.id}
+                  onClick={() => setPermissionAgentId(a.id)}
+                  style={{
+                    background: "var(--bg-secondary, #1e293b)",
+                    border: "1px solid var(--border, #334155)",
+                    borderRadius: 8,
+                    padding: "0.8rem 1rem",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    color: "var(--text-primary, #e2e8f0)",
+                    fontFamily: "var(--font-mono, monospace)",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  <span>{a.name}</span>
+                  <span style={{ color: "var(--text-secondary, #64748b)", fontSize: "0.8rem" }}>{a.status}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      }
       return (
         <PermissionDashboard
           agentId={permissionAgentId}

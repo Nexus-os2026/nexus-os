@@ -1,4 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
+import type { LucideIcon } from "lucide-react";
+import {
+  Folder,
+  Globe,
+  Brain,
+  Shield,
+  Share2,
+  MessageCircle,
+  HelpCircle,
+  Circle,
+} from "lucide-react";
 import {
   bulkUpdatePermissions,
   getAgentPermissions,
@@ -19,14 +30,41 @@ import "./permission-dashboard.css";
 
 // ── Icon mapping ──
 
-const CATEGORY_ICONS: Record<string, string> = {
-  folder: "\u{1F4C1}",
-  globe: "\u{1F310}",
-  brain: "\u{1F9E0}",
-  shield: "\u{1F512}",
-  share: "\u{1F4E4}",
-  chat: "\u{1F4AC}",
-  circle: "\u{25CF}",
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  folder: Folder,
+  globe: Globe,
+  brain: Brain,
+  shield: Shield,
+  share: Share2,
+  chat: MessageCircle,
+  circle: Circle,
+};
+
+// ── Plain English tooltips for every capability ──
+
+const CAPABILITY_TOOLTIPS: Record<string, string> = {
+  "fs.read":
+    "Lets the agent look at files on your computer. It can read documents, configs, and other data — but it cannot change or delete anything with this permission alone.",
+  "fs.write":
+    "Lets the agent create, edit, and delete files on your computer. This is high risk because changes can be destructive and hard to undo.",
+  "web.search":
+    "Lets the agent search the internet for information, similar to how you would use a search engine. It can see search results but does not share your personal data.",
+  "web.read":
+    "Lets the agent open and read web pages. It can fetch articles, documentation, or any public page — but it cannot log into your accounts or submit forms.",
+  "llm.query":
+    "Lets the agent send questions to an AI language model (like ChatGPT or Claude). This may send data to a cloud service and could incur usage costs on your account.",
+  "process.exec":
+    "Lets the agent run programs and system commands on your computer. This is the most powerful permission — a misbehaving agent could install software, change system settings, or access any data.",
+  "audit.read":
+    "Lets the agent view the history of actions taken by all agents. This is low risk — it's read-only access to activity logs, useful for monitoring and reporting.",
+  "social.post":
+    "Lets the agent publish posts on social media platforms on your behalf. Anything it posts will be visible to your followers and the public.",
+  "social.x.post":
+    "Lets the agent post on X (formerly Twitter) using your account. Posts will appear as if you wrote them, so review what the agent plans to say.",
+  "social.x.read":
+    "Lets the agent read your X (Twitter) timeline, mentions, and other public posts. It cannot post, like, or interact — only read.",
+  "messaging.send":
+    "Lets the agent send messages through Telegram, WhatsApp, Discord, or Slack on your behalf. Recipients will see the messages as if they came from you.",
 };
 
 const RISK_LABELS: Record<PermissionRiskLevel, { label: string; className: string }> = {
@@ -241,9 +279,13 @@ export function PermissionDashboard({
 
   // ── Render helpers ──
 
+  const [openTooltip, setOpenTooltip] = useState<string | null>(null);
+
   const renderToggle = (perm: Permission) => {
     const isPending = pendingToggles.has(perm.capability_key);
     const risk = RISK_LABELS[perm.risk_level];
+    const tooltip = CAPABILITY_TOOLTIPS[perm.capability_key];
+    const isTooltipOpen = openTooltip === perm.capability_key;
 
     return (
       <div className="perm-row" key={perm.capability_key}>
@@ -251,8 +293,24 @@ export function PermissionDashboard({
           <span className="perm-name">{perm.display_name}</span>
           <span className={`perm-risk-badge ${risk.className}`}>{risk.label}</span>
           {!perm.can_user_toggle && <span className="perm-locked-badge" title="Locked by admin">{"\u{1F512}"}</span>}
+          {tooltip && (
+            <button
+              className="perm-help-btn"
+              onClick={() => setOpenTooltip(isTooltipOpen ? null : perm.capability_key)}
+              title="What does this mean?"
+            >
+              <HelpCircle size={14} />
+            </button>
+          )}
         </div>
-        <div className="perm-tooltip">{perm.description}</div>
+        {isTooltipOpen && tooltip ? (
+          <div className="perm-explain-tooltip">
+            <span className="perm-explain-label">What does this mean?</span>
+            <p className="perm-explain-text">{tooltip}</p>
+          </div>
+        ) : (
+          <div className="perm-tooltip">{perm.description}</div>
+        )}
         <label className={`perm-toggle ${isPending ? "perm-toggle-pending" : ""}`}>
           <input
             type="checkbox"
@@ -267,11 +325,11 @@ export function PermissionDashboard({
   };
 
   const renderCategory = (cat: PermissionCategory) => {
-    const icon = CATEGORY_ICONS[cat.icon] || CATEGORY_ICONS.circle;
+    const IconComponent = CATEGORY_ICONS[cat.icon] || CATEGORY_ICONS.circle;
     return (
       <div className="perm-category-card" key={cat.id}>
         <div className="perm-category-header">
-          <span className="perm-category-icon">{icon}</span>
+          <span className="perm-category-icon"><IconComponent size={18} /></span>
           <span className="perm-category-name">{cat.display_name}</span>
         </div>
         <div className="perm-category-body">

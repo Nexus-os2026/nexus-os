@@ -212,6 +212,47 @@
   line-height: 1.3;
 }
 
+/* ── Help Button & Explanation Tooltip ── */
+.perm-help-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #64748b);
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+
+.perm-help-btn:hover {
+  color: var(--text-accent, #00f0ff);
+}
+
+.perm-explain-tooltip {
+  grid-column: 1;
+  grid-row: 2;
+  background: rgba(0, 240, 255, 0.06);
+  border: 1px solid rgba(0, 240, 255, 0.15);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  margin-top: 0.2rem;
+}
+
+.perm-explain-label {
+  color: var(--text-accent, #00f0ff);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.perm-explain-text {
+  color: var(--text-primary, #e2e8f0);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin: 0.2rem 0 0;
+}
+
 /* ── Risk Badges ── */
 .perm-risk-badge {
   font-size: 0.65rem;
