@@ -164,7 +164,7 @@ These are enforced at the code level and must never be violated:
 
 ## Built By
 
-Created by Devil -- a self-taught developer who built an entire governed agent operating system from scratch.
+Created by Suresh Karicheti -- a self-taught developer who built an entire governed agent operating system from scratch.
 
 ## License
 
