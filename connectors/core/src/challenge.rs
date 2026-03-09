@@ -69,16 +69,18 @@ pub fn handle_challenge(
         challenge_type
     );
 
-    let _ = audit_trail.append_event(
-        agent_id,
-        EventType::Error,
-        json!({
-            "event": "challenge_detected",
-            "challenge_type": format!("{:?}", challenge_type),
-            "message": message,
-            "timestamp": timestamp
-        }),
-    );
+    audit_trail
+        .append_event(
+            agent_id,
+            EventType::Error,
+            json!({
+                "event": "challenge_detected",
+                "challenge_type": format!("{:?}", challenge_type),
+                "message": message,
+                "timestamp": timestamp
+            }),
+        )
+        .expect("audit: fail-closed");
 
     Some(EscalationEvent {
         agent_id,
@@ -103,15 +105,17 @@ pub fn resume_after_resolution(
 
     *state = transition_state(*state, AgentState::Running)?;
 
-    let _ = audit_trail.append_event(
-        agent_id,
-        EventType::UserAction,
-        json!({
-            "event": "challenge_resolved",
-            "evidence": user_evidence,
-            "timestamp": current_unix_timestamp()
-        }),
-    );
+    audit_trail
+        .append_event(
+            agent_id,
+            EventType::UserAction,
+            json!({
+                "event": "challenge_resolved",
+                "evidence": user_evidence,
+                "timestamp": current_unix_timestamp()
+            }),
+        )
+        .expect("audit: fail-closed");
 
     Ok(())
 }

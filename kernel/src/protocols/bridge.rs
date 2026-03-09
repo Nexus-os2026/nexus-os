@@ -132,16 +132,18 @@ impl GovernanceBridge {
         // Register with MCP server for tool discovery/invocation
         self.mcp_server.register_agent(agent_id, manifest.clone());
 
-        self.audit_trail.append_event(
-            agent_id,
-            EventType::StateChange,
-            json!({
-                "event_kind": "bridge.agent_registered",
-                "agent_name": manifest.name,
-                "capabilities": manifest.capabilities,
-                "fuel_budget": fuel,
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                agent_id,
+                EventType::StateChange,
+                json!({
+                    "event_kind": "bridge.agent_registered",
+                    "agent_name": manifest.name,
+                    "capabilities": manifest.capabilities,
+                    "fuel_budget": fuel,
+                }),
+            )
+            .expect("audit: fail-closed");
 
         agent_id
     }
@@ -177,32 +179,36 @@ impl GovernanceBridge {
         // Step 3: Capability check — infer required capability from payload
         let required_capability = infer_capability_from_payload(&request.payload);
         if !agent.manifest.capabilities.contains(&required_capability) {
-            self.audit_trail.append_event(
-                agent_id,
-                EventType::Error,
-                json!({
-                    "event_kind": "bridge.a2a_capability_denied",
-                    "sender": request.sender_id,
-                    "receiver": request.receiver_agent,
-                    "required_capability": required_capability,
-                }),
-            );
+            self.audit_trail
+                .append_event(
+                    agent_id,
+                    EventType::Error,
+                    json!({
+                        "event_kind": "bridge.a2a_capability_denied",
+                        "sender": request.sender_id,
+                        "receiver": request.receiver_agent,
+                        "required_capability": required_capability,
+                    }),
+                )
+                .expect("audit: fail-closed");
             return Err(AgentError::CapabilityDenied(required_capability));
         }
 
         // Step 4: Fuel check (1 fuel unit per A2A task)
         let fuel_cost = 1u64;
         if agent.fuel_remaining < fuel_cost {
-            self.audit_trail.append_event(
-                agent_id,
-                EventType::Error,
-                json!({
-                    "event_kind": "bridge.a2a_fuel_exhausted",
-                    "sender": request.sender_id,
-                    "receiver": request.receiver_agent,
-                    "fuel_remaining": agent.fuel_remaining,
-                }),
-            );
+            self.audit_trail
+                .append_event(
+                    agent_id,
+                    EventType::Error,
+                    json!({
+                        "event_kind": "bridge.a2a_fuel_exhausted",
+                        "sender": request.sender_id,
+                        "receiver": request.receiver_agent,
+                        "fuel_remaining": agent.fuel_remaining,
+                    }),
+                )
+                .expect("audit: fail-closed");
             return Err(AgentError::FuelExhausted);
         }
 
@@ -272,7 +278,7 @@ impl GovernanceBridge {
                 "risk_level": RiskLevel::from_governance(tier, autonomy).as_str(),
                 "simulated": simulation.is_some(),
             }),
-        );
+        )?;
 
         // Attach audit hash to governance context
         if let Some(ref mut gov) = task.governance {
@@ -340,17 +346,19 @@ impl GovernanceBridge {
                 .get_tool_governance(agent_id, &request.tool_name),
         );
         if let Some(violation) = firewall_result {
-            self.audit_trail.append_event(
-                agent_id,
-                EventType::Error,
-                json!({
-                    "event_kind": "bridge.mcp_firewall_blocked",
-                    "caller": request.caller_id,
-                    "agent": request.agent_name,
-                    "tool": request.tool_name,
-                    "violation": violation,
-                }),
-            );
+            self.audit_trail
+                .append_event(
+                    agent_id,
+                    EventType::Error,
+                    json!({
+                        "event_kind": "bridge.mcp_firewall_blocked",
+                        "caller": request.caller_id,
+                        "agent": request.agent_name,
+                        "tool": request.tool_name,
+                        "violation": violation,
+                    }),
+                )
+                .expect("audit: fail-closed");
             return Err(AgentError::CapabilityDenied(format!(
                 "prompt firewall: {violation}"
             )));
@@ -369,18 +377,20 @@ impl GovernanceBridge {
         }
 
         // Audit the bridge-level invocation
-        self.audit_trail.append_event(
-            agent_id,
-            EventType::ToolCall,
-            json!({
-                "event_kind": "bridge.mcp_tool_invoked",
-                "caller": request.caller_id,
-                "agent": request.agent_name,
-                "tool": request.tool_name,
-                "fuel_consumed": tool_result.fuel_consumed,
-                "simulated": simulation.is_some(),
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                agent_id,
+                EventType::ToolCall,
+                json!({
+                    "event_kind": "bridge.mcp_tool_invoked",
+                    "caller": request.caller_id,
+                    "agent": request.agent_name,
+                    "tool": request.tool_name,
+                    "fuel_consumed": tool_result.fuel_consumed,
+                    "simulated": simulation.is_some(),
+                }),
+            )
+            .expect("audit: fail-closed");
 
         Ok(McpInvokeResponse {
             result: tool_result,
@@ -411,14 +421,16 @@ impl GovernanceBridge {
         if !self.allowed_senders.is_empty()
             && !self.allowed_senders.contains(&sender_id.to_string())
         {
-            self.audit_trail.append_event(
-                Uuid::nil(),
-                EventType::Error,
-                json!({
-                    "event_kind": "bridge.sender_rejected",
-                    "sender": sender_id,
-                }),
-            );
+            self.audit_trail
+                .append_event(
+                    Uuid::nil(),
+                    EventType::Error,
+                    json!({
+                        "event_kind": "bridge.sender_rejected",
+                        "sender": sender_id,
+                    }),
+                )
+                .expect("audit: fail-closed");
             return Err(AgentError::CapabilityDenied(format!(
                 "sender '{sender_id}' not authorized"
             )));

@@ -92,17 +92,19 @@ impl KeyManager {
         let public_key = self.backend.public_key(&handle)?;
         let public_key_hash = public_key_hash(public_key);
 
-        let _ = audit.append_event(
-            actor_id,
-            EventType::StateChange,
-            json!({
-                "event": "keys.generated",
-                "key_handle_id": handle.id,
-                "purpose": handle.purpose.as_str(),
-                "backend_name": self.backend_name(),
-                "public_key_hash": public_key_hash
-            }),
-        );
+        audit
+            .append_event(
+                actor_id,
+                EventType::StateChange,
+                json!({
+                    "event": "keys.generated",
+                    "key_handle_id": handle.id,
+                    "purpose": handle.purpose.as_str(),
+                    "backend_name": self.backend_name(),
+                    "public_key_hash": public_key_hash
+                }),
+            )
+            .expect("audit: fail-closed");
         Ok(handle)
     }
 
@@ -149,19 +151,21 @@ impl KeyManager {
         let new_public_hash = public_key_hash(self.backend.public_key(&new_handle)?);
 
         self.deprecated_handles.push(handle.clone());
-        let _ = audit.append_event(
-            actor_id,
-            EventType::StateChange,
-            json!({
-                "event": "keys.rotated",
-                "old_key_handle_id": handle.id,
-                "new_key_handle_id": new_handle.id,
-                "purpose": handle.purpose.as_str(),
-                "backend_name": self.backend_name(),
-                "old_public_key_hash": old_public_hash,
-                "new_public_key_hash": new_public_hash
-            }),
-        );
+        audit
+            .append_event(
+                actor_id,
+                EventType::StateChange,
+                json!({
+                    "event": "keys.rotated",
+                    "old_key_handle_id": handle.id,
+                    "new_key_handle_id": new_handle.id,
+                    "purpose": handle.purpose.as_str(),
+                    "backend_name": self.backend_name(),
+                    "old_public_key_hash": old_public_hash,
+                    "new_public_key_hash": new_public_hash
+                }),
+            )
+            .expect("audit: fail-closed");
 
         Ok(new_handle)
     }
@@ -176,17 +180,19 @@ impl KeyManager {
         actor_id: Uuid,
     ) -> Result<AttestationReport, KeyError> {
         let report = self.backend.attest()?;
-        let _ = audit.append_event(
-            actor_id,
-            EventType::StateChange,
-            json!({
-                "event": "attestation.generated",
-                "backend_name": report.backend,
-                "available": report.available,
-                "device_claims_hash": hex_encode(&report.device_claims_hash),
-                "protocol_version": report.protocol_version
-            }),
-        );
+        audit
+            .append_event(
+                actor_id,
+                EventType::StateChange,
+                json!({
+                    "event": "attestation.generated",
+                    "backend_name": report.backend,
+                    "available": report.available,
+                    "device_claims_hash": hex_encode(&report.device_claims_hash),
+                    "protocol_version": report.protocol_version
+                }),
+            )
+            .expect("audit: fail-closed");
         Ok(report)
     }
 }

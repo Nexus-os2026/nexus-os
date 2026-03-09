@@ -717,19 +717,21 @@ impl ConsentRuntime {
 }
 
 fn append_requested_event(audit: &mut AuditTrail, request: &ApprovalRequest) {
-    let _ = audit.append_event(
-        parse_or_nil_uuid(request.agent_id.as_str()),
-        EventType::UserAction,
-        json!({
-            "event": "consent.requested",
-            "request_id": request.id,
-            "operation": request.operation.as_str(),
-            "required_tier": request.required_tier.as_str(),
-            "payload_hash": request.payload_hash,
-            "approver_ids": [],
-            "decision_result": "pending",
-        }),
-    );
+    audit
+        .append_event(
+            parse_or_nil_uuid(request.agent_id.as_str()),
+            EventType::UserAction,
+            json!({
+                "event": "consent.requested",
+                "request_id": request.id,
+                "operation": request.operation.as_str(),
+                "required_tier": request.required_tier.as_str(),
+                "payload_hash": request.payload_hash,
+                "approver_ids": [],
+                "decision_result": "pending",
+            }),
+        )
+        .expect("audit: fail-closed");
 }
 
 fn append_decision_event(
@@ -745,19 +747,21 @@ fn append_decision_event(
         ApprovalVerdict::Approve => "consent.approved",
         ApprovalVerdict::Deny => "consent.denied",
     };
-    let _ = audit.append_event(
-        parse_or_nil_uuid(request.agent_id.as_str()),
-        EventType::UserAction,
-        json!({
-            "event": event_name,
-            "request_id": request.id,
-            "operation": request.operation.as_str(),
-            "required_tier": request.required_tier.as_str(),
-            "payload_hash": request.payload_hash,
-            "approver_ids": [decision.approver_id.clone()],
-            "decision_result": decision_result,
-        }),
-    );
+    audit
+        .append_event(
+            parse_or_nil_uuid(request.agent_id.as_str()),
+            EventType::UserAction,
+            json!({
+                "event": event_name,
+                "request_id": request.id,
+                "operation": request.operation.as_str(),
+                "required_tier": request.required_tier.as_str(),
+                "payload_hash": request.payload_hash,
+                "approver_ids": [decision.approver_id.clone()],
+                "decision_result": decision_result,
+            }),
+        )
+        .expect("audit: fail-closed");
 }
 
 fn append_executed_event(
@@ -765,19 +769,21 @@ fn append_executed_event(
     request: &ApprovalRequest,
     approver_ids: &[String],
 ) {
-    let _ = audit.append_event(
-        parse_or_nil_uuid(request.agent_id.as_str()),
-        EventType::StateChange,
-        json!({
-            "event": "consent.executed",
-            "request_id": request.id,
-            "operation": request.operation.as_str(),
-            "required_tier": request.required_tier.as_str(),
-            "payload_hash": request.payload_hash,
-            "approver_ids": approver_ids,
-            "decision_result": "executed",
-        }),
-    );
+    audit
+        .append_event(
+            parse_or_nil_uuid(request.agent_id.as_str()),
+            EventType::StateChange,
+            json!({
+                "event": "consent.executed",
+                "request_id": request.id,
+                "operation": request.operation.as_str(),
+                "required_tier": request.required_tier.as_str(),
+                "payload_hash": request.payload_hash,
+                "approver_ids": approver_ids,
+                "decision_result": "executed",
+            }),
+        )
+        .expect("audit: fail-closed");
 }
 
 fn next_audit_sequence(audit: &AuditTrail) -> u64 {

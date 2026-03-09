@@ -113,14 +113,14 @@ impl StrategyAdapter {
                 .map(change_description)
                 .collect::<Vec<_>>()
                 .join(", ");
-            let _ = self.audit_trail.append_event(
+            self.audit_trail.append_event(
                 self.agent_id,
                 EventType::UserAction,
                 json!({
                     "event": "adaptation_blocked_pending_approval",
                     "pending_changes": pending
                 }),
-            );
+            )?;
             return Err(AdaptationError::RequiresApproval(pending));
         }
 
@@ -130,7 +130,7 @@ impl StrategyAdapter {
 
         updated_strategy.normalize();
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             self.agent_id,
             EventType::UserAction,
             json!({
@@ -139,7 +139,7 @@ impl StrategyAdapter {
                 "authority_changes": authority_changes.len(),
                 "report_window": format!("{:?}", analytics_report.window)
             }),
-        );
+        )?;
 
         Ok(AdaptationResult {
             updated_strategy,
@@ -153,15 +153,17 @@ impl StrategyAdapter {
     }
 
     fn log_security_event(&mut self, change: &StrategyChange, policy: &str) {
-        let _ = self.audit_trail.append_event(
-            self.agent_id,
-            EventType::Error,
-            json!({
-                "event": "adaptation_security_violation",
-                "policy": policy,
-                "change": change_description(change)
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                self.agent_id,
+                EventType::Error,
+                json!({
+                    "event": "adaptation_security_violation",
+                    "policy": policy,
+                    "change": change_description(change)
+                }),
+            )
+            .expect("audit: fail-closed");
     }
 }
 

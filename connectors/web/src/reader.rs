@@ -121,7 +121,7 @@ impl WebReaderConnector {
             extracted_at,
         };
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             agent.agent_id,
             EventType::ToolCall,
             json!({
@@ -131,7 +131,7 @@ impl WebReaderConnector {
                 "char_count": clean.text.chars().count(),
                 "fuel_cost": fuel_cost
             }),
-        );
+        )?;
 
         Ok(clean)
     }

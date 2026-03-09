@@ -207,19 +207,21 @@ impl SafetySupervisor {
             let warn_value = threshold.as_ref().map_or(0.0, |row| row.warn_value);
             let critical_value = threshold.as_ref().map_or(0.0, |row| row.critical_value);
 
-            let _ = audit.append_event(
-                agent_id,
-                EventType::StateChange,
-                json!({
-                    "event_kind": "safety.kpi_checked",
-                    "agent_id": agent_id,
-                    "kpi_kind": kind.as_str(),
-                    "value": value,
-                    "status": status.as_str(),
-                    "warn_value": warn_value,
-                    "critical_value": critical_value,
-                }),
-            );
+            audit
+                .append_event(
+                    agent_id,
+                    EventType::StateChange,
+                    json!({
+                        "event_kind": "safety.kpi_checked",
+                        "agent_id": agent_id,
+                        "kpi_kind": kind.as_str(),
+                        "value": value,
+                        "status": status.as_str(),
+                        "warn_value": warn_value,
+                        "critical_value": critical_value,
+                    }),
+                )
+                .expect("audit: fail-closed");
 
             if status != KpiStatus::Ok {
                 violations.push(KpiViolation {
@@ -349,16 +351,18 @@ impl SafetySupervisor {
         self.set_mode(agent_id, OperatingMode::Halted(reason.clone()), audit);
         let report = self.generate_incident_report_internal(agent_id, "halted", audit);
         let violations = self.violation_counter.get(&agent_id).copied().unwrap_or(0);
-        let _ = audit.append_event(
-            agent_id,
-            EventType::Error,
-            json!({
-                "event_kind": "safety.agent_halted",
-                "agent_id": agent_id,
-                "violations": violations,
-                "report_id": report.report_id,
-            }),
-        );
+        audit
+            .append_event(
+                agent_id,
+                EventType::Error,
+                json!({
+                    "event_kind": "safety.agent_halted",
+                    "agent_id": agent_id,
+                    "violations": violations,
+                    "report_id": report.report_id,
+                }),
+            )
+            .expect("audit: fail-closed");
 
         SafetyAction::Halted {
             reason,
@@ -417,17 +421,19 @@ impl SafetySupervisor {
                 .agent_modes
                 .insert(agent_id, OperatingMode::Normal)
                 .unwrap_or(OperatingMode::Normal);
-            let _ = audit.append_event(
-                agent_id,
-                EventType::UserAction,
-                json!({
-                    "event_kind": "safety.mode_changed",
-                    "agent_id": agent_id,
-                    "from": mode_name(&from),
-                    "to": "normal",
-                    "reason": "violations_reset",
-                }),
-            );
+            audit
+                .append_event(
+                    agent_id,
+                    EventType::UserAction,
+                    json!({
+                        "event_kind": "safety.mode_changed",
+                        "agent_id": agent_id,
+                        "from": mode_name(&from),
+                        "to": "normal",
+                        "reason": "violations_reset",
+                    }),
+                )
+                .expect("audit: fail-closed");
         }
 
         self.refresh_global_mode();
@@ -454,20 +460,22 @@ impl SafetySupervisor {
             *entry
         };
 
-        let _ = audit.append_event(
-            agent_id,
-            EventType::Error,
-            json!({
-                "event_kind": "safety.violation_recorded",
-                "agent_id": agent_id,
-                "count": count,
-                "kpi_kind": violation.kind.as_str(),
-                "value": violation.value,
-                "status": violation.status.as_str(),
-                "warn_value": violation.warn_value,
-                "critical_value": violation.critical_value,
-            }),
-        );
+        audit
+            .append_event(
+                agent_id,
+                EventType::Error,
+                json!({
+                    "event_kind": "safety.violation_recorded",
+                    "agent_id": agent_id,
+                    "count": count,
+                    "kpi_kind": violation.kind.as_str(),
+                    "value": violation.value,
+                    "status": violation.status.as_str(),
+                    "warn_value": violation.warn_value,
+                    "critical_value": violation.critical_value,
+                }),
+            )
+            .expect("audit: fail-closed");
 
         match count {
             0 | 1 => {
@@ -543,18 +551,20 @@ impl SafetySupervisor {
             .or_default()
             .push(report.clone());
 
-        let _ = audit.append_event(
-            agent_id,
-            EventType::UserAction,
-            json!({
-                "event_kind": "safety.incident_report_generated",
-                "report_id": report_id,
-                "agent_id": agent_id,
-                "timestamp_seq": sequence,
-                "action_taken": action_taken,
-                "signature": report.signature,
-            }),
-        );
+        audit
+            .append_event(
+                agent_id,
+                EventType::UserAction,
+                json!({
+                    "event_kind": "safety.incident_report_generated",
+                    "report_id": report_id,
+                    "agent_id": agent_id,
+                    "timestamp_seq": sequence,
+                    "action_taken": action_taken,
+                    "signature": report.signature,
+                }),
+            )
+            .expect("audit: fail-closed");
 
         report
     }
@@ -574,17 +584,19 @@ impl SafetySupervisor {
             OperatingMode::Degraded(reason) | OperatingMode::Halted(reason) => reason.clone(),
         };
 
-        let _ = audit.append_event(
-            agent_id,
-            EventType::UserAction,
-            json!({
-                "event_kind": "safety.mode_changed",
-                "agent_id": agent_id,
-                "from": mode_name(&from),
-                "to": mode_name(&next),
-                "reason": reason,
-            }),
-        );
+        audit
+            .append_event(
+                agent_id,
+                EventType::UserAction,
+                json!({
+                    "event_kind": "safety.mode_changed",
+                    "agent_id": agent_id,
+                    "from": mode_name(&from),
+                    "to": mode_name(&next),
+                    "reason": reason,
+                }),
+            )
+            .expect("audit: fail-closed");
 
         self.refresh_global_mode();
     }

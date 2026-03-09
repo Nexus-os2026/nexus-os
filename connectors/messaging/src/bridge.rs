@@ -289,7 +289,7 @@ impl BridgeDaemon {
             }
         };
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             message.sender_id.parse().unwrap_or_default(),
             EventType::UserAction,
             json!({
@@ -299,7 +299,7 @@ impl BridgeDaemon {
                 "command_text": command_text,
                 "response": response,
             }),
-        );
+        )?;
 
         Ok(response)
     }

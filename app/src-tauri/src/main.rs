@@ -109,7 +109,9 @@ impl AppState {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
         };
-        let _ = guard.append_event(agent_id, event_type, payload);
+        guard
+            .append_event(agent_id, event_type, payload)
+            .expect("audit: fail-closed — no unrecorded operations allowed");
     }
 }
 

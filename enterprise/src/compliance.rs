@@ -240,31 +240,41 @@ mod tests {
         let mut trail = AuditTrail::new();
         let agent = Uuid::new_v4();
 
-        trail.append_event(
-            agent,
-            EventType::ToolCall,
-            json!({"action": "capability_check", "cap": "llm.query"}),
-        );
-        trail.append_event(
-            agent,
-            EventType::UserAction,
-            json!({"event": "consent.approval", "tier": 2}),
-        );
-        trail.append_event(
-            agent,
-            EventType::StateChange,
-            json!({"event": "safety.kpi_check", "status": "normal"}),
-        );
-        trail.append_event(
-            agent,
-            EventType::StateChange,
-            json!({"event": "fuel.budget_check", "remaining": 500}),
-        );
-        trail.append_event(
-            agent,
-            EventType::LlmCall,
-            json!({"action": "llm_query", "tokens": 100}),
-        );
+        trail
+            .append_event(
+                agent,
+                EventType::ToolCall,
+                json!({"action": "capability_check", "cap": "llm.query"}),
+            )
+            .expect("audit: fail-closed");
+        trail
+            .append_event(
+                agent,
+                EventType::UserAction,
+                json!({"event": "consent.approval", "tier": 2}),
+            )
+            .expect("audit: fail-closed");
+        trail
+            .append_event(
+                agent,
+                EventType::StateChange,
+                json!({"event": "safety.kpi_check", "status": "normal"}),
+            )
+            .expect("audit: fail-closed");
+        trail
+            .append_event(
+                agent,
+                EventType::StateChange,
+                json!({"event": "fuel.budget_check", "remaining": 500}),
+            )
+            .expect("audit: fail-closed");
+        trail
+            .append_event(
+                agent,
+                EventType::LlmCall,
+                json!({"action": "llm_query", "tokens": 100}),
+            )
+            .expect("audit: fail-closed");
 
         trail
     }

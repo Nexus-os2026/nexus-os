@@ -146,7 +146,8 @@ impl ReplicationManager {
         // Re-append using the trail's method to maintain local chain integrity.
         let _ = self
             .trail
-            .append_event(event.agent_id, event.event_type, event.payload);
+            .append_event(event.agent_id, event.event_type, event.payload)
+            .expect("audit: fail-closed");
         self.applied_version += 1;
     }
 }
@@ -205,10 +206,12 @@ mod tests {
         let agent = Uuid::new_v4();
         node_a
             .trail_mut()
-            .append_event(agent, EventType::StateChange, json!({"action": "create"}));
+            .append_event(agent, EventType::StateChange, json!({"action": "create"}))
+            .expect("audit: fail-closed");
         node_a
             .trail_mut()
-            .append_event(agent, EventType::ToolCall, json!({"tool": "search"}));
+            .append_event(agent, EventType::ToolCall, json!({"tool": "search"}))
+            .expect("audit: fail-closed");
 
         assert_eq!(node_a.trail().events().len(), 2);
         assert_eq!(node_b.trail().events().len(), 0);
@@ -229,7 +232,8 @@ mod tests {
         let agent = Uuid::new_v4();
         node_a
             .trail_mut()
-            .append_event(agent, EventType::StateChange, json!({"seq": 1}));
+            .append_event(agent, EventType::StateChange, json!({"seq": 1}))
+            .expect("audit: fail-closed");
 
         // Full sync first
         node_a.broadcast(ReplicationMode::FullSync).unwrap();
@@ -239,10 +243,12 @@ mod tests {
         // Add more events on A
         node_a
             .trail_mut()
-            .append_event(agent, EventType::ToolCall, json!({"seq": 2}));
+            .append_event(agent, EventType::ToolCall, json!({"seq": 2}))
+            .expect("audit: fail-closed");
         node_a
             .trail_mut()
-            .append_event(agent, EventType::LlmCall, json!({"seq": 3}));
+            .append_event(agent, EventType::LlmCall, json!({"seq": 3}))
+            .expect("audit: fail-closed");
 
         // Delta sync sends only new events (from applied_version onward)
         node_a.broadcast(ReplicationMode::Delta).unwrap();
@@ -263,10 +269,12 @@ mod tests {
         let agent = Uuid::new_v4();
         node_a
             .trail_mut()
-            .append_event(agent, EventType::StateChange, json!({"x": 1}));
+            .append_event(agent, EventType::StateChange, json!({"x": 1}))
+            .expect("audit: fail-closed");
         node_a
             .trail_mut()
-            .append_event(agent, EventType::StateChange, json!({"x": 2}));
+            .append_event(agent, EventType::StateChange, json!({"x": 2}))
+            .expect("audit: fail-closed");
 
         let digest_a = node_a.current_digest();
 
@@ -294,7 +302,8 @@ mod tests {
         let agent = Uuid::new_v4();
         node_a
             .trail_mut()
-            .append_event(agent, EventType::StateChange, json!({"v": 1}));
+            .append_event(agent, EventType::StateChange, json!({"v": 1}))
+            .expect("audit: fail-closed");
 
         node_a.broadcast(ReplicationMode::FullSync).unwrap();
         node_b.apply_remote().unwrap();

@@ -453,7 +453,7 @@ impl PermissionManager {
         self.history.entry(agent_id).or_default().push(entry);
 
         // Audit log
-        let _ = audit_trail.append_event(
+        audit_trail.append_event(
             agent_id,
             EventType::UserAction,
             json!({
@@ -465,7 +465,7 @@ impl PermissionManager {
                 "changed_by": changed_by,
                 "reason": reason,
             }),
-        );
+        )?;
 
         // Flush to distributed audit immediately — permission changes are
         // high-value events that should not wait for the batch threshold.
@@ -529,15 +529,17 @@ impl PermissionManager {
                     reason: None,
                 });
 
-            let _ = audit_trail.append_event(
-                agent_id,
-                EventType::UserAction,
-                json!({
-                    "event_kind": "permission.locked",
-                    "capability": capability_key,
-                    "by": "admin",
-                }),
-            );
+            audit_trail
+                .append_event(
+                    agent_id,
+                    EventType::UserAction,
+                    json!({
+                        "event_kind": "permission.locked",
+                        "capability": capability_key,
+                        "by": "admin",
+                    }),
+                )
+                .expect("audit: fail-closed");
         }
     }
 
@@ -562,15 +564,17 @@ impl PermissionManager {
                     reason: None,
                 });
 
-            let _ = audit_trail.append_event(
-                agent_id,
-                EventType::UserAction,
-                json!({
-                    "event_kind": "permission.unlocked",
-                    "capability": capability_key,
-                    "by": "admin",
-                }),
-            );
+            audit_trail
+                .append_event(
+                    agent_id,
+                    EventType::UserAction,
+                    json!({
+                        "event_kind": "permission.unlocked",
+                        "capability": capability_key,
+                        "by": "admin",
+                    }),
+                )
+                .expect("audit: fail-closed");
         }
     }
 

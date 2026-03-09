@@ -19,6 +19,7 @@ pub enum MutationError {
     HumanApprovalRequired,
     KillGateFrozen(&'static str),
     KillGateHalted(&'static str),
+    AuditFailure(String),
 }
 
 impl std::fmt::Display for MutationError {
@@ -40,7 +41,16 @@ impl std::fmt::Display for MutationError {
             MutationError::KillGateHalted(subsystem) => {
                 write!(f, "kill gate is halted for subsystem '{subsystem}'")
             }
+            MutationError::AuditFailure(reason) => {
+                write!(f, "audit failure: {reason}")
+            }
         }
+    }
+}
+
+impl From<nexus_kernel::audit::AuditError> for MutationError {
+    fn from(value: nexus_kernel::audit::AuditError) -> Self {
+        MutationError::AuditFailure(value.to_string())
     }
 }
 
@@ -110,7 +120,7 @@ impl MutationLifecycle {
             },
         );
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             self.agent_id,
             EventType::UserAction,
             json!({
@@ -118,7 +128,7 @@ impl MutationLifecycle {
                 "patch_id": patch_id,
                 "proposed_by": proposed_by,
             }),
-        );
+        )?;
 
         Ok(patch_id)
     }
@@ -131,14 +141,14 @@ impl MutationLifecycle {
         validate_patch(&record.patch).map_err(map_patch_error)?;
         record.validated = true;
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             self.agent_id,
             EventType::UserAction,
             json!({
                 "event": "mutation_validated",
                 "patch_id": patch_id,
             }),
-        );
+        )?;
         Ok(())
     }
 
@@ -175,7 +185,7 @@ impl MutationLifecycle {
             .ok_or_else(|| MutationError::PatchNotFound(patch_id.to_string()))?;
         record.replay_passed = true;
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             self.agent_id,
             EventType::UserAction,
             json!({
@@ -183,7 +193,7 @@ impl MutationLifecycle {
                 "patch_id": patch_id,
                 "cases": corpus.len(),
             }),
-        );
+        )?;
         Ok(())
     }
 
@@ -200,7 +210,7 @@ impl MutationLifecycle {
         }
         record.approved_by_human = true;
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             self.agent_id,
             EventType::UserAction,
             json!({
@@ -208,7 +218,7 @@ impl MutationLifecycle {
                 "patch_id": patch_id,
                 "human_approved": true,
             }),
-        );
+        )?;
         Ok(())
     }
 
@@ -239,7 +249,7 @@ impl MutationLifecycle {
             .ok_or_else(|| MutationError::PatchNotFound(patch_id.to_string()))?;
         record.applied = true;
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             self.agent_id,
             EventType::StateChange,
             json!({
@@ -247,7 +257,7 @@ impl MutationLifecycle {
                 "patch_id": patch_id,
                 "attestation_hash": attestation_hash,
             }),
-        );
+        )?;
         Ok(())
     }
 

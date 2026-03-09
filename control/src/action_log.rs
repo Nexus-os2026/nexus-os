@@ -78,7 +78,9 @@ impl ActionLogger {
             Err(poisoned) => poisoned.into_inner(),
         };
 
-        guard.append_event(agent_id, EventType::ToolCall, payload)
+        guard
+            .append_event(agent_id, EventType::ToolCall, payload)
+            .expect("audit: fail-closed")
     }
 
     pub fn events(&self) -> Vec<AuditEvent> {

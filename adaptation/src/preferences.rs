@@ -144,7 +144,7 @@ impl PreferenceStore {
             .insert(user_id.to_string(), encrypted.clone());
         self.persist_to_disk(user_id, &encrypted)?;
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             uuid::Uuid::nil(),
             EventType::UserAction,
             json!({
@@ -152,7 +152,7 @@ impl PreferenceStore {
                 "user_id": user_id,
                 "updated_at": preferences.updated_at
             }),
-        );
+        )?;
 
         Ok(())
     }
@@ -194,7 +194,7 @@ impl PreferenceStore {
 
         self.set_preferences(user_id, preferences.clone(), user_key)?;
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             uuid::Uuid::nil(),
             EventType::ToolCall,
             json!({
@@ -204,7 +204,7 @@ impl PreferenceStore {
                 "tone": preferences.tone,
                 "content_style": preferences.content_style
             }),
-        );
+        )?;
 
         Ok(preferences)
     }
@@ -213,14 +213,14 @@ impl PreferenceStore {
         self.encrypted_by_user.remove(user_id);
         self.delete_from_disk(user_id)?;
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             uuid::Uuid::nil(),
             EventType::UserAction,
             json!({
                 "event": "preferences_deleted",
                 "user_id": user_id
             }),
-        );
+        )?;
 
         Ok(())
     }

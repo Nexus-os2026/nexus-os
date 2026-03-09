@@ -93,18 +93,20 @@ impl ContentComposer {
             variants,
         };
 
-        self.audit_trail.append_event(
-            self.runtime.agent_id,
-            EventType::LlmCall,
-            json!({
-                "step": "compose",
-                "platform": platform.as_label(),
-                "topic": topic,
-                "style": style,
-                "variants": draft.variants.len(),
-                "text_length": draft.text.chars().count(),
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                self.runtime.agent_id,
+                EventType::LlmCall,
+                json!({
+                    "step": "compose",
+                    "platform": platform.as_label(),
+                    "topic": topic,
+                    "style": style,
+                    "variants": draft.variants.len(),
+                    "text_length": draft.text.chars().count(),
+                }),
+            )
+            .expect("audit: fail-closed");
 
         Ok(draft)
     }

@@ -65,7 +65,7 @@ impl TeamMessageBus {
     ) -> Result<TeamMessage, AgentError> {
         let validation = validate_message(payload);
         if validation.is_threat() {
-            let _ = self.audit_trail.append_event(
+            self.audit_trail.append_event(
                 team_id,
                 EventType::Error,
                 json!({
@@ -74,7 +74,7 @@ impl TeamMessageBus {
                     "to_agent": to_agent,
                     "threats": validation.detected_threats,
                 }),
-            );
+            )?;
             return Err(AgentError::SupervisorError(
                 "message blocked by injection defense".to_string(),
             ));
@@ -103,7 +103,7 @@ impl TeamMessageBus {
             .or_default()
             .push(message.clone());
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             team_id,
             EventType::ToolCall,
             json!({
@@ -113,7 +113,7 @@ impl TeamMessageBus {
                 "from_agent": message.from_agent,
                 "to_agent": message.to_agent,
             }),
-        );
+        )?;
 
         Ok(message)
     }

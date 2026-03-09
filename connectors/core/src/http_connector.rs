@@ -191,18 +191,20 @@ impl HttpConnector {
         status_code: u16,
         request_id: Option<&str>,
     ) {
-        let _ = self.audit_trail.append_event(
-            self.agent_id,
-            EventType::ToolCall,
-            json!({
-                "event": "http_request",
-                "connector_id": self.id,
-                "method": method,
-                "url": url,
-                "status_code": status_code,
-                "request_id": request_id
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                self.agent_id,
+                EventType::ToolCall,
+                json!({
+                    "event": "http_request",
+                    "connector_id": self.id,
+                    "method": method,
+                    "url": url,
+                    "status_code": status_code,
+                    "request_id": request_id
+                }),
+            )
+            .expect("audit: fail-closed");
     }
 
     fn maybe_escalate_challenge(&mut self, response: &HttpResponse) {

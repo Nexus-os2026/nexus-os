@@ -254,15 +254,17 @@ impl SandboxRuntime for WasmtimeSandbox {
 
         // Log verification result to audit trail
         let agent_id = ctx.agent_id();
-        ctx.audit_trail_mut().append_event(
-            agent_id,
-            EventType::ToolCall,
-            json!({
-                "action": "wasm_signature_check",
-                "result": format!("{:?}", sig_result),
-                "accepted": sig_result.is_accepted(),
-            }),
-        );
+        ctx.audit_trail_mut()
+            .append_event(
+                agent_id,
+                EventType::ToolCall,
+                json!({
+                    "action": "wasm_signature_check",
+                    "result": format!("{:?}", sig_result),
+                    "accepted": sig_result.is_accepted(),
+                }),
+            )
+            .expect("audit: fail-closed");
 
         if !sig_result.is_accepted() {
             let reason = match &sig_result {

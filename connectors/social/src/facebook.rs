@@ -54,7 +54,7 @@ impl FacebookConnector {
             .record_completion(request_id, post_id.clone());
         self.published_count += 1;
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             Uuid::nil(),
             EventType::ToolCall,
             json!({
@@ -62,7 +62,7 @@ impl FacebookConnector {
                 "request_id": request_id,
                 "post_id": post_id
             }),
-        );
+        )?;
 
         Ok(FacebookPostResult {
             post_id,

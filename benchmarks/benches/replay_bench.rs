@@ -12,11 +12,13 @@ fn bench_build_audit_chain_for_replay(c: &mut Criterion) {
             b.iter(|| {
                 let mut trail = AuditTrail::new();
                 for i in 0..n {
-                    trail.append_event(
-                        agent_id,
-                        EventType::ToolCall,
-                        json!({"tool": "web.search", "seq": i}),
-                    );
+                    trail
+                        .append_event(
+                            agent_id,
+                            EventType::ToolCall,
+                            json!({"tool": "web.search", "seq": i}),
+                        )
+                        .expect("audit append");
                 }
                 black_box(trail.verify_integrity());
             });
@@ -32,11 +34,13 @@ fn bench_serialize_audit_trail(c: &mut Criterion) {
     for count in [50, 500] {
         let mut trail = AuditTrail::new();
         for i in 0..count {
-            trail.append_event(
-                agent_id,
-                EventType::ToolCall,
-                json!({"tool": "web.search", "seq": i}),
-            );
+            trail
+                .append_event(
+                    agent_id,
+                    EventType::ToolCall,
+                    json!({"tool": "web.search", "seq": i}),
+                )
+                .expect("audit append");
         }
 
         group.bench_with_input(
@@ -57,11 +61,13 @@ fn bench_deserialize_audit_events(c: &mut Criterion) {
     for count in [50, 500] {
         let mut trail = AuditTrail::new();
         for i in 0..count {
-            trail.append_event(
-                agent_id,
-                EventType::ToolCall,
-                json!({"tool": "web.search", "seq": i}),
-            );
+            trail
+                .append_event(
+                    agent_id,
+                    EventType::ToolCall,
+                    json!({"tool": "web.search", "seq": i}),
+                )
+                .expect("audit append");
         }
         let serialized = serde_json::to_vec(trail.events()).unwrap();
 

@@ -7,6 +7,14 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
+/// Audit subsystem error — returned when an audit event cannot be recorded.
+/// Fail-closed: callers MUST propagate this to abort the operation.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum AuditError {
+    #[error("audit batcher mutex poisoned — audit integrity compromised")]
+    BatcherPoisoned,
+}
+
 const GENESIS_HASH: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -125,12 +133,12 @@ impl BatcherHandle {
         }
     }
 
-    fn push_event(&self, event: &AuditEvent) {
+    fn push_event(&self, event: &AuditEvent) -> Result<(), AuditError> {
         if let Some(inner) = &self.inner {
-            if let Ok(mut state) = inner.lock() {
-                state.push_event(event.clone());
-            }
+            let mut state = inner.lock().map_err(|_| AuditError::BatcherPoisoned)?;
+            state.push_event(event.clone());
         }
+        Ok(())
     }
 
     fn flush(&self) {
@@ -208,7 +216,12 @@ impl AuditTrail {
         self.batcher.pending_count()
     }
 
-    pub fn append_event(&mut self, agent_id: Uuid, event_type: EventType, payload: Value) -> Uuid {
+    pub fn append_event(
+        &mut self,
+        agent_id: Uuid,
+        event_type: EventType,
+        payload: Value,
+    ) -> Result<Uuid, AuditError> {
         let event_id = Uuid::new_v4();
         let timestamp = current_unix_timestamp();
         let previous_hash = self
@@ -235,8 +248,8 @@ impl AuditTrail {
             hash,
         };
         self.events.push(event.clone());
-        self.batcher.push_event(&event);
-        event_id
+        self.batcher.push_event(&event)?;
+        Ok(event_id)
     }
 
     pub fn events(&self) -> &[AuditEvent] {
@@ -334,7 +347,9 @@ mod tests {
 
         for idx in 0..5 {
             let payload = json!({ "seq": idx, "status": "ok" });
-            let _ = trail.append_event(agent_id, EventType::StateChange, payload);
+            trail
+                .append_event(agent_id, EventType::StateChange, payload)
+                .expect("audit append");
         }
 
         assert!(trail.verify_integrity());
@@ -379,7 +394,9 @@ mod tests {
         let agent_id = Uuid::new_v4();
 
         for i in 0..100 {
-            trail.append_event(agent_id, EventType::StateChange, json!({"i": i}));
+            trail
+                .append_event(agent_id, EventType::StateChange, json!({"i": i}))
+                .expect("audit append");
         }
 
         assert_eq!(trail.events().len(), 100);
@@ -404,7 +421,9 @@ mod tests {
 
         // Append 25 events: should seal 2 batches of 10, with 5 pending
         for i in 0..25 {
-            trail.append_event(agent_id, EventType::ToolCall, json!({"i": i}));
+            trail
+                .append_event(agent_id, EventType::ToolCall, json!({"i": i}))
+                .expect("audit append");
         }
 
         assert_eq!(trail.sealed_batch_count(), 2);
@@ -437,7 +456,9 @@ mod tests {
 
         // Append 7 events (under threshold)
         for i in 0..7 {
-            trail.append_event(agent_id, EventType::LlmCall, json!({"i": i}));
+            trail
+                .append_event(agent_id, EventType::LlmCall, json!({"i": i}))
+                .expect("audit append");
         }
 
         assert_eq!(trail.sealed_batch_count(), 0);
@@ -469,7 +490,9 @@ mod tests {
 
         let mut event_ids = Vec::new();
         for i in 0..5 {
-            let eid = trail.append_event(agent_id, EventType::StateChange, json!({"i": i}));
+            let eid = trail
+                .append_event(agent_id, EventType::StateChange, json!({"i": i}))
+                .expect("audit append");
             event_ids.push(eid);
         }
 

@@ -84,7 +84,7 @@ impl ResumableWorkflowEngine {
             // Execute all currently ready steps; these are dependency-safe to run in parallel.
             // We run deterministically in sorted order for stable replay.
             for step_id in ready {
-                let _ = self.audit_trail.append_event(
+                self.audit_trail.append_event(
                     uuid::Uuid::nil(),
                     EventType::ToolCall,
                     json!({
@@ -92,12 +92,12 @@ impl ResumableWorkflowEngine {
                         "workflow_id": workflow_id,
                         "step_id": step_id
                     }),
-                );
+                )?;
 
                 let execution = executor.execute_step(step_id.as_str());
                 if let Err(error) = execution {
                     persist_checkpoint(checkpoint_path.as_path(), &checkpoint)?;
-                    let _ = self.audit_trail.append_event(
+                    self.audit_trail.append_event(
                         uuid::Uuid::nil(),
                         EventType::Error,
                         json!({
@@ -106,7 +106,7 @@ impl ResumableWorkflowEngine {
                             "step_id": step_id,
                             "error": error.to_string()
                         }),
-                    );
+                    )?;
                     return Err(error);
                 }
 
@@ -115,7 +115,7 @@ impl ResumableWorkflowEngine {
                     .insert(step_id.clone(), StepStatus::Completed);
                 persist_checkpoint(checkpoint_path.as_path(), &checkpoint)?;
 
-                let _ = self.audit_trail.append_event(
+                self.audit_trail.append_event(
                     uuid::Uuid::nil(),
                     EventType::ToolCall,
                     json!({
@@ -123,7 +123,7 @@ impl ResumableWorkflowEngine {
                         "workflow_id": workflow_id,
                         "step_id": step_id
                     }),
-                );
+                )?;
             }
         }
 

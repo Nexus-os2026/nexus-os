@@ -130,7 +130,7 @@ impl WebSearchConnector {
             results.truncate(max_results);
         }
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             agent.agent_id,
             EventType::ToolCall,
             json!({
@@ -141,7 +141,7 @@ impl WebSearchConnector {
                 "fuel_cost": fuel_cost,
                 "provider": if self.fallback_provider == FallbackProvider::None { "brave" } else { "brave+fallback" }
             }),
-        );
+        )?;
 
         Ok(results)
     }

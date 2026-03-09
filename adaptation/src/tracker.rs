@@ -103,7 +103,7 @@ impl ChangeTracker {
         let summary = format!("rollback_to_v{version}");
         let _ = self.record_change(snapshot.clone(), summary.as_str())?;
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             self.agent_id,
             EventType::UserAction,
             json!({
@@ -111,7 +111,7 @@ impl ChangeTracker {
                 "target_version": version,
                 "new_version": self.current_version()
             }),
-        );
+        )?;
 
         Ok(snapshot)
     }
@@ -202,17 +202,19 @@ impl ChangeTracker {
     }
 
     fn log_version_event(&mut self, version: &StrategyVersion, action: &str) {
-        let _ = self.audit_trail.append_event(
-            self.agent_id,
-            EventType::StateChange,
-            json!({
-                "event": "strategy_version_changed",
-                "action": action,
-                "version": version.version,
-                "summary": version.summary,
-                "timestamp": version.timestamp
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                self.agent_id,
+                EventType::StateChange,
+                json!({
+                    "event": "strategy_version_changed",
+                    "action": action,
+                    "version": version.version,
+                    "summary": version.summary,
+                    "timestamp": version.timestamp
+                }),
+            )
+            .expect("audit: fail-closed");
     }
 }
 

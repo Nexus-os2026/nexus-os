@@ -55,15 +55,17 @@ impl UserReviewGate {
         self.decisions
             .insert(request_id.to_string(), decision.clone());
 
-        let _ = self.audit_trail.append_event(
-            agent_id,
-            EventType::UserAction,
-            json!({
-                "event": "research_review_decision",
-                "request_id": request_id,
-                "decision": format!("{decision:?}")
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                agent_id,
+                EventType::UserAction,
+                json!({
+                    "event": "research_review_decision",
+                    "request_id": request_id,
+                    "decision": format!("{decision:?}")
+                }),
+            )
+            .expect("audit: fail-closed");
     }
 
     pub fn enforce_approval_for_running(

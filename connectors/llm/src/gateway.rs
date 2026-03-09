@@ -204,7 +204,7 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
             vec![agent.agent_id.to_string(), model.to_string()],
             prompt,
         );
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             agent.agent_id,
             EventType::LlmCall,
             json!({
@@ -216,8 +216,8 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
                 "context_ids": redaction_result.envelope.context_ids,
                 "total_findings": redaction_result.summary.total_findings
             }),
-        );
-        let _ = self.audit_trail.append_event(
+        )?;
+        self.audit_trail.append_event(
             agent.agent_id,
             EventType::LlmCall,
             json!({
@@ -229,7 +229,7 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
                 "redacted_hash": redaction_result.redacted_hash_hex,
                 "prompt_envelope_hash": redaction_result.outbound_prompt_hash_hex
             }),
-        );
+        )?;
 
         let started = Instant::now();
         let response =
@@ -263,7 +263,7 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
         );
 
         if using_fallback_model {
-            let _ = self.audit_trail.append_event(
+            self.audit_trail.append_event(
                 agent.agent_id,
                 EventType::UserAction,
                 json!({
@@ -273,10 +273,10 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
                     "fallback_cost_per_1k_input": fallback_cost.cost_per_1k_input,
                     "fallback_cost_per_1k_output": fallback_cost.cost_per_1k_output,
                 }),
-            );
+            )?;
         }
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             agent.agent_id,
             EventType::LlmCall,
             json!({
@@ -287,7 +287,7 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
                 "estimated_output_tokens": output_tokens,
                 "provider_total_tokens": response.token_count,
             }),
-        );
+        )?;
 
         let ledger_default_cap = agent.fuel_remaining.saturating_add(actual_tokens).max(1);
         let ledger_entry = self.fuel_ledgers.entry(agent.agent_id).or_insert_with(|| {
@@ -316,7 +316,7 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
                     reason.as_str(),
                     &mut self.audit_trail,
                 );
-                let _ = self.audit_trail.append_event(
+                self.audit_trail.append_event(
                     agent.agent_id,
                     EventType::UserAction,
                     json!({
@@ -326,7 +326,7 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
                         "new_level": 0,
                         "reason": reason,
                     }),
-                );
+                )?;
                 agent.fuel_remaining = 0;
                 return Err(AgentError::FuelViolation {
                     violation,
@@ -358,7 +358,7 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
         });
         let _ = self
             .audit_trail
-            .append_event(agent.agent_id, EventType::LlmCall, payload);
+            .append_event(agent.agent_id, EventType::LlmCall, payload)?;
 
         let audit_len_after = self.audit_trail.events().len();
         let audit_events_added = audit_len_after.saturating_sub(audit_len_before);

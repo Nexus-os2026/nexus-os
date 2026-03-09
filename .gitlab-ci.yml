@@ -1,5 +1,22 @@
 stages:
+  - security
   - test
+
+cargo-audit:
+  stage: security
+  image: rust:latest
+  before_script:
+    - cargo install cargo-audit --locked
+  script:
+    - cargo audit
+
+cargo-deny:
+  stage: security
+  image: rust:latest
+  before_script:
+    - cargo install cargo-deny --locked
+  script:
+    - cargo deny check -W unlicensed
 
 rust-tests:
   stage: test
@@ -12,8 +29,6 @@ rust-tests:
         librsvg2-dev
         libssl-dev
         pkg-config
-    - rustup target add wasm32-wasip1
-    - rustup component add rustfmt clippy
   script:
     - cargo fmt --all -- --check
     - cargo clippy --workspace --all-targets -- -D warnings
@@ -21,7 +36,7 @@ rust-tests:
 
 frontend-tests:
   stage: test
-  image: node:20
+  image: node:22
   script:
     - cd app
     - npm ci

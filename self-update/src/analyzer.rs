@@ -257,16 +257,20 @@ mod tests {
         let analyzer = ErrorAnalyzer::new(MockCrashAnalysisProvider, "mock-model");
         let agent_id = Uuid::new_v4();
         let mut trail = AuditTrail::new();
-        let _ = trail.append_event(
-            agent_id,
-            EventType::StateChange,
-            json!({"state": "running"}),
-        );
-        let _ = trail.append_event(
-            agent_id,
-            EventType::Error,
-            json!({"error": "CapabilityDenied", "capability": "web.search"}),
-        );
+        trail
+            .append_event(
+                agent_id,
+                EventType::StateChange,
+                json!({"state": "running"}),
+            )
+            .expect("audit append");
+        trail
+            .append_event(
+                agent_id,
+                EventType::Error,
+                json!({"error": "CapabilityDenied", "capability": "web.search"}),
+            )
+            .expect("audit append");
 
         let report = analyzer
             .analyze_crash(agent_id, "Crash after denied capability", &trail)

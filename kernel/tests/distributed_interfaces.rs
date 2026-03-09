@@ -41,11 +41,13 @@ fn test_local_registry() {
 fn test_noop_replicator() {
     let mut trail = AuditTrail::new();
     let agent_id = Uuid::new_v4();
-    let _ = trail.append_event(
-        agent_id,
-        EventType::StateChange,
-        json!({ "event_kind": "test.replicate" }),
-    );
+    trail
+        .append_event(
+            agent_id,
+            EventType::StateChange,
+            json!({ "event_kind": "test.replicate" }),
+        )
+        .expect("audit append");
     let event = trail
         .events()
         .first()
@@ -90,11 +92,13 @@ fn test_all_trait_methods_callable_without_panic() {
 
     let mut trail = AuditTrail::new();
     let agent_id = Uuid::new_v4();
-    let _ = trail.append_event(
-        agent_id,
-        EventType::ToolCall,
-        json!({ "event_kind": "distributed.interfaces" }),
-    );
+    trail
+        .append_event(
+            agent_id,
+            EventType::ToolCall,
+            json!({ "event_kind": "distributed.interfaces" }),
+        )
+        .expect("audit append");
     let event = trail.events().first().cloned().expect("event should exist");
 
     let mut replicator = NoOpReplicator::new();

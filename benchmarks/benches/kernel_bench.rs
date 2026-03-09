@@ -17,11 +17,13 @@ fn bench_audit_append(c: &mut Criterion) {
             b.iter(|| {
                 let mut trail = AuditTrail::new();
                 for i in 0..n {
-                    trail.append_event(
-                        agent_id,
-                        EventType::StateChange,
-                        json!({"seq": i, "status": "ok"}),
-                    );
+                    trail
+                        .append_event(
+                            agent_id,
+                            EventType::StateChange,
+                            json!({"seq": i, "status": "ok"}),
+                        )
+                        .expect("audit append");
                 }
                 black_box(&trail);
             });
@@ -37,11 +39,13 @@ fn bench_audit_verify_integrity(c: &mut Criterion) {
     for count in [10, 100, 1000] {
         let mut trail = AuditTrail::new();
         for i in 0..count {
-            trail.append_event(
-                agent_id,
-                EventType::StateChange,
-                json!({"seq": i, "status": "ok"}),
-            );
+            trail
+                .append_event(
+                    agent_id,
+                    EventType::StateChange,
+                    json!({"seq": i, "status": "ok"}),
+                )
+                .expect("audit append");
         }
 
         group.bench_with_input(BenchmarkId::from_parameter(count), &trail, |b, trail| {

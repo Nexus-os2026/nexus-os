@@ -78,6 +78,18 @@
 - [x] Core agents always present with SYSTEM/CUSTOM badges
 - [x] Smart capability auto-detection in agent factory
 - [x] LLM model selector dropdown
+- [x] Engineering Foundation Hardening (COMPLETE)
+  - Fail-closed audit enforcement: 199 call sites fixed across 75+ files — `append_event` returns `Result<Uuid, AuditError>`, zero silent failures remain
+  - `AuditError` type added to kernel with `BatcherPoisoned` variant; `From<AuditError>` impls for `AgentError`, `AdaptationError`, `MutationError`
+  - Two-tier fix strategy: `?` for Result-returning functions, `.expect("audit: fail-closed")` for boundary/non-Result code
+  - Node.js 20 → 22 LTS upgrade across all CI (`.gitlab-ci.yml`, `ci.yml`, `release.yml` — 5 references)
+  - `rust-toolchain.toml` pinning stable channel with rustfmt, clippy, wasm32-wasip1 target for reproducible builds
+  - `cargo-audit` CI job for known vulnerability scanning (RUSTSEC advisory database)
+  - `cargo-deny` CI job for license compliance — allows MIT, Apache-2.0, BSD-2/3-Clause, ISC, Zlib, MPL-2.0, Unicode-3.0, CDLA-Permissive-2.0
+  - `deny.toml` moved from `.github/` to project root (standard location), old file removed
+  - Security stage runs before test stage in GitLab CI pipeline
+  - 4 wasmtime advisories (RUSTSEC-2025-0046, -0118, RUSTSEC-2026-0020, -0021) tracked for separate version bump
+  - 905 tests pass, clippy clean, cargo deny clean
 - [x] Phase 7.1: A2A + MCP Protocol Integration (COMPLETE)
   - A2A core types in kernel/src/protocols/a2a.rs: AgentCard, A2ATask, TaskStatus lifecycle, GovernanceContext, JSON-RPC 2.0, AgentCard::from_manifest auto-generation (all 11 capabilities → skills)
   - MCP governed tool server in kernel/src/protocols/mcp.rs: McpServer with capability check → fuel check → execute → fuel deduct → audit pipeline, GovernedTool/GovernedResource/GovernedPrompt types, 11 capability-to-tool mappings

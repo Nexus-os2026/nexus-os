@@ -59,7 +59,7 @@ impl InstagramConnector {
             .record_completion(request_id, media_id.clone());
         self.published_count += 1;
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             Uuid::nil(),
             EventType::ToolCall,
             json!({
@@ -67,7 +67,7 @@ impl InstagramConnector {
                 "request_id": request_id,
                 "media_id": media_id
             }),
-        );
+        )?;
 
         Ok(InstagramPublishResult {
             media_id,

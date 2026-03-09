@@ -42,15 +42,17 @@ impl ApprovalFlow {
         capabilities: Vec<String>,
         fuel_budget: u64,
     ) -> ApprovalRequest {
-        let _ = self.audit_trail.append_event(
-            uuid::Uuid::nil(),
-            EventType::UserAction,
-            json!({
-                "event": "factory_approval_presented",
-                "capabilities": capabilities,
-                "fuel_budget": fuel_budget,
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                uuid::Uuid::nil(),
+                EventType::UserAction,
+                json!({
+                    "event": "factory_approval_presented",
+                    "capabilities": capabilities,
+                    "fuel_budget": fuel_budget,
+                }),
+            )
+            .expect("audit: fail-closed");
 
         ApprovalRequest {
             capabilities,
@@ -68,11 +70,11 @@ impl ApprovalFlow {
         user_approved: bool,
     ) -> Result<DeploymentResult, AgentError> {
         if !user_approved {
-            let _ = self.audit_trail.append_event(
+            self.audit_trail.append_event(
                 uuid::Uuid::nil(),
                 EventType::UserAction,
                 json!({"event": "factory_approval_rejected"}),
-            );
+            )?;
 
             return Ok(DeploymentResult {
                 approved: false,
@@ -97,7 +99,7 @@ impl ApprovalFlow {
             .map(|agent| agent.state)
             .unwrap_or(AgentState::Created);
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             agent_id,
             EventType::StateChange,
             json!({
@@ -106,7 +108,7 @@ impl ApprovalFlow {
                 "fuel_budget": request.fuel_budget,
                 "state": format!("{state}"),
             }),
-        );
+        )?;
 
         Ok(DeploymentResult {
             approved: true,

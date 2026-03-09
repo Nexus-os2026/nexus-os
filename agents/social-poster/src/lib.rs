@@ -167,49 +167,55 @@ impl SocialPosterAgent {
 
     /// Executes the full pipeline and returns a run report with audit events.
     pub fn run(&mut self) -> Result<SocialPosterRunReport, AgentError> {
-        self.audit_trail.append_event(
-            self.agent_id,
-            EventType::StateChange,
-            json!({
-                "step": "start",
-                "name": self.manifest.name,
-                "version": self.manifest.version,
-                "schedule": self.manifest.schedule,
-                "topic": self.manifest.config.topic,
-                "posts_per_day": self.manifest.config.posts_per_day,
-                "dry_run": self.dry_run,
-                "autonomy_level": self.autonomy_guard.level().as_str(),
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                self.agent_id,
+                EventType::StateChange,
+                json!({
+                    "step": "start",
+                    "name": self.manifest.name,
+                    "version": self.manifest.version,
+                    "schedule": self.manifest.schedule,
+                    "topic": self.manifest.config.topic,
+                    "posts_per_day": self.manifest.config.posts_per_day,
+                    "dry_run": self.dry_run,
+                    "autonomy_level": self.autonomy_guard.level().as_str(),
+                }),
+            )
+            .expect("audit: fail-closed");
 
         let search_query = format!("latest {} news", self.manifest.config.topic);
         self.require_operation(GovernedOperation::ToolCall, search_query.as_bytes())?;
         let search_results = self.dependencies.search.search(search_query.as_str(), 8)?;
-        self.audit_trail.append_event(
-            self.agent_id,
-            EventType::ToolCall,
-            json!({
-                "step": "research",
-                "query": search_query,
-                "results": search_results.len()
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                self.agent_id,
+                EventType::ToolCall,
+                json!({
+                    "step": "research",
+                    "query": search_query,
+                    "results": search_results.len()
+                }),
+            )
+            .expect("audit: fail-closed");
 
         let mut key_points = Vec::new();
         for result in search_results.into_iter().take(3) {
             self.require_operation(GovernedOperation::ToolCall, result.url.as_bytes())?;
             let content = self.dependencies.reader.read(result.url.as_str())?;
             let summary = summarize(content.text.as_str(), 220);
-            self.audit_trail.append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "step": "read",
-                    "url": result.url,
-                    "title": content.title,
-                    "summary": summary
-                }),
-            );
+            self.audit_trail
+                .append_event(
+                    self.agent_id,
+                    EventType::ToolCall,
+                    json!({
+                        "step": "read",
+                        "url": result.url,
+                        "title": content.title,
+                        "summary": summary
+                    }),
+                )
+                .expect("audit: fail-closed");
             key_points.push(summary);
         }
 
@@ -225,15 +231,17 @@ impl SocialPosterAgent {
         let platforms = self.manifest.config.platforms.clone();
         for platform_label in platforms {
             let Some(platform) = parse_platform(platform_label.as_str()) else {
-                self.audit_trail.append_event(
-                    self.agent_id,
-                    EventType::Error,
-                    json!({
-                        "step": "platform",
-                        "status": "unsupported",
-                        "platform": platform_label.as_str()
-                    }),
-                );
+                self.audit_trail
+                    .append_event(
+                        self.agent_id,
+                        EventType::Error,
+                        json!({
+                            "step": "platform",
+                            "status": "unsupported",
+                            "platform": platform_label.as_str()
+                        }),
+                    )
+                    .expect("audit: fail-closed");
                 continue;
             };
 
@@ -246,53 +254,61 @@ impl SocialPosterAgent {
                     generation_topic.as_str(),
                     self.manifest.config.style.as_str(),
                 )?;
-                self.audit_trail.append_event(
-                    self.agent_id,
-                    EventType::LlmCall,
-                    json!({
-                        "step": "generate",
-                        "platform": platform_label.as_str(),
-                        "slot": slot,
-                        "length": generated.text.chars().count()
-                    }),
-                );
+                self.audit_trail
+                    .append_event(
+                        self.agent_id,
+                        EventType::LlmCall,
+                        json!({
+                            "step": "generate",
+                            "platform": platform_label.as_str(),
+                            "slot": slot,
+                            "length": generated.text.chars().count()
+                        }),
+                    )
+                    .expect("audit: fail-closed");
 
                 let compliance = check_compliance(platform, slot as usize);
-                self.audit_trail.append_event(
-                    self.agent_id,
-                    EventType::ToolCall,
-                    json!({
-                        "step": "review",
-                        "platform": platform_label.as_str(),
-                        "slot": slot,
-                        "decision": format!("{compliance:?}")
-                    }),
-                );
-                if let ComplianceDecision::Blocked(reason) = compliance {
-                    self.audit_trail.append_event(
+                self.audit_trail
+                    .append_event(
                         self.agent_id,
-                        EventType::Error,
+                        EventType::ToolCall,
                         json!({
                             "step": "review",
-                            "status": "blocked",
-                            "reason": reason
+                            "platform": platform_label.as_str(),
+                            "slot": slot,
+                            "decision": format!("{compliance:?}")
                         }),
-                    );
+                    )
+                    .expect("audit: fail-closed");
+                if let ComplianceDecision::Blocked(reason) = compliance {
+                    self.audit_trail
+                        .append_event(
+                            self.agent_id,
+                            EventType::Error,
+                            json!({
+                                "step": "review",
+                                "status": "blocked",
+                                "reason": reason
+                            }),
+                        )
+                        .expect("audit: fail-closed");
                     continue;
                 }
 
                 if self.dry_run {
-                    self.audit_trail.append_event(
-                        self.agent_id,
-                        EventType::ToolCall,
-                        json!({
-                            "step": "publish",
-                            "mode": "dry-run",
-                            "platform": platform_label.as_str(),
-                            "slot": slot,
-                            "content": generated.text
-                        }),
-                    );
+                    self.audit_trail
+                        .append_event(
+                            self.agent_id,
+                            EventType::ToolCall,
+                            json!({
+                                "step": "publish",
+                                "mode": "dry-run",
+                                "platform": platform_label.as_str(),
+                                "slot": slot,
+                                "content": generated.text
+                            }),
+                        )
+                        .expect("audit: fail-closed");
                     generated_posts.push(generated);
                     continue;
                 }
@@ -307,46 +323,52 @@ impl SocialPosterAgent {
                             .dependencies
                             .publisher
                             .publish_x(generated.text.as_str())?;
-                        self.audit_trail.append_event(
-                            self.agent_id,
-                            EventType::ToolCall,
-                            json!({
-                                "step": "publish",
-                                "mode": "live",
-                                "platform": platform_label.as_str(),
-                                "slot": slot,
-                                "tweet_id": publish_result.tweet_id
-                            }),
-                        );
+                        self.audit_trail
+                            .append_event(
+                                self.agent_id,
+                                EventType::ToolCall,
+                                json!({
+                                    "step": "publish",
+                                    "mode": "live",
+                                    "platform": platform_label.as_str(),
+                                    "slot": slot,
+                                    "tweet_id": publish_result.tweet_id
+                                }),
+                            )
+                            .expect("audit: fail-closed");
                         published_post_ids.push(publish_result.tweet_id);
                         generated_posts.push(generated);
                     }
                     SocialPlatform::Instagram | SocialPlatform::Facebook => {
-                        self.audit_trail.append_event(
-                            self.agent_id,
-                            EventType::Error,
-                            json!({
-                                "step": "publish",
-                                "status": "skipped",
-                                "reason": "platform publisher not wired yet",
-                                "platform": platform_label.as_str()
-                            }),
-                        );
+                        self.audit_trail
+                            .append_event(
+                                self.agent_id,
+                                EventType::Error,
+                                json!({
+                                    "step": "publish",
+                                    "status": "skipped",
+                                    "reason": "platform publisher not wired yet",
+                                    "platform": platform_label.as_str()
+                                }),
+                            )
+                            .expect("audit: fail-closed");
                     }
                 }
             }
         }
 
-        self.audit_trail.append_event(
-            self.agent_id,
-            EventType::StateChange,
-            json!({
-                "step": "complete",
-                "generated_posts": generated_posts.len(),
-                "published_posts": published_post_ids.len(),
-                "dry_run": self.dry_run
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                self.agent_id,
+                EventType::StateChange,
+                json!({
+                    "step": "complete",
+                    "generated_posts": generated_posts.len(),
+                    "published_posts": published_post_ids.len(),
+                    "dry_run": self.dry_run
+                }),
+            )
+            .expect("audit: fail-closed");
 
         Ok(SocialPosterRunReport {
             generated_posts,

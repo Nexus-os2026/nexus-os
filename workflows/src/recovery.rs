@@ -55,45 +55,51 @@ impl FailureRecoveryManager {
         match strategy {
             FailureStrategy::Retry => {
                 let delay = backoff_delay_seconds(attempt, 60);
-                let _ = self.audit_trail.append_event(
-                    uuid::Uuid::nil(),
-                    EventType::Error,
-                    json!({
-                        "event": "workflow_retry_scheduled",
-                        "workflow_id": workflow_id,
-                        "step_id": step_id,
-                        "attempt": attempt,
-                        "delay_seconds": delay
-                    }),
-                );
+                self.audit_trail
+                    .append_event(
+                        uuid::Uuid::nil(),
+                        EventType::Error,
+                        json!({
+                            "event": "workflow_retry_scheduled",
+                            "workflow_id": workflow_id,
+                            "step_id": step_id,
+                            "attempt": attempt,
+                            "delay_seconds": delay
+                        }),
+                    )
+                    .expect("audit: fail-closed");
                 RecoveryActionResult::RetryScheduled {
                     delay_seconds: delay,
                 }
             }
             FailureStrategy::Skip => {
-                let _ = self.audit_trail.append_event(
-                    uuid::Uuid::nil(),
-                    EventType::Error,
-                    json!({
-                        "event": "workflow_step_skipped",
-                        "workflow_id": workflow_id,
-                        "step_id": step_id
-                    }),
-                );
+                self.audit_trail
+                    .append_event(
+                        uuid::Uuid::nil(),
+                        EventType::Error,
+                        json!({
+                            "event": "workflow_step_skipped",
+                            "workflow_id": workflow_id,
+                            "step_id": step_id
+                        }),
+                    )
+                    .expect("audit: fail-closed");
                 RecoveryActionResult::StepSkipped
             }
             FailureStrategy::Escalate => {
                 self.paused_workflows.insert(workflow_id.to_string());
-                let _ = self.audit_trail.append_event(
-                    uuid::Uuid::nil(),
-                    EventType::Error,
-                    json!({
-                        "event": "workflow_escalated",
-                        "workflow_id": workflow_id,
-                        "step_id": step_id,
-                        "notify": "messaging_bridge"
-                    }),
-                );
+                self.audit_trail
+                    .append_event(
+                        uuid::Uuid::nil(),
+                        EventType::Error,
+                        json!({
+                            "event": "workflow_escalated",
+                            "workflow_id": workflow_id,
+                            "step_id": step_id,
+                            "notify": "messaging_bridge"
+                        }),
+                    )
+                    .expect("audit: fail-closed");
                 RecoveryActionResult::EscalatedToUser
             }
         }
@@ -112,17 +118,19 @@ impl FailureRecoveryManager {
             return Ok(false);
         }
 
-        action()?;
+        action().expect("audit: fail-closed");
         self.executed_compensations.insert(action_id.to_string());
 
-        let _ = self.audit_trail.append_event(
-            uuid::Uuid::nil(),
-            EventType::ToolCall,
-            json!({
-                "event": "workflow_compensation_applied",
-                "action_id": action_id
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                uuid::Uuid::nil(),
+                EventType::ToolCall,
+                json!({
+                    "event": "workflow_compensation_applied",
+                    "action_id": action_id
+                }),
+            )
+            .expect("audit: fail-closed");
 
         Ok(true)
     }

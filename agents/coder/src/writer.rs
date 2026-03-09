@@ -98,15 +98,17 @@ impl CodeWriter {
         }
 
         for change in &changes {
-            self.audit_trail.append_event(
-                self.runtime.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "step": "write_code",
-                    "task": task,
-                    "change": format!("{change:?}"),
-                }),
-            );
+            self.audit_trail
+                .append_event(
+                    self.runtime.agent_id,
+                    EventType::ToolCall,
+                    json!({
+                        "step": "write_code",
+                        "task": task,
+                        "change": format!("{change:?}"),
+                    }),
+                )
+                .expect("audit: fail-closed");
         }
 
         Ok(changes)

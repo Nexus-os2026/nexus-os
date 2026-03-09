@@ -127,7 +127,7 @@ impl TwitterConnector {
 
         let tweet_id = payload.id_str.unwrap_or_else(|| Uuid::new_v4().to_string());
         let now = current_unix_timestamp();
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             agent.agent_id,
             EventType::ToolCall,
             json!({
@@ -135,7 +135,7 @@ impl TwitterConnector {
                 "tweet_id": tweet_id,
                 "length": text.chars().count()
             }),
-        );
+        )?;
 
         Ok(TweetResult {
             tweet_id,
@@ -255,7 +255,7 @@ impl TwitterConnector {
             },
         );
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             agent.agent_id,
             EventType::ToolCall,
             json!({
@@ -264,7 +264,7 @@ impl TwitterConnector {
                 "length": text.chars().count(),
                 "mode": "mock"
             }),
-        );
+        )?;
 
         Ok(TweetResult {
             tweet_id,

@@ -146,30 +146,34 @@ pub fn fix_until_pass_with(
     for iteration in 1..=limit {
         if !pending_changes.is_empty() {
             applied_changes += apply_changes(project_path, pending_changes.as_slice())?;
-            audit.append_event(
-                Uuid::nil(),
-                EventType::ToolCall,
-                json!({
-                    "step": "apply_changes",
-                    "iteration": iteration,
-                    "changes": pending_changes.len(),
-                }),
-            );
+            audit
+                .append_event(
+                    Uuid::nil(),
+                    EventType::ToolCall,
+                    json!({
+                        "step": "apply_changes",
+                        "iteration": iteration,
+                        "changes": pending_changes.len(),
+                    }),
+                )
+                .expect("audit: fail-closed");
         }
 
         charge_fuel(&mut fuel_remaining, FUEL_COST_TEST_RUN)?;
         let test_result = executor.run_tests(project_path)?;
-        audit.append_event(
-            Uuid::nil(),
-            EventType::ToolCall,
-            json!({
-                "step": "run_tests",
-                "iteration": iteration,
-                "framework": format!("{:?}", test_result.framework),
-                "passed": test_result.passed,
-                "failed": test_result.failed,
-            }),
-        );
+        audit
+            .append_event(
+                Uuid::nil(),
+                EventType::ToolCall,
+                json!({
+                    "step": "run_tests",
+                    "iteration": iteration,
+                    "framework": format!("{:?}", test_result.framework),
+                    "passed": test_result.passed,
+                    "failed": test_result.failed,
+                }),
+            )
+            .expect("audit: fail-closed");
 
         if test_result.failed == 0 && test_result.errors.is_empty() {
             return Ok(FixResult::Success {
@@ -193,16 +197,18 @@ pub fn fix_until_pass_with(
         charge_fuel(&mut fuel_remaining, FUEL_COST_FIX_GENERATION)?;
         pending_changes =
             fixer.propose_fixes(project_path, last_result.errors.as_slice(), iteration)?;
-        audit.append_event(
-            Uuid::nil(),
-            EventType::LlmCall,
-            json!({
-                "step": "generate_fix",
-                "iteration": iteration,
-                "proposed_changes": pending_changes.len(),
-                "remaining_fuel": fuel_remaining,
-            }),
-        );
+        audit
+            .append_event(
+                Uuid::nil(),
+                EventType::LlmCall,
+                json!({
+                    "step": "generate_fix",
+                    "iteration": iteration,
+                    "proposed_changes": pending_changes.len(),
+                    "remaining_fuel": fuel_remaining,
+                }),
+            )
+            .expect("audit: fail-closed");
     }
 
     Ok(FixResult::MaxIterationsReached {

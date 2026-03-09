@@ -378,16 +378,18 @@ impl McpServer {
 
         let fuel_remaining = manifest.fuel_budget;
 
-        self.audit_trail.append_event(
-            agent_id,
-            EventType::StateChange,
-            json!({
-                "event_kind": "mcp.agent_registered",
-                "agent_name": manifest.name,
-                "tool_count": tools.len(),
-                "fuel_budget": fuel_remaining,
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                agent_id,
+                EventType::StateChange,
+                json!({
+                    "event_kind": "mcp.agent_registered",
+                    "agent_name": manifest.name,
+                    "tool_count": tools.len(),
+                    "fuel_budget": fuel_remaining,
+                }),
+            )
+            .expect("audit: fail-closed");
 
         self.agents.insert(
             agent_id,
@@ -501,15 +503,17 @@ impl McpServer {
         // Step 2: Capability check — tool's required capabilities must be in manifest
         for required_cap in &tool.governance.required_capabilities {
             if !agent.manifest.capabilities.contains(required_cap) {
-                self.audit_trail.append_event(
-                    agent_id,
-                    EventType::Error,
-                    json!({
-                        "event_kind": "mcp.capability_denied",
-                        "tool": tool_name,
-                        "missing_capability": required_cap,
-                    }),
-                );
+                self.audit_trail
+                    .append_event(
+                        agent_id,
+                        EventType::Error,
+                        json!({
+                            "event_kind": "mcp.capability_denied",
+                            "tool": tool_name,
+                            "missing_capability": required_cap,
+                        }),
+                    )
+                    .expect("audit: fail-closed");
                 return Err(AgentError::CapabilityDenied(required_cap.clone()));
             }
         }
@@ -517,16 +521,18 @@ impl McpServer {
         // Step 3: Fuel check — must have enough before execution
         let fuel_cost = tool.governance.estimated_fuel_cost;
         if agent.fuel_remaining < fuel_cost {
-            self.audit_trail.append_event(
-                agent_id,
-                EventType::Error,
-                json!({
-                    "event_kind": "mcp.fuel_exhausted",
-                    "tool": tool_name,
-                    "fuel_remaining": agent.fuel_remaining,
-                    "fuel_required": fuel_cost,
-                }),
-            );
+            self.audit_trail
+                .append_event(
+                    agent_id,
+                    EventType::Error,
+                    json!({
+                        "event_kind": "mcp.fuel_exhausted",
+                        "tool": tool_name,
+                        "fuel_remaining": agent.fuel_remaining,
+                        "fuel_required": fuel_cost,
+                    }),
+                )
+                .expect("audit: fail-closed");
             return Err(AgentError::FuelExhausted);
         }
 
@@ -558,7 +564,7 @@ impl McpServer {
                     "pii_redaction": tool.governance.pii_redaction,
                 }
             }),
-        );
+        )?;
 
         Ok(GovernedToolResult {
             content: vec![ToolContent::Text { text: output_text }],

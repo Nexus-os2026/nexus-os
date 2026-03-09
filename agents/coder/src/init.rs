@@ -101,18 +101,20 @@ impl ProjectInitializer {
             default_ci(language).as_str(),
         )?;
 
-        self.audit_trail.append_event(
-            self.agent_id,
-            EventType::ToolCall,
-            json!({
-                "tool": "init_project",
-                "language": language,
-                "framework": framework,
-                "name": name,
-                "description_provided": description.is_some(),
-                "path": root.to_string_lossy().to_string(),
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                self.agent_id,
+                EventType::ToolCall,
+                json!({
+                    "tool": "init_project",
+                    "language": language,
+                    "framework": framework,
+                    "name": name,
+                    "description_provided": description.is_some(),
+                    "path": root.to_string_lossy().to_string(),
+                }),
+            )
+            .expect("audit: fail-closed");
 
         Ok(root)
     }

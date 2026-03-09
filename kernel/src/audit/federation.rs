@@ -82,8 +82,8 @@ impl FederatedAuditTrail {
         agent_id: Uuid,
         event_type: EventType,
         payload: serde_json::Value,
-    ) -> Uuid {
-        let event_id = self.trail.append_event(agent_id, event_type, payload);
+    ) -> Result<Uuid, super::AuditError> {
+        let event_id = self.trail.append_event(agent_id, event_type, payload)?;
 
         let local_event = self
             .trail
@@ -112,7 +112,7 @@ impl FederatedAuditTrail {
             cross_references,
         });
 
-        event_id
+        Ok(event_id)
     }
 
     /// Record a remote node's latest chain hash (called during replication sync).
@@ -265,14 +265,18 @@ mod tests {
         let agent = Uuid::new_v4();
 
         // Node A appends an event
-        node_a.append_federated(agent, EventType::StateChange, json!({"action": "init"}));
+        node_a
+            .append_federated(agent, EventType::StateChange, json!({"action": "init"}))
+            .expect("audit append");
         let a_hash = node_a.trail().events().last().unwrap().hash.clone();
 
         // Node B learns about A's chain hash
         node_b.update_remote_hash(node_a_id, a_hash.clone());
 
         // Node B appends an event — it will cross-reference A's hash
-        node_b.append_federated(agent, EventType::ToolCall, json!({"tool": "search"}));
+        node_b
+            .append_federated(agent, EventType::ToolCall, json!({"tool": "search"}))
+            .expect("audit append");
 
         // Node B's federated event should have a cross-ref to A
         let b_fed = node_b.federated_events().last().unwrap();
@@ -285,7 +289,9 @@ mod tests {
         node_a.update_remote_hash(node_b_id, b_hash);
 
         // Node A appends — now cross-refs B
-        node_a.append_federated(agent, EventType::StateChange, json!({"action": "sync"}));
+        node_a
+            .append_federated(agent, EventType::StateChange, json!({"action": "sync"}))
+            .expect("audit append");
         let a_fed = node_a.federated_events().last().unwrap();
         assert_eq!(a_fed.cross_references.len(), 1);
         assert_eq!(a_fed.cross_references[0].remote_node_id, node_b_id);
@@ -311,12 +317,16 @@ mod tests {
         let agent = Uuid::new_v4();
 
         // A appends event, B records the hash
-        node_a.append_federated(agent, EventType::StateChange, json!({"v": 1}));
+        node_a
+            .append_federated(agent, EventType::StateChange, json!({"v": 1}))
+            .expect("audit append");
         let a_hash = node_a.trail().events().last().unwrap().hash.clone();
         node_b.update_remote_hash(node_a_id, a_hash);
 
         // B appends (creating cross-ref to A)
-        node_b.append_federated(agent, EventType::StateChange, json!({"v": 2}));
+        node_b
+            .append_federated(agent, EventType::StateChange, json!({"v": 2}))
+            .expect("audit append");
 
         // Tamper with A's event
         node_a.trail_mut().events_mut()[0].payload = json!({"v": 999});
@@ -337,10 +347,14 @@ mod tests {
 
         // Record B's hash and append events
         node_a.update_remote_hash(node_b_id, "hash-from-b-1".to_string());
-        node_a.append_federated(agent, EventType::StateChange, json!({"seq": 1}));
+        node_a
+            .append_federated(agent, EventType::StateChange, json!({"seq": 1}))
+            .expect("audit append");
 
         node_a.update_remote_hash(node_b_id, "hash-from-b-2".to_string());
-        node_a.append_federated(agent, EventType::StateChange, json!({"seq": 2}));
+        node_a
+            .append_federated(agent, EventType::StateChange, json!({"seq": 2}))
+            .expect("audit append");
 
         // Export proof for full range
         let proof = node_a.export_federation_proof(0, u64::MAX);

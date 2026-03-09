@@ -115,7 +115,7 @@ impl<D: ResearchDataSource> ResearchPipeline<D> {
             remaining_fuel,
         };
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             uuid::Uuid::nil(),
             EventType::ToolCall,
             json!({
@@ -127,7 +127,7 @@ impl<D: ResearchDataSource> ResearchPipeline<D> {
                 "fuel_consumed": report.fuel_consumed,
                 "remaining_fuel": report.remaining_fuel
             }),
-        );
+        )?;
 
         Ok(report)
     }

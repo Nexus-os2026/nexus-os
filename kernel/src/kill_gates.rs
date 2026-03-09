@@ -218,7 +218,7 @@ impl KillGateRegistry {
             gate.frozen = true;
             status = GateStatus::Halted;
 
-            let _ = audit.append_event(
+            audit.append_event(
                 agent_id,
                 EventType::Error,
                 json!({
@@ -226,13 +226,13 @@ impl KillGateRegistry {
                     "subsystem": subsystem,
                     "reason": format!("metric {} exceeded halt threshold {}", metric_value, gate.halt_threshold),
                 }),
-            );
+            ).expect("audit: fail-closed");
             self.escalate_to(subsystem, EscalationLevel::Incident, agent_id, audit);
         } else if !gate.frozen && metric_value >= gate.freeze_threshold {
             gate.frozen = true;
             status = GateStatus::Frozen;
 
-            let _ = audit.append_event(
+            audit.append_event(
                 agent_id,
                 EventType::UserAction,
                 json!({
@@ -241,26 +241,28 @@ impl KillGateRegistry {
                     "reason": format!("metric {} exceeded freeze threshold {}", metric_value, gate.freeze_threshold),
                     "by": "auto",
                 }),
-            );
+            ).expect("audit: fail-closed");
             self.escalate_to(subsystem, EscalationLevel::Freeze, agent_id, audit);
         } else if metric_value > 0.0 && status == GateStatus::Open {
             let _ = self.escalate_once(subsystem, agent_id, audit);
         }
 
-        let _ = audit.append_event(
-            agent_id,
-            EventType::StateChange,
-            json!({
-                "event_kind": "killgate.checked",
-                "subsystem": subsystem,
-                "metric": metric_value,
-                "status": match status {
-                    GateStatus::Open => "open",
-                    GateStatus::Frozen => "frozen",
-                    GateStatus::Halted => "halted",
-                },
-            }),
-        );
+        audit
+            .append_event(
+                agent_id,
+                EventType::StateChange,
+                json!({
+                    "event_kind": "killgate.checked",
+                    "subsystem": subsystem,
+                    "metric": metric_value,
+                    "status": match status {
+                        GateStatus::Open => "open",
+                        GateStatus::Frozen => "frozen",
+                        GateStatus::Halted => "halted",
+                    },
+                }),
+            )
+            .expect("audit: fail-closed");
 
         status
     }
@@ -278,16 +280,18 @@ impl KillGateRegistry {
             .ok_or_else(|| KillGateError::UnknownSubsystem(subsystem.to_string()))?;
 
         gate.frozen = true;
-        let _ = audit.append_event(
-            agent_id,
-            EventType::UserAction,
-            json!({
-                "event_kind": "killgate.frozen",
-                "subsystem": subsystem,
-                "reason": "manual freeze",
-                "by": operator_id,
-            }),
-        );
+        audit
+            .append_event(
+                agent_id,
+                EventType::UserAction,
+                json!({
+                    "event_kind": "killgate.frozen",
+                    "subsystem": subsystem,
+                    "reason": "manual freeze",
+                    "by": operator_id,
+                }),
+            )
+            .expect("audit: fail-closed");
 
         self.escalate_to(subsystem, EscalationLevel::Freeze, agent_id, audit);
         Ok(GateStatus::Frozen)
@@ -308,15 +312,17 @@ impl KillGateRegistry {
         gate.halted = true;
         gate.frozen = true;
 
-        let _ = audit.append_event(
-            agent_id,
-            EventType::Error,
-            json!({
-                "event_kind": "killgate.halted",
-                "subsystem": subsystem,
-                "reason": format!("manual halt by {}", operator_id),
-            }),
-        );
+        audit
+            .append_event(
+                agent_id,
+                EventType::Error,
+                json!({
+                    "event_kind": "killgate.halted",
+                    "subsystem": subsystem,
+                    "reason": format!("manual halt by {}", operator_id),
+                }),
+            )
+            .expect("audit: fail-closed");
 
         self.escalate_to(subsystem, EscalationLevel::Incident, agent_id, audit);
         Ok(GateStatus::Halted)
@@ -343,16 +349,18 @@ impl KillGateRegistry {
         gate.halted = false;
         self.escalation_levels.remove(subsystem);
 
-        let _ = audit.append_event(
-            agent_id,
-            EventType::UserAction,
-            json!({
-                "event_kind": "killgate.unfrozen",
-                "subsystem": subsystem,
-                "operator_id": operator_id,
-                "hitl_tier": hitl_tier,
-            }),
-        );
+        audit
+            .append_event(
+                agent_id,
+                EventType::UserAction,
+                json!({
+                    "event_kind": "killgate.unfrozen",
+                    "subsystem": subsystem,
+                    "operator_id": operator_id,
+                    "hitl_tier": hitl_tier,
+                }),
+            )
+            .expect("audit: fail-closed");
         Ok(GateStatus::Open)
     }
 
@@ -384,27 +392,31 @@ impl KillGateRegistry {
         let next = current.next();
         self.escalation_levels.insert(subsystem.to_string(), next);
 
-        let _ = audit.append_event(
-            agent_id,
-            EventType::UserAction,
-            json!({
-                "event_kind": "killgate.escalated",
-                "subsystem": subsystem,
-                "from_level": current.as_str(),
-                "to_level": next.as_str(),
-            }),
-        );
-
-        if next == EscalationLevel::Incident {
-            let _ = audit.append_event(
+        audit
+            .append_event(
                 agent_id,
                 EventType::UserAction,
                 json!({
-                    "event_kind": "killgate.notification_sent",
+                    "event_kind": "killgate.escalated",
                     "subsystem": subsystem,
-                    "via": "messaging_bridge",
+                    "from_level": current.as_str(),
+                    "to_level": next.as_str(),
                 }),
-            );
+            )
+            .expect("audit: fail-closed");
+
+        if next == EscalationLevel::Incident {
+            audit
+                .append_event(
+                    agent_id,
+                    EventType::UserAction,
+                    json!({
+                        "event_kind": "killgate.notification_sent",
+                        "subsystem": subsystem,
+                        "via": "messaging_bridge",
+                    }),
+                )
+                .expect("audit: fail-closed");
         }
 
         next

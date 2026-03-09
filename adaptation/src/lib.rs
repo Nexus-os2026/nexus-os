@@ -67,6 +67,12 @@ impl From<AgentError> for AdaptationError {
     }
 }
 
+impl From<nexus_kernel::audit::AuditError> for AdaptationError {
+    fn from(value: nexus_kernel::audit::AuditError) -> Self {
+        AdaptationError::KernelError(value.to_string())
+    }
+}
+
 fn normalize_preserve_order(values: &mut Vec<String>) {
     for value in values.iter_mut() {
         *value = value.trim().to_string();

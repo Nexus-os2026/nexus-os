@@ -60,7 +60,9 @@ fn append_events_as_block(
     let events: Vec<AuditEvent> = (0..count)
         .map(|i| {
             let mut trail = AuditTrail::new();
-            trail.append_event(agent_id, EventType::StateChange, json!({"seq": i}));
+            trail
+                .append_event(agent_id, EventType::StateChange, json!({"seq": i}))
+                .expect("audit append");
             trail.events()[0].clone()
         })
         .collect();
@@ -282,8 +284,9 @@ fn event_verification_proof_three_of_three() {
 
     // Create events and blocks
     let mut trail = AuditTrail::new();
-    let target_event_id =
-        trail.append_event(agent_id, EventType::ToolCall, json!({"action": "deploy"}));
+    let target_event_id = trail
+        .append_event(agent_id, EventType::ToolCall, json!({"action": "deploy"}))
+        .expect("audit append");
     let events = trail.events().to_vec();
 
     // All three chains have the same block with the target event
@@ -378,7 +381,9 @@ fn kernel_events_flow_through_batcher_into_audit_blocks() {
     // Append 12 kernel events → should trigger 2 batches (5+5), 2 pending
     let mut event_ids = Vec::new();
     for i in 0..12 {
-        let eid = trail.append_event(agent_id, EventType::StateChange, json!({"i": i}));
+        let eid = trail
+            .append_event(agent_id, EventType::StateChange, json!({"i": i}))
+            .expect("audit append");
         event_ids.push(eid);
     }
 

@@ -95,7 +95,7 @@ impl Supervisor {
             ),
         );
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             id,
             EventType::StateChange,
             json!({
@@ -105,15 +105,15 @@ impl Supervisor {
                 "cap_units": monthly_cap,
                 "spent_units": 0,
             }),
-        );
-        let _ = self.audit_trail.append_event(
+        )?;
+        self.audit_trail.append_event(
             id,
             EventType::StateChange,
             json!({
                 "event": "autonomy.level_initialized",
                 "level": autonomy_level.as_str(),
             }),
-        );
+        )?;
 
         {
             let entry = self
@@ -344,7 +344,7 @@ impl Supervisor {
             )));
         }
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             id,
             EventType::Error,
             json!({
@@ -353,7 +353,7 @@ impl Supervisor {
                 "reason": reason,
                 "by": operator_id,
             }),
-        );
+        )?;
         let action = self.safety_supervisor.force_halt(
             id,
             format!("manual override halt by {operator_id}: {reason}"),
@@ -803,7 +803,7 @@ impl Supervisor {
         match action {
             SafetyAction::Continue => Ok(()),
             SafetyAction::Degraded { reason } => {
-                let _ = self.audit_trail.append_event(
+                self.audit_trail.append_event(
                     id,
                     EventType::UserAction,
                     json!({
@@ -811,7 +811,7 @@ impl Supervisor {
                         "agent_id": id,
                         "reason": reason,
                     }),
-                );
+                )?;
                 Ok(())
             }
             SafetyAction::Halted { reason, report_id } => {

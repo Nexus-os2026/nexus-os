@@ -57,14 +57,14 @@ impl SecretsVault {
             },
         );
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             Uuid::nil(),
             EventType::UserAction,
             json!({
                 "event": "secret_stored",
                 "secret_name": name
             }),
-        );
+        )?;
 
         Ok(())
     }
@@ -96,28 +96,30 @@ impl SecretsVault {
         let decoded = String::from_utf8(plaintext)
             .map_err(|_| AgentError::SupervisorError("secret payload is not utf-8".to_string()))?;
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             Uuid::nil(),
             EventType::UserAction,
             json!({
                 "event": "secret_accessed",
                 "secret_name": name
             }),
-        );
+        )?;
 
         Ok(decoded)
     }
 
     pub fn delete_secret(&mut self, name: &str) {
         self.secrets.remove(name);
-        let _ = self.audit_trail.append_event(
-            Uuid::nil(),
-            EventType::UserAction,
-            json!({
-                "event": "secret_deleted",
-                "secret_name": name
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                Uuid::nil(),
+                EventType::UserAction,
+                json!({
+                    "event": "secret_deleted",
+                    "secret_name": name
+                }),
+            )
+            .expect("audit: fail-closed");
     }
 
     pub fn list_secrets(&self) -> Vec<String> {

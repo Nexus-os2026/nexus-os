@@ -218,17 +218,19 @@ impl SpeculativeEngine {
             summary,
         };
 
-        audit.append_event(
-            snapshot.agent_id,
-            crate::audit::EventType::ToolCall,
-            serde_json::json!({
-                "action": "speculative_simulation",
-                "simulation_id": result.simulation_id,
-                "operation": operation.as_str(),
-                "risk_level": risk_level.as_str(),
-                "fuel_cost": result.resource_impact.fuel_cost,
-            }),
-        );
+        audit
+            .append_event(
+                snapshot.agent_id,
+                crate::audit::EventType::ToolCall,
+                serde_json::json!({
+                    "action": "speculative_simulation",
+                    "simulation_id": result.simulation_id,
+                    "operation": operation.as_str(),
+                    "risk_level": risk_level.as_str(),
+                    "fuel_cost": result.resource_impact.fuel_cost,
+                }),
+            )
+            .expect("audit: fail-closed");
 
         self.results.insert(result.simulation_id, result.clone());
         result
@@ -264,16 +266,18 @@ impl SpeculativeEngine {
     pub fn rollback(&mut self, request_id: &str, audit: &mut AuditTrail) {
         if let Some(sid) = self.pending_for_request.remove(request_id) {
             if let Some(result) = self.results.remove(&sid) {
-                audit.append_event(
-                    result.agent_id,
-                    crate::audit::EventType::UserAction,
-                    serde_json::json!({
-                        "action": "speculative_rollback",
-                        "simulation_id": sid,
-                        "operation": result.operation.as_str(),
-                        "reason": "user_rejected",
-                    }),
-                );
+                audit
+                    .append_event(
+                        result.agent_id,
+                        crate::audit::EventType::UserAction,
+                        serde_json::json!({
+                            "action": "speculative_rollback",
+                            "simulation_id": sid,
+                            "operation": result.operation.as_str(),
+                            "reason": "user_rejected",
+                        }),
+                    )
+                    .expect("audit: fail-closed");
             }
         }
     }

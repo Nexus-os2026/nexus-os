@@ -1,3 +1,4 @@
+use crate::audit::AuditError;
 use crate::fuel_hardening::FuelViolation;
 use crate::lifecycle::AgentState;
 use thiserror::Error;
@@ -23,6 +24,8 @@ pub enum AgentError {
     SupervisorError(String),
     #[error("key '{0}' has been destroyed")]
     KeyDestroyed(String),
+    #[error("audit failure: {0}")]
+    AuditFailure(#[from] AuditError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,7 +41,8 @@ pub fn on_error(error: &AgentError) -> ErrorStrategy {
         | AgentError::FuelViolation { .. }
         | AgentError::CapabilityDenied(_)
         | AgentError::ApprovalRequired { .. }
-        | AgentError::KeyDestroyed(_) => ErrorStrategy::Escalate,
+        | AgentError::KeyDestroyed(_)
+        | AgentError::AuditFailure(_) => ErrorStrategy::Escalate,
         AgentError::InvalidTransition { .. } | AgentError::ManifestError(_) => ErrorStrategy::Skip,
         AgentError::SupervisorError(_) => ErrorStrategy::Retry { max_attempts: 3 },
     }

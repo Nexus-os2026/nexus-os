@@ -82,16 +82,18 @@ impl Deployer {
             },
         };
 
-        self.audit.append_event(
-            self.agent_id,
-            EventType::ToolCall,
-            json!({
-                "step": "deploy",
-                "provider": format!("{:?}", provider),
-                "project": project.to_string_lossy().to_string(),
-                "url": result.url,
-            }),
-        );
+        self.audit
+            .append_event(
+                self.agent_id,
+                EventType::ToolCall,
+                json!({
+                    "step": "deploy",
+                    "provider": format!("{:?}", provider),
+                    "project": project.to_string_lossy().to_string(),
+                    "url": result.url,
+                }),
+            )
+            .expect("audit: fail-closed");
 
         Ok(result)
     }

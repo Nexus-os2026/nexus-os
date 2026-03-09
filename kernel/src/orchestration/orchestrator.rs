@@ -118,14 +118,14 @@ impl Orchestrator {
 
         let team = Team { team_id, agents };
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             team_id,
             EventType::StateChange,
             json!({
                 "event": "team_created",
                 "agent_count": team.agents.len(),
             }),
-        );
+        )?;
 
         self.teams.insert(team_id, team);
         Ok(team_id)
@@ -165,7 +165,7 @@ impl Orchestrator {
             assignments.push(assignment);
         }
 
-        let _ = self.audit_trail.append_event(
+        self.audit_trail.append_event(
             team_id,
             EventType::ToolCall,
             json!({
@@ -173,7 +173,7 @@ impl Orchestrator {
                 "task": task,
                 "assignment_count": assignments.len(),
             }),
-        );
+        )?;
 
         Ok(TeamTaskPlan {
             team_id,

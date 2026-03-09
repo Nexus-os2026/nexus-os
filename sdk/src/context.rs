@@ -157,16 +157,18 @@ impl AgentContext {
             ));
         }
 
-        self.audit_trail.append_event(
-            self.agent_id,
-            EventType::LlmCall,
-            json!({
-                "action": "llm_query",
-                "prompt_len": prompt.len(),
-                "max_tokens": max_tokens,
-                "fuel_cost": LLM_QUERY_FUEL_COST,
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                self.agent_id,
+                EventType::LlmCall,
+                json!({
+                    "action": "llm_query",
+                    "prompt_len": prompt.len(),
+                    "max_tokens": max_tokens,
+                    "fuel_cost": LLM_QUERY_FUEL_COST,
+                }),
+            )
+            .expect("audit: fail-closed");
 
         Ok(format!("[mock-llm-response to {} chars]", prompt.len()))
     }
@@ -185,15 +187,17 @@ impl AgentContext {
             return Ok(format!("[recorded-file-read: {}]", path));
         }
 
-        self.audit_trail.append_event(
-            self.agent_id,
-            EventType::ToolCall,
-            json!({
-                "action": "read_file",
-                "path": path,
-                "fuel_cost": READ_FILE_FUEL_COST,
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                self.agent_id,
+                EventType::ToolCall,
+                json!({
+                    "action": "read_file",
+                    "path": path,
+                    "fuel_cost": READ_FILE_FUEL_COST,
+                }),
+            )
+            .expect("audit: fail-closed");
 
         Ok(format!("[mock-file-content of {}]", path))
     }
@@ -213,16 +217,18 @@ impl AgentContext {
             return Ok(());
         }
 
-        self.audit_trail.append_event(
-            self.agent_id,
-            EventType::ToolCall,
-            json!({
-                "action": "write_file",
-                "path": path,
-                "content_len": content.len(),
-                "fuel_cost": WRITE_FILE_FUEL_COST,
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                self.agent_id,
+                EventType::ToolCall,
+                json!({
+                    "action": "write_file",
+                    "path": path,
+                    "content_len": content.len(),
+                    "fuel_cost": WRITE_FILE_FUEL_COST,
+                }),
+            )
+            .expect("audit: fail-closed");
 
         Ok(())
     }
@@ -246,14 +252,16 @@ impl AgentContext {
             return record;
         }
 
-        self.audit_trail.append_event(
-            self.agent_id,
-            EventType::UserAction,
-            json!({
-                "action": "request_approval",
-                "description": description,
-            }),
-        );
+        self.audit_trail
+            .append_event(
+                self.agent_id,
+                EventType::UserAction,
+                json!({
+                    "action": "request_approval",
+                    "description": description,
+                }),
+            )
+            .expect("audit: fail-closed");
 
         self.approval_records.push(record.clone());
         record
@@ -266,29 +274,33 @@ impl AgentContext {
     pub fn deduct_wasm_fuel(&mut self, units: u64) {
         self.fuel_remaining = self.fuel_remaining.saturating_sub(units);
         if units > 0 {
-            self.audit_trail.append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "action": "wasm_fuel_consumed",
-                    "units": units,
-                    "remaining": self.fuel_remaining,
-                }),
-            );
+            self.audit_trail
+                .append_event(
+                    self.agent_id,
+                    EventType::ToolCall,
+                    json!({
+                        "action": "wasm_fuel_consumed",
+                        "units": units,
+                        "remaining": self.fuel_remaining,
+                    }),
+                )
+                .expect("audit: fail-closed");
         }
     }
 
     fn deduct_fuel(&mut self, cost: u64) -> Result<(), AgentError> {
         if self.fuel_remaining < cost {
-            self.audit_trail.append_event(
-                self.agent_id,
-                EventType::Error,
-                json!({
-                    "action": "fuel_exhausted",
-                    "requested": cost,
-                    "remaining": self.fuel_remaining,
-                }),
-            );
+            self.audit_trail
+                .append_event(
+                    self.agent_id,
+                    EventType::Error,
+                    json!({
+                        "action": "fuel_exhausted",
+                        "requested": cost,
+                        "remaining": self.fuel_remaining,
+                    }),
+                )
+                .expect("audit: fail-closed");
             return Err(AgentError::FuelExhausted);
         }
         self.fuel_remaining -= cost;

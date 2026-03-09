@@ -79,6 +79,16 @@
 - When adding nav items to the UI sidebar, check for duplicate icons — "⬡" was already used by marketplace-browser; protocols got "⌬" instead.
 - Pre-existing test failures on main (e.g., `test_context_building` in coder-agent due to missing `github_connector.rs`) should be verified via git stash/pop cycle before assuming your changes caused them.
 
+## Engineering Foundation Hardening
+- Execution credibility matters as much as architectural vision — 199 silent `let _ = audit.append_event(...)` failures across 75+ files proved that fail-closed is non-negotiable; a single missed audit event means an unrecorded agent action, violating the core "Don't trust. Verify." invariant
+- `append_event` was originally infallible (returned `Uuid`), but `BatcherHandle::push_event` silently swallowed mutex poisoning via `if let Ok(...)` — the real silent failure was one layer deeper than the surface `let _ =` pattern
+- Two-tier fix strategy for audit propagation: `?` for functions returning `Result` with compatible error types, `.expect("audit: fail-closed")` for boundary/non-Result code — both prevent silent failures, but `?` is preferred because it allows graceful error handling upstream
+- Bulk mechanical changes across 75+ files need verification at every step — subagents claiming edits doesn't mean the edits persisted; always `grep` for remaining patterns after bulk operations
+- Dependency governance (cargo-audit + cargo-deny) catches vulnerabilities before production — 4 wasmtime WASI advisories (host panics, unsound memory access, resource exhaustion) were discovered immediately upon adding cargo-audit to CI
+- License compliance is not optional: Tauri dependencies pull MPL-2.0 (cssparser) and CDLA-Permissive-2.0 (webpki-roots) — both are permissive but would fail a strict MIT-only policy; `deny.toml` makes this explicit and auditable
+- `rust-toolchain.toml` eliminates "works on my machine" drift — pinning stable channel with explicit components and targets ensures CI and local builds use identical toolchains
+- Run `cargo fmt` after any bulk code modification — automated search-and-replace doesn't respect rustfmt's line-breaking rules for chained method calls
+
 ## CI / Workflows
 - Always check for merge conflict markers after merging branches — leftover `<<<<<<< branch` / `>>>>>>> main` markers in YAML break CI silently
 - The release.yml had unresolved merge conflict markers from the `ci/windows-artifact-fix` branch, causing duplicate steps and bare text in YAML that GitHub Actions rejects
