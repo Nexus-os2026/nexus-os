@@ -3,8 +3,10 @@ use crate::{AdaptationError, StrategyDocument};
 use analytics::report::AnalyticsReport;
 use nexus_connectors_llm::providers::LlmProvider;
 use nexus_kernel::audit::{AuditTrail, EventType};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::sync::OnceLock;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -310,19 +312,21 @@ fn change_description(change: &StrategyChange) -> String {
 }
 
 fn extract_preferred_time(report: &AnalyticsReport) -> Option<String> {
-    if let Ok(regex) = regex::Regex::new(r"(?i)\b([0-1]?\d|2[0-3])\s?(am|pm)\b") {
-        for source in report
-            .recommendations
-            .iter()
-            .chain(report.growth_trends.iter())
-            .chain(std::iter::once(&report.llm_summary))
-        {
-            if let Some(captures) = regex.captures(source) {
-                let hour = captures.get(1).map(|value| value.as_str()).unwrap_or("");
-                let suffix = captures.get(2).map(|value| value.as_str()).unwrap_or("");
-                if !hour.is_empty() && !suffix.is_empty() {
-                    return Some(format!("{}{}", hour, suffix.to_lowercase()));
-                }
+    static TIME_RE: OnceLock<Regex> = OnceLock::new();
+    let regex = TIME_RE
+        .get_or_init(|| Regex::new(r"(?i)\b([0-1]?\d|2[0-3])\s?(am|pm)\b").expect("valid regex"));
+
+    for source in report
+        .recommendations
+        .iter()
+        .chain(report.growth_trends.iter())
+        .chain(std::iter::once(&report.llm_summary))
+    {
+        if let Some(captures) = regex.captures(source) {
+            let hour = captures.get(1).map(|value| value.as_str()).unwrap_or("");
+            let suffix = captures.get(2).map(|value| value.as_str()).unwrap_or("");
+            if !hour.is_empty() && !suffix.is_empty() {
+                return Some(format!("{}{}", hour, suffix.to_lowercase()));
             }
         }
     }
@@ -358,17 +362,19 @@ fn extract_preferred_style(report: &AnalyticsReport) -> Option<String> {
 }
 
 fn extract_hashtags(report: &AnalyticsReport) -> Vec<String> {
+    static HASHTAG_RE: OnceLock<Regex> = OnceLock::new();
+    let regex = HASHTAG_RE
+        .get_or_init(|| Regex::new(r"#[A-Za-z0-9_]{2,32}").expect("valid regex"));
+
     let mut hashtags = Vec::new();
-    if let Ok(regex) = regex::Regex::new(r"#[A-Za-z0-9_]{2,32}") {
-        for source in report
-            .recommendations
-            .iter()
-            .chain(report.growth_trends.iter())
-            .chain(std::iter::once(&report.llm_summary))
-        {
-            for candidate in regex.find_iter(source) {
-                hashtags.push(candidate.as_str().to_lowercase());
-            }
+    for source in report
+        .recommendations
+        .iter()
+        .chain(report.growth_trends.iter())
+        .chain(std::iter::once(&report.llm_summary))
+    {
+        for candidate in regex.find_iter(source) {
+            hashtags.push(candidate.as_str().to_lowercase());
         }
     }
     hashtags.sort();

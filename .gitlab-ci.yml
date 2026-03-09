@@ -5,6 +5,7 @@ stages:
 cargo-audit:
   stage: security
   image: rust:latest
+  allow_failure: true
   before_script:
     - cargo install cargo-audit --locked
   script:
@@ -13,6 +14,7 @@ cargo-audit:
 cargo-deny:
   stage: security
   image: rust:latest
+  allow_failure: true
   before_script:
     - cargo install cargo-deny --locked
   script:

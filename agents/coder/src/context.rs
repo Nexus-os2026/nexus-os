@@ -81,6 +81,14 @@ pub fn build_context(
             score += 12.0;
             reasons.push("core connector trait".to_string());
         }
+        if path_ends_with_components(
+            entry.path.as_str(),
+            &["connectors", "core", "src", "github_connector.rs"],
+        ) && task_mentions_connector
+        {
+            score += 10.0;
+            reasons.push("connector reference implementation".to_string());
+        }
         if lower_path.contains("connector") && task_mentions_connector {
             score += 4.0;
             reasons.push("connector-related file".to_string());

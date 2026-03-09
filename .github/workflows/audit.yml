@@ -61,4 +61,4 @@ jobs:
         run: cargo audit
 
       - name: Run cargo deny check
-        run: cargo deny check --config .github/deny.toml -W unlicensed
+        run: cargo deny check -W unlicensed
