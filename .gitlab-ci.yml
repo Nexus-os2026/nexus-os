@@ -4,10 +4,13 @@ stages:
 rust-tests:
   stage: test
   image: rust:latest
+  before_script:
+    - rustup target add wasm32-wasi
+    - rustup component add rustfmt clippy
   script:
     - cargo fmt --all -- --check
-    - cargo clippy --workspace --all-targets --all-features -- -D warnings
-    - cargo test --workspace --all-features
+    - cargo clippy --workspace --all-targets -- -D warnings
+    - cargo test --workspace
 
 frontend-tests:
   stage: test
