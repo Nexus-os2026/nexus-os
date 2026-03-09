@@ -1,0 +1,18 @@
+stages:
+  - test
+
+rust-tests:
+  stage: test
+  image: rust:latest
+  script:
+    - cargo fmt --all -- --check
+    - cargo clippy --workspace --all-targets --all-features -- -D warnings
+    - cargo test --workspace --all-features
+
+frontend-tests:
+  stage: test
+  image: node:20
+  script:
+    - cd app
+    - npm ci
+    - npm run build
