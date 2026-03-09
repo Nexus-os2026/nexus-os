@@ -133,7 +133,9 @@ fn test_project_init_rust() {
     assert!(project.join("tests").exists());
 }
 
+// Requires full shell environment, skipped in CI
 #[test]
+#[ignore]
 fn test_git_auto_commit() {
     let project = tempdir().expect("tempdir must be created");
     git(project.path(), &["init"]);
