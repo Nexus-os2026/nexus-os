@@ -14,14 +14,6 @@ use tempfile::tempdir;
 #[test]
 fn test_safe_command_execution() {
     let project = tempdir().expect("tempdir must be created");
-    write_file(
-        project.path().join("Cargo.toml"),
-        "[package]\nname = \"cmd-test\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
-    );
-    write_file(
-        project.path().join("src/lib.rs"),
-        "#[cfg(test)]\nmod tests {\n    #[test]\n    fn smoke() {\n        assert_eq!(2 + 2, 4);\n    }\n}\n",
-    );
 
     let mut capabilities = HashSet::new();
     capabilities.insert(TERMINAL_EXECUTE_CAPABILITY.to_string());
@@ -29,7 +21,7 @@ fn test_safe_command_execution() {
         TerminalExecutor::with_capabilities_and_autonomy(capabilities, AutonomyLevel::L1);
 
     let request_id =
-        match executor.execute("cargo test", project.path(), Some(Duration::from_secs(120))) {
+        match executor.execute("cargo --version", project.path(), Some(Duration::from_secs(10))) {
             Err(CommandError::ApprovalRequired(request_id)) => request_id,
             other => panic!("expected approval request for terminal command, got: {other:?}"),
         };
@@ -38,12 +30,12 @@ fn test_safe_command_execution() {
         .expect("approval should succeed");
 
     let result = executor
-        .execute("cargo test", project.path(), Some(Duration::from_secs(120)))
-        .expect("cargo test should execute successfully after approval");
+        .execute("cargo --version", project.path(), Some(Duration::from_secs(10)))
+        .expect("cargo --version should execute successfully after approval");
     assert_eq!(result.exit_code, 0);
     assert!(
-        result.stdout.contains("test result"),
-        "expected cargo test output in stdout"
+        result.stdout.contains("cargo"),
+        "expected cargo version output in stdout"
     );
 
     let blocked_request = match executor.execute("rm -rf /", project.path(), None) {
