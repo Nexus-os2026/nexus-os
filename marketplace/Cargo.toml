@@ -22,6 +22,7 @@ nexus-adaptation = { path = "../adaptation" }
 nexus-control = { path = "../control" }
 nexus-factory = { path = "../factory" }
 ed25519-dalek = "2.2"
+rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"

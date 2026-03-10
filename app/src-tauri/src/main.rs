@@ -1379,6 +1379,242 @@ pub fn get_firewall_patterns() -> Result<FirewallPatternsRow, String> {
     })
 }
 
+// ── Marketplace API ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketplaceAgentRow {
+    pub package_id: String,
+    pub name: String,
+    pub description: String,
+    pub author: String,
+    pub tags: Vec<String>,
+    pub version: String,
+    pub capabilities: Vec<String>,
+    pub price_cents: i64,
+    pub downloads: i64,
+    pub rating: f64,
+    pub review_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketplaceReviewRow {
+    pub reviewer: String,
+    pub stars: u8,
+    pub comment: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketplaceDetailRow {
+    pub agent: MarketplaceAgentRow,
+    pub reviews: Vec<MarketplaceReviewRow>,
+    pub versions: Vec<MarketplaceVersionRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketplaceVersionRow {
+    pub version: String,
+    pub changelog: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketplacePublishResult {
+    pub package_id: String,
+    pub name: String,
+    pub version: String,
+    pub verdict: String,
+    pub checks: Vec<MarketplaceCheckRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketplaceCheckRow {
+    pub name: String,
+    pub passed: bool,
+    pub findings: Vec<String>,
+}
+
+fn open_marketplace_registry() -> Result<nexus_marketplace::sqlite_registry::SqliteRegistry, String>
+{
+    let db_path = nexus_marketplace::sqlite_registry::SqliteRegistry::default_db_path();
+    nexus_marketplace::sqlite_registry::SqliteRegistry::open(&db_path)
+        .map_err(|e| format!("Failed to open marketplace database: {e}"))
+}
+
+pub fn marketplace_search(query: &str) -> Result<Vec<MarketplaceAgentRow>, String> {
+    let registry = open_marketplace_registry()?;
+    let results = registry
+        .search(query)
+        .map_err(|e| format!("Search failed: {e}"))?;
+
+    Ok(results
+        .into_iter()
+        .map(|r| {
+            // Get full detail for each result to include rating/downloads
+            let detail = registry.get_agent(&r.package_id).ok();
+            MarketplaceAgentRow {
+                package_id: r.package_id,
+                name: r.name,
+                description: r.description,
+                author: r.author_id,
+                tags: r.tags,
+                version: detail
+                    .as_ref()
+                    .map(|d| d.version.clone())
+                    .unwrap_or_default(),
+                capabilities: detail
+                    .as_ref()
+                    .map(|d| d.capabilities.clone())
+                    .unwrap_or_default(),
+                price_cents: detail.as_ref().map(|d| d.price_cents).unwrap_or(0),
+                downloads: detail.as_ref().map(|d| d.downloads).unwrap_or(0),
+                rating: detail.as_ref().map(|d| d.rating).unwrap_or(0.0),
+                review_count: detail.as_ref().map(|d| d.review_count).unwrap_or(0),
+            }
+        })
+        .collect())
+}
+
+pub fn marketplace_install(package_id: &str) -> Result<MarketplaceAgentRow, String> {
+    let registry = open_marketplace_registry()?;
+    let bundle = registry
+        .install(package_id)
+        .map_err(|e| format!("Install failed: {e}"))?;
+    let detail = registry
+        .get_agent(package_id)
+        .map_err(|e| format!("Failed to get agent detail: {e}"))?;
+
+    Ok(MarketplaceAgentRow {
+        package_id: bundle.package_id,
+        name: bundle.metadata.name,
+        description: bundle.metadata.description,
+        author: bundle.metadata.author_id,
+        tags: bundle.metadata.tags,
+        version: bundle.metadata.version,
+        capabilities: bundle.metadata.capabilities,
+        price_cents: detail.price_cents,
+        downloads: detail.downloads,
+        rating: detail.rating,
+        review_count: detail.review_count,
+    })
+}
+
+pub fn marketplace_info(agent_id: &str) -> Result<MarketplaceDetailRow, String> {
+    let registry = open_marketplace_registry()?;
+    let detail = registry
+        .get_agent(agent_id)
+        .map_err(|e| format!("Agent not found: {e}"))?;
+    let reviews = registry.get_reviews(agent_id).unwrap_or_default();
+    let versions = registry.version_history(agent_id).unwrap_or_default();
+
+    Ok(MarketplaceDetailRow {
+        agent: MarketplaceAgentRow {
+            package_id: detail.package_id,
+            name: detail.name,
+            description: detail.description,
+            author: detail.author,
+            tags: detail.tags,
+            version: detail.version,
+            capabilities: detail.capabilities,
+            price_cents: detail.price_cents,
+            downloads: detail.downloads,
+            rating: detail.rating,
+            review_count: detail.review_count,
+        },
+        reviews: reviews
+            .into_iter()
+            .map(|r| MarketplaceReviewRow {
+                reviewer: r.reviewer,
+                stars: r.stars,
+                comment: r.comment,
+                created_at: r.created_at,
+            })
+            .collect(),
+        versions: versions
+            .into_iter()
+            .map(|v| MarketplaceVersionRow {
+                version: v.version,
+                changelog: v.changelog,
+                created_at: v.created_at,
+            })
+            .collect(),
+    })
+}
+
+pub fn marketplace_publish(bundle_json: &str) -> Result<MarketplacePublishResult, String> {
+    use nexus_marketplace::package::SignedPackageBundle;
+    use nexus_marketplace::verification_pipeline::{verify_bundle, Verdict};
+
+    let bundle: SignedPackageBundle =
+        serde_json::from_str(bundle_json).map_err(|e| format!("Invalid bundle format: {e}"))?;
+
+    let verification = verify_bundle(&bundle);
+    if verification.verdict == Verdict::Rejected {
+        let findings: Vec<String> = verification
+            .checks
+            .iter()
+            .filter(|c| !c.passed)
+            .flat_map(|c| c.findings.clone())
+            .collect();
+        return Err(format!("Verification rejected: {}", findings.join("; ")));
+    }
+
+    let registry = open_marketplace_registry()?;
+    registry
+        .upsert_signed(&bundle)
+        .map_err(|e| format!("Publish failed: {e}"))?;
+
+    Ok(MarketplacePublishResult {
+        package_id: bundle.package_id,
+        name: bundle.metadata.name,
+        version: bundle.metadata.version,
+        verdict: format!("{:?}", verification.verdict),
+        checks: verification
+            .checks
+            .iter()
+            .map(|c| MarketplaceCheckRow {
+                name: c.name.clone(),
+                passed: c.passed,
+                findings: c.findings.clone(),
+            })
+            .collect(),
+    })
+}
+
+pub fn marketplace_my_agents(author: &str) -> Result<Vec<MarketplaceAgentRow>, String> {
+    let registry = open_marketplace_registry()?;
+    let results = registry
+        .search(author)
+        .map_err(|e| format!("Query failed: {e}"))?;
+
+    Ok(results
+        .into_iter()
+        .filter(|r| r.author_id == author)
+        .map(|r| {
+            let detail = registry.get_agent(&r.package_id).ok();
+            MarketplaceAgentRow {
+                package_id: r.package_id,
+                name: r.name,
+                description: r.description,
+                author: r.author_id,
+                tags: r.tags,
+                version: detail
+                    .as_ref()
+                    .map(|d| d.version.clone())
+                    .unwrap_or_default(),
+                capabilities: detail
+                    .as_ref()
+                    .map(|d| d.capabilities.clone())
+                    .unwrap_or_default(),
+                price_cents: detail.as_ref().map(|d| d.price_cents).unwrap_or(0),
+                downloads: detail.as_ref().map(|d| d.downloads).unwrap_or(0),
+                rating: detail.as_ref().map(|d| d.rating).unwrap_or(0.0),
+                review_count: detail.as_ref().map(|d| d.review_count).unwrap_or(0),
+            }
+        })
+        .collect())
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1720,6 +1956,33 @@ mod runtime {
         super::get_firewall_patterns()
     }
 
+    // ── Marketplace Commands ──
+
+    #[tauri::command]
+    fn marketplace_search(query: String) -> Result<Vec<super::MarketplaceAgentRow>, String> {
+        super::marketplace_search(&query)
+    }
+
+    #[tauri::command]
+    fn marketplace_install(package_id: String) -> Result<super::MarketplaceAgentRow, String> {
+        super::marketplace_install(&package_id)
+    }
+
+    #[tauri::command]
+    fn marketplace_info(agent_id: String) -> Result<super::MarketplaceDetailRow, String> {
+        super::marketplace_info(&agent_id)
+    }
+
+    #[tauri::command]
+    fn marketplace_publish(bundle_json: String) -> Result<super::MarketplacePublishResult, String> {
+        super::marketplace_publish(&bundle_json)
+    }
+
+    #[tauri::command]
+    fn marketplace_my_agents(author: String) -> Result<Vec<super::MarketplaceAgentRow>, String> {
+        super::marketplace_my_agents(&author)
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -1814,6 +2077,11 @@ mod runtime {
                 list_identities,
                 get_firewall_status,
                 get_firewall_patterns,
+                marketplace_search,
+                marketplace_install,
+                marketplace_info,
+                marketplace_publish,
+                marketplace_my_agents,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");

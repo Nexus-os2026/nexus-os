@@ -361,3 +361,52 @@ export interface FirewallPatterns {
   passport_regex: string;
   internal_ip_regex: string;
 }
+
+// ── Marketplace Types ──
+
+export interface MarketplaceAgent {
+  package_id: string;
+  name: string;
+  description: string;
+  author: string;
+  tags: string[];
+  version: string;
+  capabilities: string[];
+  price_cents: number;
+  downloads: number;
+  rating: number;
+  review_count: number;
+}
+
+export interface MarketplaceReview {
+  reviewer: string;
+  stars: number;
+  comment: string;
+  created_at: string;
+}
+
+export interface MarketplaceVersion {
+  version: string;
+  changelog: string;
+  created_at: string;
+}
+
+export interface MarketplaceDetail {
+  agent: MarketplaceAgent;
+  reviews: MarketplaceReview[];
+  versions: MarketplaceVersion[];
+}
+
+export interface MarketplaceCheck {
+  name: string;
+  passed: boolean;
+  findings: string[];
+}
+
+export interface MarketplacePublishResult {
+  package_id: string;
+  name: string;
+  version: string;
+  verdict: string;
+  checks: MarketplaceCheck[];
+}

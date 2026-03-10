@@ -53,6 +53,7 @@ import { PermissionDashboard } from "./pages/PermissionDashboard";
 import Protocols from "./pages/Protocols";
 import Identity from "./pages/Identity";
 import Firewall from "./pages/Firewall";
+import DeveloperPortal from "./pages/DeveloperPortal";
 import type {
   AgentSummary,
   AuditEventRow,
@@ -67,7 +68,7 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall";
+type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -79,6 +80,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "workflows", label: "Workflows", icon: "⎇", shortcut: "Alt+4" },
   { id: "marketplace", label: "Marketplace", icon: "◈", shortcut: "Alt+5" },
   { id: "marketplace-browser", label: "Registry", icon: "⬡", shortcut: "" },
+  { id: "developer-portal", label: "Publish", icon: "⬆", shortcut: "" },
   { id: "compliance", label: "Compliance", icon: "⛨", shortcut: "" },
   { id: "cluster", label: "Cluster", icon: "⬣", shortcut: "" },
   { id: "trust", label: "Trust", icon: "◉", shortcut: "" },
@@ -1098,6 +1100,9 @@ export default function App(): JSX.Element {
     }
     if (page === "marketplace-browser") {
       return <MarketplaceBrowser />;
+    }
+    if (page === "developer-portal") {
+      return <DeveloperPortal />;
     }
     if (page === "compliance") {
       return <ComplianceDashboard />;

@@ -8,8 +8,12 @@ use self_improve_agent::r#loop::{run_once_with_storage, AgentRunObservation, Imp
 use self_improve_agent::tracker::{OutcomeResult, TaskMetrics, TaskType};
 use social_poster_agent::run_social_poster_from_manifest;
 pub mod commands;
+pub mod packager;
 pub mod router;
+pub mod scaffold;
 pub mod setup;
+pub mod templates;
+pub mod test_runner;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -23,6 +27,27 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum TopLevelCommand {
+    /// Scaffold a new Nexus agent project
+    Create {
+        /// Agent name (3-64 chars, alphanumeric and hyphens)
+        name: String,
+        /// Template to use (basic, data-analyst, web-researcher, code-reviewer, content-writer, file-organizer)
+        #[arg(short, long, default_value = "basic")]
+        template: String,
+        /// Parent directory to create the project in
+        #[arg(short, long)]
+        output_dir: Option<String>,
+    },
+    /// Test an agent in a sandboxed environment
+    Test {
+        /// Path to agent project directory or manifest.toml
+        path: String,
+    },
+    /// Package an agent into a signed .nexus-agent bundle
+    Package {
+        /// Path to agent project directory
+        path: String,
+    },
     Agent {
         #[command(subcommand)]
         command: AgentCommand,
@@ -58,6 +83,46 @@ pub enum TopLevelCommand {
     Protocols {
         #[command(subcommand)]
         command: ProtocolsCommand,
+    },
+    /// Marketplace: browse, publish, install, and manage agents
+    Marketplace {
+        #[command(subcommand)]
+        command: MarketplaceCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum MarketplaceCommand {
+    /// Search the marketplace for agents
+    Search {
+        /// Search query string
+        query: String,
+    },
+    /// Install an agent from the marketplace
+    Install {
+        /// Agent package ID or name
+        name: String,
+    },
+    /// Publish a signed agent bundle to the marketplace
+    Publish {
+        /// Path to .nexus-agent bundle file
+        bundle_path: String,
+    },
+    /// Show detailed info about a marketplace agent
+    Info {
+        /// Agent package ID
+        agent_id: String,
+    },
+    /// List agents published by an author
+    MyAgents {
+        /// Author ID to filter by
+        #[arg(long, default_value = "me")]
+        author: String,
+    },
+    /// Uninstall an agent from the marketplace
+    Uninstall {
+        /// Agent package ID or name
+        name: String,
     },
 }
 
@@ -163,6 +228,13 @@ pub enum GovernanceCommand {
 
 pub fn execute_command(cli: Cli) -> Result<String, String> {
     match cli.command {
+        TopLevelCommand::Create {
+            name,
+            template,
+            output_dir,
+        } => execute_create_command(&name, &template, output_dir.as_deref()),
+        TopLevelCommand::Test { path } => execute_test_command(&path),
+        TopLevelCommand::Package { path } => execute_package_command(&path),
         TopLevelCommand::Agent { command } => execute_agent_command(command),
         TopLevelCommand::Sandbox { command } => execute_sandbox_command(command),
         TopLevelCommand::Simulation { command } => execute_simulation_command(command),
@@ -172,7 +244,89 @@ pub fn execute_command(cli: Cli) -> Result<String, String> {
         TopLevelCommand::Model { command } => execute_model_command(command),
         TopLevelCommand::Governance { command } => execute_governance_command(command),
         TopLevelCommand::Protocols { command } => execute_protocols_command(command),
+        TopLevelCommand::Marketplace { command } => execute_marketplace_command(command),
     }
+}
+
+pub fn execute_create_command(
+    name: &str,
+    template: &str,
+    output_dir: Option<&str>,
+) -> Result<String, String> {
+    let parent = match output_dir {
+        Some(dir) => PathBuf::from(dir),
+        None => std::env::current_dir()
+            .map_err(|e| format!("Failed to determine current directory: {e}"))?,
+    };
+
+    let result = scaffold::scaffold_agent_project(name, template, &parent)?;
+
+    let mut output = format!(
+        "Created agent '{}' from template '{}'\n  {}\n\nFiles:\n",
+        result.agent_name,
+        result.template,
+        result.project_dir.display(),
+    );
+    for f in &result.files_created {
+        output.push_str(&format!("  - {f}\n"));
+    }
+    output.push_str(&format!(
+        "\nNext steps:\n  cd {}\n  cargo build\n  cargo test\n",
+        result.agent_name
+    ));
+    Ok(output)
+}
+
+pub fn execute_test_command(path: &str) -> Result<String, String> {
+    let path = Path::new(path);
+    let manifest_path = if path.is_dir() {
+        path.join("manifest.toml")
+    } else {
+        path.to_path_buf()
+    };
+
+    let report = test_runner::run_agent_test(&manifest_path)?;
+    let formatted = test_runner::format_report(&report);
+
+    if report.passed {
+        Ok(formatted)
+    } else {
+        Err(formatted)
+    }
+}
+
+pub fn execute_package_command(path: &str) -> Result<String, String> {
+    let project_dir = Path::new(path);
+    if !project_dir.is_dir() {
+        return Err(format!("'{}' is not a directory", path));
+    }
+
+    // Generate a deterministic dev signing key.
+    // In production this would come from IdentityManager / keyring.
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&dev_signing_key_bytes());
+
+    let result = packager::package_agent(project_dir, &signing_key)?;
+    Ok(packager::format_result(&result))
+}
+
+/// Derive a deterministic dev signing key from the machine.
+/// In production, keys would be stored in the OS keyring via IdentityManager.
+fn dev_signing_key_bytes() -> [u8; 32] {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    if let Ok(home) = std::env::var("HOME") {
+        home.hash(&mut hasher);
+    }
+    "nexus-dev-signing-key".hash(&mut hasher);
+    let h = hasher.finish();
+    let mut bytes = [0u8; 32];
+    bytes[..8].copy_from_slice(&h.to_le_bytes());
+    bytes[8..16].copy_from_slice(&h.to_be_bytes());
+    bytes[16..24].copy_from_slice(&h.to_le_bytes());
+    bytes[24..32].copy_from_slice(&h.to_be_bytes());
+    bytes
 }
 
 pub fn execute_agent_command(command: AgentCommand) -> Result<String, String> {
@@ -540,6 +694,39 @@ pub fn execute_protocols_command(command: ProtocolsCommand) -> Result<String, St
         }
         ProtocolsCommand::Start { port } => {
             router::route(commands::CliCommand::ProtocolsStart { port })
+        }
+    };
+    if output.success {
+        let mut result = output.message;
+        if let Some(data) = output.data {
+            result.push('\n');
+            result.push_str(&serde_json::to_string_pretty(&data).unwrap_or_default());
+        }
+        Ok(result)
+    } else {
+        Err(output.message)
+    }
+}
+
+pub fn execute_marketplace_command(command: MarketplaceCommand) -> Result<String, String> {
+    let output = match command {
+        MarketplaceCommand::Search { query } => {
+            router::route(commands::CliCommand::MarketplaceSearch { query })
+        }
+        MarketplaceCommand::Install { name } => {
+            router::route(commands::CliCommand::MarketplaceInstall { name })
+        }
+        MarketplaceCommand::Publish { bundle_path } => {
+            router::route(commands::CliCommand::MarketplacePublish { bundle_path })
+        }
+        MarketplaceCommand::Info { agent_id } => {
+            router::route(commands::CliCommand::MarketplaceInfo { agent_id })
+        }
+        MarketplaceCommand::MyAgents { author } => {
+            router::route(commands::CliCommand::MarketplaceMyAgents { author })
+        }
+        MarketplaceCommand::Uninstall { name } => {
+            router::route(commands::CliCommand::MarketplaceUninstall { name })
         }
     };
     if output.success {

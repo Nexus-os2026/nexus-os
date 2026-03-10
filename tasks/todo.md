@@ -6,6 +6,7 @@
 - [x] Real system stats in header (CPU/RAM via sysinfo)
 - [x] Smart capability detection case-insensitive fix
 - [x] Agent button state management (disable Start when Running, etc)
+- [x] Phase 7.4: Marketplace & Developer Toolkit (COMPLETE)
 
 ## Completed
 - [x] Phase 1: Hardening (benchmarks, replay evidence, circuit breakers)
@@ -114,3 +115,13 @@
   - Tauri desktop Compliance page: 6-tab layout (Overview with green/yellow/red status indicator + alerts, Risk Cards with per-agent EU AI Act classification, Transparency Report viewer with download, Erasure controls with confirmation dialog, Data Provenance table with classification + transformations, Retention policy settings with visual bars + enforcement trigger)
   - 12 integration tests in kernel/tests/compliance_integration_tests.rs: risk classification across all tiers, unacceptable agent rejection at spawn, Article 13 transparency report completeness, cryptographic erasure with key destruction, erasure proof event under system UUID, legal hold prevention + release, retention purge with legal hold exemption, full data lineage chain, delegation handoff provenance, missing identity detection, broken audit chain detection, multi-framework SOC2+EU AI Act+HIPAA+CA AB316 report
   - All tests pass with zero regressions
+- [x] Phase 7.4: Marketplace & Developer Toolkit (COMPLETE)
+  - SQLite-backed marketplace registry (SqliteRegistry) replacing in-memory HashMap: agents/reviews/versions tables, publish/search/install/update/rate/get_agent methods, configurable DB path (~/.nexus/marketplace.db), auto-migration
+  - 6-step verification pipeline (verification_pipeline.rs): signature_check, manifest_validation, sandbox_test, security_scan, capability_audit, governance_check with Approved/ConditionalApproval/Rejected verdicts
+  - CLI 6 marketplace subcommands (search/install/publish/info/my-agents/uninstall) wired to real SQLite registry via router.rs
+  - CLI developer toolkit: `nexus create` (6 templates), `nexus test` (3-phase lifecycle), `nexus package` (Ed25519 signed bundles with In-Toto attestation)
+  - Tauri desktop 5 marketplace commands registered in invoke_handler, backed by same SQLite DB
+  - MarketplaceBrowser page: real backend search, agent cards with ratings/downloads/price/capability badges, detail modal with reviews/versions/install
+  - DeveloperPortal page: drag-drop .nexus-agent upload, animated 6-step verification pipeline, verdict display, published agent stats
+  - 8 marketplace integration tests + 7 CLI SDK workflow tests covering full create→test→package→publish→install roundtrip
+  - Stripe deferred to 7.5 — paid agents show price but install free during beta

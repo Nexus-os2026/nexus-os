@@ -1,0 +1,143 @@
+.dp-hub { padding: 1.5rem; }
+.dp-header { margin-bottom: 1.25rem; }
+.dp-title { font-family: var(--font-display, "JetBrains Mono", monospace); font-size: 1.1rem; color: #e0f2fe; letter-spacing: 0.08em; }
+.dp-subtitle { font-size: 0.8rem; color: rgba(165, 243, 252, 0.6); margin-top: 0.25rem; }
+.dp-section-title { font-size: 0.9rem; color: #e0f2fe; margin-bottom: 0.75rem; letter-spacing: 0.05em; }
+
+.dp-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+@media (max-width: 900px) { .dp-layout { grid-template-columns: 1fr; } }
+
+.dp-publish-panel, .dp-agents-panel {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(56, 189, 248, 0.12);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+
+/* Dropzone */
+.dp-dropzone {
+  border: 2px dashed rgba(56, 189, 248, 0.25);
+  border-radius: 0.5rem;
+  padding: 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 1rem;
+}
+.dp-dropzone:hover, .dp-dropzone-active { border-color: rgba(56, 189, 248, 0.5); background: rgba(56, 189, 248, 0.05); }
+.dp-dropzone-loaded { border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.05); }
+
+.dp-dropzone-empty { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
+.dp-drop-icon { font-size: 1.5rem; color: rgba(56, 189, 248, 0.5); }
+.dp-drop-text { font-size: 0.85rem; color: #cbd5e1; }
+.dp-drop-hint { font-size: 0.7rem; color: rgba(165, 243, 252, 0.4); }
+
+.dp-dropzone-file { display: flex; align-items: center; gap: 0.75rem; }
+.dp-file-icon { color: #22c55e; font-size: 1.2rem; }
+.dp-file-name { font-size: 0.85rem; color: #e0f2fe; font-family: monospace; }
+.dp-file-size { font-size: 0.7rem; color: rgba(165, 243, 252, 0.5); }
+
+/* Buttons */
+.dp-publish-btn {
+  width: 100%;
+  padding: 0.6rem 1.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  border-radius: 0.4rem;
+  background: rgba(34, 211, 238, 0.1);
+  color: #22d3ee;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.dp-publish-btn:hover { background: rgba(34, 211, 238, 0.2); border-color: rgba(34, 211, 238, 0.5); }
+
+.dp-reset-btn {
+  margin-top: 0.75rem;
+  padding: 0.35rem 1rem;
+  font-size: 0.7rem;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 0.4rem;
+  background: rgba(15, 23, 42, 0.6);
+  color: #67e8f9;
+  cursor: pointer;
+}
+
+/* Verification Pipeline */
+.dp-verify-panel { margin-top: 1rem; }
+.dp-verify-title { font-size: 0.85rem; color: #e0f2fe; margin-bottom: 0.5rem; }
+.dp-steps { display: flex; flex-direction: column; gap: 0.35rem; }
+.dp-step { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; padding: 0.3rem 0.5rem; border-radius: 0.3rem; }
+.dp-step-icon { width: 1.2rem; text-align: center; font-weight: 700; }
+.dp-step-label { color: #cbd5e1; }
+.dp-step-detail { font-size: 0.65rem; color: rgba(165, 243, 252, 0.5); margin-left: auto; }
+
+.dp-step-pending { opacity: 0.4; }
+.dp-step-running { background: rgba(56, 189, 248, 0.08); }
+.dp-step-running .dp-step-icon { color: #38bdf8; animation: dp-pulse 1s infinite; }
+.dp-step-passed .dp-step-icon { color: #22c55e; }
+.dp-step-warning .dp-step-icon { color: #f59e0b; }
+.dp-step-failed .dp-step-icon { color: #ef4444; }
+.dp-step-failed { background: rgba(239, 68, 68, 0.05); }
+
+@keyframes dp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* Result */
+.dp-result { margin-top: 1rem; }
+.dp-verdict { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1rem; border-radius: 0.4rem; margin-bottom: 0.75rem; }
+.dp-verdict-icon { font-size: 1.1rem; }
+.dp-verdict-text { font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; }
+.dp-verdict-approved { background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); color: #22c55e; }
+.dp-verdict-conditional_approval { background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); color: #f59e0b; }
+.dp-verdict-rejected { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; }
+
+.dp-result-meta { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.72rem; color: rgba(165, 243, 252, 0.6); font-family: monospace; margin-bottom: 0.75rem; }
+
+/* Error */
+.dp-error { margin-top: 1rem; display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 0.4rem; color: #ef4444; font-size: 0.8rem; }
+.dp-error-icon { font-size: 1rem; }
+
+/* Author input */
+.dp-author-input { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; font-size: 0.8rem; color: #cbd5e1; }
+.dp-author-field {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 0.35rem;
+  color: #e0f2fe;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.78rem;
+  font-family: monospace;
+}
+
+/* My Agents list */
+.dp-no-agents { color: rgba(165, 243, 252, 0.4); font-size: 0.8rem; text-align: center; padding: 2rem; }
+.dp-agent-list { display: flex; flex-direction: column; gap: 0.75rem; }
+.dp-agent-card {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(56, 189, 248, 0.12);
+  border-radius: 0.5rem;
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.dp-agent-top { display: flex; justify-content: space-between; align-items: center; }
+.dp-agent-name { font-size: 0.9rem; font-weight: 600; color: #e0f2fe; }
+.dp-agent-version { font-size: 0.7rem; color: rgba(165, 243, 252, 0.5); font-family: monospace; }
+.dp-agent-desc { font-size: 0.78rem; color: #94a3b8; line-height: 1.4; }
+.dp-agent-stats { display: flex; gap: 0.75rem; font-size: 0.7rem; color: rgba(165, 243, 252, 0.55); }
+.dp-price { color: #f59e0b; }
+.dp-free { color: #22c55e; }
+.dp-agent-tags { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.dp-tag {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.12rem 0.4rem;
+  border-radius: 0.2rem;
+  background: rgba(56, 189, 248, 0.1);
+  color: #67e8f9;
+  border: 1px solid rgba(56, 189, 248, 0.15);
+}

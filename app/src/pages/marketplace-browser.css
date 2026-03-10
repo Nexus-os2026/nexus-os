@@ -94,3 +94,75 @@
 }
 
 .mb-empty { color: rgba(165, 243, 252, 0.4); font-size: 0.85rem; grid-column: 1 / -1; text-align: center; padding: 2rem; }
+
+/* Card stats row */
+.mb-card-stats-row { display: flex; gap: 0.75rem; align-items: center; font-size: 0.72rem; }
+.mb-card-stars { color: #fbbf24; }
+.mb-card-dl { color: rgba(165, 243, 252, 0.55); }
+.mb-card-price { color: #f59e0b; font-weight: 600; }
+.mb-card-free { color: #22c55e; font-weight: 600; }
+
+/* Capability badges */
+.mb-cap-badge {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.25rem;
+  font-family: monospace;
+}
+.mb-risk-medium { background: rgba(56, 189, 248, 0.1); color: #67e8f9; border: 1px solid rgba(56, 189, 248, 0.2); }
+.mb-risk-high { background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.25); }
+.mb-risk-critical { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.25); }
+
+/* Detail overlay / modal */
+.mb-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.mb-detail-modal {
+  background: #0f172a;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  max-width: 560px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+}
+.mb-detail-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: none;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  color: #67e8f9;
+  border-radius: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+.mb-detail-name { font-size: 1.15rem; color: #e0f2fe; margin-bottom: 0.35rem; }
+.mb-detail-meta { font-size: 0.75rem; color: rgba(165, 243, 252, 0.6); margin-bottom: 0.5rem; }
+.mb-detail-desc { font-size: 0.85rem; color: #cbd5e1; margin-bottom: 0.75rem; line-height: 1.4; }
+.mb-detail-stats { display: flex; gap: 1rem; font-size: 0.75rem; margin-bottom: 0.75rem; color: rgba(165, 243, 252, 0.6); }
+.mb-price { color: #f59e0b; }
+.mb-free { color: #22c55e; }
+.mb-detail-caps { margin-bottom: 0.75rem; }
+.mb-detail-caps h4, .mb-detail-versions h4, .mb-detail-reviews h4 { font-size: 0.8rem; color: #e0f2fe; margin-bottom: 0.4rem; }
+.mb-detail-versions { margin-bottom: 0.75rem; }
+.mb-version-row { display: flex; gap: 0.5rem; font-size: 0.72rem; padding: 0.2rem 0; }
+.mb-version-num { color: #67e8f9; font-family: monospace; }
+.mb-version-log { color: #94a3b8; }
+.mb-detail-reviews { margin-bottom: 0.75rem; }
+.mb-review-row { padding: 0.3rem 0; border-bottom: 1px solid rgba(56, 189, 248, 0.08); }
+.mb-review-stars { font-size: 0.7rem; color: #fbbf24; margin-right: 0.5rem; }
+.mb-review-author { font-size: 0.7rem; color: rgba(165, 243, 252, 0.6); }
+.mb-review-comment { font-size: 0.75rem; color: #94a3b8; margin-top: 0.15rem; }
+.mb-detail-actions { margin-top: 0.75rem; }

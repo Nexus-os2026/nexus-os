@@ -9,6 +9,9 @@ import type {
   FirewallPatterns,
   FirewallStatus,
   HardwareInfo,
+  MarketplaceAgent,
+  MarketplaceDetail,
+  MarketplacePublishResult,
   IdentityInfo,
   McpTool,
   NexusConfig,
@@ -273,4 +276,35 @@ export function getFirewallStatus(): Promise<FirewallStatus> {
 
 export function getFirewallPatterns(): Promise<FirewallPatterns> {
   return invokeDesktop<FirewallPatterns>("get_firewall_patterns");
+}
+
+// ── Marketplace API ──
+
+export function marketplaceSearch(query: string): Promise<MarketplaceAgent[]> {
+  return invokeDesktop<MarketplaceAgent[]>("marketplace_search", { query });
+}
+
+export function marketplaceInstall(packageId: string): Promise<MarketplaceAgent> {
+  return invokeDesktop<MarketplaceAgent>("marketplace_install", {
+    packageId,
+    package_id: packageId
+  });
+}
+
+export function marketplaceInfo(agentId: string): Promise<MarketplaceDetail> {
+  return invokeDesktop<MarketplaceDetail>("marketplace_info", {
+    agentId,
+    agent_id: agentId
+  });
+}
+
+export function marketplacePublish(bundleJson: string): Promise<MarketplacePublishResult> {
+  return invokeDesktop<MarketplacePublishResult>("marketplace_publish", {
+    bundleJson,
+    bundle_json: bundleJson
+  });
+}
+
+export function marketplaceMyAgents(author: string): Promise<MarketplaceAgent[]> {
+  return invokeDesktop<MarketplaceAgent[]>("marketplace_my_agents", { author });
 }

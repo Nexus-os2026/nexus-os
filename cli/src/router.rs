@@ -28,6 +28,9 @@ pub fn route(command: CliCommand) -> CliOutput {
         CliCommand::MarketplaceSearch { query } => marketplace_search(&query),
         CliCommand::MarketplaceInstall { name } => marketplace_install(&name),
         CliCommand::MarketplaceUninstall { name } => marketplace_uninstall(&name),
+        CliCommand::MarketplacePublish { bundle_path } => marketplace_publish(&bundle_path),
+        CliCommand::MarketplaceInfo { agent_id } => marketplace_info(&agent_id),
+        CliCommand::MarketplaceMyAgents { author } => marketplace_my_agents(&author),
 
         // Compliance
         CliCommand::ComplianceReport { framework } => compliance_report(&framework),
@@ -201,28 +204,235 @@ fn cluster_leave() -> CliOutput {
 }
 
 // ---------------------------------------------------------------------------
-// Marketplace commands
+// Marketplace commands (backed by SQLite registry)
 // ---------------------------------------------------------------------------
 
+fn open_registry() -> Result<nexus_marketplace::sqlite_registry::SqliteRegistry, String> {
+    let db_path = nexus_marketplace::sqlite_registry::SqliteRegistry::default_db_path();
+    nexus_marketplace::sqlite_registry::SqliteRegistry::open(&db_path)
+        .map_err(|e| format!("Failed to open marketplace database: {e}"))
+}
+
 fn marketplace_search(query: &str) -> CliOutput {
-    CliOutput::ok_with_data(
-        format!("Search results for '{query}'"),
-        json!({"query": query, "results": []}),
-    )
+    let registry = match open_registry() {
+        Ok(r) => r,
+        Err(e) => return CliOutput::err(e),
+    };
+
+    match registry.search(query) {
+        Ok(results) => {
+            let items: Vec<serde_json::Value> = results
+                .iter()
+                .map(|r| {
+                    json!({
+                        "package_id": r.package_id,
+                        "name": r.name,
+                        "description": r.description,
+                        "author": r.author_id,
+                        "tags": r.tags,
+                    })
+                })
+                .collect();
+            let count = items.len();
+            CliOutput::ok_with_data(
+                format!("{count} result(s) for '{query}'"),
+                json!({"query": query, "count": count, "results": items}),
+            )
+        }
+        Err(e) => CliOutput::err(format!("Search failed: {e}")),
+    }
 }
 
 fn marketplace_install(name: &str) -> CliOutput {
-    CliOutput::ok_with_data(
-        format!("Agent '{name}' installed (signature verified)"),
-        json!({"name": name, "installed": true, "signature_verified": true}),
-    )
+    let registry = match open_registry() {
+        Ok(r) => r,
+        Err(e) => return CliOutput::err(e),
+    };
+
+    match registry.install(name) {
+        Ok(bundle) => {
+            let downloads = registry.download_count(name).unwrap_or(0);
+            CliOutput::ok_with_data(
+                format!(
+                    "Agent '{}' v{} installed (signature verified)",
+                    bundle.metadata.name, bundle.metadata.version
+                ),
+                json!({
+                    "package_id": bundle.package_id,
+                    "name": bundle.metadata.name,
+                    "version": bundle.metadata.version,
+                    "installed": true,
+                    "signature_verified": true,
+                    "downloads": downloads,
+                }),
+            )
+        }
+        Err(e) => CliOutput::err(format!("Install failed: {e}")),
+    }
 }
 
 fn marketplace_uninstall(name: &str) -> CliOutput {
-    CliOutput::ok_with_data(
-        format!("Agent '{name}' uninstalled"),
-        json!({"name": name, "uninstalled": true}),
-    )
+    let registry = match open_registry() {
+        Ok(r) => r,
+        Err(e) => return CliOutput::err(e),
+    };
+
+    match registry.remove(name) {
+        Ok(true) => CliOutput::ok_with_data(
+            format!("Agent '{name}' uninstalled"),
+            json!({"name": name, "uninstalled": true}),
+        ),
+        Ok(false) => CliOutput::err(format!("Agent '{name}' not found in marketplace")),
+        Err(e) => CliOutput::err(format!("Uninstall failed: {e}")),
+    }
+}
+
+fn marketplace_publish(bundle_path: &str) -> CliOutput {
+    use nexus_marketplace::package::SignedPackageBundle;
+    use nexus_marketplace::verification_pipeline::{verify_bundle, Verdict};
+
+    let content = match std::fs::read_to_string(bundle_path) {
+        Ok(c) => c,
+        Err(e) => return CliOutput::err(format!("Cannot read bundle file: {e}")),
+    };
+
+    let bundle: SignedPackageBundle = match serde_json::from_str(&content) {
+        Ok(b) => b,
+        Err(e) => return CliOutput::err(format!("Invalid bundle format: {e}")),
+    };
+
+    // Run verification pipeline
+    let verification = verify_bundle(&bundle);
+    if verification.verdict == Verdict::Rejected {
+        let findings: Vec<String> = verification
+            .checks
+            .iter()
+            .filter(|c| !c.passed)
+            .flat_map(|c| c.findings.clone())
+            .collect();
+        return CliOutput::err(format!("Verification rejected: {}", findings.join("; ")));
+    }
+
+    let registry = match open_registry() {
+        Ok(r) => r,
+        Err(e) => return CliOutput::err(e),
+    };
+
+    match registry.upsert_signed(&bundle) {
+        Ok(()) => {
+            let check_summaries: Vec<serde_json::Value> = verification
+                .checks
+                .iter()
+                .map(|c| {
+                    json!({
+                        "name": c.name,
+                        "passed": c.passed,
+                        "findings": c.findings,
+                    })
+                })
+                .collect();
+            CliOutput::ok_with_data(
+                format!(
+                    "Published '{}' v{} ({:?})",
+                    bundle.metadata.name, bundle.metadata.version, verification.verdict
+                ),
+                json!({
+                    "package_id": bundle.package_id,
+                    "name": bundle.metadata.name,
+                    "version": bundle.metadata.version,
+                    "verdict": format!("{:?}", verification.verdict),
+                    "checks": check_summaries,
+                }),
+            )
+        }
+        Err(e) => CliOutput::err(format!("Publish failed: {e}")),
+    }
+}
+
+fn marketplace_info(agent_id: &str) -> CliOutput {
+    let registry = match open_registry() {
+        Ok(r) => r,
+        Err(e) => return CliOutput::err(e),
+    };
+
+    match registry.get_agent(agent_id) {
+        Ok(detail) => {
+            let reviews = registry.get_reviews(agent_id).unwrap_or_default();
+            let versions = registry.version_history(agent_id).unwrap_or_default();
+            let review_items: Vec<serde_json::Value> = reviews
+                .iter()
+                .map(|r| {
+                    json!({
+                        "reviewer": r.reviewer,
+                        "stars": r.stars,
+                        "comment": r.comment,
+                        "created_at": r.created_at,
+                    })
+                })
+                .collect();
+            let version_items: Vec<serde_json::Value> = versions
+                .iter()
+                .map(|v| {
+                    json!({
+                        "version": v.version,
+                        "changelog": v.changelog,
+                        "created_at": v.created_at,
+                    })
+                })
+                .collect();
+            CliOutput::ok_with_data(
+                format!("{} v{}", detail.name, detail.version),
+                json!({
+                    "package_id": detail.package_id,
+                    "name": detail.name,
+                    "version": detail.version,
+                    "description": detail.description,
+                    "author": detail.author,
+                    "tags": detail.tags,
+                    "capabilities": detail.capabilities,
+                    "price_cents": detail.price_cents,
+                    "downloads": detail.downloads,
+                    "rating": detail.rating,
+                    "review_count": detail.review_count,
+                    "reviews": review_items,
+                    "versions": version_items,
+                    "created_at": detail.created_at,
+                    "updated_at": detail.updated_at,
+                }),
+            )
+        }
+        Err(e) => CliOutput::err(format!("Agent not found: {e}")),
+    }
+}
+
+fn marketplace_my_agents(author: &str) -> CliOutput {
+    let registry = match open_registry() {
+        Ok(r) => r,
+        Err(e) => return CliOutput::err(e),
+    };
+
+    // Search by author to find their agents
+    match registry.search(author) {
+        Ok(results) => {
+            let items: Vec<serde_json::Value> = results
+                .iter()
+                .filter(|r| r.author_id == author)
+                .map(|r| {
+                    json!({
+                        "package_id": r.package_id,
+                        "name": r.name,
+                        "description": r.description,
+                    })
+                })
+                .collect();
+            let count = items.len();
+            CliOutput::ok_with_data(
+                format!("{count} agent(s) by '{author}'"),
+                json!({"author": author, "count": count, "agents": items}),
+            )
+        }
+        Err(e) => CliOutput::err(format!("Query failed: {e}")),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1072,34 +1282,58 @@ mod tests {
         assert!(out.success);
     }
 
-    // Marketplace tests
+    // Marketplace tests — real SQLite registry on default db path
     #[test]
     fn marketplace_search_returns_results() {
         let out = route(CliCommand::MarketplaceSearch {
-            query: "code".to_string(),
-        });
-        assert!(out.success);
-        assert_eq!(out.data.unwrap()["query"], "code");
-    }
-
-    #[test]
-    fn marketplace_install_verifies_signature() {
-        let out = route(CliCommand::MarketplaceInstall {
-            name: "agent-x".to_string(),
+            query: "nonexistent-xyz-agent".to_string(),
         });
         assert!(out.success);
         let data = out.data.unwrap();
-        assert_eq!(data["signature_verified"], true);
-        assert_eq!(data["installed"], true);
+        assert_eq!(data["query"], "nonexistent-xyz-agent");
+        assert_eq!(data["count"], 0);
     }
 
     #[test]
-    fn marketplace_uninstall_succeeds() {
+    fn marketplace_install_nonexistent_fails() {
+        let out = route(CliCommand::MarketplaceInstall {
+            name: "pkg-does-not-exist".to_string(),
+        });
+        // Install should fail for non-existent agent
+        assert!(!out.success);
+    }
+
+    #[test]
+    fn marketplace_uninstall_nonexistent_fails() {
         let out = route(CliCommand::MarketplaceUninstall {
-            name: "agent-x".to_string(),
+            name: "pkg-does-not-exist".to_string(),
+        });
+        assert!(!out.success);
+    }
+
+    #[test]
+    fn marketplace_info_nonexistent_fails() {
+        let out = route(CliCommand::MarketplaceInfo {
+            agent_id: "pkg-does-not-exist".to_string(),
+        });
+        assert!(!out.success);
+    }
+
+    #[test]
+    fn marketplace_my_agents_returns_empty() {
+        let out = route(CliCommand::MarketplaceMyAgents {
+            author: "nonexistent-author".to_string(),
         });
         assert!(out.success);
-        assert_eq!(out.data.unwrap()["uninstalled"], true);
+        assert_eq!(out.data.unwrap()["count"], 0);
+    }
+
+    #[test]
+    fn marketplace_publish_invalid_path_fails() {
+        let out = route(CliCommand::MarketplacePublish {
+            bundle_path: "/tmp/nonexistent-bundle.nexus-agent".to_string(),
+        });
+        assert!(!out.success);
     }
 
     // Compliance tests

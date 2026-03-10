@@ -113,3 +113,13 @@
 - Tabbed UI layouts scale better than single-page dashboards for compliance: overview, risk cards, reports, erasure, provenance, and retention are distinct workflows that don't need to be visible simultaneously
 - `ProvenanceTracker::rebuild_from_audit()` enables lineage recovery from any audit trail backup — design data provenance events to be fully reconstructable from their payload fields alone
 - Multi-framework compliance reports (SOC2 + EU AI Act + HIPAA + CA AB316) should be generated from a single `FullReportConfig` to ensure consistent agent snapshots and audit trail state across all framework sections
+
+## Marketplace & Developer Toolkit (Phase 7.4)
+- SQLite `INSERT OR REPLACE` is the simplest upsert for marketplace agents — avoids checking existence before insert, and the primary key (package_id) naturally deduplicates
+- `PermissionRiskLevel` doesn't implement `Ord` — use `.fold()` with a rank closure instead of `.max()` when comparing risk levels across capability lists
+- Verification pipeline should use fold-based verdict escalation (Approved < ConditionalApproval < Rejected) — each check can only raise the verdict, never lower it
+- Test agent templates against the kernel's actual CAPABILITY_REGISTRY (11 capabilities) — using capabilities like `screen.capture` or `input.keyboard` that aren't registered causes silent test failures
+- `verified_publish_sqlite()` should reject on `Verdict::Rejected` but allow `ConditionalApproval` through — conditional agents get listed with flags for human review
+- Frontend marketplace pages need graceful degradation: call real Tauri backend when available, fall back to mock data arrays for browser-only preview mode — use `hasDesktopRuntime()` guard
+- Integration tests spanning CLI → marketplace → kernel should use in-memory SQLite (`open_in_memory()`) for speed and isolation — avoid temp file cleanup issues across parallel test execution
+- The scaffold → test → package → publish pipeline validates each stage feeds into the next: scaffold produces valid manifests (kernel parser), test runner exercises capabilities (SDK context), packager creates signed bundles (Ed25519 + attestation), publisher runs verification (6 checks)

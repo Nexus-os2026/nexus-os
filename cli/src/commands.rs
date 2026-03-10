@@ -46,6 +46,15 @@ pub enum CliCommand {
     MarketplaceUninstall {
         name: String,
     },
+    MarketplacePublish {
+        bundle_path: String,
+    },
+    MarketplaceInfo {
+        agent_id: String,
+    },
+    MarketplaceMyAgents {
+        author: String,
+    },
 
     // Compliance commands
     ComplianceReport {
@@ -262,6 +271,15 @@ mod tests {
             CliCommand::MarketplaceUninstall {
                 name: "agent-x".to_string(),
             },
+            CliCommand::MarketplacePublish {
+                bundle_path: "/tmp/agent.nexus-agent".to_string(),
+            },
+            CliCommand::MarketplaceInfo {
+                agent_id: "pkg-abc123".to_string(),
+            },
+            CliCommand::MarketplaceMyAgents {
+                author: "dev-alice".to_string(),
+            },
             CliCommand::ComplianceReport {
                 framework: "SOC2".to_string(),
             },
@@ -344,6 +362,6 @@ mod tests {
             CliCommand::FirewallStatus,
             CliCommand::FirewallPatterns,
         ];
-        assert_eq!(_cmds.len(), 51);
+        assert_eq!(_cmds.len(), 54);
     }
 }
