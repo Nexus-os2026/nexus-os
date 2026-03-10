@@ -415,7 +415,7 @@ export interface MarketplacePublishResult {
 
 export type BrowserMode = "research" | "build" | "learn";
 
-export type ActivityMessageType = "searching" | "reading" | "extracting" | "deciding" | "navigating" | "blocked" | "info" | "merging";
+export type ActivityMessageType = "searching" | "reading" | "extracting" | "deciding" | "navigating" | "blocked" | "info" | "merging" | "coding" | "designing";
 
 export interface ActivityMessage {
   id: string;
@@ -466,6 +466,36 @@ export interface ResearchSessionState {
   summary: string | null;
   total_fuel_used: number;
   pages_visited: number;
+}
+
+// ── Build Mode Types ──
+
+export type BuildStatus = "idle" | "planning" | "coding" | "complete" | "error";
+
+export interface BuildAgentMessage {
+  id: string;
+  timestamp: number;
+  agent_name: string;
+  role: "supervisor" | "coder" | "designer";
+  content: string;
+}
+
+export interface BuildSessionState {
+  session_id: string;
+  description: string;
+  status: BuildStatus;
+  code: string;
+  preview_html: string;
+  messages: BuildAgentMessage[];
+  fuel_used: number;
+  llm_calls: number;
+}
+
+export interface BuildCodeDelta {
+  session_id: string;
+  delta: string;
+  full_code: string;
+  agent_name: string;
 }
 
 export interface ResearchEvent {

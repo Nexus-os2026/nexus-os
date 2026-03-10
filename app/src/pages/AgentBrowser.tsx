@@ -1,7 +1,8 @@
 import { useCallback, useRef, useState } from "react";
 import { BrowserToolbar } from "../components/browser/BrowserToolbar";
 import { ActivityStream } from "../components/browser/ActivityStream";
-import { hasDesktopRuntime, navigateTo, getBrowserHistory, getAgentActivity } from "../api/backend";
+import { ResearchMode } from "../components/browser/ResearchMode";
+import { hasDesktopRuntime, navigateTo } from "../api/backend";
 import type { ActivityMessage, BrowserMode } from "../types";
 import "./agent-browser.css";
 
@@ -167,43 +168,52 @@ export function AgentBrowser(): JSX.Element {
         </div>
       )}
 
-      <div className="browser-split-container" ref={containerRef}>
-        <div
-          className="browser-activity-panel"
-          style={{ width: `${activityWidth}%` }}
-        >
-          <ActivityStream messages={activities} />
-        </div>
-
-        <div
-          className="browser-resize-handle"
-          ref={dividerRef}
-          onMouseDown={handleDividerMouseDown}
+      {mode === "research" ? (
+        <ResearchMode
+          activities={activities}
+          onActivity={addActivity}
+          iframeSrc={iframeSrc}
+          onIframeSrc={setIframeSrc}
         />
+      ) : (
+        <div className="browser-split-container" ref={containerRef}>
+          <div
+            className="browser-activity-panel"
+            style={{ width: `${activityWidth}%` }}
+          >
+            <ActivityStream messages={activities} />
+          </div>
 
-        <div className="browser-view-panel">
-          <div className="browser-iframe-container">
-            {iframeSrc && !blocked ? (
-              <iframe
-                ref={iframeRef}
-                className="browser-iframe"
-                src={iframeSrc}
-                title="Agent Browser"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                onLoad={() => setLoading(false)}
-              />
-            ) : (
-              <div className="browser-placeholder">
-                <span className="browser-placeholder-icon">⌁</span>
-                <span className="browser-placeholder-text">Agent Browser</span>
-                <span className="browser-placeholder-hint">
-                  Enter a URL above to begin browsing
-                </span>
-              </div>
-            )}
+          <div
+            className="browser-resize-handle"
+            ref={dividerRef}
+            onMouseDown={handleDividerMouseDown}
+          />
+
+          <div className="browser-view-panel">
+            <div className="browser-iframe-container">
+              {iframeSrc && !blocked ? (
+                <iframe
+                  ref={iframeRef}
+                  className="browser-iframe"
+                  src={iframeSrc}
+                  title="Agent Browser"
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                  onLoad={() => setLoading(false)}
+                />
+              ) : (
+                <div className="browser-placeholder">
+                  <span className="browser-placeholder-icon">⌁</span>
+                  <span className="browser-placeholder-text">Agent Browser</span>
+                  <span className="browser-placeholder-hint">
+                    Enter a URL above to begin browsing
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

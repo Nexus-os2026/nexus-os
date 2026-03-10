@@ -142,3 +142,7 @@
 - When adding new heavy dependencies (wasmtime, reqwest, hyper, hf-hub, metrics-exporter-prometheus), always run `cargo deny check licenses` locally before pushing — transitive deps like `aws-lc-sys` bring non-obvious licenses (OpenSSL) that aren't in the default allow list
 - The `aws-lc-sys` crate (pulled in by rustls → aws-lc-rs) uses the OpenSSL license — this is an FSF-approved permissive license but must be explicitly allowed in deny.toml
 - After adding any new Cargo dependency, run `cargo deny check` as part of the pre-push checklist alongside fmt/clippy/test
+
+## Test Portability
+- Tests must only use commands from the TerminalExecutor ALLOWLIST (cargo, npm, pip, git, python, node, npx) — `echo`, `true`, `ls` etc. are NOT in the allowlist and will fail with CommandBlocked
+- Prefer `git --version` over `cargo --version` in CI-portable tests — git is available on virtually every CI runner image, while cargo requires a Rust toolchain

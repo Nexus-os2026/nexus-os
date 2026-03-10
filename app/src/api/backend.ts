@@ -24,6 +24,7 @@ import type {
   PermissionUpdate,
   ProtocolRequest,
   ProtocolsStatus,
+  BuildSessionState,
   ResearchSessionState,
   SetupResult,
   SystemInfo,
@@ -366,4 +367,56 @@ export function getResearchSession(sessionId: string): Promise<ResearchSessionSt
 
 export function listResearchSessions(): Promise<ResearchSessionState[]> {
   return invokeDesktop<ResearchSessionState[]>("list_research_sessions");
+}
+
+// ── Build Mode API ──
+
+export function startBuild(description: string): Promise<BuildSessionState> {
+  return invokeDesktop<BuildSessionState>("start_build", { description });
+}
+
+export function buildAppendCode(
+  sessionId: string,
+  delta: string,
+  agentName: string,
+): Promise<BuildSessionState> {
+  return invokeDesktop<BuildSessionState>("build_append_code", {
+    session_id: sessionId,
+    delta,
+    agent_name: agentName,
+  });
+}
+
+export function buildAddMessage(
+  sessionId: string,
+  agentName: string,
+  role: string,
+  content: string,
+): Promise<BuildSessionState> {
+  return invokeDesktop<BuildSessionState>("build_add_message", {
+    session_id: sessionId,
+    agent_name: agentName,
+    role,
+    content,
+  });
+}
+
+export function completeBuild(sessionId: string): Promise<BuildSessionState> {
+  return invokeDesktop<BuildSessionState>("complete_build", {
+    session_id: sessionId,
+  });
+}
+
+export function getBuildSession(sessionId: string): Promise<BuildSessionState> {
+  return invokeDesktop<BuildSessionState>("get_build_session", {
+    session_id: sessionId,
+  });
+}
+
+export function getBuildCode(sessionId: string): Promise<string> {
+  return invokeDesktop<string>("get_build_code", { session_id: sessionId });
+}
+
+export function getBuildPreview(sessionId: string): Promise<string> {
+  return invokeDesktop<string>("get_build_preview", { session_id: sessionId });
 }

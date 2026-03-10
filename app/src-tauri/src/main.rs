@@ -91,6 +91,7 @@ pub struct AppState {
     identity_mgr: Arc<Mutex<nexus_kernel::identity::IdentityManager>>,
     browser: Arc<Mutex<BrowserManager>>,
     research: Arc<Mutex<ResearchManager>>,
+    build: Arc<Mutex<BuildManager>>,
 }
 
 impl Default for AppState {
@@ -115,6 +116,7 @@ impl AppState {
             )),
             browser: Arc::new(Mutex::new(BrowserManager::new())),
             research: Arc::new(Mutex::new(ResearchManager::new())),
+            build: Arc::new(Mutex::new(BuildManager::new())),
         }
     }
 
@@ -1685,13 +1687,13 @@ impl ResearchManager {
 /// PII redaction helper — applies PromptFirewall-style redaction to extracted text.
 /// Redacts SSN, email, phone patterns before they enter findings.
 fn redact_pii(text: &str) -> String {
-    use nexus_kernel::firewall::prompt_firewall::InputFilter;
+    use nexus_kernel::firewall::prompt_firewall::{FirewallAction, InputFilter};
 
-    let filter = InputFilter::default();
+    let mut filter = InputFilter::default();
     let agent_id = Uuid::nil();
     let mut audit = AuditTrail::new();
-    match filter.check(text, agent_id, &mut audit) {
-        nexus_kernel::firewall::prompt_firewall::FirewallAction::Redacted {
+    match filter.check(agent_id, text, &mut audit) {
+        FirewallAction::Redacted {
             redacted_text,
             ..
         } => redacted_text,
@@ -1843,6 +1845,28 @@ fn research_agent_action(
 
     let agent_name = agent.agent_name.clone();
 
+    // Egress governance check (before mutating agent state)
+    if action == "reading" {
+        if let Some(ref target_url) = url {
+            let browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+            if let Err(reason) = browser.check_url(target_url) {
+                drop(research);
+                state.log_event(
+                    supervisor_id,
+                    EventType::ToolCall,
+                    json!({
+                        "event": "research_url_blocked",
+                        "session_id": session_id,
+                        "agent_id": agent_id,
+                        "url": target_url,
+                        "reason": reason,
+                    }),
+                );
+                return Err(format!("URL blocked by egress policy: {}", reason));
+            }
+        }
+    }
+
     match action.as_str() {
         "searching" => {
             agent.status = "searching".to_string();
@@ -1854,26 +1878,6 @@ fn research_agent_action(
             agent.pages_visited += 1;
             agent.status = "reading".to_string();
             agent.current_url = url.clone();
-
-            // Egress governance check
-            if let Some(ref target_url) = url {
-                let browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
-                if let Err(reason) = browser.check_url(target_url) {
-                    drop(research);
-                    state.log_event(
-                        supervisor_id,
-                        EventType::ToolCall,
-                        json!({
-                            "event": "research_url_blocked",
-                            "session_id": session_id,
-                            "agent_id": agent_id,
-                            "url": target_url,
-                            "reason": reason,
-                        }),
-                    );
-                    return Err(format!("URL blocked by egress policy: {}", reason));
-                }
-            }
         }
         "extracting" => {
             // Fuel metered per LLM extraction call
@@ -1895,9 +1899,15 @@ fn research_agent_action(
         }
     }
 
-    // Update session totals
+    // Capture agent fields we need for activity stream before dropping the mutable borrow
+    let agent_query = agent.query.clone();
+    let agent_findings_count = agent.findings.len();
+
+    // Update session totals (no longer conflicts with agent borrow)
     session.total_fuel_used = session.sub_agents.iter().map(|a| a.fuel_used).sum();
     session.pages_visited = session.sub_agents.iter().map(|a| a.pages_visited).sum();
+
+    let result = session.clone();
 
     // Audit
     state.log_event(
@@ -1927,10 +1937,10 @@ fn research_agent_action(
         _ => "info",
     };
     let content_msg = match action.as_str() {
-        "searching" => format!("Searching: \"{}\"", agent.query),
+        "searching" => format!("Searching: \"{}\"", agent_query),
         "reading" => format!("Reading: {}", url.as_deref().unwrap_or("unknown")),
         "extracting" => format!("Extracting findings from {}", url.as_deref().unwrap_or("current page")),
-        "done" => format!("Completed with {} findings", agent.findings.len()),
+        "done" => format!("Completed with {} findings", agent_findings_count),
         _ => action.clone(),
     };
     browser.add_activity(&agent_id, &agent_name, msg_type, &content_msg);
@@ -1950,7 +1960,6 @@ fn research_agent_action(
         }
     }
 
-    let result = session.clone();
     Ok(result)
 }
 
@@ -2058,6 +2067,287 @@ fn get_research_session(
 fn list_research_sessions(state: &AppState) -> Result<Vec<ResearchSessionState>, String> {
     let research = state.research.lock().unwrap_or_else(|p| p.into_inner());
     Ok(research.list_sessions())
+}
+
+// ── Build Mode ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildAgentMessage {
+    pub id: String,
+    pub timestamp: u64,
+    pub agent_name: String,
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildSessionState {
+    pub session_id: String,
+    pub description: String,
+    pub status: String,
+    pub code: String,
+    pub preview_html: String,
+    pub messages: Vec<BuildAgentMessage>,
+    pub fuel_used: u64,
+    pub llm_calls: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildCodeDelta {
+    pub session_id: String,
+    pub delta: String,
+    pub full_code: String,
+    pub agent_name: String,
+}
+
+/// Fuel cost constants for build operations.
+const FUEL_PER_BUILD_LLM_CALL: u64 = 75;
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+/// Manages build sessions where agents write code collaboratively.
+#[derive(Debug, Clone)]
+pub struct BuildManager {
+    sessions: HashMap<String, BuildSessionState>,
+}
+
+impl BuildManager {
+    pub fn new() -> Self {
+        Self {
+            sessions: HashMap::new(),
+        }
+    }
+}
+
+fn build_msg(agent_name: &str, role: &str, content: &str) -> BuildAgentMessage {
+    BuildAgentMessage {
+        id: Uuid::new_v4().to_string(),
+        timestamp: now_secs(),
+        agent_name: agent_name.to_string(),
+        role: role.to_string(),
+        content: content.to_string(),
+    }
+}
+
+/// Wrap code in a full HTML document for preview rendering.
+fn wrap_preview_html(code: &str) -> String {
+    // If code already has <html> or <!DOCTYPE>, use as-is
+    let lower = code.to_lowercase();
+    if lower.contains("<html") || lower.contains("<!doctype") {
+        return code.to_string();
+    }
+    format!(
+        "<!DOCTYPE html>\n<html>\n<head><meta charset=\"utf-8\"><style>body{{margin:0;font-family:system-ui,sans-serif}}</style></head>\n<body>\n{}\n</body>\n</html>",
+        code
+    )
+}
+
+fn start_build(state: &AppState, description: String) -> Result<BuildSessionState, String> {
+    let session_id = Uuid::new_v4().to_string();
+    let supervisor_id = Uuid::new_v4();
+
+    // Audit: build started
+    state.log_event(
+        supervisor_id,
+        EventType::ToolCall,
+        json!({
+            "event": "build_started",
+            "session_id": session_id,
+            "description": description,
+        }),
+    );
+
+    let mut messages = Vec::new();
+    messages.push(build_msg(
+        "Supervisor",
+        "supervisor",
+        &format!("Build task received: {}", description),
+    ));
+    messages.push(build_msg(
+        "Supervisor",
+        "supervisor",
+        "Assigning to Coder agent. Designer agent on standby for styling.",
+    ));
+
+    let session = BuildSessionState {
+        session_id: session_id.clone(),
+        description,
+        status: "planning".to_string(),
+        code: String::new(),
+        preview_html: String::new(),
+        messages,
+        fuel_used: 0,
+        llm_calls: 0,
+    };
+
+    let mut bm = state.build.lock().unwrap_or_else(|p| p.into_inner());
+    bm.sessions.insert(session_id.clone(), session.clone());
+
+    // Activity stream
+    let mut browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+    browser.add_activity("supervisor", "Supervisor", "info", &format!("Build started: {}", session.description));
+
+    Ok(session)
+}
+
+fn build_append_code(
+    state: &AppState,
+    session_id: String,
+    delta: String,
+    agent_name: String,
+) -> Result<BuildSessionState, String> {
+    let supervisor_id = Uuid::new_v4();
+    let mut bm = state.build.lock().unwrap_or_else(|p| p.into_inner());
+
+    let session = bm
+        .sessions
+        .get_mut(&session_id)
+        .ok_or_else(|| format!("Build session {} not found", session_id))?;
+
+    // PII redaction on code content
+    let redacted_delta = redact_pii(&delta);
+    session.code.push_str(&redacted_delta);
+    session.preview_html = wrap_preview_html(&session.code);
+    session.status = "coding".to_string();
+    session.fuel_used += FUEL_PER_BUILD_LLM_CALL;
+    session.llm_calls += 1;
+
+    let result = session.clone();
+    drop(bm);
+
+    // Audit
+    state.log_event(
+        supervisor_id,
+        EventType::ToolCall,
+        json!({
+            "event": "build_code_delta",
+            "session_id": session_id,
+            "agent_name": agent_name,
+            "delta_len": redacted_delta.len(),
+            "total_len": result.code.len(),
+            "fuel_cost": FUEL_PER_BUILD_LLM_CALL,
+        }),
+    );
+
+    // Activity stream
+    let mut browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+    browser.add_activity(
+        &agent_name.to_lowercase().replace(' ', "-"),
+        &agent_name,
+        "extracting",
+        &format!("Writing code ({} chars)", redacted_delta.len()),
+    );
+
+    Ok(result)
+}
+
+fn build_add_message(
+    state: &AppState,
+    session_id: String,
+    agent_name: String,
+    role: String,
+    content: String,
+) -> Result<BuildSessionState, String> {
+    let mut bm = state.build.lock().unwrap_or_else(|p| p.into_inner());
+
+    let session = bm
+        .sessions
+        .get_mut(&session_id)
+        .ok_or_else(|| format!("Build session {} not found", session_id))?;
+
+    session.messages.push(build_msg(&agent_name, &role, &content));
+
+    let result = session.clone();
+    drop(bm);
+
+    // Activity stream
+    let msg_type = match role.as_str() {
+        "coder" => "extracting",
+        "designer" => "deciding",
+        _ => "info",
+    };
+    let mut browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+    browser.add_activity(
+        &agent_name.to_lowercase().replace(' ', "-"),
+        &agent_name,
+        msg_type,
+        &content,
+    );
+
+    Ok(result)
+}
+
+fn complete_build(state: &AppState, session_id: String) -> Result<BuildSessionState, String> {
+    let supervisor_id = Uuid::new_v4();
+    let mut bm = state.build.lock().unwrap_or_else(|p| p.into_inner());
+
+    let session = bm
+        .sessions
+        .get_mut(&session_id)
+        .ok_or_else(|| format!("Build session {} not found", session_id))?;
+
+    session.status = "complete".to_string();
+    session.preview_html = wrap_preview_html(&session.code);
+    session.messages.push(build_msg(
+        "Supervisor",
+        "supervisor",
+        "Build complete. Preview is ready.",
+    ));
+
+    let result = session.clone();
+    drop(bm);
+
+    // Audit
+    state.log_event(
+        supervisor_id,
+        EventType::ToolCall,
+        json!({
+            "event": "build_complete",
+            "session_id": session_id,
+            "code_len": result.code.len(),
+            "fuel_used": result.fuel_used,
+            "llm_calls": result.llm_calls,
+        }),
+    );
+
+    let mut browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+    browser.add_activity(
+        "supervisor",
+        "Supervisor",
+        "info",
+        &format!("Build complete — {} chars, {} LLM calls", result.code.len(), result.llm_calls),
+    );
+
+    Ok(result)
+}
+
+fn get_build_session(state: &AppState, session_id: String) -> Result<BuildSessionState, String> {
+    let bm = state.build.lock().unwrap_or_else(|p| p.into_inner());
+    bm.sessions
+        .get(&session_id)
+        .cloned()
+        .ok_or_else(|| format!("Build session {} not found", session_id))
+}
+
+fn get_build_code(state: &AppState, session_id: String) -> Result<String, String> {
+    let bm = state.build.lock().unwrap_or_else(|p| p.into_inner());
+    bm.sessions
+        .get(&session_id)
+        .map(|s| s.code.clone())
+        .ok_or_else(|| format!("Build session {} not found", session_id))
+}
+
+fn get_build_preview(state: &AppState, session_id: String) -> Result<String, String> {
+    let bm = state.build.lock().unwrap_or_else(|p| p.into_inner());
+    bm.sessions
+        .get(&session_id)
+        .map(|s| s.preview_html.clone())
+        .ok_or_else(|| format!("Build session {} not found", session_id))
 }
 
 // ── Agent Browser ──
@@ -2685,6 +2975,69 @@ mod runtime {
         super::list_research_sessions(state.inner())
     }
 
+    // ── Build Mode Commands ──
+
+    #[tauri::command]
+    fn start_build(
+        state: tauri::State<'_, AppState>,
+        description: String,
+    ) -> Result<super::BuildSessionState, String> {
+        super::start_build(state.inner(), description)
+    }
+
+    #[tauri::command]
+    fn build_append_code(
+        state: tauri::State<'_, AppState>,
+        session_id: String,
+        delta: String,
+        agent_name: String,
+    ) -> Result<super::BuildSessionState, String> {
+        super::build_append_code(state.inner(), session_id, delta, agent_name)
+    }
+
+    #[tauri::command]
+    fn build_add_message(
+        state: tauri::State<'_, AppState>,
+        session_id: String,
+        agent_name: String,
+        role: String,
+        content: String,
+    ) -> Result<super::BuildSessionState, String> {
+        super::build_add_message(state.inner(), session_id, agent_name, role, content)
+    }
+
+    #[tauri::command]
+    fn complete_build(
+        state: tauri::State<'_, AppState>,
+        session_id: String,
+    ) -> Result<super::BuildSessionState, String> {
+        super::complete_build(state.inner(), session_id)
+    }
+
+    #[tauri::command]
+    fn get_build_session(
+        state: tauri::State<'_, AppState>,
+        session_id: String,
+    ) -> Result<super::BuildSessionState, String> {
+        super::get_build_session(state.inner(), session_id)
+    }
+
+    #[tauri::command]
+    fn get_build_code(
+        state: tauri::State<'_, AppState>,
+        session_id: String,
+    ) -> Result<String, String> {
+        super::get_build_code(state.inner(), session_id)
+    }
+
+    #[tauri::command]
+    fn get_build_preview(
+        state: tauri::State<'_, AppState>,
+        session_id: String,
+    ) -> Result<String, String> {
+        super::get_build_preview(state.inner(), session_id)
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -2792,6 +3145,13 @@ mod runtime {
                 complete_research,
                 get_research_session,
                 list_research_sessions,
+                start_build,
+                build_append_code,
+                build_add_message,
+                complete_build,
+                get_build_session,
+                get_build_code,
+                get_build_preview,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");

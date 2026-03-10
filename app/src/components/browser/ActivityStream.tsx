@@ -12,6 +12,9 @@ const TYPE_COLORS: Record<string, string> = {
   deciding: "#10b981",
   navigating: "#00ffd5",
   blocked: "#ef4444",
+  merging: "#8b5cf6",
+  coding: "#22d3ee",
+  designing: "#f472b6",
   info: "#94a3b8",
 };
 
@@ -22,6 +25,9 @@ const TYPE_ICONS: Record<string, string> = {
   deciding: "◈",
   navigating: "→",
   blocked: "⛔",
+  merging: "⬡",
+  coding: "⟨⟩",
+  designing: "◐",
   info: "ℹ",
 };
 

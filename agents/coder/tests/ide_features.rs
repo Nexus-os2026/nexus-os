@@ -21,7 +21,7 @@ fn test_safe_command_execution() {
         TerminalExecutor::with_capabilities_and_autonomy(capabilities, AutonomyLevel::L1);
 
     let request_id = match executor.execute(
-        "cargo --version",
+        "git --version",
         project.path(),
         Some(Duration::from_secs(10)),
     ) {
@@ -34,15 +34,15 @@ fn test_safe_command_execution() {
 
     let result = executor
         .execute(
-            "cargo --version",
+            "git --version",
             project.path(),
             Some(Duration::from_secs(10)),
         )
-        .expect("cargo --version should execute successfully after approval");
+        .expect("git --version should execute successfully after approval");
     assert_eq!(result.exit_code, 0);
     assert!(
-        result.stdout.contains("cargo"),
-        "expected cargo version output in stdout"
+        result.stdout.contains("git"),
+        "expected git version output in stdout"
     );
 
     let blocked_request = match executor.execute("rm -rf /", project.path(), None) {
