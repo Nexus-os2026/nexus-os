@@ -1,5 +1,11 @@
 use super::{KeyBackendKind, KeyError, KeyManager, KeyManagerConfig, KeyPurpose, RotationApproval};
 use crate::audit::AuditTrail;
+#[cfg(any(
+    feature = "hardware-tpm",
+    feature = "hardware-secure-enclave",
+    feature = "hardware-tee"
+))]
+use crate::hardware_security::types::KeyBackend;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use uuid::Uuid;
 

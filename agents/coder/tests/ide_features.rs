@@ -11,9 +11,7 @@ use std::process::Command;
 use std::time::Duration;
 use tempfile::tempdir;
 
-// Requires shell environment, skipped in minimal CI containers
 #[test]
-#[ignore]
 fn test_safe_command_execution() {
     let project = tempdir().expect("tempdir must be created");
 
@@ -133,9 +131,7 @@ fn test_project_init_rust() {
     assert!(project.join("tests").exists());
 }
 
-// Requires full shell environment, skipped in CI
 #[test]
-#[ignore]
 fn test_git_auto_commit() {
     let project = tempdir().expect("tempdir must be created");
     git(project.path(), &["init"]);

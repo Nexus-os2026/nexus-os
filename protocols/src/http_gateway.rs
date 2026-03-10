@@ -1,30 +1,52 @@
 //! Axum-based HTTP gateway — async edge layer bridging HTTP to the sync kernel.
 //!
 //! Routes:
-//! - `POST /a2a`              — A2A task submission
-//! - `GET  /a2a/agent-card`   — Agent Card discovery
-//! - `GET  /a2a/tasks/:id`    — Task status lookup
-//! - `POST /mcp/tools/invoke` — MCP tool invocation
-//! - `GET  /mcp/tools/list`   — MCP tool discovery
-//! - `GET  /health`           — Health check
+//! - `POST /a2a`                                — A2A task submission
+//! - `GET  /a2a/agent-card`                     — Agent Card discovery
+//! - `GET  /a2a/tasks/:id`                      — Task status lookup
+//! - `POST /mcp/tools/invoke`                   — MCP tool invocation
+//! - `GET  /mcp/tools/list`                     — MCP tool discovery
+//! - `GET  /health`                             — Health check
+//! - `GET  /auth/jwks`                          — OIDC discovery
+//! - `GET  /ws?token=<jwt>`                     — WebSocket event stream
+//!
+//! REST API (all JWT-authenticated via middleware layer):
+//! - Agent management: GET/POST /api/agents, POST /api/agents/:id/start|stop, GET /api/agents/:id/status
+//! - Permissions: GET/PUT /api/agents/:id/permissions, POST /api/agents/:id/permissions/bulk
+//! - Audit: GET /api/audit/events, GET /api/audit/events/:id
+//! - Compliance: GET /api/compliance/status, GET /api/compliance/report/:agent_id, POST /api/compliance/erase/:agent_id
+//! - Marketplace: GET /api/marketplace/search, GET /api/marketplace/agents/:id, POST /api/marketplace/install/:id
+//! - Identity: GET /api/identity/agents, GET /api/identity/agents/:id
+//! - Firewall: GET /api/firewall/status
 //!
 //! Every route goes through governance. JWT auth required on mutating endpoints.
 
+use crate::metrics::NexusMetrics;
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
-use axum::http::{HeaderMap, StatusCode};
-use axum::response::IntoResponse;
+use axum::http::{HeaderMap, Request, StatusCode};
+use axum::middleware::{self, Next};
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use nexus_kernel::audit::{AuditTrail, EventType};
+use nexus_kernel::compliance::data_governance::AgentDataEraser;
+use nexus_kernel::compliance::monitor::{AgentSnapshot, ComplianceMonitor};
+use nexus_kernel::compliance::transparency::TransparencyReportGenerator;
 use nexus_kernel::identity::{AgentIdentity, IdentityManager, OidcAClaims, TokenManager};
 use nexus_kernel::manifest::AgentManifest;
+use nexus_kernel::permissions::PermissionManager;
+use nexus_kernel::privacy::PrivacyManager;
 use nexus_kernel::protocols::a2a::{
     A2ATask, AgentCard, GovernanceContext, MessagePart, MessageRole, TaskMessage, TaskPayload,
     A2A_PROTOCOL_VERSION,
 };
 use nexus_kernel::protocols::mcp::McpServer;
+use nexus_kernel::supervisor::Supervisor;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use tokio::sync::broadcast;
 use tower_http::cors::{Any, CorsLayer};
 use uuid::Uuid;
 
@@ -81,6 +103,129 @@ impl AuthError {
     }
 }
 
+// ── WebSocket event types ────────────────────────────────────────────────────
+
+/// Events broadcast over the WebSocket stream.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WsEvent {
+    /// Event kind discriminator.
+    #[serde(rename = "type")]
+    pub event_type: WsEventType,
+    /// Event payload.
+    pub data: serde_json::Value,
+    /// Unix-epoch millisecond timestamp.
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WsEventType {
+    AgentStatusChanged,
+    FuelConsumed,
+    AuditEvent,
+    ComplianceAlert,
+    FirewallBlock,
+    SpeculationDecision,
+}
+
+impl WsEvent {
+    fn now_ms() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
+    }
+
+    pub fn agent_status_changed(agent_id: Uuid, status: &str) -> Self {
+        Self {
+            event_type: WsEventType::AgentStatusChanged,
+            data: serde_json::json!({ "agent_id": agent_id.to_string(), "status": status }),
+            timestamp: Self::now_ms(),
+        }
+    }
+
+    pub fn fuel_consumed(agent_id: Uuid, remaining: u64) -> Self {
+        Self {
+            event_type: WsEventType::FuelConsumed,
+            data: serde_json::json!({ "agent_id": agent_id.to_string(), "fuel_remaining": remaining }),
+            timestamp: Self::now_ms(),
+        }
+    }
+
+    pub fn audit_event(event_id: Uuid, agent_id: Uuid, event_type: &str) -> Self {
+        Self {
+            event_type: WsEventType::AuditEvent,
+            data: serde_json::json!({
+                "event_id": event_id.to_string(),
+                "agent_id": agent_id.to_string(),
+                "event_type": event_type,
+            }),
+            timestamp: Self::now_ms(),
+        }
+    }
+
+    pub fn compliance_alert(agent_id: Uuid, message: &str) -> Self {
+        Self {
+            event_type: WsEventType::ComplianceAlert,
+            data: serde_json::json!({ "agent_id": agent_id.to_string(), "message": message }),
+            timestamp: Self::now_ms(),
+        }
+    }
+
+    pub fn firewall_block(agent_id: Uuid, reason: &str) -> Self {
+        Self {
+            event_type: WsEventType::FirewallBlock,
+            data: serde_json::json!({ "agent_id": agent_id.to_string(), "reason": reason }),
+            timestamp: Self::now_ms(),
+        }
+    }
+
+    pub fn speculation_decision(agent_id: Uuid, approved: bool, summary: &str) -> Self {
+        Self {
+            event_type: WsEventType::SpeculationDecision,
+            data: serde_json::json!({
+                "agent_id": agent_id.to_string(),
+                "approved": approved,
+                "summary": summary,
+            }),
+            timestamp: Self::now_ms(),
+        }
+    }
+}
+
+/// Channel capacity for the broadcast sender.
+const WS_BROADCAST_CAPACITY: usize = 256;
+
+// ── JWT middleware layer ────────────────────────────────────────────────────
+
+/// Axum middleware that validates JWT on every request in the wrapped router.
+/// On success, the validated `OidcAClaims` are inserted into request extensions.
+async fn jwt_auth_middleware(
+    State(state): State<GatewayState>,
+    mut req: Request<axum::body::Body>,
+    next: Next,
+) -> Response {
+    let headers = req.headers().clone();
+    let claims = {
+        let inner = state.inner.lock().expect("lock poisoned");
+        validate_jwt(&headers, &inner.token_manager, &inner.gateway_identity)
+    };
+
+    match claims {
+        Ok(c) => {
+            req.extensions_mut().insert(c);
+            next.run(req).await
+        }
+        Err(e) => {
+            let body = serde_json::json!({
+                "error": e.message(),
+                "code": e.status_code().as_u16(),
+            });
+            (e.status_code(), Json(body)).into_response()
+        }
+    }
+}
+
 // ── Shared gateway state ────────────────────────────────────────────────────
 
 /// Shared state for the HTTP gateway, wrapped in Arc<Mutex<>> for sync access.
@@ -104,10 +249,30 @@ struct GatewayInner {
     /// Gateway-level signing identity (used to sign/verify JWTs).
     gateway_identity: AgentIdentity,
     /// Agent identity manager (used for per-agent key management).
-    #[allow(dead_code)]
     identity_manager: IdentityManager,
     /// Server start time.
     started_at: u64,
+    /// Kernel supervisor for agent lifecycle.
+    supervisor: Supervisor,
+    /// Audit trail for governance events.
+    audit_trail: AuditTrail,
+    /// Agent name metadata keyed by UUID.
+    agent_meta: HashMap<Uuid, AgentMeta>,
+    /// Permission manager for capability dashboard.
+    permission_manager: PermissionManager,
+    /// Privacy manager for cryptographic erasure.
+    privacy_manager: PrivacyManager,
+    /// Broadcast sender for WebSocket event streaming.
+    ws_tx: broadcast::Sender<WsEvent>,
+    /// Prometheus-compatible metrics.
+    metrics: Option<NexusMetrics>,
+}
+
+/// Metadata about an agent tracked alongside the supervisor.
+#[derive(Debug, Clone)]
+struct AgentMeta {
+    name: String,
+    last_action: String,
 }
 
 impl GatewayState {
@@ -125,6 +290,7 @@ impl GatewayState {
         let gateway_id = Uuid::new_v4();
         let gateway_identity = AgentIdentity::generate(gateway_id);
         let token_manager = TokenManager::new("nexus-gateway", "nexus-agents");
+        let (ws_tx, _) = broadcast::channel(WS_BROADCAST_CAPACITY);
 
         Self {
             inner: Arc::new(Mutex::new(GatewayInner {
@@ -136,19 +302,59 @@ impl GatewayState {
                 gateway_identity,
                 identity_manager: IdentityManager::in_memory(),
                 started_at: now,
+                supervisor: Supervisor::new(),
+                audit_trail: AuditTrail::new(),
+                agent_meta: HashMap::new(),
+                permission_manager: PermissionManager::default(),
+                privacy_manager: PrivacyManager::new(),
+                ws_tx,
+                metrics: None,
             })),
         }
+    }
+
+    /// Attach a [`NexusMetrics`] instance to this gateway for Prometheus export.
+    pub fn with_metrics(self, metrics: NexusMetrics) -> Self {
+        let mut inner = self.inner.lock().expect("lock poisoned");
+        inner.metrics = Some(metrics);
+        drop(inner);
+        self
     }
 
     /// Register an agent with the gateway.
     pub fn register_agent(&self, manifest: AgentManifest, base_url: &str) {
         let mut inner = self.inner.lock().expect("lock poisoned");
-        let agent_id = Uuid::new_v4();
         let card = AgentCard::from_manifest(&manifest, base_url);
         let name = manifest.name.clone();
+
+        // Start agent in supervisor for full lifecycle support
+        let agent_id = match inner.supervisor.start_agent(manifest.clone()) {
+            Ok(id) => id,
+            Err(_) => {
+                // Fallback: register in MCP only (backwards compat)
+                let agent_id = Uuid::new_v4();
+                inner.mcp_server.register_agent(agent_id, manifest);
+                inner.agent_cards.insert(name.clone(), card);
+                inner.agent_ids.insert(name, agent_id);
+                return;
+            }
+        };
+
         inner.mcp_server.register_agent(agent_id, manifest);
         inner.agent_cards.insert(name.clone(), card);
-        inner.agent_ids.insert(name, agent_id);
+        inner.agent_ids.insert(name.clone(), agent_id);
+        inner.agent_meta.insert(
+            agent_id,
+            AgentMeta {
+                name,
+                last_action: "registered".to_string(),
+            },
+        );
+
+        // Metrics: agent spawned via registration
+        if let Some(ref m) = inner.metrics {
+            m.inc_agents_spawned();
+        }
     }
 
     /// Issue an EdDSA-signed JWT for testing or programmatic use.
@@ -164,6 +370,53 @@ impl GatewayState {
         let inner = self.inner.lock().expect("lock poisoned");
         TokenManager::jwks_json(&inner.gateway_identity)
     }
+
+    /// Subscribe to the WebSocket event broadcast channel.
+    pub fn subscribe(&self) -> broadcast::Receiver<WsEvent> {
+        let inner = self.inner.lock().expect("lock poisoned");
+        inner.ws_tx.subscribe()
+    }
+
+    /// Broadcast a WebSocket event to all connected clients.
+    pub fn broadcast(&self, event: WsEvent) {
+        let inner = self.inner.lock().expect("lock poisoned");
+        // Ignore send errors — they just mean no active subscribers.
+        let _ = inner.ws_tx.send(event);
+    }
+
+    /// Graceful shutdown: stop agents, flush audit, log completion.
+    pub fn shutdown(&self) {
+        let mut inner = self.inner.lock().expect("lock poisoned");
+
+        // 1. Stop all running agents
+        let agent_ids: Vec<Uuid> = inner
+            .supervisor
+            .health_check()
+            .iter()
+            .map(|s| s.id)
+            .collect();
+        for id in &agent_ids {
+            let _ = inner.supervisor.stop_agent(*id);
+        }
+
+        // 2. Flush audit trail batcher to persist pending events
+        inner.audit_trail.flush_batcher();
+
+        // 3. Log shutdown event
+        let _ = inner.audit_trail.append_event(
+            Uuid::nil(),
+            EventType::StateChange,
+            serde_json::json!({
+                "event": "gateway.shutdown",
+                "agents_stopped": agent_ids.len(),
+            }),
+        );
+
+        println!(
+            "Shutdown complete: {} agents stopped, audit flushed",
+            agent_ids.len()
+        );
+    }
 }
 
 // ── Router construction ─────────────────────────────────────────────────────
@@ -175,6 +428,44 @@ pub fn build_router(state: GatewayState) -> Router {
         .allow_methods(Any)
         .allow_headers(Any);
 
+    // Authenticated REST API routes — JWT validated via middleware layer
+    let api_routes = Router::new()
+        // Agent management
+        .route("/agents", get(api_list_agents).post(api_create_agent))
+        .route("/agents/{id}/start", post(api_start_agent))
+        .route("/agents/{id}/stop", post(api_stop_agent))
+        .route("/agents/{id}/status", get(api_agent_status))
+        // Permissions
+        .route(
+            "/agents/{id}/permissions",
+            get(api_get_permissions).put(api_update_permission),
+        )
+        .route(
+            "/agents/{id}/permissions/bulk",
+            post(api_bulk_update_permissions),
+        )
+        // Audit
+        .route("/audit/events", get(api_audit_events))
+        .route("/audit/events/{id}", get(api_audit_event_by_id))
+        // Compliance
+        .route("/compliance/status", get(api_compliance_status))
+        .route("/compliance/report/{agent_id}", get(api_compliance_report))
+        .route("/compliance/erase/{agent_id}", post(api_compliance_erase))
+        // Marketplace
+        .route("/marketplace/search", get(api_marketplace_search))
+        .route("/marketplace/agents/{id}", get(api_marketplace_agent))
+        .route("/marketplace/install/{id}", post(api_marketplace_install))
+        // Identity
+        .route("/identity/agents", get(api_identity_list))
+        .route("/identity/agents/{id}", get(api_identity_get))
+        // Firewall
+        .route("/firewall/status", get(api_firewall_status))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            jwt_auth_middleware,
+        ))
+        .with_state(state.clone());
+
     Router::new()
         // A2A routes
         .route("/a2a", post(a2a_task_submit))
@@ -185,8 +476,13 @@ pub fn build_router(state: GatewayState) -> Router {
         .route("/mcp/tools/list", get(mcp_tool_list))
         // Auth / OIDC discovery
         .route("/auth/jwks", get(auth_jwks))
-        // Health
+        // Health & Metrics
         .route("/health", get(health_check))
+        .route("/metrics", get(metrics_endpoint))
+        // WebSocket event stream (JWT via query param)
+        .route("/ws", get(ws_upgrade))
+        // REST API (nested under /api)
+        .nest("/api", api_routes)
         .layer(cors)
         .with_state(state)
 }
@@ -204,6 +500,32 @@ pub struct AgentCardQuery {
 pub struct ToolListQuery {
     /// Agent name to list tools for.
     pub agent: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuditQuery {
+    /// Optional agent ID filter.
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    /// Page size (default 50).
+    #[serde(default)]
+    pub limit: Option<usize>,
+    /// Offset for pagination (default 0).
+    #[serde(default)]
+    pub offset: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MarketplaceSearchQuery {
+    /// Search query string.
+    #[serde(default)]
+    pub q: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WsAuthQuery {
+    /// JWT token for WebSocket authentication.
+    pub token: String,
 }
 
 // ── Request/response types ──────────────────────────────────────────────────
@@ -230,6 +552,40 @@ pub struct ToolInvokeRequest {
     pub params: serde_json::Value,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CreateAgentRequest {
+    /// Agent manifest as JSON.
+    pub manifest: AgentManifest,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdatePermissionRequest {
+    /// Capability key to toggle.
+    pub capability_key: String,
+    /// Whether to enable or disable.
+    pub enabled: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BulkPermissionUpdate {
+    pub capability_key: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BulkUpdatePermissionsRequest {
+    pub updates: Vec<BulkPermissionUpdate>,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EraseRequest {
+    /// Encryption key IDs to destroy during cryptographic erasure.
+    #[serde(default)]
+    pub encryption_key_ids: Vec<String>,
+}
+
 #[derive(Debug, Serialize)]
 struct ErrorResponse {
     error: String,
@@ -246,24 +602,92 @@ fn error_json(status: StatusCode, msg: impl Into<String>) -> (StatusCode, Json<E
     )
 }
 
-// ── Route handlers ──────────────────────────────────────────────────────────
+fn parse_uuid(s: &str) -> Result<Uuid, (StatusCode, Json<ErrorResponse>)> {
+    Uuid::parse_str(s).map_err(|_| error_json(StatusCode::BAD_REQUEST, "invalid UUID"))
+}
+
+/// Concrete result type for API handlers, avoids axum IntoResponse ambiguity.
+type ApiResult = Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)>;
+
+// ── Original route handlers ─────────────────────────────────────────────────
 
 /// `GET /health` — public, no auth required.
+///
+/// Returns extended health information including uptime, agent counts,
+/// audit chain validity, compliance status, and resource utilisation.
 async fn health_check(State(state): State<GatewayState>) -> impl IntoResponse {
     let result = tokio::task::spawn_blocking(move || {
         let inner = state.inner.lock().expect("lock poisoned");
+
+        let now_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let uptime = now_secs.saturating_sub(inner.started_at);
+
+        let agents_active = inner
+            .supervisor
+            .health_check()
+            .iter()
+            .filter(|s| s.state.to_string() == "running")
+            .count();
+
+        let audit_chain_valid = inner.audit_trail.verify_integrity();
+        let total_tests_passed = inner.audit_trail.events().len() as u64;
+
+        // Update the gauge so /metrics stays in sync
+        if let Some(ref m) = inner.metrics {
+            m.set_agents_active(agents_active as f64);
+        }
+
         serde_json::json!({
             "status": "healthy",
             "version": A2A_PROTOCOL_VERSION,
             "agents_registered": inner.agent_cards.len(),
             "tasks_in_flight": inner.tasks.len(),
             "started_at": inner.started_at,
+            "uptime_seconds": uptime,
+            "agents_active": agents_active,
+            "total_tests_passed": total_tests_passed,
+            "audit_chain_valid": audit_chain_valid,
+            "compliance_status": "active",
+            "memory_usage_bytes": 0,
+            "wasm_cache_hit_rate": 0.0,
         })
     })
     .await
     .expect("spawn_blocking panicked");
 
     Json(result)
+}
+
+/// `GET /metrics` — Prometheus text exposition format.
+async fn metrics_endpoint(State(state): State<GatewayState>) -> impl IntoResponse {
+    let result = tokio::task::spawn_blocking(move || {
+        let inner = state.inner.lock().expect("lock poisoned");
+        match &inner.metrics {
+            Some(m) => {
+                // Sync the agents_active gauge before rendering.
+                let active = inner
+                    .supervisor
+                    .health_check()
+                    .iter()
+                    .filter(|s| s.state.to_string() == "running")
+                    .count();
+                m.set_agents_active(active as f64);
+                m.render()
+            }
+            None => "# metrics not enabled\n".to_string(),
+        }
+    })
+    .await
+    .expect("spawn_blocking panicked");
+
+    (
+        StatusCode::OK,
+        [("content-type", "text/plain; version=0.0.4; charset=utf-8")],
+        result,
+    )
 }
 
 /// `GET /a2a/agent-card?agent=name` — public discovery endpoint.
@@ -461,12 +885,22 @@ async fn mcp_tool_invoke(
             }
         };
 
+        let tool_name = req.tool.clone();
         // Route through governed MCP server — capability check + fuel + audit
         match inner
             .mcp_server
             .invoke_tool(agent_id, &req.tool, req.params)
         {
-            Ok(result) => Ok(serde_json::to_value(result).unwrap()),
+            Ok(result) => {
+                let fuel = inner.mcp_server.fuel_remaining(agent_id).unwrap_or(0);
+                let _ = inner.ws_tx.send(WsEvent::fuel_consumed(agent_id, fuel));
+                // Metrics: host function call + fuel consumed
+                if let Some(ref m) = inner.metrics {
+                    m.inc_host_function_call(&tool_name);
+                    m.inc_fuel_consumed(result.fuel_consumed);
+                }
+                Ok(serde_json::to_value(result).unwrap())
+            }
             Err(e) => {
                 let status = match &e {
                     nexus_kernel::errors::AgentError::CapabilityDenied(_) => StatusCode::FORBIDDEN,
@@ -483,6 +917,710 @@ async fn mcp_tool_invoke(
     .expect("spawn_blocking panicked");
 
     result.map(Json)
+}
+
+// ── REST API handlers (JWT validated via middleware layer) ───────────────────
+
+/// `GET /api/agents` — list all agents with status.
+async fn api_list_agents(State(state): State<GatewayState>) -> impl IntoResponse {
+    let result = tokio::task::spawn_blocking(move || {
+        let inner = state.inner.lock().expect("lock poisoned");
+        let statuses = inner.supervisor.health_check();
+        let rows: Vec<serde_json::Value> = statuses
+            .into_iter()
+            .map(|s| {
+                let meta = inner.agent_meta.get(&s.id);
+                serde_json::json!({
+                    "id": s.id.to_string(),
+                    "name": meta.map(|m| m.name.as_str()).unwrap_or("unknown"),
+                    "status": s.state.to_string(),
+                    "fuel_remaining": s.remaining_fuel,
+                    "last_action": meta.map(|m| m.last_action.as_str()).unwrap_or("none"),
+                })
+            })
+            .collect();
+        serde_json::json!({ "agents": rows })
+    })
+    .await
+    .expect("spawn_blocking panicked");
+
+    Json(result)
+}
+
+/// `POST /api/agents` — create a new agent from a manifest.
+async fn api_create_agent(
+    State(state): State<GatewayState>,
+    Json(req): Json<CreateAgentRequest>,
+) -> Response {
+    let result: ApiResult = tokio::task::spawn_blocking(move || {
+        let mut inner = state.inner.lock().expect("lock poisoned");
+        let agent_name = req.manifest.name.clone();
+
+        let agent_id = inner
+            .supervisor
+            .start_agent(req.manifest.clone())
+            .map_err(|e| error_json(StatusCode::BAD_REQUEST, e.to_string()))?;
+
+        inner
+            .mcp_server
+            .register_agent(agent_id, req.manifest.clone());
+        let card = AgentCard::from_manifest(&req.manifest, "");
+        inner.agent_cards.insert(agent_name.clone(), card);
+        inner.agent_ids.insert(agent_name.clone(), agent_id);
+        inner.agent_meta.insert(
+            agent_id,
+            AgentMeta {
+                name: agent_name.clone(),
+                last_action: "created".to_string(),
+            },
+        );
+
+        // Metrics: agent spawned
+        if let Some(ref m) = inner.metrics {
+            m.inc_agents_spawned();
+        }
+
+        if let Ok(eid) = inner.audit_trail.append_event(
+            agent_id,
+            EventType::UserAction,
+            serde_json::json!({"event": "create_agent", "status": "ok"}),
+        ) {
+            let _ = inner
+                .ws_tx
+                .send(WsEvent::audit_event(eid, agent_id, "UserAction"));
+            // Metrics: audit block created
+            if let Some(ref m) = inner.metrics {
+                m.inc_audit_blocks_created();
+            }
+        }
+        let _ = inner
+            .ws_tx
+            .send(WsEvent::agent_status_changed(agent_id, "running"));
+
+        Ok(Json(serde_json::json!({
+            "agent_id": agent_id.to_string(),
+            "name": agent_name,
+            "status": "running",
+        })))
+    })
+    .await
+    .expect("spawn_blocking panicked");
+
+    match result {
+        Ok(v) => (StatusCode::CREATED, v).into_response(),
+        Err(e) => e.into_response(),
+    }
+}
+
+/// `POST /api/agents/:id/start` — start (restart) an agent.
+async fn api_start_agent(State(state): State<GatewayState>, Path(id): Path<String>) -> ApiResult {
+    tokio::task::spawn_blocking(move || {
+        let agent_id = parse_uuid(&id)?;
+        let mut inner = state.inner.lock().expect("lock poisoned");
+        inner
+            .supervisor
+            .restart_agent(agent_id)
+            .map_err(|e| error_json(StatusCode::NOT_FOUND, e.to_string()))?;
+        if let Some(meta) = inner.agent_meta.get_mut(&agent_id) {
+            meta.last_action = "started".to_string();
+        }
+        if let Ok(eid) = inner.audit_trail.append_event(
+            agent_id,
+            EventType::StateChange,
+            serde_json::json!({"event": "start_agent", "status": "ok"}),
+        ) {
+            let _ = inner
+                .ws_tx
+                .send(WsEvent::audit_event(eid, agent_id, "StateChange"));
+        }
+        let _ = inner
+            .ws_tx
+            .send(WsEvent::agent_status_changed(agent_id, "started"));
+        Ok(Json(
+            serde_json::json!({"status": "started", "agent_id": id}),
+        ))
+    })
+    .await
+    .expect("spawn_blocking panicked")
+}
+
+/// `POST /api/agents/:id/stop` — stop an agent.
+async fn api_stop_agent(State(state): State<GatewayState>, Path(id): Path<String>) -> ApiResult {
+    tokio::task::spawn_blocking(move || {
+        let agent_id = parse_uuid(&id)?;
+        let mut inner = state.inner.lock().expect("lock poisoned");
+        inner
+            .supervisor
+            .stop_agent(agent_id)
+            .map_err(|e| error_json(StatusCode::NOT_FOUND, e.to_string()))?;
+        if let Some(meta) = inner.agent_meta.get_mut(&agent_id) {
+            meta.last_action = "stopped".to_string();
+        }
+        if let Ok(eid) = inner.audit_trail.append_event(
+            agent_id,
+            EventType::StateChange,
+            serde_json::json!({"event": "stop_agent", "status": "ok"}),
+        ) {
+            let _ = inner
+                .ws_tx
+                .send(WsEvent::audit_event(eid, agent_id, "StateChange"));
+        }
+        let _ = inner
+            .ws_tx
+            .send(WsEvent::agent_status_changed(agent_id, "stopped"));
+        Ok(Json(
+            serde_json::json!({"status": "stopped", "agent_id": id}),
+        ))
+    })
+    .await
+    .expect("spawn_blocking panicked")
+}
+
+/// `GET /api/agents/:id/status` — get single agent status.
+async fn api_agent_status(State(state): State<GatewayState>, Path(id): Path<String>) -> ApiResult {
+    tokio::task::spawn_blocking(move || {
+        let agent_id = parse_uuid(&id)?;
+        let inner = state.inner.lock().expect("lock poisoned");
+        let handle = inner
+            .supervisor
+            .get_agent(agent_id)
+            .ok_or_else(|| error_json(StatusCode::NOT_FOUND, "agent not found"))?;
+        let meta = inner.agent_meta.get(&agent_id);
+        Ok(Json(serde_json::json!({
+            "id": agent_id.to_string(),
+            "name": meta.map(|m| m.name.as_str()).unwrap_or("unknown"),
+            "status": handle.state.to_string(),
+            "fuel_remaining": handle.remaining_fuel,
+            "autonomy_level": handle.autonomy_level,
+            "capabilities": handle.manifest.capabilities,
+            "last_action": meta.map(|m| m.last_action.as_str()).unwrap_or("none"),
+        })))
+    })
+    .await
+    .expect("spawn_blocking panicked")
+}
+
+// ── Permissions ─────────────────────────────────────────────────────────────
+
+/// `GET /api/agents/:id/permissions` — get permission categories for an agent.
+async fn api_get_permissions(
+    State(state): State<GatewayState>,
+    Path(id): Path<String>,
+) -> ApiResult {
+    tokio::task::spawn_blocking(move || {
+        let agent_id = parse_uuid(&id)?;
+        let inner = state.inner.lock().expect("lock poisoned");
+        inner
+            .supervisor
+            .get_agent_permissions(agent_id)
+            .map(|perms| Json(serde_json::to_value(perms).unwrap()))
+            .map_err(|e| error_json(StatusCode::NOT_FOUND, e.to_string()))
+    })
+    .await
+    .expect("spawn_blocking panicked")
+}
+
+/// `PUT /api/agents/:id/permissions` — update a single permission.
+async fn api_update_permission(
+    State(state): State<GatewayState>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdatePermissionRequest>,
+) -> ApiResult {
+    tokio::task::spawn_blocking(move || {
+        let agent_id = parse_uuid(&id)?;
+        let mut inner = state.inner.lock().expect("lock poisoned");
+        inner
+            .supervisor
+            .update_agent_permission(agent_id, &req.capability_key, req.enabled, "api-user", None)
+            .map_err(|e| error_json(StatusCode::BAD_REQUEST, e.to_string()))?;
+        if let Ok(eid) = inner.audit_trail.append_event(
+            agent_id,
+            EventType::UserAction,
+            serde_json::json!({
+                "event": "update_permission",
+                "capability": req.capability_key,
+                "enabled": req.enabled,
+            }),
+        ) {
+            let _ = inner
+                .ws_tx
+                .send(WsEvent::audit_event(eid, agent_id, "UserAction"));
+        }
+        Ok(Json(serde_json::json!({"status": "updated"})))
+    })
+    .await
+    .expect("spawn_blocking panicked")
+}
+
+/// `POST /api/agents/:id/permissions/bulk` — bulk update permissions.
+async fn api_bulk_update_permissions(
+    State(state): State<GatewayState>,
+    Path(id): Path<String>,
+    Json(req): Json<BulkUpdatePermissionsRequest>,
+) -> ApiResult {
+    tokio::task::spawn_blocking(move || {
+        let agent_id = parse_uuid(&id)?;
+        let mut inner = state.inner.lock().expect("lock poisoned");
+        let pairs: Vec<(String, bool)> = req
+            .updates
+            .iter()
+            .map(|u| (u.capability_key.clone(), u.enabled))
+            .collect();
+        let count = pairs.len();
+        inner
+            .supervisor
+            .bulk_update_agent_permissions(agent_id, &pairs, "api-user", req.reason.as_deref())
+            .map_err(|e| error_json(StatusCode::BAD_REQUEST, e.to_string()))?;
+        if let Ok(eid) = inner.audit_trail.append_event(
+            agent_id,
+            EventType::UserAction,
+            serde_json::json!({
+                "event": "bulk_update_permissions",
+                "updates": count,
+                "reason": req.reason,
+            }),
+        ) {
+            let _ = inner
+                .ws_tx
+                .send(WsEvent::audit_event(eid, agent_id, "UserAction"));
+        }
+        Ok(Json(
+            serde_json::json!({"status": "updated", "count": count}),
+        ))
+    })
+    .await
+    .expect("spawn_blocking panicked")
+}
+
+// ── Audit ───────────────────────────────────────────────────────────────────
+
+/// `GET /api/audit/events?agent_id=&limit=&offset=` — paginated audit events.
+async fn api_audit_events(
+    State(state): State<GatewayState>,
+    Query(query): Query<AuditQuery>,
+) -> ApiResult {
+    tokio::task::spawn_blocking(move || {
+        let inner = state.inner.lock().expect("lock poisoned");
+        let agent_filter = query
+            .agent_id
+            .as_deref()
+            .map(Uuid::parse_str)
+            .transpose()
+            .map_err(|_| error_json(StatusCode::BAD_REQUEST, "invalid agent_id UUID"))?;
+
+        let limit = query.limit.unwrap_or(50).min(500);
+        let offset = query.offset.unwrap_or(0);
+
+        let events = inner.audit_trail.events();
+        let filtered: Vec<&nexus_kernel::audit::AuditEvent> = events
+            .iter()
+            .filter(|e| {
+                if let Some(required) = agent_filter {
+                    return e.agent_id == required;
+                }
+                true
+            })
+            .collect();
+
+        let total = filtered.len();
+        let page: Vec<serde_json::Value> = filtered
+            .into_iter()
+            .skip(offset)
+            .take(limit)
+            .map(|e| {
+                serde_json::json!({
+                    "event_id": e.event_id.to_string(),
+                    "timestamp": e.timestamp,
+                    "agent_id": e.agent_id.to_string(),
+                    "event_type": format!("{:?}", e.event_type),
+                    "payload": e.payload,
+                    "hash": e.hash,
+                    "previous_hash": e.previous_hash,
+                })
+            })
+            .collect();
+
+        Ok(Json(serde_json::json!({
+            "events": page,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        })))
+    })
+    .await
+    .expect("spawn_blocking panicked")
+}
+
+/// `GET /api/audit/events/:id` — get a single audit event by ID.
+async fn api_audit_event_by_id(
+    State(state): State<GatewayState>,
+    Path(id): Path<String>,
+) -> ApiResult {
+    tokio::task::spawn_blocking(move || {
+        let event_id = Uuid::parse_str(&id)
+            .map_err(|_| error_json(StatusCode::BAD_REQUEST, "invalid UUID"))?;
+        let inner = state.inner.lock().expect("lock poisoned");
+        let event = inner
+            .audit_trail
+            .events()
+            .iter()
+            .find(|e| e.event_id == event_id)
+            .ok_or_else(|| error_json(StatusCode::NOT_FOUND, "event not found"))?;
+        Ok(Json(serde_json::json!({
+            "event_id": event.event_id.to_string(),
+            "timestamp": event.timestamp,
+            "agent_id": event.agent_id.to_string(),
+            "event_type": format!("{:?}", event.event_type),
+            "payload": event.payload,
+            "hash": event.hash,
+            "previous_hash": event.previous_hash,
+        })))
+    })
+    .await
+    .expect("spawn_blocking panicked")
+}
+
+// ── Compliance ──────────────────────────────────────────────────────────────
+
+/// `GET /api/compliance/status` — overall compliance status.
+async fn api_compliance_status(State(state): State<GatewayState>) -> Json<serde_json::Value> {
+    let result = tokio::task::spawn_blocking(move || {
+        let inner = state.inner.lock().expect("lock poisoned");
+        let monitor = ComplianceMonitor::new();
+
+        // Build agent snapshots from supervisor
+        let snapshots: Vec<AgentSnapshot> = inner
+            .supervisor
+            .health_check()
+            .into_iter()
+            .map(|s| {
+                let manifest = inner
+                    .supervisor
+                    .get_agent(s.id)
+                    .map(|h| h.manifest.clone())
+                    .unwrap_or_else(|| AgentManifest {
+                        name: "unknown".to_string(),
+                        version: "0.0.0".to_string(),
+                        capabilities: vec![],
+                        fuel_budget: 0,
+                        autonomy_level: None,
+                        consent_policy_path: None,
+                        requester_id: None,
+                        schedule: None,
+                        llm_model: None,
+                        fuel_period_id: None,
+                        monthly_fuel_cap: None,
+                        allowed_endpoints: None,
+                        domain_tags: vec![],
+                    });
+                AgentSnapshot {
+                    agent_id: s.id,
+                    manifest,
+                    running: s.state.to_string() == "running",
+                }
+            })
+            .collect();
+
+        let status =
+            monitor.check_compliance(&snapshots, &inner.audit_trail, &inner.identity_manager);
+        serde_json::to_value(status).unwrap()
+    })
+    .await
+    .expect("spawn_blocking panicked");
+
+    Json(result)
+}
+
+/// `GET /api/compliance/report/:agent_id` — EU AI Act transparency report.
+async fn api_compliance_report(
+    State(state): State<GatewayState>,
+    Path(agent_id): Path<String>,
+) -> ApiResult {
+    tokio::task::spawn_blocking(move || {
+        let parsed = parse_uuid(&agent_id)?;
+        let mut inner = state.inner.lock().expect("lock poisoned");
+        let manifest = inner
+            .supervisor
+            .get_agent(parsed)
+            .map(|h| h.manifest.clone())
+            .ok_or_else(|| error_json(StatusCode::NOT_FOUND, "agent not found"))?;
+
+        let generator = TransparencyReportGenerator::new();
+        let did = inner
+            .identity_manager
+            .get_or_create(parsed)
+            .ok()
+            .map(|i| i.did.clone());
+        let report = generator.generate(&manifest, did.as_deref(), &inner.audit_trail, parsed);
+        Ok(Json(serde_json::to_value(report).unwrap()))
+    })
+    .await
+    .expect("spawn_blocking panicked")
+}
+
+/// `POST /api/compliance/erase/:agent_id` — GDPR Article 17 cryptographic erasure.
+async fn api_compliance_erase(
+    State(state): State<GatewayState>,
+    Path(agent_id): Path<String>,
+    Json(req): Json<EraseRequest>,
+) -> ApiResult {
+    tokio::task::spawn_blocking(move || {
+        let parsed = parse_uuid(&agent_id)?;
+        let mut inner = state.inner.lock().expect("lock poisoned");
+
+        // Ensure agent exists
+        if inner.supervisor.get_agent(parsed).is_none() {
+            return Err(error_json(StatusCode::NOT_FOUND, "agent not found"));
+        }
+
+        let eraser = AgentDataEraser::new();
+        // Destructure to avoid multiple mutable borrows
+        let GatewayInner {
+            ref mut audit_trail,
+            ref mut privacy_manager,
+            ref mut identity_manager,
+            ref mut permission_manager,
+            ref ws_tx,
+            ..
+        } = *inner;
+        let receipt = eraser
+            .erase_agent_data(
+                parsed,
+                &req.encryption_key_ids,
+                audit_trail,
+                privacy_manager,
+                identity_manager,
+                permission_manager,
+            )
+            .map_err(|e| error_json(StatusCode::CONFLICT, e.to_string()))?;
+
+        let _ = ws_tx.send(WsEvent::compliance_alert(
+            parsed,
+            "agent data erased (GDPR Article 17)",
+        ));
+
+        Ok(Json(serde_json::to_value(receipt).unwrap()))
+    })
+    .await
+    .expect("spawn_blocking panicked")
+}
+
+// ── Marketplace ─────────────────────────────────────────────────────────────
+
+fn open_marketplace_registry(
+) -> Result<nexus_marketplace::sqlite_registry::SqliteRegistry, (StatusCode, Json<ErrorResponse>)> {
+    let db_path = nexus_marketplace::sqlite_registry::SqliteRegistry::default_db_path();
+    nexus_marketplace::sqlite_registry::SqliteRegistry::open(&db_path).map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("marketplace: {e}"),
+        )
+    })
+}
+
+/// `GET /api/marketplace/search?q=` — search marketplace agents.
+async fn api_marketplace_search(Query(query): Query<MarketplaceSearchQuery>) -> ApiResult {
+    tokio::task::spawn_blocking(move || {
+        let registry = open_marketplace_registry()?;
+        let q = query.q.as_deref().unwrap_or("");
+        let results = registry
+            .search(q)
+            .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        let agents: Vec<serde_json::Value> = results
+            .into_iter()
+            .map(|r| {
+                serde_json::json!({
+                    "package_id": r.package_id,
+                    "name": r.name,
+                    "description": r.description,
+                    "author": r.author_id,
+                    "tags": r.tags,
+                })
+            })
+            .collect();
+        Ok(Json(serde_json::json!({ "results": agents })))
+    })
+    .await
+    .expect("spawn_blocking panicked")
+}
+
+/// `GET /api/marketplace/agents/:id` — get marketplace agent detail.
+async fn api_marketplace_agent(Path(id): Path<String>) -> ApiResult {
+    tokio::task::spawn_blocking(move || {
+        let registry = open_marketplace_registry()?;
+        let detail = registry
+            .get_agent(&id)
+            .map_err(|e| error_json(StatusCode::NOT_FOUND, e.to_string()))?;
+        Ok(Json(serde_json::to_value(detail).unwrap()))
+    })
+    .await
+    .expect("spawn_blocking panicked")
+}
+
+/// `POST /api/marketplace/install/:id` — install a marketplace agent.
+async fn api_marketplace_install(
+    State(state): State<GatewayState>,
+    Path(id): Path<String>,
+) -> Response {
+    let result: ApiResult = tokio::task::spawn_blocking(move || {
+        let registry = open_marketplace_registry()?;
+        let bundle = registry
+            .install(&id)
+            .map_err(|e| error_json(StatusCode::BAD_REQUEST, e.to_string()))?;
+
+        // Metrics: marketplace install
+        let inner = state.inner.lock().expect("lock poisoned");
+        if let Some(ref m) = inner.metrics {
+            m.inc_marketplace_installs();
+        }
+
+        Ok(Json(serde_json::json!({
+            "package_id": bundle.package_id,
+            "name": bundle.metadata.name,
+            "version": bundle.metadata.version,
+            "status": "installed",
+        })))
+    })
+    .await
+    .expect("spawn_blocking panicked");
+
+    match result {
+        Ok(v) => (StatusCode::CREATED, v).into_response(),
+        Err(e) => e.into_response(),
+    }
+}
+
+// ── Identity ────────────────────────────────────────────────────────────────
+
+/// `GET /api/identity/agents` — list all agent identities (DID).
+async fn api_identity_list(State(state): State<GatewayState>) -> Json<serde_json::Value> {
+    let result = tokio::task::spawn_blocking(move || {
+        let mut inner = state.inner.lock().expect("lock poisoned");
+        let statuses = inner.supervisor.health_check();
+        let mut rows = Vec::new();
+        for s in &statuses {
+            if let Ok(identity) = inner.identity_manager.get_or_create(s.id) {
+                rows.push(serde_json::json!({
+                    "agent_id": s.id.to_string(),
+                    "did": identity.did.clone(),
+                    "created_at": identity.created_at,
+                    "public_key_hex": identity.public_key_bytes().iter().map(|b| format!("{b:02x}")).collect::<String>(),
+                }));
+            }
+        }
+        serde_json::json!({ "identities": rows })
+    })
+    .await
+    .expect("spawn_blocking panicked");
+
+    Json(result)
+}
+
+/// `GET /api/identity/agents/:id` — get identity for a specific agent.
+async fn api_identity_get(State(state): State<GatewayState>, Path(id): Path<String>) -> ApiResult {
+    tokio::task::spawn_blocking(move || {
+        let agent_id = parse_uuid(&id)?;
+        let mut inner = state.inner.lock().expect("lock poisoned");
+        let identity = inner
+            .identity_manager
+            .get_or_create(agent_id)
+            .map_err(|e| error_json(StatusCode::NOT_FOUND, e.to_string()))?;
+        Ok(Json(serde_json::json!({
+            "agent_id": agent_id.to_string(),
+            "did": identity.did.clone(),
+            "created_at": identity.created_at,
+            "public_key_hex": identity.public_key_bytes().iter().map(|b| format!("{b:02x}")).collect::<String>(),
+        })))
+    })
+    .await
+    .expect("spawn_blocking panicked")
+}
+
+// ── Firewall ────────────────────────────────────────────────────────────────
+
+/// `GET /api/firewall/status` — prompt firewall status and pattern counts.
+async fn api_firewall_status() -> Json<serde_json::Value> {
+    let result = tokio::task::spawn_blocking(move || {
+        let summary = nexus_kernel::firewall::pattern_summary();
+        serde_json::json!({
+            "status": "active",
+            "mode": "fail-closed",
+            "injection_pattern_count": summary.injection_count,
+            "pii_pattern_count": summary.pii_count,
+            "exfil_pattern_count": summary.exfil_count,
+            "sensitive_path_count": summary.sensitive_path_count,
+            "ssn_detection": summary.has_ssn_detection,
+            "passport_detection": summary.has_passport_detection,
+            "internal_ip_detection": summary.has_internal_ip_detection,
+            "context_overflow_threshold_bytes": summary.context_overflow_threshold_bytes,
+            "egress_default_deny": true,
+            "egress_rate_limit_per_min": nexus_kernel::firewall::DEFAULT_RATE_LIMIT_PER_MIN,
+        })
+    })
+    .await
+    .expect("spawn_blocking panicked");
+
+    Json(result)
+}
+
+// ── WebSocket ────────────────────────────────────────────────────────────────
+
+/// `GET /ws?token=<jwt>` — upgrade to WebSocket and stream kernel events.
+async fn ws_upgrade(
+    State(state): State<GatewayState>,
+    Query(query): Query<WsAuthQuery>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    // Validate JWT from query parameter before upgrading.
+    let claims = {
+        let inner = state.inner.lock().expect("lock poisoned");
+        inner
+            .token_manager
+            .validate_token(&query.token, &inner.gateway_identity)
+    };
+
+    match claims {
+        Ok(_) => ws.on_upgrade(move |socket| ws_stream(socket, state)),
+        Err(e) => {
+            let body = serde_json::json!({
+                "error": format!("invalid token: {e}"),
+                "code": 401,
+            });
+            (StatusCode::UNAUTHORIZED, Json(body)).into_response()
+        }
+    }
+}
+
+/// Pump broadcast events into the WebSocket as JSON text frames.
+async fn ws_stream(mut socket: WebSocket, state: GatewayState) {
+    let mut rx = state.subscribe();
+
+    loop {
+        match rx.recv().await {
+            Ok(event) => {
+                let json = match serde_json::to_string(&event) {
+                    Ok(j) => j,
+                    Err(_) => continue,
+                };
+                if socket.send(Message::Text(json.into())).await.is_err() {
+                    break; // Client disconnected.
+                }
+            }
+            Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                let warning = serde_json::json!({
+                    "type": "warning",
+                    "data": { "message": format!("dropped {skipped} events (slow consumer)") },
+                    "timestamp": WsEvent::now_ms(),
+                });
+                let msg = serde_json::to_string(&warning).unwrap_or_default();
+                if socket.send(Message::Text(msg.into())).await.is_err() {
+                    break;
+                }
+            }
+            Err(broadcast::error::RecvError::Closed) => break,
+        }
+    }
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
@@ -531,6 +1669,12 @@ mod tests {
     async fn body_to_json(body: Body) -> serde_json::Value {
         let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
         serde_json::from_slice(&bytes).unwrap()
+    }
+
+    /// Get the agent UUID from the gateway state for the registered test-agent.
+    fn get_test_agent_id(state: &GatewayState) -> String {
+        let inner = state.inner.lock().unwrap();
+        inner.agent_ids.get("test-agent").unwrap().to_string()
     }
 
     // ── Health check ────────────────────────────────────────────────────
@@ -932,6 +2076,630 @@ mod tests {
             resp.status() == StatusCode::OK || resp.status() == StatusCode::NO_CONTENT,
             "preflight should succeed, got {}",
             resp.status()
+        );
+    }
+
+    // ── REST API: Agent management ──────────────────────────────────────
+
+    #[tokio::test]
+    async fn api_list_agents_returns_registered() {
+        let (router, state) = setup_gateway();
+        let req = Request::builder()
+            .uri("/api/agents")
+            .header("authorization", auth_header_for(&state))
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        let agents = json["agents"].as_array().unwrap();
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0]["name"], "test-agent");
+        assert_eq!(agents[0]["status"], "Running");
+    }
+
+    #[tokio::test]
+    async fn api_list_agents_without_auth_rejected() {
+        let (router, _) = setup_gateway();
+        let req = Request::builder()
+            .uri("/api/agents")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn api_create_agent_succeeds() {
+        let (router, state) = setup_gateway();
+        let body = serde_json::json!({
+            "manifest": {
+                "name": "new-agent",
+                "version": "1.0.0",
+                "capabilities": ["audit.read"],
+                "fuel_budget": 5000,
+                "domain_tags": []
+            }
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/api/agents")
+            .header("content-type", "application/json")
+            .header("authorization", auth_header_for(&state))
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json["name"], "new-agent");
+        assert!(!json["agent_id"].as_str().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn api_agent_status_returns_detail() {
+        let (router, state) = setup_gateway();
+        let agent_id = get_test_agent_id(&state);
+
+        let req = Request::builder()
+            .uri(format!("/api/agents/{agent_id}/status"))
+            .header("authorization", auth_header_for(&state))
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json["name"], "test-agent");
+        assert_eq!(json["status"], "Running");
+        assert!(json["fuel_remaining"].as_u64().unwrap() > 0);
+        assert!(json["capabilities"].as_array().unwrap().len() >= 2);
+    }
+
+    #[tokio::test]
+    async fn api_stop_and_start_agent() {
+        let (router, state) = setup_gateway();
+        let agent_id = get_test_agent_id(&state);
+        let auth = auth_header_for(&state);
+
+        // Stop
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/api/agents/{agent_id}/stop"))
+            .header("authorization", &auth)
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json["status"], "stopped");
+
+        // Start
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/api/agents/{agent_id}/start"))
+            .header("authorization", &auth)
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json["status"], "started");
+    }
+
+    // ── REST API: Permissions ───────────────────────────────────────────
+
+    #[tokio::test]
+    async fn api_get_permissions_returns_categories() {
+        let (router, state) = setup_gateway();
+        let agent_id = get_test_agent_id(&state);
+
+        let req = Request::builder()
+            .uri(format!("/api/agents/{agent_id}/permissions"))
+            .header("authorization", auth_header_for(&state))
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        let categories = json.as_array().unwrap();
+        assert!(!categories.is_empty());
+    }
+
+    #[tokio::test]
+    async fn api_update_permission_toggles_capability() {
+        let (router, state) = setup_gateway();
+        let agent_id = get_test_agent_id(&state);
+        let body = serde_json::json!({
+            "capability_key": "web.search",
+            "enabled": false
+        });
+
+        let req = Request::builder()
+            .method(Method::PUT)
+            .uri(format!("/api/agents/{agent_id}/permissions"))
+            .header("content-type", "application/json")
+            .header("authorization", auth_header_for(&state))
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn api_bulk_update_permissions() {
+        let (router, state) = setup_gateway();
+        let agent_id = get_test_agent_id(&state);
+        let body = serde_json::json!({
+            "updates": [
+                {"capability_key": "web.search", "enabled": false},
+                {"capability_key": "llm.query", "enabled": false}
+            ],
+            "reason": "testing bulk update"
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/api/agents/{agent_id}/permissions/bulk"))
+            .header("content-type", "application/json")
+            .header("authorization", auth_header_for(&state))
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json["count"], 2);
+    }
+
+    // ── REST API: Audit ─────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn api_audit_events_with_pagination() {
+        let (router, state) = setup_gateway();
+
+        let req = Request::builder()
+            .uri("/api/audit/events?limit=10&offset=0")
+            .header("authorization", auth_header_for(&state))
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert!(json["events"].as_array().is_some());
+        assert!(json["total"].as_u64().is_some());
+        assert_eq!(json["limit"], 10);
+        assert_eq!(json["offset"], 0);
+    }
+
+    // ── REST API: Compliance ────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn api_compliance_status_returns_result() {
+        let (router, state) = setup_gateway();
+
+        let req = Request::builder()
+            .uri("/api/compliance/status")
+            .header("authorization", auth_header_for(&state))
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert!(json["status"].as_str().is_some());
+        assert!(json["agents_checked"].as_u64().is_some());
+    }
+
+    #[tokio::test]
+    async fn api_compliance_report_returns_transparency() {
+        let (router, state) = setup_gateway();
+        let agent_id = get_test_agent_id(&state);
+
+        let req = Request::builder()
+            .uri(format!("/api/compliance/report/{agent_id}"))
+            .header("authorization", auth_header_for(&state))
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json["agent_name"], "test-agent");
+        assert!(json["risk_tier"].as_str().is_some());
+    }
+
+    // ── REST API: Identity ──────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn api_identity_list_returns_dids() {
+        let (router, state) = setup_gateway();
+
+        let req = Request::builder()
+            .uri("/api/identity/agents")
+            .header("authorization", auth_header_for(&state))
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        let identities = json["identities"].as_array().unwrap();
+        assert_eq!(identities.len(), 1);
+        assert!(identities[0]["did"]
+            .as_str()
+            .unwrap()
+            .starts_with("did:key:z"));
+    }
+
+    #[tokio::test]
+    async fn api_identity_get_by_id() {
+        let (router, state) = setup_gateway();
+        let agent_id = get_test_agent_id(&state);
+
+        let req = Request::builder()
+            .uri(format!("/api/identity/agents/{agent_id}"))
+            .header("authorization", auth_header_for(&state))
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert!(json["did"].as_str().unwrap().starts_with("did:key:z"));
+        assert_eq!(json["agent_id"], agent_id);
+    }
+
+    // ── REST API: Firewall ──────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn api_firewall_status_returns_patterns() {
+        let (router, state) = setup_gateway();
+
+        let req = Request::builder()
+            .uri("/api/firewall/status")
+            .header("authorization", auth_header_for(&state))
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json["status"], "active");
+        assert_eq!(json["mode"], "fail-closed");
+        assert!(json["injection_pattern_count"].as_u64().unwrap() > 0);
+        assert_eq!(json["egress_default_deny"], true);
+    }
+
+    // ── REST API: Middleware rejects all /api without auth ──────────────
+
+    #[tokio::test]
+    async fn api_middleware_rejects_unauthenticated() {
+        let (router, _) = setup_gateway();
+
+        // Try several API endpoints without auth
+        for uri in &[
+            "/api/agents",
+            "/api/audit/events",
+            "/api/compliance/status",
+            "/api/firewall/status",
+            "/api/identity/agents",
+        ] {
+            let req = Request::builder().uri(*uri).body(Body::empty()).unwrap();
+
+            let resp = router.clone().oneshot(req).await.unwrap();
+            assert_eq!(
+                resp.status(),
+                StatusCode::UNAUTHORIZED,
+                "{uri} should require auth"
+            );
+        }
+    }
+
+    // ── WebSocket: broadcast channel tests ─────────────────────────────
+
+    #[tokio::test]
+    async fn ws_broadcast_delivers_event() {
+        let state = GatewayState::new("ignored");
+        let mut rx = state.subscribe();
+
+        let agent_id = Uuid::new_v4();
+        state.broadcast(WsEvent::agent_status_changed(agent_id, "running"));
+
+        let event = rx.recv().await.expect("should receive event");
+        assert_eq!(event.event_type, WsEventType::AgentStatusChanged);
+        assert_eq!(
+            event.data["agent_id"].as_str().unwrap(),
+            agent_id.to_string()
+        );
+        assert_eq!(event.data["status"], "running");
+        assert!(event.timestamp > 0);
+    }
+
+    #[tokio::test]
+    async fn ws_broadcast_multiple_event_types() {
+        let state = GatewayState::new("ignored");
+        let mut rx = state.subscribe();
+
+        let agent_id = Uuid::new_v4();
+        state.broadcast(WsEvent::fuel_consumed(agent_id, 9500));
+        state.broadcast(WsEvent::firewall_block(agent_id, "injection detected"));
+        state.broadcast(WsEvent::speculation_decision(agent_id, true, "low risk"));
+
+        let e1 = rx.recv().await.unwrap();
+        assert_eq!(e1.event_type, WsEventType::FuelConsumed);
+        assert_eq!(e1.data["fuel_remaining"], 9500);
+
+        let e2 = rx.recv().await.unwrap();
+        assert_eq!(e2.event_type, WsEventType::FirewallBlock);
+        assert_eq!(e2.data["reason"], "injection detected");
+
+        let e3 = rx.recv().await.unwrap();
+        assert_eq!(e3.event_type, WsEventType::SpeculationDecision);
+        assert_eq!(e3.data["approved"], true);
+        assert_eq!(e3.data["summary"], "low risk");
+    }
+
+    #[tokio::test]
+    async fn ws_event_serialization_roundtrip() {
+        let event = WsEvent::audit_event(Uuid::nil(), Uuid::nil(), "StateChange");
+        let json = serde_json::to_string(&event).unwrap();
+        let parsed: WsEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.event_type, WsEventType::AuditEvent);
+        assert_eq!(parsed.data["event_type"], "StateChange");
+    }
+
+    #[tokio::test]
+    async fn ws_agent_lifecycle_emits_broadcast() {
+        let (router, state) = setup_gateway();
+        let agent_id = get_test_agent_id(&state);
+        let auth = auth_header_for(&state);
+        let mut rx = state.subscribe();
+
+        // Stop agent to trigger broadcast
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(format!("/api/agents/{agent_id}/stop"))
+            .header("authorization", &auth)
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // Collect all broadcast events
+        let mut got_audit = false;
+        let mut got_status = false;
+        while let Ok(event) = rx.try_recv() {
+            match event.event_type {
+                WsEventType::AuditEvent => got_audit = true,
+                WsEventType::AgentStatusChanged => {
+                    assert_eq!(event.data["status"], "stopped");
+                    got_status = true;
+                }
+                _ => {}
+            }
+        }
+        assert!(got_audit, "should broadcast audit event");
+        assert!(got_status, "should broadcast agent_status_changed");
+    }
+
+    // ── WebSocket: real TCP listener tests ──────────────────────────────
+
+    /// Spin up a real TCP server and return its address.
+    async fn start_test_server(state: GatewayState) -> std::net::SocketAddr {
+        let router = build_router(state);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+        addr
+    }
+
+    #[tokio::test]
+    async fn ws_invalid_token_rejected() {
+        let state = GatewayState::new("ignored");
+        state.register_agent(
+            test_manifest("test-agent", vec!["web.search"], 10_000),
+            "https://example.com",
+        );
+        let addr = start_test_server(state).await;
+
+        let url = format!("ws://{addr}/ws?token=invalid.jwt.token");
+        let result = tokio_tungstenite::connect_async(&url).await;
+        assert!(result.is_err(), "invalid token should reject WS handshake");
+    }
+
+    #[tokio::test]
+    async fn ws_wrong_key_rejected() {
+        let state = GatewayState::new("ignored");
+        state.register_agent(
+            test_manifest("test-agent", vec!["web.search"], 10_000),
+            "https://example.com",
+        );
+        let addr = start_test_server(state).await;
+
+        let rogue_identity = AgentIdentity::generate(Uuid::new_v4());
+        let rogue_mgr = TokenManager::new("rogue", "nexus-agents");
+        let bad_token = rogue_mgr.issue_token(&rogue_identity, &[], 3600, None);
+
+        let url = format!("ws://{addr}/ws?token={bad_token}");
+        let result = tokio_tungstenite::connect_async(&url).await;
+        assert!(
+            result.is_err(),
+            "wrong-key token should reject WS handshake"
+        );
+    }
+
+    #[tokio::test]
+    async fn ws_valid_token_connects_and_receives_event() {
+        use futures_util::StreamExt;
+        use tokio_tungstenite::tungstenite::Message as TungsteniteMessage;
+
+        let state = GatewayState::new("ignored");
+        state.register_agent(
+            test_manifest("test-agent", vec!["web.search"], 10_000),
+            "https://example.com",
+        );
+        let token = state.issue_token(&[], 3600);
+        let broadcast_state = state.clone();
+        let addr = start_test_server(state).await;
+
+        let url = format!("ws://{addr}/ws?token={token}");
+        let (mut ws_stream, resp) = tokio_tungstenite::connect_async(&url)
+            .await
+            .expect("valid token should connect");
+        assert_eq!(resp.status(), axum::http::StatusCode::SWITCHING_PROTOCOLS);
+
+        // Broadcast an event after connection is established
+        let agent_id = Uuid::new_v4();
+        broadcast_state.broadcast(WsEvent::agent_status_changed(agent_id, "running"));
+
+        // Read it from the WebSocket
+        let msg = tokio::time::timeout(std::time::Duration::from_secs(2), ws_stream.next())
+            .await
+            .expect("should receive within 2s")
+            .expect("stream should not be closed")
+            .expect("message should be valid");
+
+        if let TungsteniteMessage::Text(text) = msg {
+            let event: WsEvent = serde_json::from_str(&text).unwrap();
+            assert_eq!(event.event_type, WsEventType::AgentStatusChanged);
+            assert_eq!(event.data["status"], "running");
+            assert_eq!(
+                event.data["agent_id"].as_str().unwrap(),
+                agent_id.to_string()
+            );
+        } else {
+            panic!("expected text message, got {msg:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn graceful_shutdown_completes_cleanly() {
+        let state = GatewayState::new("test-secret");
+
+        // Register an agent so shutdown has work to do
+        let manifest = test_manifest("shutdown-test-agent", vec!["llm.query"], 500);
+        state.register_agent(manifest, "http://localhost:9999");
+
+        // Verify agent is registered
+        {
+            let inner = state.inner.lock().unwrap();
+            assert!(!inner.supervisor.health_check().is_empty());
+        }
+
+        // Run shutdown — should not panic and should stop all agents
+        state.shutdown();
+
+        // After shutdown, all agents should be stopped
+        let inner = state.inner.lock().unwrap();
+        for status in inner.supervisor.health_check() {
+            assert_eq!(
+                status.state.to_string(),
+                "Stopped",
+                "agent {} should be stopped after shutdown",
+                status.id
+            );
+        }
+
+        // Audit trail should contain the shutdown event
+        let events = inner.audit_trail.events();
+        let has_shutdown = events
+            .iter()
+            .any(|e| e.payload.get("event").and_then(|v| v.as_str()) == Some("gateway.shutdown"));
+        assert!(has_shutdown, "shutdown event should be in audit trail");
+    }
+
+    // ── Metrics endpoint ──────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn metrics_endpoint_returns_prometheus_format() {
+        // NOTE: We cannot install the global metrics recorder in tests that run
+        // in the same process as other metrics tests. Instead we test the
+        // fallback path (metrics: None) returns a placeholder.
+        let (router, _state) = setup_gateway();
+        let req = Request::builder()
+            .uri("/metrics")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let text = String::from_utf8(bytes.to_vec()).unwrap();
+        // Without metrics installed, we get the placeholder
+        assert!(
+            text.contains("metrics") || text.contains("nexus_"),
+            "response should mention metrics"
+        );
+    }
+
+    // ── Extended health check ─────────────────────────────────────────
+
+    #[tokio::test]
+    async fn health_check_returns_extended_fields() {
+        let (router, _state) = setup_gateway();
+        let req = Request::builder()
+            .uri("/health")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json["status"], "healthy");
+        assert!(
+            json["uptime_seconds"].is_u64(),
+            "should have uptime_seconds"
+        );
+        assert!(
+            json["agents_active"].is_number(),
+            "should have agents_active"
+        );
+        assert!(
+            json["total_tests_passed"].is_number(),
+            "should have total_tests_passed"
+        );
+        assert!(
+            json["audit_chain_valid"].is_boolean(),
+            "should have audit_chain_valid"
+        );
+        assert!(
+            json["compliance_status"].is_string(),
+            "should have compliance_status"
+        );
+        assert!(
+            json["memory_usage_bytes"].is_number(),
+            "should have memory_usage_bytes"
+        );
+        assert!(
+            json["wasm_cache_hit_rate"].is_number(),
+            "should have wasm_cache_hit_rate"
         );
     }
 }

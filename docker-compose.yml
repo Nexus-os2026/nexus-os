@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  nexus-os:
+    build: .
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    volumes:
+      - "${HOME}/.nexus:/data"
+    environment:
+      NEXUS_CONFIG_PATH: /data/config
+      JWT_SECRET: ${JWT_SECRET:-changeme}
+    restart: unless-stopped

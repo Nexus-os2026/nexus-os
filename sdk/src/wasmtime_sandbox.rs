@@ -5,6 +5,7 @@
 //! Each agent gets its own `Store<WasmAgentState>` — the isolation boundary.
 
 use crate::context::AgentContext;
+use crate::module_cache::ModuleCache;
 use crate::sandbox::{SandboxConfig, SandboxError, SandboxResult, SandboxRuntime};
 use crate::wasm_signature::{self, SignaturePolicy, SignatureVerification};
 use crate::wasmtime_host_functions::{self, SpeculativePolicy};
@@ -77,6 +78,8 @@ pub struct WasmtimeSandbox {
     trusted_keys: Vec<VerifyingKey>,
     /// Optional speculative policy propagated to WasmAgentState on each execution.
     speculative_policy: Option<SpeculativePolicy>,
+    /// Optional compilation cache shared across sandbox instances.
+    module_cache: Option<ModuleCache>,
 }
 
 impl std::fmt::Debug for WasmtimeSandbox {
@@ -109,6 +112,7 @@ impl WasmtimeSandbox {
             signature_policy: SignaturePolicy::AllowUnsigned,
             trusted_keys: Vec::new(),
             speculative_policy: None,
+            module_cache: None,
         }
     }
 
@@ -216,6 +220,18 @@ impl WasmtimeSandbox {
         self.speculative_policy.as_ref()
     }
 
+    /// Set a shared module cache for compiled WASM modules.
+    /// Identical bytecode is compiled only once across all sandbox instances
+    /// sharing the same cache.
+    pub fn set_module_cache(&mut self, cache: ModuleCache) {
+        self.module_cache = Some(cache);
+    }
+
+    /// Current module cache, if any.
+    pub fn module_cache(&self) -> Option<&ModuleCache> {
+        self.module_cache.as_ref()
+    }
+
     /// Calculate how much Nexus fuel was consumed based on wasmtime fuel delta.
     fn nexus_fuel_from_wasm(wasm_fuel_consumed: u64) -> u64 {
         // Inverse of the 10_000 multiplier, rounded up so at least 1 unit consumed
@@ -286,18 +302,34 @@ impl SandboxRuntime for WasmtimeSandbox {
             };
         }
 
-        // Compile the wasm module (using only the wasm portion, sans appended signature)
-        let module = match Module::new(&self.engine, wasm_bytes) {
-            Ok(m) => m,
-            Err(e) => {
-                return SandboxResult {
-                    completed: false,
-                    outputs: vec![format!("wasm compile error: {e}")],
-                    fuel_used: 0,
-                    host_calls_made: 0,
-                    killed: false,
-                    kill_reason: None,
-                };
+        // Compile the wasm module (using cache if available)
+        let module = if let Some(cache) = &self.module_cache {
+            match cache.get_or_compile(&self.engine, wasm_bytes) {
+                Ok((m, _)) => m,
+                Err(e) => {
+                    return SandboxResult {
+                        completed: false,
+                        outputs: vec![format!("wasm compile error: {e}")],
+                        fuel_used: 0,
+                        host_calls_made: 0,
+                        killed: false,
+                        kill_reason: None,
+                    };
+                }
+            }
+        } else {
+            match Module::new(&self.engine, wasm_bytes) {
+                Ok(m) => m,
+                Err(e) => {
+                    return SandboxResult {
+                        completed: false,
+                        outputs: vec![format!("wasm compile error: {e}")],
+                        fuel_used: 0,
+                        host_calls_made: 0,
+                        killed: false,
+                        kill_reason: None,
+                    };
+                }
             }
         };
 
@@ -661,5 +693,54 @@ mod tests {
         // After fuel exhaustion, context fuel should be reduced
         assert!(ctx.fuel_remaining() < 5);
         assert!(sandbox.is_killed());
+    }
+
+    #[test]
+    fn module_cache_hit_avoids_recompilation() {
+        let wasm = wat::parse_str("(module)").unwrap();
+        let cache = ModuleCache::new();
+
+        // Shared engine — cached modules must be used with the same engine
+        let mut wasm_config = wasmtime::Config::new();
+        wasm_config.consume_fuel(true);
+        wasm_config.max_wasm_stack(512 * 1024);
+        let engine = Arc::new(Engine::new(&wasm_config).unwrap());
+
+        let mut sandbox = WasmtimeSandbox::new(SandboxConfig::default(), Arc::clone(&engine));
+        sandbox.set_module_cache(cache.clone());
+
+        let mut ctx = make_ctx(vec![], 1000);
+        let result = sandbox.execute(&wasm, &mut ctx);
+        assert!(result.completed);
+        assert_eq!(cache.len(), 1, "first execution should populate cache");
+
+        // Execute again with a fresh sandbox sharing the same engine and cache
+        let mut sandbox2 = WasmtimeSandbox::new(SandboxConfig::default(), Arc::clone(&engine));
+        sandbox2.set_module_cache(cache.clone());
+        let mut ctx2 = make_ctx(vec![], 1000);
+        let result2 = sandbox2.execute(&wasm, &mut ctx2);
+        assert!(result2.completed);
+        assert_eq!(
+            cache.len(),
+            1,
+            "second execution should reuse cached module"
+        );
+    }
+
+    #[test]
+    fn module_cache_miss_compiles_and_stores() {
+        let wasm = wat::parse_str("(module)").unwrap();
+        let cache = ModuleCache::new();
+        assert!(cache.is_empty());
+
+        let mut sandbox = make_sandbox();
+        sandbox.set_module_cache(cache.clone());
+
+        let mut ctx = make_ctx(vec![], 1000);
+        sandbox.execute(&wasm, &mut ctx);
+
+        assert_eq!(cache.len(), 1);
+        let hash = crate::module_cache::ContentHash::of(&wasm);
+        assert!(cache.contains(&hash), "cache should contain the module");
     }
 }

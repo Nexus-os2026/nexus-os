@@ -6,13 +6,14 @@
 //! Agent crates should depend on `nexus-sdk` (not `nexus-kernel` directly) and use
 //! the prelude for common imports:
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! use nexus_sdk::prelude::*;
 //! ```
 
 pub mod agent_trait;
 pub mod context;
 pub mod manifest;
+pub mod module_cache;
 pub mod prelude;
 pub mod sandbox;
 pub mod shadow_sandbox;
@@ -25,6 +26,7 @@ pub mod wasmtime_sandbox;
 pub use agent_trait::{AgentOutput, NexusAgent};
 pub use context::{AgentContext, ContextSideEffect};
 pub use manifest::ManifestBuilder;
+pub use module_cache::{ContentHash, ModuleCache};
 pub use sandbox::{
     HostCallResult, HostFunction, InProcessSandbox, SandboxConfig, SandboxError, SandboxResult,
     SandboxRuntime,

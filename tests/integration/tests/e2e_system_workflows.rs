@@ -27,9 +27,7 @@ use workflow_studio_agent::nodes::{
     ActionNode, NodeErrorStrategy, NodeKind, NodePort, Workflow, WorkflowConnection, WorkflowNode,
 };
 
-// Requires cargo in PATH, skipped in minimal CI containers
 #[test]
-#[ignore]
 fn test_integration_coding_agent_end_to_end() {
     let project_dir = tempdir().expect("temp project directory should be created");
     write_file(

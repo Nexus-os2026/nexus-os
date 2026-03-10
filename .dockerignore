@@ -1,0 +1,8 @@
+target/
+node_modules/
+.git/
+app/dist/
+app/node_modules/
+*.log
+.env
+.DS_Store

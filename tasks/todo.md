@@ -125,3 +125,13 @@
   - DeveloperPortal page: drag-drop .nexus-agent upload, animated 6-step verification pipeline, verdict display, published agent stats
   - 8 marketplace integration tests + 7 CLI SDK workflow tests covering full create→test→package→publish→install roundtrip
   - Stripe deferred to 7.5 — paid agents show price but install free during beta
+- [x] Phase 7.5: Web API Integration Tests (COMPLETE)
+  - 11 integration tests in protocols/tests/web_api_integration_tests.rs exercising the full HTTP gateway stack
+  - REST API: list agents (multi-agent, correct fields), create agent (UUID validation), permissions CRUD (GET/PUT/POST bulk), compliance status (all ComplianceMonitor fields), marketplace search (query + list-all)
+  - Security: all 10+ /api/* endpoints verified to reject unauthenticated, invalid JWT, and wrong-key JWT requests
+  - WebSocket: valid JWT connects, receives 3 event types (AgentStatusChanged, FuelConsumed, ComplianceAlert) with correct data
+  - Health endpoint: all 12 fields validated (status, version, agents_registered, tasks_in_flight, started_at, uptime_seconds, agents_active, total_tests_passed, audit_chain_valid, compliance_status, memory_usage_bytes, wasm_cache_hit_rate)
+  - Metrics endpoint: Prometheus text format validation (# comments + nexus_ metric lines)
+  - Graceful shutdown: 5 agents registered → shutdown within 5s timeout → agents_active=0 verified via health endpoint
+  - WASM module cache: cache miss → cache hit performance, different modules cached separately, clear works
+- [x] **PHASE 7 COMPLETE** — Full production-ready web API stack with A2A+MCP protocols, EdDSA JWT identity, prompt firewall, EU AI Act compliance, SQLite marketplace, developer SDK, and comprehensive integration test coverage

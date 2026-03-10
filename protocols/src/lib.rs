@@ -9,6 +9,7 @@
 //! fuel accounting, audit trail) before executing agent operations.
 
 pub mod http_gateway;
+pub mod metrics;
 
 // Re-export core types from kernel for convenience.
 pub use nexus_kernel::protocols::a2a;

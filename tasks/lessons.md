@@ -52,6 +52,7 @@
 - Feature flags keep compile times manageable: gating candle/tokenizers/hf-hub behind `local-slm` means default builds don't pull ~100 heavy ML crates, and CI runs fast with `MockProvider` for all governance tests
 - Data structures should always be available, runtime gated: `ModelConfig`, `GovernanceVerdict`, `GovernanceSlm` work without `local-slm` feature — only actual tensor loading and inference need the feature flag
 - When writing integration tests that span feature gates, handle both paths: `load()` returns different errors with vs without `local-slm` (feature error vs file-not-found) — assert on the common property (is_err) not the specific message
+- Feature-gated trait imports: when tests call trait methods on concrete structs behind `#[cfg(feature = "...")]`, the trait `use` must also be feature-gated with the same cfg — otherwise clippy reports unused-import without the feature, or missing-method with it. Use `#[cfg(any(feature = "a", feature = "b"))]` when multiple features share the import
 - Pattern scanners and ML scanners complement each other: pattern matching is fast and deterministic (12 hardcoded injection phrases), ML catches subtle semantic attacks (social engineering, obfuscated manipulation) that patterns miss — test both independently and in combination
 
 ## Distributed Immutable Audit (Phase 6.4)
@@ -123,3 +124,16 @@
 - Frontend marketplace pages need graceful degradation: call real Tauri backend when available, fall back to mock data arrays for browser-only preview mode — use `hasDesktopRuntime()` guard
 - Integration tests spanning CLI → marketplace → kernel should use in-memory SQLite (`open_in_memory()`) for speed and isolation — avoid temp file cleanup issues across parallel test execution
 - The scaffold → test → package → publish pipeline validates each stage feeds into the next: scaffold produces valid manifests (kernel parser), test runner exercises capabilities (SDK context), packager creates signed bundles (Ed25519 + attestation), publisher runs verification (6 checks)
+
+## Ignored Tests
+- Never use `#[ignore]` as a workaround for tests that "might not work in CI" when cargo/git/shell tools are available — always verify first by running with `--ignored`, and only leave `#[ignore]` if there is a genuine reason (e.g., performance benchmark with timing sensitivity)
+- `rust,ignore` in doctests means the example won't even compile-check — use `rust,no_run` instead when you want compile checking without execution. A bare `use nexus_sdk::prelude::*;` compiles fine as a doctest
+- The governance overhead benchmark (`governance_benchmark.rs`) is legitimately `#[ignore]` — it's timing-sensitive, CPU-intensive, and requires `NEXUS_PERF=1` opt-in. This is the correct pattern for performance benchmarks
+
+## Web API Integration Tests (Phase 7.5)
+- Integration tests (in `protocols/tests/`) cannot access private struct fields like `GatewayState.inner` — use the REST API itself (e.g., GET /api/agents) to retrieve agent IDs and verify state, which also tests the API more realistically
+- When testing auth rejection across many endpoints, iterate with `router.clone().oneshot()` — axum routers are cloneable and each `oneshot()` consumes the router
+- WebSocket integration tests need a real TCP listener (`TcpListener::bind("127.0.0.1:0")`) because `oneshot()` doesn't support protocol upgrades — use `tokio_tungstenite::connect_async` against the ephemeral port
+- Graceful shutdown testing should verify observable outcomes (health endpoint returns agents_active=0) rather than peeking at internal state — this is both more realistic and avoids private field access
+- Marketplace search handler returns `{"results": [...]}` not `{"agents": [...]}` — always read the handler source to confirm response shape before writing assertions
+- The `metrics` crate global recorder can only be installed once per process — integration tests that don't need real metrics should test the fallback path (metrics: None) instead of trying to install a recorder
