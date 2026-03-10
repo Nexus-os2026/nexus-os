@@ -2,6 +2,7 @@ use crate::WebAgentContext;
 use nexus_connectors_core::rate_limit::{RateLimitDecision, RateLimiter};
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::errors::AgentError;
+use nexus_kernel::firewall::{ContentOrigin, SemanticBoundary};
 use regex::Regex;
 use reqwest::blocking::Client;
 use scraper::{Html, Selector};
@@ -112,6 +113,9 @@ impl WebReaderConnector {
 
         let word_count = text.split_whitespace().count();
         let extracted_at = current_unix_timestamp();
+
+        let boundary = SemanticBoundary::new();
+        text = boundary.sanitize_data(text.as_str(), ContentOrigin::WebContent);
 
         let clean = CleanContent {
             title,
@@ -450,8 +454,12 @@ mod tests {
         assert!(result.is_ok());
 
         if let Ok(content) = result {
-            assert_eq!(content.text.chars().count(), 50_000);
-            assert!(content.text.ends_with("[truncated]"));
+            // Content is wrapped with semantic boundary delimiters after truncation.
+            assert!(content.text.contains("[truncated]"));
+            assert!(content
+                .text
+                .contains("---BEGIN EXTERNAL DATA (WebContent)---"));
+            assert!(content.text.contains("---END EXTERNAL DATA---"));
         }
     }
 }

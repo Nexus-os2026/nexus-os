@@ -1,6 +1,7 @@
 use crate::connector::{Connector, HealthStatus, RetryPolicy};
 use crate::http_connector::HttpConnector;
 use nexus_kernel::errors::AgentError;
+use nexus_kernel::firewall::{ContentOrigin, SemanticBoundary};
 use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -31,7 +32,8 @@ impl GitHubConnector {
     pub fn list_repos(&mut self, owner: &str) -> Result<String, AgentError> {
         let url = format!("https://api.github.com/users/{owner}/repos");
         let response = self.http.get(url.as_str(), HashMap::new())?;
-        Ok(response.body)
+        let boundary = SemanticBoundary::new();
+        Ok(boundary.sanitize_data(response.body.as_str(), ContentOrigin::RepoContent))
     }
 
     pub fn create_issue(
@@ -57,7 +59,8 @@ impl GitHubConnector {
     pub fn get_file(&mut self, owner: &str, repo: &str, path: &str) -> Result<String, AgentError> {
         let url = format!("https://api.github.com/repos/{owner}/{repo}/contents/{path}");
         let response = self.http.get(url.as_str(), HashMap::new())?;
-        Ok(response.body)
+        let boundary = SemanticBoundary::new();
+        Ok(boundary.sanitize_data(response.body.as_str(), ContentOrigin::RepoContent))
     }
 }
 

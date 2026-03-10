@@ -9,9 +9,11 @@
 pub mod egress;
 pub mod patterns;
 pub mod prompt_firewall;
+pub mod semantic_boundary;
 
 pub use egress::{EgressDecision, EgressGovernor, DEFAULT_RATE_LIMIT_PER_MIN};
 pub use patterns::{pattern_summary, PatternSummary};
 pub use prompt_firewall::{
     FirewallAction, FirewallAuditEntry, InputFilter, OutputFilter, PromptFirewall,
 };
+pub use semantic_boundary::{ContentClassification, ContentOrigin, MlClassifier, SemanticBoundary};

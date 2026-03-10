@@ -3,6 +3,7 @@ use nexus_connectors_core::rate_limit::{RateLimitDecision, RateLimiter};
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::config::load_config;
 use nexus_kernel::errors::AgentError;
+use nexus_kernel::firewall::{ContentOrigin, SemanticBoundary};
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT};
 use serde::{Deserialize, Serialize};
@@ -128,6 +129,12 @@ impl WebSearchConnector {
 
         if results.len() > max_results {
             results.truncate(max_results);
+        }
+
+        let boundary = SemanticBoundary::new();
+        for result in &mut results {
+            result.snippet =
+                boundary.sanitize_data(result.snippet.as_str(), ContentOrigin::SearchResult);
         }
 
         self.audit_trail.append_event(

@@ -423,6 +423,7 @@ mod tests {
             chat_id: "chat-1".to_string(),
             sender_id: "1".to_string(),
             text: "status".to_string(),
+            sanitized_text: None,
             voice_note_url: None,
             timestamp: 1_000,
         });
@@ -463,6 +464,7 @@ mod tests {
             chat_id: "chat-unpaired".to_string(),
             sender_id: "2".to_string(),
             text: "status".to_string(),
+            sanitized_text: None,
             voice_note_url: None,
             timestamp: 1_000,
         });

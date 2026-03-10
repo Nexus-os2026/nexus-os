@@ -4,6 +4,7 @@ use crate::messaging::{
 };
 use nexus_connectors_core::rate_limit::{RateLimitDecision, RateLimiter};
 use nexus_kernel::errors::AgentError;
+use nexus_kernel::firewall::{ContentOrigin, SemanticBoundary};
 use uuid::Uuid;
 
 pub struct SlackAdapter {
@@ -62,7 +63,14 @@ impl MessagingPlatform for SlackAdapter {
     }
 
     fn receive_messages(&mut self) -> IncomingMessageStream {
-        let drained = self.incoming.drain(..).collect::<Vec<_>>();
+        let mut drained = self.incoming.drain(..).collect::<Vec<_>>();
+
+        let boundary = SemanticBoundary::new();
+        for msg in &mut drained {
+            msg.sanitized_text =
+                Some(boundary.sanitize_data(msg.text.as_str(), ContentOrigin::MessageContent));
+        }
+
         IncomingMessageStream::new(drained)
     }
 

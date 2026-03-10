@@ -5,6 +5,7 @@ use crate::messaging::{
 use nexus_connectors_core::rate_limit::{RateLimitDecision, RateLimiter};
 use nexus_kernel::config::load_config;
 use nexus_kernel::errors::AgentError;
+use nexus_kernel::firewall::{ContentOrigin, SemanticBoundary};
 use reqwest::blocking::Client;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -271,6 +272,7 @@ impl TelegramAdapter {
             chat_id,
             sender_id,
             text,
+            sanitized_text: None,
             voice_note_url,
             timestamp: current_unix_timestamp(),
         }))
@@ -356,6 +358,12 @@ impl MessagingPlatform for TelegramAdapter {
                     }
                 }
             }
+        }
+
+        let boundary = SemanticBoundary::new();
+        for msg in &mut drained {
+            msg.sanitized_text =
+                Some(boundary.sanitize_data(msg.text.as_str(), ContentOrigin::MessageContent));
         }
 
         IncomingMessageStream::new(drained)

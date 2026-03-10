@@ -3,7 +3,10 @@ use crate::providers::{
 };
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::errors::AgentError;
-use nexus_kernel::firewall::{EgressGovernor, FirewallAction, InputFilter, OutputFilter};
+use nexus_kernel::firewall::{
+    ContentClassification, ContentOrigin, EgressGovernor, FirewallAction, InputFilter,
+    OutputFilter, SemanticBoundary,
+};
 use nexus_kernel::fuel_hardening::{
     AgentFuelLedger, BudgetPeriodId, BurnAnomalyDetector, FuelAuditReport, FuelToTokenModel,
     ModelCost,
@@ -125,6 +128,7 @@ pub struct GovernedLlmGateway<P: LlmProvider> {
     audit_trail: AuditTrail,
     oracle_events: Vec<OracleEvent>,
     redaction_engine: RedactionEngine,
+    semantic_boundary: SemanticBoundary,
     input_filter: InputFilter,
     egress_governor: EgressGovernor,
     fuel_model: FuelToTokenModel,
@@ -144,6 +148,7 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
             audit_trail: AuditTrail::new(),
             oracle_events: Vec::new(),
             redaction_engine: RedactionEngine::new(policy),
+            semantic_boundary: SemanticBoundary::new(),
             input_filter: InputFilter::new(),
             egress_governor: EgressGovernor::new(),
             fuel_model: FuelToTokenModel::with_defaults(),
@@ -209,6 +214,19 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
         max_tokens: u32,
         model: &str,
     ) -> Result<LlmResponse, AgentError> {
+        self.query_with_origin(agent, prompt, max_tokens, model, ContentOrigin::UserPrompt)
+    }
+
+    /// Query with an explicit [`ContentOrigin`] so the semantic boundary
+    /// filter can classify external data appropriately.
+    pub fn query_with_origin(
+        &mut self,
+        agent: &mut AgentRuntimeContext,
+        prompt: &str,
+        max_tokens: u32,
+        model: &str,
+        origin: ContentOrigin,
+    ) -> Result<LlmResponse, AgentError> {
         let audit_len_before = self.audit_trail.events().len();
 
         if !agent.capabilities.contains("llm.query") {
@@ -223,11 +241,50 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
             }
         }
 
+        // ── Semantic boundary (before redaction + input firewall) ───────
+        let (boundary_prompt, classification) = self
+            .semantic_boundary
+            .wrap_for_prompt(prompt, origin.clone());
+
+        if classification == ContentClassification::Suspicious {
+            self.audit_trail.append_event(
+                agent.agent_id,
+                EventType::UserAction,
+                json!({
+                    "event_kind": "firewall.semantic_boundary",
+                    "classification": "Suspicious",
+                    "origin": format!("{origin}"),
+                    "action": "wrapped_with_warning",
+                    "prompt_length": prompt.len(),
+                }),
+            )?;
+        } else if classification == ContentClassification::Mixed {
+            self.audit_trail.append_event(
+                agent.agent_id,
+                EventType::UserAction,
+                json!({
+                    "event_kind": "firewall.semantic_boundary",
+                    "classification": "Mixed",
+                    "origin": format!("{origin}"),
+                    "action": "wrapped",
+                    "prompt_length": prompt.len(),
+                }),
+            )?;
+        }
+
+        let prompt_for_redaction = match classification {
+            // User prompts pass through unwrapped (classify returns Instruction,
+            // sanitize_data returns text unchanged).
+            ContentClassification::Instruction => prompt.to_string(),
+            // All external data is wrapped with semantic delimiters.
+            _ => boundary_prompt,
+        };
+
         let mut redaction_result = self.redaction_engine.process_prompt(
             "llm.query",
             "strict",
             vec![agent.agent_id.to_string(), model.to_string()],
-            prompt,
+            &prompt_for_redaction,
         );
         self.audit_trail.append_event(
             agent.agent_id,

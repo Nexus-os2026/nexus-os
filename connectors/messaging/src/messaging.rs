@@ -17,6 +17,9 @@ pub struct IncomingMessage {
     pub chat_id: String,
     pub sender_id: String,
     pub text: String,
+    /// Semantically wrapped version of `text` for safe inclusion in LLM prompts.
+    /// Populated by the platform adapter via [`SemanticBoundary::sanitize_data`].
+    pub sanitized_text: Option<String>,
     pub voice_note_url: Option<String>,
     pub timestamp: u64,
 }
