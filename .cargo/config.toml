@@ -1,0 +1,5 @@
+[build]
+jobs = 2
+
+[env]
+CARGO_PROFILE_TEST_DEBUG = "1"

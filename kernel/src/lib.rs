@@ -23,6 +23,11 @@ pub mod privacy;
 pub mod protocols;
 pub mod redaction;
 pub mod replay;
+// SAFETY EXCEPTION: resource_limiter uses `unsafe` for `pre_exec` + `setrlimit`
+// to impose OS-level limits on child processes.  This is the only unsafe code
+// in the workspace.  See module-level docs for full justification.
+#[allow(unsafe_code)]
+pub mod resource_limiter;
 pub mod safety_supervisor;
 pub mod speculative;
 pub mod supervisor;

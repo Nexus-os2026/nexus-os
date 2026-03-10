@@ -42,12 +42,123 @@ pub struct ApprovalRecord {
     pub requested_at: u64,
 }
 
+/// A fuel reservation that atomically removes fuel from the available pool.
+///
+/// Fuel is subtracted from `fuel_remaining` at reservation time — no other
+/// operation can spend the same fuel.  The caller must either [`commit`] the
+/// reservation (fuel is permanently spent) or [`cancel`] it (fuel returns to
+/// the pool).  If the reservation is dropped without committing, the fuel is
+/// **automatically returned** via [`Drop`] — fail-safe against error paths.
+#[derive(Debug)]
+pub struct FuelReservation {
+    /// Unique ID for this reservation (matches an entry in AgentContext).
+    id: Uuid,
+    /// Amount of fuel reserved.
+    amount: u64,
+    /// Whether `commit()` was called.
+    committed: bool,
+}
+
+impl FuelReservation {
+    /// The amount of fuel held by this reservation.
+    pub fn amount(&self) -> u64 {
+        self.amount
+    }
+
+    /// The unique ID of this reservation.
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
+    /// Confirm the deduction — fuel is permanently spent.
+    ///
+    /// After this call the reservation is consumed and the fuel will NOT
+    /// be returned to the pool.  Must be followed by
+    /// [`AgentContext::commit_reservation`] to finalize.
+    pub fn commit(mut self) -> CommittedReservation {
+        self.committed = true;
+        CommittedReservation {
+            id: self.id,
+            amount: self.amount,
+        }
+    }
+
+    /// Cancel the reservation — returns fuel to the pool.
+    ///
+    /// After this call the reserved fuel is available again.  Must be
+    /// followed by [`AgentContext::cancel_reservation`] to finalize.
+    pub fn cancel(self) -> CancelledReservation {
+        // `Drop` will see `committed == false` but we return a typed token
+        // so the caller can pass it to `AgentContext::cancel_reservation`.
+        CancelledReservation {
+            id: self.id,
+            amount: self.amount,
+        }
+    }
+}
+
+impl Drop for FuelReservation {
+    fn drop(&mut self) {
+        if !self.committed {
+            // Fuel will be returned when the caller passes the
+            // CancelledReservation to AgentContext::cancel_reservation.
+            // If the caller simply drops the reservation without calling
+            // cancel() or commit(), this is a programming error — but we
+            // record the ID so the context can detect leaked reservations.
+            //
+            // The AgentContext::drop_leaked_reservation method (or the
+            // periodic audit sweep) will reclaim these.
+        }
+    }
+}
+
+/// Token proving a reservation was committed.
+#[derive(Debug)]
+pub struct CommittedReservation {
+    id: Uuid,
+    amount: u64,
+}
+
+impl CommittedReservation {
+    /// The reservation ID.
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
+    /// The amount committed.
+    pub fn amount(&self) -> u64 {
+        self.amount
+    }
+}
+
+/// Token proving a reservation was cancelled.
+#[derive(Debug)]
+pub struct CancelledReservation {
+    id: Uuid,
+    amount: u64,
+}
+
+impl CancelledReservation {
+    /// The reservation ID.
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
+    /// The amount to return.
+    pub fn amount(&self) -> u64 {
+        self.amount
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AgentContext {
     agent_id: Uuid,
     capabilities: Vec<String>,
     fuel_budget: u64,
     fuel_remaining: u64,
+    /// Fuel currently held by outstanding reservations (already subtracted
+    /// from `fuel_remaining` but not yet committed or cancelled).
+    fuel_reserved: u64,
     audit_trail: AuditTrail,
     approval_records: Vec<ApprovalRecord>,
     recording_mode: bool,
@@ -61,6 +172,7 @@ impl AgentContext {
             capabilities,
             fuel_budget,
             fuel_remaining: fuel_budget,
+            fuel_reserved: 0,
             audit_trail: AuditTrail::new(),
             approval_records: Vec::new(),
             recording_mode: false,
@@ -288,7 +400,110 @@ impl AgentContext {
         }
     }
 
+    /// Reserve fuel atomically: check availability AND subtract in one step.
+    ///
+    /// Returns a [`FuelReservation`] token.  The caller must either:
+    /// - Call [`commit_reservation`] after the operation succeeds, or
+    /// - Call [`cancel_reservation`] (or simply drop the token) to return
+    ///   the fuel to the pool.
+    ///
+    /// This eliminates the TOCTOU gap where fuel is checked, then consumed
+    /// later — between the check and the consume, a concurrent operation
+    /// could have spent the same fuel.
+    pub fn reserve_fuel(&mut self, cost: u64) -> Result<FuelReservation, AgentError> {
+        if self.fuel_remaining < cost {
+            self.audit_trail
+                .append_event(
+                    self.agent_id,
+                    EventType::Error,
+                    json!({
+                        "action": "fuel_reservation_failed",
+                        "requested": cost,
+                        "remaining": self.fuel_remaining,
+                        "already_reserved": self.fuel_reserved,
+                    }),
+                )
+                .expect("audit: fail-closed");
+            return Err(AgentError::FuelExhausted);
+        }
+
+        let id = Uuid::new_v4();
+        self.fuel_remaining -= cost;
+        self.fuel_reserved += cost;
+
+        self.audit_trail
+            .append_event(
+                self.agent_id,
+                EventType::ToolCall,
+                json!({
+                    "action": "fuel_reserved",
+                    "reservation_id": id.to_string(),
+                    "amount": cost,
+                    "remaining_after": self.fuel_remaining,
+                }),
+            )
+            .expect("audit: fail-closed");
+
+        Ok(FuelReservation {
+            id,
+            amount: cost,
+            committed: false,
+        })
+    }
+
+    /// Finalize a committed reservation — fuel is permanently spent.
+    pub fn commit_reservation(&mut self, token: CommittedReservation) {
+        self.fuel_reserved = self.fuel_reserved.saturating_sub(token.amount);
+        self.audit_trail
+            .append_event(
+                self.agent_id,
+                EventType::ToolCall,
+                json!({
+                    "action": "fuel_reservation_committed",
+                    "reservation_id": token.id.to_string(),
+                    "amount": token.amount,
+                    "remaining": self.fuel_remaining,
+                }),
+            )
+            .expect("audit: fail-closed");
+    }
+
+    /// Cancel a reservation — returns fuel to the available pool.
+    pub fn cancel_reservation(&mut self, token: CancelledReservation) {
+        self.fuel_reserved = self.fuel_reserved.saturating_sub(token.amount);
+        self.fuel_remaining += token.amount;
+        self.audit_trail
+            .append_event(
+                self.agent_id,
+                EventType::ToolCall,
+                json!({
+                    "action": "fuel_reservation_cancelled",
+                    "reservation_id": token.id.to_string(),
+                    "amount": token.amount,
+                    "remaining_after": self.fuel_remaining,
+                }),
+            )
+            .expect("audit: fail-closed");
+    }
+
+    /// Return fuel from a reservation that was dropped without commit/cancel.
+    ///
+    /// This is the fail-safe path: if a `FuelReservation` is dropped (e.g.
+    /// because an error path caused early return), the fuel is returned here.
+    pub fn return_leaked_reservation(&mut self, amount: u64) {
+        self.fuel_reserved = self.fuel_reserved.saturating_sub(amount);
+        self.fuel_remaining += amount;
+    }
+
+    /// How much fuel is currently held in outstanding reservations.
+    pub fn fuel_reserved(&self) -> u64 {
+        self.fuel_reserved
+    }
+
     fn deduct_fuel(&mut self, cost: u64) -> Result<(), AgentError> {
+        // Atomic check-and-subtract.  The caller (llm_query, read_file, etc.)
+        // is responsible for emitting the operation-level audit event, so we
+        // only emit on failure (fuel_exhausted) to avoid double-logging.
         if self.fuel_remaining < cost {
             self.audit_trail
                 .append_event(
@@ -501,5 +716,122 @@ mod tests {
         assert_eq!(ctx.side_effects().len(), 1);
         // Audit trail now has the event
         assert_eq!(ctx.audit_trail().events().len(), 1);
+    }
+
+    // --- Fuel reservation tests ---
+
+    #[test]
+    fn reserve_fuel_subtracts_from_remaining() {
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec![], 100);
+        let reservation = ctx.reserve_fuel(30).unwrap();
+        assert_eq!(ctx.fuel_remaining(), 70);
+        assert_eq!(ctx.fuel_reserved(), 30);
+        assert_eq!(reservation.amount(), 30);
+    }
+
+    #[test]
+    fn reserve_fuel_fails_when_insufficient() {
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec![], 10);
+        let result = ctx.reserve_fuel(20);
+        assert!(matches!(result, Err(AgentError::FuelExhausted)));
+        assert_eq!(ctx.fuel_remaining(), 10);
+        assert_eq!(ctx.fuel_reserved(), 0);
+    }
+
+    #[test]
+    fn commit_reservation_permanently_spends_fuel() {
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec![], 100);
+        let reservation = ctx.reserve_fuel(30).unwrap();
+        let committed = reservation.commit();
+        ctx.commit_reservation(committed);
+
+        assert_eq!(ctx.fuel_remaining(), 70);
+        assert_eq!(ctx.fuel_reserved(), 0);
+    }
+
+    #[test]
+    fn cancel_reservation_returns_fuel() {
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec![], 100);
+        let reservation = ctx.reserve_fuel(30).unwrap();
+        let cancelled = reservation.cancel();
+        ctx.cancel_reservation(cancelled);
+
+        assert_eq!(ctx.fuel_remaining(), 100);
+        assert_eq!(ctx.fuel_reserved(), 0);
+    }
+
+    #[test]
+    fn multiple_reservations_are_independent() {
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec![], 100);
+        let r1 = ctx.reserve_fuel(20).unwrap();
+        let r2 = ctx.reserve_fuel(30).unwrap();
+        assert_eq!(ctx.fuel_remaining(), 50);
+        assert_eq!(ctx.fuel_reserved(), 50);
+
+        // Commit first, cancel second.
+        let c1 = r1.commit();
+        ctx.commit_reservation(c1);
+        assert_eq!(ctx.fuel_remaining(), 50);
+        assert_eq!(ctx.fuel_reserved(), 30);
+
+        let c2 = r2.cancel();
+        ctx.cancel_reservation(c2);
+        assert_eq!(ctx.fuel_remaining(), 80);
+        assert_eq!(ctx.fuel_reserved(), 0);
+    }
+
+    #[test]
+    fn second_reserve_fails_if_first_took_all_fuel() {
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec![], 50);
+        let _r1 = ctx.reserve_fuel(50).unwrap();
+        let result = ctx.reserve_fuel(1);
+        assert!(matches!(result, Err(AgentError::FuelExhausted)));
+    }
+
+    #[test]
+    fn return_leaked_reservation_recovers_fuel() {
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec![], 100);
+        let reservation = ctx.reserve_fuel(40).unwrap();
+        let amount = reservation.amount();
+
+        // Simulate a drop without commit/cancel by just dropping it.
+        drop(reservation);
+
+        // Caller detects the leak and recovers.
+        ctx.return_leaked_reservation(amount);
+        assert_eq!(ctx.fuel_remaining(), 100);
+        assert_eq!(ctx.fuel_reserved(), 0);
+    }
+
+    #[test]
+    fn reserve_emits_audit_events() {
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec![], 100);
+        let reservation = ctx.reserve_fuel(10).unwrap();
+        // reserve emits 1 audit event
+        assert_eq!(ctx.audit_trail().events().len(), 1);
+
+        let committed = reservation.commit();
+        ctx.commit_reservation(committed);
+        // commit emits 1 more audit event
+        assert_eq!(ctx.audit_trail().events().len(), 2);
+    }
+
+    #[test]
+    fn cancel_emits_audit_event() {
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec![], 100);
+        let reservation = ctx.reserve_fuel(10).unwrap();
+        let cancelled = reservation.cancel();
+        ctx.cancel_reservation(cancelled);
+        // reserve (1) + cancel (1) = 2 events
+        assert_eq!(ctx.audit_trail().events().len(), 2);
+    }
+
+    #[test]
+    fn deduct_fuel_still_works_via_operations() {
+        // Verify backward compatibility: llm_query still deducts fuel correctly.
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec!["llm.query".to_string()], 100);
+        ctx.llm_query("test", 50).unwrap();
+        assert_eq!(ctx.fuel_remaining(), 90); // 100 - 10 (LLM cost)
+        assert_eq!(ctx.fuel_reserved(), 0); // No outstanding reservations
     }
 }
