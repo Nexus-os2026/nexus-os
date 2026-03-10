@@ -1,4 +1,4 @@
-import { useCallback, useState, type KeyboardEvent } from "react";
+import { useCallback, useState, type KeyboardEvent, type Ref } from "react";
 import type { BrowserMode } from "../../types";
 
 interface BrowserToolbarProps {
@@ -12,12 +12,16 @@ interface BrowserToolbarProps {
   onForward: () => void;
   onRefresh: () => void;
   onModeChange: (mode: BrowserMode) => void;
+  urlInputRef?: Ref<HTMLInputElement>;
+  onToggleHistory?: () => void;
+  onToggleGovernance?: () => void;
+  showGovernance?: boolean;
 }
 
-const MODE_LABELS: Record<BrowserMode, string> = {
-  research: "Research",
-  build: "Build",
-  learn: "Learn",
+const MODE_LABELS: Record<BrowserMode, { label: string; shortcut: string }> = {
+  research: { label: "Research", shortcut: "1" },
+  build: { label: "Build", shortcut: "2" },
+  learn: { label: "Learn", shortcut: "3" },
 };
 
 export function BrowserToolbar({
@@ -31,6 +35,10 @@ export function BrowserToolbar({
   onForward,
   onRefresh,
   onModeChange,
+  urlInputRef,
+  onToggleHistory,
+  onToggleGovernance,
+  showGovernance,
 }: BrowserToolbarProps): JSX.Element {
   const [draft, setDraft] = useState(url);
 
@@ -70,10 +78,37 @@ export function BrowserToolbar({
             type="button"
             className={`browser-mode-tab ${mode === m ? "active" : ""}`}
             onClick={() => onModeChange(m)}
+            title={`Ctrl+${MODE_LABELS[m].shortcut}`}
           >
-            {MODE_LABELS[m]}
+            {MODE_LABELS[m].label}
           </button>
         ))}
+
+        <div className="browser-toolbar-spacer" />
+
+        {/* History toggle */}
+        {onToggleHistory && (
+          <button
+            type="button"
+            className="browser-toolbar-icon-btn"
+            onClick={onToggleHistory}
+            title="History (Ctrl+H)"
+          >
+{"\u23F2"}
+          </button>
+        )}
+
+        {/* Governance toggle */}
+        {onToggleGovernance && (
+          <button
+            type="button"
+            className={`browser-toolbar-icon-btn ${showGovernance ? "browser-toolbar-icon-btn--active" : ""}`}
+            onClick={onToggleGovernance}
+            title="Governance (Ctrl+G)"
+          >
+            {"\u2694"}
+          </button>
+        )}
       </div>
 
       {/* Navigation controls */}
@@ -85,7 +120,7 @@ export function BrowserToolbar({
           onClick={onBack}
           title="Back"
         >
-          ◁
+          {"\u25C1"}
         </button>
         <button
           type="button"
@@ -94,26 +129,27 @@ export function BrowserToolbar({
           onClick={onForward}
           title="Forward"
         >
-          ▷
+          {"\u25B7"}
         </button>
         <button
           type="button"
           className="browser-nav-btn"
           onClick={onRefresh}
-          title="Refresh"
+          title="Refresh (Ctrl+R)"
         >
-          {loading ? "◌" : "↻"}
+          {loading ? "\u25CC" : "\u21BB"}
         </button>
 
         <div className="browser-url-bar">
           {loading && <span className="browser-loading-indicator" />}
           <input
+            ref={urlInputRef}
             type="text"
             className="browser-url-input"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Enter URL..."
+            placeholder="Enter URL... (Ctrl+L to focus)"
             spellCheck={false}
           />
           <button
@@ -122,7 +158,7 @@ export function BrowserToolbar({
             onClick={handleSubmit}
             title="Navigate"
           >
-            →
+            {"\u2192"}
           </button>
         </div>
       </div>

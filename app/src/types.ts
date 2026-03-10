@@ -508,3 +508,55 @@ export interface ResearchEvent {
   finding: string | null;
   summary: string | null;
 }
+
+// ── Learn Mode Types ──
+
+export type LearningStatus = "idle" | "browsing" | "extracting" | "comparing" | "complete" | "error";
+
+export interface LearningSource {
+  url: string;
+  label: string;
+  category: "documentation" | "github" | "blog" | "changelog";
+}
+
+export interface KnowledgeEntry {
+  id: string;
+  title: string;
+  source_url: string;
+  key_points: string[];
+  timestamp: number;
+  relevance_score: number;
+  category: string;
+  is_new: boolean;
+  change_summary: string | null;
+}
+
+export interface LearningSuggestion {
+  id: string;
+  title: string;
+  description: string;
+  source_url: string;
+  relevance: "high" | "medium" | "low";
+  timestamp: number;
+}
+
+export interface LearningSessionState {
+  session_id: string;
+  status: LearningStatus;
+  sources: LearningSource[];
+  current_source_idx: number;
+  current_url: string | null;
+  knowledge_base: KnowledgeEntry[];
+  suggestions: LearningSuggestion[];
+  fuel_used: number;
+  pages_visited: number;
+}
+
+export interface LearningEvent {
+  event_type: "learning_started" | "agent_browsing" | "agent_extracted" | "knowledge_updated" | "learning_suggestion" | "learning_complete";
+  session_id: string;
+  message: string;
+  url: string | null;
+  key_points: string[] | null;
+  change_summary: string | null;
+}

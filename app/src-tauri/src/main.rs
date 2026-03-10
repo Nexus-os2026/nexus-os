@@ -3594,7 +3594,11 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{create_agent, list_agents, pause_agent, resume_agent, AppState};
+    use super::{
+        complete_build, complete_research, create_agent, get_agent_activity, get_browser_history,
+        get_knowledge_base, learning_agent_action, list_agents, navigate_to, pause_agent,
+        resume_agent, start_build, start_learning, start_research, AppState, LearningSource,
+    };
     use serde_json::json;
 
     fn build_manifest(name: &str) -> String {
@@ -3664,5 +3668,215 @@ mod tests {
             assert_eq!(resumed_rows[0].status, "Running");
             assert_eq!(resumed_rows[0].last_action, "resumed");
         }
+    }
+
+    // ── Browser Navigate Tests ──
+
+    #[test]
+    fn test_browser_navigate_logs_audit() {
+        let state = AppState::new();
+        let result = navigate_to(&state, "https://docs.rust-lang.org/".to_string());
+        assert!(result.is_ok());
+        let nav = result.unwrap();
+        assert!(nav.allowed);
+        assert_eq!(nav.url, "https://docs.rust-lang.org/");
+
+        // History should have one entry
+        let hist = get_browser_history(&state).unwrap();
+        assert_eq!(hist.len(), 1);
+        assert_eq!(hist[0].url, "https://docs.rust-lang.org/");
+
+        // Activity log should have recorded the visit
+        let activity = get_agent_activity(&state).unwrap();
+        assert!(!activity.is_empty());
+
+        // Audit trail should have at least one event
+        let audit = state.audit.lock().unwrap();
+        assert!(!audit.events().is_empty());
+    }
+
+    #[test]
+    fn test_browser_blocked_domain_returns_error() {
+        let state = AppState::new();
+        let result = navigate_to(&state, "https://malware.example.com/payload".to_string());
+        assert!(result.is_ok());
+        let nav = result.unwrap();
+        assert!(!nav.allowed);
+        assert!(nav.deny_reason.is_some());
+        assert!(nav
+            .deny_reason
+            .unwrap()
+            .contains("blocked by egress policy"));
+    }
+
+    #[test]
+    fn test_browser_invalid_protocol_blocked() {
+        let state = AppState::new();
+        let result = navigate_to(&state, "ftp://files.example.com/data".to_string());
+        assert!(result.is_ok());
+        let nav = result.unwrap();
+        assert!(!nav.allowed);
+    }
+
+    // ── Research Session Tests ──
+
+    #[test]
+    fn test_research_session_creates_multiple_agents() {
+        let state = AppState::new();
+        let result = start_research(&state, "Rust async patterns".to_string(), 3);
+        assert!(result.is_ok());
+        let session = result.unwrap();
+        assert_eq!(session.sub_agents.len(), 3);
+        assert_eq!(session.status, "running");
+        assert_eq!(session.topic, "Rust async patterns");
+
+        // Each agent should have a unique ID and a query
+        let ids: Vec<_> = session.sub_agents.iter().map(|a| &a.agent_id).collect();
+        let unique: std::collections::HashSet<_> = ids.iter().collect();
+        assert_eq!(unique.len(), 3, "agent IDs should be unique");
+
+        for agent in &session.sub_agents {
+            assert!(!agent.query.is_empty());
+            assert_eq!(agent.status, "searching");
+        }
+    }
+
+    #[test]
+    fn test_research_complete_merges_findings() {
+        let state = AppState::new();
+        let session = start_research(&state, "WebAssembly".to_string(), 2).unwrap();
+        let result = complete_research(&state, session.session_id);
+        assert!(result.is_ok());
+        let completed = result.unwrap();
+        assert_eq!(completed.status, "complete");
+        assert!(completed.total_fuel_used > 0);
+    }
+
+    // ── Build Session Tests ──
+
+    #[test]
+    fn test_build_session_streams_code() {
+        let state = AppState::new();
+        let session = start_build(&state, "Dashboard widget".to_string()).unwrap();
+        assert_eq!(session.status, "planning");
+        assert!(!session.messages.is_empty());
+
+        // Complete the build
+        let result = complete_build(&state, session.session_id);
+        assert!(result.is_ok());
+        let completed = result.unwrap();
+        assert_eq!(completed.status, "complete");
+    }
+
+    // ── Learning Session Tests ──
+
+    #[test]
+    fn test_learning_session_extracts_takeaways() {
+        let state = AppState::new();
+        let sources = vec![
+            LearningSource {
+                url: "https://docs.rust-lang.org/stable/".to_string(),
+                label: "Rust Docs".to_string(),
+                category: "documentation".to_string(),
+            },
+            LearningSource {
+                url: "https://blog.rust-lang.org/".to_string(),
+                label: "Rust Blog".to_string(),
+                category: "blog".to_string(),
+            },
+        ];
+
+        let session = start_learning(&state, sources).unwrap();
+        assert_eq!(session.status, "browsing");
+        assert_eq!(session.sources.len(), 2);
+
+        // Browse first source
+        let browsed = learning_agent_action(
+            &state,
+            session.session_id.clone(),
+            "browse".to_string(),
+            Some("https://docs.rust-lang.org/stable/".to_string()),
+            None,
+        )
+        .unwrap();
+        assert_eq!(browsed.pages_visited, 1);
+        assert!(browsed.fuel_used > 0);
+
+        // Extract from it
+        let extracted = learning_agent_action(
+            &state,
+            session.session_id.clone(),
+            "extract".to_string(),
+            Some("https://docs.rust-lang.org/stable/".to_string()),
+            Some("Rust 1.78 adds diagnostic attributes".to_string()),
+        )
+        .unwrap();
+        assert_eq!(extracted.knowledge_base.len(), 1);
+        assert!(extracted.knowledge_base[0]
+            .key_points
+            .iter()
+            .any(|p| p.contains("diagnostic")));
+
+        // Compare with existing knowledge
+        let compared = learning_agent_action(
+            &state,
+            session.session_id.clone(),
+            "compare".to_string(),
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(compared.knowledge_base[0].is_new);
+
+        // Complete session
+        let done = learning_agent_action(
+            &state,
+            session.session_id.clone(),
+            "done".to_string(),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(done.status, "complete");
+
+        // Global knowledge base should now have entries
+        let kb = get_knowledge_base(&state).unwrap();
+        assert!(!kb.is_empty());
+    }
+
+    #[test]
+    fn test_learning_blocked_source_rejected() {
+        let state = AppState::new();
+        let sources = vec![LearningSource {
+            url: "https://phishing.evil.com/".to_string(),
+            label: "Bad Source".to_string(),
+            category: "blog".to_string(),
+        }];
+
+        let result = start_learning(&state, sources);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("blocked"));
+    }
+
+    #[test]
+    fn test_learning_browse_blocked_url() {
+        let state = AppState::new();
+        let sources = vec![LearningSource {
+            url: "https://docs.rust-lang.org/".to_string(),
+            label: "Rust Docs".to_string(),
+            category: "documentation".to_string(),
+        }];
+
+        let session = start_learning(&state, sources).unwrap();
+
+        // Try browsing a blocked URL during the session
+        let result = learning_agent_action(
+            &state,
+            session.session_id,
+            "browse".to_string(),
+            Some("https://darkweb.example.com/".to_string()),
+            None,
+        );
+        assert!(result.is_err());
     }
 }

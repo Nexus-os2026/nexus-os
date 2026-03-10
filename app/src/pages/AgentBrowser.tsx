@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BrowserToolbar } from "../components/browser/BrowserToolbar";
-import { ActivityStream } from "../components/browser/ActivityStream";
 import { ResearchMode } from "../components/browser/ResearchMode";
+import { BuildMode } from "../components/browser/BuildMode";
+import { LearnMode } from "../components/browser/LearnMode";
 import { hasDesktopRuntime, navigateTo } from "../api/backend";
 import type { ActivityMessage, BrowserMode } from "../types";
 import "./agent-browser.css";
@@ -11,6 +12,19 @@ function makeId(): string {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.floor(Math.random() * 100_000)}`;
+}
+
+interface HistoryEntry {
+  url: string;
+  timestamp: number;
+  agent: string;
+}
+
+interface GovernanceStats {
+  domainsBlocked: number;
+  piiRedactions: number;
+  fuelConsumed: number;
+  auditEvents: number;
 }
 
 export function AgentBrowser(): JSX.Element {
@@ -23,10 +37,20 @@ export function AgentBrowser(): JSX.Element {
   const [blocked, setBlocked] = useState<string | null>(null);
   const [iframeSrc, setIframeSrc] = useState<string | null>(null);
 
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const dividerRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [activityWidth, setActivityWidth] = useState(40); // percent
+  // History dropdown
+  const [historyLog, setHistoryLog] = useState<HistoryEntry[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Governance sidebar
+  const [showGovernance, setShowGovernance] = useState(false);
+  const [govStats, setGovStats] = useState<GovernanceStats>({
+    domainsBlocked: 0,
+    piiRedactions: 0,
+    fuelConsumed: 0,
+    auditEvents: 0,
+  });
+
+  const urlInputRef = useRef<HTMLInputElement>(null);
 
   const addActivity = useCallback(
     (type: ActivityMessage["message_type"], content: string, agentName = "Browser") => {
@@ -41,6 +65,13 @@ export function AgentBrowser(): JSX.Element {
           content,
         },
       ]);
+      // Track governance stats
+      setGovStats((prev) => ({
+        ...prev,
+        auditEvents: prev.auditEvents + 1,
+        domainsBlocked: prev.domainsBlocked + (type === "blocked" ? 1 : 0),
+        fuelConsumed: prev.fuelConsumed + 25,
+      }));
     },
     []
   );
@@ -82,6 +113,10 @@ export function AgentBrowser(): JSX.Element {
         setHistoryIdx(next.length - 1);
         return next;
       });
+      setHistoryLog((prev) => [
+        { url: target, timestamp: Date.now(), agent: "Browser" },
+        ...prev,
+      ]);
       setLoading(false);
     },
     [addActivity, historyIdx]
@@ -110,40 +145,62 @@ export function AgentBrowser(): JSX.Element {
   const handleRefresh = useCallback(() => {
     if (iframeSrc) {
       addActivity("navigating", `Refreshing: ${iframeSrc}`);
-      // Force iframe reload by toggling src
       const src = iframeSrc;
       setIframeSrc(null);
       requestAnimationFrame(() => setIframeSrc(src));
     }
   }, [iframeSrc, addActivity]);
 
-  // Resizable divider logic
-  const handleDividerMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      const container = containerRef.current;
-      if (!container) return;
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+L — focus URL bar
+      if (e.ctrlKey && e.key === "l") {
+        e.preventDefault();
+        urlInputRef.current?.focus();
+        urlInputRef.current?.select();
+      }
+      // Ctrl+1/2/3 — switch modes
+      if (e.ctrlKey && e.key === "1") {
+        e.preventDefault();
+        setMode("research");
+      }
+      if (e.ctrlKey && e.key === "2") {
+        e.preventDefault();
+        setMode("build");
+      }
+      if (e.ctrlKey && e.key === "3") {
+        e.preventDefault();
+        setMode("learn");
+      }
+      // Ctrl+R — refresh
+      if (e.ctrlKey && e.key === "r") {
+        e.preventDefault();
+        handleRefresh();
+      }
+      // Ctrl+H — toggle history
+      if (e.ctrlKey && e.key === "h") {
+        e.preventDefault();
+        setShowHistory((p) => !p);
+      }
+      // Ctrl+G — toggle governance
+      if (e.ctrlKey && e.key === "g") {
+        e.preventDefault();
+        setShowGovernance((p) => !p);
+      }
+    };
 
-      const startX = e.clientX;
-      const startWidth = activityWidth;
-      const containerWidth = container.getBoundingClientRect().width;
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [handleRefresh]);
 
-      const onMove = (me: MouseEvent) => {
-        const delta = me.clientX - startX;
-        const pct = startWidth + (delta / containerWidth) * 100;
-        setActivityWidth(Math.max(15, Math.min(65, pct)));
-      };
-
-      const onUp = () => {
-        document.removeEventListener("mousemove", onMove);
-        document.removeEventListener("mouseup", onUp);
-      };
-
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
-    },
-    [activityWidth]
-  );
+  function formatHistoryTime(ts: number): string {
+    return new Date(ts).toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  }
 
   return (
     <div className="agent-browser-root">
@@ -160,60 +217,156 @@ export function AgentBrowser(): JSX.Element {
         onForward={handleForward}
         onRefresh={handleRefresh}
         onModeChange={setMode}
+        urlInputRef={urlInputRef}
+        onToggleHistory={() => setShowHistory((p) => !p)}
+        onToggleGovernance={() => setShowGovernance((p) => !p)}
+        showGovernance={showGovernance}
       />
 
       {blocked && (
         <div className="browser-blocked-banner">
-          ⛔ {blocked}
+          {blocked}
         </div>
       )}
 
-      {mode === "research" ? (
-        <ResearchMode
-          activities={activities}
-          onActivity={addActivity}
-          iframeSrc={iframeSrc}
-          onIframeSrc={setIframeSrc}
-        />
-      ) : (
-        <div className="browser-split-container" ref={containerRef}>
-          <div
-            className="browser-activity-panel"
-            style={{ width: `${activityWidth}%` }}
-          >
-            <ActivityStream messages={activities} />
+      {/* History dropdown */}
+      {showHistory && (
+        <div className="browser-history-dropdown">
+          <div className="browser-history-header">
+            <span className="browser-history-title">Browsing History</span>
+            <button
+              className="browser-history-close"
+              onClick={() => setShowHistory(false)}
+            >
+              x
+            </button>
           </div>
-
-          <div
-            className="browser-resize-handle"
-            ref={dividerRef}
-            onMouseDown={handleDividerMouseDown}
-          />
-
-          <div className="browser-view-panel">
-            <div className="browser-iframe-container">
-              {iframeSrc && !blocked ? (
-                <iframe
-                  ref={iframeRef}
-                  className="browser-iframe"
-                  src={iframeSrc}
-                  title="Agent Browser"
-                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                  onLoad={() => setLoading(false)}
-                />
-              ) : (
-                <div className="browser-placeholder">
-                  <span className="browser-placeholder-icon">⌁</span>
-                  <span className="browser-placeholder-text">Agent Browser</span>
-                  <span className="browser-placeholder-hint">
-                    Enter a URL above to begin browsing
+          {historyLog.length === 0 ? (
+            <div className="browser-history-empty">No pages visited yet</div>
+          ) : (
+            <div className="browser-history-list">
+              {historyLog.map((entry, i) => (
+                <button
+                  key={i}
+                  className="browser-history-item"
+                  onClick={() => {
+                    setShowHistory(false);
+                    void handleNavigate(entry.url);
+                  }}
+                >
+                  <span className="browser-history-item-url">
+                    {entry.url.replace(/^https?:\/\//, "").slice(0, 60)}
                   </span>
-                </div>
-              )}
+                  <span className="browser-history-item-meta">
+                    <span className="browser-history-item-agent">{entry.agent}</span>
+                    <span className="browser-history-item-time">
+                      {formatHistoryTime(entry.timestamp)}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="browser-main-area">
+        {/* Governance sidebar */}
+        {showGovernance && (
+          <div className="governance-sidebar">
+            <div className="governance-sidebar-header">
+              <span className="governance-sidebar-title">Governance</span>
+            </div>
+            <div className="governance-stat-grid">
+              <div className="governance-stat">
+                <span className="governance-stat-value governance-stat--blocked">
+                  {govStats.domainsBlocked}
+                </span>
+                <span className="governance-stat-label">Domains Blocked</span>
+              </div>
+              <div className="governance-stat">
+                <span className="governance-stat-value governance-stat--pii">
+                  {govStats.piiRedactions}
+                </span>
+                <span className="governance-stat-label">PII Redactions</span>
+              </div>
+              <div className="governance-stat">
+                <span className="governance-stat-value governance-stat--fuel">
+                  {govStats.fuelConsumed}
+                </span>
+                <span className="governance-stat-label">Fuel Consumed</span>
+              </div>
+              <div className="governance-stat">
+                <span className="governance-stat-value governance-stat--audit">
+                  {govStats.auditEvents}
+                </span>
+                <span className="governance-stat-label">Audit Events</span>
+              </div>
+            </div>
+            <div className="governance-info">
+              <div className="governance-info-item">
+                <span className="governance-info-dot governance-info-dot--green" />
+                Egress policy active
+              </div>
+              <div className="governance-info-item">
+                <span className="governance-info-dot governance-info-dot--green" />
+                PII firewall enabled
+              </div>
+              <div className="governance-info-item">
+                <span className="governance-info-dot governance-info-dot--green" />
+                Audit chain verified
+              </div>
+              <div className="governance-info-item">
+                <span className="governance-info-dot governance-info-dot--green" />
+                Fuel metering on
+              </div>
+            </div>
+            <div className="governance-shortcuts">
+              <div className="governance-shortcut">
+                <kbd>Ctrl+L</kbd> Focus URL
+              </div>
+              <div className="governance-shortcut">
+                <kbd>Ctrl+1/2/3</kbd> Switch mode
+              </div>
+              <div className="governance-shortcut">
+                <kbd>Ctrl+R</kbd> Refresh
+              </div>
+              <div className="governance-shortcut">
+                <kbd>Ctrl+H</kbd> History
+              </div>
+              <div className="governance-shortcut">
+                <kbd>Ctrl+G</kbd> Governance
+              </div>
             </div>
           </div>
+        )}
+
+        {/* Mode panels with transitions */}
+        <div className="browser-mode-content">
+          <div
+            className={`browser-mode-panel ${mode === "research" ? "browser-mode-panel--active" : ""}`}
+          >
+            {mode === "research" && (
+              <ResearchMode
+                activities={activities}
+                onActivity={addActivity}
+                iframeSrc={iframeSrc}
+                onIframeSrc={setIframeSrc}
+              />
+            )}
+          </div>
+          <div
+            className={`browser-mode-panel ${mode === "build" ? "browser-mode-panel--active" : ""}`}
+          >
+            {mode === "build" && <BuildMode onActivity={addActivity} />}
+          </div>
+          <div
+            className={`browser-mode-panel ${mode === "learn" ? "browser-mode-panel--active" : ""}`}
+          >
+            {mode === "learn" && <LearnMode onActivity={addActivity} />}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -12,6 +12,9 @@ import type {
   FirewallPatterns,
   FirewallStatus,
   HardwareInfo,
+  KnowledgeEntry,
+  LearningSessionState,
+  LearningSource,
   MarketplaceAgent,
   MarketplaceDetail,
   MarketplacePublishResult,
@@ -419,4 +422,34 @@ export function getBuildCode(sessionId: string): Promise<string> {
 
 export function getBuildPreview(sessionId: string): Promise<string> {
   return invokeDesktop<string>("get_build_preview", { session_id: sessionId });
+}
+
+// ── Learn Mode API ──
+
+export function startLearning(sources: LearningSource[]): Promise<LearningSessionState> {
+  return invokeDesktop<LearningSessionState>("start_learning", { sources });
+}
+
+export function getKnowledgeBase(): Promise<KnowledgeEntry[]> {
+  return invokeDesktop<KnowledgeEntry[]>("get_knowledge_base");
+}
+
+export function getLearningSession(sessionId: string): Promise<LearningSessionState> {
+  return invokeDesktop<LearningSessionState>("get_learning_session", {
+    session_id: sessionId,
+  });
+}
+
+export function learningAgentAction(
+  sessionId: string,
+  action: string,
+  url?: string,
+  content?: string,
+): Promise<LearningSessionState> {
+  return invokeDesktop<LearningSessionState>("learning_agent_action", {
+    session_id: sessionId,
+    action,
+    url: url ?? null,
+    content: content ?? null,
+  });
 }
