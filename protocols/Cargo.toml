@@ -29,5 +29,5 @@ metrics-exporter-prometheus = "0.18"
 tokio-tungstenite = "0.28"
 futures-util = "0.3"
 nexus-sdk = { path = "../sdk" }
-wasmtime = "27"
+wasmtime = "42"
 wat = "1"
