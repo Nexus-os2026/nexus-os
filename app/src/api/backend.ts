@@ -1,9 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  ActivityMessage,
   AgentCardSummary,
   AgentSummary,
   AuditEventRow,
   AvailableModel,
+  BrowserHistoryEntry,
+  BrowserNavigateResult,
   CapabilityRequest,
   ChatResponse,
   FirewallPatterns,
@@ -21,6 +24,7 @@ import type {
   PermissionUpdate,
   ProtocolRequest,
   ProtocolsStatus,
+  ResearchSessionState,
   SetupResult,
   SystemInfo,
   VoiceRuntimeState
@@ -307,4 +311,59 @@ export function marketplacePublish(bundleJson: string): Promise<MarketplacePubli
 
 export function marketplaceMyAgents(author: string): Promise<MarketplaceAgent[]> {
   return invokeDesktop<MarketplaceAgent[]>("marketplace_my_agents", { author });
+}
+
+// ── Agent Browser API ──
+
+export function navigateTo(url: string): Promise<BrowserNavigateResult> {
+  return invokeDesktop<BrowserNavigateResult>("navigate_to", { url });
+}
+
+export function getBrowserHistory(): Promise<BrowserHistoryEntry[]> {
+  return invokeDesktop<BrowserHistoryEntry[]>("get_browser_history");
+}
+
+export function getAgentActivity(): Promise<ActivityMessage[]> {
+  return invokeDesktop<ActivityMessage[]>("get_agent_activity");
+}
+
+// ── Research Mode API ──
+
+export function startResearch(topic: string, numAgents: number): Promise<ResearchSessionState> {
+  return invokeDesktop<ResearchSessionState>("start_research", {
+    topic,
+    num_agents: numAgents,
+  });
+}
+
+export function researchAgentAction(
+  sessionId: string,
+  agentId: string,
+  action: string,
+  url?: string,
+  content?: string,
+): Promise<ResearchSessionState> {
+  return invokeDesktop<ResearchSessionState>("research_agent_action", {
+    session_id: sessionId,
+    agent_id: agentId,
+    action,
+    url: url ?? null,
+    content: content ?? null,
+  });
+}
+
+export function completeResearch(sessionId: string): Promise<ResearchSessionState> {
+  return invokeDesktop<ResearchSessionState>("complete_research", {
+    session_id: sessionId,
+  });
+}
+
+export function getResearchSession(sessionId: string): Promise<ResearchSessionState> {
+  return invokeDesktop<ResearchSessionState>("get_research_session", {
+    session_id: sessionId,
+  });
+}
+
+export function listResearchSessions(): Promise<ResearchSessionState[]> {
+  return invokeDesktop<ResearchSessionState[]>("list_research_sessions");
 }

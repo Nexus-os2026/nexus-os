@@ -410,3 +410,71 @@ export interface MarketplacePublishResult {
   verdict: string;
   checks: MarketplaceCheck[];
 }
+
+// ── Agent Browser Types ──
+
+export type BrowserMode = "research" | "build" | "learn";
+
+export type ActivityMessageType = "searching" | "reading" | "extracting" | "deciding" | "navigating" | "blocked" | "info" | "merging";
+
+export interface ActivityMessage {
+  id: string;
+  timestamp: number;
+  agent_id: string;
+  agent_name: string;
+  message_type: ActivityMessageType;
+  content: string;
+}
+
+export interface BrowserHistoryEntry {
+  url: string;
+  title: string;
+  timestamp: number;
+  agent_id: string | null;
+}
+
+export interface BrowserNavigateResult {
+  url: string;
+  title: string;
+  allowed: boolean;
+  deny_reason: string | null;
+}
+
+// ── Research Mode Types ──
+
+export type ResearchStatus = "idle" | "running" | "merging" | "complete" | "error";
+
+export type SubAgentStatus = "searching" | "reading" | "extracting" | "merging" | "idle" | "done" | "error";
+
+export interface SubAgentState {
+  agent_id: string;
+  agent_name: string;
+  status: SubAgentStatus;
+  current_url: string | null;
+  query: string;
+  findings: string[];
+  pages_visited: number;
+  fuel_used: number;
+}
+
+export interface ResearchSessionState {
+  session_id: string;
+  topic: string;
+  status: ResearchStatus;
+  supervisor_message: string;
+  sub_agents: SubAgentState[];
+  summary: string | null;
+  total_fuel_used: number;
+  pages_visited: number;
+}
+
+export interface ResearchEvent {
+  event_type: "research_started" | "agent_searching" | "agent_reading" | "agent_extracted" | "agents_merging" | "research_complete";
+  session_id: string;
+  agent_id: string | null;
+  agent_name: string | null;
+  message: string;
+  url: string | null;
+  finding: string | null;
+  summary: string | null;
+}

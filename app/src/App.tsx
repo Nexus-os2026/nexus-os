@@ -54,6 +54,7 @@ import Protocols from "./pages/Protocols";
 import Identity from "./pages/Identity";
 import Firewall from "./pages/Firewall";
 import DeveloperPortal from "./pages/DeveloperPortal";
+import { AgentBrowser } from "./pages/AgentBrowser";
 import type {
   AgentSummary,
   AuditEventRow,
@@ -68,7 +69,7 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall";
+type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -88,6 +89,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "protocols", label: "Protocols", icon: "⌬", shortcut: "Alt+6" },
   { id: "permissions", label: "Permissions", icon: "⛊", shortcut: "Alt+7" },
   { id: "identity", label: "Identity", icon: "⚿", shortcut: "" },
+  { id: "browser", label: "Browser", icon: "⊜", shortcut: "Alt+9" },
   { id: "firewall", label: "Firewall", icon: "⛉", shortcut: "" },
   { id: "settings", label: "Settings", icon: "⚙", shortcut: "Alt+8" }
 ];
@@ -1121,6 +1123,9 @@ export default function App(): JSX.Element {
     }
     if (page === "identity") {
       return <Identity agents={agents.map((a) => ({ id: a.id, name: a.name }))} />;
+    }
+    if (page === "browser") {
+      return <AgentBrowser />;
     }
     if (page === "firewall") {
       return <Firewall />;

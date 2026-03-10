@@ -137,3 +137,8 @@
 - Graceful shutdown testing should verify observable outcomes (health endpoint returns agents_active=0) rather than peeking at internal state — this is both more realistic and avoids private field access
 - Marketplace search handler returns `{"results": [...]}` not `{"agents": [...]}` — always read the handler source to confirm response shape before writing assertions
 - The `metrics` crate global recorder can only be installed once per process — integration tests that don't need real metrics should test the fallback path (metrics: None) instead of trying to install a recorder
+
+## Dependency License Compliance
+- When adding new heavy dependencies (wasmtime, reqwest, hyper, hf-hub, metrics-exporter-prometheus), always run `cargo deny check licenses` locally before pushing — transitive deps like `aws-lc-sys` bring non-obvious licenses (OpenSSL) that aren't in the default allow list
+- The `aws-lc-sys` crate (pulled in by rustls → aws-lc-rs) uses the OpenSSL license — this is an FSF-approved permissive license but must be explicitly allowed in deny.toml
+- After adding any new Cargo dependency, run `cargo deny check` as part of the pre-push checklist alongside fmt/clippy/test

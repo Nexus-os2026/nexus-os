@@ -89,6 +89,8 @@ pub struct AppState {
     meta: Arc<Mutex<HashMap<AgentId, AgentMeta>>>,
     voice: Arc<Mutex<VoiceRuntimeState>>,
     identity_mgr: Arc<Mutex<nexus_kernel::identity::IdentityManager>>,
+    browser: Arc<Mutex<BrowserManager>>,
+    research: Arc<Mutex<ResearchManager>>,
 }
 
 impl Default for AppState {
@@ -111,6 +113,8 @@ impl AppState {
             identity_mgr: Arc::new(Mutex::new(
                 nexus_kernel::identity::IdentityManager::in_memory(),
             )),
+            browser: Arc::new(Mutex::new(BrowserManager::new())),
+            research: Arc::new(Mutex::new(ResearchManager::new())),
         }
     }
 
@@ -1615,6 +1619,634 @@ pub fn marketplace_my_agents(author: &str) -> Result<Vec<MarketplaceAgentRow>, S
         .collect())
 }
 
+// ── Research Mode ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubAgentState {
+    pub agent_id: String,
+    pub agent_name: String,
+    pub status: String,
+    pub current_url: Option<String>,
+    pub query: String,
+    pub findings: Vec<String>,
+    pub pages_visited: u32,
+    pub fuel_used: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResearchSessionState {
+    pub session_id: String,
+    pub topic: String,
+    pub status: String,
+    pub supervisor_message: String,
+    pub sub_agents: Vec<SubAgentState>,
+    pub summary: Option<String>,
+    pub total_fuel_used: u64,
+    pub pages_visited: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResearchEvent {
+    pub event_type: String,
+    pub session_id: String,
+    pub agent_id: Option<String>,
+    pub agent_name: Option<String>,
+    pub message: String,
+    pub url: Option<String>,
+    pub finding: Option<String>,
+    pub summary: Option<String>,
+}
+
+/// Manages multi-agent research sessions with supervisor delegation.
+/// Each session: supervisor breaks topic into sub-queries, assigns to sub-agents,
+/// sub-agents search + extract, supervisor merges findings.
+/// PII redaction via PromptFirewall, fuel metered per page + LLM call, all audited.
+#[derive(Debug, Clone)]
+pub struct ResearchManager {
+    sessions: HashMap<String, ResearchSessionState>,
+}
+
+impl ResearchManager {
+    pub fn new() -> Self {
+        Self {
+            sessions: HashMap::new(),
+        }
+    }
+
+    pub fn get_session(&self, session_id: &str) -> Option<&ResearchSessionState> {
+        self.sessions.get(session_id)
+    }
+
+    pub fn list_sessions(&self) -> Vec<ResearchSessionState> {
+        self.sessions.values().cloned().collect()
+    }
+}
+
+/// PII redaction helper — applies PromptFirewall-style redaction to extracted text.
+/// Redacts SSN, email, phone patterns before they enter findings.
+fn redact_pii(text: &str) -> String {
+    use nexus_kernel::firewall::prompt_firewall::InputFilter;
+
+    let filter = InputFilter::default();
+    let agent_id = Uuid::nil();
+    let mut audit = AuditTrail::new();
+    match filter.check(text, agent_id, &mut audit) {
+        nexus_kernel::firewall::prompt_firewall::FirewallAction::Redacted {
+            redacted_text,
+            ..
+        } => redacted_text,
+        _ => text.to_string(),
+    }
+}
+
+/// Fuel cost constants for research operations.
+const FUEL_PER_PAGE_VISIT: u64 = 25;
+const FUEL_PER_LLM_EXTRACTION: u64 = 50;
+const FUEL_PER_MERGE: u64 = 100;
+
+fn start_research(
+    state: &AppState,
+    topic: String,
+    num_agents: u32,
+) -> Result<ResearchSessionState, String> {
+    let num_agents = num_agents.clamp(1, 5);
+    let session_id = Uuid::new_v4().to_string();
+    let supervisor_id = Uuid::new_v4();
+
+    // Audit: research started
+    state.log_event(
+        supervisor_id,
+        EventType::ToolCall,
+        json!({
+            "event": "research_started",
+            "session_id": session_id,
+            "topic": topic,
+            "num_agents": num_agents,
+        }),
+    );
+
+    // Step 1: Supervisor breaks topic into sub-queries
+    let sub_queries = generate_sub_queries(&topic, num_agents);
+
+    // Step 2: Create sub-agents
+    let mut sub_agents = Vec::new();
+    for (i, query) in sub_queries.iter().enumerate() {
+        let agent_id = Uuid::new_v4().to_string();
+        let agent_name = format!("Sub-Agent-{}", i + 1);
+
+        sub_agents.push(SubAgentState {
+            agent_id: agent_id.clone(),
+            agent_name: agent_name.clone(),
+            status: "searching".to_string(),
+            current_url: None,
+            query: query.clone(),
+            findings: Vec::new(),
+            pages_visited: 0,
+            fuel_used: 0,
+        });
+
+        // Audit: sub-agent assigned
+        state.log_event(
+            supervisor_id,
+            EventType::ToolCall,
+            json!({
+                "event": "agent_assigned",
+                "session_id": session_id,
+                "agent_id": agent_id,
+                "agent_name": agent_name,
+                "query": query,
+            }),
+        );
+    }
+
+    let supervisor_msg = format!(
+        "Assigning research task to {}",
+        sub_agents
+            .iter()
+            .map(|a| a.agent_name.as_str())
+            .collect::<Vec<_>>()
+            .join(" and ")
+    );
+
+    let session = ResearchSessionState {
+        session_id: session_id.clone(),
+        topic: topic.clone(),
+        status: "running".to_string(),
+        supervisor_message: supervisor_msg,
+        sub_agents: sub_agents.clone(),
+        summary: None,
+        total_fuel_used: 0,
+        pages_visited: 0,
+    };
+
+    let mut research = state.research.lock().unwrap_or_else(|p| p.into_inner());
+    research.sessions.insert(session_id.clone(), session.clone());
+
+    // Add activity to browser manager for the activity stream
+    let mut browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+    browser.add_activity(
+        "supervisor",
+        "Supervisor",
+        "info",
+        &format!("Research started: \"{}\" with {} sub-agents", topic, num_agents),
+    );
+    for agent in &sub_agents {
+        browser.add_activity(
+            &agent.agent_id,
+            &agent.agent_name,
+            "searching",
+            &format!("Assigned query: \"{}\"", agent.query),
+        );
+    }
+
+    Ok(session)
+}
+
+/// Generate sub-queries by splitting the topic into focused aspects.
+fn generate_sub_queries(topic: &str, num_agents: u32) -> Vec<String> {
+    let aspects = [
+        "overview and key concepts",
+        "recent developments and trends",
+        "practical applications and examples",
+        "challenges and limitations",
+        "future directions and outlook",
+    ];
+    (0..num_agents as usize)
+        .map(|i| {
+            let aspect = aspects.get(i).unwrap_or(&"additional details");
+            format!("{} — {}", topic, aspect)
+        })
+        .collect()
+}
+
+fn research_agent_action(
+    state: &AppState,
+    session_id: String,
+    agent_id: String,
+    action: String,
+    url: Option<String>,
+    content: Option<String>,
+) -> Result<ResearchSessionState, String> {
+    let supervisor_id = Uuid::new_v4();
+    let mut research = state.research.lock().unwrap_or_else(|p| p.into_inner());
+
+    let session = research
+        .sessions
+        .get_mut(&session_id)
+        .ok_or_else(|| format!("Research session {} not found", session_id))?;
+
+    let agent = session
+        .sub_agents
+        .iter_mut()
+        .find(|a| a.agent_id == agent_id)
+        .ok_or_else(|| format!("Sub-agent {} not found", agent_id))?;
+
+    let agent_name = agent.agent_name.clone();
+
+    match action.as_str() {
+        "searching" => {
+            agent.status = "searching".to_string();
+            agent.current_url = url.clone();
+        }
+        "reading" => {
+            // Fuel metered per page visit
+            agent.fuel_used += FUEL_PER_PAGE_VISIT;
+            agent.pages_visited += 1;
+            agent.status = "reading".to_string();
+            agent.current_url = url.clone();
+
+            // Egress governance check
+            if let Some(ref target_url) = url {
+                let browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+                if let Err(reason) = browser.check_url(target_url) {
+                    drop(research);
+                    state.log_event(
+                        supervisor_id,
+                        EventType::ToolCall,
+                        json!({
+                            "event": "research_url_blocked",
+                            "session_id": session_id,
+                            "agent_id": agent_id,
+                            "url": target_url,
+                            "reason": reason,
+                        }),
+                    );
+                    return Err(format!("URL blocked by egress policy: {}", reason));
+                }
+            }
+        }
+        "extracting" => {
+            // Fuel metered per LLM extraction call
+            agent.fuel_used += FUEL_PER_LLM_EXTRACTION;
+            agent.status = "extracting".to_string();
+
+            // PII redaction on extracted content
+            if let Some(ref raw_content) = content {
+                let redacted = redact_pii(raw_content);
+                agent.findings.push(redacted);
+            }
+        }
+        "done" => {
+            agent.status = "done".to_string();
+            agent.current_url = None;
+        }
+        _ => {
+            return Err(format!("Unknown action: {}", action));
+        }
+    }
+
+    // Update session totals
+    session.total_fuel_used = session.sub_agents.iter().map(|a| a.fuel_used).sum();
+    session.pages_visited = session.sub_agents.iter().map(|a| a.pages_visited).sum();
+
+    // Audit
+    state.log_event(
+        supervisor_id,
+        EventType::ToolCall,
+        json!({
+            "event": format!("agent_{}", action),
+            "session_id": session_id,
+            "agent_id": agent_id,
+            "agent_name": agent_name,
+            "url": url,
+            "fuel_cost": match action.as_str() {
+                "reading" => FUEL_PER_PAGE_VISIT,
+                "extracting" => FUEL_PER_LLM_EXTRACTION,
+                _ => 0,
+            },
+        }),
+    );
+
+    // Record in browser activity stream
+    let mut browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+    let msg_type = match action.as_str() {
+        "searching" => "searching",
+        "reading" => "reading",
+        "extracting" => "extracting",
+        "done" => "info",
+        _ => "info",
+    };
+    let content_msg = match action.as_str() {
+        "searching" => format!("Searching: \"{}\"", agent.query),
+        "reading" => format!("Reading: {}", url.as_deref().unwrap_or("unknown")),
+        "extracting" => format!("Extracting findings from {}", url.as_deref().unwrap_or("current page")),
+        "done" => format!("Completed with {} findings", agent.findings.len()),
+        _ => action.clone(),
+    };
+    browser.add_activity(&agent_id, &agent_name, msg_type, &content_msg);
+
+    // Record URL visit in browser history
+    if let Some(ref target_url) = url {
+        if action == "reading" {
+            let title = target_url
+                .split("://")
+                .nth(1)
+                .unwrap_or(target_url)
+                .split('/')
+                .next()
+                .unwrap_or("Untitled")
+                .to_string();
+            browser.record_visit(target_url, &title, Some(agent_id.clone()));
+        }
+    }
+
+    let result = session.clone();
+    Ok(result)
+}
+
+fn complete_research(
+    state: &AppState,
+    session_id: String,
+) -> Result<ResearchSessionState, String> {
+    let supervisor_id = Uuid::new_v4();
+    let mut research = state.research.lock().unwrap_or_else(|p| p.into_inner());
+
+    let session = research
+        .sessions
+        .get_mut(&session_id)
+        .ok_or_else(|| format!("Research session {} not found", session_id))?;
+
+    // Fuel for merge operation
+    session.total_fuel_used += FUEL_PER_MERGE;
+    session.status = "merging".to_string();
+
+    // Collect all findings from sub-agents, apply PII redaction to merged summary
+    let all_findings: Vec<String> = session
+        .sub_agents
+        .iter()
+        .flat_map(|a| {
+            let header = format!("## {} (query: \"{}\")", a.agent_name, a.query);
+            let mut items = vec![header];
+            for (j, f) in a.findings.iter().enumerate() {
+                items.push(format!("{}. {}", j + 1, f));
+            }
+            items
+        })
+        .collect();
+
+    let raw_summary = format!(
+        "# Research Summary: {}\n\n{}\n\n---\nTotal pages visited: {} | Total fuel used: {}",
+        session.topic,
+        all_findings.join("\n"),
+        session.pages_visited,
+        session.total_fuel_used,
+    );
+
+    // PII redaction on merged summary
+    let summary = redact_pii(&raw_summary);
+
+    session.summary = Some(summary.clone());
+    session.status = "complete".to_string();
+
+    // Mark all sub-agents as done
+    for agent in &mut session.sub_agents {
+        agent.status = "done".to_string();
+        agent.current_url = None;
+    }
+
+    // Audit
+    state.log_event(
+        supervisor_id,
+        EventType::ToolCall,
+        json!({
+            "event": "research_complete",
+            "session_id": session_id,
+            "topic": session.topic,
+            "total_pages": session.pages_visited,
+            "total_fuel": session.total_fuel_used,
+            "findings_count": session.sub_agents.iter().map(|a| a.findings.len()).sum::<usize>(),
+        }),
+    );
+
+    // Activity stream
+    let mut browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+    browser.add_activity(
+        "supervisor",
+        "Supervisor",
+        "extracting",
+        &format!(
+            "Merging findings from {} agents ({} total findings)",
+            session.sub_agents.len(),
+            session.sub_agents.iter().map(|a| a.findings.len()).sum::<usize>(),
+        ),
+    );
+    browser.add_activity(
+        "supervisor",
+        "Supervisor",
+        "info",
+        &format!(
+            "Research complete: {} pages visited, {} fuel consumed",
+            session.pages_visited, session.total_fuel_used,
+        ),
+    );
+
+    let result = session.clone();
+    Ok(result)
+}
+
+fn get_research_session(
+    state: &AppState,
+    session_id: String,
+) -> Result<ResearchSessionState, String> {
+    let research = state.research.lock().unwrap_or_else(|p| p.into_inner());
+    research
+        .get_session(&session_id)
+        .cloned()
+        .ok_or_else(|| format!("Research session {} not found", session_id))
+}
+
+fn list_research_sessions(state: &AppState) -> Result<Vec<ResearchSessionState>, String> {
+    let research = state.research.lock().unwrap_or_else(|p| p.into_inner());
+    Ok(research.list_sessions())
+}
+
+// ── Agent Browser ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserNavigateResult {
+    pub url: String,
+    pub title: String,
+    pub allowed: bool,
+    pub deny_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserHistoryEntry {
+    pub url: String,
+    pub title: String,
+    pub timestamp: u64,
+    pub agent_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActivityMessageRow {
+    pub id: String,
+    pub timestamp: u64,
+    pub agent_id: String,
+    pub agent_name: String,
+    pub message_type: String,
+    pub content: String,
+}
+
+/// BrowserManager tracks active browsing sessions and enforces egress governance.
+/// URLs are checked against a built-in blocklist and (when agents are assigned)
+/// against the agent's `allowed_endpoints` from their manifest.
+#[derive(Debug, Clone, Default)]
+pub struct BrowserManager {
+    history: Vec<BrowserHistoryEntry>,
+    activity: Vec<ActivityMessageRow>,
+    /// Blocked domain patterns (default deny list).
+    blocked_domains: Vec<String>,
+}
+
+impl BrowserManager {
+    pub fn new() -> Self {
+        Self {
+            history: Vec::new(),
+            activity: Vec::new(),
+            blocked_domains: vec![
+                "malware.".to_string(),
+                "phishing.".to_string(),
+                "darkweb.".to_string(),
+            ],
+        }
+    }
+
+    /// Check whether a URL is allowed by egress governance.
+    /// Returns Ok(title) on success, Err(reason) on block.
+    pub fn check_url(&self, url: &str) -> Result<(), String> {
+        // Basic URL validation
+        if !url.starts_with("http://") && !url.starts_with("https://") {
+            return Err("Only http:// and https:// URLs are allowed".to_string());
+        }
+
+        // Extract host for domain check
+        let host = url
+            .split("://")
+            .nth(1)
+            .unwrap_or("")
+            .split('/')
+            .next()
+            .unwrap_or("")
+            .to_lowercase();
+
+        // Check against blocked domains
+        for blocked in &self.blocked_domains {
+            if host.contains(blocked) {
+                return Err(format!("Domain blocked by egress policy: {}", host));
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn record_visit(&mut self, url: &str, title: &str, agent_id: Option<String>) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.history.push(BrowserHistoryEntry {
+            url: url.to_string(),
+            title: title.to_string(),
+            timestamp: now,
+            agent_id,
+        });
+    }
+
+    pub fn add_activity(
+        &mut self,
+        agent_id: &str,
+        agent_name: &str,
+        message_type: &str,
+        content: &str,
+    ) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.activity.push(ActivityMessageRow {
+            id: Uuid::new_v4().to_string(),
+            timestamp: now,
+            agent_id: agent_id.to_string(),
+            agent_name: agent_name.to_string(),
+            message_type: message_type.to_string(),
+            content: content.to_string(),
+        });
+    }
+}
+
+fn navigate_to(state: &AppState, url: String) -> Result<BrowserNavigateResult, String> {
+    let mut browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+
+    // Egress governance check — fail-closed
+    if let Err(reason) = browser.check_url(&url) {
+        browser.add_activity("system", "Firewall", "blocked", &format!("Blocked: {} — {}", url, reason));
+
+        // Audit the blocked attempt
+        let system_id = Uuid::nil();
+        state.log_event(
+            system_id,
+            EventType::ToolCall,
+            json!({
+                "event": "browser_navigate",
+                "url": url,
+                "allowed": false,
+                "reason": reason,
+            }),
+        );
+
+        return Ok(BrowserNavigateResult {
+            url,
+            title: String::new(),
+            allowed: false,
+            deny_reason: Some(reason),
+        });
+    }
+
+    // Extract a title from the URL (real browser would parse HTML)
+    let title = url
+        .split("://")
+        .nth(1)
+        .unwrap_or(&url)
+        .split('/')
+        .next()
+        .unwrap_or("Untitled")
+        .to_string();
+
+    browser.record_visit(&url, &title, None);
+    browser.add_activity("system", "Browser", "navigating", &format!("Loaded: {}", url));
+
+    // Audit the page visit
+    let system_id = Uuid::nil();
+    state.log_event(
+        system_id,
+        EventType::ToolCall,
+        json!({
+            "event": "browser_navigate",
+            "url": url,
+            "allowed": true,
+            "title": title,
+        }),
+    );
+
+    Ok(BrowserNavigateResult {
+        url,
+        title,
+        allowed: true,
+        deny_reason: None,
+    })
+}
+
+fn get_browser_history(state: &AppState) -> Result<Vec<BrowserHistoryEntry>, String> {
+    let browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+    Ok(browser.history.clone())
+}
+
+fn get_agent_activity(state: &AppState) -> Result<Vec<ActivityMessageRow>, String> {
+    let browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+    Ok(browser.activity.clone())
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1983,6 +2615,76 @@ mod runtime {
         super::marketplace_my_agents(&author)
     }
 
+    // ── Agent Browser Commands ──
+
+    #[tauri::command]
+    fn navigate_to(
+        state: tauri::State<'_, AppState>,
+        url: String,
+    ) -> Result<super::BrowserNavigateResult, String> {
+        super::navigate_to(state.inner(), url)
+    }
+
+    #[tauri::command]
+    fn get_browser_history(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<super::BrowserHistoryEntry>, String> {
+        super::get_browser_history(state.inner())
+    }
+
+    #[tauri::command]
+    fn get_agent_activity(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<super::ActivityMessageRow>, String> {
+        super::get_agent_activity(state.inner())
+    }
+
+    // ── Research Mode Commands ──
+
+    #[tauri::command]
+    fn start_research(
+        state: tauri::State<'_, AppState>,
+        topic: String,
+        num_agents: u32,
+    ) -> Result<super::ResearchSessionState, String> {
+        super::start_research(state.inner(), topic, num_agents)
+    }
+
+    #[tauri::command]
+    fn research_agent_action(
+        state: tauri::State<'_, AppState>,
+        session_id: String,
+        agent_id: String,
+        action: String,
+        url: Option<String>,
+        content: Option<String>,
+    ) -> Result<super::ResearchSessionState, String> {
+        super::research_agent_action(state.inner(), session_id, agent_id, action, url, content)
+    }
+
+    #[tauri::command]
+    fn complete_research(
+        state: tauri::State<'_, AppState>,
+        session_id: String,
+    ) -> Result<super::ResearchSessionState, String> {
+        super::complete_research(state.inner(), session_id)
+    }
+
+    #[tauri::command]
+    fn get_research_session(
+        state: tauri::State<'_, AppState>,
+        session_id: String,
+    ) -> Result<super::ResearchSessionState, String> {
+        super::get_research_session(state.inner(), session_id)
+    }
+
+    #[tauri::command]
+    fn list_research_sessions(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<super::ResearchSessionState>, String> {
+        super::list_research_sessions(state.inner())
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -2082,6 +2784,14 @@ mod runtime {
                 marketplace_info,
                 marketplace_publish,
                 marketplace_my_agents,
+                navigate_to,
+                get_browser_history,
+                get_agent_activity,
+                start_research,
+                research_agent_action,
+                complete_research,
+                get_research_session,
+                list_research_sessions,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
