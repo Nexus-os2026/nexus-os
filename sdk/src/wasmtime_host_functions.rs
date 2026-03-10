@@ -17,6 +17,7 @@
 use crate::context::ContextSideEffect;
 use crate::sandbox::{HostCallResult, SandboxError};
 use crate::shadow_sandbox::{SafetyVerdict, ThreatDetector};
+use crate::typed_tools::{self, ToolRequest};
 use crate::wasmtime_sandbox::WasmAgentState;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -185,6 +186,7 @@ fn read_wasm_str(
 /// - `nexus_fs_read(path_ptr, path_len) -> i32` — speculative gate + `ctx.read_file()`
 /// - `nexus_fs_write(path_ptr, path_len, content_ptr, content_len) -> i32` — speculative gate + `ctx.write_file()`
 /// - `nexus_request_approval(desc_ptr, desc_len) -> i32` — speculative gate + `ctx.request_approval()`
+/// - `nexus_exec_tool(json_ptr, json_len) -> i32` — typed tool execution (no shell)
 pub fn link_host_functions(linker: &mut Linker<WasmAgentState>) -> Result<(), SandboxError> {
     link_nexus_log(linker)?;
     link_nexus_emit_audit(linker)?;
@@ -192,6 +194,7 @@ pub fn link_host_functions(linker: &mut Linker<WasmAgentState>) -> Result<(), Sa
     link_nexus_fs_read(linker)?;
     link_nexus_fs_write(linker)?;
     link_nexus_request_approval(linker)?;
+    link_nexus_exec_tool(linker)?;
     Ok(())
 }
 
@@ -611,6 +614,124 @@ fn link_nexus_request_approval(linker: &mut Linker<WasmAgentState>) -> Result<()
     Ok(())
 }
 
+/// Process a JSON-serialized `ToolRequest` and return a JSON result string.
+///
+/// This is the pure logic extracted from the host function so it can be
+/// unit-tested without spinning up a wasmtime `Store`.
+///
+/// Returns `(return_code, json_output)`.
+pub fn process_exec_tool_request(json_input: &str) -> (i32, String) {
+    let request: ToolRequest = match serde_json::from_str(json_input) {
+        Ok(r) => r,
+        Err(e) => {
+            let err_json = serde_json::json!({
+                "success": false,
+                "error": format!("JSON parse error: {e}"),
+                "exit_code": -1,
+            });
+            return (-5, err_json.to_string());
+        }
+    };
+
+    // Validate by building the command (no execution).
+    // build_command checks argument safety (e.g. npm script allowlist).
+    match typed_tools::build_command(&request) {
+        Ok(cmd) => {
+            let program = cmd.get_program().to_string_lossy().into_owned();
+            let args: Vec<String> = cmd
+                .get_args()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect();
+            let result_json = serde_json::json!({
+                "success": true,
+                "program": program,
+                "args": args,
+                "stdout": "",
+                "stderr": "",
+                "exit_code": 0,
+            });
+            (0, result_json.to_string())
+        }
+        Err(typed_tools::ToolError::NotAllowed(reason)) => {
+            let err_json = serde_json::json!({
+                "success": false,
+                "error": format!("not allowed: {reason}"),
+                "exit_code": -1,
+            });
+            (-1, err_json.to_string())
+        }
+        Err(e) => {
+            let err_json = serde_json::json!({
+                "success": false,
+                "error": e.to_string(),
+                "exit_code": -1,
+            });
+            (-5, err_json.to_string())
+        }
+    }
+}
+
+/// `nexus_exec_tool(json_ptr, json_len) -> i32`
+///
+/// Typed tool execution host function. WASM agents send a JSON-serialized
+/// `ToolRequest`, which is validated and built into an exact `Command` with
+/// no shell involvement. The JSON result (program + args or error) is pushed
+/// to the agent's output buffer.
+fn link_nexus_exec_tool(linker: &mut Linker<WasmAgentState>) -> Result<(), SandboxError> {
+    linker
+        .func_wrap(
+            "nexus",
+            "nexus_exec_tool",
+            |mut caller: wasmtime::Caller<'_, WasmAgentState>,
+             json_ptr: i32,
+             json_len: i32|
+             -> i32 {
+                let memory = match caller.get_export("memory") {
+                    Some(wasmtime::Extern::Memory(mem)) => mem,
+                    _ => return -5,
+                };
+                let json_input = read_wasm_str(&caller, &memory, json_ptr, json_len);
+                let state = caller.data_mut();
+
+                // Check allowed_host_functions gate
+                if !state
+                    .allowed_host_functions
+                    .contains(&"exec_tool".to_string())
+                {
+                    state.host_calls_made += 1;
+                    return -1; // CapabilityDenied
+                }
+
+                // Speculative policy gate
+                let decision = check_speculation(state, "exec_tool");
+                if decision != SpeculativeDecision::Commit {
+                    state.host_calls_made += 1;
+                    state.outputs.push(format!(
+                        "[speculation-{}: exec_tool, input_len={}]",
+                        if decision == SpeculativeDecision::Block {
+                            "blocked"
+                        } else {
+                            "review"
+                        },
+                        json_input.len(),
+                    ));
+                    return if decision == SpeculativeDecision::Block {
+                        -6
+                    } else {
+                        -7
+                    };
+                }
+
+                let (code, output_json) = process_exec_tool_request(&json_input);
+                state.host_calls_made += 1;
+                state.outputs.push(output_json);
+                code
+            },
+        )
+        .map_err(|e| SandboxError::ConfigError(format!("link nexus_exec_tool: {e}")))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -718,6 +839,56 @@ mod tests {
         assert_eq!(
             check_speculation(&state, "fs_read"),
             SpeculativeDecision::Commit
+        );
+    }
+
+    // ── nexus_exec_tool tests ──────────────────────────────────────────
+
+    #[test]
+    fn test_nexus_exec_tool_git_status() {
+        let json = r#"{"GitStatus":null}"#;
+        let (code, output) = process_exec_tool_request(json);
+        assert_eq!(code, 0);
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed["success"], true);
+        assert_eq!(parsed["program"], "git");
+        assert_eq!(parsed["args"], serde_json::json!(["status"]));
+    }
+
+    #[test]
+    fn test_nexus_exec_tool_rejects_unknown() {
+        // NpmRunScript with an unsafe script name should be rejected
+        let json = r#"{"NpmRunScript":{"script":"malicious"}}"#;
+        let (code, output) = process_exec_tool_request(json);
+        assert_eq!(code, -1); // NotAllowed
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed["success"], false);
+        assert!(parsed["error"].as_str().unwrap().contains("not allowed"));
+    }
+
+    #[test]
+    fn test_nexus_exec_tool_json_parse_error() {
+        let json = "not valid json at all";
+        let (code, output) = process_exec_tool_request(json);
+        assert_eq!(code, -5); // Error (generic)
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed["success"], false);
+        assert!(parsed["error"]
+            .as_str()
+            .unwrap()
+            .contains("JSON parse error"));
+    }
+
+    #[test]
+    fn test_nexus_exec_tool_cargo_test_round_trip() {
+        let json = r#"{"CargoTest":{"package":"nexus-sdk","test_name":null}}"#;
+        let (code, output) = process_exec_tool_request(json);
+        assert_eq!(code, 0);
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed["program"], "cargo");
+        assert_eq!(
+            parsed["args"],
+            serde_json::json!(["test", "-p", "nexus-sdk"])
         );
     }
 

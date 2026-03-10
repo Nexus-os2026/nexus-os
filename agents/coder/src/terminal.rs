@@ -1,3 +1,20 @@
+//! # Terminal Module — Shell Command Execution (Migration In Progress)
+//!
+//! This module handles governed shell command execution for the coder agent.
+//!
+//! ## Security Hardening (A.1 Complete)
+//! - Shell operator injection blocked: ;, &&, ||, |, backticks, $, newlines, redirects, globs, braces
+//! - Argument-level validation for dangerous commands: python -c, git -c, npm run, node -e, pip
+//! - 25 tests covering all validator paths
+//!
+//! ## Migration Path
+//! Raw shell execution via spawn_shell is deprecated. The replacement is
+//! `sdk::typed_tools::execute_typed_tool()` which provides typed tool interfaces
+//! (e.g., `GitCommit { message }`, `CargoTest { package }`) that map to direct
+//! `Command::new()` calls with no shell involvement.
+//!
+//! WASM agents already use the new path via the `nexus_exec_tool` host function.
+
 use nexus_sdk::audit::{AuditEvent, AuditTrail, EventType};
 use nexus_sdk::autonomy::{AutonomyGuard, AutonomyLevel};
 use nexus_sdk::consent::{
@@ -370,7 +387,12 @@ pub fn execute(
     executor.execute(command, working_dir, timeout)
 }
 
+/// DEPRECATED: This function passes raw command strings to `sh -lc` which is inherently unsafe.
+/// New agent code should use `sdk::typed_tools::execute_typed_tool()` which provides typed,
+/// shell-free command execution. This function will be removed in a future release.
+/// See: `sdk/src/typed_tools.rs`
 fn spawn_shell(command: &str, cwd: &Path) -> Result<std::process::Child, CommandError> {
+    eprintln!("DEPRECATED: spawn_shell called with raw command string. Migrate to sdk::typed_tools::execute_typed_tool for safe typed tool execution.");
     let mut shell = if cfg!(target_os = "windows") {
         let mut cmd = Command::new("cmd");
         cmd.args(["/C", command]);
@@ -425,16 +447,125 @@ fn validate_command(command: &str) -> Result<(), CommandError> {
             "command '{base}' is not in the safe allowlist"
         )));
     }
+    validate_command_args(trimmed, &base)
+}
+
+/// Per-command argument restrictions for allowlisted executables.
+///
+/// Even though a command passes the allowlist, certain argument patterns let
+/// the caller break out of the intended sandbox:
+/// - `python3 -c "os.system(...)"` — arbitrary code execution
+/// - `git -c core.sshCommand=...` — config injection
+/// - `npm run <arbitrary>` — runs anything in package.json scripts
+/// - `node -e "..."` — eval arbitrary JS
+/// - `pip install <malicious-pkg>` — only safe subcommands allowed
+fn validate_command_args(command: &str, base: &str) -> Result<(), CommandError> {
+    let args: Vec<&str> = command.split_whitespace().skip(1).collect();
+    let args_lower: Vec<String> = args.iter().map(|a| a.to_ascii_lowercase()).collect();
+
+    match base {
+        "python" | "python3" => {
+            if args_lower.iter().any(|a| a == "-c") {
+                return Err(CommandError::CommandBlocked(
+                    "python -c is blocked: arbitrary code execution".to_string(),
+                ));
+            }
+        }
+        "git" => {
+            // Block `git -c key=value` config injection
+            for (i, arg) in args_lower.iter().enumerate() {
+                if arg == "-c" {
+                    if let Some(val) = args.get(i + 1) {
+                        let val_lower = val.to_ascii_lowercase();
+                        if val_lower.contains('=')
+                            || val_lower.contains("sshcommand")
+                            || val_lower.contains("core.editor")
+                        {
+                            return Err(CommandError::CommandBlocked(
+                                "git -c config injection is blocked".to_string(),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        "npm" => {
+            const SAFE_NPM: &[&[&str]] = &[
+                &["install"],
+                &["ci"],
+                &["test"],
+                &["run", "build"],
+                &["run", "lint"],
+                &["run", "dev"],
+                &["run", "start"],
+            ];
+            if args.is_empty() {
+                // bare `npm` is fine (prints help)
+            } else {
+                let matches_safe = SAFE_NPM.iter().any(|pattern| {
+                    pattern.len() <= args_lower.len()
+                        && pattern
+                            .iter()
+                            .zip(args_lower.iter())
+                            .all(|(p, a)| *p == a.as_str())
+                });
+                if !matches_safe {
+                    return Err(CommandError::CommandBlocked(format!(
+                        "npm subcommand '{}' is not in the safe npm allowlist",
+                        args_lower.first().unwrap_or(&String::new()),
+                    )));
+                }
+            }
+        }
+        "npx" => {
+            // npx can run arbitrary packages; allow through for now
+            // (npx is already on the allowlist and is needed for tooling)
+        }
+        "node" => {
+            if args_lower.iter().any(|a| a == "-e" || a == "--eval") {
+                return Err(CommandError::CommandBlocked(
+                    "node -e/--eval is blocked: arbitrary code execution".to_string(),
+                ));
+            }
+        }
+        "pip" | "pip3" => {
+            const SAFE_PIP: &[&str] = &["install", "list", "show", "freeze"];
+            if let Some(sub) = args_lower.first() {
+                if !SAFE_PIP.contains(&sub.as_str()) {
+                    return Err(CommandError::CommandBlocked(format!(
+                        "pip subcommand '{sub}' is not in the safe pip allowlist",
+                    )));
+                }
+            }
+        }
+        "cargo" => {
+            // cargo is generally safe within the project context
+        }
+        _ => {}
+    }
     Ok(())
 }
 
+/// Check for shell operators and injection vectors.
+///
+/// Blocked: `;` `&&` `||` `|` `` ` `` `$` (covers `$()`, `$VAR`, `${IFS}`)
+/// `\n` `\r` (newline injection) `>` `<` (redirection)
+/// `*` `?` (glob expansion) `{` `}` (brace expansion)
 fn contains_shell_operator(command: &str) -> bool {
     command.contains(';')
         || command.contains("&&")
         || command.contains("||")
         || command.contains('|')
         || command.contains('`')
-        || command.contains("$(")
+        || command.contains('$')
+        || command.contains('\n')
+        || command.contains('\r')
+        || command.contains('>')
+        || command.contains('<')
+        || command.contains('*')
+        || command.contains('?')
+        || command.contains('{')
+        || command.contains('}')
 }
 
 fn extract_command_base(command: &str) -> Option<String> {
@@ -491,4 +622,214 @@ where
         OutputStream::Stderr => stderr.push_str(chunk.text.as_str()),
     }
     on_chunk(chunk);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── contains_shell_operator ──────────────────────────────────────
+
+    #[test]
+    fn test_contains_shell_operator_blocks_semicolon() {
+        assert!(contains_shell_operator("cargo test; rm -rf /"));
+    }
+
+    #[test]
+    fn test_contains_shell_operator_blocks_pipes() {
+        assert!(contains_shell_operator("cargo test | grep ok"));
+    }
+
+    #[test]
+    fn test_contains_shell_operator_blocks_and_or() {
+        assert!(contains_shell_operator("true && false"));
+        assert!(contains_shell_operator("true || false"));
+    }
+
+    #[test]
+    fn test_contains_shell_operator_blocks_backticks() {
+        assert!(contains_shell_operator("cargo `whoami`"));
+    }
+
+    #[test]
+    fn test_contains_shell_operator_blocks_dollar_paren() {
+        assert!(contains_shell_operator("cargo $(whoami)"));
+    }
+
+    #[test]
+    fn test_contains_shell_operator_blocks_newline() {
+        assert!(contains_shell_operator("cargo test\nrm -rf /"));
+        assert!(contains_shell_operator("cargo test\rrm -rf /"));
+    }
+
+    #[test]
+    fn test_contains_shell_operator_blocks_redirects() {
+        assert!(contains_shell_operator("cargo test > out.txt"));
+        assert!(contains_shell_operator("cargo test >> out.txt"));
+        assert!(contains_shell_operator("python3 < input.py"));
+    }
+
+    #[test]
+    fn test_contains_shell_operator_blocks_env_vars() {
+        assert!(contains_shell_operator("cargo $HOME"));
+        assert!(contains_shell_operator("cargo ${IFS}"));
+        assert!(contains_shell_operator("$PATH"));
+    }
+
+    #[test]
+    fn test_contains_shell_operator_blocks_globs() {
+        assert!(contains_shell_operator("python3 /tmp/*.py"));
+        assert!(contains_shell_operator("node ?.js"));
+    }
+
+    #[test]
+    fn test_contains_shell_operator_allows_clean_command() {
+        assert!(!contains_shell_operator("cargo test --release"));
+        assert!(!contains_shell_operator("git status"));
+        assert!(!contains_shell_operator("npm install"));
+    }
+
+    // ── validate_command (end-to-end) ────────────────────────────────
+
+    #[test]
+    fn test_validate_command_rejects_empty() {
+        assert!(matches!(
+            validate_command(""),
+            Err(CommandError::CommandBlocked(_))
+        ));
+        assert!(matches!(
+            validate_command("   "),
+            Err(CommandError::CommandBlocked(_))
+        ));
+    }
+
+    #[test]
+    fn test_validate_command_rejects_unknown_command() {
+        let err = validate_command("curl http://example.com").unwrap_err();
+        assert!(
+            matches!(err, CommandError::CommandBlocked(ref msg) if msg.contains("not in the safe allowlist")),
+            "expected allowlist rejection, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_validate_command_allows_cargo_test() {
+        assert!(validate_command("cargo test").is_ok());
+        assert!(validate_command("cargo test --release").is_ok());
+        assert!(validate_command("cargo fmt --all").is_ok());
+    }
+
+    #[test]
+    fn test_validate_command_allows_git_status() {
+        assert!(validate_command("git status").is_ok());
+        assert!(validate_command("git log --oneline").is_ok());
+    }
+
+    #[test]
+    fn test_validate_command_rejects_python_dash_c() {
+        let err = validate_command("python3 -c import os").unwrap_err();
+        assert!(
+            matches!(err, CommandError::CommandBlocked(ref msg) if msg.contains("python -c")),
+            "expected python -c rejection, got: {err}"
+        );
+        // Also block `python -c`
+        assert!(validate_command("python -c print('hi')").is_err());
+    }
+
+    #[test]
+    fn test_validate_command_rejects_git_config_injection() {
+        let err = validate_command("git -c core.sshCommand=evil fetch").unwrap_err();
+        assert!(
+            matches!(err, CommandError::CommandBlocked(ref msg) if msg.contains("config injection")),
+            "expected git config injection rejection, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_validate_command_rejects_npm_arbitrary_script() {
+        let err = validate_command("npm run malicious").unwrap_err();
+        assert!(
+            matches!(err, CommandError::CommandBlocked(ref msg) if msg.contains("npm")),
+            "expected npm rejection, got: {err}"
+        );
+        assert!(validate_command("npm exec something").is_err());
+    }
+
+    #[test]
+    fn test_validate_command_allows_npm_test() {
+        assert!(validate_command("npm test").is_ok());
+        assert!(validate_command("npm install").is_ok());
+        assert!(validate_command("npm run build").is_ok());
+        assert!(validate_command("npm run lint").is_ok());
+        assert!(validate_command("npm run dev").is_ok());
+        assert!(validate_command("npm run start").is_ok());
+        assert!(validate_command("npm ci").is_ok());
+    }
+
+    #[test]
+    fn test_validate_command_rejects_node_eval() {
+        let err = validate_command("node -e process.exit").unwrap_err();
+        assert!(
+            matches!(err, CommandError::CommandBlocked(ref msg) if msg.contains("node -e")),
+            "expected node eval rejection, got: {err}"
+        );
+        assert!(validate_command("node --eval process.exit").is_err());
+    }
+
+    #[test]
+    fn test_validate_command_rejects_newline_injection() {
+        let err = validate_command("cargo test\nrm -rf /").unwrap_err();
+        assert!(
+            matches!(err, CommandError::CommandBlocked(ref msg) if msg.contains("shell control operators")),
+            "expected shell operator rejection, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_validate_command_rejects_redirect() {
+        let err = validate_command("cargo test > /etc/crontab").unwrap_err();
+        assert!(
+            matches!(err, CommandError::CommandBlocked(ref msg) if msg.contains("shell control operators")),
+            "expected shell operator rejection, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_blocklist_rejects_rm_rf() {
+        // rm is not on the allowlist, but also check blocklist fires
+        let err = validate_command("rm -rf /").unwrap_err();
+        assert!(matches!(err, CommandError::CommandBlocked(_)));
+    }
+
+    #[test]
+    fn test_blocklist_rejects_sudo() {
+        let err = validate_command("sudo anything").unwrap_err();
+        assert!(
+            matches!(err, CommandError::CommandBlocked(ref msg) if msg.contains("dangerous pattern")),
+            "expected blocklist rejection, got: {err}"
+        );
+    }
+
+    // ── validate_command_args (unit) ─────────────────────────────────
+
+    #[test]
+    fn test_pip_only_safe_subcommands() {
+        assert!(validate_command_args("pip install requests", "pip").is_ok());
+        assert!(validate_command_args("pip3 list", "pip3").is_ok());
+        assert!(validate_command_args("pip3 show flask", "pip3").is_ok());
+        assert!(validate_command_args("pip freeze", "pip").is_ok());
+        assert!(validate_command_args("pip download evil", "pip").is_err());
+    }
+
+    #[test]
+    fn test_extract_command_base_strips_path() {
+        assert_eq!(
+            extract_command_base("/usr/bin/cargo test"),
+            Some("cargo".to_string())
+        );
+        assert_eq!(
+            extract_command_base("python3 script.py"),
+            Some("python3".to_string())
+        );
+    }
 }

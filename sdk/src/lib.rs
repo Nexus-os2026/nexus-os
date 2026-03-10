@@ -18,6 +18,7 @@ pub mod prelude;
 pub mod sandbox;
 pub mod shadow_sandbox;
 pub mod testing;
+pub mod typed_tools;
 pub mod wasm_agent;
 pub mod wasm_signature;
 pub mod wasmtime_host_functions;
