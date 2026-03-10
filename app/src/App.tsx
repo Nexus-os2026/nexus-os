@@ -55,6 +55,21 @@ import Identity from "./pages/Identity";
 import Firewall from "./pages/Firewall";
 import DeveloperPortal from "./pages/DeveloperPortal";
 import { AgentBrowser } from "./pages/AgentBrowser";
+import CodeEditor from "./pages/CodeEditor";
+import Terminal from "./pages/Terminal";
+import FileManager from "./pages/FileManager";
+import SystemMonitor from "./pages/SystemMonitor";
+import NotesApp from "./pages/NotesApp";
+import ProjectManager from "./pages/ProjectManager";
+import DatabaseManager from "./pages/DatabaseManager";
+import ApiClient from "./pages/ApiClient";
+import DesignStudio from "./pages/DesignStudio";
+import EmailClient from "./pages/EmailClient";
+import MediaStudio from "./pages/MediaStudio";
+import AppStore from "./pages/AppStore";
+import AiChatHub from "./pages/AiChatHub";
+import DeployPipeline from "./pages/DeployPipeline";
+import LearningCenter from "./pages/LearningCenter";
 import type {
   AgentSummary,
   AuditEventRow,
@@ -69,7 +84,7 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser";
+type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -89,6 +104,21 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "protocols", label: "Protocols", icon: "⌬", shortcut: "Alt+6" },
   { id: "permissions", label: "Permissions", icon: "⛊", shortcut: "Alt+7" },
   { id: "identity", label: "Identity", icon: "⚿", shortcut: "" },
+  { id: "design-studio", label: "Design", icon: "◇", shortcut: "" },
+  { id: "email-client", label: "Email", icon: "📧", shortcut: "" },
+  { id: "media-studio", label: "Media", icon: "🖼", shortcut: "" },
+  { id: "app-store", label: "App Store", icon: "◈", shortcut: "" },
+  { id: "ai-chat-hub", label: "AI Chat", icon: "✦", shortcut: "" },
+  { id: "deploy-pipeline", label: "Deploy", icon: "🚀", shortcut: "" },
+  { id: "learning-center", label: "Learn", icon: "🎓", shortcut: "" },
+  { id: "code-editor", label: "Code", icon: "⌨", shortcut: "" },
+  { id: "terminal", label: "Terminal", icon: "$", shortcut: "" },
+  { id: "file-manager", label: "Files", icon: "📁", shortcut: "" },
+  { id: "system-monitor", label: "Monitor", icon: "⊙", shortcut: "" },
+  { id: "notes", label: "Notes", icon: "📝", shortcut: "" },
+  { id: "project-manager", label: "Projects", icon: "◫", shortcut: "" },
+  { id: "database", label: "Database", icon: "◆", shortcut: "" },
+  { id: "api-client", label: "API", icon: "⤴", shortcut: "" },
   { id: "browser", label: "Browser", icon: "⊜", shortcut: "Alt+9" },
   { id: "firewall", label: "Firewall", icon: "⛉", shortcut: "" },
   { id: "settings", label: "Settings", icon: "⚙", shortcut: "Alt+8" }
@@ -1123,6 +1153,51 @@ export default function App(): JSX.Element {
     }
     if (page === "identity") {
       return <Identity agents={agents.map((a) => ({ id: a.id, name: a.name }))} />;
+    }
+    if (page === "code-editor") {
+      return <CodeEditor />;
+    }
+    if (page === "terminal") {
+      return <Terminal />;
+    }
+    if (page === "file-manager") {
+      return <FileManager />;
+    }
+    if (page === "system-monitor") {
+      return <SystemMonitor />;
+    }
+    if (page === "notes") {
+      return <NotesApp />;
+    }
+    if (page === "project-manager") {
+      return <ProjectManager />;
+    }
+    if (page === "database") {
+      return <DatabaseManager />;
+    }
+    if (page === "api-client") {
+      return <ApiClient />;
+    }
+    if (page === "design-studio") {
+      return <DesignStudio />;
+    }
+    if (page === "email-client") {
+      return <EmailClient />;
+    }
+    if (page === "media-studio") {
+      return <MediaStudio />;
+    }
+    if (page === "app-store") {
+      return <AppStore />;
+    }
+    if (page === "ai-chat-hub") {
+      return <AiChatHub />;
+    }
+    if (page === "deploy-pipeline") {
+      return <DeployPipeline />;
+    }
+    if (page === "learning-center") {
+      return <LearningCenter />;
     }
     if (page === "browser") {
       return <AgentBrowser />;

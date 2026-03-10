@@ -5,10 +5,11 @@
 ## Project Identity
 
 - Name: Nexus OS
-- Version: 5.0.0
+- Version: 7.0.0
 - Tagline: Don't trust. Verify.
-- Repo: https://github.com/nexai-lang/nexus-os
+- Repo: https://gitlab.com/nexaiceo/nexus-os (primary — GitHub suspended)
 - License: MIT
+- Built by: Suresh Karicheti
 
 ## Architecture Invariants (NEVER VIOLATE)
 
@@ -48,6 +49,10 @@
 - cd app && npm ci && npm run build
 - cd voice && python3 -m pytest -v
 
+## Push Commands
+
+git push gitlab main --tags
+
 ## Roadmap
 
 See .claude/roadmap/ for implementation plans:
@@ -56,7 +61,30 @@ See .claude/roadmap/ for implementation plans:
 - 03-v5-ecosystem.md (DONE - plugin SDK, enterprise RBAC/SSO, cloud scaffolding)
 - 04-v6-intelligence.md (DONE - multi-agent collaboration, delegation, adaptive governance)
 - 05-v5-production-ready.md (DONE - WASM sandbox, real networking, CLI, desktop UI, docs, E2E tests)
-- 06-v6-next-era.md (NEXT - real Wasm sandboxing, speculative execution, local SLM, distributed audit, permission dashboard)
+- 06-v6-next-era.md (DONE - real Wasm sandboxing, speculative execution, local SLM, distributed audit, permission dashboard)
+- 07-v7-complete-os.md (IN PROGRESS - 15 built-in apps: code editor, design studio, terminal, file manager, database manager, API client, notes, email, project manager, media studio, system monitor, marketplace expansion, chat hub, deployment pipeline, learning center)
+
+## Phase 7 Quick Reference
+
+Phase 7 turns Nexus OS into a complete operating system. 15 built-in applications, each governed:
+
+| # | Feature | File | Status |
+|---|---------|------|--------|
+| 7.1 | Code Editor (Monaco + agent coding) | app/src/pages/CodeEditor.tsx | IN PROGRESS |
+| 7.2 | Design Studio (AI-powered Figma) | app/src/pages/DesignStudio.tsx | TODO |
+| 7.3 | Terminal (governed shell) | app/src/pages/Terminal.tsx | TODO |
+| 7.4 | File Manager (governed Finder) | app/src/pages/FileManager.tsx | TODO |
+| 7.5 | Database Manager (visual SQL) | app/src/pages/DatabaseManager.tsx | TODO |
+| 7.6 | API Client (governed Postman) | app/src/pages/ApiClient.tsx | TODO |
+| 7.7 | Notes App (private Notion) | app/src/pages/NotesApp.tsx | TODO |
+| 7.8 | Email Client (governed email) | app/src/pages/EmailClient.tsx | TODO |
+| 7.9 | Project Manager (AI Jira) | app/src/pages/ProjectManager.tsx | TODO |
+| 7.10 | Media Studio (image tools) | app/src/pages/MediaStudio.tsx | TODO |
+| 7.11 | System Monitor (deep stats) | app/src/pages/SystemMonitor.tsx | TODO |
+| 7.12 | App Store (expanded marketplace) | app/src/pages/Marketplace.tsx | EXPAND |
+| 7.13 | AI Chat Hub (multi-model) | app/src/pages/Chat.tsx | EXPAND |
+| 7.14 | Deployment Pipeline | app/src/pages/DeployPipeline.tsx | TODO |
+| 7.15 | Learning Center | app/src/pages/LearningCenter.tsx | TODO |
 
 ## Workflow Rules
 

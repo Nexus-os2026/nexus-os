@@ -2,6 +2,46 @@
 
 All notable changes to NEXUS OS are documented here.
 
+## v7.0.0 - The Complete Operating System
+
+When you open Nexus OS, you never need to leave it. 15 built-in governed applications, 33 desktop pages, every tool a developer needs — all running through the same capability-checked, fuel-metered, audit-logged governance kernel.
+
+### Built-in Applications (Phase 7)
+
+- **Code Editor** — Monaco editor with 50+ language support, file explorer, multi-tab editing, integrated governed terminal, Git integration (commit/push/pull/diff/branch), agent-assisted coding with 8 actions (Explain/Refactor/Fix/Test/Document/Optimize/Complete/Review), split view for agent suggestions, agent worker collaboration panel, cross-file search
+- **Design Studio** — AI-powered canvas with drag-and-drop, Designer Agent generates layouts from natural language, 29 components across 5 categories, real-time React/HTML preview, export to code, 26 design tokens, version history with visual diffs
+- **Terminal** — 30+ shell commands, 18 blocked patterns requiring Tier2+ HITL approval, warning system for risky commands, multi-pane with tab management, command history, smart agent suggestions, mock filesystem navigation, nexus CLI integration
+- **File Manager** — Grid and list view, drag-and-drop operations, preview panel with syntax display, agent file operations with live progress, file permissions tied to agent capabilities, content search, encrypted vault for sensitive files, governed trash with recovery
+- **Database Manager** — Connect to SQLite/PostgreSQL/MySQL, visual query builder with filters, governed agent read/write (DROP/TRUNCATE/DELETE blocked), query history with audit trail, data visualization charts (bar/pie/line), CSV/JSON export, schema viewer with ERD
+- **API Client** — Request builder (7 HTTP methods), headers/body/auth configuration, JSON syntax highlighted response viewer, API collections, governed API key vault, rate limiting enforcement, all calls audit-logged
+- **Notes App** — Rich markdown editor with live preview, folders and tags, agent auto-creates notes, research note dumps, link notes to agents/workflows/audit events, full-text search, export to PDF/markdown/docx, templates
+- **Email Client** — IMAP/SMTP with Gmail/Outlook/custom, conversation threading, agent-drafted emails with HITL approval, email templates, smart categorization and priority, PII redaction before agent processing
+- **Project Manager** — Kanban board with drag-and-drop, agent auto-creates tasks, sprint planning with agent-estimated complexity, time tracking with fuel correlation, burndown charts and velocity metrics, workflow automation triggers
+- **Media Studio** — Image editor (crop/resize/9 filters/rotation/annotations), AI image generation with 8 styles, media library with 6 folders, OCR text extraction, before/after comparison slider, multi-format export (PNG/JPEG/WebP/SVG/PDF/AVIF)
+- **System Monitor** — Real-time CPU/RAM/GPU/disk/network graphs, per-agent resource breakdown, process list with agent attribution, network traffic monitoring, fuel consumption over time, alert system for excessive resource use
+- **App Store** — Featured agents with screenshots and reviews, one-click install with Ed25519 signature verification, user ratings and reviews, developer portal for publishing, automatic governed updates, dependency management
+- **AI Chat Hub** — 9 models (Claude Opus/Sonnet/Haiku 4.5, GPT-4o/Mini, Gemini Pro/Flash, Llama 70B, Qwen 72B), side-by-side model comparison, agents join conversations, voice chat with Jarvis mode, image generation, code blocks with Run button, chat history search
+- **Deploy Pipeline** — One-click build and deploy to Vercel/Netlify/Cloudflare/self-hosted, environment management (dev/staging/prod), one-click rollback, deploy logs with agent commentary, SSL certificate management, domain management, HITL required for production deploys
+- **Learning Center** — 7 interactive courses with lesson tracking, 6 Rust code challenges with editor and hints, XP leveling system (Apprentice to Master), Self-Improve Agent shares learnings with confidence scores, community knowledge base, agent-generated video tutorials
+
+### Governance Runs Through Everything
+
+Every single app enforces the same governance model:
+- Capability checks before every action
+- Fuel metering with visual budget bars
+- Audit trail logging for every operation
+- HITL approval for dangerous actions
+- Agent attribution on all automated activity
+- PII redaction at data boundaries
+
+### Stats
+
+- 1,175 tests passing
+- 33 workspace crates
+- 33 desktop pages
+- 15 built-in applications
+- Zero unsafe Rust
+
 ## v5.0.0 - Production Ready
 
 ### Sandbox and Networking

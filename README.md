@@ -1,5 +1,5 @@
 [![CI](https://github.com/nexai-lang/nexus-os/actions/workflows/ci.yml/badge.svg)](https://github.com/nexai-lang/nexus-os/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-5.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-7.0.0-blue.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 # Nexus OS
@@ -31,8 +31,23 @@ Nexus OS is a Rust-based operating system for AI agents where every action passe
 | **Enterprise** | SOC 2 Type II compliance reporting | Stable |
 | **Marketplace** | Signed agent bundles with trust scoring | Stable |
 | **Marketplace** | Security scanning + manifest verification | Stable |
-| **Desktop** | Tauri shell with 9 interactive pages | Stable |
+| **Desktop** | Tauri shell with 33 pages + 15 built-in apps | Stable |
 | **CLI** | 24 commands across 8 subsystems | Stable |
+| **Apps** | Code Editor — Monaco, 50+ languages, agent-assisted coding | Stable |
+| **Apps** | Design Studio — AI canvas, component library, design tokens | Stable |
+| **Apps** | Terminal — 30+ commands, governed execution, HITL blocking | Stable |
+| **Apps** | File Manager — grid/list view, drag-drop, encrypted vault | Stable |
+| **Apps** | Database Manager — SQL editor, visual builder, ERD schema | Stable |
+| **Apps** | API Client — request builder, governed vault, rate limiting | Stable |
+| **Apps** | Notes — rich markdown, templates, agent auto-notes | Stable |
+| **Apps** | Email Client — IMAP/SMTP, threading, PII redaction | Stable |
+| **Apps** | Project Manager — kanban, sprints, burndown charts | Stable |
+| **Apps** | Media Studio — editor, AI generation, OCR, before/after | Stable |
+| **Apps** | System Monitor — CPU/RAM/GPU graphs, per-agent resources | Stable |
+| **Apps** | App Store — Ed25519 verification, reviews, publishing | Stable |
+| **Apps** | AI Chat Hub — 9 models, comparison, voice/Jarvis mode | Stable |
+| **Apps** | Deploy Pipeline — 4 providers, environments, SSL/domains | Stable |
+| **Apps** | Learning Center — courses, code challenges, XP leveling | Stable |
 | **Safety** | Kill gates for emergency shutdown | Stable |
 | **Safety** | Zero unsafe Rust (`unsafe_code = "forbid"`) | Enforced |
 
