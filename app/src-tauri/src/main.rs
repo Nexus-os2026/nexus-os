@@ -92,6 +92,7 @@ pub struct AppState {
     browser: Arc<Mutex<BrowserManager>>,
     research: Arc<Mutex<ResearchManager>>,
     build: Arc<Mutex<BuildManager>>,
+    learning: Arc<Mutex<LearningManager>>,
 }
 
 impl Default for AppState {
@@ -117,6 +118,7 @@ impl AppState {
             browser: Arc::new(Mutex::new(BrowserManager::new())),
             research: Arc::new(Mutex::new(ResearchManager::new())),
             build: Arc::new(Mutex::new(BuildManager::new())),
+            learning: Arc::new(Mutex::new(LearningManager::new())),
         }
     }
 
@@ -1663,7 +1665,7 @@ pub struct ResearchEvent {
 /// Each session: supervisor breaks topic into sub-queries, assigns to sub-agents,
 /// sub-agents search + extract, supervisor merges findings.
 /// PII redaction via PromptFirewall, fuel metered per page + LLM call, all audited.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ResearchManager {
     sessions: HashMap<String, ResearchSessionState>,
 }
@@ -1693,10 +1695,7 @@ fn redact_pii(text: &str) -> String {
     let agent_id = Uuid::nil();
     let mut audit = AuditTrail::new();
     match filter.check(agent_id, text, &mut audit) {
-        FirewallAction::Redacted {
-            redacted_text,
-            ..
-        } => redacted_text,
+        FirewallAction::Redacted { redacted_text, .. } => redacted_text,
         _ => text.to_string(),
     }
 }
@@ -1782,7 +1781,9 @@ fn start_research(
     };
 
     let mut research = state.research.lock().unwrap_or_else(|p| p.into_inner());
-    research.sessions.insert(session_id.clone(), session.clone());
+    research
+        .sessions
+        .insert(session_id.clone(), session.clone());
 
     // Add activity to browser manager for the activity stream
     let mut browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
@@ -1790,7 +1791,10 @@ fn start_research(
         "supervisor",
         "Supervisor",
         "info",
-        &format!("Research started: \"{}\" with {} sub-agents", topic, num_agents),
+        &format!(
+            "Research started: \"{}\" with {} sub-agents",
+            topic, num_agents
+        ),
     );
     for agent in &sub_agents {
         browser.add_activity(
@@ -1939,7 +1943,10 @@ fn research_agent_action(
     let content_msg = match action.as_str() {
         "searching" => format!("Searching: \"{}\"", agent_query),
         "reading" => format!("Reading: {}", url.as_deref().unwrap_or("unknown")),
-        "extracting" => format!("Extracting findings from {}", url.as_deref().unwrap_or("current page")),
+        "extracting" => format!(
+            "Extracting findings from {}",
+            url.as_deref().unwrap_or("current page")
+        ),
         "done" => format!("Completed with {} findings", agent_findings_count),
         _ => action.clone(),
     };
@@ -1963,10 +1970,7 @@ fn research_agent_action(
     Ok(result)
 }
 
-fn complete_research(
-    state: &AppState,
-    session_id: String,
-) -> Result<ResearchSessionState, String> {
+fn complete_research(state: &AppState, session_id: String) -> Result<ResearchSessionState, String> {
     let supervisor_id = Uuid::new_v4();
     let mut research = state.research.lock().unwrap_or_else(|p| p.into_inner());
 
@@ -2036,7 +2040,11 @@ fn complete_research(
         &format!(
             "Merging findings from {} agents ({} total findings)",
             session.sub_agents.len(),
-            session.sub_agents.iter().map(|a| a.findings.len()).sum::<usize>(),
+            session
+                .sub_agents
+                .iter()
+                .map(|a| a.findings.len())
+                .sum::<usize>(),
         ),
     );
     browser.add_activity(
@@ -2111,7 +2119,7 @@ fn now_secs() -> u64 {
 }
 
 /// Manages build sessions where agents write code collaboratively.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BuildManager {
     sessions: HashMap<String, BuildSessionState>,
 }
@@ -2190,7 +2198,12 @@ fn start_build(state: &AppState, description: String) -> Result<BuildSessionStat
 
     // Activity stream
     let mut browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
-    browser.add_activity("supervisor", "Supervisor", "info", &format!("Build started: {}", session.description));
+    browser.add_activity(
+        "supervisor",
+        "Supervisor",
+        "info",
+        &format!("Build started: {}", session.description),
+    );
 
     Ok(session)
 }
@@ -2260,7 +2273,9 @@ fn build_add_message(
         .get_mut(&session_id)
         .ok_or_else(|| format!("Build session {} not found", session_id))?;
 
-    session.messages.push(build_msg(&agent_name, &role, &content));
+    session
+        .messages
+        .push(build_msg(&agent_name, &role, &content));
 
     let result = session.clone();
     drop(bm);
@@ -2320,7 +2335,11 @@ fn complete_build(state: &AppState, session_id: String) -> Result<BuildSessionSt
         "supervisor",
         "Supervisor",
         "info",
-        &format!("Build complete — {} chars, {} LLM calls", result.code.len(), result.llm_calls),
+        &format!(
+            "Build complete — {} chars, {} LLM calls",
+            result.code.len(),
+            result.llm_calls
+        ),
     );
 
     Ok(result)
@@ -2348,6 +2367,355 @@ fn get_build_preview(state: &AppState, session_id: String) -> Result<String, Str
         .get(&session_id)
         .map(|s| s.preview_html.clone())
         .ok_or_else(|| format!("Build session {} not found", session_id))
+}
+
+// ── Learn Mode ──
+
+/// Fuel cost constants for learning operations.
+const FUEL_PER_LEARN_BROWSE: u64 = 25;
+const FUEL_PER_LEARN_EXTRACT: u64 = 50;
+const FUEL_PER_LEARN_COMPARE: u64 = 30;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearningSource {
+    pub url: String,
+    pub label: String,
+    pub category: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeEntry {
+    pub id: String,
+    pub title: String,
+    pub source_url: String,
+    pub key_points: Vec<String>,
+    pub timestamp: u64,
+    pub relevance_score: f64,
+    pub category: String,
+    pub is_new: bool,
+    pub change_summary: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearningSuggestion {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub source_url: String,
+    pub relevance: String,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearningSessionState {
+    pub session_id: String,
+    pub status: String,
+    pub sources: Vec<LearningSource>,
+    pub current_source_idx: usize,
+    pub current_url: Option<String>,
+    pub knowledge_base: Vec<KnowledgeEntry>,
+    pub suggestions: Vec<LearningSuggestion>,
+    pub fuel_used: u64,
+    pub pages_visited: u64,
+}
+
+/// Manages learning sessions where agents browse documentation to stay current.
+#[derive(Debug, Clone, Default)]
+pub struct LearningManager {
+    sessions: HashMap<String, LearningSessionState>,
+    knowledge: Vec<KnowledgeEntry>,
+}
+
+impl LearningManager {
+    pub fn new() -> Self {
+        Self {
+            sessions: HashMap::new(),
+            knowledge: Vec::new(),
+        }
+    }
+}
+
+fn start_learning(
+    state: &AppState,
+    sources: Vec<LearningSource>,
+) -> Result<LearningSessionState, String> {
+    let session_id = Uuid::new_v4().to_string();
+    let agent_id = Uuid::new_v4();
+
+    // Validate sources — all must be http(s) URLs
+    for src in &sources {
+        let browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+        if let Err(reason) = browser.check_url(&src.url) {
+            return Err(format!("Source {} blocked: {}", src.label, reason));
+        }
+    }
+
+    // Audit: learning started
+    state.log_event(
+        agent_id,
+        EventType::ToolCall,
+        json!({
+            "event": "learning_started",
+            "session_id": session_id,
+            "source_count": sources.len(),
+            "sources": sources.iter().map(|s| &s.url).collect::<Vec<_>>(),
+        }),
+    );
+
+    let session = LearningSessionState {
+        session_id: session_id.clone(),
+        status: "browsing".to_string(),
+        sources,
+        current_source_idx: 0,
+        current_url: None,
+        knowledge_base: Vec::new(),
+        suggestions: Vec::new(),
+        fuel_used: 0,
+        pages_visited: 0,
+    };
+
+    let mut lm = state.learning.lock().unwrap_or_else(|p| p.into_inner());
+    lm.sessions.insert(session_id.clone(), session.clone());
+
+    let mut browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+    browser.add_activity(
+        "learn-agent",
+        "LearnAgent",
+        "info",
+        &format!(
+            "Learning session {} started with {} sources",
+            &session_id[..8],
+            session.sources.len()
+        ),
+    );
+
+    Ok(session)
+}
+
+fn learning_agent_action(
+    state: &AppState,
+    session_id: String,
+    action: String,
+    url: Option<String>,
+    content: Option<String>,
+) -> Result<LearningSessionState, String> {
+    let agent_id = Uuid::new_v4();
+
+    // Egress check if URL provided
+    if let Some(ref u) = url {
+        let browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+        if let Err(reason) = browser.check_url(u) {
+            state.log_event(
+                agent_id,
+                EventType::ToolCall,
+                json!({
+                    "event": "learning_blocked",
+                    "session_id": session_id,
+                    "url": u,
+                    "reason": reason,
+                }),
+            );
+            return Err(format!("URL blocked: {}", reason));
+        }
+    }
+
+    let mut lm = state.learning.lock().unwrap_or_else(|p| p.into_inner());
+
+    // Snapshot existing knowledge URLs before borrowing session
+    let existing_knowledge_urls: HashSet<String> =
+        lm.knowledge.iter().map(|k| k.source_url.clone()).collect();
+
+    if !lm.sessions.contains_key(&session_id) {
+        return Err(format!("Learning session {} not found", session_id));
+    }
+
+    // Perform session mutations in a block so we can access lm.knowledge afterward
+    let (result, entries_to_merge) = {
+        let session = lm.sessions.get_mut(&session_id).unwrap();
+
+        match action.as_str() {
+            "browse" => {
+                session.fuel_used += FUEL_PER_LEARN_BROWSE;
+                session.pages_visited += 1;
+                session.current_url = url.clone();
+                session.status = "browsing".to_string();
+
+                if let Some(ref u) = url {
+                    let mut browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+                    browser.record_visit(u, "Learning", Some("learn-agent".to_string()));
+                    browser.add_activity(
+                        "learn-agent",
+                        "LearnAgent",
+                        "navigating",
+                        &format!("Browsing: {}", u),
+                    );
+                }
+
+                state.log_event(
+                    agent_id,
+                    EventType::ToolCall,
+                    json!({
+                        "event": "agent_browsing",
+                        "session_id": session_id,
+                        "url": url,
+                        "fuel_used": session.fuel_used,
+                    }),
+                );
+
+                (session.clone(), None)
+            }
+            "extract" => {
+                session.fuel_used += FUEL_PER_LEARN_EXTRACT;
+                session.status = "extracting".to_string();
+
+                let source_url =
+                    url.unwrap_or_else(|| session.current_url.clone().unwrap_or_default());
+                let src_label = session
+                    .sources
+                    .iter()
+                    .find(|s| s.url == source_url)
+                    .map(|s| s.label.clone())
+                    .unwrap_or_else(|| source_url.clone());
+                let src_category = session
+                    .sources
+                    .iter()
+                    .find(|s| s.url == source_url)
+                    .map(|s| s.category.clone())
+                    .unwrap_or_else(|| "documentation".to_string());
+
+                let raw_content =
+                    content.unwrap_or_else(|| format!("Extracted information from {}", src_label));
+                let redacted = redact_pii(&raw_content);
+
+                let entry = KnowledgeEntry {
+                    id: Uuid::new_v4().to_string(),
+                    title: format!("{} — Latest", src_label),
+                    source_url: source_url.clone(),
+                    key_points: vec![redacted],
+                    timestamp: now_secs(),
+                    relevance_score: 0.5,
+                    category: src_category,
+                    is_new: true,
+                    change_summary: None,
+                };
+                session.knowledge_base.push(entry);
+
+                state.log_event(
+                    agent_id,
+                    EventType::ToolCall,
+                    json!({
+                        "event": "agent_extracted",
+                        "session_id": session_id,
+                        "source": source_url,
+                        "fuel_used": session.fuel_used,
+                    }),
+                );
+
+                let mut browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+                browser.add_activity(
+                    "learn-agent",
+                    "LearnAgent",
+                    "extracting",
+                    &format!("Extracted from {}", src_label),
+                );
+
+                (session.clone(), None)
+            }
+            "compare" => {
+                session.fuel_used += FUEL_PER_LEARN_COMPARE;
+                session.status = "comparing".to_string();
+
+                for entry in &mut session.knowledge_base {
+                    if !existing_knowledge_urls.contains(&entry.source_url) {
+                        entry.is_new = true;
+                        entry.change_summary =
+                            Some("New source — not previously in knowledge base".to_string());
+                        entry.relevance_score = 0.8;
+                    }
+                }
+
+                state.log_event(
+                    agent_id,
+                    EventType::ToolCall,
+                    json!({
+                        "event": "knowledge_updated",
+                        "session_id": session_id,
+                        "knowledge_count": session.knowledge_base.len(),
+                        "fuel_used": session.fuel_used,
+                    }),
+                );
+
+                let mut browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+                browser.add_activity(
+                    "learn-agent",
+                    "LearnAgent",
+                    "deciding",
+                    "Compared with existing knowledge base",
+                );
+
+                (session.clone(), None)
+            }
+            "done" => {
+                session.status = "complete".to_string();
+                session.current_url = None;
+
+                let kb_len = session.knowledge_base.len();
+                let fuel_used = session.fuel_used;
+                let pages_visited = session.pages_visited;
+                let merge = session.knowledge_base.clone();
+
+                state.log_event(
+                    agent_id,
+                    EventType::ToolCall,
+                    json!({
+                        "event": "learning_complete",
+                        "session_id": session_id,
+                        "knowledge_entries": kb_len,
+                        "fuel_used": fuel_used,
+                        "pages_visited": pages_visited,
+                    }),
+                );
+
+                let mut browser = state.browser.lock().unwrap_or_else(|p| p.into_inner());
+                browser.add_activity(
+                    "learn-agent",
+                    "LearnAgent",
+                    "info",
+                    &format!("Learning complete — {} entries, {} fuel", kb_len, fuel_used),
+                );
+
+                (session.clone(), Some(merge))
+            }
+            other => {
+                return Err(format!("Unknown learning action: {}", other));
+            }
+        }
+    };
+
+    // Merge knowledge entries into global store (session borrow is now dropped)
+    if let Some(entries) = entries_to_merge {
+        for entry in entries {
+            lm.knowledge.push(entry);
+        }
+    }
+
+    Ok(result)
+}
+
+fn get_learning_session(
+    state: &AppState,
+    session_id: String,
+) -> Result<LearningSessionState, String> {
+    let lm = state.learning.lock().unwrap_or_else(|p| p.into_inner());
+    lm.sessions
+        .get(&session_id)
+        .cloned()
+        .ok_or_else(|| format!("Learning session {} not found", session_id))
+}
+
+fn get_knowledge_base(state: &AppState) -> Result<Vec<KnowledgeEntry>, String> {
+    let lm = state.learning.lock().unwrap_or_else(|p| p.into_inner());
+    Ok(lm.knowledge.clone())
 }
 
 // ── Agent Browser ──
@@ -2470,7 +2838,12 @@ fn navigate_to(state: &AppState, url: String) -> Result<BrowserNavigateResult, S
 
     // Egress governance check — fail-closed
     if let Err(reason) = browser.check_url(&url) {
-        browser.add_activity("system", "Firewall", "blocked", &format!("Blocked: {} — {}", url, reason));
+        browser.add_activity(
+            "system",
+            "Firewall",
+            "blocked",
+            &format!("Blocked: {} — {}", url, reason),
+        );
 
         // Audit the blocked attempt
         let system_id = Uuid::nil();
@@ -2504,7 +2877,12 @@ fn navigate_to(state: &AppState, url: String) -> Result<BrowserNavigateResult, S
         .to_string();
 
     browser.record_visit(&url, &title, None);
-    browser.add_activity("system", "Browser", "navigating", &format!("Loaded: {}", url));
+    browser.add_activity(
+        "system",
+        "Browser",
+        "navigating",
+        &format!("Loaded: {}", url),
+    );
 
     // Audit the page visit
     let system_id = Uuid::nil();
@@ -2905,6 +3283,42 @@ mod runtime {
         super::marketplace_my_agents(&author)
     }
 
+    // ── Learn Mode Commands ──
+
+    #[tauri::command]
+    fn start_learning(
+        state: tauri::State<'_, AppState>,
+        sources: Vec<super::LearningSource>,
+    ) -> Result<super::LearningSessionState, String> {
+        super::start_learning(state.inner(), sources)
+    }
+
+    #[tauri::command]
+    fn learning_agent_action(
+        state: tauri::State<'_, AppState>,
+        session_id: String,
+        action: String,
+        url: Option<String>,
+        content: Option<String>,
+    ) -> Result<super::LearningSessionState, String> {
+        super::learning_agent_action(state.inner(), session_id, action, url, content)
+    }
+
+    #[tauri::command]
+    fn get_learning_session(
+        state: tauri::State<'_, AppState>,
+        session_id: String,
+    ) -> Result<super::LearningSessionState, String> {
+        super::get_learning_session(state.inner(), session_id)
+    }
+
+    #[tauri::command]
+    fn get_knowledge_base(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<super::KnowledgeEntry>, String> {
+        super::get_knowledge_base(state.inner())
+    }
+
     // ── Agent Browser Commands ──
 
     #[tauri::command]
@@ -3137,6 +3551,10 @@ mod runtime {
                 marketplace_info,
                 marketplace_publish,
                 marketplace_my_agents,
+                start_learning,
+                learning_agent_action,
+                get_learning_session,
+                get_knowledge_base,
                 navigate_to,
                 get_browser_history,
                 get_agent_activity,
