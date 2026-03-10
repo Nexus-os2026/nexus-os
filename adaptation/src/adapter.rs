@@ -363,8 +363,7 @@ fn extract_preferred_style(report: &AnalyticsReport) -> Option<String> {
 
 fn extract_hashtags(report: &AnalyticsReport) -> Vec<String> {
     static HASHTAG_RE: OnceLock<Regex> = OnceLock::new();
-    let regex = HASHTAG_RE
-        .get_or_init(|| Regex::new(r"#[A-Za-z0-9_]{2,32}").expect("valid regex"));
+    let regex = HASHTAG_RE.get_or_init(|| Regex::new(r"#[A-Za-z0-9_]{2,32}").expect("valid regex"));
 
     let mut hashtags = Vec::new();
     for source in report

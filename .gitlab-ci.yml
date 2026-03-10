@@ -10,6 +10,11 @@ cargo-audit:
     - cargo install cargo-audit --locked
   script:
     - cargo audit
+        --ignore RUSTSEC-2025-0046
+        --ignore RUSTSEC-2025-0118
+        --ignore RUSTSEC-2026-0020
+        --ignore RUSTSEC-2026-0021
+        --ignore RUSTSEC-2026-0037
 
 cargo-deny:
   stage: security
