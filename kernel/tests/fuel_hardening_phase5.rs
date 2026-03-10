@@ -43,6 +43,7 @@ fn phase5_exhaustion_triggers_autonomy_downgrade() {
         fuel_period_id: Some("2026-03".to_string()),
         monthly_fuel_cap: Some(1),
         allowed_endpoints: None,
+        domain_tags: vec![],
     };
 
     let id = supervisor

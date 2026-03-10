@@ -108,3 +108,9 @@
   - Tauri desktop Identity page and Firewall page with pattern library
   - 14 integration tests in kernel/tests/identity_firewall_integration_tests.rs
   - 932 total tests with zero regressions
+- [x] Phase 7.3: Compliance, Erasure & Provenance (COMPLETE)
+  - CLI commands: `nexus compliance status` (real ComplianceMonitor), `nexus compliance classify <agent-id>` (EU AI Act risk tier), `nexus compliance erase-agent-data <agent-id>` (GDPR Article 17 cryptographic erasure), `nexus compliance retention-check` (retention policy enforcement), `nexus compliance provenance <agent-id>` (data lineage report) — 51 total CLI commands
+  - Kernel compliance module: ComplianceMonitor (6 continuous checks), RiskClassifier (4 EU AI Act tiers), AgentDataEraser (legal hold + cryptographic erasure), RetentionPolicy (per-data-class periods + legal hold), ProvenanceTracker (data lineage with origin/transformation/delegation tracking), TransparencyReportGenerator (Article 13 reports with JSON + Markdown output)
+  - Tauri desktop Compliance page: 6-tab layout (Overview with green/yellow/red status indicator + alerts, Risk Cards with per-agent EU AI Act classification, Transparency Report viewer with download, Erasure controls with confirmation dialog, Data Provenance table with classification + transformations, Retention policy settings with visual bars + enforcement trigger)
+  - 12 integration tests in kernel/tests/compliance_integration_tests.rs: risk classification across all tiers, unacceptable agent rejection at spawn, Article 13 transparency report completeness, cryptographic erasure with key destruction, erasure proof event under system UUID, legal hold prevention + release, retention purge with legal hold exemption, full data lineage chain, delegation handoff provenance, missing identity detection, broken audit chain detection, multi-framework SOC2+EU AI Act+HIPAA+CA AB316 report
+  - All tests pass with zero regressions

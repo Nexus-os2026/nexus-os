@@ -76,6 +76,7 @@ impl ManifestBuilder {
             fuel_period_id: None,
             monthly_fuel_cap: None,
             allowed_endpoints: None,
+            domain_tags: vec![],
         })
     }
 }

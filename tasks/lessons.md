@@ -105,3 +105,11 @@
 - EdDSA (Ed25519) is simpler than ES256 (ECDSA P-256) for JWTs when ed25519-dalek is already a dependency — custom base64url + JWT encode avoids pulling in the `jsonwebtoken` crate
 - Integration tests should exercise the full pipeline end-to-end (identity → token → firewall → egress → audit) rather than testing components in isolation — catches wiring issues that unit tests miss
 - Rate limiting with sliding windows needs per-endpoint tracking — one endpoint hitting the limit shouldn't block other allowed endpoints for the same agent
+
+## Compliance, Erasure & Provenance (Phase 7.3)
+- CLI commands that call kernel modules (e.g., `compliance_status` using real `ComplianceMonitor`) provide more useful output than returning static JSON — worth the extra import even for demo/mock endpoints
+- Cryptographic erasure proof events must be logged under `Uuid::nil()` (system agent), not the erased agent — otherwise the proof event itself would be subject to future agent erasure
+- Legal hold is a cross-cutting concern: both `AgentDataEraser` and `RetentionPolicy` must independently respect holds — erasure blocks immediately, retention skips held agents during purge
+- Tabbed UI layouts scale better than single-page dashboards for compliance: overview, risk cards, reports, erasure, provenance, and retention are distinct workflows that don't need to be visible simultaneously
+- `ProvenanceTracker::rebuild_from_audit()` enables lineage recovery from any audit trail backup — design data provenance events to be fully reconstructable from their payload fields alone
+- Multi-framework compliance reports (SOC2 + EU AI Act + HIPAA + CA AB316) should be generated from a single `FullReportConfig` to ensure consistent agent snapshots and audit trail state across all framework sections

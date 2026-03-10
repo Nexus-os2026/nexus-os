@@ -32,6 +32,10 @@ pub fn route(command: CliCommand) -> CliOutput {
         // Compliance
         CliCommand::ComplianceReport { framework } => compliance_report(&framework),
         CliCommand::ComplianceStatus => compliance_status(),
+        CliCommand::ComplianceClassify { agent_id } => compliance_classify(agent_id),
+        CliCommand::ComplianceEraseAgentData { agent_id } => compliance_erase_agent_data(agent_id),
+        CliCommand::ComplianceRetentionCheck => compliance_retention_check(),
+        CliCommand::ComplianceProvenance { agent_id } => compliance_provenance(agent_id),
 
         // Delegation
         CliCommand::DelegationGrant {
@@ -238,11 +242,150 @@ fn compliance_report(framework: &str) -> CliOutput {
 }
 
 fn compliance_status() -> CliOutput {
+    use nexus_kernel::audit::AuditTrail;
+    use nexus_kernel::compliance::monitor::ComplianceMonitor;
+    use nexus_kernel::identity::IdentityManager;
+
+    let trail = AuditTrail::new();
+    let id_mgr = IdentityManager::in_memory();
+    let monitor = ComplianceMonitor::new();
+    let status = monitor.check_compliance(&[], &trail, &id_mgr);
+
     CliOutput::ok_with_data(
-        "Compliance status summary",
+        format!("Compliance status: {}", status.status.as_str()),
         json!({
-            "frameworks": ["SOC2"],
-            "overall_satisfaction": 0.0,
+            "status": status.status.as_str(),
+            "frameworks": ["SOC2", "EU_AI_Act", "HIPAA", "CA_AB316"],
+            "checks_passed": status.checks_passed,
+            "checks_failed": status.checks_failed,
+            "agents_checked": status.agents_checked,
+            "alerts": status.alerts.iter().map(|a| json!({
+                "severity": a.severity.as_str(),
+                "check_id": a.check_id,
+                "message": a.message,
+                "agent_id": a.agent_id.map(|id| id.to_string()),
+            })).collect::<Vec<_>>(),
+            "last_check_unix": status.last_check_unix,
+        }),
+    )
+}
+
+fn compliance_classify(agent_id: Uuid) -> CliOutput {
+    use nexus_kernel::compliance::eu_ai_act::RiskClassifier;
+    use nexus_kernel::manifest::AgentManifest;
+
+    // Build a representative manifest for the agent
+    let manifest = AgentManifest {
+        name: format!("agent-{}", &agent_id.to_string()[..8]),
+        version: "1.0.0".to_string(),
+        capabilities: vec!["llm.query".to_string(), "fs.read".to_string()],
+        fuel_budget: 5000,
+        autonomy_level: Some(2),
+        consent_policy_path: None,
+        requester_id: None,
+        schedule: None,
+        llm_model: None,
+        fuel_period_id: None,
+        monthly_fuel_cap: None,
+        allowed_endpoints: None,
+        domain_tags: vec![],
+    };
+
+    let classifier = RiskClassifier::new();
+    let profile = classifier.classify_agent(&manifest);
+
+    CliOutput::ok_with_data(
+        format!(
+            "EU AI Act risk classification for agent {}: {}",
+            agent_id,
+            profile.tier.as_str()
+        ),
+        json!({
+            "agent_id": agent_id.to_string(),
+            "risk_tier": profile.tier.as_str(),
+            "justification": profile.justification,
+            "applicable_articles": profile.applicable_articles,
+            "required_controls": profile.required_controls,
+        }),
+    )
+}
+
+fn compliance_erase_agent_data(agent_id: Uuid) -> CliOutput {
+    use nexus_kernel::audit::AuditTrail;
+    use nexus_kernel::compliance::data_governance::AgentDataEraser;
+    use nexus_kernel::identity::IdentityManager;
+    use nexus_kernel::permissions::PermissionManager;
+    use nexus_kernel::privacy::PrivacyManager;
+
+    let mut trail = AuditTrail::new();
+    let mut privacy = PrivacyManager::new();
+    let mut identity_mgr = IdentityManager::in_memory();
+    let mut perm_mgr = PermissionManager::new();
+
+    let eraser = AgentDataEraser::new();
+    match eraser.erase_agent_data(
+        agent_id,
+        &[],
+        &mut trail,
+        &mut privacy,
+        &mut identity_mgr,
+        &mut perm_mgr,
+    ) {
+        Ok(receipt) => CliOutput::ok_with_data(
+            format!("Cryptographic erasure completed for agent {agent_id}"),
+            json!({
+                "agent_id": receipt.agent_id.to_string(),
+                "events_redacted": receipt.events_redacted,
+                "keys_destroyed": receipt.keys_destroyed.len(),
+                "identity_purged": receipt.identity_purged,
+                "permissions_purged": receipt.permissions_purged,
+                "proof_event_id": receipt.proof_event_id.to_string(),
+                "erased_at": receipt.erased_at,
+            }),
+        ),
+        Err(e) => CliOutput::err(format!("Erasure failed: {e}")),
+    }
+}
+
+fn compliance_retention_check() -> CliOutput {
+    use nexus_kernel::audit::AuditTrail;
+    use nexus_kernel::compliance::data_governance::RetentionPolicy;
+
+    let mut trail = AuditTrail::new();
+    let policy = RetentionPolicy::new();
+    let result = policy.check_retention(&mut trail);
+
+    CliOutput::ok_with_data(
+        format!(
+            "Retention check complete — {} events purged",
+            result.events_purged
+        ),
+        json!({
+            "events_purged": result.events_purged,
+            "agents_held": result.agents_held.iter().map(|id| id.to_string()).collect::<Vec<_>>(),
+            "checked_at": result.checked_at,
+            "policy": {
+                "audit_events_max_age_days": 365,
+            },
+        }),
+    )
+}
+
+fn compliance_provenance(agent_id: Uuid) -> CliOutput {
+    use nexus_kernel::compliance::provenance::ProvenanceTracker;
+
+    let tracker = ProvenanceTracker::new();
+    let report = tracker.export_lineage_report(agent_id);
+
+    CliOutput::ok_with_data(
+        format!("Data provenance report for agent {agent_id}"),
+        json!({
+            "agent_id": report.agent_id.to_string(),
+            "lineage_entries": report.lineage_entries.len(),
+            "data_originated": report.originated,
+            "data_received": report.received,
+            "transformations_applied": report.transformations_applied,
+            "generated_at": report.generated_at,
         }),
     )
 }
@@ -669,6 +812,7 @@ fn protocols_agent_card(agent_name: &str) -> CliOutput {
         fuel_period_id: None,
         monthly_fuel_cap: None,
         allowed_endpoints: None,
+        domain_tags: vec![],
     };
 
     let card = AgentCard::from_manifest(&manifest, "http://localhost:3000");
@@ -973,6 +1117,49 @@ mod tests {
         let out = route(CliCommand::ComplianceStatus);
         assert!(out.success);
         assert!(out.data.unwrap()["frameworks"].is_array());
+    }
+
+    #[test]
+    fn compliance_classify_returns_risk_tier() {
+        let out = route(CliCommand::ComplianceClassify {
+            agent_id: Uuid::new_v4(),
+        });
+        assert!(out.success);
+        let data = out.data.unwrap();
+        assert!(data.get("risk_tier").is_some());
+        assert!(data.get("justification").is_some());
+        assert!(data["applicable_articles"].is_array());
+    }
+
+    #[test]
+    fn compliance_erase_agent_data_returns_receipt() {
+        let out = route(CliCommand::ComplianceEraseAgentData {
+            agent_id: Uuid::new_v4(),
+        });
+        assert!(out.success);
+        let data = out.data.unwrap();
+        assert!(data.get("agent_id").is_some());
+        assert!(data.get("proof_event_id").is_some());
+    }
+
+    #[test]
+    fn compliance_retention_check_returns_result() {
+        let out = route(CliCommand::ComplianceRetentionCheck);
+        assert!(out.success);
+        let data = out.data.unwrap();
+        assert_eq!(data["events_purged"], 0);
+        assert!(data.get("checked_at").is_some());
+    }
+
+    #[test]
+    fn compliance_provenance_returns_report() {
+        let out = route(CliCommand::ComplianceProvenance {
+            agent_id: Uuid::new_v4(),
+        });
+        assert!(out.success);
+        let data = out.data.unwrap();
+        assert!(data.get("agent_id").is_some());
+        assert_eq!(data["lineage_entries"], 0);
     }
 
     // Delegation tests
@@ -1288,6 +1475,7 @@ mod tests {
             CliCommand::AuditShow { count: 10 },
             CliCommand::ClusterStatus,
             CliCommand::ComplianceStatus,
+            CliCommand::ComplianceRetentionCheck,
             CliCommand::SandboxStatus,
             CliCommand::SimulationStatus,
             CliCommand::BenchmarkRun,

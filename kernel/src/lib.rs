@@ -3,6 +3,7 @@
 pub mod adaptive_policy;
 pub mod audit;
 pub mod autonomy;
+pub mod compliance;
 pub mod config;
 pub mod consent;
 pub mod delegation;

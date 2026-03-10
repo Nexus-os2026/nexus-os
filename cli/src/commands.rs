@@ -52,6 +52,16 @@ pub enum CliCommand {
         framework: String,
     },
     ComplianceStatus,
+    ComplianceClassify {
+        agent_id: Uuid,
+    },
+    ComplianceEraseAgentData {
+        agent_id: Uuid,
+    },
+    ComplianceRetentionCheck,
+    ComplianceProvenance {
+        agent_id: Uuid,
+    },
 
     // Delegation commands
     DelegationGrant {
@@ -256,6 +266,16 @@ mod tests {
                 framework: "SOC2".to_string(),
             },
             CliCommand::ComplianceStatus,
+            CliCommand::ComplianceClassify {
+                agent_id: Uuid::new_v4(),
+            },
+            CliCommand::ComplianceEraseAgentData {
+                agent_id: Uuid::new_v4(),
+            },
+            CliCommand::ComplianceRetentionCheck,
+            CliCommand::ComplianceProvenance {
+                agent_id: Uuid::new_v4(),
+            },
             CliCommand::DelegationGrant {
                 grantor: Uuid::new_v4(),
                 grantee: Uuid::new_v4(),
@@ -324,6 +344,6 @@ mod tests {
             CliCommand::FirewallStatus,
             CliCommand::FirewallPatterns,
         ];
-        assert_eq!(_cmds.len(), 47);
+        assert_eq!(_cmds.len(), 51);
     }
 }

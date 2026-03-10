@@ -210,6 +210,18 @@ impl IdentityManager {
         Ok(count)
     }
 
+    /// Remove an agent's identity from the manager and delete its persisted file.
+    pub fn remove(&mut self, agent_id: &Uuid) -> Result<bool, IdentityError> {
+        let existed = self.identities.remove(agent_id).is_some();
+        if let Some(dir) = &self.persist_dir {
+            let path = Self::identity_path(dir, agent_id);
+            if path.exists() {
+                std::fs::remove_file(&path)?;
+            }
+        }
+        Ok(existed)
+    }
+
     // -- internal -------------------------------------------------------------
 
     fn persist(&self, identity: &AgentIdentity) -> Result<(), IdentityError> {

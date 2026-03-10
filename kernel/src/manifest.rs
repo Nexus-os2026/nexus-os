@@ -36,6 +36,9 @@ pub struct AgentManifest {
     /// URL prefixes this agent is allowed to call. `None` = default deny all.
     #[serde(default)]
     pub allowed_endpoints: Option<Vec<String>>,
+    /// Domain tags for EU AI Act risk classification (e.g. "biometric", "critical-infrastructure").
+    #[serde(default)]
+    pub domain_tags: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -52,6 +55,7 @@ struct RawManifest {
     fuel_period_id: Option<String>,
     monthly_fuel_cap: Option<u64>,
     allowed_endpoints: Option<Vec<String>>,
+    domain_tags: Option<Vec<String>>,
 }
 
 pub fn parse_manifest(input: &str) -> Result<AgentManifest, AgentError> {
@@ -101,6 +105,7 @@ pub fn parse_manifest(input: &str) -> Result<AgentManifest, AgentError> {
         fuel_period_id: raw.fuel_period_id,
         monthly_fuel_cap: raw.monthly_fuel_cap,
         allowed_endpoints: raw.allowed_endpoints,
+        domain_tags: raw.domain_tags.unwrap_or_default(),
     })
 }
 
@@ -231,6 +236,7 @@ llm_model = "claude-sonnet-4-5"
             fuel_period_id: None,
             monthly_fuel_cap: None,
             allowed_endpoints: None,
+            domain_tags: vec![],
         };
         assert_eq!(manifest, expected);
     }

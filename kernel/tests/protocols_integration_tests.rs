@@ -41,6 +41,7 @@ fn full_manifest(name: &str) -> AgentManifest {
         fuel_period_id: None,
         monthly_fuel_cap: None,
         allowed_endpoints: None,
+        domain_tags: vec![],
     }
 }
 
@@ -58,6 +59,7 @@ fn limited_manifest(name: &str, caps: Vec<&str>, fuel: u64) -> AgentManifest {
         fuel_period_id: None,
         monthly_fuel_cap: None,
         allowed_endpoints: None,
+        domain_tags: vec![],
     }
 }
 

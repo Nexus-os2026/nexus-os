@@ -639,6 +639,13 @@ impl PermissionManager {
             // audit.read stays enabled
         ]
     }
+
+    /// Remove all data for an agent: history, locks, and pending requests.
+    pub fn remove_agent(&mut self, agent_id: &AgentId) {
+        self.history.remove(agent_id);
+        self.locked.remove(agent_id);
+        self.pending_requests.remove(agent_id);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -670,6 +677,7 @@ mod tests {
             fuel_period_id: None,
             monthly_fuel_cap: None,
             allowed_endpoints: None,
+            domain_tags: vec![],
         }
     }
 
