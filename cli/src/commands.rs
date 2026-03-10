@@ -130,6 +130,21 @@ pub enum CliCommand {
     ProtocolsStart {
         port: u16,
     },
+
+    // Identity commands
+    IdentityShow {
+        agent_id: Uuid,
+    },
+    IdentityList,
+    TokenIssue {
+        agent_id: Uuid,
+        scopes: Vec<String>,
+        ttl: Option<u64>,
+    },
+
+    // Firewall commands
+    FirewallStatus,
+    FirewallPatterns,
 }
 
 /// Structured output for every CLI command, supporting JSON mode.
@@ -297,7 +312,18 @@ mod tests {
                 agent_name: "test-agent".to_string(),
             },
             CliCommand::ProtocolsStart { port: 3000 },
+            CliCommand::IdentityShow {
+                agent_id: Uuid::new_v4(),
+            },
+            CliCommand::IdentityList,
+            CliCommand::TokenIssue {
+                agent_id: Uuid::new_v4(),
+                scopes: vec!["web.search".to_string()],
+                ttl: Some(3600),
+            },
+            CliCommand::FirewallStatus,
+            CliCommand::FirewallPatterns,
         ];
-        assert_eq!(_cmds.len(), 42);
+        assert_eq!(_cmds.len(), 47);
     }
 }

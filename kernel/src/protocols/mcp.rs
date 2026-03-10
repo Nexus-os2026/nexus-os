@@ -8,6 +8,7 @@
 
 use crate::audit::{AuditTrail, EventType};
 use crate::errors::AgentError;
+use crate::firewall::{EgressDecision, EgressGovernor};
 use crate::manifest::AgentManifest;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -330,6 +331,7 @@ pub struct McpServer {
     agents: HashMap<Uuid, RegisteredAgent>,
     audit_trail: AuditTrail,
     resources: Vec<GovernedResource>,
+    egress_governor: EgressGovernor,
 }
 
 impl McpServer {
@@ -338,6 +340,7 @@ impl McpServer {
         Self {
             agents: HashMap::new(),
             audit_trail: AuditTrail::new(),
+            egress_governor: EgressGovernor::new(),
             resources: vec![
                 GovernedResource {
                     uri: "nexus://agents/status".to_string(),
@@ -390,6 +393,10 @@ impl McpServer {
                 }),
             )
             .expect("audit: fail-closed");
+
+        // Register egress policy from manifest allowed_endpoints.
+        let allowed = manifest.allowed_endpoints.clone().unwrap_or_default();
+        self.egress_governor.register_agent(agent_id, allowed);
 
         self.agents.insert(
             agent_id,
@@ -536,6 +543,18 @@ impl McpServer {
             return Err(AgentError::FuelExhausted);
         }
 
+        // Step 3b: Egress check — if params contain a URL, validate against allowlist.
+        if let Some(url) = params.get("url").and_then(|v| v.as_str()) {
+            if let EgressDecision::Deny { reason } =
+                self.egress_governor
+                    .check_egress(agent_id, url, &mut self.audit_trail)
+            {
+                return Err(AgentError::CapabilityDenied(format!(
+                    "egress blocked: {reason}"
+                )));
+            }
+        }
+
         // Step 4: Execute (mock — real execution routes to agent runtime)
         let output_text = format!(
             "Tool '{}' executed with params: {}",
@@ -619,6 +638,7 @@ mod tests {
             llm_model: None,
             fuel_period_id: None,
             monthly_fuel_cap: None,
+            allowed_endpoints: None,
         }
     }
 

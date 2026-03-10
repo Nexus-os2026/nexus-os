@@ -319,4 +319,8 @@ impl LlmProvider for OllamaProvider {
     fn cost_per_token(&self) -> f64 {
         0.0
     }
+
+    fn endpoint_url(&self) -> String {
+        self.base_url.clone()
+    }
 }

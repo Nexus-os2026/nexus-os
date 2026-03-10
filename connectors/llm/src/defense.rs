@@ -1,17 +1,10 @@
 use nexus_kernel::audit::{AuditTrail, EventType};
+use nexus_kernel::firewall::patterns::INJECTION_PATTERNS;
 use nexus_kernel::lifecycle::{transition_state, AgentState};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
-
-const INJECTION_PATTERNS: [&str; 5] = [
-    "ignore previous instructions",
-    "system:",
-    "you are now",
-    "forget everything",
-    "new instructions:",
-];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SanitizationResult {

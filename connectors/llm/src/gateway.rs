@@ -3,6 +3,7 @@ use crate::providers::{
 };
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::errors::AgentError;
+use nexus_kernel::firewall::{EgressGovernor, FirewallAction, InputFilter, OutputFilter};
 use nexus_kernel::fuel_hardening::{
     AgentFuelLedger, BudgetPeriodId, BurnAnomalyDetector, FuelAuditReport, FuelToTokenModel,
     ModelCost,
@@ -124,6 +125,8 @@ pub struct GovernedLlmGateway<P: LlmProvider> {
     audit_trail: AuditTrail,
     oracle_events: Vec<OracleEvent>,
     redaction_engine: RedactionEngine,
+    input_filter: InputFilter,
+    egress_governor: EgressGovernor,
     fuel_model: FuelToTokenModel,
     default_period_id: BudgetPeriodId,
     fuel_ledgers: HashMap<Uuid, AgentFuelLedger>,
@@ -141,11 +144,33 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
             audit_trail: AuditTrail::new(),
             oracle_events: Vec::new(),
             redaction_engine: RedactionEngine::new(policy),
+            input_filter: InputFilter::new(),
+            egress_governor: EgressGovernor::new(),
             fuel_model: FuelToTokenModel::with_defaults(),
             default_period_id: BudgetPeriodId::new("period.default"),
             fuel_ledgers: HashMap::new(),
             safety_supervisor: SafetySupervisor::default(),
         }
+    }
+
+    /// Register an agent's allowed egress endpoints (from manifest).
+    pub fn register_agent_egress(&mut self, agent_id: Uuid, allowed_endpoints: Vec<String>) {
+        self.egress_governor
+            .register_agent(agent_id, allowed_endpoints);
+    }
+
+    /// Register an agent's allowed egress endpoints with a custom rate limit.
+    pub fn register_agent_egress_with_limit(
+        &mut self,
+        agent_id: Uuid,
+        allowed_endpoints: Vec<String>,
+        rate_limit_per_min: u32,
+    ) {
+        self.egress_governor.register_agent_with_limit(
+            agent_id,
+            allowed_endpoints,
+            rate_limit_per_min,
+        );
     }
 
     pub fn set_default_period(&mut self, period_id: impl Into<String>) {
@@ -198,7 +223,7 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
             }
         }
 
-        let redaction_result = self.redaction_engine.process_prompt(
+        let mut redaction_result = self.redaction_engine.process_prompt(
             "llm.query",
             "strict",
             vec![agent.agent_id.to_string(), model.to_string()],
@@ -230,6 +255,37 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
                 "prompt_envelope_hash": redaction_result.outbound_prompt_hash_hex
             }),
         )?;
+
+        // ── Input firewall (after redaction, before provider call) ──────
+        match self.input_filter.check(
+            agent.agent_id,
+            redaction_result.outbound_prompt.as_str(),
+            &mut self.audit_trail,
+        ) {
+            FirewallAction::Block { reason } => {
+                return Err(AgentError::CapabilityDenied(format!(
+                    "prompt firewall blocked: {reason}"
+                )));
+            }
+            FirewallAction::Redacted { redacted_text, .. } => {
+                // Replace outbound prompt with further-redacted version.
+                redaction_result.outbound_prompt = redacted_text;
+            }
+            FirewallAction::Allow => {}
+        }
+
+        // ── Egress check (before provider call) ────────────────────────
+        if self.egress_governor.has_policy(agent.agent_id) {
+            let provider_endpoint = self.provider.endpoint_url();
+            if let nexus_kernel::firewall::EgressDecision::Deny { reason } = self
+                .egress_governor
+                .check_egress(agent.agent_id, &provider_endpoint, &mut self.audit_trail)
+            {
+                return Err(AgentError::CapabilityDenied(format!(
+                    "egress blocked: {reason}"
+                )));
+            }
+        }
 
         let started = Instant::now();
         let response =
@@ -376,6 +432,21 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
                 "safety supervisor halted llm call for agent '{}': {} (report_id={})",
                 agent.agent_id, reason, report_id
             )));
+        }
+
+        // ── Output firewall (after response, before returning to agent) ──
+        match OutputFilter::check(
+            agent.agent_id,
+            &response.output_text,
+            None,
+            &mut self.audit_trail,
+        ) {
+            FirewallAction::Block { reason } => {
+                return Err(AgentError::CapabilityDenied(format!(
+                    "output firewall blocked: {reason}"
+                )));
+            }
+            FirewallAction::Allow | FirewallAction::Redacted { .. } => {}
         }
 
         self.oracle_events.push(OracleEvent {

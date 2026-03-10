@@ -98,3 +98,13 @@
   - Tauri desktop Protocols page: A2A/MCP server status cards, MCP Tool Registry table, Agent Cards grid with JSON preview, Recent Protocol Requests with governance decisions
   - 9 integration tests in kernel/tests/protocols_integration_tests.rs: Agent Card mapping, task lifecycle, tool discovery governance, capability+fuel enforcement, sender auth, MCP capability denial, speculative execution triggers, full audit coverage, no-bypass verification
   - 95+ unit tests across a2a.rs (30), mcp.rs (25), bridge.rs (16), router.rs (3), commands.rs (5)
+- [x] Phase 7.2: Identity & Firewall (COMPLETE)
+  - Ed25519 cryptographic identity per agent: AgentIdentity with DID derivation (did:key:z6Mk...), signing, verification, persistence via IdentityManager
+  - EdDSA JWT token system: TokenManager with OIDC-A claims (iss, sub, aud, exp, iat, jti, scope, agent_did, delegator_sub), issue/validate/refresh/revoke, JWKS endpoint
+  - PromptFirewall: InputFilter (20 injection patterns, homoglyph detection, context overflow, PII+SSN+passport redaction) + OutputFilter (JSON schema validation, exfiltration detection)
+  - EgressGovernor: per-agent URL allowlisting, rate limiting (sliding 60s window), default deny, wired into GovernedLlmGateway and MCP tool invocation
+  - Canonical patterns.rs: single source of truth for all security patterns (20 injection, 6 PII, 7 exfil, 3 sensitive paths, SSN/passport/IP regex)
+  - CLI commands: `nexus identity show/list`, `nexus token issue`, `nexus firewall status/patterns` (47 total CLI commands)
+  - Tauri desktop Identity page and Firewall page with pattern library
+  - 14 integration tests in kernel/tests/identity_firewall_integration_tests.rs
+  - 932 total tests with zero regressions

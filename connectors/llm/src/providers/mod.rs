@@ -55,6 +55,11 @@ pub trait LlmProvider: Send + Sync {
         let chars = prompt.chars().count();
         u32::try_from(chars.saturating_div(4).saturating_add(1)).unwrap_or(u32::MAX)
     }
+
+    /// The base URL this provider calls. Used by egress governor for allowlisting.
+    fn endpoint_url(&self) -> String {
+        format!("provider://{}", self.name())
+    }
 }
 
 impl<T: LlmProvider + ?Sized> LlmProvider for Box<T> {
@@ -80,6 +85,10 @@ impl<T: LlmProvider + ?Sized> LlmProvider for Box<T> {
 
     fn estimate_input_tokens(&self, prompt: &str) -> u32 {
         (**self).estimate_input_tokens(prompt)
+    }
+
+    fn endpoint_url(&self) -> String {
+        (**self).endpoint_url()
     }
 }
 

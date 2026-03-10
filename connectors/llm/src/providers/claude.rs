@@ -155,4 +155,8 @@ impl LlmProvider for ClaudeProvider {
     fn requires_real_api_opt_in(&self) -> bool {
         true
     }
+
+    fn endpoint_url(&self) -> String {
+        "https://api.anthropic.com".to_string()
+    }
 }

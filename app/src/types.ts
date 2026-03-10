@@ -325,3 +325,39 @@ export interface AgentCardSummary {
   rate_limit_rpm: number;
   card_json: Record<string, unknown>;
 }
+
+// ── Identity types ──
+
+export interface IdentityInfo {
+  agent_id: string;
+  did: string;
+  created_at: number;
+  public_key_hex: string;
+}
+
+// ── Firewall types ──
+
+export interface FirewallStatus {
+  status: string;
+  mode: string;
+  injection_pattern_count: number;
+  pii_pattern_count: number;
+  exfil_pattern_count: number;
+  sensitive_path_count: number;
+  ssn_detection: boolean;
+  passport_detection: boolean;
+  internal_ip_detection: boolean;
+  context_overflow_threshold_bytes: number;
+  egress_default_deny: boolean;
+  egress_rate_limit_per_min: number;
+}
+
+export interface FirewallPatterns {
+  injection_patterns: string[];
+  pii_patterns: string[];
+  exfil_patterns: string[];
+  sensitive_paths: string[];
+  ssn_regex: string;
+  passport_regex: string;
+  internal_ip_regex: string;
+}

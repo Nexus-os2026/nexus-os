@@ -40,6 +40,7 @@ fn full_manifest(name: &str) -> AgentManifest {
         llm_model: Some("claude-sonnet-4-5".to_string()),
         fuel_period_id: None,
         monthly_fuel_cap: None,
+        allowed_endpoints: None,
     }
 }
 
@@ -56,6 +57,7 @@ fn limited_manifest(name: &str, caps: Vec<&str>, fuel: u64) -> AgentManifest {
         llm_model: None,
         fuel_period_id: None,
         monthly_fuel_cap: None,
+        allowed_endpoints: None,
     }
 }
 

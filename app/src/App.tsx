@@ -51,6 +51,8 @@ import TrustDashboard from "./pages/TrustDashboard";
 import DistributedAudit from "./pages/DistributedAudit";
 import { PermissionDashboard } from "./pages/PermissionDashboard";
 import Protocols from "./pages/Protocols";
+import Identity from "./pages/Identity";
+import Firewall from "./pages/Firewall";
 import type {
   AgentSummary,
   AuditEventRow,
@@ -65,7 +67,7 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols";
+type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -83,6 +85,8 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "distributed-audit", label: "Chain", icon: "⛓", shortcut: "" },
   { id: "protocols", label: "Protocols", icon: "⌬", shortcut: "Alt+6" },
   { id: "permissions", label: "Permissions", icon: "⛊", shortcut: "Alt+7" },
+  { id: "identity", label: "Identity", icon: "⚿", shortcut: "" },
+  { id: "firewall", label: "Firewall", icon: "⛉", shortcut: "" },
   { id: "settings", label: "Settings", icon: "⚙", shortcut: "Alt+8" }
 ];
 
@@ -1109,6 +1113,12 @@ export default function App(): JSX.Element {
     }
     if (page === "distributed-audit") {
       return <DistributedAudit />;
+    }
+    if (page === "identity") {
+      return <Identity agents={agents.map((a) => ({ id: a.id, name: a.name }))} />;
+    }
+    if (page === "firewall") {
+      return <Firewall />;
     }
     return (
       <Settings

@@ -82,6 +82,19 @@ pub fn route(command: CliCommand) -> CliOutput {
         CliCommand::ProtocolsStatus => protocols_status(),
         CliCommand::ProtocolsAgentCard { agent_name } => protocols_agent_card(&agent_name),
         CliCommand::ProtocolsStart { port } => protocols_start(port),
+
+        // Identity
+        CliCommand::IdentityShow { agent_id } => identity_show(agent_id),
+        CliCommand::IdentityList => identity_list(),
+        CliCommand::TokenIssue {
+            agent_id,
+            scopes,
+            ttl,
+        } => token_issue(agent_id, &scopes, ttl),
+
+        // Firewall
+        CliCommand::FirewallStatus => firewall_status(),
+        CliCommand::FirewallPatterns => firewall_patterns(),
     }
 }
 
@@ -655,6 +668,7 @@ fn protocols_agent_card(agent_name: &str) -> CliOutput {
         llm_model: None,
         fuel_period_id: None,
         monthly_fuel_cap: None,
+        allowed_endpoints: None,
     };
 
     let card = AgentCard::from_manifest(&manifest, "http://localhost:3000");
@@ -680,6 +694,136 @@ fn protocols_start(port: u16) -> CliOutput {
             "jwt_auth": true,
             "governance_bridge": true,
             "note": "Use 'nexus protocols status' to check server state",
+        }),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Identity commands
+// ---------------------------------------------------------------------------
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn identity_show(agent_id: Uuid) -> CliOutput {
+    use nexus_kernel::identity::IdentityManager;
+
+    let mut mgr = IdentityManager::in_memory();
+    match mgr.get_or_create(agent_id) {
+        Ok(identity) => CliOutput::ok_with_data(
+            format!("Identity for agent {agent_id}"),
+            json!({
+                "agent_id": agent_id.to_string(),
+                "did": identity.did,
+                "created_at": identity.created_at,
+                "public_key_hex": hex_encode(&identity.public_key_bytes()),
+            }),
+        ),
+        Err(e) => CliOutput::err(format!("failed to get identity: {e}")),
+    }
+}
+
+fn identity_list() -> CliOutput {
+    // In a real deployment, this would scan the persist directory.
+    // For now, return an illustrative empty list.
+    CliOutput::ok_with_data(
+        "Agent identities",
+        json!({
+            "identities": [],
+            "count": 0,
+            "persist_dir": "~/.nexus/identities",
+            "note": "Run 'nexus identity show <agent-id>' to create/view an identity",
+        }),
+    )
+}
+
+fn token_issue(agent_id: Uuid, scopes: &[String], ttl: Option<u64>) -> CliOutput {
+    use nexus_kernel::identity::{IdentityManager, TokenManager, DEFAULT_TTL_SECS};
+
+    let mut mgr = IdentityManager::in_memory();
+    let identity = match mgr.get_or_create(agent_id) {
+        Ok(id) => id,
+        Err(e) => return CliOutput::err(format!("identity error: {e}")),
+    };
+
+    let tm = TokenManager::new("nexus-os", "nexus-agents");
+    let ttl_secs = ttl.unwrap_or(DEFAULT_TTL_SECS);
+    let token = tm.issue_token(identity, scopes, ttl_secs, None);
+
+    CliOutput::ok_with_data(
+        format!("Token issued for agent {agent_id}"),
+        json!({
+            "agent_id": agent_id.to_string(),
+            "did": identity.did,
+            "token": token,
+            "ttl_secs": ttl_secs,
+            "scopes": scopes,
+            "algorithm": "EdDSA",
+        }),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Firewall commands
+// ---------------------------------------------------------------------------
+
+fn firewall_status() -> CliOutput {
+    use nexus_kernel::firewall::{pattern_summary, EgressGovernor};
+
+    let summary = pattern_summary();
+    let _egress = EgressGovernor::new();
+
+    CliOutput::ok_with_data(
+        "Firewall status",
+        json!({
+            "status": "active",
+            "mode": "fail-closed",
+            "input_filter": {
+                "injection_patterns": summary.injection_count,
+                "pii_detection": true,
+                "ssn_detection": summary.has_ssn_detection,
+                "passport_detection": summary.has_passport_detection,
+                "homoglyph_detection": true,
+                "context_overflow_threshold_bytes": summary.context_overflow_threshold_bytes,
+            },
+            "output_filter": {
+                "exfil_patterns": summary.exfil_count,
+                "internal_ip_detection": summary.has_internal_ip_detection,
+                "json_schema_validation": true,
+            },
+            "egress_governor": {
+                "default_deny": true,
+                "rate_limit_per_min": nexus_kernel::firewall::DEFAULT_RATE_LIMIT_PER_MIN,
+                "registered_agents": 0,
+            },
+        }),
+    )
+}
+
+fn firewall_patterns() -> CliOutput {
+    use nexus_kernel::firewall::patterns;
+
+    CliOutput::ok_with_data(
+        "Canonical firewall patterns",
+        json!({
+            "injection_patterns": patterns::INJECTION_PATTERNS,
+            "pii_patterns": patterns::PII_PATTERNS,
+            "exfil_patterns": patterns::EXFIL_PATTERNS,
+            "sensitive_paths": patterns::SENSITIVE_PATHS,
+            "regex_patterns": {
+                "ssn": patterns::SSN_PATTERN,
+                "passport": patterns::PASSPORT_PATTERN,
+                "internal_ip": patterns::INTERNAL_IP_PATTERN,
+            },
+            "context_overflow_threshold_bytes": patterns::CONTEXT_OVERFLOW_THRESHOLD_BYTES,
+            "summary": {
+                "total_patterns": patterns::INJECTION_PATTERNS.len()
+                    + patterns::PII_PATTERNS.len()
+                    + patterns::EXFIL_PATTERNS.len()
+                    + patterns::SENSITIVE_PATHS.len()
+                    + 3, // regex patterns
+            },
         }),
     )
 }
@@ -1154,6 +1298,8 @@ mod tests {
             CliCommand::AuditComplianceReport,
             CliCommand::DeviceList,
             CliCommand::ProtocolsStatus,
+            CliCommand::FirewallStatus,
+            CliCommand::FirewallPatterns,
         ];
         for cmd in commands {
             let out = route(cmd);
@@ -1168,5 +1314,55 @@ mod tests {
             assert!(parsed.success);
             assert!(parsed.data.is_some());
         }
+    }
+
+    // Identity tests
+    #[test]
+    fn identity_show_creates_identity() {
+        let out = route(CliCommand::IdentityShow {
+            agent_id: Uuid::new_v4(),
+        });
+        assert!(out.success);
+        let data = out.data.unwrap();
+        assert!(data["did"].as_str().unwrap().starts_with("did:key:z6Mk"));
+    }
+
+    #[test]
+    fn identity_list_returns_empty() {
+        let out = route(CliCommand::IdentityList);
+        assert!(out.success);
+        assert_eq!(out.data.unwrap()["count"], 0);
+    }
+
+    #[test]
+    fn token_issue_returns_token() {
+        let out = route(CliCommand::TokenIssue {
+            agent_id: Uuid::new_v4(),
+            scopes: vec!["web.search".to_string()],
+            ttl: Some(3600),
+        });
+        assert!(out.success);
+        let data = out.data.unwrap();
+        assert!(data["token"].as_str().unwrap().contains('.'));
+        assert_eq!(data["algorithm"], "EdDSA");
+    }
+
+    // Firewall tests
+    #[test]
+    fn firewall_status_returns_active() {
+        let out = route(CliCommand::FirewallStatus);
+        assert!(out.success);
+        let data = out.data.unwrap();
+        assert_eq!(data["status"], "active");
+        assert_eq!(data["mode"], "fail-closed");
+    }
+
+    #[test]
+    fn firewall_patterns_returns_all() {
+        let out = route(CliCommand::FirewallPatterns);
+        assert!(out.success);
+        let data = out.data.unwrap();
+        assert!(data["injection_patterns"].as_array().unwrap().len() >= 20);
+        assert!(data["pii_patterns"].as_array().unwrap().len() >= 6);
     }
 }

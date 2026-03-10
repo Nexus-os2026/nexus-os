@@ -533,32 +533,7 @@ fn determine_hitl_tier(capability: &str) -> HitlTier {
 
 // ── Prompt firewall ──────────────────────────────────────────────────────────
 
-/// Prompt injection patterns (case-insensitive matching).
-/// Same detection set as the SDK ThreatDetector for consistency.
-const INJECTION_PATTERNS: &[&str] = &[
-    "ignore previous instructions",
-    "ignore all previous",
-    "disregard previous",
-    "forget your instructions",
-    "you are now",
-    "new role:",
-    "system prompt:",
-    "act as",
-    "pretend you are",
-    "jailbreak",
-    "do anything now",
-    "developer mode",
-];
-
-/// PII patterns for redaction checks (simplified heuristic).
-const PII_PATTERNS: &[&str] = &[
-    "social security",
-    "credit card",
-    "password:",
-    "secret:",
-    "api_key:",
-    "private_key:",
-];
+use crate::firewall::patterns::{INJECTION_PATTERNS, PII_PATTERNS, SENSITIVE_PATHS};
 
 /// Scan MCP tool params for prompt injection and PII violations.
 ///
@@ -598,7 +573,7 @@ fn scan_mcp_params(
             if path.contains("..") {
                 return Some(format!("path traversal detected in {tool_name}: '{path}'"));
             }
-            for sensitive in &["/etc/", "/sys/", "/proc/"] {
+            for sensitive in SENSITIVE_PATHS {
                 if path.starts_with(sensitive) {
                     return Some(format!("sensitive path access in {tool_name}: '{path}'"));
                 }
@@ -646,6 +621,7 @@ mod tests {
             llm_model: None,
             fuel_period_id: None,
             monthly_fuel_cap: None,
+            allowed_endpoints: None,
         }
     }
 

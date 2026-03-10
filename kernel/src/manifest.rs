@@ -33,6 +33,9 @@ pub struct AgentManifest {
     pub llm_model: Option<String>,
     pub fuel_period_id: Option<String>,
     pub monthly_fuel_cap: Option<u64>,
+    /// URL prefixes this agent is allowed to call. `None` = default deny all.
+    #[serde(default)]
+    pub allowed_endpoints: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,6 +51,7 @@ struct RawManifest {
     llm_model: Option<String>,
     fuel_period_id: Option<String>,
     monthly_fuel_cap: Option<u64>,
+    allowed_endpoints: Option<Vec<String>>,
 }
 
 pub fn parse_manifest(input: &str) -> Result<AgentManifest, AgentError> {
@@ -96,6 +100,7 @@ pub fn parse_manifest(input: &str) -> Result<AgentManifest, AgentError> {
         llm_model: raw.llm_model,
         fuel_period_id: raw.fuel_period_id,
         monthly_fuel_cap: raw.monthly_fuel_cap,
+        allowed_endpoints: raw.allowed_endpoints,
     })
 }
 
@@ -225,6 +230,7 @@ llm_model = "claude-sonnet-4-5"
             llm_model: Some("claude-sonnet-4-5".to_string()),
             fuel_period_id: None,
             monthly_fuel_cap: None,
+            allowed_endpoints: None,
         };
         assert_eq!(manifest, expected);
     }

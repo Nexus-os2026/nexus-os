@@ -97,3 +97,11 @@
 - Keep workflow files clean: each build job should have exactly one set of build/normalize/upload steps, not duplicates from both sides of a merge conflict
 - Release workflows must only trigger on tag pushes (`push: tags: ["v*"]`), never on `push: branches: [main]` — otherwise every push to main triggers a failing release build
 - Always verify workflow triggers after resolving merge conflicts — conflicts can corrupt the `on:` block
+
+## Identity & Firewall (Phase 7.2)
+- Adding a new field to a widely-used struct (e.g., `allowed_endpoints` on `AgentManifest`) causes E0063 in ~15+ files — use `Option<T>` with `#[serde(default)]` for backward compatibility, then batch-fix all struct literals
+- Conditional governance checks avoid breaking existing code: `if self.egress_governor.has_policy(agent_id)` ensures agents without egress policies (most test agents) aren't default-denied by the new EgressGovernor
+- Consolidate security patterns into one canonical module early — scattered copies in defense.rs, bridge.rs, and prompt_firewall.rs diverge over time and make pattern updates error-prone
+- EdDSA (Ed25519) is simpler than ES256 (ECDSA P-256) for JWTs when ed25519-dalek is already a dependency — custom base64url + JWT encode avoids pulling in the `jsonwebtoken` crate
+- Integration tests should exercise the full pipeline end-to-end (identity → token → firewall → egress → audit) rather than testing components in isolation — catches wiring issues that unit tests miss
+- Rate limiting with sliding windows needs per-endpoint tracking — one endpoint hitting the limit shouldn't block other allowed endpoints for the same agent

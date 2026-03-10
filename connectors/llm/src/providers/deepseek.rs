@@ -115,4 +115,8 @@ impl LlmProvider for DeepSeekProvider {
     fn requires_real_api_opt_in(&self) -> bool {
         true
     }
+
+    fn endpoint_url(&self) -> String {
+        "https://api.deepseek.com".to_string()
+    }
 }

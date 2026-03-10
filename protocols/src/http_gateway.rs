@@ -15,6 +15,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use nexus_kernel::identity::{AgentIdentity, IdentityManager, OidcAClaims, TokenManager};
 use nexus_kernel::manifest::AgentManifest;
 use nexus_kernel::protocols::a2a::{
     A2ATask, AgentCard, GovernanceContext, MessagePart, MessageRole, TaskMessage, TaskPayload,
@@ -27,29 +28,17 @@ use std::sync::{Arc, Mutex};
 use tower_http::cors::{Any, CorsLayer};
 use uuid::Uuid;
 
-// ── JWT auth ────────────────────────────────────────────────────────────────
+// ── JWT auth (EdDSA / Ed25519) ──────────────────────────────────────────────
 
-/// JWT validation config.
-#[derive(Debug, Clone)]
-pub struct JwtConfig {
-    /// HMAC secret for HS256 validation.
-    pub secret: String,
-}
+/// Re-export claims type so existing consumers can keep using it.
+pub type JwtClaims = OidcAClaims;
 
-/// Claims embedded in a JWT.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JwtClaims {
-    /// Subject (caller identity).
-    pub sub: String,
-    /// Expiration (unix timestamp).
-    pub exp: u64,
-    /// Issued at (unix timestamp).
-    #[serde(default)]
-    pub iat: u64,
-}
-
-/// Validate a JWT bearer token from the Authorization header.
-fn validate_jwt(headers: &HeaderMap, config: &JwtConfig) -> Result<JwtClaims, AuthError> {
+/// Extract and validate an EdDSA bearer token from the Authorization header.
+fn validate_jwt(
+    headers: &HeaderMap,
+    token_mgr: &TokenManager,
+    gateway_identity: &AgentIdentity,
+) -> Result<OidcAClaims, AuthError> {
     let header_value = headers
         .get("authorization")
         .ok_or(AuthError::MissingToken)?
@@ -60,30 +49,14 @@ fn validate_jwt(headers: &HeaderMap, config: &JwtConfig) -> Result<JwtClaims, Au
         .strip_prefix("Bearer ")
         .ok_or(AuthError::InvalidToken("expected Bearer scheme".into()))?;
 
-    let key = jsonwebtoken::DecodingKey::from_secret(config.secret.as_bytes());
-    let validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::HS256);
-
-    let token_data = jsonwebtoken::decode::<JwtClaims>(token, &key, &validation)
-        .map_err(|e| AuthError::InvalidToken(e.to_string()))?;
-
-    Ok(token_data.claims)
+    token_mgr
+        .validate_token(token, gateway_identity)
+        .map_err(|e| AuthError::InvalidToken(e.to_string()))
 }
 
-/// Create a signed JWT for testing.
-pub fn create_test_jwt(sub: &str, secret: &str, exp_secs_from_now: u64) -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-
-    let claims = JwtClaims {
-        sub: sub.to_string(),
-        exp: now + exp_secs_from_now,
-        iat: now,
-    };
-
-    let key = jsonwebtoken::EncodingKey::from_secret(secret.as_bytes());
-    jsonwebtoken::encode(&jsonwebtoken::Header::default(), &claims, &key).unwrap()
+/// Create a signed EdDSA JWT for testing.
+pub fn create_test_jwt(identity: &AgentIdentity, token_mgr: &TokenManager, ttl: u64) -> String {
+    token_mgr.issue_token(identity, &[], ttl, None)
 }
 
 #[derive(Debug)]
@@ -126,19 +99,32 @@ struct GatewayInner {
     tasks: HashMap<String, A2ATask>,
     /// Map agent name → agent UUID for routing.
     agent_ids: HashMap<String, Uuid>,
-    /// JWT configuration.
-    jwt_config: JwtConfig,
+    /// EdDSA token manager for JWT issuance/validation.
+    token_manager: TokenManager,
+    /// Gateway-level signing identity (used to sign/verify JWTs).
+    gateway_identity: AgentIdentity,
+    /// Agent identity manager (used for per-agent key management).
+    #[allow(dead_code)]
+    identity_manager: IdentityManager,
     /// Server start time.
     started_at: u64,
 }
 
 impl GatewayState {
-    /// Create a new gateway state with JWT config.
-    pub fn new(jwt_secret: impl Into<String>) -> Self {
+    /// Create a new gateway state with EdDSA JWT auth.
+    ///
+    /// A fresh Ed25519 keypair is generated for the gateway itself, used to
+    /// sign and verify all JWTs. The old `jwt_secret` parameter is accepted
+    /// for API compatibility but is **ignored** — signing is now asymmetric.
+    pub fn new(_jwt_secret: impl Into<String>) -> Self {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
+
+        let gateway_id = Uuid::new_v4();
+        let gateway_identity = AgentIdentity::generate(gateway_id);
+        let token_manager = TokenManager::new("nexus-gateway", "nexus-agents");
 
         Self {
             inner: Arc::new(Mutex::new(GatewayInner {
@@ -146,9 +132,9 @@ impl GatewayState {
                 mcp_server: McpServer::new(),
                 tasks: HashMap::new(),
                 agent_ids: HashMap::new(),
-                jwt_config: JwtConfig {
-                    secret: jwt_secret.into(),
-                },
+                token_manager,
+                gateway_identity,
+                identity_manager: IdentityManager::in_memory(),
                 started_at: now,
             })),
         }
@@ -163,6 +149,20 @@ impl GatewayState {
         inner.mcp_server.register_agent(agent_id, manifest);
         inner.agent_cards.insert(name.clone(), card);
         inner.agent_ids.insert(name, agent_id);
+    }
+
+    /// Issue an EdDSA-signed JWT for testing or programmatic use.
+    pub fn issue_token(&self, scopes: &[String], ttl: u64) -> String {
+        let inner = self.inner.lock().expect("lock poisoned");
+        inner
+            .token_manager
+            .issue_token(&inner.gateway_identity, scopes, ttl, None)
+    }
+
+    /// Return the JWKS JSON for OIDC discovery.
+    pub fn jwks(&self) -> serde_json::Value {
+        let inner = self.inner.lock().expect("lock poisoned");
+        TokenManager::jwks_json(&inner.gateway_identity)
     }
 }
 
@@ -183,6 +183,8 @@ pub fn build_router(state: GatewayState) -> Router {
         // MCP routes
         .route("/mcp/tools/invoke", post(mcp_tool_invoke))
         .route("/mcp/tools/list", get(mcp_tool_list))
+        // Auth / OIDC discovery
+        .route("/auth/jwks", get(auth_jwks))
         // Health
         .route("/health", get(health_check))
         .layer(cors)
@@ -291,6 +293,14 @@ async fn a2a_agent_card(
     result.map(Json)
 }
 
+/// `GET /auth/jwks` — OIDC discovery: return the gateway's EdDSA public key.
+async fn auth_jwks(State(state): State<GatewayState>) -> impl IntoResponse {
+    let result = tokio::task::spawn_blocking(move || state.jwks())
+        .await
+        .expect("spawn_blocking panicked");
+    Json(result)
+}
+
 /// `POST /a2a` — submit a task. Requires JWT auth.
 async fn a2a_task_submit(
     State(state): State<GatewayState>,
@@ -298,13 +308,12 @@ async fn a2a_task_submit(
     Json(req): Json<TaskSubmitRequest>,
 ) -> impl IntoResponse {
     // Validate JWT outside spawn_blocking (headers aren't Send)
-    let jwt_secret = {
+    let claims = {
         let inner = state.inner.lock().expect("lock poisoned");
-        inner.jwt_config.clone()
-    };
-    let claims = match validate_jwt(&headers, &jwt_secret) {
-        Ok(c) => c,
-        Err(e) => return Err(error_json(e.status_code(), e.message())),
+        match validate_jwt(&headers, &inner.token_manager, &inner.gateway_identity) {
+            Ok(c) => c,
+            Err(e) => return Err(error_json(e.status_code(), e.message())),
+        }
     };
 
     let result = tokio::task::spawn_blocking(move || {
@@ -366,12 +375,11 @@ async fn a2a_task_status(
     headers: HeaderMap,
     Path(task_id): Path<String>,
 ) -> impl IntoResponse {
-    let jwt_secret = {
+    {
         let inner = state.inner.lock().expect("lock poisoned");
-        inner.jwt_config.clone()
-    };
-    if let Err(e) = validate_jwt(&headers, &jwt_secret) {
-        return Err(error_json(e.status_code(), e.message()));
+        if let Err(e) = validate_jwt(&headers, &inner.token_manager, &inner.gateway_identity) {
+            return Err(error_json(e.status_code(), e.message()));
+        }
     }
 
     let result = tokio::task::spawn_blocking(move || {
@@ -396,12 +404,11 @@ async fn mcp_tool_list(
     headers: HeaderMap,
     Query(query): Query<ToolListQuery>,
 ) -> impl IntoResponse {
-    let jwt_secret = {
+    {
         let inner = state.inner.lock().expect("lock poisoned");
-        inner.jwt_config.clone()
-    };
-    if let Err(e) = validate_jwt(&headers, &jwt_secret) {
-        return Err(error_json(e.status_code(), e.message()));
+        if let Err(e) = validate_jwt(&headers, &inner.token_manager, &inner.gateway_identity) {
+            return Err(error_json(e.status_code(), e.message()));
+        }
     }
 
     let result = tokio::task::spawn_blocking(move || {
@@ -434,12 +441,11 @@ async fn mcp_tool_invoke(
     headers: HeaderMap,
     Json(req): Json<ToolInvokeRequest>,
 ) -> impl IntoResponse {
-    let jwt_secret = {
+    {
         let inner = state.inner.lock().expect("lock poisoned");
-        inner.jwt_config.clone()
-    };
-    if let Err(e) = validate_jwt(&headers, &jwt_secret) {
-        return Err(error_json(e.status_code(), e.message()));
+        if let Err(e) = validate_jwt(&headers, &inner.token_manager, &inner.gateway_identity) {
+            return Err(error_json(e.status_code(), e.message()));
+        }
     }
 
     let result = tokio::task::spawn_blocking(move || {
@@ -489,8 +495,6 @@ mod tests {
     use nexus_kernel::protocols::a2a::TaskStatus;
     use tower::ServiceExt;
 
-    const TEST_SECRET: &str = "test-secret-key-for-jwt-validation";
-
     fn test_manifest(name: &str, caps: Vec<&str>, fuel: u64) -> AgentManifest {
         AgentManifest {
             name: name.to_string(),
@@ -504,11 +508,12 @@ mod tests {
             llm_model: None,
             fuel_period_id: None,
             monthly_fuel_cap: None,
+            allowed_endpoints: None,
         }
     }
 
     fn setup_gateway() -> (Router, GatewayState) {
-        let state = GatewayState::new(TEST_SECRET);
+        let state = GatewayState::new("ignored");
         state.register_agent(
             test_manifest("test-agent", vec!["web.search", "llm.query"], 10_000),
             "https://example.com",
@@ -517,8 +522,8 @@ mod tests {
         (router, state)
     }
 
-    fn auth_header() -> String {
-        let token = create_test_jwt("test-user", TEST_SECRET, 3600);
+    fn auth_header_for(state: &GatewayState) -> String {
+        let token = state.issue_token(&[], 3600);
         format!("Bearer {token}")
     }
 
@@ -599,6 +604,7 @@ mod tests {
     #[tokio::test]
     async fn task_submission_creates_task() {
         let (router, state) = setup_gateway();
+        let auth = auth_header_for(&state);
         let body = serde_json::json!({
             "agent": "test-agent",
             "message": "Hello, agent!"
@@ -608,7 +614,7 @@ mod tests {
             .method(Method::POST)
             .uri("/a2a")
             .header("content-type", "application/json")
-            .header("authorization", auth_header())
+            .header("authorization", &auth)
             .body(Body::from(serde_json::to_vec(&body).unwrap()))
             .unwrap();
 
@@ -618,7 +624,9 @@ mod tests {
         let json = body_to_json(resp.into_body()).await;
         assert_eq!(json["status"], "submitted");
         assert_eq!(json["agent"], "test-agent");
-        assert_eq!(json["sender"], "test-user");
+        // sub is now the gateway DID, not a plain string
+        let sender = json["sender"].as_str().unwrap();
+        assert!(sender.starts_with("did:key:z"));
 
         let task_id = json["task_id"].as_str().unwrap();
         assert!(!task_id.is_empty());
@@ -627,7 +635,7 @@ mod tests {
         let inner = state.inner.lock().unwrap();
         let task = inner.tasks.get(task_id).unwrap();
         assert_eq!(task.status, TaskStatus::Submitted);
-        assert_eq!(task.sender, "test-user");
+        assert!(task.sender.starts_with("did:key:z"));
         assert_eq!(task.receiver, "test-agent");
         assert!(task.governance.is_some());
     }
@@ -676,9 +684,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn task_submission_wrong_secret_rejected() {
+    async fn task_submission_wrong_key_rejected() {
         let (router, _) = setup_gateway();
-        let bad_token = create_test_jwt("attacker", "wrong-secret", 3600);
+        // Token signed by a completely different identity → signature mismatch.
+        let rogue_identity = AgentIdentity::generate(Uuid::new_v4());
+        let rogue_mgr = TokenManager::new("rogue", "nexus-agents");
+        let bad_token = rogue_mgr.issue_token(&rogue_identity, &[], 3600, None);
         let body = serde_json::json!({
             "agent": "test-agent",
             "message": "Hello!"
@@ -700,7 +711,7 @@ mod tests {
 
     #[tokio::test]
     async fn task_status_lookup() {
-        let state = GatewayState::new(TEST_SECRET);
+        let state = GatewayState::new("ignored");
         state.register_agent(
             test_manifest("test-agent", vec!["web.search"], 10_000),
             "https://example.com",
@@ -725,10 +736,11 @@ mod tests {
             id
         };
 
+        let auth = auth_header_for(&state);
         let router = build_router(state);
         let req = Request::builder()
             .uri(format!("/a2a/tasks/{task_id}"))
-            .header("authorization", auth_header())
+            .header("authorization", auth)
             .body(Body::empty())
             .unwrap();
 
@@ -742,10 +754,10 @@ mod tests {
 
     #[tokio::test]
     async fn task_status_not_found() {
-        let (router, _) = setup_gateway();
+        let (router, state) = setup_gateway();
         let req = Request::builder()
             .uri("/a2a/tasks/nonexistent-id")
-            .header("authorization", auth_header())
+            .header("authorization", auth_header_for(&state))
             .body(Body::empty())
             .unwrap();
 
@@ -769,10 +781,10 @@ mod tests {
 
     #[tokio::test]
     async fn mcp_tool_list_returns_governed_tools() {
-        let (router, _) = setup_gateway();
+        let (router, state) = setup_gateway();
         let req = Request::builder()
             .uri("/mcp/tools/list?agent=test-agent")
-            .header("authorization", auth_header())
+            .header("authorization", auth_header_for(&state))
             .body(Body::empty())
             .unwrap();
 
@@ -804,7 +816,7 @@ mod tests {
 
     #[tokio::test]
     async fn mcp_tool_invoke_succeeds() {
-        let (router, _) = setup_gateway();
+        let (router, state) = setup_gateway();
         let body = serde_json::json!({
             "agent": "test-agent",
             "tool": "web_search",
@@ -815,7 +827,7 @@ mod tests {
             .method(Method::POST)
             .uri("/mcp/tools/invoke")
             .header("content-type", "application/json")
-            .header("authorization", auth_header())
+            .header("authorization", auth_header_for(&state))
             .body(Body::from(serde_json::to_vec(&body).unwrap()))
             .unwrap();
 
@@ -830,7 +842,7 @@ mod tests {
 
     #[tokio::test]
     async fn mcp_tool_invoke_unauthorized_capability_rejected() {
-        let (router, _) = setup_gateway();
+        let (router, state) = setup_gateway();
         // test-agent has web.search and llm.query, but NOT fs.write
         let body = serde_json::json!({
             "agent": "test-agent",
@@ -842,7 +854,7 @@ mod tests {
             .method(Method::POST)
             .uri("/mcp/tools/invoke")
             .header("content-type", "application/json")
-            .header("authorization", auth_header())
+            .header("authorization", auth_header_for(&state))
             .body(Body::from(serde_json::to_vec(&body).unwrap()))
             .unwrap();
 
@@ -872,6 +884,32 @@ mod tests {
 
         let resp = router.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // ── JWKS endpoint ──────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn jwks_endpoint_returns_valid_key() {
+        let (router, _) = setup_gateway();
+        let req = Request::builder()
+            .uri("/auth/jwks")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        let keys = json["keys"].as_array().expect("keys array");
+        assert_eq!(keys.len(), 1);
+
+        let key = &keys[0];
+        assert_eq!(key["kty"], "OKP");
+        assert_eq!(key["crv"], "Ed25519");
+        assert_eq!(key["alg"], "EdDSA");
+        assert_eq!(key["use"], "sig");
+        assert!(key["kid"].as_str().unwrap().starts_with("did:key:z"));
+        assert!(key["x"].as_str().is_some());
     }
 
     // ── CORS headers ────────────────────────────────────────────────────

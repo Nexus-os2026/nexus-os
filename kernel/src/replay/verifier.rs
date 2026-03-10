@@ -356,6 +356,7 @@ mod tests {
             llm_model: None,
             fuel_period_id: None,
             monthly_fuel_cap: None,
+            allowed_endpoints: None,
         }
     }
 

@@ -42,6 +42,7 @@ fn phase5_exhaustion_triggers_autonomy_downgrade() {
         llm_model: Some("mock-1".to_string()),
         fuel_period_id: Some("2026-03".to_string()),
         monthly_fuel_cap: Some(1),
+        allowed_endpoints: None,
     };
 
     let id = supervisor

@@ -6,7 +6,10 @@ import type {
   AvailableModel,
   CapabilityRequest,
   ChatResponse,
+  FirewallPatterns,
+  FirewallStatus,
   HardwareInfo,
+  IdentityInfo,
   McpTool,
   NexusConfig,
   OllamaStatus,
@@ -250,4 +253,24 @@ export function getMcpTools(): Promise<McpTool[]> {
 
 export function getAgentCards(): Promise<AgentCardSummary[]> {
   return invokeDesktop<AgentCardSummary[]>("get_agent_cards");
+}
+
+// ── Identity API ──
+
+export function getAgentIdentity(agentId: string): Promise<IdentityInfo> {
+  return invokeDesktop<IdentityInfo>("get_agent_identity", agentArgs(agentId));
+}
+
+export function listIdentities(): Promise<IdentityInfo[]> {
+  return invokeDesktop<IdentityInfo[]>("list_identities");
+}
+
+// ── Firewall API ──
+
+export function getFirewallStatus(): Promise<FirewallStatus> {
+  return invokeDesktop<FirewallStatus>("get_firewall_status");
+}
+
+export function getFirewallPatterns(): Promise<FirewallPatterns> {
+  return invokeDesktop<FirewallPatterns>("get_firewall_patterns");
 }

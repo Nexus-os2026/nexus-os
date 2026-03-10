@@ -616,6 +616,7 @@ mod tests {
             llm_model: Some("claude-sonnet-4-5".to_string()),
             fuel_period_id: None,
             monthly_fuel_cap: None,
+            allowed_endpoints: None,
         }
     }
 
@@ -633,6 +634,7 @@ mod tests {
             llm_model: None,
             fuel_period_id: None,
             monthly_fuel_cap: None,
+            allowed_endpoints: None,
         }
     }
 

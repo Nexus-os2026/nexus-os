@@ -82,12 +82,19 @@ pub struct VoiceRuntimeState {
     pub overlay_visible: bool,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct AppState {
     supervisor: Arc<Mutex<Supervisor>>,
     audit: Arc<Mutex<AuditTrail>>,
     meta: Arc<Mutex<HashMap<AgentId, AgentMeta>>>,
     voice: Arc<Mutex<VoiceRuntimeState>>,
+    identity_mgr: Arc<Mutex<nexus_kernel::identity::IdentityManager>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AppState {
@@ -101,6 +108,9 @@ impl AppState {
                 push_to_talk_enabled: true,
                 overlay_visible: false,
             })),
+            identity_mgr: Arc::new(Mutex::new(
+                nexus_kernel::identity::IdentityManager::in_memory(),
+            )),
         }
     }
 
@@ -1248,6 +1258,127 @@ pub fn get_agent_cards(state: &AppState) -> Result<Vec<AgentCardRow>, String> {
     Ok(rows)
 }
 
+// ── Identity Commands ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdentityRow {
+    pub agent_id: String,
+    pub did: String,
+    pub created_at: u64,
+    pub public_key_hex: String,
+}
+
+pub fn get_agent_identity(state: &AppState, agent_id: String) -> Result<IdentityRow, String> {
+    let uuid = uuid::Uuid::parse_str(&agent_id).map_err(|e| format!("invalid UUID: {e}"))?;
+    let mut mgr = state.identity_mgr.lock().map_err(|e| e.to_string())?;
+    let identity = mgr
+        .get_or_create(uuid)
+        .map_err(|e| format!("identity error: {e}"))?;
+    Ok(IdentityRow {
+        agent_id: uuid.to_string(),
+        did: identity.did.clone(),
+        created_at: identity.created_at,
+        public_key_hex: identity
+            .public_key_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect(),
+    })
+}
+
+pub fn list_identities(state: &AppState) -> Result<Vec<IdentityRow>, String> {
+    let sup = state.supervisor.lock().map_err(|e| e.to_string())?;
+    let mut mgr = state.identity_mgr.lock().map_err(|e| e.to_string())?;
+    let mut rows = Vec::new();
+    for agent_status in sup.health_check() {
+        if let Ok(identity) = mgr.get_or_create(agent_status.id) {
+            rows.push(IdentityRow {
+                agent_id: agent_status.id.to_string(),
+                did: identity.did.clone(),
+                created_at: identity.created_at,
+                public_key_hex: identity
+                    .public_key_bytes()
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect(),
+            });
+        }
+    }
+    Ok(rows)
+}
+
+// ── Firewall Commands ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FirewallStatusRow {
+    pub status: String,
+    pub mode: String,
+    pub injection_pattern_count: usize,
+    pub pii_pattern_count: usize,
+    pub exfil_pattern_count: usize,
+    pub sensitive_path_count: usize,
+    pub ssn_detection: bool,
+    pub passport_detection: bool,
+    pub internal_ip_detection: bool,
+    pub context_overflow_threshold_bytes: usize,
+    pub egress_default_deny: bool,
+    pub egress_rate_limit_per_min: u32,
+}
+
+pub fn get_firewall_status(_state: &AppState) -> Result<FirewallStatusRow, String> {
+    let summary = nexus_kernel::firewall::pattern_summary();
+    Ok(FirewallStatusRow {
+        status: "active".to_string(),
+        mode: "fail-closed".to_string(),
+        injection_pattern_count: summary.injection_count,
+        pii_pattern_count: summary.pii_count,
+        exfil_pattern_count: summary.exfil_count,
+        sensitive_path_count: summary.sensitive_path_count,
+        ssn_detection: summary.has_ssn_detection,
+        passport_detection: summary.has_passport_detection,
+        internal_ip_detection: summary.has_internal_ip_detection,
+        context_overflow_threshold_bytes: summary.context_overflow_threshold_bytes,
+        egress_default_deny: true,
+        egress_rate_limit_per_min: nexus_kernel::firewall::DEFAULT_RATE_LIMIT_PER_MIN,
+    })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FirewallPatternsRow {
+    pub injection_patterns: Vec<String>,
+    pub pii_patterns: Vec<String>,
+    pub exfil_patterns: Vec<String>,
+    pub sensitive_paths: Vec<String>,
+    pub ssn_regex: String,
+    pub passport_regex: String,
+    pub internal_ip_regex: String,
+}
+
+pub fn get_firewall_patterns() -> Result<FirewallPatternsRow, String> {
+    use nexus_kernel::firewall::patterns;
+    Ok(FirewallPatternsRow {
+        injection_patterns: patterns::INJECTION_PATTERNS
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        pii_patterns: patterns::PII_PATTERNS
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        exfil_patterns: patterns::EXFIL_PATTERNS
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        sensitive_paths: patterns::SENSITIVE_PATHS
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        ssn_regex: patterns::SSN_PATTERN.to_string(),
+        passport_regex: patterns::PASSPORT_PATTERN.to_string(),
+        internal_ip_regex: patterns::INTERNAL_IP_PATTERN.to_string(),
+    })
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1558,6 +1689,37 @@ mod runtime {
         super::get_agent_cards(state.inner())
     }
 
+    // ── Identity Commands ──
+
+    #[tauri::command]
+    fn get_agent_identity(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<super::IdentityRow, String> {
+        super::get_agent_identity(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn list_identities(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<super::IdentityRow>, String> {
+        super::list_identities(state.inner())
+    }
+
+    // ── Firewall Commands ──
+
+    #[tauri::command]
+    fn get_firewall_status(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<super::FirewallStatusRow, String> {
+        super::get_firewall_status(state.inner())
+    }
+
+    #[tauri::command]
+    fn get_firewall_patterns() -> Result<super::FirewallPatternsRow, String> {
+        super::get_firewall_patterns()
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -1648,6 +1810,10 @@ mod runtime {
                 get_protocols_requests,
                 get_mcp_tools,
                 get_agent_cards,
+                get_agent_identity,
+                list_identities,
+                get_firewall_status,
+                get_firewall_patterns,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
