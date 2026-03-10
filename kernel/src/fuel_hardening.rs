@@ -1,8 +1,10 @@
 use crate::audit::{AuditTrail, EventType};
+use crate::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 const ALERT_THRESHOLDS: [u8; 3] = [70, 100, 120];
@@ -580,9 +582,107 @@ fn hash_evidence(
     format!("{:x}", hasher.finalize())
 }
 
+/// Thread-safe fuel context that tracks remaining fuel for an agent execution.
+///
+/// Supports both direct deduction (`deduct_fuel`) and two-phase reservation
+/// (`reserve_fuel` → commit/cancel).  Reservations that are dropped without
+/// being committed automatically return their fuel.
+#[derive(Debug, Clone)]
+pub struct FuelContext {
+    inner: Arc<Mutex<FuelContextInner>>,
+}
+
+#[derive(Debug)]
+struct FuelContextInner {
+    fuel_remaining: u64,
+}
+
+impl FuelContext {
+    /// Create a new fuel context with the given initial budget.
+    pub fn new(initial_fuel: u64) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(FuelContextInner {
+                fuel_remaining: initial_fuel,
+            })),
+        }
+    }
+
+    /// Returns the current remaining fuel (excluding reserved-but-uncommitted fuel).
+    pub fn fuel_remaining(&self) -> u64 {
+        self.inner
+            .lock()
+            .expect("fuel lock poisoned")
+            .fuel_remaining
+    }
+
+    /// Immediately deduct `amount` fuel.  Returns `Err(FuelExhausted)` if
+    /// insufficient fuel is available.
+    pub fn deduct_fuel(&self, amount: u64) -> Result<(), AgentError> {
+        let mut inner = self.inner.lock().expect("fuel lock poisoned");
+        if inner.fuel_remaining < amount {
+            return Err(AgentError::FuelExhausted);
+        }
+        inner.fuel_remaining -= amount;
+        Ok(())
+    }
+
+    /// Reserve `amount` fuel for later commit or cancel.
+    ///
+    /// The reserved fuel is immediately subtracted from the available balance.
+    /// Call [`FuelReservation::commit`] to finalise or [`FuelReservation::cancel`]
+    /// to return it.  Dropping the reservation without committing automatically
+    /// cancels it (fuel is returned).
+    pub fn reserve_fuel(&self, amount: u64) -> Result<FuelReservation, AgentError> {
+        let mut inner = self.inner.lock().expect("fuel lock poisoned");
+        if inner.fuel_remaining < amount {
+            return Err(AgentError::FuelExhausted);
+        }
+        inner.fuel_remaining -= amount;
+        Ok(FuelReservation {
+            context: self.inner.clone(),
+            amount,
+            committed: false,
+        })
+    }
+}
+
+/// A pending fuel reservation.  Commit to finalise the deduction, cancel to
+/// return the fuel, or simply drop to auto-cancel.
+#[derive(Debug)]
+pub struct FuelReservation {
+    context: Arc<Mutex<FuelContextInner>>,
+    amount: u64,
+    committed: bool,
+}
+
+impl FuelReservation {
+    /// Finalise the reservation — the fuel is permanently consumed.
+    pub fn commit(mut self) {
+        self.committed = true;
+    }
+
+    /// Cancel the reservation — the fuel is returned to the context.
+    pub fn cancel(mut self) {
+        if !self.committed {
+            let mut inner = self.context.lock().expect("fuel lock poisoned");
+            inner.fuel_remaining += self.amount;
+            self.committed = true; // prevent double-return in Drop
+        }
+    }
+}
+
+impl Drop for FuelReservation {
+    fn drop(&mut self) {
+        if !self.committed {
+            let mut inner = self.context.lock().expect("fuel lock poisoned");
+            inner.fuel_remaining += self.amount;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{AgentFuelLedger, BudgetPeriodId, BurnAnomalyDetector, FuelViolation};
+    use super::{AgentFuelLedger, BudgetPeriodId, BurnAnomalyDetector, FuelContext, FuelViolation};
     use crate::audit::AuditTrail;
     use uuid::Uuid;
 
@@ -684,5 +784,85 @@ mod tests {
                 == Some("fuel.anomaly_detected")
         });
         assert!(anomaly_logged);
+    }
+
+    // ── Fuel reservation tests ──
+
+    #[test]
+    fn test_fuel_reservation_commit() {
+        let ctx = FuelContext::new(500);
+        let reservation = ctx.reserve_fuel(100).expect("reserve should succeed");
+        assert_eq!(ctx.fuel_remaining(), 400);
+        reservation.commit();
+        assert_eq!(ctx.fuel_remaining(), 400);
+    }
+
+    #[test]
+    fn test_fuel_reservation_cancel() {
+        let ctx = FuelContext::new(500);
+        let reservation = ctx.reserve_fuel(100).expect("reserve should succeed");
+        assert_eq!(ctx.fuel_remaining(), 400);
+        reservation.cancel();
+        assert_eq!(ctx.fuel_remaining(), 500);
+    }
+
+    #[test]
+    fn test_fuel_reservation_drop_returns_fuel() {
+        let ctx = FuelContext::new(500);
+        {
+            let _reservation = ctx.reserve_fuel(100).expect("reserve should succeed");
+            assert_eq!(ctx.fuel_remaining(), 400);
+        } // _reservation dropped here without commit or cancel
+        assert_eq!(ctx.fuel_remaining(), 500);
+    }
+
+    #[test]
+    fn test_fuel_reservation_insufficient() {
+        let ctx = FuelContext::new(500);
+        let result = ctx.reserve_fuel(600);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            crate::errors::AgentError::FuelExhausted
+        );
+        assert_eq!(ctx.fuel_remaining(), 500);
+    }
+
+    #[test]
+    fn test_concurrent_reservation_no_overdraw() {
+        use std::sync::Arc;
+
+        let ctx = Arc::new(FuelContext::new(500));
+        let ctx1 = ctx.clone();
+        let ctx2 = ctx.clone();
+
+        let handle1 = std::thread::spawn(move || ctx1.reserve_fuel(400));
+        let handle2 = std::thread::spawn(move || ctx2.reserve_fuel(400));
+
+        let r1 = handle1.join().expect("thread 1 panicked");
+        let r2 = handle2.join().expect("thread 2 panicked");
+
+        // Exactly one should succeed, one should fail.
+        let successes = [r1.is_ok(), r2.is_ok()].iter().filter(|&&ok| ok).count();
+        assert_eq!(successes, 1, "exactly one reservation should succeed");
+
+        // Commit the successful reservation.
+        if let Ok(reservation) = r1 {
+            reservation.commit();
+        }
+        if let Ok(reservation) = r2 {
+            reservation.commit();
+        }
+
+        // Total fuel spent should never exceed initial balance.
+        assert!(ctx.fuel_remaining() <= 500);
+        assert_eq!(ctx.fuel_remaining(), 100);
+    }
+
+    #[test]
+    fn test_deduct_fuel_backward_compatible() {
+        let ctx = FuelContext::new(500);
+        ctx.deduct_fuel(100).expect("deduct should succeed");
+        assert_eq!(ctx.fuel_remaining(), 400);
     }
 }

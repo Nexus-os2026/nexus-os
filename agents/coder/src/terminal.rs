@@ -21,6 +21,7 @@ use nexus_sdk::consent::{
     ApprovalQueue, ApprovalRequest, ConsentError, ConsentPolicyEngine, ConsentRuntime,
     GovernedOperation,
 };
+use nexus_sdk::resource_limiter::ResourceLimiter;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashSet;
@@ -254,7 +255,9 @@ impl TerminalExecutor {
 
             if start.elapsed() > effective_timeout {
                 timed_out = true;
-                let _ = process.kill();
+                // Kill the entire process group (child + all descendants) to
+                // prevent orphaned grandchildren from surviving the timeout.
+                let _ = ResourceLimiter::kill_process_tree(process.id());
                 exit_status = process.wait().map_err(|error| {
                     CommandError::ExecutionFailed(format!("failed waiting after kill: {error}"))
                 })?;
@@ -391,6 +394,10 @@ pub fn execute(
 /// New agent code should use `sdk::typed_tools::execute_typed_tool()` which provides typed,
 /// shell-free command execution. This function will be removed in a future release.
 /// See: `sdk/src/typed_tools.rs`
+///
+/// Resource limits (memory, CPU, process count, file size) are enforced via
+/// rlimits set in the child process.  On timeout, the entire process group is
+/// killed to prevent orphaned grandchildren.
 fn spawn_shell(command: &str, cwd: &Path) -> Result<std::process::Child, CommandError> {
     eprintln!("DEPRECATED: spawn_shell called with raw command string. Migrate to sdk::typed_tools::execute_typed_tool for safe typed tool execution.");
     let mut shell = if cfg!(target_os = "windows") {
@@ -402,6 +409,11 @@ fn spawn_shell(command: &str, cwd: &Path) -> Result<std::process::Child, Command
         cmd.args(["-lc", command]);
         cmd
     };
+
+    // Apply OS-level resource limits (RLIMIT_AS, RLIMIT_CPU, RLIMIT_NPROC,
+    // RLIMIT_FSIZE) and put the child in its own process group via pre_exec.
+    let limiter = ResourceLimiter::default();
+    limiter.apply_to_command(&mut shell);
 
     shell
         .current_dir(cwd)

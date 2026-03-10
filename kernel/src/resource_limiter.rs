@@ -15,16 +15,22 @@
 //! `libc::setpgid`, both of which are async-signal-safe per POSIX.
 //! The parent process is never affected.
 
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Hard resource limits applied to every spawned subprocess.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ResourceLimits {
     /// Maximum virtual memory in bytes (RLIMIT_AS). Default: 512 MB.
     pub max_memory_bytes: u64,
     /// Maximum CPU time in seconds (RLIMIT_CPU). Default: 60.
     pub max_cpu_seconds: u64,
-    /// Maximum number of processes for the user (RLIMIT_NPROC). Default: 50.
+    /// Maximum number of processes for the user (RLIMIT_NPROC). Default: 4096.
+    ///
+    /// Note: RLIMIT_NPROC counts **all** processes for the UID, not just
+    /// descendants of the child.  The default of 4096 stops fork bombs
+    /// (which create thousands within milliseconds) while leaving ample
+    /// headroom for normal operation.
     pub max_processes: u32,
     /// Maximum file size in bytes (RLIMIT_FSIZE). Default: 100 MB.
     pub max_file_size_bytes: u64,
@@ -37,7 +43,7 @@ impl Default for ResourceLimits {
         Self {
             max_memory_bytes: 512 * 1024 * 1024,    // 512 MB
             max_cpu_seconds: 60,                    // 60 seconds
-            max_processes: 50,                      // 50 processes
+            max_processes: 4096,                    // 4096 processes
             max_file_size_bytes: 100 * 1024 * 1024, // 100 MB
             timeout_seconds: 60,                    // 60 seconds
         }
@@ -205,7 +211,7 @@ mod tests {
         let limits = ResourceLimits::default();
         assert_eq!(limits.max_memory_bytes, 512 * 1024 * 1024);
         assert_eq!(limits.max_cpu_seconds, 60);
-        assert_eq!(limits.max_processes, 50);
+        assert_eq!(limits.max_processes, 4096);
         assert_eq!(limits.max_file_size_bytes, 100 * 1024 * 1024);
         assert_eq!(limits.timeout_seconds, 60);
     }
@@ -242,6 +248,17 @@ mod tests {
         assert!(e.to_string().contains("ESRCH"));
     }
 
+    #[test]
+    fn apply_to_command_no_spawn_does_not_panic() {
+        // Verify apply_to_command completes without panicking even
+        // when the command is never spawned.
+        let limiter = ResourceLimiter::default();
+        let mut cmd = std::process::Command::new("echo");
+        cmd.arg("test");
+        limiter.apply_to_command(&mut cmd);
+        // No spawn — just verify no panic from applying limits.
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn apply_to_command_does_not_panic() {
@@ -253,6 +270,14 @@ mod tests {
         assert!(status.success());
     }
 
+    #[test]
+    fn kill_process_tree_nonexistent_pid() {
+        // PID 999_999_999 almost certainly does not exist.
+        // On Linux ESRCH is treated as Ok; on other platforms this is a no-op.
+        let result = ResourceLimiter::kill_process_tree(999_999_999);
+        assert!(result.is_ok());
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn kill_nonexistent_process_group_is_ok() {
@@ -260,6 +285,48 @@ mod tests {
         let result = ResourceLimiter::kill_process_tree(2_000_000_000);
         // Should succeed because ESRCH is treated as Ok.
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn resource_limits_serialize_deserialize() {
+        let limits = ResourceLimits {
+            max_memory_bytes: 256 * 1024 * 1024,
+            max_cpu_seconds: 30,
+            max_processes: 100,
+            max_file_size_bytes: 50 * 1024 * 1024,
+            timeout_seconds: 45,
+        };
+        let json = serde_json::to_string(&limits).expect("serialize");
+        let deserialized: ResourceLimits = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(limits, deserialized);
+    }
+
+    #[test]
+    fn default_limits_serialize_round_trip() {
+        let defaults = ResourceLimits::default();
+        let json = serde_json::to_string_pretty(&defaults).expect("serialize");
+        let round_tripped: ResourceLimits = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(defaults, round_tripped);
+    }
+
+    #[test]
+    fn limits_are_reasonable() {
+        let limits = ResourceLimits::default();
+        // Memory: between 100 MB and 2 GB
+        assert!(limits.max_memory_bytes >= 100 * 1024 * 1024);
+        assert!(limits.max_memory_bytes <= 2 * 1024 * 1024 * 1024);
+        // CPU: between 10 and 300 seconds
+        assert!(limits.max_cpu_seconds >= 10);
+        assert!(limits.max_cpu_seconds <= 300);
+        // Processes: between 100 and 10_000 (per-UID, needs headroom)
+        assert!(limits.max_processes >= 100);
+        assert!(limits.max_processes <= 10_000);
+        // File size: between 10 MB and 1 GB
+        assert!(limits.max_file_size_bytes >= 10 * 1024 * 1024);
+        assert!(limits.max_file_size_bytes <= 1024 * 1024 * 1024);
+        // Timeout: between 10 and 300 seconds
+        assert!(limits.timeout_seconds >= 10);
+        assert!(limits.timeout_seconds <= 300);
     }
 
     #[cfg(target_os = "linux")]
