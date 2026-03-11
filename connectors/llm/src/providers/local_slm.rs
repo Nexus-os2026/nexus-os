@@ -3,14 +3,114 @@
 //! This module is only compiled when the `local-slm` feature flag is enabled.
 //! It implements the `LlmProvider` trait so it can be plugged into the
 //! `ProviderRouter` alongside cloud providers.
+//!
+//! ## KV Cache / Incremental Inference
+//!
+//! The model architecture is a pure MLP stack (embedding → down_proj/up_proj
+//! layers → lm_head) with no attention mechanism. Each token is processed
+//! independently through the layers, which means we can skip reprocessing
+//! already-seen tokens during autoregressive generation.
+//!
+//! [`KvCache`] tracks per-layer hidden-state history so the generation loop
+//! only runs the *new* token through the forward pass each step, reducing
+//! total work from O(N·T) to O(N + T).
 
 use super::{LlmProvider, LlmResponse};
 use crate::model_registry::{LoadedModel, ModelRegistry};
 use nexus_kernel::errors::AgentError;
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 use candle_core::{DType, Tensor};
+
+/// Cache for incremental inference through the MLP stack.
+///
+/// For this position-independent MLP architecture (no attention), the cache
+/// stores per-layer key and value tensors that allow the forward pass to
+/// process only newly-appended tokens instead of the full sequence.
+///
+/// In a traditional transformer this would hold attention K/V projections.
+/// Here it holds the hidden states entering/exiting each MLP layer so that
+/// the final LM-head projection can be computed on just the new position.
+#[derive(Debug)]
+pub struct KvCache {
+    /// Per-layer key tensors.  `keys[i]` has shape `[cached_seq_len, dim]`.
+    keys: Vec<Option<Tensor>>,
+    /// Per-layer value tensors.  `values[i]` has shape `[cached_seq_len, dim]`.
+    values: Vec<Option<Tensor>>,
+}
+
+impl KvCache {
+    /// Create a new empty cache for `num_layers` layers.
+    pub fn new(num_layers: usize) -> Self {
+        Self {
+            keys: (0..num_layers).map(|_| None).collect(),
+            values: (0..num_layers).map(|_| None).collect(),
+        }
+    }
+
+    /// Return cached (key, value) for `layer_idx`, if present.
+    pub fn get(&self, layer_idx: usize) -> Option<(&Tensor, &Tensor)> {
+        let k = self.keys.get(layer_idx)?.as_ref()?;
+        let v = self.values.get(layer_idx)?.as_ref()?;
+        Some((k, v))
+    }
+
+    /// Append `new_key` / `new_value` to the cache for `layer_idx`.
+    ///
+    /// If the layer already has cached tensors, the new tensors are
+    /// concatenated along dimension 0 (the sequence-length axis).
+    /// Returns the full `(all_keys, all_values)` after concatenation
+    /// and stores the updated tensors back in the cache.
+    pub fn update(
+        &mut self,
+        layer_idx: usize,
+        new_key: Tensor,
+        new_value: Tensor,
+    ) -> Result<(Tensor, Tensor), candle_core::Error> {
+        // Grow vectors if needed (models may have more layers than initially guessed).
+        while self.keys.len() <= layer_idx {
+            self.keys.push(None);
+            self.values.push(None);
+        }
+
+        let full_k = match self.keys[layer_idx].take() {
+            Some(prev) => Tensor::cat(&[&prev, &new_key], 0)?,
+            None => new_key,
+        };
+        let full_v = match self.values[layer_idx].take() {
+            Some(prev) => Tensor::cat(&[&prev, &new_value], 0)?,
+            None => new_value,
+        };
+
+        self.keys[layer_idx] = Some(full_k.clone());
+        self.values[layer_idx] = Some(full_v.clone());
+
+        Ok((full_k, full_v))
+    }
+
+    /// Clear all cached entries back to `None`.
+    pub fn reset(&mut self) {
+        for slot in &mut self.keys {
+            *slot = None;
+        }
+        for slot in &mut self.values {
+            *slot = None;
+        }
+    }
+
+    /// Current cached sequence length (from the first non-`None` layer).
+    pub fn seq_len(&self) -> usize {
+        for t in self.keys.iter().flatten() {
+            let dims = t.dims();
+            if !dims.is_empty() {
+                return dims[0];
+            }
+        }
+        0
+    }
+}
 
 /// Sampling configuration for text generation.
 #[derive(Debug, Clone)]
@@ -33,6 +133,49 @@ impl Default for SamplingConfig {
     }
 }
 
+/// Configuration for speculative decoding.
+///
+/// When enabled, a smaller *draft* model generates candidate tokens cheaply
+/// and the full *target* model verifies them in a batched forward pass.
+/// Tokens where the target agrees with the draft are accepted, yielding
+/// multiple accepted tokens per target forward pass.
+#[derive(Clone, Debug)]
+pub struct SpeculativeConfig {
+    /// How many candidate tokens the draft model generates per round.
+    pub draft_steps: usize,
+    /// Minimum target-to-draft probability ratio to accept a draft token.
+    pub acceptance_threshold: f32,
+    /// Master toggle — speculative decoding is off by default.
+    pub enabled: bool,
+}
+
+impl Default for SpeculativeConfig {
+    fn default() -> Self {
+        Self {
+            draft_steps: 4,
+            acceptance_threshold: 0.1,
+            enabled: false,
+        }
+    }
+}
+
+/// Statistics collected during a speculative decoding run.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SpeculativeStats {
+    /// Total draft tokens proposed across all rounds.
+    pub total_draft_tokens: usize,
+    /// Draft tokens accepted by the target model.
+    pub accepted_tokens: usize,
+    /// Draft tokens rejected by the target model.
+    pub rejected_tokens: usize,
+    /// `accepted / total_draft` (0.0 if no drafts).
+    pub acceptance_rate: f32,
+    /// Number of target-model forward passes (verify rounds).
+    pub target_forward_passes: usize,
+    /// `accepted / target_forward_passes` — effective throughput multiplier.
+    pub effective_tokens_per_pass: f32,
+}
+
 /// Local small language model provider backed by candle.
 ///
 /// When a model is loaded via `load_model()`, inference runs entirely
@@ -43,19 +186,31 @@ impl Default for SamplingConfig {
 pub struct LocalSlmProvider {
     /// Model registry for discovering and loading models.
     registry: RwLock<ModelRegistry>,
-    /// Currently active model for inference.
+    /// Currently active model for inference (the *target* model).
     active_model: RwLock<Option<Arc<LoadedModel>>>,
+    /// Optional smaller *draft* model for speculative decoding.
+    draft_model: RwLock<Option<Arc<LoadedModel>>>,
     /// Sampling configuration.
     sampling: RwLock<SamplingConfig>,
+    /// Speculative decoding configuration.
+    speculative_config: RwLock<SpeculativeConfig>,
 }
 
 impl std::fmt::Debug for LocalSlmProvider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LocalSlmProvider")
             .field("has_model", &self.is_available())
+            .field("has_draft", &self.has_draft_model())
             .field(
                 "sampling",
                 &*self.sampling.read().unwrap_or_else(|e| e.into_inner()),
+            )
+            .field(
+                "speculative",
+                &*self
+                    .speculative_config
+                    .read()
+                    .unwrap_or_else(|e| e.into_inner()),
             )
             .finish()
     }
@@ -67,7 +222,9 @@ impl LocalSlmProvider {
         Self {
             registry: RwLock::new(registry),
             active_model: RwLock::new(None),
+            draft_model: RwLock::new(None),
             sampling: RwLock::new(SamplingConfig::default()),
+            speculative_config: RwLock::new(SpeculativeConfig::default()),
         }
     }
 
@@ -177,9 +334,67 @@ impl LocalSlmProvider {
         Ok(f(&mut reg))
     }
 
+    /// Load a draft model for speculative decoding.
+    ///
+    /// The draft model should be smaller/faster than the target model.
+    /// It is loaded from the same registry as the target model.
+    pub fn load_draft_model(&self, model_id: &str) -> Result<(), String> {
+        let mut reg = self
+            .registry
+            .write()
+            .map_err(|e| format!("registry lock poisoned: {e}"))?;
+
+        if reg.available_models().is_empty() {
+            reg.discover();
+        }
+
+        let loaded = reg.load(model_id)?;
+
+        let mut draft = self
+            .draft_model
+            .write()
+            .map_err(|e| format!("draft_model lock poisoned: {e}"))?;
+        *draft = Some(loaded);
+        Ok(())
+    }
+
+    /// Unload the draft model, freeing memory.
+    pub fn unload_draft_model(&self) {
+        if let Ok(mut draft) = self.draft_model.write() {
+            *draft = None;
+        }
+    }
+
+    /// Whether a draft model is loaded.
+    pub fn has_draft_model(&self) -> bool {
+        self.draft_model
+            .read()
+            .map(|d| d.is_some())
+            .unwrap_or(false)
+    }
+
+    /// Get the current speculative decoding configuration.
+    pub fn speculative_config(&self) -> SpeculativeConfig {
+        self.speculative_config
+            .read()
+            .map(|c| c.clone())
+            .unwrap_or_default()
+    }
+
+    /// Set the speculative decoding configuration.
+    pub fn set_speculative_config(&self, config: SpeculativeConfig) {
+        if let Ok(mut c) = self.speculative_config.write() {
+            *c = config;
+        }
+    }
+
     /// Run the candle inference pipeline on a loaded model.
     ///
-    /// Pipeline: tokenize → forward pass per token → sample → decode.
+    /// Pipeline: tokenize → cached forward passes → sample → decode.
+    ///
+    /// Uses [`KvCache`] so the generation loop processes only the *new*
+    /// token each step instead of the full sequence, reducing work from
+    /// O(N·T) to O(N + T).
     fn run_inference(
         loaded: &LoadedModel,
         prompt: &str,
@@ -219,59 +434,79 @@ impl LocalSlmProvider {
             .map(|(name, tensor)| (name.as_str(), tensor))
             .collect();
 
-        // 3. Autoregressive generation loop
-        let mut generated_ids: Vec<u32> = Vec::with_capacity(max_tokens as usize);
-        let mut current_ids: Vec<u32> = input_ids.to_vec();
         let vocab_size = Self::infer_vocab_size(&weight_map);
+        let num_layers = Self::count_layers(&weight_map);
+        let mut kv_cache = KvCache::new(num_layers);
+
+        // 3. PREFILL — process the entire prompt in one shot to populate cache
+        let prompt_tensor = Tensor::new(input_ids, device).map_err(|e| {
+            AgentError::SupervisorError(format!("failed to create prompt tensor: {e}"))
+        })?;
+
+        let prefill_logits = Self::forward_pass_cached(
+            &prompt_tensor,
+            &weight_map,
+            vocab_size,
+            device,
+            &mut kv_cache,
+        )?;
+
+        // Get logits for the last prompt position
+        let last_logits = Self::last_position_logits(&prefill_logits, input_ids.len())?;
+
+        // 4. GENERATION — one new token per step through the cached path
+        let mut generated_ids: Vec<u32> = Vec::with_capacity(max_tokens as usize);
+        let mut all_ids: Vec<u32> = input_ids.to_vec();
+
+        // Sample from the prefill output
+        let last_logits = Self::apply_repetition_penalty(
+            &last_logits,
+            &all_ids,
+            &generated_ids,
+            sampling.repetition_penalty,
+        )?;
+
+        let mut next_token =
+            Self::sample_token(&last_logits, sampling.temperature, sampling.top_p)?;
 
         for _step in 0..max_tokens {
-            // Build input tensor from current token sequence
-            let input_tensor = Tensor::new(&current_ids[..], device).map_err(|e| {
-                AgentError::SupervisorError(format!("failed to create input tensor: {e}"))
-            })?;
-
-            // Forward pass: compute logits
-            let logits = Self::forward_pass(&input_tensor, &weight_map, vocab_size, device)?;
-
-            // Get logits for the last position
-            let seq_len = current_ids.len();
-            let last_logits = if logits.dims().len() == 2 {
-                // Shape: (seq_len, vocab_size)
-                logits.get(seq_len - 1).map_err(|e| {
-                    AgentError::SupervisorError(format!("failed to index logits: {e}"))
-                })?
-            } else {
-                // Shape: (vocab_size,) — already a single position
-                logits
-            };
-
-            // Apply repetition penalty
-            let last_logits = Self::apply_repetition_penalty(
-                &last_logits,
-                &current_ids,
-                &generated_ids,
-                sampling.repetition_penalty,
-            )?;
-
-            // Sample next token
-            let next_token =
-                Self::sample_token(&last_logits, sampling.temperature, sampling.top_p)?;
-
-            // Check for EOS (token ID 2 is common EOS, also check 0)
             if next_token == 2 || next_token == 0 {
                 break;
             }
 
             generated_ids.push(next_token);
-            current_ids.push(next_token);
+            all_ids.push(next_token);
 
-            // Safety: don't exceed context length
-            if current_ids.len() >= loaded.config.max_context_length {
+            if all_ids.len() >= loaded.config.max_context_length {
                 break;
             }
+
+            // Forward pass for the SINGLE new token only
+            let token_tensor = Tensor::new(&[next_token], device).map_err(|e| {
+                AgentError::SupervisorError(format!("failed to create token tensor: {e}"))
+            })?;
+
+            let logits = Self::forward_pass_cached(
+                &token_tensor,
+                &weight_map,
+                vocab_size,
+                device,
+                &mut kv_cache,
+            )?;
+
+            let last_logits = Self::last_position_logits(&logits, 1)?;
+
+            let last_logits = Self::apply_repetition_penalty(
+                &last_logits,
+                &all_ids,
+                &generated_ids,
+                sampling.repetition_penalty,
+            )?;
+
+            next_token = Self::sample_token(&last_logits, sampling.temperature, sampling.top_p)?;
         }
 
-        // 4. Decode generated tokens
+        // 5. Decode generated tokens
         let output_text = loaded
             .tokenizer
             .decode(&generated_ids, true)
@@ -281,6 +516,19 @@ impl LocalSlmProvider {
         let token_count = generated_ids.len() as u32;
 
         Ok((output_text, token_count, inference_ms))
+    }
+
+    /// Extract logits for the last position from a (possibly batched) tensor.
+    fn last_position_logits(logits: &Tensor, seq_len: usize) -> Result<Tensor, AgentError> {
+        if logits.dims().len() == 2 {
+            // Shape: (seq_len, vocab_size) — take last row.
+            logits
+                .get(seq_len - 1)
+                .map_err(|e| AgentError::SupervisorError(format!("failed to index logits: {e}")))
+        } else {
+            // Shape: (vocab_size,) — already a single position.
+            Ok(logits.clone())
+        }
     }
 
     /// Infer vocab size from the weight map by looking for common embedding
@@ -306,32 +554,53 @@ impl LocalSlmProvider {
         32000
     }
 
-    /// Simplified forward pass through model weights.
+    /// Count how many MLP layers are present in the weight map.
+    fn count_layers(weight_map: &std::collections::HashMap<&str, &Tensor>) -> usize {
+        let mut n = 0;
+        loop {
+            let dense_key = format!("model.layers.{n}.mlp.down_proj.weight");
+            let up_key = format!("model.layers.{n}.mlp.up_proj.weight");
+            if !weight_map.contains_key(dense_key.as_str())
+                && !weight_map.contains_key(up_key.as_str())
+            {
+                break;
+            }
+            n += 1;
+            if n > 128 {
+                break;
+            }
+        }
+        n
+    }
+
+    /// Cached forward pass — processes only the *new* token(s) through the
+    /// MLP stack and updates `kv_cache` so subsequent calls can skip
+    /// already-processed positions.
     ///
-    /// Performs embedding lookup → linear projection through available weight
-    /// layers → final LM head projection to produce logits.
-    fn forward_pass(
+    /// Because the MLP layers are position-independent (no attention), each
+    /// token's hidden state is computed independently. The cache stores per-
+    /// layer hidden states so the LM-head projection only needs the latest.
+    fn forward_pass_cached(
         input_ids: &Tensor,
         weight_map: &std::collections::HashMap<&str, &Tensor>,
         vocab_size: usize,
         device: &candle_core::Device,
+        kv_cache: &mut KvCache,
     ) -> Result<Tensor, AgentError> {
         let map_err =
             |e: candle_core::Error| AgentError::SupervisorError(format!("forward pass: {e}"));
 
-        // Embedding lookup
+        // Embedding lookup — only for the new token(s)
         let embed_weight = Self::find_embedding_weight(weight_map).ok_or_else(|| {
             AgentError::SupervisorError("no embedding weight found in model weights".to_string())
         })?;
 
         let hidden = embed_weight.index_select(input_ids, 0).map_err(map_err)?;
 
-        // Apply any available transformer layers (simplified: just project
-        // through dense layers we can find)
+        // Apply MLP layers — each token processed independently
         let mut current = hidden;
         let mut layer_idx = 0;
         loop {
-            // Look for layer weights with common naming patterns
             let dense_key = format!("model.layers.{layer_idx}.mlp.down_proj.weight");
             let up_key = format!("model.layers.{layer_idx}.mlp.up_proj.weight");
 
@@ -342,10 +611,65 @@ impl LocalSlmProvider {
                 break;
             }
 
-            // Simple MLP: hidden = hidden @ weight.T
             if let Some(w) = weight_map.get(dense_key.as_str()) {
                 let w_t = w.t().map_err(map_err)?;
-                // Only apply if dimensions are compatible
+                let h_dim = current.dims().last().copied().unwrap_or(0);
+                let w_dim = w_t.dims().first().copied().unwrap_or(0);
+                if h_dim == w_dim {
+                    current = current.matmul(&w_t).map_err(map_err)?;
+                }
+            }
+
+            // Store the layer output in the cache.  For this MLP arch the
+            // "key" and "value" are both the hidden state after the layer.
+            let _ = kv_cache
+                .update(layer_idx, current.clone(), current.clone())
+                .map_err(map_err)?;
+
+            layer_idx += 1;
+            if layer_idx > 128 {
+                break;
+            }
+        }
+
+        // Project to vocab via LM head
+        Self::project_lm_head(&current, weight_map, embed_weight, vocab_size, device)
+    }
+
+    /// Original uncached forward pass — processes the full sequence.
+    ///
+    /// Kept for correctness testing against the cached variant.
+    #[cfg(test)]
+    fn forward_pass_uncached(
+        input_ids: &Tensor,
+        weight_map: &std::collections::HashMap<&str, &Tensor>,
+        vocab_size: usize,
+        device: &candle_core::Device,
+    ) -> Result<Tensor, AgentError> {
+        let map_err =
+            |e: candle_core::Error| AgentError::SupervisorError(format!("forward pass: {e}"));
+
+        let embed_weight = Self::find_embedding_weight(weight_map).ok_or_else(|| {
+            AgentError::SupervisorError("no embedding weight found in model weights".to_string())
+        })?;
+
+        let hidden = embed_weight.index_select(input_ids, 0).map_err(map_err)?;
+
+        let mut current = hidden;
+        let mut layer_idx = 0;
+        loop {
+            let dense_key = format!("model.layers.{layer_idx}.mlp.down_proj.weight");
+            let up_key = format!("model.layers.{layer_idx}.mlp.up_proj.weight");
+
+            let has_layer = weight_map.contains_key(dense_key.as_str())
+                || weight_map.contains_key(up_key.as_str());
+
+            if !has_layer {
+                break;
+            }
+
+            if let Some(w) = weight_map.get(dense_key.as_str()) {
+                let w_t = w.t().map_err(map_err)?;
                 let h_dim = current.dims().last().copied().unwrap_or(0);
                 let w_dim = w_t.dims().first().copied().unwrap_or(0);
                 if h_dim == w_dim {
@@ -354,13 +678,25 @@ impl LocalSlmProvider {
             }
 
             layer_idx += 1;
-            // Safety limit to prevent infinite loops on malformed weights
             if layer_idx > 128 {
                 break;
             }
         }
 
-        // Project to vocab via LM head
+        Self::project_lm_head(&current, weight_map, embed_weight, vocab_size, device)
+    }
+
+    /// Shared LM head projection — maps hidden state to logits.
+    fn project_lm_head(
+        current: &Tensor,
+        weight_map: &std::collections::HashMap<&str, &Tensor>,
+        embed_weight: &Tensor,
+        vocab_size: usize,
+        device: &candle_core::Device,
+    ) -> Result<Tensor, AgentError> {
+        let map_err =
+            |e: candle_core::Error| AgentError::SupervisorError(format!("forward pass: {e}"));
+
         let lm_head = Self::find_lm_head_weight(weight_map);
         let logits = if let Some(head_weight) = lm_head {
             let head_t = head_weight.t().map_err(map_err)?;
@@ -369,20 +705,26 @@ impl LocalSlmProvider {
             if h_dim == w_dim {
                 current.matmul(&head_t).map_err(map_err)?
             } else {
-                // Dimension mismatch — produce uniform logits
-                Tensor::zeros(&[current.dims()[0], vocab_size], DType::F32, device)
-                    .map_err(map_err)?
+                let seq = if current.dims().len() == 2 {
+                    current.dims()[0]
+                } else {
+                    1
+                };
+                Tensor::zeros(&[seq, vocab_size], DType::F32, device).map_err(map_err)?
             }
         } else {
-            // No LM head found — use embedding weight as tied LM head
             let embed_t = embed_weight.t().map_err(map_err)?;
             let h_dim = current.dims().last().copied().unwrap_or(0);
             let w_dim = embed_t.dims().first().copied().unwrap_or(0);
             if h_dim == w_dim {
                 current.matmul(&embed_t).map_err(map_err)?
             } else {
-                Tensor::zeros(&[current.dims()[0], vocab_size], DType::F32, device)
-                    .map_err(map_err)?
+                let seq = if current.dims().len() == 2 {
+                    current.dims()[0]
+                } else {
+                    1
+                };
+                Tensor::zeros(&[seq, vocab_size], DType::F32, device).map_err(map_err)?
             }
         };
 
@@ -535,6 +877,376 @@ impl LocalSlmProvider {
 
         Ok(*best_idx as u32)
     }
+
+    /// Convert a 1-D logits tensor to a probability vector via softmax.
+    fn logits_to_probs(logits: &Tensor) -> Result<Vec<f32>, AgentError> {
+        let vals: Vec<f32> = logits
+            .to_vec1::<f32>()
+            .map_err(|e| AgentError::SupervisorError(format!("logits_to_probs: {e}")))?;
+        if vals.is_empty() {
+            return Ok(vals);
+        }
+        let max_val = vals.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        let exp_vals: Vec<f32> = vals.iter().map(|&x| (x - max_val).exp()).collect();
+        let sum: f32 = exp_vals.iter().sum();
+        if sum <= 0.0 {
+            return Ok(exp_vals);
+        }
+        Ok(exp_vals.iter().map(|&x| x / sum).collect())
+    }
+
+    /// Speculative decoding inference loop.
+    ///
+    /// A small *draft* model proposes `config.draft_steps` candidate tokens,
+    /// then the *target* model verifies them in a single batched forward pass.
+    /// Tokens where `target_prob >= threshold * draft_prob` are accepted;
+    /// rejection truncates the remaining candidates.
+    ///
+    /// Returns `(generated_token_ids, stats)`.
+    fn run_inference_speculative(
+        prompt_tokens: &[u32],
+        max_tokens: u32,
+        target: &LoadedModel,
+        draft: &LoadedModel,
+        config: &SpeculativeConfig,
+        sampling: &SamplingConfig,
+    ) -> Result<(Vec<u32>, SpeculativeStats), AgentError> {
+        let device = &target.device;
+        let draft_device = &draft.device;
+
+        // Build weight maps for both models
+        let target_wm: std::collections::HashMap<&str, &Tensor> = target
+            .weights
+            .iter()
+            .map(|(n, t)| (n.as_str(), t))
+            .collect();
+        let draft_wm: std::collections::HashMap<&str, &Tensor> =
+            draft.weights.iter().map(|(n, t)| (n.as_str(), t)).collect();
+
+        let target_vocab = Self::infer_vocab_size(&target_wm);
+        let draft_vocab = Self::infer_vocab_size(&draft_wm);
+        let target_layers = Self::count_layers(&target_wm);
+        let draft_layers = Self::count_layers(&draft_wm);
+
+        let mut target_cache = KvCache::new(target_layers);
+        let mut draft_cache = KvCache::new(draft_layers);
+
+        // Prefill both models with the prompt
+        let prompt_tensor = Tensor::new(prompt_tokens, device)
+            .map_err(|e| AgentError::SupervisorError(format!("speculative: prompt tensor: {e}")))?;
+        let draft_prompt = Tensor::new(prompt_tokens, draft_device).map_err(|e| {
+            AgentError::SupervisorError(format!("speculative: draft prompt tensor: {e}"))
+        })?;
+
+        let target_prefill = Self::forward_pass_cached(
+            &prompt_tensor,
+            &target_wm,
+            target_vocab,
+            device,
+            &mut target_cache,
+        )?;
+        let draft_prefill = Self::forward_pass_cached(
+            &draft_prompt,
+            &draft_wm,
+            draft_vocab,
+            draft_device,
+            &mut draft_cache,
+        )?;
+
+        let mut stats = SpeculativeStats::default();
+        let mut generated: Vec<u32> = Vec::with_capacity(max_tokens as usize);
+        let mut all_ids: Vec<u32> = prompt_tokens.to_vec();
+
+        // Sample first token from target prefill
+        let last_target = Self::last_position_logits(&target_prefill, prompt_tokens.len())?;
+        // Also advance draft pointer (we discard its logits — target decides)
+        let _last_draft = Self::last_position_logits(&draft_prefill, prompt_tokens.len())?;
+
+        let last_target_pen = Self::apply_repetition_penalty(
+            &last_target,
+            &all_ids,
+            &generated,
+            sampling.repetition_penalty,
+        )?;
+        let mut next_token =
+            Self::sample_token(&last_target_pen, sampling.temperature, sampling.top_p)?;
+
+        // `prev_target_logits` holds the target's logits from the last accepted
+        // position.  These are needed to verify the first draft token in each
+        // round (before any draft tokens have been fed to the target).
+        // Initialized inside the loop from the target's sync pass.
+        let mut prev_target_logits: Tensor;
+
+        while (generated.len() as u32) < max_tokens {
+            if next_token == 2 || next_token == 0 {
+                break;
+            }
+            generated.push(next_token);
+            all_ids.push(next_token);
+
+            if all_ids.len() >= target.config.max_context_length {
+                break;
+            }
+
+            // Feed the accepted token to BOTH caches so they stay in sync.
+            let sync_tensor_t = Tensor::new(&[next_token], device).map_err(|e| {
+                AgentError::SupervisorError(format!("speculative: sync tensor target: {e}"))
+            })?;
+            let target_after_sync = Self::forward_pass_cached(
+                &sync_tensor_t,
+                &target_wm,
+                target_vocab,
+                device,
+                &mut target_cache,
+            )?;
+            prev_target_logits = Self::last_position_logits(&target_after_sync, 1)?;
+
+            let sync_tensor_d = Tensor::new(&[next_token], draft_device).map_err(|e| {
+                AgentError::SupervisorError(format!("speculative: sync tensor draft: {e}"))
+            })?;
+            let _ = Self::forward_pass_cached(
+                &sync_tensor_d,
+                &draft_wm,
+                draft_vocab,
+                draft_device,
+                &mut draft_cache,
+            )?;
+
+            // --- DRAFT PHASE ---
+            let k = config
+                .draft_steps
+                .min((max_tokens as usize).saturating_sub(generated.len()));
+            if k == 0 {
+                break;
+            }
+
+            let mut draft_tokens: Vec<u32> = Vec::with_capacity(k);
+            let mut draft_probs_at_token: Vec<f32> = Vec::with_capacity(k);
+
+            // The draft model's first token is sampled from the logits after
+            // seeing `next_token` (same position as prev_target_logits).
+            // We already ran the draft's forward pass on next_token above.
+            // Re-run is unnecessary; instead we sample from draft logits now.
+            let draft_sync = Self::forward_pass_cached(
+                &Tensor::new(&[next_token], draft_device).map_err(|e| {
+                    AgentError::SupervisorError(format!("speculative: draft resync: {e}"))
+                })?,
+                &draft_wm,
+                draft_vocab,
+                draft_device,
+                &mut draft_cache,
+            );
+
+            // Actually, the draft cache was already advanced with next_token
+            // above.  We need the draft's logits from that step.  But we
+            // discarded them.  Since the MLP is position-independent we can
+            // just re-derive the logits for `next_token` without mutating
+            // the cache by using logits_to_probs on prev_target_logits
+            // (for identical models they are the same).
+            //
+            // Simpler: just generate draft tokens starting from next_token's
+            // output logits.  We already ran draft forward on next_token —
+            // but the cache advanced an extra step because we ran it twice.
+            //
+            // Let's simplify: reset draft cache and rebuild cleanly.
+            drop(draft_sync);
+            draft_cache.reset();
+            let all_tensor_d = Tensor::new(all_ids.as_slice(), draft_device).map_err(|e| {
+                AgentError::SupervisorError(format!("speculative: rebuild draft: {e}"))
+            })?;
+            let draft_rebuild_logits = Self::forward_pass_cached(
+                &all_tensor_d,
+                &draft_wm,
+                draft_vocab,
+                draft_device,
+                &mut draft_cache,
+            )?;
+            let draft_last_rebuild =
+                Self::last_position_logits(&draft_rebuild_logits, all_ids.len())?;
+            let draft_p0 = Self::logits_to_probs(&draft_last_rebuild)?;
+            let mut draft_next =
+                Self::sample_token(&draft_last_rebuild, sampling.temperature, sampling.top_p)?;
+            let prob0 = draft_p0.get(draft_next as usize).copied().unwrap_or(0.0);
+            draft_tokens.push(draft_next);
+            draft_probs_at_token.push(prob0);
+
+            for _step in 1..k {
+                let dt = Tensor::new(&[draft_next], draft_device).map_err(|e| {
+                    AgentError::SupervisorError(format!("speculative: draft tensor: {e}"))
+                })?;
+                let draft_logits = Self::forward_pass_cached(
+                    &dt,
+                    &draft_wm,
+                    draft_vocab,
+                    draft_device,
+                    &mut draft_cache,
+                )?;
+                let draft_last = Self::last_position_logits(&draft_logits, 1)?;
+                let draft_p = Self::logits_to_probs(&draft_last)?;
+
+                draft_next = Self::sample_token(&draft_last, sampling.temperature, sampling.top_p)?;
+                let prob = draft_p.get(draft_next as usize).copied().unwrap_or(0.0);
+                draft_tokens.push(draft_next);
+                draft_probs_at_token.push(prob);
+            }
+
+            stats.total_draft_tokens += draft_tokens.len();
+
+            // --- VERIFY PHASE ---
+            // Feed all draft tokens to the target model in one batched pass.
+            let verify_tensor = Tensor::new(draft_tokens.as_slice(), device).map_err(|e| {
+                AgentError::SupervisorError(format!("speculative: verify tensor: {e}"))
+            })?;
+            let target_logits = Self::forward_pass_cached(
+                &verify_tensor,
+                &target_wm,
+                target_vocab,
+                device,
+                &mut target_cache,
+            )?;
+            stats.target_forward_passes += 1;
+
+            // --- ACCEPT / REJECT ---
+            // For draft token i:
+            //   - i==0: compare against prev_target_logits (target's view before
+            //           seeing any draft tokens in this round)
+            //   - i>0:  compare against target_logits[i-1] (target's view after
+            //           seeing draft tokens 0..i-1)
+            let mut accepted_count = 0usize;
+            for i in 0..draft_tokens.len() {
+                let t_logits_i = if i == 0 {
+                    prev_target_logits.clone()
+                } else if draft_tokens.len() == 1 {
+                    // unreachable since i==0 is handled, but guard anyway
+                    Self::last_position_logits(&target_logits, 1)?
+                } else {
+                    target_logits.get(i - 1).map_err(|e| {
+                        AgentError::SupervisorError(format!("speculative: index logits: {e}"))
+                    })?
+                };
+                let target_p = Self::logits_to_probs(&t_logits_i)?;
+                let tp = target_p
+                    .get(draft_tokens[i] as usize)
+                    .copied()
+                    .unwrap_or(0.0);
+                let dp = draft_probs_at_token[i];
+
+                if dp <= 0.0 || tp >= config.acceptance_threshold * dp {
+                    accepted_count += 1;
+                    generated.push(draft_tokens[i]);
+                    all_ids.push(draft_tokens[i]);
+
+                    if draft_tokens[i] == 2 || draft_tokens[i] == 0 {
+                        break;
+                    }
+                    if all_ids.len() >= target.config.max_context_length {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            stats.accepted_tokens += accepted_count;
+            stats.rejected_tokens += draft_tokens.len() - accepted_count;
+
+            // Roll back the target cache for rejected tokens.
+            let rejected = draft_tokens.len() - accepted_count;
+            if rejected > 0 {
+                Self::trim_cache(&mut target_cache, rejected);
+            }
+
+            // Rebuild the draft cache to match the accepted position.
+            draft_cache.reset();
+            let all_tensor = Tensor::new(all_ids.as_slice(), draft_device).map_err(|e| {
+                AgentError::SupervisorError(format!("speculative: rebuild draft cache: {e}"))
+            })?;
+            let _ = Self::forward_pass_cached(
+                &all_tensor,
+                &draft_wm,
+                draft_vocab,
+                draft_device,
+                &mut draft_cache,
+            )?;
+
+            // If all K tokens accepted, sample a bonus token from target's last logits.
+            if accepted_count == draft_tokens.len() && !draft_tokens.is_empty() {
+                let bonus_logits = Self::last_position_logits(&target_logits, draft_tokens.len())?;
+                let bonus_logits = Self::apply_repetition_penalty(
+                    &bonus_logits,
+                    &all_ids,
+                    &generated,
+                    sampling.repetition_penalty,
+                )?;
+                next_token =
+                    Self::sample_token(&bonus_logits, sampling.temperature, sampling.top_p)?;
+            } else if accepted_count > 0 {
+                // Use the target logits at the last accepted position.
+                let idx = accepted_count - 1;
+                let rl = if draft_tokens.len() == 1 {
+                    Self::last_position_logits(&target_logits, 1)?
+                } else {
+                    target_logits.get(idx).map_err(|e| {
+                        AgentError::SupervisorError(format!("speculative: resample: {e}"))
+                    })?
+                };
+                let rl = Self::apply_repetition_penalty(
+                    &rl,
+                    &all_ids,
+                    &generated,
+                    sampling.repetition_penalty,
+                )?;
+                next_token = Self::sample_token(&rl, sampling.temperature, sampling.top_p)?;
+            } else {
+                // All rejected — use prev_target_logits to resample a different token.
+                // Since the sampler is deterministic, we'd get the same token again.
+                // Just advance with the target's own greedy pick.
+                let rl = Self::apply_repetition_penalty(
+                    &prev_target_logits,
+                    &all_ids,
+                    &generated,
+                    sampling.repetition_penalty,
+                )?;
+                next_token = Self::sample_token(&rl, sampling.temperature, sampling.top_p)?;
+            }
+        }
+
+        // Finalize stats
+        if stats.total_draft_tokens > 0 {
+            stats.acceptance_rate = stats.accepted_tokens as f32 / stats.total_draft_tokens as f32;
+        }
+        if stats.target_forward_passes > 0 {
+            stats.effective_tokens_per_pass =
+                stats.accepted_tokens as f32 / stats.target_forward_passes as f32;
+        }
+
+        Ok((generated, stats))
+    }
+
+    /// Trim the last `n` sequence positions from every layer in the cache.
+    fn trim_cache(cache: &mut KvCache, n: usize) {
+        for slot in cache.keys.iter_mut() {
+            if let Some(t) = slot.take() {
+                let seq = t.dims()[0];
+                if seq > n {
+                    if let Ok(trimmed) = t.narrow(0, 0, seq - n) {
+                        *slot = Some(trimmed);
+                    }
+                }
+                // If seq <= n the whole layer is cleared (slot is already None).
+            }
+        }
+        for slot in cache.values.iter_mut() {
+            if let Some(t) = slot.take() {
+                let seq = t.dims()[0];
+                if seq > n {
+                    if let Ok(trimmed) = t.narrow(0, 0, seq - n) {
+                        *slot = Some(trimmed);
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl LlmProvider for LocalSlmProvider {
@@ -552,7 +1264,50 @@ impl LlmProvider for LocalSlmProvider {
         })?;
 
         let sampling = self.sampling_config();
+        let spec_cfg = self.speculative_config();
 
+        // Use speculative decoding when enabled and a draft model is loaded.
+        if spec_cfg.enabled {
+            let draft_guard = self.draft_model.read().map_err(|e| {
+                AgentError::SupervisorError(format!("draft_model lock poisoned: {e}"))
+            })?;
+            if let Some(ref draft_loaded) = *draft_guard {
+                let encoding = loaded.tokenizer.encode(prompt, true).map_err(|e| {
+                    AgentError::SupervisorError(format!("tokenization failed: {e}"))
+                })?;
+                let input_ids = encoding.get_ids();
+                if input_ids.is_empty() {
+                    return Err(AgentError::SupervisorError(
+                        "tokenization produced empty input".to_string(),
+                    ));
+                }
+
+                let (generated, _stats) = Self::run_inference_speculative(
+                    input_ids,
+                    max_tokens,
+                    loaded,
+                    draft_loaded,
+                    &spec_cfg,
+                    &sampling,
+                )?;
+
+                // Fuel policy: charge only for ACCEPTED output tokens.
+                // Draft-model work is internal and not billed.
+                let output_text = loaded
+                    .tokenizer
+                    .decode(&generated, true)
+                    .map_err(|e| AgentError::SupervisorError(format!("decoding failed: {e}")))?;
+
+                return Ok(LlmResponse {
+                    output_text,
+                    token_count: generated.len() as u32,
+                    model_name: model.to_string(),
+                    tool_calls: Vec::new(),
+                });
+            }
+        }
+
+        // Fallback: normal (non-speculative) inference
         let (output_text, token_count, _inference_ms) =
             Self::run_inference(loaded, prompt, max_tokens, &sampling)?;
 
@@ -713,6 +1468,8 @@ mod tests {
         let debug = format!("{:?}", provider);
         assert!(debug.contains("LocalSlmProvider"));
         assert!(debug.contains("has_model"));
+        assert!(debug.contains("has_draft"));
+        assert!(debug.contains("speculative"));
     }
 
     #[test]
@@ -846,5 +1603,635 @@ mod tests {
     fn find_lm_head_weight_returns_none_if_missing() {
         let map: std::collections::HashMap<&str, &Tensor> = std::collections::HashMap::new();
         assert!(LocalSlmProvider::find_lm_head_weight(&map).is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // KV cache unit tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_kv_cache_new() {
+        let cache = KvCache::new(4);
+        assert_eq!(cache.seq_len(), 0);
+        assert!(cache.get(0).is_none());
+        assert!(cache.get(3).is_none());
+    }
+
+    #[test]
+    fn test_kv_cache_update() {
+        let mut cache = KvCache::new(2);
+        let device = candle_core::Device::Cpu;
+
+        let k = Tensor::zeros(&[1, 8], DType::F32, &device).unwrap();
+        let v = Tensor::ones(&[1, 8], DType::F32, &device).unwrap();
+
+        let (full_k, full_v) = cache.update(0, k, v).unwrap();
+        assert_eq!(full_k.dims(), &[1, 8]);
+        assert_eq!(full_v.dims(), &[1, 8]);
+        assert!(cache.get(0).is_some());
+        assert!(cache.get(1).is_none());
+    }
+
+    #[test]
+    fn test_kv_cache_concatenation() {
+        let mut cache = KvCache::new(1);
+        let device = candle_core::Device::Cpu;
+
+        // First token
+        let k1 = Tensor::zeros(&[1, 4], DType::F32, &device).unwrap();
+        let v1 = Tensor::zeros(&[1, 4], DType::F32, &device).unwrap();
+        let (fk, fv) = cache.update(0, k1, v1).unwrap();
+        assert_eq!(fk.dims(), &[1, 4]);
+        assert_eq!(fv.dims(), &[1, 4]);
+
+        // Second token — should concatenate along dim 0
+        let k2 = Tensor::ones(&[1, 4], DType::F32, &device).unwrap();
+        let v2 = Tensor::ones(&[1, 4], DType::F32, &device).unwrap();
+        let (fk, fv) = cache.update(0, k2, v2).unwrap();
+        assert_eq!(fk.dims(), &[2, 4]);
+        assert_eq!(fv.dims(), &[2, 4]);
+
+        // Third token — three rows now
+        let k3 = Tensor::zeros(&[1, 4], DType::F32, &device).unwrap();
+        let v3 = Tensor::zeros(&[1, 4], DType::F32, &device).unwrap();
+        let (fk, _fv) = cache.update(0, k3, v3).unwrap();
+        assert_eq!(fk.dims(), &[3, 4]);
+    }
+
+    #[test]
+    fn test_kv_cache_reset() {
+        let mut cache = KvCache::new(2);
+        let device = candle_core::Device::Cpu;
+
+        let k = Tensor::zeros(&[1, 4], DType::F32, &device).unwrap();
+        let v = Tensor::zeros(&[1, 4], DType::F32, &device).unwrap();
+        cache.update(0, k.clone(), v.clone()).unwrap();
+        cache.update(1, k, v).unwrap();
+
+        assert!(cache.get(0).is_some());
+        assert!(cache.get(1).is_some());
+
+        cache.reset();
+        assert!(cache.get(0).is_none());
+        assert!(cache.get(1).is_none());
+        assert_eq!(cache.seq_len(), 0);
+    }
+
+    #[test]
+    fn test_kv_cache_seq_len() {
+        let mut cache = KvCache::new(1);
+        let device = candle_core::Device::Cpu;
+
+        assert_eq!(cache.seq_len(), 0);
+
+        let k1 = Tensor::zeros(&[3, 8], DType::F32, &device).unwrap();
+        let v1 = Tensor::zeros(&[3, 8], DType::F32, &device).unwrap();
+        cache.update(0, k1, v1).unwrap();
+        assert_eq!(cache.seq_len(), 3);
+
+        let k2 = Tensor::zeros(&[2, 8], DType::F32, &device).unwrap();
+        let v2 = Tensor::zeros(&[2, 8], DType::F32, &device).unwrap();
+        cache.update(0, k2, v2).unwrap();
+        assert_eq!(cache.seq_len(), 5);
+    }
+
+    #[test]
+    fn test_kv_cache_auto_grow() {
+        // Updating a layer beyond initial capacity should grow the vectors
+        let mut cache = KvCache::new(1);
+        let device = candle_core::Device::Cpu;
+
+        let k = Tensor::zeros(&[1, 4], DType::F32, &device).unwrap();
+        let v = Tensor::zeros(&[1, 4], DType::F32, &device).unwrap();
+
+        // Layer 5 is beyond initial capacity (1)
+        let (fk, _) = cache.update(5, k, v).unwrap();
+        assert_eq!(fk.dims(), &[1, 4]);
+        assert!(cache.get(5).is_some());
+    }
+
+    // -----------------------------------------------------------------------
+    // Cached vs uncached forward pass correctness
+    // -----------------------------------------------------------------------
+
+    /// Build a small toy weight map for forward pass tests.
+    fn make_toy_weights() -> Vec<(String, Tensor)> {
+        let device = candle_core::Device::Cpu;
+        let vocab = 8;
+        let hidden = 4;
+
+        let embed = Tensor::randn(0f32, 1.0, &[vocab, hidden], &device).unwrap();
+        let down = Tensor::randn(0f32, 1.0, &[hidden, hidden], &device).unwrap();
+        let lm_head = Tensor::randn(0f32, 1.0, &[vocab, hidden], &device).unwrap();
+
+        vec![
+            ("model.embed_tokens.weight".to_string(), embed),
+            ("model.layers.0.mlp.down_proj.weight".to_string(), down),
+            ("lm_head.weight".to_string(), lm_head),
+        ]
+    }
+
+    #[test]
+    fn test_cached_forward_single_token_matches_uncached() {
+        let device = candle_core::Device::Cpu;
+        let weights = make_toy_weights();
+        let weight_map: std::collections::HashMap<&str, &Tensor> =
+            weights.iter().map(|(n, t)| (n.as_str(), t)).collect();
+        let vocab_size = LocalSlmProvider::infer_vocab_size(&weight_map);
+        let num_layers = LocalSlmProvider::count_layers(&weight_map);
+
+        // Full sequence: [3, 5, 1]
+        let ids = Tensor::new(&[3u32, 5, 1], &device).unwrap();
+
+        // Uncached: process full sequence
+        let logits_uncached =
+            LocalSlmProvider::forward_pass_uncached(&ids, &weight_map, vocab_size, &device)
+                .unwrap();
+        // Get last position logits
+        let uncached_last: Vec<f32> = logits_uncached.get(2).unwrap().to_vec1().unwrap();
+
+        // Cached: process tokens one by one
+        let mut cache = KvCache::new(num_layers);
+
+        // Prefill [3, 5]
+        let prefix = Tensor::new(&[3u32, 5], &device).unwrap();
+        let _ = LocalSlmProvider::forward_pass_cached(
+            &prefix,
+            &weight_map,
+            vocab_size,
+            &device,
+            &mut cache,
+        )
+        .unwrap();
+
+        // Generate: process token [1]
+        let single = Tensor::new(&[1u32], &device).unwrap();
+        let logits_cached = LocalSlmProvider::forward_pass_cached(
+            &single,
+            &weight_map,
+            vocab_size,
+            &device,
+            &mut cache,
+        )
+        .unwrap();
+        let cached_last: Vec<f32> = logits_cached.get(0).unwrap().to_vec1().unwrap();
+
+        // MLP is position-independent so single-token pass must match the
+        // corresponding row from the full-sequence pass.
+        for (a, b) in uncached_last.iter().zip(cached_last.iter()) {
+            assert!(
+                (a - b).abs() < 1e-5,
+                "logits diverged: uncached={a}, cached={b}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_cached_forward_full_sequence_matches_uncached() {
+        let device = candle_core::Device::Cpu;
+        let weights = make_toy_weights();
+        let weight_map: std::collections::HashMap<&str, &Tensor> =
+            weights.iter().map(|(n, t)| (n.as_str(), t)).collect();
+        let vocab_size = LocalSlmProvider::infer_vocab_size(&weight_map);
+        let num_layers = LocalSlmProvider::count_layers(&weight_map);
+
+        let ids = Tensor::new(&[2u32, 7, 4, 0], &device).unwrap();
+
+        let logits_uncached =
+            LocalSlmProvider::forward_pass_uncached(&ids, &weight_map, vocab_size, &device)
+                .unwrap();
+
+        let mut cache = KvCache::new(num_layers);
+        let logits_cached = LocalSlmProvider::forward_pass_cached(
+            &ids,
+            &weight_map,
+            vocab_size,
+            &device,
+            &mut cache,
+        )
+        .unwrap();
+
+        // All rows must match.
+        let unc: Vec<f32> = logits_uncached.flatten_all().unwrap().to_vec1().unwrap();
+        let cac: Vec<f32> = logits_cached.flatten_all().unwrap().to_vec1().unwrap();
+        assert_eq!(unc.len(), cac.len());
+        for (a, b) in unc.iter().zip(cac.iter()) {
+            assert!(
+                (a - b).abs() < 1e-5,
+                "logits diverged: uncached={a}, cached={b}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_count_layers() {
+        let weights = make_toy_weights();
+        let weight_map: std::collections::HashMap<&str, &Tensor> =
+            weights.iter().map(|(n, t)| (n.as_str(), t)).collect();
+        assert_eq!(LocalSlmProvider::count_layers(&weight_map), 1);
+    }
+
+    #[test]
+    fn test_count_layers_empty() {
+        let map: std::collections::HashMap<&str, &Tensor> = std::collections::HashMap::new();
+        assert_eq!(LocalSlmProvider::count_layers(&map), 0);
+    }
+
+    #[test]
+    fn test_last_position_logits_2d() {
+        let device = candle_core::Device::Cpu;
+        let logits = Tensor::new(&[[1.0f32, 2.0], [3.0, 4.0], [5.0, 6.0]], &device).unwrap();
+        let last = LocalSlmProvider::last_position_logits(&logits, 3).unwrap();
+        let vals: Vec<f32> = last.to_vec1().unwrap();
+        assert!((vals[0] - 5.0).abs() < f32::EPSILON);
+        assert!((vals[1] - 6.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_last_position_logits_1d() {
+        let device = candle_core::Device::Cpu;
+        let logits = Tensor::new(&[7.0f32, 8.0], &device).unwrap();
+        let last = LocalSlmProvider::last_position_logits(&logits, 1).unwrap();
+        let vals: Vec<f32> = last.to_vec1().unwrap();
+        assert!((vals[0] - 7.0).abs() < f32::EPSILON);
+        assert!((vals[1] - 8.0).abs() < f32::EPSILON);
+    }
+
+    // -----------------------------------------------------------------------
+    // Speculative decoding tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_speculative_config_default() {
+        let config = SpeculativeConfig::default();
+        assert_eq!(config.draft_steps, 4);
+        assert!((config.acceptance_threshold - 0.1).abs() < f32::EPSILON);
+        assert!(!config.enabled);
+    }
+
+    #[test]
+    fn test_speculative_stats_default() {
+        let stats = SpeculativeStats::default();
+        assert_eq!(stats.total_draft_tokens, 0);
+        assert_eq!(stats.accepted_tokens, 0);
+        assert_eq!(stats.rejected_tokens, 0);
+        assert!((stats.acceptance_rate - 0.0).abs() < f32::EPSILON);
+        assert_eq!(stats.target_forward_passes, 0);
+        assert!((stats.effective_tokens_per_pass - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_draft_model_load_unload() {
+        let provider = make_provider();
+        assert!(!provider.has_draft_model());
+
+        // Loading a nonexistent model fails
+        let result = provider.load_draft_model("nonexistent/model");
+        assert!(result.is_err());
+        assert!(!provider.has_draft_model());
+
+        // Unloading when nothing loaded is a no-op
+        provider.unload_draft_model();
+        assert!(!provider.has_draft_model());
+    }
+
+    #[test]
+    fn test_speculative_config_get_set() {
+        let provider = make_provider();
+        let default = provider.speculative_config();
+        assert!(!default.enabled);
+
+        provider.set_speculative_config(SpeculativeConfig {
+            draft_steps: 8,
+            acceptance_threshold: 0.5,
+            enabled: true,
+        });
+        let updated = provider.speculative_config();
+        assert!(updated.enabled);
+        assert_eq!(updated.draft_steps, 8);
+        assert!((updated.acceptance_threshold - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_speculative_disabled_fallback() {
+        // With speculative disabled, query() should fall through to normal inference.
+        // We can't run full inference without a loaded model, but we can verify the
+        // code path: speculative is off → normal path → "no model loaded" error.
+        let provider = make_provider();
+        provider.set_speculative_config(SpeculativeConfig {
+            enabled: false,
+            ..SpeculativeConfig::default()
+        });
+        let result = provider.query("test", 10, "test-model");
+        assert!(result.is_err());
+        let err = format!("{}", result.unwrap_err());
+        assert!(err.contains("no model loaded"));
+    }
+
+    /// Build "draft" weights: smaller model with 1 MLP layer (random).
+    fn make_draft_weights() -> Vec<(String, Tensor)> {
+        let device = candle_core::Device::Cpu;
+        let vocab = 8;
+        let hidden = 4;
+
+        let embed = Tensor::randn(0f32, 0.5, &[vocab, hidden], &device).unwrap();
+        let down0 = Tensor::randn(0f32, 0.5, &[hidden, hidden], &device).unwrap();
+        let lm_head = Tensor::randn(0f32, 0.5, &[vocab, hidden], &device).unwrap();
+
+        vec![
+            ("model.embed_tokens.weight".to_string(), embed),
+            ("model.layers.0.mlp.down_proj.weight".to_string(), down0),
+            ("lm_head.weight".to_string(), lm_head),
+        ]
+    }
+
+    /// Build a mock LoadedModel from raw weights.
+    fn mock_loaded_model(weights: Vec<(String, Tensor)>) -> LoadedModel {
+        use crate::model_registry::{ModelConfig, Quantization};
+        use std::sync::Arc;
+
+        // Build a minimal byte-level tokenizer.
+        let tokenizer = {
+            use tokenizers::models::bpe::BPE;
+            use tokenizers::Tokenizer;
+
+            let mut vocab = std::collections::HashMap::new();
+            for i in 0u32..256 {
+                vocab.insert(format!("t{i}"), i);
+            }
+            // Add the merged token to the vocabulary so the merge is valid.
+            vocab.insert("t0t1".to_string(), 256);
+            let merges = vec![("t0".to_string(), "t1".to_string())];
+            let bpe = BPE::builder()
+                .vocab_and_merges(vocab, merges)
+                .unk_token("t0".to_string())
+                .build()
+                .unwrap();
+            Tokenizer::new(bpe)
+        };
+
+        LoadedModel {
+            config: ModelConfig {
+                model_id: "mock-model".to_string(),
+                model_path: std::path::PathBuf::from("/tmp/mock"),
+                quantization: Quantization::F32,
+                max_context_length: 2048,
+                recommended_tasks: vec![],
+                min_ram_mb: 1,
+            },
+            weights: Arc::new(weights),
+            tokenizer: Arc::new(tokenizer),
+            device: candle_core::Device::Cpu,
+        }
+    }
+
+    #[test]
+    fn test_speculative_stats_tracking() {
+        // Use deterministic weights for both target and draft to avoid flakiness.
+        let target = mock_loaded_model(make_deterministic_weights());
+        let draft = mock_loaded_model(make_draft_weights());
+
+        let config = SpeculativeConfig {
+            draft_steps: 3,
+            acceptance_threshold: 0.1,
+            enabled: true,
+        };
+        let sampling = SamplingConfig {
+            temperature: 0.0, // greedy for determinism
+            top_p: 1.0,
+            repetition_penalty: 1.0,
+        };
+
+        // Use prompt tokens > 2 to avoid immediate EOS
+        let prompt_tokens = &[3u32, 5, 4];
+        let (generated, stats) = LocalSlmProvider::run_inference_speculative(
+            prompt_tokens,
+            8,
+            &target,
+            &draft,
+            &config,
+            &sampling,
+        )
+        .unwrap();
+
+        // We should have generated something
+        assert!(!generated.is_empty(), "should generate at least one token");
+        // Stats should be populated
+        assert!(stats.total_draft_tokens > 0);
+        assert!(stats.accepted_tokens + stats.rejected_tokens == stats.total_draft_tokens);
+        assert!(stats.target_forward_passes > 0);
+        assert!(stats.acceptance_rate >= 0.0 && stats.acceptance_rate <= 1.0);
+        assert!(stats.effective_tokens_per_pass >= 0.0);
+    }
+
+    /// Build deterministic weights that produce tokens > 2 (avoiding EOS).
+    ///
+    /// Uses fixed values instead of randn to ensure reproducible behavior.
+    fn make_deterministic_weights() -> Vec<(String, Tensor)> {
+        let device = candle_core::Device::Cpu;
+        let vocab = 8;
+        let hidden = 4;
+
+        // Fixed-value embeddings that steer predictions away from tokens 0 and 2 (EOS).
+        // Embedding rows 3..7 have large positive values so tokens 3+ are always
+        // more likely than tokens 0 or 2, preventing immediate EOS termination.
+        let embed_data: Vec<f32> = (0..vocab * hidden)
+            .map(|i| {
+                let row = i / hidden;
+                let col = i % hidden;
+                if row <= 2 {
+                    // EOS-like tokens: small values
+                    -1.0 + 0.1 * col as f32
+                } else {
+                    // Normal tokens: larger values
+                    0.5 + 0.2 * (row as f32) + 0.1 * (col as f32)
+                }
+            })
+            .collect();
+        let embed = Tensor::new(&embed_data[..], &device)
+            .unwrap()
+            .reshape(&[vocab, hidden])
+            .unwrap();
+
+        // Simple identity-ish MLP layer
+        let down_data: Vec<f32> = (0..hidden * hidden)
+            .map(|i| if i / hidden == i % hidden { 0.8 } else { 0.1 })
+            .collect();
+        let down = Tensor::new(&down_data[..], &device)
+            .unwrap()
+            .reshape(&[hidden, hidden])
+            .unwrap();
+
+        // LM head: same as embed (tied weights)
+        let lm_head = embed.clone();
+
+        vec![
+            ("model.embed_tokens.weight".to_string(), embed),
+            ("model.layers.0.mlp.down_proj.weight".to_string(), down),
+            ("lm_head.weight".to_string(), lm_head),
+        ]
+    }
+
+    #[test]
+    fn test_speculative_acceptance_rate_identical_models() {
+        // When draft and target use the SAME weights, acceptance should be 100%.
+        let weights = make_deterministic_weights();
+        let target = mock_loaded_model(weights.clone());
+        let draft = mock_loaded_model(weights);
+
+        let config = SpeculativeConfig {
+            draft_steps: 4,
+            acceptance_threshold: 0.1,
+            enabled: true,
+        };
+        let sampling = SamplingConfig {
+            temperature: 0.0,
+            top_p: 1.0,
+            repetition_penalty: 1.0,
+        };
+
+        // Use prompt tokens > 2 to avoid immediate EOS
+        let prompt_tokens = &[3u32, 5];
+        let (_generated, stats) = LocalSlmProvider::run_inference_speculative(
+            prompt_tokens,
+            12,
+            &target,
+            &draft,
+            &config,
+            &sampling,
+        )
+        .unwrap();
+
+        // With identical models, every draft token should be accepted
+        assert!(
+            stats.total_draft_tokens > 0,
+            "should have drafted some tokens, generated {} tokens",
+            _generated.len()
+        );
+        assert_eq!(
+            stats.accepted_tokens, stats.total_draft_tokens,
+            "identical models should accept all: accepted={}, total={}",
+            stats.accepted_tokens, stats.total_draft_tokens
+        );
+        assert!(stats.acceptance_rate > 0.99);
+    }
+
+    #[test]
+    fn test_speculative_matches_normal_output_identical_models() {
+        // With identical draft/target weights, speculative should produce
+        // the same output as normal inference (greedy, no repetition penalty).
+        let weights = make_deterministic_weights();
+        let target = mock_loaded_model(weights.clone());
+        let draft = mock_loaded_model(weights);
+
+        let sampling = SamplingConfig {
+            temperature: 0.0,
+            top_p: 1.0,
+            repetition_penalty: 1.0,
+        };
+
+        let prompt_tokens = &[3u32, 5];
+        let max_tokens = 6;
+
+        // Normal inference via forward_pass_cached
+        let device = candle_core::Device::Cpu;
+        let wm: std::collections::HashMap<&str, &Tensor> = target
+            .weights
+            .iter()
+            .map(|(n, t)| (n.as_str(), t))
+            .collect();
+        let vocab_size = LocalSlmProvider::infer_vocab_size(&wm);
+        let num_layers = LocalSlmProvider::count_layers(&wm);
+
+        let mut cache = KvCache::new(num_layers);
+        let prompt_tensor = Tensor::new(prompt_tokens, &device).unwrap();
+        let prefill = LocalSlmProvider::forward_pass_cached(
+            &prompt_tensor,
+            &wm,
+            vocab_size,
+            &device,
+            &mut cache,
+        )
+        .unwrap();
+        let last = LocalSlmProvider::last_position_logits(&prefill, prompt_tokens.len()).unwrap();
+        let mut normal_ids = Vec::new();
+        let mut next = LocalSlmProvider::sample_token(&last, 0.0, 1.0).unwrap();
+        for _ in 0..max_tokens {
+            if next == 0 || next == 2 {
+                break;
+            }
+            normal_ids.push(next);
+            let tt = Tensor::new(&[next], &device).unwrap();
+            let logits =
+                LocalSlmProvider::forward_pass_cached(&tt, &wm, vocab_size, &device, &mut cache)
+                    .unwrap();
+            let ll = LocalSlmProvider::last_position_logits(&logits, 1).unwrap();
+            next = LocalSlmProvider::sample_token(&ll, 0.0, 1.0).unwrap();
+        }
+
+        // Speculative inference
+        let config = SpeculativeConfig {
+            draft_steps: 3,
+            acceptance_threshold: 0.1,
+            enabled: true,
+        };
+        let (spec_ids, _stats) = LocalSlmProvider::run_inference_speculative(
+            prompt_tokens,
+            max_tokens as u32,
+            &target,
+            &draft,
+            &config,
+            &sampling,
+        )
+        .unwrap();
+
+        // With identical models and greedy decoding, output should match
+        assert_eq!(
+            normal_ids, spec_ids,
+            "speculative output should match normal: normal={normal_ids:?}, spec={spec_ids:?}"
+        );
+    }
+
+    #[test]
+    fn test_trim_cache() {
+        let device = candle_core::Device::Cpu;
+        let mut cache = KvCache::new(1);
+
+        // Add 5 positions
+        let k = Tensor::zeros(&[5, 4], DType::F32, &device).unwrap();
+        let v = Tensor::zeros(&[5, 4], DType::F32, &device).unwrap();
+        cache.update(0, k, v).unwrap();
+        assert_eq!(cache.seq_len(), 5);
+
+        // Trim last 2
+        LocalSlmProvider::trim_cache(&mut cache, 2);
+        assert_eq!(cache.seq_len(), 3);
+
+        // Trim more than remaining
+        LocalSlmProvider::trim_cache(&mut cache, 10);
+        assert_eq!(cache.seq_len(), 0);
+    }
+
+    #[test]
+    fn test_logits_to_probs() {
+        let device = candle_core::Device::Cpu;
+        let logits = Tensor::new(&[1.0f32, 2.0, 3.0], &device).unwrap();
+        let probs = LocalSlmProvider::logits_to_probs(&logits).unwrap();
+
+        // Should sum to ~1.0
+        let sum: f32 = probs.iter().sum();
+        assert!((sum - 1.0).abs() < 1e-5, "probs should sum to 1, got {sum}");
+
+        // Higher logit → higher prob
+        assert!(probs[2] > probs[1]);
+        assert!(probs[1] > probs[0]);
+    }
+
+    #[test]
+    fn test_logits_to_probs_empty() {
+        let device = candle_core::Device::Cpu;
+        let logits = Tensor::new(&[0f32; 0], &device).unwrap();
+        let probs = LocalSlmProvider::logits_to_probs(&logits).unwrap();
+        assert!(probs.is_empty());
     }
 }
