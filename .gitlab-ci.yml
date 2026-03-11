@@ -46,14 +46,12 @@ rust-tests:
     - cargo clippy --workspace --all-targets -- -D warnings
     - cargo test --workspace
 
-# Supplementary: runs with --all-features but needs more RAM than shared runners provide.
-# On a dedicated runner with 8GB+ RAM, change allow_failure to false.
 rust-tests-all-features:
   stage: test
   image: rust:latest
-  allow_failure: true
+  allow_failure: false
   variables:
-    CARGO_BUILD_JOBS: "1"
+    CARGO_BUILD_JOBS: "2"
     RUSTFLAGS: "-C debuginfo=1"
   before_script:
     - apt-get update && apt-get install -y
@@ -84,13 +82,10 @@ frontend-tests:
     - npm test
     - npm run lint
 
-# Coverage: targets workspace crates only, excludes registry crates to avoid
-# tarpaulin compilation issues (e.g. pulp crate CheckSameSize assertion failure).
-# TODO: Set allow_failure: false once tarpaulin upstream fixes are confirmed.
 code-coverage:
   stage: test
   image: rust:latest
-  allow_failure: true
+  allow_failure: false
   coverage: '/(\d+\.\d+)% coverage/'
   before_script:
     - apt-get update && apt-get install -y
