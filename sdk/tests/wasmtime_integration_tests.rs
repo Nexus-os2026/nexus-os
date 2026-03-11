@@ -610,8 +610,10 @@ fn shared_engine_isolation() {
     wasm_config.consume_fuel(true);
     let engine = Arc::new(wasmtime::Engine::new(&wasm_config).unwrap());
 
-    let mut sandbox_a = WasmtimeSandbox::new(SandboxConfig::default(), Arc::clone(&engine));
-    let mut sandbox_b = WasmtimeSandbox::new(SandboxConfig::default(), Arc::clone(&engine));
+    let mut sandbox_a =
+        WasmtimeSandbox::new_for_development(SandboxConfig::default(), Arc::clone(&engine));
+    let mut sandbox_b =
+        WasmtimeSandbox::new_for_development(SandboxConfig::default(), Arc::clone(&engine));
 
     let mut ctx_a = make_ctx(vec![], 1000);
     let mut ctx_b = make_ctx(vec![], 1000);

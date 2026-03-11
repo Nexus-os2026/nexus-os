@@ -541,7 +541,7 @@ impl ShadowSandbox {
             ],
         };
 
-        let sandbox = WasmtimeSandbox::new(config, engine);
+        let sandbox = WasmtimeSandbox::new_for_development(config, engine);
 
         Self {
             sandbox,

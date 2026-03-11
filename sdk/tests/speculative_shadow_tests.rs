@@ -387,7 +387,7 @@ fn shadow_crash_doesnt_affect_real_agent() {
     assert!(real_ctx.side_effects().is_empty());
 
     // Real agent can still execute normally after shadow crash
-    let mut sandbox = WasmtimeSandbox::new(SandboxConfig::default(), engine);
+    let mut sandbox = WasmtimeSandbox::new_for_development(SandboxConfig::default(), engine);
     let mut real_ctx_mut = make_ctx(vec!["llm.query"], 500);
     let real_result = sandbox.execute(&logging_wasm(), &mut real_ctx_mut);
     assert!(real_result.completed);

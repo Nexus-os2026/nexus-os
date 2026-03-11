@@ -1,11 +1,13 @@
 stages:
   - security
   - test
+  - release
+  - sign
 
 cargo-audit:
   stage: security
   image: rust:latest
-  allow_failure: true
+  allow_failure: false
   before_script:
     - cargo install cargo-audit --locked
   script:
@@ -19,7 +21,7 @@ cargo-audit:
 cargo-deny:
   stage: security
   image: rust:latest
-  allow_failure: true
+  allow_failure: false
   before_script:
     - cargo install cargo-deny --locked
   script:
@@ -51,3 +53,115 @@ frontend-tests:
     - cd app
     - npm ci
     - npm run build
+
+build-release:
+  stage: release
+  image: rust:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+  before_script:
+    - apt-get update && apt-get install -y
+        libgtk-3-dev
+        libwebkit2gtk-4.1-dev
+        libayatana-appindicator3-dev
+        librsvg2-dev
+        libssl-dev
+        pkg-config
+  script:
+    - cargo build --release --workspace
+  artifacts:
+    paths:
+      - target/release/nexus-server
+      - target/release/coding-agent
+      - target/release/social-poster-agent
+    expire_in: 30 days
+
+build-agent-bundles:
+  stage: release
+  image: rust:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+  before_script:
+    - apt-get update && apt-get install -y
+        libgtk-3-dev
+        libwebkit2gtk-4.1-dev
+        libayatana-appindicator3-dev
+        librsvg2-dev
+        libssl-dev
+        pkg-config
+  script:
+    - cargo build --release -p nexus-marketplace
+    - mkdir -p agent-bundles
+    - |
+      for agent_dir in agents/*/; do
+        agent_name=$(basename "$agent_dir")
+        if [ -f "$agent_dir/manifest.toml" ]; then
+          mkdir -p "agent-bundles/$agent_name"
+          cp "$agent_dir/manifest.toml" "agent-bundles/$agent_name/"
+          if [ -d "$agent_dir/src" ]; then
+            cp -r "$agent_dir/src" "agent-bundles/$agent_name/"
+          fi
+          if [ -f "$agent_dir/Cargo.toml" ]; then
+            cp "$agent_dir/Cargo.toml" "agent-bundles/$agent_name/"
+          fi
+        fi
+      done
+  artifacts:
+    paths:
+      - agent-bundles/
+    expire_in: 30 days
+
+sign-release:
+  stage: sign
+  image: rust:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+  needs:
+    - job: build-release
+      artifacts: true
+  before_script:
+    - apt-get update && apt-get install -y jq
+    - COSIGN_VERSION="2.4.1"
+    - curl -fsSL "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64" -o /usr/local/bin/cosign
+    - chmod +x /usr/local/bin/cosign
+  script:
+    - mkdir -p signatures
+    - |
+      for artifact in target/release/nexus-server target/release/coding-agent target/release/social-poster-agent; do
+        if [ -f "$artifact" ]; then
+          ./scripts/sign-release.sh --artifact "$artifact" --output-dir signatures
+        fi
+      done
+    - |
+      # Merge per-artifact manifests into a single signing-manifest.json
+      jq -s '{
+        version: "1.0.0",
+        artifacts: [.[].artifacts[]],
+        build_id: .[0].build_id,
+        git_commit: .[0].git_commit,
+        git_tag: .[0].git_tag,
+        pipeline_id: .[0].pipeline_id,
+        created_at: .[0].created_at
+      }' signatures/*.manifest.json > signatures/signing-manifest.json
+  artifacts:
+    paths:
+      - signatures/
+    expire_in: 30 days
+
+verify-signatures:
+  stage: sign
+  image: rust:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+  needs:
+    - job: build-release
+      artifacts: true
+    - job: sign-release
+      artifacts: true
+  before_script:
+    - apt-get update && apt-get install -y jq
+    - COSIGN_VERSION="2.4.1"
+    - curl -fsSL "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64" -o /usr/local/bin/cosign
+    - chmod +x /usr/local/bin/cosign
+  script:
+    - ./scripts/verify-release.sh signatures/signing-manifest.json

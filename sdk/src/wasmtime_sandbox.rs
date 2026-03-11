@@ -97,7 +97,8 @@ impl std::fmt::Debug for WasmtimeSandbox {
 impl WasmtimeSandbox {
     /// Create a new wasmtime sandbox with the given config.
     /// The `Engine` is shared (cheap to clone via `Arc`) so callers can reuse it.
-    /// Defaults to `AllowUnsigned` signature policy (no keys configured).
+    /// Defaults to `RequireSigned` signature policy for production use.
+    /// Use `new_for_development()` to allow unsigned modules in dev environments.
     pub fn new(config: SandboxConfig, engine: Arc<Engine>) -> Self {
         Self {
             engine,
@@ -109,14 +110,22 @@ impl WasmtimeSandbox {
             host_calls_made: 0,
             outputs: Vec::new(),
             memory_used: 0,
-            signature_policy: SignaturePolicy::AllowUnsigned,
+            signature_policy: SignaturePolicy::RequireSigned,
             trusted_keys: Vec::new(),
             speculative_policy: None,
             module_cache: None,
         }
     }
 
-    /// Create a new wasmtime sandbox with a default engine and `AllowUnsigned` policy.
+    /// Create a sandbox with `AllowUnsigned` policy for development/testing.
+    pub fn new_for_development(config: SandboxConfig, engine: Arc<Engine>) -> Self {
+        let mut sandbox = Self::new(config, engine);
+        sandbox.signature_policy = SignaturePolicy::AllowUnsigned;
+        sandbox
+    }
+
+    /// Create a new wasmtime sandbox with a default engine and `AllowUnsigned` policy
+    /// suitable for development and testing environments.
     pub fn with_defaults(config: SandboxConfig) -> Result<Self, SandboxError> {
         let mut wasm_config = wasmtime::Config::new();
         wasm_config.consume_fuel(true);
@@ -125,7 +134,7 @@ impl WasmtimeSandbox {
         let engine = Engine::new(&wasm_config)
             .map_err(|e| SandboxError::ConfigError(format!("wasmtime engine init: {e}")))?;
 
-        Ok(Self::new(config, Arc::new(engine)))
+        Ok(Self::new_for_development(config, Arc::new(engine)))
     }
 
     /// Build a `Store<WasmAgentState>` with fuel and memory limits from config + context.
@@ -706,7 +715,8 @@ mod tests {
         wasm_config.max_wasm_stack(512 * 1024);
         let engine = Arc::new(Engine::new(&wasm_config).unwrap());
 
-        let mut sandbox = WasmtimeSandbox::new(SandboxConfig::default(), Arc::clone(&engine));
+        let mut sandbox =
+            WasmtimeSandbox::new_for_development(SandboxConfig::default(), Arc::clone(&engine));
         sandbox.set_module_cache(cache.clone());
 
         let mut ctx = make_ctx(vec![], 1000);
@@ -715,7 +725,8 @@ mod tests {
         assert_eq!(cache.len(), 1, "first execution should populate cache");
 
         // Execute again with a fresh sandbox sharing the same engine and cache
-        let mut sandbox2 = WasmtimeSandbox::new(SandboxConfig::default(), Arc::clone(&engine));
+        let mut sandbox2 =
+            WasmtimeSandbox::new_for_development(SandboxConfig::default(), Arc::clone(&engine));
         sandbox2.set_module_cache(cache.clone());
         let mut ctx2 = make_ctx(vec![], 1000);
         let result2 = sandbox2.execute(&wasm, &mut ctx2);
