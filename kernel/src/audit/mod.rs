@@ -1,4 +1,7 @@
 pub mod federation;
+pub mod zk_mcp;
+pub mod zk_proof;
+pub mod zk_report;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
