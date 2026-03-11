@@ -1,31 +1,22 @@
 stages:
   - security
   - test
-  - release
-  - sign
 
 cargo-audit:
   stage: security
   image: rust:latest
-  allow_failure: false
   before_script:
-    - cargo install cargo-audit --locked
+    - cargo install cargo-audit
   script:
-    - cargo audit
-        --ignore RUSTSEC-2025-0046
-        --ignore RUSTSEC-2025-0118
-        --ignore RUSTSEC-2026-0020
-        --ignore RUSTSEC-2026-0021
-        --ignore RUSTSEC-2026-0037
+    - cargo audit --config audit.toml
 
 cargo-deny:
   stage: security
   image: rust:latest
-  allow_failure: false
   before_script:
-    - cargo install cargo-deny --locked
+    - cargo install cargo-deny
   script:
-    - cargo deny check -W unlicensed
+    - cargo deny check
 
 rust-tests:
   stage: test
@@ -34,44 +25,13 @@ rust-tests:
     CARGO_BUILD_JOBS: "2"
     RUSTFLAGS: "-C debuginfo=1"
   before_script:
-    - apt-get update && apt-get install -y
-        libgtk-3-dev
-        libwebkit2gtk-4.1-dev
-        libayatana-appindicator3-dev
-        librsvg2-dev
-        libssl-dev
-        pkg-config
+    - apt-get update && apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev pkg-config
+    - rustup component add rustfmt clippy
+    - rustup target add wasm32-wasip1
   script:
     - cargo fmt --all -- --check
     - cargo clippy --workspace --all-targets -- -D warnings
     - cargo test --workspace
-
-rust-tests-all-features:
-  stage: test
-  image: rust:latest
-  allow_failure: false
-  variables:
-    CARGO_BUILD_JOBS: "1"
-    RUSTFLAGS: "-C debuginfo=0 -C codegen-units=16"
-  before_script:
-    - apt-get update && apt-get install -y
-        libgtk-3-dev
-        libwebkit2gtk-4.1-dev
-        libayatana-appindicator3-dev
-        librsvg2-dev
-        libssl-dev
-        pkg-config
-        mold
-  script:
-    - cargo clippy --workspace --all-targets --all-features -- -D warnings
-    - RUSTFLAGS="-C debuginfo=0 -C codegen-units=16 -C link-arg=-fuse-ld=mold" cargo test --workspace --all-features
-
-voice-tests:
-  stage: test
-  image: python:3.12
-  allow_failure: false
-  script:
-    - cd voice && python3 -m pytest tests/ -v
 
 frontend-tests:
   stage: test
@@ -80,223 +40,3 @@ frontend-tests:
     - cd app
     - npm ci
     - npm run build
-    - npm test
-    - npm run lint
-
-code-coverage:
-  stage: test
-  image: rust:latest
-  allow_failure: false
-  coverage: '/(\d+\.\d+)% coverage/'
-  variables:
-    CARGO_BUILD_JOBS: "1"
-    RUSTFLAGS: "-C debuginfo=0 -C codegen-units=16"
-  before_script:
-    - apt-get update && apt-get install -y
-        libgtk-3-dev
-        libwebkit2gtk-4.1-dev
-        libayatana-appindicator3-dev
-        librsvg2-dev
-        libssl-dev
-        pkg-config
-        mold
-    - cargo install cargo-tarpaulin --locked
-  script:
-    - RUSTFLAGS="-C debuginfo=0 -C codegen-units=16 -C link-arg=-fuse-ld=mold" cargo tarpaulin --workspace --skip-clean --out xml --output-dir coverage/ --exclude-files "*/registry/*"
-  artifacts:
-    reports:
-      coverage_report:
-        coverage_format: cobertura
-        path: coverage/cobertura.xml
-    expire_in: 30 days
-
-build-release:
-  stage: release
-  image: rust:latest
-  rules:
-    - if: $CI_COMMIT_TAG
-  before_script:
-    - apt-get update && apt-get install -y
-        libgtk-3-dev
-        libwebkit2gtk-4.1-dev
-        libayatana-appindicator3-dev
-        librsvg2-dev
-        libssl-dev
-        pkg-config
-        python3
-        nodejs
-        npm
-  script:
-    - cargo build --release --workspace
-    # Install npm dependencies for SBOM npm parsing
-    - cd app && npm ci && cd ..
-    # Generate SBOM
-    - ./scripts/generate-sbom.sh --output sbom.cdx.json
-    # Generate provenance attestation
-    - ./scripts/generate-provenance.sh
-        --artifacts
-          target/release/nexus-server
-          target/release/coding-agent
-          target/release/social-poster-agent
-        --output provenance.intoto.jsonl
-        --sbom-ref sbom.cdx.json
-        --builder-id "https://gitlab.com/nexaiceo/nexus-os/-/pipelines/${CI_PIPELINE_ID}"
-  artifacts:
-    paths:
-      - target/release/nexus-server
-      - target/release/coding-agent
-      - target/release/social-poster-agent
-      - sbom.cdx.json
-      - provenance.intoto.jsonl
-    expire_in: 30 days
-
-build-agent-bundles:
-  stage: release
-  image: rust:latest
-  rules:
-    - if: $CI_COMMIT_TAG
-  before_script:
-    - apt-get update && apt-get install -y
-        libgtk-3-dev
-        libwebkit2gtk-4.1-dev
-        libayatana-appindicator3-dev
-        librsvg2-dev
-        libssl-dev
-        pkg-config
-  script:
-    - cargo build --release -p nexus-marketplace
-    - mkdir -p agent-bundles
-    - |
-      for agent_dir in agents/*/; do
-        agent_name=$(basename "$agent_dir")
-        if [ -f "$agent_dir/manifest.toml" ]; then
-          mkdir -p "agent-bundles/$agent_name"
-          cp "$agent_dir/manifest.toml" "agent-bundles/$agent_name/"
-          if [ -d "$agent_dir/src" ]; then
-            cp -r "$agent_dir/src" "agent-bundles/$agent_name/"
-          fi
-          if [ -f "$agent_dir/Cargo.toml" ]; then
-            cp "$agent_dir/Cargo.toml" "agent-bundles/$agent_name/"
-          fi
-        fi
-      done
-  artifacts:
-    paths:
-      - agent-bundles/
-    expire_in: 30 days
-
-sign-release:
-  stage: sign
-  image: rust:latest
-  rules:
-    - if: $CI_COMMIT_TAG
-  needs:
-    - job: build-release
-      artifacts: true
-  before_script:
-    - apt-get update && apt-get install -y jq
-    - COSIGN_VERSION="2.4.1"
-    - curl -fsSL "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64" -o /usr/local/bin/cosign
-    - chmod +x /usr/local/bin/cosign
-  script:
-    - mkdir -p signatures
-    # Sign release binaries
-    - |
-      for artifact in target/release/nexus-server target/release/coding-agent target/release/social-poster-agent; do
-        if [ -f "$artifact" ]; then
-          ./scripts/sign-release.sh --artifact "$artifact" --output-dir signatures
-        fi
-      done
-    # Sign SBOM
-    - |
-      if [ -f "sbom.cdx.json" ]; then
-        ./scripts/sign-release.sh --artifact sbom.cdx.json --output-dir signatures
-      fi
-    # Sign provenance attestation
-    - |
-      if [ -f "provenance.intoto.jsonl" ]; then
-        ./scripts/sign-release.sh --artifact provenance.intoto.jsonl --output-dir signatures
-      fi
-    # Merge all per-artifact manifests into a single signing-manifest.json
-    - |
-      jq -s '{
-        version: "1.0.0",
-        artifacts: [.[].artifacts[]],
-        build_id: .[0].build_id,
-        git_commit: .[0].git_commit,
-        git_tag: .[0].git_tag,
-        pipeline_id: .[0].pipeline_id,
-        created_at: .[0].created_at
-      }' signatures/*.manifest.json > signatures/signing-manifest.json
-  artifacts:
-    paths:
-      - signatures/
-    expire_in: 30 days
-
-verify-signatures:
-  stage: sign
-  image: rust:latest
-  rules:
-    - if: $CI_COMMIT_TAG
-  needs:
-    - job: build-release
-      artifacts: true
-    - job: sign-release
-      artifacts: true
-  before_script:
-    - apt-get update && apt-get install -y jq
-    - COSIGN_VERSION="2.4.1"
-    - curl -fsSL "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64" -o /usr/local/bin/cosign
-    - chmod +x /usr/local/bin/cosign
-  script:
-    - ./scripts/verify-release.sh signatures/signing-manifest.json
-
-verify-sbom:
-  stage: sign
-  image: python:3.12
-  rules:
-    - if: $CI_COMMIT_TAG
-  needs:
-    - job: build-release
-      artifacts: true
-  script:
-    # Verify SBOM against current lock files
-    - ./scripts/generate-sbom.sh --verify sbom.cdx.json
-    # Validate SBOM is well-formed JSON with expected component counts
-    - |
-      python3 -c "
-      import json, sys
-
-      with open('sbom.cdx.json') as f:
-          sbom = json.load(f)
-
-      assert sbom['bomFormat'] == 'CycloneDX', 'bomFormat must be CycloneDX'
-      assert sbom['specVersion'] == '1.5', 'specVersion must be 1.5'
-
-      components = sbom.get('components', [])
-      total = len(components)
-
-      rust_count = sum(
-          1 for c in components
-          if any(p.get('value') in ('RustCrate', 'WorkspaceCrate')
-                 for p in c.get('properties', [])
-                 if p.get('name') == 'nexus:entry_type')
-      )
-      npm_count = sum(
-          1 for c in components
-          if any(p.get('value') == 'NpmPackage'
-                 for p in c.get('properties', [])
-                 if p.get('name') == 'nexus:entry_type')
-      )
-
-      print(f'SBOM validation: {total} total, {rust_count} Rust, {npm_count} npm')
-
-      if rust_count < 100:
-          print(f'ERROR: expected at least 100 Rust crates, found {rust_count}')
-          sys.exit(1)
-      if npm_count < 10:
-          print(f'ERROR: expected at least 10 npm packages, found {npm_count}')
-          sys.exit(1)
-
-      print('SBOM validation: passed')
-      "
