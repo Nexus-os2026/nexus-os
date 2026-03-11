@@ -80,6 +80,11 @@ pub enum TopLevelCommand {
         #[command(subcommand)]
         command: GovernanceCommand,
     },
+    /// Policy engine: manage, test, and reload Cedar-style policies
+    Policy {
+        #[command(subcommand)]
+        command: PolicyCommand,
+    },
     Protocols {
         #[command(subcommand)]
         command: ProtocolsCommand,
@@ -226,6 +231,38 @@ pub enum GovernanceCommand {
     },
 }
 
+#[derive(Debug, Subcommand)]
+pub enum PolicyCommand {
+    /// List all loaded policies with IDs and effects
+    List,
+    /// Show full details of a specific policy
+    Show {
+        /// Policy ID to display
+        policy_id: String,
+    },
+    /// Validate a policy TOML file for syntax errors
+    Validate {
+        /// Path to policy TOML file
+        file: String,
+    },
+    /// Dry-run a policy evaluation against specific parameters
+    Test {
+        /// Path to policy TOML file
+        file: String,
+        /// Agent DID or identifier
+        #[arg(long)]
+        principal: String,
+        /// Operation type (tool_call, terminal_command, etc.)
+        #[arg(long)]
+        action: String,
+        /// Capability key (web.search, fs.write, etc.)
+        #[arg(long)]
+        resource: String,
+    },
+    /// Reload policies from disk without restart
+    Reload,
+}
+
 pub fn execute_command(cli: Cli) -> Result<String, String> {
     match cli.command {
         TopLevelCommand::Create {
@@ -243,6 +280,7 @@ pub fn execute_command(cli: Cli) -> Result<String, String> {
         TopLevelCommand::SelfImprove { command } => execute_self_improve_command(command),
         TopLevelCommand::Model { command } => execute_model_command(command),
         TopLevelCommand::Governance { command } => execute_governance_command(command),
+        TopLevelCommand::Policy { command } => execute_policy_command(command),
         TopLevelCommand::Protocols { command } => execute_protocols_command(command),
         TopLevelCommand::Marketplace { command } => execute_marketplace_command(command),
     }
@@ -673,6 +711,40 @@ pub fn execute_governance_command(command: GovernanceCommand) -> Result<String, 
         GovernanceCommand::Test { task_type, input } => {
             router::route(commands::CliCommand::GovernanceTest { task_type, input })
         }
+    };
+    if output.success {
+        let mut result = output.message;
+        if let Some(data) = output.data {
+            result.push('\n');
+            result.push_str(&serde_json::to_string_pretty(&data).unwrap_or_default());
+        }
+        Ok(result)
+    } else {
+        Err(output.message)
+    }
+}
+
+pub fn execute_policy_command(command: PolicyCommand) -> Result<String, String> {
+    let output = match command {
+        PolicyCommand::List => router::route(commands::CliCommand::PolicyList),
+        PolicyCommand::Show { policy_id } => {
+            router::route(commands::CliCommand::PolicyShow { policy_id })
+        }
+        PolicyCommand::Validate { file } => {
+            router::route(commands::CliCommand::PolicyValidate { file })
+        }
+        PolicyCommand::Test {
+            file,
+            principal,
+            action,
+            resource,
+        } => router::route(commands::CliCommand::PolicyTest {
+            file,
+            principal,
+            action,
+            resource,
+        }),
+        PolicyCommand::Reload => router::route(commands::CliCommand::PolicyReload),
     };
     if output.success {
         let mut result = output.message;

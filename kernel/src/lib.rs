@@ -22,6 +22,7 @@ pub mod lifecycle;
 pub mod manifest;
 pub mod orchestration;
 pub mod permissions;
+pub mod policy_engine;
 pub mod privacy;
 pub mod protocols;
 pub mod provenance;

@@ -85,6 +85,18 @@ pub fn route(command: CliCommand) -> CliOutput {
         // Governance
         CliCommand::GovernanceTest { task_type, input } => governance_test(&task_type, &input),
 
+        // Policy engine
+        CliCommand::PolicyList => policy_list(),
+        CliCommand::PolicyShow { policy_id } => policy_show(&policy_id),
+        CliCommand::PolicyValidate { file } => policy_validate(&file),
+        CliCommand::PolicyTest {
+            file,
+            principal,
+            action,
+            resource,
+        } => policy_test(&file, &principal, &action, &resource),
+        CliCommand::PolicyReload => policy_reload(),
+
         // Protocols (A2A + MCP)
         CliCommand::ProtocolsStatus => protocols_status(),
         CliCommand::ProtocolsAgentCard { agent_name } => protocols_agent_card(&agent_name),

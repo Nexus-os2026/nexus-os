@@ -1,5 +1,6 @@
 use crate::audit::{AuditTrail, EventType};
 use crate::errors::AgentError;
+use crate::policy_engine::{EvaluationContext, PolicyDecision, PolicyEngine};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -390,6 +391,8 @@ pub enum ConsentError {
     },
     #[error("approval queue storage error: {0}")]
     QueueStorage(String),
+    #[error("policy denied: {reason}")]
+    PolicyDenied { reason: String },
 }
 
 impl From<ConsentError> for AgentError {
@@ -657,6 +660,7 @@ pub struct ConsentRuntime {
     policy_engine: ConsentPolicyEngine,
     approval_queue: ApprovalQueue,
     requester_id: String,
+    cedar_engine: Option<PolicyEngine>,
 }
 
 impl Default for ConsentRuntime {
@@ -679,6 +683,7 @@ impl ConsentRuntime {
             policy_engine,
             approval_queue,
             requester_id,
+            cedar_engine: None,
         }
     }
 
@@ -708,6 +713,20 @@ impl ConsentRuntime {
         ))
     }
 
+    /// Attach a Cedar-style policy engine for pre-evaluation.
+    ///
+    /// When set, `enforce_operation` checks the policy engine first.  If it
+    /// returns an explicit Allow or Deny the hardcoded consent tiers are
+    /// bypassed.  When no policy matches the request falls through to the
+    /// existing default logic.
+    pub fn set_cedar_engine(&mut self, engine: PolicyEngine) {
+        self.cedar_engine = Some(engine);
+    }
+
+    pub fn cedar_engine(&self) -> Option<&PolicyEngine> {
+        self.cedar_engine.as_ref()
+    }
+
     pub fn policy_engine(&self) -> &ConsentPolicyEngine {
         &self.policy_engine
     }
@@ -727,7 +746,38 @@ impl ConsentRuntime {
         payload: &[u8],
         audit: &mut AuditTrail,
     ) -> Result<(), ConsentError> {
+        // Cedar-style policy engine pre-check: if an explicit policy matches,
+        // use its decision instead of the hardcoded consent tiers.
+        if let Some(cedar) = &self.cedar_engine {
+            if cedar.has_policies() {
+                let ctx = EvaluationContext::default();
+                let decision = cedar.evaluate(&agent_id.to_string(), operation.as_str(), "*", &ctx);
+                match decision {
+                    PolicyDecision::Allow => return Ok(()),
+                    PolicyDecision::Deny { reason } => {
+                        return Err(ConsentError::PolicyDenied { reason });
+                    }
+                    PolicyDecision::RequireApproval { tier } => {
+                        // Override the default tier with the policy-specified tier
+                        // and fall through to the normal approval flow below.
+                        return self.enforce_with_tier(operation, agent_id, payload, tier, audit);
+                    }
+                }
+            }
+        }
+
         let required_tier = self.policy_engine.required_tier(operation);
+        self.enforce_with_tier(operation, agent_id, payload, required_tier, audit)
+    }
+
+    fn enforce_with_tier(
+        &mut self,
+        operation: GovernedOperation,
+        agent_id: Uuid,
+        payload: &[u8],
+        required_tier: HitlTier,
+        audit: &mut AuditTrail,
+    ) -> Result<(), ConsentError> {
         if required_tier == HitlTier::Tier0 {
             return Ok(());
         }

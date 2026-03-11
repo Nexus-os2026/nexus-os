@@ -11,10 +11,12 @@ use crate::manifest::AgentManifest;
 use crate::permissions::{
     CapabilityRequest, PermissionCategory, PermissionHistoryEntry, PermissionManager,
 };
+use crate::policy_engine::PolicyEngine;
 use crate::safety_supervisor::{KpiKind, SafetyAction, SafetySupervisor};
 use crate::speculative::{SimulationResult, SpeculativeEngine};
 use serde_json::json;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use uuid::Uuid;
 
 pub type AgentId = Uuid;
@@ -37,7 +39,7 @@ pub struct AgentStatus {
     pub remaining_fuel: u64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Supervisor {
     agents: HashMap<AgentId, AgentHandle>,
     fuel_ledgers: HashMap<AgentId, AgentFuelLedger>,
@@ -45,6 +47,13 @@ pub struct Supervisor {
     safety_supervisor: SafetySupervisor,
     speculative_engine: SpeculativeEngine,
     permission_manager: PermissionManager,
+    policy_engine: PolicyEngine,
+}
+
+impl Default for Supervisor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Supervisor {
@@ -56,13 +65,44 @@ impl Supervisor {
             safety_supervisor: SafetySupervisor::default(),
             speculative_engine: SpeculativeEngine::new(),
             permission_manager: PermissionManager::new(),
+            policy_engine: PolicyEngine::default(),
         }
+    }
+
+    /// Create a supervisor with a policy engine loaded from the given directory.
+    pub fn with_policy_dir(dir: impl Into<PathBuf>) -> Self {
+        let mut engine = PolicyEngine::new(dir);
+        let _ = engine.load_policies();
+        Self {
+            agents: HashMap::new(),
+            fuel_ledgers: HashMap::new(),
+            audit_trail: AuditTrail::new(),
+            safety_supervisor: SafetySupervisor::default(),
+            speculative_engine: SpeculativeEngine::new(),
+            permission_manager: PermissionManager::new(),
+            policy_engine: engine,
+        }
+    }
+
+    /// Replace the policy engine (useful for testing or runtime reload).
+    pub fn set_policy_engine(&mut self, engine: PolicyEngine) {
+        self.policy_engine = engine;
+    }
+
+    /// Reload policies from the configured directory.
+    pub fn reload_policies(&mut self) -> Result<usize, crate::policy_engine::PolicyError> {
+        self.policy_engine.load_policies()
+    }
+
+    /// Access the policy engine.
+    pub fn policy_engine(&self) -> &PolicyEngine {
+        &self.policy_engine
     }
 
     pub fn start_agent(&mut self, manifest: AgentManifest) -> Result<AgentId, AgentError> {
         let id = Uuid::new_v4();
         let autonomy_level = AutonomyLevel::from_manifest(manifest.autonomy_level);
-        let consent_runtime = ConsentRuntime::from_manifest(
+        let mut consent_runtime = ConsentRuntime::from_manifest(
             manifest.consent_policy_path.as_deref(),
             manifest.requester_id.as_deref(),
             manifest.name.as_str(),
@@ -74,6 +114,12 @@ impl Supervisor {
                 .unwrap_or_else(|| "period.default".to_string()),
         );
         let monthly_cap = manifest.monthly_fuel_cap.unwrap_or(manifest.fuel_budget);
+
+        // Attach Cedar policy engine to the consent runtime so it can
+        // pre-check policies before falling back to hardcoded tiers.
+        if self.policy_engine.has_policies() {
+            consent_runtime.set_cedar_engine(self.policy_engine.clone());
+        }
 
         let handle = AgentHandle {
             id,
@@ -363,6 +409,11 @@ impl Supervisor {
     }
 
     pub fn require_tool_call(&mut self, id: AgentId) -> Result<(), AgentError> {
+        let policy_ref = if self.policy_engine.has_policies() {
+            Some(self.policy_engine.clone())
+        } else {
+            None
+        };
         let handle = self
             .agents
             .get_mut(&id)
@@ -379,7 +430,23 @@ impl Supervisor {
         handle
             .autonomy_guard
             .require_tool_call(id, &mut self.audit_trail)
-            .map_err(AgentError::from)
+            .map_err(AgentError::from)?;
+        // Policy engine autonomy override (only when policies exist)
+        if let Some(ref pe) = policy_ref {
+            let handle = self.agents.get_mut(&id).unwrap();
+            let default_min = handle.autonomy_guard.level();
+            handle
+                .autonomy_guard
+                .require_level_with_policy(
+                    id,
+                    &mut self.audit_trail,
+                    default_min,
+                    "tool_call",
+                    Some(pe),
+                )
+                .map_err(AgentError::from)?;
+        }
+        Ok(())
     }
 
     pub fn require_multi_agent(&mut self, id: AgentId) -> Result<(), AgentError> {
@@ -1027,5 +1094,145 @@ mod tests {
             sup.audit_trail.events().len() > events_before,
             "simulation should append audit events"
         );
+    }
+
+    // ── PolicyEngine integration tests ──
+
+    #[test]
+    fn custom_policy_overrides_default_consent_tier() {
+        use crate::policy_engine::{Policy, PolicyConditions, PolicyEffect, PolicyEngine};
+
+        // TerminalCommand defaults to Tier2 (requires approval).
+        // Create a policy that explicitly allows it for all agents.
+        let allow_terminal = Policy {
+            policy_id: "allow-terminal".to_string(),
+            description: String::new(),
+            effect: PolicyEffect::Allow,
+            principal: "*".to_string(),
+            action: "terminal_command".to_string(),
+            resource: "*".to_string(),
+            priority: 10,
+            conditions: PolicyConditions::default(),
+        };
+
+        let pe = PolicyEngine::with_policies(vec![allow_terminal]);
+        let mut sup = Supervisor::new();
+        sup.set_policy_engine(pe);
+        let id = sup.start_agent(test_manifest()).unwrap();
+
+        // With the policy, TerminalCommand should be auto-allowed (no approval needed).
+        let result = sup.require_consent(id, GovernedOperation::TerminalCommand, b"echo hello");
+        assert!(
+            result.is_ok(),
+            "policy should override default Tier2 to Allow: {result:?}"
+        );
+    }
+
+    #[test]
+    fn custom_policy_denies_normally_allowed_operation() {
+        use crate::policy_engine::{Policy, PolicyConditions, PolicyEffect, PolicyEngine};
+
+        // ToolCall defaults to Tier1 (auto-approved).
+        // Create a policy that explicitly denies it.
+        let deny_tools = Policy {
+            policy_id: "deny-tools".to_string(),
+            description: "tools blocked by enterprise policy".to_string(),
+            effect: PolicyEffect::Deny,
+            principal: "*".to_string(),
+            action: "tool_call".to_string(),
+            resource: "*".to_string(),
+            priority: 10,
+            conditions: PolicyConditions::default(),
+        };
+
+        let pe = PolicyEngine::with_policies(vec![deny_tools]);
+        let mut sup = Supervisor::new();
+        sup.set_policy_engine(pe);
+        let id = sup.start_agent(test_manifest()).unwrap();
+
+        let result = sup.require_consent(id, GovernedOperation::ToolCall, b"test");
+        assert!(
+            result.is_err(),
+            "policy should deny normally auto-approved ToolCall"
+        );
+    }
+
+    #[test]
+    fn no_custom_policy_falls_back_to_defaults() {
+        // Empty policy engine — should behave identically to no engine.
+        let pe = PolicyEngine::with_policies(vec![]);
+        let mut sup = Supervisor::new();
+        sup.set_policy_engine(pe);
+        let id = sup.start_agent(test_manifest()).unwrap();
+
+        // ToolCall at Tier1 → auto-approved (default behavior).
+        let result = sup.require_consent(id, GovernedOperation::ToolCall, b"test");
+        assert!(result.is_ok(), "empty engine should fall back to defaults");
+
+        // TerminalCommand at Tier2 → requires approval (default behavior).
+        let result = sup.require_consent(id, GovernedOperation::TerminalCommand, b"cmd");
+        assert!(
+            result.is_err(),
+            "empty engine should preserve default Tier2 approval requirement"
+        );
+    }
+
+    #[test]
+    fn custom_policy_requires_higher_autonomy() {
+        use crate::policy_engine::{Policy, PolicyConditions, PolicyEffect, PolicyEngine};
+
+        // Create a policy that requires min_autonomy_level=3 for tool_call.
+        // The allow policy with min_autonomy=3 means agents below L3 won't
+        // match, falling through to default deny in the policy engine.
+        let strict_tool = Policy {
+            policy_id: "strict-tool".to_string(),
+            description: String::new(),
+            effect: PolicyEffect::Allow,
+            principal: "*".to_string(),
+            action: "tool_call".to_string(),
+            resource: "*".to_string(),
+            priority: 10,
+            conditions: PolicyConditions {
+                min_autonomy_level: Some(3),
+                ..PolicyConditions::default()
+            },
+        };
+
+        let pe = PolicyEngine::with_policies(vec![strict_tool]);
+        let mut sup = Supervisor::new();
+        sup.set_policy_engine(pe);
+
+        // Agent at L2 — policy condition not met, falls to default deny in
+        // the cedar engine, which returns PolicyDenied.
+        let id = sup.start_agent(test_manifest()).unwrap();
+        let result = sup.require_consent(id, GovernedOperation::ToolCall, b"test");
+        assert!(
+            result.is_err(),
+            "L2 agent should be denied when policy requires min_autonomy_level=3"
+        );
+    }
+
+    #[test]
+    fn policy_engine_reload_picks_up_new_files() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let mut sup = Supervisor::with_policy_dir(dir.path());
+        assert_eq!(sup.policy_engine().policies().len(), 0);
+
+        // Write a policy file after initialization
+        let policy_toml = r#"
+policy_id = "runtime-added"
+effect = "allow"
+principal = "*"
+action = "tool_call"
+resource = "*"
+priority = 50
+"#;
+        std::fs::write(dir.path().join("new-policy.toml"), policy_toml).unwrap();
+
+        // Reload should pick it up
+        let count = sup.reload_policies().unwrap();
+        assert_eq!(count, 1);
+        assert_eq!(sup.policy_engine().policies()[0].policy_id, "runtime-added");
     }
 }

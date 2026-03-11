@@ -141,6 +141,22 @@ pub enum CliCommand {
         input: String,
     },
 
+    // Policy engine commands
+    PolicyList,
+    PolicyShow {
+        policy_id: String,
+    },
+    PolicyValidate {
+        file: String,
+    },
+    PolicyTest {
+        file: String,
+        principal: String,
+        action: String,
+        resource: String,
+    },
+    PolicyReload,
+
     // Protocol commands (A2A + MCP)
     ProtocolsStatus,
     ProtocolsAgentCard {
@@ -345,6 +361,20 @@ mod tests {
                 task_type: "pii_detection".to_string(),
                 input: "test input".to_string(),
             },
+            CliCommand::PolicyList,
+            CliCommand::PolicyShow {
+                policy_id: "allow-tools".to_string(),
+            },
+            CliCommand::PolicyValidate {
+                file: "/tmp/policy.toml".to_string(),
+            },
+            CliCommand::PolicyTest {
+                file: "/tmp/policy.toml".to_string(),
+                principal: "did:nexus:agent1".to_string(),
+                action: "tool_call".to_string(),
+                resource: "web.search".to_string(),
+            },
+            CliCommand::PolicyReload,
             CliCommand::ProtocolsStatus,
             CliCommand::ProtocolsAgentCard {
                 agent_name: "test-agent".to_string(),
@@ -362,6 +392,6 @@ mod tests {
             CliCommand::FirewallStatus,
             CliCommand::FirewallPatterns,
         ];
-        assert_eq!(_cmds.len(), 54);
+        assert_eq!(_cmds.len(), 59);
     }
 }

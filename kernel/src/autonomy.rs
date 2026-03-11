@@ -1,5 +1,6 @@
 use crate::audit::{AuditTrail, EventType};
 use crate::errors::AgentError;
+use crate::policy_engine::{EvaluationContext, PolicyDecision, PolicyEngine};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
@@ -193,6 +194,59 @@ impl AutonomyGuard {
                 }),
             )
             .expect("audit: fail-closed");
+    }
+
+    /// Check the policy engine for an autonomy override before falling back
+    /// to the hardcoded minimum level.  Policies can raise the required
+    /// autonomy level (enterprises restricting specific operations) but the
+    /// result is always at least `default_required`.
+    pub fn require_level_with_policy(
+        &mut self,
+        actor_id: Uuid,
+        audit_trail: &mut AuditTrail,
+        default_required: AutonomyLevel,
+        action: &'static str,
+        policy_engine: Option<&PolicyEngine>,
+    ) -> Result<(), AutonomyError> {
+        let mut effective = default_required;
+
+        if let Some(engine) = policy_engine {
+            if engine.has_policies() {
+                let ctx = EvaluationContext {
+                    autonomy_level: self.level,
+                    fuel_cost: None,
+                };
+                let decision = engine.evaluate(&actor_id.to_string(), action, "*", &ctx);
+                match decision {
+                    PolicyDecision::Deny { .. } => {
+                        // Policy explicitly denies — treat as requiring L5+
+                        // which is unreachable, so it always fails.
+                        effective = AutonomyLevel::L5;
+                        if self.level < effective {
+                            return self.require_level(actor_id, audit_trail, effective, action);
+                        }
+                    }
+                    PolicyDecision::Allow => {
+                        // Policy explicitly allows — still enforce the
+                        // default minimum (policies can loosen consent
+                        // tiers but not bypass autonomy minimums).
+                    }
+                    PolicyDecision::RequireApproval { .. } => {
+                        // RequireApproval in autonomy context: bump required
+                        // level by one above current default (stricter).
+                        effective = match default_required {
+                            AutonomyLevel::L0 => AutonomyLevel::L1,
+                            AutonomyLevel::L1 => AutonomyLevel::L2,
+                            AutonomyLevel::L2 => AutonomyLevel::L3,
+                            AutonomyLevel::L3 => AutonomyLevel::L4,
+                            AutonomyLevel::L4 | AutonomyLevel::L5 => AutonomyLevel::L5,
+                        };
+                    }
+                }
+            }
+        }
+
+        self.require_level(actor_id, audit_trail, effective, action)
     }
 
     fn require_level(
