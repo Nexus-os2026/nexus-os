@@ -2,7 +2,4 @@
 # Mirrors the ignore list in deny.toml for cargo-deny parity.
 
 [advisories]
-ignore = [
-    # quinn-proto 0.11.13 DoS — reqwest transitive dep, upgrade tracked separately
-    "RUSTSEC-2026-0037",
-]
+ignore = []

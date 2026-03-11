@@ -43,6 +43,7 @@ use nexus_kernel::protocols::a2a::{
 };
 use nexus_kernel::protocols::mcp::McpServer;
 use nexus_kernel::supervisor::Supervisor;
+use nexus_sdk::module_cache::ModuleCache;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -266,6 +267,8 @@ struct GatewayInner {
     ws_tx: broadcast::Sender<WsEvent>,
     /// Prometheus-compatible metrics.
     metrics: Option<NexusMetrics>,
+    /// Shared WASM module cache for hit-rate reporting.
+    wasm_module_cache: Option<ModuleCache>,
 }
 
 /// Metadata about an agent tracked alongside the supervisor.
@@ -309,6 +312,7 @@ impl GatewayState {
                 privacy_manager: PrivacyManager::new(),
                 ws_tx,
                 metrics: None,
+                wasm_module_cache: None,
             })),
         }
     }
@@ -317,6 +321,14 @@ impl GatewayState {
     pub fn with_metrics(self, metrics: NexusMetrics) -> Self {
         let mut inner = self.inner.lock().expect("lock poisoned");
         inner.metrics = Some(metrics);
+        drop(inner);
+        self
+    }
+
+    /// Attach a shared [`ModuleCache`] for WASM cache hit-rate reporting on `/health`.
+    pub fn with_wasm_cache(self, cache: ModuleCache) -> Self {
+        let mut inner = self.inner.lock().expect("lock poisoned");
+        inner.wasm_module_cache = Some(cache);
         drop(inner);
         self
     }
@@ -611,6 +623,28 @@ type ApiResult = Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse
 
 // ── Original route handlers ─────────────────────────────────────────────────
 
+/// Read the resident set size (RSS) of this process in bytes.
+///
+/// On Linux, parses the second field of `/proc/self/statm` and multiplies by
+/// the page size (4096). Returns 0 on non-Linux platforms or on any error.
+fn read_rss_bytes() -> u64 {
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(statm) = std::fs::read_to_string("/proc/self/statm") {
+            if let Some(rss_pages) = statm.split_whitespace().nth(1) {
+                if let Ok(pages) = rss_pages.parse::<u64>() {
+                    return pages * 4096;
+                }
+            }
+        }
+        0
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        0 // No /proc/self/statm available on this platform
+    }
+}
+
 /// `GET /health` — public, no auth required.
 ///
 /// Returns extended health information including uptime, agent counts,
@@ -640,6 +674,13 @@ async fn health_check(State(state): State<GatewayState>) -> impl IntoResponse {
             m.set_agents_active(agents_active as f64);
         }
 
+        let memory_usage_bytes = read_rss_bytes();
+
+        let wasm_cache_hit_rate = inner
+            .wasm_module_cache
+            .as_ref()
+            .map_or(-1.0, |c| c.hit_rate());
+
         serde_json::json!({
             "status": "healthy",
             "version": A2A_PROTOCOL_VERSION,
@@ -651,8 +692,8 @@ async fn health_check(State(state): State<GatewayState>) -> impl IntoResponse {
             "total_tests_passed": total_tests_passed,
             "audit_chain_valid": audit_chain_valid,
             "compliance_status": "active",
-            "memory_usage_bytes": 0,
-            "wasm_cache_hit_rate": 0.0,
+            "memory_usage_bytes": memory_usage_bytes,
+            "wasm_cache_hit_rate": wasm_cache_hit_rate,
         })
     })
     .await

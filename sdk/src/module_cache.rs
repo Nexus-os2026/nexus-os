@@ -5,6 +5,7 @@
 
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use wasmtime::{Engine, Module};
 
@@ -22,9 +23,21 @@ impl ContentHash {
 }
 
 /// Thread-safe cache of compiled `wasmtime::Module` instances keyed by content hash.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ModuleCache {
     inner: Arc<Mutex<HashMap<ContentHash, Module>>>,
+    hits: Arc<AtomicU64>,
+    misses: Arc<AtomicU64>,
+}
+
+impl Clone for ModuleCache {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            hits: Arc::clone(&self.hits),
+            misses: Arc::clone(&self.misses),
+        }
+    }
 }
 
 impl Default for ModuleCache {
@@ -37,6 +50,8 @@ impl ModuleCache {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Mutex::new(HashMap::new())),
+            hits: Arc::new(AtomicU64::new(0)),
+            misses: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -52,12 +67,27 @@ impl ModuleCache {
         let mut map = self.inner.lock().expect("cache lock poisoned");
 
         if let Some(module) = map.get(&hash) {
+            self.hits.fetch_add(1, Ordering::Relaxed);
             return Ok((module.clone(), true));
         }
 
         let module = Module::new(engine, wasm_bytes)?;
         map.insert(hash, module.clone());
+        self.misses.fetch_add(1, Ordering::Relaxed);
         Ok((module, false))
+    }
+
+    /// Cache hit rate as a value between 0.0 and 1.0.
+    ///
+    /// Returns -1.0 if no lookups have occurred yet.
+    pub fn hit_rate(&self) -> f64 {
+        let h = self.hits.load(Ordering::Relaxed);
+        let m = self.misses.load(Ordering::Relaxed);
+        let total = h + m;
+        if total == 0 {
+            return -1.0;
+        }
+        h as f64 / total as f64
     }
 
     /// Number of cached modules.
