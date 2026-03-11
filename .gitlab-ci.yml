@@ -51,8 +51,8 @@ rust-tests-all-features:
   image: rust:latest
   allow_failure: false
   variables:
-    CARGO_BUILD_JOBS: "2"
-    RUSTFLAGS: "-C debuginfo=1"
+    CARGO_BUILD_JOBS: "1"
+    RUSTFLAGS: "-C debuginfo=0 -C codegen-units=16"
   before_script:
     - apt-get update && apt-get install -y
         libgtk-3-dev
@@ -61,9 +61,10 @@ rust-tests-all-features:
         librsvg2-dev
         libssl-dev
         pkg-config
+        mold
   script:
     - cargo clippy --workspace --all-targets --all-features -- -D warnings
-    - cargo test --workspace --all-features
+    - RUSTFLAGS="-C debuginfo=0 -C codegen-units=16 -C link-arg=-fuse-ld=mold" cargo test --workspace --all-features
 
 voice-tests:
   stage: test
@@ -87,6 +88,9 @@ code-coverage:
   image: rust:latest
   allow_failure: false
   coverage: '/(\d+\.\d+)% coverage/'
+  variables:
+    CARGO_BUILD_JOBS: "1"
+    RUSTFLAGS: "-C debuginfo=0 -C codegen-units=16"
   before_script:
     - apt-get update && apt-get install -y
         libgtk-3-dev
@@ -95,9 +99,10 @@ code-coverage:
         librsvg2-dev
         libssl-dev
         pkg-config
+        mold
     - cargo install cargo-tarpaulin --locked
   script:
-    - cargo tarpaulin --workspace --skip-clean --out xml --output-dir coverage/ --exclude-files "*/registry/*"
+    - RUSTFLAGS="-C debuginfo=0 -C codegen-units=16 -C link-arg=-fuse-ld=mold" cargo tarpaulin --workspace --skip-clean --out xml --output-dir coverage/ --exclude-files "*/registry/*"
   artifacts:
     reports:
       coverage_report:
