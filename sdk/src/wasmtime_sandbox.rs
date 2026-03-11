@@ -727,6 +727,78 @@ mod tests {
         );
     }
 
+    /// Canary test: verifies the Engine creates successfully with wasmtime >= 42.
+    /// Resolves: RUSTSEC-2025-0046, RUSTSEC-2025-0118, RUSTSEC-2026-0020, RUSTSEC-2026-0021.
+    /// If someone downgrades wasmtime below 42, this test still passes but the
+    /// advisory ignore list in deny.toml must be restored — cargo deny will catch it.
+    #[test]
+    fn test_wasmtime_version_minimum() {
+        let mut config = wasmtime::Config::new();
+        config.consume_fuel(true);
+        config.max_wasm_stack(512 * 1024);
+        let engine = Engine::new(&config);
+        assert!(
+            engine.is_ok(),
+            "Engine creation must succeed with current wasmtime"
+        );
+    }
+
+    /// Verifies all 7 host functions register without error after wasmtime upgrade.
+    /// Catches any host function registration breakage from API changes.
+    #[test]
+    fn test_all_host_functions_link_successfully() {
+        let mut config = wasmtime::Config::new();
+        config.consume_fuel(true);
+        let engine = Engine::new(&config).expect("engine");
+        let mut linker = Linker::<WasmAgentState>::new(&engine);
+        let result = wasmtime_host_functions::link_host_functions(&mut linker);
+        assert!(result.is_ok(), "all 7 host functions must link: {result:?}");
+    }
+
+    /// Post-upgrade verification: fuel metering works identically after wasmtime 27→42.
+    /// Mirrors `fuel_reported_back_to_context` but explicitly documents upgrade safety.
+    #[test]
+    fn test_fuel_metering_works_after_upgrade() {
+        let wasm = wat::parse_str(
+            r#"(module
+                (func (export "_start")
+                    (local $i i32)
+                    (block $done
+                        (loop $loop
+                            (local.get $i)
+                            (i32.const 50)
+                            (i32.ge_u)
+                            (br_if $done)
+                            (local.get $i)
+                            (i32.const 1)
+                            (i32.add)
+                            (local.set $i)
+                            (br $loop)
+                        )
+                    )
+                )
+            )"#,
+        )
+        .unwrap();
+
+        let mut sandbox = WasmtimeSandbox::with_defaults(SandboxConfig {
+            memory_limit_bytes: 1024 * 1024,
+            execution_timeout_secs: 300,
+            allowed_host_functions: vec![],
+        })
+        .unwrap();
+        let mut ctx = make_ctx(vec![], 100);
+
+        let result = sandbox.execute(&wasm, &mut ctx);
+        assert!(result.completed, "bounded loop should complete");
+        assert!(!result.killed, "should not be killed");
+        assert!(result.fuel_used > 0, "fuel must be consumed");
+        assert!(
+            ctx.fuel_remaining() < 100,
+            "context fuel must decrease after execution"
+        );
+    }
+
     #[test]
     fn module_cache_miss_compiles_and_stores() {
         let wasm = wat::parse_str("(module)").unwrap();

@@ -216,7 +216,7 @@ impl InProcessSandbox {
                 },
             },
             HostFunction::RequestApproval { description } => {
-                let record = ctx.request_approval(&description);
+                let record = ctx.request_approval(&description, true);
                 HostCallResult::Success {
                     output: format!("approval_requested: {}", record.description),
                 }

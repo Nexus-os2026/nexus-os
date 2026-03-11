@@ -6,6 +6,7 @@ pub mod autonomy;
 pub mod compliance;
 pub mod config;
 pub mod consent;
+pub mod consent_display;
 pub mod delegation;
 pub mod distributed;
 pub mod errors;

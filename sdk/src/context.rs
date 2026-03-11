@@ -40,6 +40,10 @@ pub enum ContextSideEffect {
 pub struct ApprovalRecord {
     pub description: String,
     pub requested_at: u64,
+    /// True when the description originated from an agent (WASM guest).
+    /// The UI should display kernel-generated `display_summary` with higher
+    /// visual prominence than agent-provided descriptions.
+    pub agent_provided: bool,
 }
 
 /// A fuel reservation that atomically removes fuel from the available pool.
@@ -347,13 +351,19 @@ impl AgentContext {
 
     /// Request approval for a described action.
     /// In recording mode, logs the side-effect instead of recording approval.
-    pub fn request_approval(&mut self, description: &str) -> ApprovalRecord {
+    ///
+    /// When `agent_provided` is true, the description originated from the WASM
+    /// guest and should be treated as untrusted.  The UI should display
+    /// kernel-generated `display_summary` with higher visual prominence than
+    /// agent-provided descriptions.
+    pub fn request_approval(&mut self, description: &str, agent_provided: bool) -> ApprovalRecord {
         let record = ApprovalRecord {
             description: description.to_string(),
             requested_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0),
+            agent_provided,
         };
 
         if self.recording_mode {
@@ -567,7 +577,7 @@ mod tests {
         ctx.llm_query("prompt", 50).unwrap();
         ctx.read_file("/tmp/test.txt").unwrap();
         ctx.write_file("/tmp/out.txt", "data").unwrap();
-        ctx.request_approval("deploy to production");
+        ctx.request_approval("deploy to production", false);
 
         assert_eq!(ctx.audit_trail().events().len(), 4);
         assert_eq!(ctx.approval_records().len(), 1);
@@ -653,7 +663,7 @@ mod tests {
         let mut ctx = AgentContext::new(Uuid::new_v4(), vec![], 1000);
         ctx.enable_recording();
 
-        ctx.request_approval("deploy to prod");
+        ctx.request_approval("deploy to prod", false);
         assert_eq!(ctx.side_effects().len(), 1);
         assert!(matches!(
             &ctx.side_effects()[0],

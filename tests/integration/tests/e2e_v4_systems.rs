@@ -146,7 +146,7 @@ autonomy_level = 2
     assert!(trail.verify_integrity());
 
     // Request approval (for L2 autonomy)
-    ctx.request_approval("write output file");
+    ctx.request_approval("write output file", false);
 
     // Build policy snapshot
     let policy = PolicySnapshot {

@@ -281,6 +281,18 @@ export interface PermissionUpdate {
   enabled: boolean;
 }
 
+// ── Consent Approval Display (from kernel consent_display::ApprovalDisplay) ──
+
+export interface ApprovalDisplay {
+  summary: string;
+  details: [string, string][];
+  risk_badge: string;
+  raw_command: string;
+  warnings: string[];
+  agent_description?: string;
+  agent_provided?: boolean;
+}
+
 // ── Protocols Dashboard Types ──
 
 export interface ProtocolsStatus {

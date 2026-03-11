@@ -535,6 +535,10 @@ fn link_nexus_fs_write(linker: &mut Linker<WasmAgentState>) -> Result<(), Sandbo
 
 /// `nexus_request_approval(desc_ptr, desc_len) -> i32`
 /// Speculative gate + delegation to `AgentContext::request_approval()`.
+///
+/// Agent-provided descriptions are sanitized and marked as agent-sourced.
+/// The UI should display kernel-generated `display_summary` with higher
+/// visual prominence than agent descriptions.
 fn link_nexus_request_approval(linker: &mut Linker<WasmAgentState>) -> Result<(), SandboxError> {
     linker
         .func_wrap(
@@ -548,7 +552,10 @@ fn link_nexus_request_approval(linker: &mut Linker<WasmAgentState>) -> Result<()
                     Some(wasmtime::Extern::Memory(mem)) => mem,
                     _ => return -5,
                 };
-                let desc = read_wasm_str(&caller, &memory, desc_ptr, desc_len);
+                let raw_desc = read_wasm_str(&caller, &memory, desc_ptr, desc_len);
+                // Sanitize agent-provided description: strip Markdown, HTML,
+                // and control characters before storing or logging.
+                let desc = nexus_kernel::consent_display::sanitize_display_text(&raw_desc);
                 let state = caller.data_mut();
 
                 if !state
@@ -602,7 +609,7 @@ fn link_nexus_request_approval(linker: &mut Linker<WasmAgentState>) -> Result<()
                     Some(ctx) => Rc::clone(ctx),
                     None => return -5,
                 };
-                let record = ctx.borrow_mut().request_approval(&desc);
+                let record = ctx.borrow_mut().request_approval(&desc, true);
                 state.host_calls_made += 1;
                 state
                     .outputs

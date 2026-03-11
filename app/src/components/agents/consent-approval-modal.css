@@ -1,0 +1,215 @@
+/* ── Consent Approval Modal ── */
+
+.consent-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.consent-modal {
+  background: var(--bg-secondary, #1e293b);
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 560px;
+  width: 90%;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.consent-summary {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+  color: var(--text-primary, #e2e8f0);
+}
+
+/* ── Risk Badge ── */
+
+.consent-risk-badge {
+  display: inline-block;
+  padding: 0.3rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.consent-risk-low {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.consent-risk-medium {
+  background: rgba(234, 179, 8, 0.15);
+  color: #facc15;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.consent-risk-high {
+  background: rgba(249, 115, 22, 0.15);
+  color: #fb923c;
+  border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.consent-risk-critical {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* ── Warnings ── */
+
+.consent-warnings {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.75rem;
+}
+
+.consent-warning-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.3rem 0;
+  color: #fbbf24;
+  font-size: 0.85rem;
+}
+
+.consent-warning-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+/* ── Details Table ── */
+
+.consent-details-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.75rem;
+}
+
+.consent-detail-key {
+  color: var(--text-secondary, #94a3b8);
+  font-size: 0.8rem;
+  padding: 0.3rem 0.5rem 0.3rem 0;
+  vertical-align: top;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.consent-detail-value {
+  padding: 0.3rem 0;
+}
+
+.consent-detail-value code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+  color: var(--text-primary, #e2e8f0);
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  word-break: break-all;
+}
+
+/* ── Agent Description (unverified) ── */
+
+.consent-agent-desc {
+  background: rgba(100, 116, 139, 0.1);
+  border: 1px dashed rgba(100, 116, 139, 0.3);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.75rem;
+}
+
+.consent-agent-desc-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary, #94a3b8);
+  margin-bottom: 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.consent-agent-desc-text {
+  margin: 0;
+  font-style: italic;
+  color: var(--text-secondary, #94a3b8);
+  font-size: 0.85rem;
+}
+
+/* ── Raw View Toggle ── */
+
+.consent-raw-toggle {
+  margin-bottom: 0.75rem;
+}
+
+.consent-raw-btn {
+  background: transparent;
+  border: 1px solid var(--border-color, #334155);
+  color: var(--text-accent, #00f0ff);
+  font-size: 0.8rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.consent-raw-btn:hover {
+  background: rgba(0, 240, 255, 0.08);
+}
+
+.consent-raw-view {
+  margin-top: 0.5rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 4px;
+  padding: 0.6rem;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  color: var(--text-secondary, #94a3b8);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+/* ── Actions ── */
+
+.consent-modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.consent-btn-deny {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  padding: 0.5rem 1.2rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.consent-btn-deny:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.consent-btn-approve {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #4ade80;
+  padding: 0.5rem 1.2rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.consent-btn-approve:hover {
+  background: rgba(34, 197, 94, 0.25);
+}

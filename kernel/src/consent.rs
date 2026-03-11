@@ -60,6 +60,18 @@ impl GovernedOperation {
         }
     }
 
+    /// Human-readable label for the operation type (server-generated, never agent-supplied).
+    pub fn display_label(self) -> &'static str {
+        match self {
+            GovernedOperation::ToolCall => "Tool call",
+            GovernedOperation::TerminalCommand => "Terminal command",
+            GovernedOperation::SocialPostPublish => "Social post publish",
+            GovernedOperation::SelfMutationApply => "Self-mutation apply",
+            GovernedOperation::MultiAgentOrchestrate => "Multi-agent orchestration",
+            GovernedOperation::DistributedEnable => "Distributed enable",
+        }
+    }
+
     fn from_policy_key(value: &str) -> Option<Self> {
         match value {
             "tool_call" => Some(GovernedOperation::ToolCall),
@@ -234,6 +246,31 @@ struct RawOperationPolicy {
     allowed_approvers: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RiskLevel {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+impl RiskLevel {
+    /// Compute risk from operation type and HITL tier.
+    pub fn from_operation_tier(operation: GovernedOperation, tier: HitlTier) -> Self {
+        match (operation, tier) {
+            (_, HitlTier::Tier3) => RiskLevel::Critical,
+            (GovernedOperation::SelfMutationApply, _)
+            | (GovernedOperation::DistributedEnable, _) => RiskLevel::Critical,
+            (_, HitlTier::Tier2) => RiskLevel::High,
+            (GovernedOperation::TerminalCommand, _)
+            | (GovernedOperation::SocialPostPublish, _)
+            | (GovernedOperation::MultiAgentOrchestrate, _) => RiskLevel::Medium,
+            _ => RiskLevel::Low,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApprovalRequest {
     pub id: String,
@@ -243,6 +280,69 @@ pub struct ApprovalRequest {
     pub requested_by: String,
     pub required_tier: HitlTier,
     pub created_seq: u64,
+    /// One-line human-readable summary generated server-side from the operation.
+    pub display_summary: String,
+    /// Structured key-value pairs showing exact parameters of the operation.
+    pub display_args: Vec<(String, String)>,
+    /// Risk level computed from operation type and HITL tier.
+    pub risk_level: RiskLevel,
+    /// Complete unformatted raw representation for advanced users (plain text only).
+    pub raw_view: String,
+}
+
+impl ApprovalRequest {
+    /// Construct an `ApprovalRequest` with server-generated display fields.
+    ///
+    /// The `display_summary`, `display_args`, `risk_level`, and `raw_view` are
+    /// derived from the `GovernedOperation` and `HitlTier` — never from
+    /// agent-supplied content.
+    pub fn from_operation(
+        id: String,
+        operation: GovernedOperation,
+        agent_id: String,
+        payload_hash: String,
+        requested_by: String,
+        required_tier: HitlTier,
+        created_seq: u64,
+    ) -> Self {
+        let display_summary = format!(
+            "{} (agent {})",
+            operation.display_label(),
+            &agent_id[..8.min(agent_id.len())]
+        );
+
+        let display_args = vec![
+            ("operation".to_string(), operation.as_str().to_string()),
+            ("agent_id".to_string(), agent_id.clone()),
+            ("tier".to_string(), required_tier.as_str().to_string()),
+            ("payload_hash".to_string(), payload_hash.clone()),
+        ];
+
+        let risk_level = RiskLevel::from_operation_tier(operation, required_tier);
+
+        let raw_view = format!(
+            "operation={:?} agent_id={} requested_by={} tier={} payload_hash={}",
+            operation,
+            agent_id,
+            requested_by,
+            required_tier.as_str(),
+            payload_hash
+        );
+
+        Self {
+            id,
+            operation,
+            agent_id,
+            payload_hash,
+            requested_by,
+            required_tier,
+            created_seq,
+            display_summary,
+            display_args,
+            risk_level,
+            raw_view,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -396,15 +496,15 @@ impl ApprovalQueue {
             requested_by.as_str(),
             required_tier,
         );
-        let request = ApprovalRequest {
-            id: request_id.clone(),
+        let request = ApprovalRequest::from_operation(
+            request_id.clone(),
             operation,
-            agent_id: agent_id.to_string(),
+            agent_id.to_string(),
             payload_hash,
             requested_by,
             required_tier,
             created_seq,
-        };
+        );
         let record = ApprovalRecord {
             request: request.clone(),
             approvals: BTreeSet::new(),
@@ -1019,6 +1119,124 @@ mod tests {
             &mut audit,
         );
         assert!(execute.is_ok());
+    }
+
+    #[test]
+    fn approval_request_from_operation_terminal() {
+        let request = super::ApprovalRequest::from_operation(
+            "req-term".to_string(),
+            GovernedOperation::TerminalCommand,
+            "abcdef01-2345-6789-abcd-ef0123456789".to_string(),
+            "cmdhash".to_string(),
+            "agent.coder".to_string(),
+            HitlTier::Tier2,
+            10,
+        );
+
+        assert!(request.display_summary.contains("Terminal command"));
+        assert!(request.display_summary.contains("abcdef01"));
+        assert_eq!(request.risk_level, super::RiskLevel::High);
+        assert_eq!(
+            request.display_args.iter().find(|(k, _)| k == "operation"),
+            Some(&("operation".to_string(), "terminal_command".to_string()))
+        );
+        assert_eq!(
+            request.display_args.iter().find(|(k, _)| k == "tier"),
+            Some(&("tier".to_string(), "tier2".to_string()))
+        );
+        assert!(request.raw_view.contains("TerminalCommand"));
+        assert!(request.raw_view.contains("agent.coder"));
+    }
+
+    #[test]
+    fn approval_request_from_operation_tool_call() {
+        let request = super::ApprovalRequest::from_operation(
+            "req-tool".to_string(),
+            GovernedOperation::ToolCall,
+            "11223344-5566-7788-99aa-bbccddeeff00".to_string(),
+            "toolhash".to_string(),
+            "agent.builder".to_string(),
+            HitlTier::Tier1,
+            20,
+        );
+
+        assert!(request.display_summary.contains("Tool call"));
+        assert!(request.display_summary.contains("11223344"));
+        assert_eq!(request.risk_level, super::RiskLevel::Low);
+        assert!(!request.display_args.is_empty());
+        assert_eq!(request.operation, GovernedOperation::ToolCall);
+        assert_eq!(request.required_tier, HitlTier::Tier1);
+        assert_eq!(request.created_seq, 20);
+        assert!(!request.raw_view.is_empty());
+    }
+
+    #[test]
+    fn risk_level_matches_tier() {
+        use super::RiskLevel;
+
+        // Tier0 ToolCall → Low
+        assert_eq!(
+            RiskLevel::from_operation_tier(GovernedOperation::ToolCall, HitlTier::Tier0),
+            RiskLevel::Low
+        );
+        // Tier1 TerminalCommand → Medium (operation-driven)
+        assert_eq!(
+            RiskLevel::from_operation_tier(GovernedOperation::TerminalCommand, HitlTier::Tier1),
+            RiskLevel::Medium
+        );
+        // Tier2 ToolCall → High (tier-driven)
+        assert_eq!(
+            RiskLevel::from_operation_tier(GovernedOperation::ToolCall, HitlTier::Tier2),
+            RiskLevel::High
+        );
+        // Tier3 anything → Critical
+        assert_eq!(
+            RiskLevel::from_operation_tier(GovernedOperation::ToolCall, HitlTier::Tier3),
+            RiskLevel::Critical
+        );
+        // SelfMutationApply at any tier → Critical
+        assert_eq!(
+            RiskLevel::from_operation_tier(GovernedOperation::SelfMutationApply, HitlTier::Tier0),
+            RiskLevel::Critical
+        );
+        // DistributedEnable at any tier → Critical
+        assert_eq!(
+            RiskLevel::from_operation_tier(GovernedOperation::DistributedEnable, HitlTier::Tier1),
+            RiskLevel::Critical
+        );
+    }
+
+    #[test]
+    fn payload_hash_still_computed_with_display_fields() {
+        let mut policy = ConsentPolicyEngine::default();
+        policy.set_policy(GovernedOperation::ToolCall, HitlTier::Tier2, Vec::new());
+        let mut runtime =
+            ConsentRuntime::new(policy, ApprovalQueue::in_memory(), "agent.test".to_string());
+        let mut audit = AuditTrail::new();
+        let actor = Uuid::new_v4();
+
+        let payload = b"secret=api-key-12345";
+        let result =
+            runtime.enforce_operation(GovernedOperation::ToolCall, actor, payload, &mut audit);
+
+        let request_id = match result {
+            Err(ConsentError::ApprovalRequired { request_id, .. }) => request_id,
+            other => panic!("expected approval required, got: {other:?}"),
+        };
+
+        // The pending request should have display fields populated
+        let pending = runtime.pending_requests();
+        let req = pending
+            .iter()
+            .find(|r| r.id == request_id)
+            .expect("request should be pending");
+        assert!(!req.display_summary.is_empty());
+        assert!(!req.display_args.is_empty());
+        assert!(!req.raw_view.is_empty());
+        // PII must NOT appear in any display field
+        assert!(!req.display_summary.contains("api-key-12345"));
+        assert!(!req.raw_view.contains("api-key-12345"));
+        assert!(!req.payload_hash.contains("api-key-12345"));
     }
 
     #[test]

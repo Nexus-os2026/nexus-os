@@ -10,7 +10,7 @@ pub use crate::testing::TestHarness;
 // Core kernel types re-exported through the SDK boundary.
 pub use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
 pub use nexus_kernel::autonomy::{AutonomyError, AutonomyGuard, AutonomyLevel};
-pub use nexus_kernel::consent::{ApprovalRequest, ConsentRuntime, GovernedOperation};
+pub use nexus_kernel::consent::{ApprovalRequest, ConsentRuntime, GovernedOperation, RiskLevel};
 pub use nexus_kernel::errors::{AgentError, ErrorStrategy};
 pub use nexus_kernel::fuel_hardening::{
     AgentFuelLedger, BudgetPeriodId, BurnAnomalyDetector, FuelAuditReport, FuelViolation,
