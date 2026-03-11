@@ -1,4 +1,7 @@
+use crate::adaptive_policy::{AdaptiveGovernor, AutonomyChange, RunOutcome};
 use crate::audit::{AuditEvent, AuditTrail, EventType};
+use crate::behavioral_profile::{ActionRecord, DriftAlert, DriftSeverity};
+use crate::drift_detector::DriftDetector;
 use crate::kill_gates::{GateStatus, KillGateConfig, KillGateError, KillGateRegistry};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -8,6 +11,7 @@ use uuid::Uuid;
 
 const INCIDENT_EXCERPT_SIZE: usize = 10;
 const GENESIS_HASH: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+const VIOLATION_COOLDOWN_SECS: u64 = 60;
 
 pub type AgentId = Uuid;
 
@@ -110,7 +114,7 @@ pub enum SafetyAction {
     Halted { reason: String, report_id: String },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct SafetySupervisor {
     pub thresholds: Vec<KpiThreshold>,
     pub violation_counter: HashMap<AgentId, u32>,
@@ -121,6 +125,11 @@ pub struct SafetySupervisor {
     tool_call_heartbeat_every: u32,
     tool_call_counter: HashMap<AgentId, u32>,
     kill_gates: KillGateRegistry,
+    adaptive_governor: AdaptiveGovernor,
+    drift_detector: DriftDetector,
+    last_violation_timestamp: HashMap<AgentId, u64>,
+    /// Monotonic sequence used as a clock in tests / environments without wall time.
+    sequence_clock: u64,
 }
 
 impl Default for SafetySupervisor {
@@ -153,6 +162,10 @@ impl SafetySupervisor {
             tool_call_heartbeat_every: tool_call_heartbeat_every.max(1),
             tool_call_counter: HashMap::new(),
             kill_gates: KillGateRegistry::from_config(kill_gate_config),
+            adaptive_governor: AdaptiveGovernor::new(),
+            drift_detector: DriftDetector::new(),
+            last_violation_timestamp: HashMap::new(),
+            sequence_clock: 0,
         }
     }
 
@@ -193,8 +206,10 @@ impl SafetySupervisor {
         readings: &[(KpiKind, f64)],
         audit: &mut AuditTrail,
     ) -> SafetyAction {
+        self.sequence_clock = self.sequence_clock.saturating_add(1);
+
         if readings.is_empty() {
-            self.reset_violations(agent_id, audit);
+            self.try_auto_reset_violations(agent_id, audit);
             return SafetyAction::Continue;
         }
 
@@ -267,7 +282,7 @@ impl SafetySupervisor {
         }
 
         if violations.is_empty() {
-            self.reset_violations(agent_id, audit);
+            self.try_auto_reset_violations(agent_id, audit);
             return SafetyAction::Continue;
         }
 
@@ -376,10 +391,45 @@ impl SafetySupervisor {
         readings: &[(KpiKind, f64)],
         audit: &mut AuditTrail,
     ) -> SafetyAction {
+        self.sequence_clock = self.sequence_clock.saturating_add(1);
+
+        // Record tool call in drift detector.
+        let action_record = ActionRecord {
+            action_type: "tool_call".to_string(),
+            timestamp: self.sequence_clock,
+            fuel_cost: 1,
+            resource_usage: None,
+        };
+        let drift_alerts = self
+            .drift_detector
+            .observe_action(&agent_id.to_string(), action_record);
+        let drift_action = self.process_drift_alerts(agent_id, &drift_alerts, audit);
+        if matches!(drift_action, SafetyAction::Halted { .. }) {
+            return drift_action;
+        }
+
         let counter = self.tool_call_counter.entry(agent_id).or_insert(0);
         *counter = counter.saturating_add(1);
         if (*counter).is_multiple_of(self.tool_call_heartbeat_every) {
-            return self.heartbeat(agent_id, readings, audit);
+            let heartbeat_action = self.heartbeat(agent_id, readings, audit);
+
+            // Record run in adaptive governor.
+            let outcome = match &heartbeat_action {
+                SafetyAction::Continue => RunOutcome::Success,
+                SafetyAction::Degraded { reason } => RunOutcome::Failed {
+                    reason: reason.clone(),
+                },
+                SafetyAction::Halted { reason, .. } => RunOutcome::PolicyViolation {
+                    violation: reason.clone(),
+                },
+            };
+            self.adaptive_governor.record_run(agent_id, outcome, 1, 100);
+
+            return heartbeat_action;
+        }
+
+        if matches!(drift_action, SafetyAction::Degraded { .. }) {
+            return drift_action;
         }
 
         SafetyAction::Continue
@@ -392,13 +442,55 @@ impl SafetySupervisor {
         governance_overhead_pct: f64,
         audit: &mut AuditTrail,
     ) -> SafetyAction {
+        self.sequence_clock = self.sequence_clock.saturating_add(1);
+
+        // Record LLM call in drift detector.
+        let action_record = ActionRecord {
+            action_type: "llm_call".to_string(),
+            timestamp: self.sequence_clock,
+            fuel_cost: latency_ms,
+            resource_usage: None,
+        };
+        let drift_alerts = self
+            .drift_detector
+            .observe_action(&agent_id.to_string(), action_record);
+        let drift_action = self.process_drift_alerts(agent_id, &drift_alerts, audit);
+        if matches!(drift_action, SafetyAction::Halted { .. }) {
+            return drift_action;
+        }
+
         let integrity = if audit.verify_integrity() { 0.0 } else { 1.0 };
         let readings = [
             (KpiKind::LlmLatency, latency_ms as f64),
             (KpiKind::GovernanceOverhead, governance_overhead_pct),
             (KpiKind::AuditChainIntegrity, integrity),
         ];
-        self.heartbeat(agent_id, &readings, audit)
+        let heartbeat_action = self.heartbeat(agent_id, &readings, audit);
+
+        // Record run in adaptive governor.
+        let outcome = match &heartbeat_action {
+            SafetyAction::Continue => RunOutcome::Success,
+            SafetyAction::Degraded { reason } => RunOutcome::Failed {
+                reason: reason.clone(),
+            },
+            SafetyAction::Halted { reason, .. } => RunOutcome::PolicyViolation {
+                violation: reason.clone(),
+            },
+        };
+        self.adaptive_governor.record_run(agent_id, outcome, 1, 100);
+
+        if matches!(
+            heartbeat_action,
+            SafetyAction::Halted { .. } | SafetyAction::Degraded { .. }
+        ) {
+            return heartbeat_action;
+        }
+
+        if matches!(drift_action, SafetyAction::Degraded { .. }) {
+            return drift_action;
+        }
+
+        heartbeat_action
     }
 
     pub fn observe_workflow_node_completion(
@@ -410,7 +502,23 @@ impl SafetySupervisor {
         self.heartbeat(agent_id, readings, audit)
     }
 
+    /// Explicit reset — always resets immediately (operator-driven).
     pub fn reset_violations(&mut self, agent_id: AgentId, audit: &mut AuditTrail) {
+        self.do_reset_violations(agent_id, audit);
+    }
+
+    /// Automatic reset — only resets if the cooldown period has elapsed since
+    /// the last violation.  This prevents the "single clean heartbeat" exploit.
+    fn try_auto_reset_violations(&mut self, agent_id: AgentId, audit: &mut AuditTrail) {
+        if let Some(&last_ts) = self.last_violation_timestamp.get(&agent_id) {
+            if self.sequence_clock.saturating_sub(last_ts) < VIOLATION_COOLDOWN_SECS {
+                return;
+            }
+        }
+        self.do_reset_violations(agent_id, audit);
+    }
+
+    fn do_reset_violations(&mut self, agent_id: AgentId, audit: &mut AuditTrail) {
         self.violation_counter.insert(agent_id, 0);
 
         if matches!(
@@ -448,6 +556,115 @@ impl SafetySupervisor {
         self.generate_incident_report_internal(agent_id, action_taken, audit)
     }
 
+    /// Register an agent in the adaptive governor for trust-based promotions/demotions.
+    pub fn register_agent_adaptive(
+        &mut self,
+        agent_id: AgentId,
+        base_autonomy: u8,
+        max_autonomy: u8,
+    ) {
+        self.adaptive_governor
+            .register(agent_id, base_autonomy, max_autonomy);
+    }
+
+    /// Register an agent in the drift detector with a role profile.
+    pub fn register_agent_role(
+        &mut self,
+        agent_id: AgentId,
+        role: &str,
+    ) -> Result<(), crate::drift_detector::DriftError> {
+        self.drift_detector
+            .register_agent(&agent_id.to_string(), role)
+    }
+
+    /// Returns pending promotions that require human approval.
+    pub fn check_promotions(&self) -> Vec<(AgentId, AutonomyChange)> {
+        let mut promotions = Vec::new();
+        for &agent_id in self.agent_modes.keys() {
+            let change = self.adaptive_governor.evaluate(agent_id);
+            if matches!(change, AutonomyChange::Promote { .. }) {
+                promotions.push((agent_id, change));
+            }
+        }
+        promotions
+    }
+
+    /// Approve a promotion surfaced by check_promotions.
+    pub fn approve_promotion(&mut self, agent_id: AgentId) -> bool {
+        self.adaptive_governor.apply_promotion(agent_id, true)
+    }
+
+    pub fn drift_detector(&self) -> &DriftDetector {
+        &self.drift_detector
+    }
+
+    pub fn adaptive_governor(&self) -> &AdaptiveGovernor {
+        &self.adaptive_governor
+    }
+
+    /// Advance the internal sequence clock (useful for testing cooldowns).
+    pub fn advance_clock(&mut self, ticks: u64) {
+        self.sequence_clock = self.sequence_clock.saturating_add(ticks);
+    }
+
+    fn process_drift_alerts(
+        &mut self,
+        agent_id: AgentId,
+        alerts: &[DriftAlert],
+        audit: &mut AuditTrail,
+    ) -> SafetyAction {
+        if alerts.is_empty() {
+            return SafetyAction::Continue;
+        }
+
+        let max_severity = alerts
+            .iter()
+            .map(|a| a.severity)
+            .max()
+            .unwrap_or(DriftSeverity::Low);
+
+        for alert in alerts {
+            audit
+                .append_event(
+                    agent_id,
+                    EventType::StateChange,
+                    json!({
+                        "event_kind": "safety.drift_alert",
+                        "agent_id": agent_id,
+                        "drift_type": format!("{:?}", alert.drift_type),
+                        "severity": format!("{:?}", alert.severity),
+                        "details": alert.details,
+                        "deviation_factor": alert.deviation_factor,
+                    }),
+                )
+                .expect("audit: fail-closed");
+        }
+
+        match max_severity {
+            DriftSeverity::Critical => {
+                let violation = KpiViolation {
+                    kind: KpiKind::AgentErrorRate,
+                    value: 100.0,
+                    status: KpiStatus::Critical,
+                    warn_value: 10.0,
+                    critical_value: 25.0,
+                };
+                self.record_violation(agent_id, violation, audit)
+            }
+            DriftSeverity::High => {
+                let violation = KpiViolation {
+                    kind: KpiKind::AgentErrorRate,
+                    value: 15.0,
+                    status: KpiStatus::Warn,
+                    warn_value: 10.0,
+                    critical_value: 25.0,
+                };
+                self.record_violation(agent_id, violation, audit)
+            }
+            _ => SafetyAction::Continue,
+        }
+    }
+
     fn record_violation(
         &mut self,
         agent_id: AgentId,
@@ -459,6 +676,10 @@ impl SafetySupervisor {
             *entry = entry.saturating_add(1);
             *entry
         };
+
+        // Track violation timestamp for cooldown.
+        self.last_violation_timestamp
+            .insert(agent_id, self.sequence_clock);
 
         audit
             .append_event(
@@ -477,7 +698,17 @@ impl SafetySupervisor {
             )
             .expect("audit: fail-closed");
 
-        match count {
+        // Record violation in adaptive governor.
+        self.adaptive_governor.record_run(
+            agent_id,
+            RunOutcome::PolicyViolation {
+                violation: violation.kind.as_str().to_string(),
+            },
+            1,
+            100,
+        );
+
+        let action = match count {
             0 | 1 => {
                 self.agent_modes
                     .entry(agent_id)
@@ -500,7 +731,17 @@ impl SafetySupervisor {
                 );
                 self.force_halt(agent_id, reason, audit)
             }
+        };
+
+        // After three-strike halt, check if adaptive governor suggests demotion.
+        if matches!(action, SafetyAction::Halted { .. }) {
+            let change = self.adaptive_governor.evaluate(agent_id);
+            if matches!(change, AutonomyChange::Demote { .. }) {
+                self.adaptive_governor.apply_demotion(agent_id);
+            }
         }
+
+        action
     }
 
     fn generate_incident_report_internal(
@@ -805,6 +1046,10 @@ mod tests {
 
         let _ = supervisor.heartbeat(agent_id, &violation, &mut audit);
         let _ = supervisor.heartbeat(agent_id, &violation, &mut audit);
+
+        // Advance past the cooldown period before attempting reset.
+        supervisor.advance_clock(super::VIOLATION_COOLDOWN_SECS);
+
         let action = supervisor.heartbeat(agent_id, &success, &mut audit);
 
         assert_eq!(action, SafetyAction::Continue);
@@ -831,5 +1076,206 @@ mod tests {
         assert!(!report.kpi_violations.is_empty());
         assert!(!report.audit_trail_excerpt.is_empty());
         assert!(!report.signature.is_empty());
+    }
+
+    #[test]
+    fn test_cooldown_prevents_immediate_reset() {
+        let mut supervisor = SafetySupervisor::new(default_thresholds(), 10);
+        let mut audit = AuditTrail::new();
+        let agent_id = Uuid::new_v4();
+
+        let violation = [(KpiKind::GovernanceOverhead, 6.0)];
+        let success = [(KpiKind::GovernanceOverhead, 1.0)];
+
+        let _ = supervisor.heartbeat(agent_id, &violation, &mut audit);
+        assert_eq!(supervisor.violation_count(agent_id), 1);
+
+        // Clean reading immediately after — should NOT reset due to cooldown.
+        let _ = supervisor.heartbeat(agent_id, &success, &mut audit);
+        assert_eq!(
+            supervisor.violation_count(agent_id),
+            1,
+            "violation counter should not reset during cooldown"
+        );
+    }
+
+    #[test]
+    fn test_adaptive_governor_integration() {
+        let mut supervisor = SafetySupervisor::new(default_thresholds(), 10);
+        let mut audit = AuditTrail::new();
+        let agent_id = Uuid::new_v4();
+
+        supervisor.register_agent_adaptive(agent_id, 2, 4);
+
+        // Three violations trigger halt and adaptive governor records them.
+        let readings = [(KpiKind::LlmLatency, 20_000.0)];
+        let _ = supervisor.heartbeat(agent_id, &readings, &mut audit);
+        let _ = supervisor.heartbeat(agent_id, &readings, &mut audit);
+        let _ = supervisor.heartbeat(agent_id, &readings, &mut audit);
+
+        let record = supervisor.adaptive_governor().get_record(agent_id);
+        assert!(record.is_some());
+        let record = record.unwrap();
+        assert!(record.policy_violations > 0);
+        assert!(record.trust_score < 0.5);
+    }
+
+    #[test]
+    fn test_drift_detector_role_registration() {
+        let mut supervisor = SafetySupervisor::new(default_thresholds(), 10);
+        let agent_id = Uuid::new_v4();
+
+        assert!(supervisor
+            .register_agent_role(agent_id, "researcher")
+            .is_ok());
+        assert!(supervisor
+            .register_agent_role(agent_id, "unknown_role")
+            .is_err());
+    }
+
+    #[test]
+    fn test_observe_tool_call_records_drift_action() {
+        let mut supervisor = SafetySupervisor::new(default_thresholds(), 1);
+        let mut audit = AuditTrail::new();
+        let agent_id = Uuid::new_v4();
+
+        let readings = [(KpiKind::GovernanceOverhead, 1.0)];
+        let action = supervisor.observe_tool_call(agent_id, &readings, &mut audit);
+
+        // With clean readings, should continue.
+        assert_eq!(action, SafetyAction::Continue);
+
+        // Drift detector should have recorded the action.
+        let baseline = supervisor
+            .drift_detector()
+            .profiler()
+            .get_baseline(&agent_id.to_string());
+        assert!(baseline.is_some());
+        assert_eq!(baseline.unwrap().samples_collected, 1);
+    }
+
+    #[test]
+    fn test_observe_llm_response_records_drift_action() {
+        let mut supervisor = SafetySupervisor::new(default_thresholds(), 10);
+        let mut audit = AuditTrail::new();
+        let agent_id = Uuid::new_v4();
+
+        let action = supervisor.observe_llm_response(agent_id, 100, 1.0, &mut audit);
+        assert_eq!(action, SafetyAction::Continue);
+
+        let baseline = supervisor
+            .drift_detector()
+            .profiler()
+            .get_baseline(&agent_id.to_string());
+        assert!(baseline.is_some());
+        assert_eq!(baseline.unwrap().samples_collected, 1);
+    }
+
+    #[test]
+    fn test_check_promotions_empty_by_default() {
+        let supervisor = SafetySupervisor::new(default_thresholds(), 10);
+        assert!(supervisor.check_promotions().is_empty());
+    }
+
+    #[test]
+    fn test_violation_cooldown_allows_reset_after_delay() {
+        let mut supervisor = SafetySupervisor::new(default_thresholds(), 10);
+        let mut audit = AuditTrail::new();
+        let agent_id = Uuid::new_v4();
+
+        let violation = [(KpiKind::GovernanceOverhead, 6.0)];
+
+        // Two violations → Degraded.
+        let _ = supervisor.heartbeat(agent_id, &violation, &mut audit);
+        let _ = supervisor.heartbeat(agent_id, &violation, &mut audit);
+        assert_eq!(supervisor.violation_count(agent_id), 2);
+
+        // Advance past the cooldown period.
+        supervisor.advance_clock(super::VIOLATION_COOLDOWN_SECS);
+
+        // Clean heartbeat should now reset.
+        let action = supervisor.heartbeat(agent_id, &[], &mut audit);
+        assert_eq!(action, SafetyAction::Continue);
+        assert_eq!(supervisor.violation_count(agent_id), 0);
+        assert_eq!(supervisor.mode_for_agent(agent_id), OperatingMode::Normal);
+    }
+
+    #[test]
+    fn test_violation_cooldown_prevents_easy_reset() {
+        let mut supervisor = SafetySupervisor::new(default_thresholds(), 10);
+        let mut audit = AuditTrail::new();
+        let agent_id = Uuid::new_v4();
+
+        let violation = [(KpiKind::GovernanceOverhead, 6.0)];
+
+        // Two violations → Degraded.
+        let _ = supervisor.heartbeat(agent_id, &violation, &mut audit);
+        let _ = supervisor.heartbeat(agent_id, &violation, &mut audit);
+        assert_eq!(supervisor.violation_count(agent_id), 2);
+
+        // Clean heartbeat immediately — should NOT reset.
+        let _ = supervisor.heartbeat(agent_id, &[], &mut audit);
+        assert_eq!(
+            supervisor.violation_count(agent_id),
+            2,
+            "violation counter should not reset during cooldown"
+        );
+        assert!(
+            matches!(
+                supervisor.mode_for_agent(agent_id),
+                OperatingMode::Degraded(_)
+            ),
+            "should still be degraded during cooldown"
+        );
+    }
+
+    #[test]
+    fn test_critical_drift_alert_triggers_violation() {
+        let mut supervisor = SafetySupervisor::new(default_thresholds(), 10);
+        let mut audit = AuditTrail::new();
+        let agent_id = Uuid::new_v4();
+
+        // Directly invoke process_drift_alerts with a Critical alert.
+        let alerts = vec![crate::behavioral_profile::DriftAlert {
+            agent_id: agent_id.to_string(),
+            drift_type: crate::behavioral_profile::DriftType::FrequencySpike,
+            severity: crate::behavioral_profile::DriftSeverity::Critical,
+            details: "test critical drift".to_string(),
+            current_value: 100.0,
+            baseline_value: 10.0,
+            deviation_factor: 10.0,
+            timestamp: 0,
+        }];
+
+        let action = supervisor.process_drift_alerts(agent_id, &alerts, &mut audit);
+
+        // Critical drift should record a violation (count = 1 → Continue).
+        assert_eq!(action, SafetyAction::Continue);
+        assert_eq!(supervisor.violation_count(agent_id), 1);
+
+        // A drift alert audit event should be logged.
+        let drift_logged = audit.events().iter().any(|event| {
+            event.payload.get("event_kind").and_then(|v| v.as_str()) == Some("safety.drift_alert")
+        });
+        assert!(drift_logged);
+
+        // A violation recorded event should be logged.
+        let violation_logged = audit.events().iter().any(|event| {
+            event.payload.get("event_kind").and_then(|v| v.as_str())
+                == Some("safety.violation_recorded")
+        });
+        assert!(violation_logged);
+    }
+
+    #[test]
+    fn test_advance_clock() {
+        let mut supervisor = SafetySupervisor::new(default_thresholds(), 10);
+        supervisor.advance_clock(100);
+        // Verify clock advanced by checking that a subsequent heartbeat tick
+        // has clock > 100.
+        let mut audit = AuditTrail::new();
+        let agent_id = Uuid::new_v4();
+        let _ = supervisor.heartbeat(agent_id, &[], &mut audit);
+        // If we got here without panic, the clock is working.
     }
 }

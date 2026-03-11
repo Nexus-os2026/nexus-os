@@ -9,10 +9,11 @@ use nexus_kernel::{audit::AuditTrail, errors::AgentError};
 fn phase5_monthly_cap_enforced() {
     let agent_id = uuid::Uuid::new_v4();
     let mut audit = AuditTrail::new();
+    // Use a detector with anomaly detection disabled so we test the cap path.
     let mut ledger = AgentFuelLedger::new(
         BudgetPeriodId::new("2026-03"),
         1_000,
-        BurnAnomalyDetector::default(),
+        BurnAnomalyDetector::new(0, 0, u64::MAX, 4),
     );
 
     let result = ledger.record_llm_spend(agent_id, "mock-1", 100, 100, 1_001, &mut audit);

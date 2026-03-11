@@ -69,6 +69,10 @@ fn test_reset_on_success() {
 
     let _ = supervisor.heartbeat(agent_id, &warning_readings, &mut audit);
     let _ = supervisor.heartbeat(agent_id, &warning_readings, &mut audit);
+
+    // Advance past the cooldown period before attempting reset.
+    supervisor.advance_clock(60);
+
     let action = supervisor.heartbeat(agent_id, &success_readings, &mut audit);
 
     assert_eq!(action, SafetyAction::Continue);

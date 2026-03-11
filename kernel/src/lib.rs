@@ -3,12 +3,14 @@
 pub mod adaptive_policy;
 pub mod audit;
 pub mod autonomy;
+pub mod behavioral_profile;
 pub mod compliance;
 pub mod config;
 pub mod consent;
 pub mod consent_display;
 pub mod delegation;
 pub mod distributed;
+pub mod drift_detector;
 pub mod errors;
 pub mod firewall;
 pub mod fuel_hardening;

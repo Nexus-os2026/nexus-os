@@ -248,9 +248,35 @@ impl BurnAnomalyDetector {
     }
 }
 
+impl BurnAnomalyDetector {
+    /// Update the baseline cost using a rolling average of the last 20 observations.
+    ///
+    /// Call this after each successful LLM spend to let the detector adapt to
+    /// the agent's actual cost profile.  The first 20 calls build the initial
+    /// average; subsequent calls maintain an exponentially-weighted rolling mean.
+    pub fn update_baseline(&mut self, actual_cost: u64) {
+        const ROLLING_WINDOW: u64 = 20;
+
+        if self.baseline_cost_per_call == 0 {
+            // Cold start: use the first observation directly.
+            self.baseline_cost_per_call = actual_cost;
+            return;
+        }
+
+        // Rolling average: new = old + (actual - old) / min(history_len, WINDOW)
+        let n = (self.history.len() as u64).clamp(1, ROLLING_WINDOW);
+        if actual_cost >= self.baseline_cost_per_call {
+            self.baseline_cost_per_call += (actual_cost - self.baseline_cost_per_call) / n;
+        } else {
+            self.baseline_cost_per_call -= (self.baseline_cost_per_call - actual_cost) / n;
+        }
+    }
+}
+
 impl Default for BurnAnomalyDetector {
     fn default() -> Self {
-        Self::new(0, 300, u64::MAX, 4)
+        // baseline=100, spike_factor=500 (5×), slope_threshold=1200 (baseline × window × 3), window=4
+        Self::new(100, 500, 1200, 4)
     }
 }
 
@@ -690,10 +716,11 @@ mod tests {
     fn monthly_cap_violation_emits_halt_event() {
         let agent_id = Uuid::new_v4();
         let mut audit = AuditTrail::new();
+        // Use a detector with anomaly detection disabled so we test the cap path.
         let mut ledger = AgentFuelLedger::new(
             BudgetPeriodId::new("2026-03"),
             1_000,
-            BurnAnomalyDetector::default(),
+            BurnAnomalyDetector::new(0, 0, u64::MAX, 4),
         );
 
         let result = ledger.record_llm_spend(agent_id, "mock-1", 100, 100, 1_001, &mut audit);
@@ -713,10 +740,11 @@ mod tests {
     fn alert_thresholds_emit_once() {
         let agent_id = Uuid::new_v4();
         let mut audit = AuditTrail::new();
+        // Use a detector with anomaly detection disabled so we test the threshold path.
         let mut ledger = AgentFuelLedger::new(
             BudgetPeriodId::new("2026-03"),
             1_000,
-            BurnAnomalyDetector::default(),
+            BurnAnomalyDetector::new(0, 0, u64::MAX, 4),
         );
 
         let first = ledger.record_llm_spend(agent_id, "mock-1", 10, 10, 700, &mut audit);
@@ -857,6 +885,65 @@ mod tests {
         // Total fuel spent should never exceed initial balance.
         assert!(ctx.fuel_remaining() <= 500);
         assert_eq!(ctx.fuel_remaining(), 100);
+    }
+
+    #[test]
+    fn default_detector_has_real_thresholds() {
+        let detector = BurnAnomalyDetector::default();
+        assert_eq!(detector.baseline_cost_per_call, 100);
+        assert_eq!(detector.spike_factor_x100, 500);
+        assert_eq!(detector.slope_threshold, 1200);
+        assert_eq!(detector.window_calls, 4);
+    }
+
+    #[test]
+    fn default_detector_catches_spike() {
+        let mut detector = BurnAnomalyDetector::default();
+        // Spike threshold: cost * 100 >= 100 * 500 → cost >= 500
+        let normal = detector.observe(400);
+        assert!(normal.is_none());
+
+        let spike = detector.observe(500);
+        assert!(spike.is_some());
+        assert_eq!(spike.unwrap().kind, super::AnomalyKind::Spike);
+    }
+
+    #[test]
+    fn default_detector_catches_slope() {
+        let mut detector = BurnAnomalyDetector::default();
+        // Slope threshold: 1200.  Window = 4 calls.
+        // 4 calls of 300 each = 1200 total → triggers slope.
+        assert!(detector.observe(300).is_none()); // window not full
+        assert!(detector.observe(300).is_none()); // window not full
+        assert!(detector.observe(300).is_none()); // window not full
+        let slope = detector.observe(300); // window full, total=1200
+        assert!(slope.is_some());
+        assert_eq!(slope.unwrap().kind, super::AnomalyKind::Slope);
+    }
+
+    #[test]
+    fn update_baseline_cold_start() {
+        let mut detector = BurnAnomalyDetector::new(0, 500, 1200, 4);
+        assert_eq!(detector.baseline_cost_per_call, 0);
+        detector.update_baseline(200);
+        assert_eq!(detector.baseline_cost_per_call, 200);
+    }
+
+    #[test]
+    fn update_baseline_rolling_average() {
+        let mut detector = BurnAnomalyDetector::default();
+        // Baseline starts at 100.  Feed 20 observations of 200.
+        for _ in 0..20 {
+            detector.observe(200); // fill history for rolling window
+            detector.update_baseline(200);
+        }
+        // After 20 observations of 200, baseline should converge toward 200.
+        // Due to integer division it won't be exact, but should be close.
+        assert!(
+            detector.baseline_cost_per_call >= 190 && detector.baseline_cost_per_call <= 210,
+            "baseline {} should be near 200",
+            detector.baseline_cost_per_call
+        );
     }
 
     #[test]
