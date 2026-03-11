@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "node --test ./tests/*.test.js",
+    "lint": "tsc --noEmit",
     "tauri": "tauri",
     "dist:windows": "tauri build --features tauri-runtime --bundles nsis,msi",
     "dist:macos": "tauri build --features tauri-runtime --bundles dmg",

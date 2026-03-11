@@ -43,8 +43,15 @@ rust-tests:
         pkg-config
   script:
     - cargo fmt --all -- --check
-    - cargo clippy --workspace --all-targets -- -D warnings
-    - cargo test --workspace
+    - cargo clippy --workspace --all-targets --all-features -- -D warnings
+    - cargo test --workspace --all-features
+
+voice-tests:
+  stage: test
+  image: python:3.12
+  allow_failure: false
+  script:
+    - cd voice && python3 -m pytest tests/ -v
 
 frontend-tests:
   stage: test
@@ -53,6 +60,32 @@ frontend-tests:
     - cd app
     - npm ci
     - npm run build
+    - npm test
+    - npm run lint
+
+# TODO: Set allow_failure: false and add minimum threshold once baseline is established.
+code-coverage:
+  stage: test
+  image: rust:latest
+  allow_failure: true
+  coverage: '/(\d+\.\d+)% coverage/'
+  before_script:
+    - apt-get update && apt-get install -y
+        libgtk-3-dev
+        libwebkit2gtk-4.1-dev
+        libayatana-appindicator3-dev
+        librsvg2-dev
+        libssl-dev
+        pkg-config
+    - cargo install cargo-tarpaulin --locked
+  script:
+    - cargo tarpaulin --workspace --all-features --out xml --output-dir coverage/ --skip-clean
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura.xml
+    expire_in: 30 days
 
 build-release:
   stage: release
