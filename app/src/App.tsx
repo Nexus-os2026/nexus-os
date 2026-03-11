@@ -70,6 +70,7 @@ import AppStore from "./pages/AppStore";
 import AiChatHub from "./pages/AiChatHub";
 import DeployPipeline from "./pages/DeployPipeline";
 import LearningCenter from "./pages/LearningCenter";
+import PolicyManagement from "./pages/PolicyManagement";
 import type {
   AgentSummary,
   AuditEventRow,
@@ -84,7 +85,7 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center";
+type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -103,6 +104,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "distributed-audit", label: "Chain", icon: "⛓", shortcut: "" },
   { id: "protocols", label: "Protocols", icon: "⌬", shortcut: "Alt+6" },
   { id: "permissions", label: "Permissions", icon: "⛊", shortcut: "Alt+7" },
+  { id: "policy-management", label: "Policies", icon: "⚖", shortcut: "" },
   { id: "identity", label: "Identity", icon: "⚿", shortcut: "" },
   { id: "design-studio", label: "Design", icon: "◇", shortcut: "" },
   { id: "email-client", label: "Email", icon: "📧", shortcut: "" },
@@ -1201,6 +1203,9 @@ export default function App(): JSX.Element {
     }
     if (page === "browser") {
       return <AgentBrowser />;
+    }
+    if (page === "policy-management") {
+      return <PolicyManagement />;
     }
     if (page === "firewall") {
       return <Firewall />;

@@ -281,6 +281,39 @@ export interface PermissionUpdate {
   enabled: boolean;
 }
 
+// ── Policy Engine Types ──
+
+export type PolicyEffect = "Allow" | "Deny";
+
+export interface PolicyConditions {
+  min_autonomy_level?: number;
+  max_fuel_cost?: number;
+  required_approvers?: number;
+  time_window?: string;
+}
+
+export interface PolicyEntry {
+  policy_id: string;
+  description: string;
+  effect: PolicyEffect;
+  principal: string;
+  action: string;
+  resource: string;
+  priority: number;
+  conditions: PolicyConditions;
+}
+
+export interface PolicyConflict {
+  policy_a: string;
+  policy_b: string;
+  overlap: string;
+}
+
+export interface PolicyTestResult {
+  decision: string;
+  matched_policies: string[];
+}
+
 // ── Consent Approval Display (from kernel consent_display::ApprovalDisplay) ──
 
 export interface ApprovalDisplay {

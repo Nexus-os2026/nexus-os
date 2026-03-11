@@ -7,6 +7,11 @@
 - [x] Smart capability detection case-insensitive fix
 - [x] Agent button state management (disable Start when Running, etc)
 - [x] Phase 7.4: Marketplace & Developer Toolkit (COMPLETE)
+- [x] C.5: Policy Engine Integration Tests (COMPLETE)
+  - 13 integration tests in kernel/tests/policy_engine_integration_tests.rs
+  - TOML loading, allow/deny evaluation, deny-overrides-allow, conditional autonomy level + fuel cost checks
+  - Time window storage, default-deny semantics, Supervisor end-to-end with consent tier override
+  - Policy reload, invalid TOML rejection, wildcard principal matching, audit trail fail-closed verification
 
 ## Completed
 - [x] Phase 1: Hardening (benchmarks, replay evidence, circuit breakers)

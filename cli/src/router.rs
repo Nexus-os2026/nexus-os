@@ -966,6 +966,147 @@ fn governance_test(task_type: &str, input: &str) -> CliOutput {
 }
 
 // ---------------------------------------------------------------------------
+// Policy engine commands
+// ---------------------------------------------------------------------------
+
+fn policy_list() -> CliOutput {
+    use nexus_kernel::policy_engine::PolicyEngine;
+
+    let policy_dir = dirs_policy_dir();
+    let mut engine = PolicyEngine::new(&policy_dir);
+    match engine.load_policies() {
+        Ok(count) => {
+            let policies: Vec<serde_json::Value> = engine
+                .policies()
+                .iter()
+                .map(|p| {
+                    serde_json::json!({
+                        "policy_id": p.policy_id,
+                        "effect": format!("{:?}", p.effect),
+                        "principal": p.principal,
+                        "action": p.action,
+                        "resource": p.resource,
+                        "priority": p.priority,
+                        "description": p.description,
+                    })
+                })
+                .collect();
+            CliOutput::ok_with_data(
+                format!("{count} policies loaded from {}", policy_dir.display()),
+                serde_json::json!({ "policies": policies, "count": count }),
+            )
+        }
+        Err(e) => CliOutput::err(format!("failed to load policies: {e}")),
+    }
+}
+
+fn policy_show(policy_id: &str) -> CliOutput {
+    use nexus_kernel::policy_engine::PolicyEngine;
+
+    let policy_dir = dirs_policy_dir();
+    let mut engine = PolicyEngine::new(&policy_dir);
+    if let Err(e) = engine.load_policies() {
+        return CliOutput::err(format!("failed to load policies: {e}"));
+    }
+    match engine.policies().iter().find(|p| p.policy_id == policy_id) {
+        Some(policy) => CliOutput::ok_with_data(
+            format!("Policy '{policy_id}'"),
+            serde_json::json!({
+                "policy_id": policy.policy_id,
+                "description": policy.description,
+                "effect": format!("{:?}", policy.effect),
+                "principal": policy.principal,
+                "action": policy.action,
+                "resource": policy.resource,
+                "priority": policy.priority,
+                "conditions": {
+                    "min_autonomy_level": policy.conditions.min_autonomy_level,
+                    "max_fuel_cost": policy.conditions.max_fuel_cost,
+                    "required_approvers": policy.conditions.required_approvers,
+                    "time_window": policy.conditions.time_window,
+                },
+            }),
+        ),
+        None => CliOutput::err(format!("policy '{policy_id}' not found")),
+    }
+}
+
+fn policy_validate(file: &str) -> CliOutput {
+    use nexus_kernel::policy_engine::Policy;
+
+    let content = match std::fs::read_to_string(file) {
+        Ok(c) => c,
+        Err(e) => return CliOutput::err(format!("cannot read '{file}': {e}")),
+    };
+    match toml::from_str::<Policy>(&content) {
+        Ok(policy) => CliOutput::ok_with_data(
+            format!("Policy '{}' is valid", policy.policy_id),
+            serde_json::json!({
+                "valid": true,
+                "policy_id": policy.policy_id,
+                "effect": format!("{:?}", policy.effect),
+            }),
+        ),
+        Err(e) => CliOutput::ok_with_data(
+            format!("Validation failed: {e}"),
+            serde_json::json!({ "valid": false, "error": e.to_string() }),
+        ),
+    }
+}
+
+fn policy_test(file: &str, principal: &str, action: &str, resource: &str) -> CliOutput {
+    use nexus_kernel::policy_engine::{EvaluationContext, Policy, PolicyEngine};
+
+    let content = match std::fs::read_to_string(file) {
+        Ok(c) => c,
+        Err(e) => return CliOutput::err(format!("cannot read '{file}': {e}")),
+    };
+    let policy: Policy = match toml::from_str(&content) {
+        Ok(p) => p,
+        Err(e) => return CliOutput::err(format!("invalid policy TOML: {e}")),
+    };
+
+    let engine = PolicyEngine::with_policies(vec![policy]);
+    let ctx = EvaluationContext::default();
+    let decision = engine.evaluate(principal, action, resource, &ctx);
+    let decision_str = format!("{decision:?}");
+
+    CliOutput::ok_with_data(
+        format!("Dry-run result: {decision_str}"),
+        serde_json::json!({
+            "principal": principal,
+            "action": action,
+            "resource": resource,
+            "decision": decision_str,
+        }),
+    )
+}
+
+fn policy_reload() -> CliOutput {
+    use nexus_kernel::policy_engine::PolicyEngine;
+
+    let policy_dir = dirs_policy_dir();
+    let mut engine = PolicyEngine::new(&policy_dir);
+    match engine.load_policies() {
+        Ok(count) => CliOutput::ok_with_data(
+            format!("Reloaded {count} policies from {}", policy_dir.display()),
+            serde_json::json!({ "count": count, "dir": policy_dir.display().to_string() }),
+        ),
+        Err(e) => CliOutput::err(format!("reload failed: {e}")),
+    }
+}
+
+fn dirs_policy_dir() -> std::path::PathBuf {
+    if let Some(home) = std::env::var_os("HOME") {
+        std::path::PathBuf::from(home)
+            .join(".nexus")
+            .join("policies")
+    } else {
+        std::path::PathBuf::from("~/.nexus/policies")
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Protocol commands (A2A + MCP)
 // ---------------------------------------------------------------------------
 
@@ -1677,6 +1818,42 @@ mod tests {
         let data = out.data.unwrap();
         assert_eq!(data["verdict"], "unknown_task_type");
         assert_eq!(data["confidence"], 0.0);
+    }
+
+    // Policy engine tests
+    #[test]
+    fn policy_list_returns_count() {
+        let out = route(CliCommand::PolicyList);
+        assert!(out.success);
+        let data = out.data.unwrap();
+        assert!(data.get("count").is_some());
+        assert!(data["policies"].is_array());
+    }
+
+    #[test]
+    fn policy_show_missing_returns_error() {
+        let out = route(CliCommand::PolicyShow {
+            policy_id: "nonexistent-policy".to_string(),
+        });
+        assert!(!out.success);
+        assert!(out.message.contains("not found"));
+    }
+
+    #[test]
+    fn policy_validate_missing_file_returns_error() {
+        let out = route(CliCommand::PolicyValidate {
+            file: "/tmp/nexus-nonexistent-policy-xyz.toml".to_string(),
+        });
+        assert!(!out.success);
+        assert!(out.message.contains("cannot read"));
+    }
+
+    #[test]
+    fn policy_reload_returns_count() {
+        let out = route(CliCommand::PolicyReload);
+        assert!(out.success);
+        let data = out.data.unwrap();
+        assert!(data.get("count").is_some());
     }
 
     // Protocol tests

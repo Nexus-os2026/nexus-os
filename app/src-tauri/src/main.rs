@@ -1045,6 +1045,115 @@ pub fn bulk_update_permissions(
     Ok(())
 }
 
+// ── Policy Engine API ──
+
+pub fn policy_list() -> Result<serde_json::Value, String> {
+    let dir = dirs_policy_dir();
+    let mut engine = nexus_kernel::policy_engine::PolicyEngine::new(&dir);
+    let _ = engine.load_policies();
+    let policies: Vec<serde_json::Value> = engine
+        .policies()
+        .iter()
+        .map(|p| {
+            json!({
+                "policy_id": p.policy_id,
+                "description": p.description,
+                "effect": format!("{:?}", p.effect),
+                "principal": p.principal,
+                "action": p.action,
+                "resource": p.resource,
+                "priority": p.priority,
+                "conditions": {
+                    "min_autonomy_level": p.conditions.min_autonomy_level,
+                    "max_fuel_cost": p.conditions.max_fuel_cost,
+                    "required_approvers": p.conditions.required_approvers,
+                    "time_window": p.conditions.time_window,
+                },
+            })
+        })
+        .collect();
+    Ok(json!({ "policies": policies, "count": policies.len() }))
+}
+
+pub fn policy_validate(content: String) -> Result<serde_json::Value, String> {
+    match toml::from_str::<nexus_kernel::policy_engine::Policy>(&content) {
+        Ok(policy) => Ok(json!({
+            "valid": true,
+            "policy_id": policy.policy_id,
+            "effect": format!("{:?}", policy.effect),
+        })),
+        Err(e) => Ok(json!({
+            "valid": false,
+            "error": e.to_string(),
+        })),
+    }
+}
+
+pub fn policy_test(
+    content: String,
+    principal: String,
+    action: String,
+    resource: String,
+) -> Result<serde_json::Value, String> {
+    let policy: nexus_kernel::policy_engine::Policy =
+        toml::from_str(&content).map_err(|e| format!("invalid policy TOML: {e}"))?;
+    let engine = nexus_kernel::policy_engine::PolicyEngine::with_policies(vec![policy]);
+    let ctx = nexus_kernel::policy_engine::EvaluationContext::default();
+    let decision = engine.evaluate(&principal, &action, &resource, &ctx);
+    Ok(json!({
+        "principal": principal,
+        "action": action,
+        "resource": resource,
+        "decision": format!("{decision:?}"),
+    }))
+}
+
+pub fn policy_detect_conflicts() -> Result<serde_json::Value, String> {
+    let dir = dirs_policy_dir();
+    let mut engine = nexus_kernel::policy_engine::PolicyEngine::new(&dir);
+    let _ = engine.load_policies();
+
+    let policies = engine.policies();
+    let mut conflicts: Vec<serde_json::Value> = Vec::new();
+
+    for (i, a) in policies.iter().enumerate() {
+        for b in policies.iter().skip(i + 1) {
+            let principal_overlap =
+                a.principal == "*" || b.principal == "*" || a.principal == b.principal;
+            let action_overlap = a.action == "*" || b.action == "*" || a.action == b.action;
+            let resource_overlap =
+                a.resource == "*" || b.resource == "*" || a.resource == b.resource;
+            let effect_differs = a.effect != b.effect;
+
+            if principal_overlap && action_overlap && resource_overlap && effect_differs {
+                conflicts.push(json!({
+                    "policy_a": a.policy_id,
+                    "policy_b": b.policy_id,
+                    "effect_a": format!("{:?}", a.effect),
+                    "effect_b": format!("{:?}", b.effect),
+                    "overlap": {
+                        "principal": if a.principal == b.principal { &a.principal } else { "*" },
+                        "action": if a.action == b.action { &a.action } else { "*" },
+                        "resource": if a.resource == b.resource { &a.resource } else { "*" },
+                    },
+                }));
+            }
+        }
+    }
+
+    Ok(json!({ "conflicts": conflicts, "count": conflicts.len() }))
+}
+
+fn dirs_policy_dir() -> std::path::PathBuf {
+    if let Some(home) = std::env::var_os("HOME") {
+        std::path::PathBuf::from(home)
+            .join(".nexus")
+            .join("policies")
+    } else {
+        std::path::PathBuf::from("~/.nexus/policies")
+    }
+}
+
 /// Check if setup has been completed (hardware detected).
 pub fn is_setup_complete() -> bool {
     match load_config() {
@@ -3452,6 +3561,31 @@ mod runtime {
         super::get_build_preview(state.inner(), session_id)
     }
 
+    #[tauri::command]
+    fn policy_list() -> Result<serde_json::Value, String> {
+        super::policy_list()
+    }
+
+    #[tauri::command]
+    fn policy_validate(content: String) -> Result<serde_json::Value, String> {
+        super::policy_validate(content)
+    }
+
+    #[tauri::command]
+    fn policy_test(
+        content: String,
+        principal: String,
+        action: String,
+        resource: String,
+    ) -> Result<serde_json::Value, String> {
+        super::policy_test(content, principal, action, resource)
+    }
+
+    #[tauri::command]
+    fn policy_detect_conflicts() -> Result<serde_json::Value, String> {
+        super::policy_detect_conflicts()
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -3570,6 +3704,10 @@ mod runtime {
                 get_build_session,
                 get_build_code,
                 get_build_preview,
+                policy_list,
+                policy_validate,
+                policy_test,
+                policy_detect_conflicts,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");

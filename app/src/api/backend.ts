@@ -25,6 +25,9 @@ import type {
   PermissionCategory,
   PermissionHistoryEntry,
   PermissionUpdate,
+  PolicyConflict,
+  PolicyEntry,
+  PolicyTestResult,
   ProtocolRequest,
   ProtocolsStatus,
   BuildSessionState,
@@ -438,6 +441,35 @@ export function getLearningSession(sessionId: string): Promise<LearningSessionSt
   return invokeDesktop<LearningSessionState>("get_learning_session", {
     session_id: sessionId,
   });
+}
+
+// ── Policy Engine API ──
+
+export function policyList(): Promise<PolicyEntry[]> {
+  return invokeDesktop<PolicyEntry[]>("policy_list");
+}
+
+export function policyValidate(tomlContent: string): Promise<PolicyEntry> {
+  return invokeDesktop<PolicyEntry>("policy_validate", { tomlContent, toml_content: tomlContent });
+}
+
+export function policyTest(
+  tomlContent: string,
+  principal: string,
+  action: string,
+  resource: string
+): Promise<PolicyTestResult> {
+  return invokeDesktop<PolicyTestResult>("policy_test", {
+    tomlContent,
+    toml_content: tomlContent,
+    principal,
+    action,
+    resource,
+  });
+}
+
+export function policyDetectConflicts(): Promise<PolicyConflict[]> {
+  return invokeDesktop<PolicyConflict[]>("policy_detect_conflicts");
 }
 
 export function learningAgentAction(
