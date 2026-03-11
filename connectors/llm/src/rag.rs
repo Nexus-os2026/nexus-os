@@ -5,6 +5,8 @@ use crate::providers::LlmProvider;
 use crate::vector_store::{SearchResult, StoredEmbedding, VectorStore};
 use nexus_kernel::redaction::RedactionEngine;
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Configuration for the RAG pipeline.
@@ -29,6 +31,26 @@ impl Default for RagConfig {
     }
 }
 
+/// Governance metadata collected during document ingestion.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentGovernance {
+    pub content_hash: String,
+    pub redacted_hash: String,
+    pub pii_findings_count: usize,
+    pub pii_types_found: Vec<String>,
+    pub redaction_mode: String,
+    pub integrity_verified: bool,
+}
+
+/// An entry in the document access log.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentAccessEntry {
+    pub timestamp: String,
+    pub operation: String,
+    pub agent_or_user: String,
+    pub detail: String,
+}
+
 /// Metadata for an indexed document.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RagDocument {
@@ -36,6 +58,7 @@ pub struct RagDocument {
     pub format: String,
     pub chunk_count: usize,
     pub indexed_at: String,
+    pub governance: DocumentGovernance,
 }
 
 /// The RAG pipeline: ingest documents, query with semantic search, build augmented prompts.
@@ -44,6 +67,7 @@ pub struct RagPipeline {
     pub vector_store: VectorStore,
     pub config: RagConfig,
     pub documents: Vec<RagDocument>,
+    pub access_log: Vec<DocumentAccessEntry>,
 }
 
 fn iso_timestamp() -> String {
@@ -55,6 +79,13 @@ fn iso_timestamp() -> String {
     format!("{secs}")
 }
 
+/// Compute a hex hash of the given text using DefaultHasher (non-cryptographic, for display).
+fn compute_hex_hash(text: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    text.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
 impl RagPipeline {
     pub fn new(config: RagConfig) -> Self {
         let dimension = config.embedding_dimension;
@@ -62,6 +93,7 @@ impl RagPipeline {
             vector_store: VectorStore::new(dimension),
             config,
             documents: Vec::new(),
+            access_log: Vec::new(),
         }
     }
 
@@ -73,21 +105,37 @@ impl RagPipeline {
         provider: &P,
         redaction_engine: &mut RedactionEngine,
     ) -> Result<RagDocument, String> {
-        // 1. Redact PII from content.
+        // 1. Hash the original content before redaction.
+        let content_hash = compute_hex_hash(content);
+
+        // 2. Redact PII from content.
         let redaction_result =
             redaction_engine.process_prompt("rag_ingest", "standard", vec![], content);
         let redacted_text = &redaction_result.redacted_payload;
 
-        // 2. Chunk the redacted content.
+        // 3. Hash the redacted content.
+        let redacted_hash = compute_hex_hash(redacted_text);
+
+        // 4. Extract PII findings info.
+        let pii_findings_count = redaction_result.summary.total_findings;
+        let pii_types_found: Vec<String> = redaction_result
+            .summary
+            .counts_by_kind
+            .keys()
+            .cloned()
+            .collect();
+        let redaction_mode = format!("{:?}", redaction_engine.policy().mode);
+
+        // 5. Chunk the redacted content.
         let chunks = chunk_file(redacted_text, format);
         if chunks.is_empty() {
             return Err("no chunks produced from content".to_string());
         }
 
-        // 3. Collect chunk texts for embedding.
+        // 6. Collect chunk texts for embedding.
         let chunk_texts: Vec<&str> = chunks.iter().map(|c| c.content.as_str()).collect();
 
-        // 4. Embed all chunks.
+        // 7. Embed all chunks.
         let embedding_response = provider
             .embed(&chunk_texts, &self.config.embedding_model)
             .map_err(|e| e.to_string())?;
@@ -100,7 +148,7 @@ impl RagPipeline {
             ));
         }
 
-        // 5. Insert each (chunk, embedding) pair into the vector store.
+        // 8. Insert each (chunk, embedding) pair into the vector store.
         for (chunk, embedding) in chunks.iter().zip(embedding_response.embeddings.iter()) {
             let chunk_id = format!("{}::{}", doc_path, chunk.index);
             let stored = StoredEmbedding {
@@ -115,21 +163,40 @@ impl RagPipeline {
                 .map_err(|e| e.to_string())?;
         }
 
-        // 6. Create and push a RagDocument record.
+        // 9. Build governance metadata.
+        let governance = DocumentGovernance {
+            content_hash,
+            redacted_hash,
+            pii_findings_count,
+            pii_types_found,
+            redaction_mode,
+            integrity_verified: true,
+        };
+
+        // 10. Create and push a RagDocument record.
         let doc = RagDocument {
             path: doc_path.to_string(),
             format: format.to_string(),
             chunk_count: chunks.len(),
             indexed_at: iso_timestamp(),
+            governance,
         };
         self.documents.push(doc.clone());
 
-        // 7. Return the document.
+        // 11. Log access entry.
+        self.access_log.push(DocumentAccessEntry {
+            timestamp: iso_timestamp(),
+            operation: "ingest".to_string(),
+            agent_or_user: "user".to_string(),
+            detail: format!("Indexed {} chunks from {}", chunks.len(), doc_path),
+        });
+
+        // 12. Return the document.
         Ok(doc)
     }
 
     pub fn query<P: LlmProvider>(
-        &self,
+        &mut self,
         question: &str,
         provider: &P,
     ) -> Result<Vec<SearchResult>, String> {
@@ -155,6 +222,15 @@ impl RagPipeline {
             .filter(|r| r.score >= self.config.min_score)
             .collect();
 
+        // 4. Log access entry.
+        let truncated: String = question.chars().take(100).collect();
+        self.access_log.push(DocumentAccessEntry {
+            timestamp: iso_timestamp(),
+            operation: "query".to_string(),
+            agent_or_user: "user".to_string(),
+            detail: format!("Search query: {truncated}"),
+        });
+
         Ok(filtered)
     }
 
@@ -175,11 +251,27 @@ impl RagPipeline {
         let removed = self.vector_store.remove_document(doc_path);
         let before = self.documents.len();
         self.documents.retain(|d| d.path != doc_path);
-        removed > 0 || self.documents.len() < before
+        let did_remove = removed > 0 || self.documents.len() < before;
+
+        self.access_log.push(DocumentAccessEntry {
+            timestamp: iso_timestamp(),
+            operation: "remove".to_string(),
+            agent_or_user: "user".to_string(),
+            detail: format!("Removed document: {doc_path}"),
+        });
+
+        did_remove
     }
 
     pub fn list_documents(&self) -> &[RagDocument] {
         &self.documents
+    }
+
+    pub fn get_document_access_log(&self, doc_path: &str) -> Vec<&DocumentAccessEntry> {
+        self.access_log
+            .iter()
+            .filter(|e| e.detail.contains(doc_path))
+            .collect()
     }
 
     pub fn save(&self, dir_path: &str) -> Result<(), String> {
@@ -192,6 +284,11 @@ impl RagPipeline {
         let documents_json =
             serde_json::to_string(&self.documents).map_err(|e| format!("serialize error: {e}"))?;
         std::fs::write(format!("{dir_path}/documents.json"), documents_json)
+            .map_err(|e| format!("write error: {e}"))?;
+
+        let access_log_json =
+            serde_json::to_string(&self.access_log).map_err(|e| format!("serialize error: {e}"))?;
+        std::fs::write(format!("{dir_path}/access_log.json"), access_log_json)
             .map_err(|e| format!("write error: {e}"))?;
 
         Ok(())
@@ -208,10 +305,18 @@ impl RagPipeline {
             Err(e) => return Err(format!("read error: {e}")),
         };
 
+        let access_log_path = format!("{dir_path}/access_log.json");
+        let access_log: Vec<DocumentAccessEntry> = match std::fs::read_to_string(&access_log_path) {
+            Ok(json) => serde_json::from_str(&json).map_err(|e| format!("parse error: {e}"))?,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(e) => return Err(format!("read error: {e}")),
+        };
+
         Ok(Self {
             vector_store,
             config,
             documents,
+            access_log,
         })
     }
 }
@@ -488,5 +593,172 @@ mod tests {
         // Also directly check the vector store embeddings via a broad search.
         let all_docs = pipeline.vector_store.list_documents();
         assert!(all_docs.contains(&"contact.md".to_string()));
+    }
+
+    #[test]
+    fn test_ingest_populates_governance() {
+        let mut pipeline = default_pipeline();
+        let provider = mock_provider();
+        let mut redaction = default_redaction_engine();
+
+        let content = "Contact us at email: test@example.com for help.";
+        let doc = pipeline
+            .ingest_document(
+                content,
+                "gov.md",
+                SupportedFormat::PlainText,
+                &provider,
+                &mut redaction,
+            )
+            .expect("ingest");
+
+        assert!(doc.governance.pii_findings_count >= 1);
+        assert!(
+            doc.governance.pii_types_found.iter().any(|t| t == "email"),
+            "expected email in pii_types_found: {:?}",
+            doc.governance.pii_types_found
+        );
+        assert!(doc.governance.integrity_verified);
+        assert!(!doc.governance.content_hash.is_empty());
+        assert!(!doc.governance.redacted_hash.is_empty());
+        assert!(!doc.governance.redaction_mode.is_empty());
+    }
+
+    #[test]
+    fn test_content_hash_differs_from_redacted_hash() {
+        let mut pipeline = default_pipeline();
+        let provider = mock_provider();
+        let mut redaction = default_redaction_engine();
+
+        let content = "Secret: email: secret@corp.com and phone: 555-123-4567.";
+        let doc = pipeline
+            .ingest_document(
+                content,
+                "hash-diff.md",
+                SupportedFormat::PlainText,
+                &provider,
+                &mut redaction,
+            )
+            .expect("ingest");
+
+        assert_ne!(
+            doc.governance.content_hash, doc.governance.redacted_hash,
+            "content hash should differ from redacted hash when PII is present"
+        );
+    }
+
+    #[test]
+    fn test_content_hash_deterministic() {
+        let provider = mock_provider();
+        let content = "Deterministic hash test with email: det@example.com.";
+
+        let mut pipeline1 = default_pipeline();
+        let mut redaction1 = default_redaction_engine();
+        let doc1 = pipeline1
+            .ingest_document(
+                content,
+                "det.md",
+                SupportedFormat::PlainText,
+                &provider,
+                &mut redaction1,
+            )
+            .expect("ingest 1");
+
+        let mut pipeline2 = default_pipeline();
+        let mut redaction2 = default_redaction_engine();
+        let doc2 = pipeline2
+            .ingest_document(
+                content,
+                "det.md",
+                SupportedFormat::PlainText,
+                &provider,
+                &mut redaction2,
+            )
+            .expect("ingest 2");
+
+        assert_eq!(doc1.governance.content_hash, doc2.governance.content_hash);
+    }
+
+    #[test]
+    fn test_access_log_records_ingest() {
+        let mut pipeline = default_pipeline();
+        let provider = mock_provider();
+        let mut redaction = default_redaction_engine();
+
+        pipeline
+            .ingest_document(
+                "Some content.",
+                "log-ingest.md",
+                SupportedFormat::PlainText,
+                &provider,
+                &mut redaction,
+            )
+            .expect("ingest");
+
+        assert!(
+            pipeline.access_log.iter().any(|e| e.operation == "ingest"),
+            "expected an ingest entry in access_log"
+        );
+    }
+
+    #[test]
+    fn test_access_log_records_query() {
+        let mut pipeline = default_pipeline();
+        let provider = mock_provider();
+        let mut redaction = default_redaction_engine();
+
+        pipeline
+            .ingest_document(
+                "Queryable content here.",
+                "log-query.md",
+                SupportedFormat::PlainText,
+                &provider,
+                &mut redaction,
+            )
+            .expect("ingest");
+
+        let _ = pipeline.query("test question", &provider);
+
+        assert!(
+            pipeline.access_log.iter().any(|e| e.operation == "query"),
+            "expected a query entry in access_log"
+        );
+    }
+
+    #[test]
+    fn test_access_log_filtered_by_doc() {
+        let mut pipeline = default_pipeline();
+        let provider = mock_provider();
+        let mut redaction = default_redaction_engine();
+
+        pipeline
+            .ingest_document(
+                "First doc.",
+                "first.md",
+                SupportedFormat::PlainText,
+                &provider,
+                &mut redaction,
+            )
+            .expect("ingest first");
+
+        pipeline
+            .ingest_document(
+                "Second doc.",
+                "second.md",
+                SupportedFormat::PlainText,
+                &provider,
+                &mut redaction,
+            )
+            .expect("ingest second");
+
+        let first_entries = pipeline.get_document_access_log("first.md");
+        assert!(
+            first_entries.iter().all(|e| e.detail.contains("first.md")),
+            "filtered entries should only mention first.md"
+        );
+        assert!(
+            !first_entries.is_empty(),
+            "should have at least one entry for first.md"
+        );
     }
 }

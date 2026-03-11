@@ -1,7 +1,9 @@
 //! In-memory vector store with cosine similarity search and JSON file persistence.
 
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
+use std::hash::{Hash, Hasher};
 
 /// A stored embedding with metadata linking back to its source chunk.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,6 +23,16 @@ pub struct SearchResult {
     pub chunk_index: usize,
     pub content: String,
     pub score: f32,
+}
+
+/// A 2D projected point for visualization of the embedding space.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectedPoint {
+    pub chunk_id: String,
+    pub doc_path: String,
+    pub x: f32,
+    pub y: f32,
+    pub label: String,
 }
 
 /// In-memory vector store backed by optional JSON file persistence.
@@ -126,6 +138,63 @@ impl VectorStore {
             .collect()
     }
 
+    /// Project all embeddings to 2D using random projection (Johnson-Lindenstrauss).
+    pub fn get_2d_projection(&self) -> Vec<ProjectedPoint> {
+        if self.embeddings.is_empty() || self.dimension == 0 {
+            return Vec::new();
+        }
+
+        // Generate two deterministic projection vectors using seeded hashing.
+        let proj_x = make_projection_vector(self.dimension, 0xCAFE_0001);
+        let proj_y = make_projection_vector(self.dimension, 0xCAFE_0002);
+
+        // Project each embedding onto the two vectors.
+        let points: Vec<(String, String, f32, f32, String)> = self
+            .embeddings
+            .iter()
+            .map(|e| {
+                let x = dot(&e.embedding, &proj_x);
+                let y = dot(&e.embedding, &proj_y);
+                let label: String = e.content.chars().take(50).collect();
+                (e.chunk_id.clone(), e.doc_path.clone(), x, y, label)
+            })
+            .collect();
+
+        // Normalize x, y to [-1.0, 1.0].
+        let (min_x, max_x, min_y, max_y) = points.iter().fold(
+            (f32::MAX, f32::MIN, f32::MAX, f32::MIN),
+            |(mnx, mxx, mny, mxy), (_, _, x, y, _)| {
+                (mnx.min(*x), mxx.max(*x), mny.min(*y), mxy.max(*y))
+            },
+        );
+
+        let range_x = max_x - min_x;
+        let range_y = max_y - min_y;
+
+        points
+            .into_iter()
+            .map(|(chunk_id, doc_path, x, y, label)| {
+                let nx = if range_x > 0.0 {
+                    (x - min_x) / range_x * 2.0 - 1.0
+                } else {
+                    0.0
+                };
+                let ny = if range_y > 0.0 {
+                    (y - min_y) / range_y * 2.0 - 1.0
+                } else {
+                    0.0
+                };
+                ProjectedPoint {
+                    chunk_id,
+                    doc_path,
+                    x: nx,
+                    y: ny,
+                    label,
+                }
+            })
+            .collect()
+    }
+
     /// Serialize the store to a JSON file.
     pub fn save_to_file(&self, path: &str) -> Result<(), String> {
         let json = serde_json::to_string(self).map_err(|e| format!("serialize error: {e}"))?;
@@ -145,13 +214,32 @@ impl VectorStore {
 /// Compute cosine similarity between two vectors: dot(a,b) / (‖a‖ × ‖b‖).
 /// Returns 0.0 if either vector has zero norm.
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let d: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
     let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
     if norm_a == 0.0 || norm_b == 0.0 {
         return 0.0;
     }
-    dot / (norm_a * norm_b)
+    d / (norm_a * norm_b)
+}
+
+/// Dot product of two slices.
+fn dot(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
+}
+
+/// Generate a deterministic pseudo-random projection vector of the given dimension.
+fn make_projection_vector(dimension: usize, seed: u64) -> Vec<f32> {
+    (0..dimension)
+        .map(|i| {
+            let mut hasher = DefaultHasher::new();
+            seed.hash(&mut hasher);
+            i.hash(&mut hasher);
+            let h = hasher.finish();
+            // Map hash to [-1.0, 1.0].
+            (h as f64 / u64::MAX as f64) as f32 * 2.0 - 1.0
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -355,5 +443,70 @@ mod tests {
         let store = VectorStore::new(3);
         let results = store.search(&[1.0, 0.0, 0.0], 10).unwrap();
         assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_2d_projection_returns_all_points() {
+        let mut store = VectorStore::new(3);
+        for i in 0..5 {
+            store
+                .insert(make_embedding(
+                    &format!("c{i}"),
+                    "doc.md",
+                    i,
+                    vec![i as f32, 1.0, 2.0],
+                ))
+                .unwrap();
+        }
+        let points = store.get_2d_projection();
+        assert_eq!(points.len(), 5);
+    }
+
+    #[test]
+    fn test_2d_projection_normalized() {
+        let mut store = VectorStore::new(3);
+        for i in 0..10 {
+            store
+                .insert(make_embedding(
+                    &format!("c{i}"),
+                    "doc.md",
+                    i,
+                    vec![i as f32 * 100.0, -50.0, 75.0],
+                ))
+                .unwrap();
+        }
+        let points = store.get_2d_projection();
+        for p in &points {
+            assert!(p.x >= -1.0 && p.x <= 1.0, "x out of range: {}", p.x);
+            assert!(p.y >= -1.0 && p.y <= 1.0, "y out of range: {}", p.y);
+        }
+    }
+
+    #[test]
+    fn test_2d_projection_deterministic() {
+        let mut store = VectorStore::new(3);
+        for i in 0..5 {
+            store
+                .insert(make_embedding(
+                    &format!("c{i}"),
+                    "doc.md",
+                    i,
+                    vec![i as f32, 1.0, 2.0],
+                ))
+                .unwrap();
+        }
+        let proj1 = store.get_2d_projection();
+        let proj2 = store.get_2d_projection();
+        for (a, b) in proj1.iter().zip(proj2.iter()) {
+            assert!((a.x - b.x).abs() < 1e-6);
+            assert!((a.y - b.y).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn test_2d_projection_empty() {
+        let store = VectorStore::new(3);
+        let points = store.get_2d_projection();
+        assert!(points.is_empty());
     }
 }

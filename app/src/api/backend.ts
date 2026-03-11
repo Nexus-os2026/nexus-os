@@ -563,3 +563,21 @@ export function removeIndexedDocument(docPath: string): Promise<string> {
     doc_path: docPath,
   });
 }
+
+export function getDocumentGovernance(docPath: string): Promise<string> {
+  return invokeDesktop<string>("get_document_governance", {
+    docPath,
+    doc_path: docPath,
+  });
+}
+
+export function getSemanticMap(): Promise<string> {
+  return invokeDesktop<string>("get_semantic_map");
+}
+
+export function getDocumentAccessLog(docPath: string): Promise<string> {
+  return invokeDesktop<string>("get_document_access_log", {
+    docPath,
+    doc_path: docPath,
+  });
+}

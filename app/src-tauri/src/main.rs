@@ -3745,7 +3745,7 @@ pub fn search_documents(
 }
 
 pub fn chat_with_documents(state: &AppState, question: String) -> Result<String, String> {
-    let rag = state.rag.lock().unwrap_or_else(|p| p.into_inner());
+    let mut rag = state.rag.lock().unwrap_or_else(|p| p.into_inner());
     let provider = MockProvider::new();
 
     let results = rag
@@ -3801,6 +3801,28 @@ pub fn remove_indexed_document(state: &AppState, doc_path: String) -> Result<Str
         "path": doc_path,
     });
     serde_json::to_string(&response).map_err(|e| format!("serialize error: {e}"))
+}
+
+pub fn get_document_governance(state: &AppState, doc_path: String) -> Result<String, String> {
+    let rag = state.rag.lock().unwrap_or_else(|p| p.into_inner());
+    let doc = rag
+        .documents
+        .iter()
+        .find(|d| d.path == doc_path)
+        .ok_or_else(|| format!("document not found: {doc_path}"))?;
+    serde_json::to_string(&doc.governance).map_err(|e| format!("serialize error: {e}"))
+}
+
+pub fn get_semantic_map(state: &AppState) -> Result<String, String> {
+    let rag = state.rag.lock().unwrap_or_else(|p| p.into_inner());
+    let points = rag.vector_store.get_2d_projection();
+    serde_json::to_string(&points).map_err(|e| format!("serialize error: {e}"))
+}
+
+pub fn get_document_access_log(state: &AppState, doc_path: String) -> Result<String, String> {
+    let rag = state.rag.lock().unwrap_or_else(|p| p.into_inner());
+    let entries: Vec<_> = rag.get_document_access_log(&doc_path);
+    serde_json::to_string(&entries).map_err(|e| format!("serialize error: {e}"))
 }
 
 #[cfg(all(
@@ -4500,6 +4522,27 @@ mod runtime {
         super::remove_indexed_document(state.inner(), doc_path)
     }
 
+    #[tauri::command]
+    fn get_document_governance(
+        state: tauri::State<'_, AppState>,
+        doc_path: String,
+    ) -> Result<String, String> {
+        super::get_document_governance(state.inner(), doc_path)
+    }
+
+    #[tauri::command]
+    fn get_semantic_map(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::get_semantic_map(state.inner())
+    }
+
+    #[tauri::command]
+    fn get_document_access_log(
+        state: tauri::State<'_, AppState>,
+        doc_path: String,
+    ) -> Result<String, String> {
+        super::get_document_access_log(state.inner(), doc_path)
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -4632,6 +4675,9 @@ mod runtime {
                 chat_with_documents,
                 list_indexed_documents,
                 remove_indexed_document,
+                get_document_governance,
+                get_semantic_map,
+                get_document_access_log,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
