@@ -531,3 +531,35 @@ export function testLlmConnection(providerName: string): Promise<TestConnectionR
     provider_name: providerName,
   });
 }
+
+// ── RAG Pipeline API ──
+
+export function indexDocument(filePath: string): Promise<string> {
+  return invokeDesktop<string>("index_document", {
+    filePath,
+    file_path: filePath,
+  });
+}
+
+export function searchDocuments(query: string, topK?: number): Promise<string> {
+  return invokeDesktop<string>("search_documents", {
+    query,
+    topK: topK ?? null,
+    top_k: topK ?? null,
+  });
+}
+
+export function chatWithDocuments(question: string): Promise<string> {
+  return invokeDesktop<string>("chat_with_documents", { question });
+}
+
+export function listIndexedDocuments(): Promise<string> {
+  return invokeDesktop<string>("list_indexed_documents");
+}
+
+export function removeIndexedDocument(docPath: string): Promise<string> {
+  return invokeDesktop<string>("remove_indexed_document", {
+    docPath,
+    doc_path: docPath,
+  });
+}

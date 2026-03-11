@@ -1,4 +1,6 @@
-use super::{curl_get_status, curl_post_json, LlmProvider, LlmResponse, ProviderRequest};
+use super::{
+    curl_get_status, curl_post_json, EmbeddingResponse, LlmProvider, LlmResponse, ProviderRequest,
+};
 use nexus_kernel::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -322,5 +324,56 @@ impl LlmProvider for OllamaProvider {
 
     fn endpoint_url(&self) -> String {
         self.base_url.clone()
+    }
+
+    fn embed(&self, texts: &[&str], model: &str) -> Result<EmbeddingResponse, AgentError> {
+        let endpoint = format!("{}/api/embeddings", self.base_url.trim_end_matches('/'));
+        let mut headers = BTreeMap::new();
+        headers.insert("content-type".to_string(), "application/json".to_string());
+
+        let mut embeddings = Vec::with_capacity(texts.len());
+        let mut total_tokens = 0u32;
+
+        for text in texts {
+            let body = json!({
+                "model": model,
+                "prompt": *text,
+            });
+            let (status, payload) = curl_post_json(&endpoint, &headers, &body)?;
+            if !(200..300).contains(&status) {
+                return Err(AgentError::SupervisorError(format!(
+                    "ollama embedding request failed with status {status}"
+                )));
+            }
+
+            let embedding = payload
+                .get("embedding")
+                .and_then(Value::as_array)
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_f64().map(|f| f as f32))
+                        .collect::<Vec<f32>>()
+                })
+                .ok_or_else(|| {
+                    AgentError::SupervisorError(
+                        "ollama embedding response missing 'embedding' field".to_string(),
+                    )
+                })?;
+
+            let tokens = payload
+                .get("prompt_eval_count")
+                .and_then(Value::as_u64)
+                .and_then(|v| u32::try_from(v).ok())
+                .unwrap_or(0);
+            total_tokens = total_tokens.saturating_add(tokens);
+
+            embeddings.push(embedding);
+        }
+
+        Ok(EmbeddingResponse {
+            embeddings,
+            model_name: model.to_string(),
+            token_count: total_tokens,
+        })
     }
 }

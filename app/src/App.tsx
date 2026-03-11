@@ -71,6 +71,7 @@ import AiChatHub from "./pages/AiChatHub";
 import DeployPipeline from "./pages/DeployPipeline";
 import LearningCenter from "./pages/LearningCenter";
 import PolicyManagement from "./pages/PolicyManagement";
+import Documents from "./pages/Documents";
 import type {
   AgentStatusEvent,
   AgentSummary,
@@ -86,7 +87,7 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management";
+type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -118,6 +119,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "terminal", label: "Terminal", icon: "$", shortcut: "" },
   { id: "file-manager", label: "Files", icon: "📁", shortcut: "" },
   { id: "system-monitor", label: "Monitor", icon: "⊙", shortcut: "" },
+  { id: "documents", label: "Documents", icon: "📑", shortcut: "" },
   { id: "notes", label: "Notes", icon: "📝", shortcut: "" },
   { id: "project-manager", label: "Projects", icon: "◫", shortcut: "" },
   { id: "database", label: "Database", icon: "◆", shortcut: "" },
@@ -1189,6 +1191,9 @@ export default function App(): JSX.Element {
     }
     if (page === "system-monitor") {
       return <SystemMonitor />;
+    }
+    if (page === "documents") {
+      return <Documents />;
     }
     if (page === "notes") {
       return <NotesApp />;

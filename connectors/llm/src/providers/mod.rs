@@ -41,6 +41,13 @@ pub struct LlmResponse {
     pub tool_calls: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EmbeddingResponse {
+    pub embeddings: Vec<Vec<f32>>,
+    pub model_name: String,
+    pub token_count: u32,
+}
+
 pub trait LlmProvider: Send + Sync {
     fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError>;
     fn name(&self) -> &str;
@@ -63,6 +70,15 @@ pub trait LlmProvider: Send + Sync {
     /// The base URL this provider calls. Used by egress governor for allowlisting.
     fn endpoint_url(&self) -> String {
         format!("provider://{}", self.name())
+    }
+
+    /// Generate embeddings for the given texts. Returns one vector per input text.
+    /// Default implementation returns an error — providers must opt in.
+    fn embed(&self, _texts: &[&str], _model: &str) -> Result<EmbeddingResponse, AgentError> {
+        Err(AgentError::SupervisorError(format!(
+            "{} does not support embeddings",
+            self.name()
+        )))
     }
 }
 
@@ -93,6 +109,10 @@ impl<T: LlmProvider + ?Sized> LlmProvider for Box<T> {
 
     fn endpoint_url(&self) -> String {
         (**self).endpoint_url()
+    }
+
+    fn embed(&self, texts: &[&str], model: &str) -> Result<EmbeddingResponse, AgentError> {
+        (**self).embed(texts, model)
     }
 }
 
@@ -363,5 +383,50 @@ mod tests {
             request.endpoint,
             "http://my-proxy.local/v1/chat/completions"
         );
+    }
+
+    #[test]
+    fn test_mock_embedding_deterministic() {
+        let provider = super::MockProvider::new();
+        let result_a = provider.embed(&["hello world"], "mock-embed").unwrap();
+        let result_b = provider.embed(&["hello world"], "mock-embed").unwrap();
+        assert_eq!(result_a.embeddings[0], result_b.embeddings[0]);
+    }
+
+    #[test]
+    fn test_mock_embedding_different_texts() {
+        let provider = super::MockProvider::new();
+        let result = provider
+            .embed(&["hello world", "goodbye world"], "mock-embed")
+            .unwrap();
+        assert_eq!(result.embeddings.len(), 2);
+        assert_ne!(result.embeddings[0], result.embeddings[1]);
+    }
+
+    #[test]
+    fn test_mock_embedding_normalized() {
+        let provider = super::MockProvider::new();
+        let result = provider
+            .embed(&["test normalization"], "mock-embed")
+            .unwrap();
+        let vec = &result.embeddings[0];
+        let norm: f32 = vec.iter().map(|v| v * v).sum::<f32>().sqrt();
+        assert!((norm - 1.0).abs() < 1e-5, "expected unit norm, got {norm}");
+    }
+
+    #[test]
+    fn test_mock_embedding_dimensions() {
+        let provider = super::MockProvider::new();
+        let result = provider.embed(&["dimension check"], "mock-embed").unwrap();
+        assert_eq!(result.embeddings[0].len(), 384);
+    }
+
+    #[test]
+    fn test_embedding_default_returns_error() {
+        let provider = ClaudeProvider::new(Some("key".to_string()));
+        let result = provider.embed(&["test"], "claude-sonnet-4-5");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("does not support embeddings"), "got: {err}");
     }
 }

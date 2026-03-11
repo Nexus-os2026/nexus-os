@@ -1,7 +1,9 @@
+use nexus_connectors_llm::chunking::SupportedFormat;
 use nexus_connectors_llm::gateway::{
     select_provider, AgentRuntimeContext, GovernedLlmGateway, ProviderSelectionConfig,
 };
-use nexus_connectors_llm::providers::OllamaProvider;
+use nexus_connectors_llm::providers::{MockProvider, OllamaProvider};
+use nexus_connectors_llm::rag::{RagConfig, RagPipeline};
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
 use nexus_kernel::config::{
     load_config, save_config as save_nexus_config, AgentLlmConfig, HardwareConfig, ModelsConfig,
@@ -14,6 +16,7 @@ use nexus_kernel::permissions::{
     CapabilityRequest as KernelCapabilityRequest, PermissionCategory as KernelPermissionCategory,
     PermissionHistoryEntry as KernelPermissionHistoryEntry,
 };
+use nexus_kernel::redaction::RedactionEngine;
 use nexus_kernel::supervisor::{AgentId, Supervisor};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -105,6 +108,8 @@ pub struct AppState {
     research: Arc<Mutex<ResearchManager>>,
     build: Arc<Mutex<BuildManager>>,
     learning: Arc<Mutex<LearningManager>>,
+    rag: Arc<Mutex<RagPipeline>>,
+    redaction_engine: Arc<Mutex<RedactionEngine>>,
 }
 
 impl Default for AppState {
@@ -131,6 +136,8 @@ impl AppState {
             research: Arc::new(Mutex::new(ResearchManager::new())),
             build: Arc::new(Mutex::new(BuildManager::new())),
             learning: Arc::new(Mutex::new(LearningManager::new())),
+            rag: Arc::new(Mutex::new(RagPipeline::new(RagConfig::default()))),
+            redaction_engine: Arc::new(Mutex::new(RedactionEngine::default())),
         }
     }
 
@@ -3649,6 +3656,153 @@ fn get_agent_activity(state: &AppState) -> Result<Vec<ActivityMessageRow>, Strin
     Ok(browser.activity.clone())
 }
 
+// ── RAG Pipeline Commands ──
+
+fn format_from_extension(path: &str) -> Result<SupportedFormat, String> {
+    let ext = std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    match ext.as_str() {
+        "txt" | "text" | "log" | "csv" => Ok(SupportedFormat::PlainText),
+        "md" | "markdown" => Ok(SupportedFormat::Markdown),
+        "rs" | "py" | "js" | "ts" | "go" | "java" | "c" | "cpp" | "h" | "toml" | "yaml"
+        | "yml" | "json" | "html" | "css" | "sh" | "bash" | "sql" | "rb" | "swift" | "kt" => {
+            Ok(SupportedFormat::Code)
+        }
+        _ => Err(format!(
+            "unsupported file extension '.{ext}'. Supported: .txt, .md, .rs, .py, .js, .ts, .go, .java, .c, .cpp, .toml, .yaml, .json, .html, .css, .sh, .sql"
+        )),
+    }
+}
+
+pub fn index_document(state: &AppState, file_path: String) -> Result<String, String> {
+    let content =
+        std::fs::read_to_string(&file_path).map_err(|e| format!("failed to read file: {e}"))?;
+
+    let format = format_from_extension(&file_path)?;
+
+    let provider = MockProvider::new();
+    let mut rag = state.rag.lock().unwrap_or_else(|p| p.into_inner());
+    let mut redaction = state
+        .redaction_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+
+    let doc = rag
+        .ingest_document(&content, &file_path, format, &provider, &mut redaction)
+        .map_err(|e| format!("ingest failed: {e}"))?;
+
+    drop(rag);
+    drop(redaction);
+
+    state.log_event(
+        Uuid::new_v4(),
+        EventType::ToolCall,
+        json!({
+            "event": "rag.ingest",
+            "file_path": file_path,
+            "format": doc.format,
+            "chunk_count": doc.chunk_count,
+        }),
+    );
+
+    serde_json::to_string(&doc).map_err(|e| format!("serialize error: {e}"))
+}
+
+pub fn search_documents(
+    state: &AppState,
+    query: String,
+    top_k: Option<u32>,
+) -> Result<String, String> {
+    let mut rag = state.rag.lock().unwrap_or_else(|p| p.into_inner());
+
+    if let Some(k) = top_k {
+        rag.config.top_k = k as usize;
+    }
+
+    let provider = MockProvider::new();
+    let results = rag
+        .query(&query, &provider)
+        .map_err(|e| format!("search failed: {e}"))?;
+
+    // SearchResult doesn't derive Serialize, so convert manually.
+    let rows: Vec<serde_json::Value> = results
+        .iter()
+        .map(|r| {
+            json!({
+                "chunk_id": r.chunk_id,
+                "doc_path": r.doc_path,
+                "chunk_index": r.chunk_index,
+                "content": r.content,
+                "score": r.score,
+            })
+        })
+        .collect();
+
+    serde_json::to_string(&rows).map_err(|e| format!("serialize error: {e}"))
+}
+
+pub fn chat_with_documents(state: &AppState, question: String) -> Result<String, String> {
+    let rag = state.rag.lock().unwrap_or_else(|p| p.into_inner());
+    let provider = MockProvider::new();
+
+    let results = rag
+        .query(&question, &provider)
+        .map_err(|e| format!("query failed: {e}"))?;
+
+    let prompt = rag.build_rag_prompt(&question, &results);
+    let chunk_count = results.len();
+
+    let sources: Vec<serde_json::Value> = results
+        .iter()
+        .map(|r| {
+            json!({
+                "doc_path": r.doc_path,
+                "chunk_index": r.chunk_index,
+                "score": r.score,
+            })
+        })
+        .collect();
+
+    drop(rag);
+
+    state.log_event(
+        Uuid::new_v4(),
+        EventType::ToolCall,
+        json!({
+            "event": "rag.query",
+            "question_len": question.len(),
+            "chunk_count": chunk_count,
+        }),
+    );
+
+    let response = json!({
+        "prompt": prompt,
+        "sources": sources,
+        "chunk_count": chunk_count,
+    });
+
+    serde_json::to_string(&response).map_err(|e| format!("serialize error: {e}"))
+}
+
+pub fn list_indexed_documents(state: &AppState) -> Result<String, String> {
+    let rag = state.rag.lock().unwrap_or_else(|p| p.into_inner());
+    let docs = rag.list_documents();
+    serde_json::to_string(docs).map_err(|e| format!("serialize error: {e}"))
+}
+
+pub fn remove_indexed_document(state: &AppState, doc_path: String) -> Result<String, String> {
+    let mut rag = state.rag.lock().unwrap_or_else(|p| p.into_inner());
+    let removed = rag.remove_document(&doc_path);
+    let response = json!({
+        "removed": removed,
+        "path": doc_path,
+    });
+    serde_json::to_string(&response).map_err(|e| format!("serialize error: {e}"))
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -4306,6 +4460,46 @@ mod runtime {
         super::policy_detect_conflicts()
     }
 
+    // ── RAG Pipeline Commands ──
+
+    #[tauri::command]
+    fn index_document(
+        state: tauri::State<'_, AppState>,
+        file_path: String,
+    ) -> Result<String, String> {
+        super::index_document(state.inner(), file_path)
+    }
+
+    #[tauri::command]
+    fn search_documents(
+        state: tauri::State<'_, AppState>,
+        query: String,
+        top_k: Option<u32>,
+    ) -> Result<String, String> {
+        super::search_documents(state.inner(), query, top_k)
+    }
+
+    #[tauri::command]
+    fn chat_with_documents(
+        state: tauri::State<'_, AppState>,
+        question: String,
+    ) -> Result<String, String> {
+        super::chat_with_documents(state.inner(), question)
+    }
+
+    #[tauri::command]
+    fn list_indexed_documents(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::list_indexed_documents(state.inner())
+    }
+
+    #[tauri::command]
+    fn remove_indexed_document(
+        state: tauri::State<'_, AppState>,
+        doc_path: String,
+    ) -> Result<String, String> {
+        super::remove_indexed_document(state.inner(), doc_path)
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -4433,6 +4627,11 @@ mod runtime {
                 policy_validate,
                 policy_test,
                 policy_detect_conflicts,
+                index_document,
+                search_documents,
+                chat_with_documents,
+                list_indexed_documents,
+                remove_indexed_document,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
