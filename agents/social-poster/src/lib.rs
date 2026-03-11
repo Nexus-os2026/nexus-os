@@ -557,6 +557,7 @@ impl RealGenerateStep {
             } else {
                 Some(config.llm.anthropic_api_key.clone())
             },
+            ..Default::default()
         };
         let provider = select_provider(&provider_config);
         Ok(Self {

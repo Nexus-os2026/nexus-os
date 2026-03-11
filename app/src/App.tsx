@@ -72,6 +72,7 @@ import DeployPipeline from "./pages/DeployPipeline";
 import LearningCenter from "./pages/LearningCenter";
 import PolicyManagement from "./pages/PolicyManagement";
 import type {
+  AgentStatusEvent,
   AgentSummary,
   AuditEventRow,
   ChatMessage,
@@ -132,6 +133,8 @@ function defaultConfig(): NexusConfig {
       default_model: "claude-sonnet-4-5",
       anthropic_api_key: "",
       openai_api_key: "",
+      deepseek_api_key: "",
+      gemini_api_key: "",
       ollama_url: "http://localhost:11434"
     },
     search: {
@@ -496,6 +499,25 @@ export default function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Listen for real-time agent status updates from the backend
+  useEffect(() => {
+    if (!hasDesktopRuntime()) return;
+    let unlisten: (() => void) | undefined;
+    import("@tauri-apps/api/event").then((mod) => {
+      mod.listen<AgentStatusEvent>("agent-status-changed", (event) => {
+        const { agent_id, status, fuel_remaining } = event.payload;
+        setAgents((prev) =>
+          prev.map((a) =>
+            a.id === agent_id
+              ? { ...a, status: status as AgentSummary["status"], fuel_remaining }
+              : a
+          )
+        );
+      }).then((fn) => { unlisten = fn; });
+    });
+    return () => { unlisten?.(); };
   }, []);
 
   useEffect(() => {

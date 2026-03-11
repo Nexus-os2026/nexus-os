@@ -19,6 +19,8 @@ import type {
   MarketplaceDetail,
   MarketplacePublishResult,
   IdentityInfo,
+  LlmRecommendations,
+  LlmStatus,
   McpTool,
   NexusConfig,
   OllamaStatus,
@@ -31,9 +33,11 @@ import type {
   ProtocolRequest,
   ProtocolsStatus,
   BuildSessionState,
+  ProviderUsageStats,
   ResearchSessionState,
   SetupResult,
   SystemInfo,
+  TestConnectionResult,
   VoiceRuntimeState
 } from "../types";
 
@@ -204,6 +208,10 @@ export function chatWithOllama(
 
 export function setAgentModel(agent: string, model: string): Promise<void> {
   return invokeDesktop<void>("set_agent_model", { agent, model });
+}
+
+export function checkLlmStatus(): Promise<LlmStatus> {
+  return invokeDesktop<LlmStatus>("check_llm_status");
 }
 
 export function getSystemInfo(): Promise<SystemInfo> {
@@ -483,5 +491,43 @@ export function learningAgentAction(
     action,
     url: url ?? null,
     content: content ?? null,
+  });
+}
+
+// ── LLM Provider Management API ──
+
+export function getLlmRecommendations(): Promise<LlmRecommendations> {
+  return invokeDesktop<LlmRecommendations>("get_llm_recommendations");
+}
+
+export function setAgentLlmProvider(
+  agentId: string,
+  providerId: string,
+  localOnly: boolean,
+  budgetDollars: number,
+  budgetTokens: number,
+): Promise<void> {
+  return invokeDesktop<void>("set_agent_llm_provider", {
+    agentId,
+    agent_id: agentId,
+    providerId,
+    provider_id: providerId,
+    localOnly,
+    local_only: localOnly,
+    budgetDollars,
+    budget_dollars: budgetDollars,
+    budgetTokens,
+    budget_tokens: budgetTokens,
+  });
+}
+
+export function getProviderUsageStats(): Promise<ProviderUsageStats[]> {
+  return invokeDesktop<ProviderUsageStats[]>("get_provider_usage_stats");
+}
+
+export function testLlmConnection(providerName: string): Promise<TestConnectionResult> {
+  return invokeDesktop<TestConnectionResult>("test_llm_connection", {
+    providerName,
+    provider_name: providerName,
   });
 }

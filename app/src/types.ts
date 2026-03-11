@@ -13,6 +13,14 @@ export interface AgentSummary {
   sandbox_runtime?: SandboxRuntime;
   memory_usage_bytes?: number;
   capabilities?: string[];
+  did?: string;
+}
+
+/** Event emitted by backend on agent lifecycle changes. */
+export interface AgentStatusEvent {
+  agent_id: string;
+  status: AgentStatus;
+  fuel_remaining: number;
 }
 
 export interface AuditEventRow {
@@ -35,7 +43,28 @@ export interface LlmConfig {
   default_model: string;
   anthropic_api_key: string;
   openai_api_key: string;
+  deepseek_api_key: string;
+  gemini_api_key: string;
   ollama_url: string;
+  routing_strategy?: string;
+  providers?: LlmProviderEntry[];
+}
+
+export interface LlmProviderEntry {
+  id: string;
+  provider_type: string;
+  display_name: string;
+  api_key: string;
+  base_url: string;
+  enabled: boolean;
+  priority: number;
+}
+
+export interface AgentLlmAssignment {
+  provider_id: string;
+  local_only: boolean;
+  budget_dollars: number;
+  budget_tokens: number;
 }
 
 export interface SearchConfig {
@@ -81,6 +110,7 @@ export interface NexusConfig {
   ollama?: OllamaConfigSection;
   models?: ModelsConfig;
   agents?: Record<string, AgentLlmConfig>;
+  agent_llm_assignments?: Record<string, AgentLlmAssignment>;
 }
 
 export interface ChatResponse {
@@ -121,6 +151,58 @@ export interface OllamaStatus {
   connected: boolean;
   base_url: string;
   models: OllamaModelInfo[];
+}
+
+/** Status of all configured LLM providers. */
+export interface LlmProviderStatusEntry {
+  name: string;
+  available: boolean;
+  is_paid: boolean;
+  reason: string;
+  latency_ms?: number;
+  error_hint?: string;
+  setup_command?: string;
+  models_installed?: number;
+}
+
+export interface LlmStatus {
+  active_provider: string;
+  providers: LlmProviderStatusEntry[];
+  governance_warning?: string;
+  has_any_provider: boolean;
+}
+
+export type RoutingStrategy = "Priority" | "RoundRobin" | "LowestLatency" | "CostOptimized";
+
+export interface LlmRecommendation {
+  provider_type: string;
+  display_name: string;
+  reason: string;
+  setup_command?: string;
+  cost_info: string;
+  recommended: boolean;
+}
+
+export interface LlmRecommendations {
+  ram_mb: number;
+  gpu: string;
+  can_run_local: boolean;
+  recommendations: LlmRecommendation[];
+}
+
+export interface ProviderUsageStats {
+  provider_name: string;
+  total_queries: number;
+  total_tokens: number;
+  estimated_cost_dollars: number;
+}
+
+export interface TestConnectionResult {
+  provider: string;
+  success: boolean;
+  latency_ms: number;
+  error?: string;
+  model_used?: string;
 }
 
 export interface SetupResult {

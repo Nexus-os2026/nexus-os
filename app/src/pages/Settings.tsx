@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import "./settings.css";
-import type { NexusConfig, OllamaModelInfo } from "../types";
+import type { LlmProviderStatusEntry, LlmRecommendation, NexusConfig, OllamaModelInfo, RoutingStrategy, TestConnectionResult } from "../types";
+import { checkLlmStatus, getLlmRecommendations, testLlmConnection, hasDesktopRuntime } from "../api/backend";
 
 interface SettingsProps {
   config: NexusConfig;
@@ -18,7 +19,7 @@ interface SettingsProps {
   onRefreshOllama?: () => Promise<void>;
 }
 
-type SettingsSection = "general" | "api" | "privacy" | "voice" | "models" | "about";
+type SettingsSection = "general" | "llm" | "api" | "privacy" | "voice" | "models" | "about";
 type ServiceStatus = "unknown" | "testing" | "ok" | "error";
 
 interface ApiKeyDef {
@@ -54,6 +55,20 @@ export function Settings({
   const [micLevel, setMicLevel] = useState(0.08);
   const [updateCheck, setUpdateCheck] = useState<"idle" | "checking" | "up-to-date">("idle");
 
+  // ── LLM Provider Management state ──
+  const [llmProviders, setLlmProviders] = useState<LlmProviderStatusEntry[]>([]);
+  const [llmActiveProvider, setLlmActiveProvider] = useState("");
+  const [llmGovernanceWarning, setLlmGovernanceWarning] = useState<string | null>(null);
+  const [llmHasAny, setLlmHasAny] = useState(false);
+  const [llmRecs, setLlmRecs] = useState<LlmRecommendation[]>([]);
+  const [llmRecsRam, setLlmRecsRam] = useState(0);
+  const [llmRecsCanLocal, setLlmRecsCanLocal] = useState(false);
+  const [testResults, setTestResults] = useState<Record<string, TestConnectionResult>>({});
+  const [testingProvider, setTestingProvider] = useState<string | null>(null);
+  const [routingStrategy, setRoutingStrategy] = useState<RoutingStrategy>(
+    (config.llm.routing_strategy as RoutingStrategy) || "Priority"
+  );
+
   const secretType = showKeys ? "text" : "password";
 
   const apiKeys: ApiKeyDef[] = [
@@ -85,6 +100,35 @@ export function Settings({
     return "status-none";
   }
 
+  // Fetch LLM status + recommendations when the LLM section is active
+  useEffect(() => {
+    if (section !== "llm" || !hasDesktopRuntime()) return;
+    checkLlmStatus().then((status) => {
+      setLlmProviders(status.providers);
+      setLlmActiveProvider(status.active_provider);
+      setLlmGovernanceWarning(status.governance_warning ?? null);
+      setLlmHasAny(status.has_any_provider);
+    }).catch(() => {});
+    getLlmRecommendations().then((recs) => {
+      setLlmRecs(recs.recommendations);
+      setLlmRecsRam(recs.ram_mb);
+      setLlmRecsCanLocal(recs.can_run_local);
+    }).catch(() => {});
+  }, [section]);
+
+  function handleTestConnection(providerName: string): void {
+    setTestingProvider(providerName);
+    testLlmConnection(providerName).then((result) => {
+      setTestResults((prev) => ({ ...prev, [providerName]: result }));
+      setTestingProvider(null);
+    }).catch(() => setTestingProvider(null));
+  }
+
+  function handleRoutingChange(strategy: RoutingStrategy): void {
+    setRoutingStrategy(strategy);
+    onChange({ ...config, llm: { ...config.llm, routing_strategy: strategy } });
+  }
+
   useEffect(() => {
     if (!micTesting) {
       setMicLevel(0.08);
@@ -104,14 +148,14 @@ export function Settings({
       </header>
 
       <nav className="st-nav">
-        {(["general", "api", "privacy", "voice", "models", "about"] as SettingsSection[]).map((s) => (
+        {(["general", "llm", "api", "privacy", "voice", "models", "about"] as SettingsSection[]).map((s) => (
           <button
             key={s}
             type="button"
             className={`st-nav-btn ${section === s ? "active" : ""}`}
             onClick={() => setSection(s)}
           >
-            {s === "api" ? "API Keys" : s.charAt(0).toUpperCase() + s.slice(1)}
+            {s === "api" ? "API Keys" : s === "llm" ? "LLM Providers" : s.charAt(0).toUpperCase() + s.slice(1)}
           </button>
         ))}
       </nav>
@@ -171,6 +215,150 @@ export function Settings({
                 />
               </div>
             </div>
+          </div>
+        )}
+
+        {section === "llm" && (
+          <div className="st-card">
+            {/* Governance Warning */}
+            {llmGovernanceWarning && (
+              <div className="st-row" style={{ background: "rgba(255,170,0,0.08)", borderRadius: 6, padding: "0.5rem 0.75rem", marginBottom: "0.75rem" }}>
+                <p className="st-row-label" style={{ color: "#ffa500", fontSize: "0.82rem" }}>{llmGovernanceWarning}</p>
+              </div>
+            )}
+
+            {/* Active Provider */}
+            <div className="st-row">
+              <div>
+                <p className="st-row-label">Active Provider</p>
+                <p className="st-row-hint">Currently routing LLM requests to this provider</p>
+              </div>
+              <span className="st-badge st-badge-green" style={{ textTransform: "capitalize" }}>{llmActiveProvider || "none"}</span>
+            </div>
+
+            {/* Routing Strategy */}
+            <div className="st-row">
+              <div>
+                <p className="st-row-label">Routing Strategy</p>
+                <p className="st-row-hint">How requests are distributed across providers</p>
+              </div>
+              <select className="st-select" value={routingStrategy} onChange={(e) => handleRoutingChange(e.target.value as RoutingStrategy)}>
+                <option value="Priority">Priority (use first available)</option>
+                <option value="RoundRobin">Round Robin</option>
+                <option value="LowestLatency">Lowest Latency</option>
+                <option value="CostOptimized">Cost Optimized</option>
+              </select>
+            </div>
+
+            {/* Provider Status List */}
+            <h3 className="st-card-title" style={{ marginTop: "1rem" }}>Provider Status</h3>
+            {llmProviders.map((p) => {
+              const tr = testResults[p.name];
+              return (
+                <div key={p.name} className="st-row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <p className="st-row-label" style={{ textTransform: "capitalize" }}>
+                      {p.name}
+                      {p.available && <span style={{ color: "#00e676", marginLeft: 6, fontSize: "0.75rem" }}>Connected</span>}
+                      {!p.available && p.name !== "mock" && <span style={{ color: "#ff5252", marginLeft: 6, fontSize: "0.75rem" }}>{p.error_hint || "Unavailable"}</span>}
+                    </p>
+                    <p className="st-row-hint">{p.reason}</p>
+                    {p.setup_command && !p.available && (
+                      <code className="st-row-hint" style={{ display: "block", marginTop: 4, color: "#80cbc4", fontSize: "0.78rem", userSelect: "all" }}>
+                        $ {p.setup_command}
+                      </code>
+                    )}
+                    {p.latency_ms != null && <p className="st-row-hint" style={{ fontSize: "0.72rem" }}>Latency: {p.latency_ms}ms</p>}
+                    {p.models_installed != null && p.models_installed > 0 && (
+                      <p className="st-row-hint" style={{ fontSize: "0.72rem" }}>{p.models_installed} model{p.models_installed === 1 ? "" : "s"} installed</p>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    {p.is_paid && <span className="st-badge" style={{ fontSize: "0.7rem", padding: "2px 6px" }}>Paid</span>}
+                    {!p.is_paid && p.name !== "mock" && <span className="st-badge st-badge-green" style={{ fontSize: "0.7rem", padding: "2px 6px" }}>Free</span>}
+                    <button
+                      type="button"
+                      className="st-btn st-btn-ghost"
+                      style={{ fontSize: "0.75rem", padding: "3px 10px" }}
+                      disabled={testingProvider === p.name}
+                      onClick={() => handleTestConnection(p.name)}
+                    >
+                      {testingProvider === p.name ? "Testing..." : "Test"}
+                    </button>
+                  </div>
+                  {tr && (
+                    <div style={{ width: "100%", fontSize: "0.75rem", paddingLeft: "0.5rem" }}>
+                      {tr.success
+                        ? <span style={{ color: "#00e676" }}>Connected in {tr.latency_ms}ms{tr.model_used ? ` (${tr.model_used})` : ""}</span>
+                        : <span style={{ color: "#ff5252" }}>Failed: {tr.error}</span>
+                      }
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* API Key Inputs */}
+            <h3 className="st-card-title" style={{ marginTop: "1rem" }}>API Keys</h3>
+            {[
+              { label: "DeepSeek", key: "deepseek_api_key" as const, hint: "~$0.14/M tokens (cheapest)" },
+              { label: "OpenAI", key: "openai_api_key" as const, hint: "~$5/M tokens" },
+              { label: "Gemini", key: "gemini_api_key" as const, hint: "~$3.50/M tokens" },
+              { label: "Anthropic", key: "anthropic_api_key" as const, hint: "~$3/M tokens" },
+            ].map((entry) => (
+              <div key={entry.key} className="st-row" style={{ flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <p className="st-row-label">{entry.label}</p>
+                  <p className="st-row-hint">{entry.hint}</p>
+                </div>
+                <input
+                  type={showKeys ? "text" : "password"}
+                  className="st-api-input"
+                  style={{ flex: 2, minWidth: 200 }}
+                  value={config.llm[entry.key]}
+                  onChange={(e) => onChange({ ...config, llm: { ...config.llm, [entry.key]: e.target.value } })}
+                  placeholder={`Enter ${entry.label} API key`}
+                />
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button type="button" className="st-btn st-btn-ghost" onClick={() => setShowKeys((p) => !p)}>
+                {showKeys ? "Hide Keys" : "Show Keys"}
+              </button>
+              <button type="button" className="st-btn st-btn-blue" onClick={onSave} disabled={saving}>
+                {saving ? "Saving..." : "Save Keys"}
+              </button>
+            </div>
+
+            {/* Setup Wizard — shown when no providers available */}
+            {!llmHasAny && llmRecs.length > 0 && (
+              <>
+                <h3 className="st-card-title" style={{ marginTop: "1.5rem", color: "#ffa500" }}>Setup Wizard</h3>
+                <p className="st-row-hint" style={{ marginBottom: "0.5rem" }}>
+                  No LLM provider is configured yet. Your system has {llmRecsRam} MB RAM.
+                  {llmRecsCanLocal
+                    ? " Your system can run local models — we recommend Ollama for maximum privacy."
+                    : " Your system may not have enough RAM for local models — consider a cloud provider."}
+                </p>
+                {llmRecs.map((rec) => (
+                  <div key={rec.provider_type} className="st-row" style={{ flexWrap: "wrap", gap: 6 }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <p className="st-row-label">
+                        {rec.display_name}
+                        {rec.recommended && <span style={{ color: "#00e676", marginLeft: 6, fontSize: "0.72rem" }}>Recommended</span>}
+                      </p>
+                      <p className="st-row-hint">{rec.reason}</p>
+                      <p className="st-row-hint" style={{ fontSize: "0.72rem" }}>{rec.cost_info}</p>
+                      {rec.setup_command && (
+                        <code className="st-row-hint" style={{ display: "block", marginTop: 4, color: "#80cbc4", fontSize: "0.78rem", userSelect: "all" }}>
+                          $ {rec.setup_command}
+                        </code>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         )}
 

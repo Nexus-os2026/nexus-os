@@ -1,8 +1,34 @@
 # Nexus OS Task Tracker
 
 ## Current Sprint
-- [ ] Wire real agent execution to Tauri backend
-- [ ] Connect LLM gateway to actual Ollama/cloud providers
+- [x] Wire real agent execution to Tauri backend (COMPLETE)
+  - create_agent: parses AgentManifest from JSON, calls Supervisor.start_agent(), creates AgentIdentity with DID, audits with capabilities
+  - start_agent: calls Supervisor.restart_agent() (stop → restart lifecycle), emits agent-status-changed event
+  - stop_agent: calls Supervisor.stop_agent() triggering shutdown, emits agent-status-changed event
+  - pause_agent / resume_agent: real Supervisor lifecycle transitions, emit events
+  - list_agents: returns real data from Supervisor (capabilities, fuel_budget, fuel_remaining, state, DID, sandbox_runtime)
+  - Real-time frontend updates via Tauri agent-status-changed event listener
+  - Full governance active: capability checks, fuel metering, audit logging, permission checks during execution
+- [x] Connect LLM gateway to actual Ollama/cloud providers — Complete LLM Management System (COMPLETE)
+  - **6 LLM providers**: Ollama (local), OpenAI, DeepSeek, Google Gemini, Anthropic Claude, Mock fallback
+  - OpenAI provider (connectors/llm/src/providers/openai.rs): OpenAI-compatible API, custom endpoint support
+  - Gemini provider (connectors/llm/src/providers/gemini.rs): Google's OpenAI-compatible endpoint
+  - **Smart Ollama error handling**: detects not installed vs not running vs no models, suggests exact command based on system RAM
+  - **User-choosable providers**: Settings > LLM Providers section with enable/disable, API key management, connection testing
+  - **4 routing strategies**: Priority, RoundRobin, LowestLatency, CostOptimized — configurable per-user
+  - **Per-agent LLM assignment**: PermissionDashboard lets users assign specific provider per agent, or "Auto" for global routing
+  - **Local-only mode**: per-agent toggle restricts to local providers for privacy-sensitive tasks
+  - **Setup wizard**: when no LLM configured, detects system specs and recommends models with exact install commands
+  - **Governance SLM routing**: warns when governance uses cloud LLM, suggests local model for privacy
+  - `check_llm_status`: smart diagnostics (Ollama binary check, model count, latency, error hints, setup commands)
+  - `get_llm_recommendations`: system-appropriate model suggestions based on RAM (phi3:mini < 8GB, llama3:8b 8-16GB, mixtral 16-32GB, llama3:70b 32GB+)
+  - `set_agent_llm_provider`: per-agent provider assignment stored in encrypted config
+  - `get_provider_usage_stats`: aggregate tokens/cost per provider from audit trail
+  - `test_llm_connection`: sends test prompt and reports latency/success
+  - LlmProviderEntry, AgentLlmAssignment types in kernel config (encrypted at rest)
+  - ProviderSelectionConfig extended with openai_api_key, gemini_api_key fields
+  - Full governance on all LLM calls: PromptFirewall, PII redaction, egress checks, fuel metering, audit trail
+  - 1639 tests passing (5 new provider tests), zero regressions
 - [x] Real system stats in header (CPU/RAM via sysinfo)
 - [x] Smart capability detection case-insensitive fix
 - [x] Agent button state management (disable Start when Running, etc)

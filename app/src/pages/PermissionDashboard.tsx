@@ -16,6 +16,7 @@ import {
   getCapabilityRequest,
   getPermissionHistory,
   hasDesktopRuntime,
+  setAgentLlmProvider as setAgentLlmProviderApi,
   updateAgentPermission,
 } from "../api/backend";
 import type {
@@ -173,6 +174,8 @@ export function PermissionDashboard({
   const [historyFilter, setHistoryFilter] = useState<string>("all");
   const [confirmAction, setConfirmAction] = useState<{ label: string; updates: PermissionUpdate[]; reason: string } | null>(null);
   const [requestModalCap, setRequestModalCap] = useState<CapabilityRequest | null>(null);
+  const [agentLlmProvider, setAgentLlmProvider] = useState("");
+  const [agentLocalOnly, setAgentLocalOnly] = useState(false);
   const isDesktop = hasDesktopRuntime();
 
   const loadData = useCallback(async () => {
@@ -511,6 +514,52 @@ export function PermissionDashboard({
               <div className={`perm-resource-fill ${memColor}`} style={{ width: `${memPercent}%` }} />
             </div>
             <div className="perm-resource-text">{memMb}MB / {memLimit}MB</div>
+          </div>
+        </div>
+      </div>
+
+      {/* LLM Provider Assignment */}
+      <div className="perm-resources-section">
+        <h3 className="perm-section-title">LLM Provider</h3>
+        <div className="perm-resources-grid">
+          <div className="perm-resource-card" style={{ gridColumn: "1 / -1" }}>
+            <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
+              <div style={{ flex: 1, minWidth: 150 }}>
+                <div className="perm-resource-label">Provider Assignment</div>
+                <select
+                  style={{ width: "100%", padding: "4px 8px", marginTop: 4, background: "rgba(255,255,255,0.05)", color: "inherit", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 4 }}
+                  value={agentLlmProvider}
+                  onChange={(e) => {
+                    setAgentLlmProvider(e.target.value);
+                    if (isDesktop) {
+                      void setAgentLlmProviderApi(agentId, e.target.value, agentLocalOnly, 0, 0);
+                    }
+                  }}
+                >
+                  <option value="">Auto (global routing strategy)</option>
+                  <option value="ollama">Ollama (local)</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="gemini">Google Gemini</option>
+                  <option value="claude">Anthropic Claude</option>
+                </select>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <label style={{ fontSize: "0.78rem", display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={agentLocalOnly}
+                    onChange={(e) => {
+                      setAgentLocalOnly(e.target.checked);
+                      if (isDesktop) {
+                        void setAgentLlmProviderApi(agentId, agentLlmProvider, e.target.checked, 0, 0);
+                      }
+                    }}
+                  />
+                  Local only (no cloud)
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       </div>

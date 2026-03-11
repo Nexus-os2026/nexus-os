@@ -7,6 +7,7 @@ license.workspace = true
 [features]
 default = ["tauri-runtime"]
 tauri-runtime = ["dep:tauri"]
+real-claude = []
 
 [dependencies]
 nexus-kernel = { path = "../../kernel" }

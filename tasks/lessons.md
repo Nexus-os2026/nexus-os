@@ -146,3 +146,40 @@
 ## Test Portability
 - Tests must only use commands from the TerminalExecutor ALLOWLIST (cargo, npm, pip, git, python, node, npx) — `echo`, `true`, `ls` etc. are NOT in the allowlist and will fail with CommandBlocked
 - Prefer `git --version` over `cargo --version` in CI-portable tests — git is available on virtually every CI runner image, while cargo requires a Rust toolchain
+
+## Wiring Real Agent Execution to Tauri Backend
+- The Tauri backend already called real Supervisor methods (start_agent, stop_agent, etc.) — the gap was that AgentRow returned minimal data (name, status, fuel) without capabilities, fuel_budget, DID, or sandbox_runtime. Enriching the response struct is the real "wiring"
+- AgentIdentity creation should be best-effort in create_agent — if Ed25519 key generation fails, the agent still works without a DID. Use `Option<String>` for did in AgentRow
+- Supervisor doesn't interact with WasmtimeSandbox directly — it's pure governance kernel. Sandbox type is reported as metadata, not orchestrated by Supervisor
+- Tauri auto-injects `window: tauri::Window` when declared in a #[tauri::command] function — no manual wiring needed, just add the parameter
+- Emit events AFTER the lifecycle operation succeeds, not before — this ensures the frontend only sees committed state transitions
+- Frontend AgentSummary fields should all be optional (fuel_budget?, capabilities?, sandbox_runtime?, did?) for backward compatibility with mock mode
+- The `agent-status-changed` event listener uses dynamic import of `@tauri-apps/api/event` to avoid breaking non-Tauri environments
+
+## Policy Engine Integration Tests (C.5)
+- `PolicyEngine::with_policies()` is the fastest path for in-memory test setup, but `PolicyEngine::new(dir) + load_policies()` tests the real TOML loading path — integration tests should use the file-based path to exercise deserialization
+- Deny-overrides-allow is absolute in the engine: even a low-priority Deny (200) beats a high-priority Allow (10) — this is by design (fail-safe), tests should verify both same-action deny and other-action allow in the same test
+- Supervisor end-to-end policy testing requires starting agents AFTER `set_policy_engine()` — the cedar engine is attached to each agent's `ConsentRuntime` at `start_agent()` time, not retroactively
+- `conditions_met()` silently passes when `fuel_cost` is `None` and `max_fuel_cost` is set — this is intentional (unknown cost doesn't exceed budget), but tests should explicitly verify this edge case
+- Time window conditions are stored in `PolicyConditions` but not enforced by `conditions_met()` — tests should verify storage/deserialization while documenting the not-yet-evaluated status
+- `tempfile::tempdir()` gives isolated directories that auto-clean — essential for policy reload tests that write files between `load_policies()` calls
+
+## Wiring LLM Gateway to Real Providers
+- The `send_chat` path already routed through GovernedLlmGateway — the real gap was the `chat_with_ollama` streaming path that bypassed ALL governance (no firewall, no PII redaction, no audit)
+- Always check BOTH chat paths: governed (send_chat) and streaming (chat_with_ollama) — streaming paths are frequently ungoverned shortcuts
+- `build_provider_config()` should read from both NexusConfig AND environment variables, with env vars taking precedence — this lets developers override without editing config files
+- `#[cfg(feature = "...")]` feature flags must be declared in Cargo.toml `[features]` section or clippy's `check-cfg` lint (-D unexpected-cfgs) will hard-fail
+- TypeScript default config objects (like `defaultConfig()` in App.tsx) must be updated whenever new required fields are added to interfaces — easy to miss since it's a runtime location not near the type definition
+- Provider status reporting should distinguish between "no key" vs "feature not enabled" vs "unreachable" — the frontend needs actionable error messages
+- Cascading provider selection (explicit → Ollama → DeepSeek → Claude → Mock) ensures something always works, with Mock as fail-safe
+- Pre-flight governance on streaming: redact PII from the last user message + run PromptFirewall scan BEFORE sending to provider, audit the completion AFTER receiving — this adds governance without blocking streaming
+
+## Complete LLM Management System
+- When adding new fields to a struct with `#[derive(Default)]`, any external code constructing it with struct literals will break — use `..Default::default()` at call sites to future-proof (social-poster agent broke when ProviderSelectionConfig got new fields)
+- Smart error detection for Ollama: check binary existence (`which ollama`), then health_check(), then list_models() — each layer gives a different actionable error message
+- System RAM detection via `sysinfo::System::new_all()` gives `total_memory()` in bytes (divide by 1024*1024 for MB) — use this for model recommendations
+- New OpenAI-compatible providers (OpenAI, Gemini) can share the same response parsing pattern (choices[0].message.content + usage.total_tokens) — DeepSeek already uses this format
+- Gemini's OpenAI-compatible endpoint is at `generativelanguage.googleapis.com/v1beta/openai/chat/completions` — uses Bearer token auth like OpenAI
+- `format!()` with no interpolation variables triggers clippy's `useless_use_of_format` — use `.to_string()` instead
+- Per-agent LLM assignments stored in config (`agent_llm_assignments: BTreeMap<String, AgentLlmAssignment>`) keeps assignments persistent and encrypted at rest
+- Settings page section organization: "LLM Providers" as its own top-level tab (not buried in "API Keys" or "Models") makes it discoverable — users manage providers, keys, and routing in one place

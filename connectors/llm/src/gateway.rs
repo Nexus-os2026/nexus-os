@@ -1,5 +1,6 @@
 use crate::providers::{
-    ClaudeProvider, DeepSeekProvider, LlmProvider, LlmResponse, MockProvider, OllamaProvider,
+    ClaudeProvider, DeepSeekProvider, GeminiProvider, LlmProvider, LlmResponse, MockProvider,
+    OllamaProvider, OpenAiProvider,
 };
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::errors::AgentError;
@@ -48,6 +49,8 @@ pub struct ProviderSelectionConfig {
     pub ollama_url: Option<String>,
     pub deepseek_api_key: Option<String>,
     pub anthropic_api_key: Option<String>,
+    pub openai_api_key: Option<String>,
+    pub gemini_api_key: Option<String>,
 }
 
 impl ProviderSelectionConfig {
@@ -57,6 +60,8 @@ impl ProviderSelectionConfig {
             ollama_url: env::var("OLLAMA_URL").ok(),
             deepseek_api_key: env::var("DEEPSEEK_API_KEY").ok(),
             anthropic_api_key: env::var("ANTHROPIC_API_KEY").ok(),
+            openai_api_key: env::var("OPENAI_API_KEY").ok(),
+            gemini_api_key: env::var("GEMINI_API_KEY").ok(),
         }
     }
 }
@@ -85,26 +90,30 @@ pub fn select_provider(config: &ProviderSelectionConfig) -> Box<dyn LlmProvider>
         return Box::new(OllamaProvider::new(url.to_string()));
     }
 
-    if config
-        .deepseek_api_key
-        .as_deref()
-        .map(|key| !key.trim().is_empty())
-        .unwrap_or(false)
-    {
+    if has_key(&config.deepseek_api_key) {
         return Box::new(DeepSeekProvider::new(config.deepseek_api_key.clone()));
     }
 
+    if has_key(&config.openai_api_key) {
+        return Box::new(OpenAiProvider::new(config.openai_api_key.clone()));
+    }
+
+    if has_key(&config.gemini_api_key) {
+        return Box::new(GeminiProvider::new(config.gemini_api_key.clone()));
+    }
+
     #[cfg(feature = "real-claude")]
-    if config
-        .anthropic_api_key
-        .as_deref()
-        .map(|key| !key.trim().is_empty())
-        .unwrap_or(false)
-    {
+    if has_key(&config.anthropic_api_key) {
         return Box::new(ClaudeProvider::new(config.anthropic_api_key.clone()));
     }
 
     Box::new(MockProvider::new())
+}
+
+fn has_key(key: &Option<String>) -> bool {
+    key.as_deref()
+        .map(|k| !k.trim().is_empty())
+        .unwrap_or(false)
 }
 
 fn explicit_provider(explicit: &str, config: &ProviderSelectionConfig) -> Box<dyn LlmProvider> {
@@ -116,6 +125,8 @@ fn explicit_provider(explicit: &str, config: &ProviderSelectionConfig) -> Box<dy
                 .unwrap_or_else(|| "http://localhost:11434".to_string()),
         )),
         "deepseek" => Box::new(DeepSeekProvider::new(config.deepseek_api_key.clone())),
+        "openai" => Box::new(OpenAiProvider::new(config.openai_api_key.clone())),
+        "gemini" | "google" => Box::new(GeminiProvider::new(config.gemini_api_key.clone())),
         "claude" | "anthropic" => Box::new(ClaudeProvider::new(config.anthropic_api_key.clone())),
         "mock" => Box::new(MockProvider::new()),
         _ => Box::new(MockProvider::new()),

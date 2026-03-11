@@ -25,6 +25,8 @@ pub struct NexusConfig {
     pub models: ModelsConfig,
     #[serde(default)]
     pub agents: BTreeMap<String, AgentLlmConfig>,
+    #[serde(default)]
+    pub agent_llm_assignments: BTreeMap<String, AgentLlmAssignment>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -32,7 +34,48 @@ pub struct LlmConfig {
     pub default_model: String,
     pub anthropic_api_key: String,
     pub openai_api_key: String,
+    #[serde(default)]
+    pub deepseek_api_key: String,
+    #[serde(default)]
+    pub gemini_api_key: String,
     pub ollama_url: String,
+    #[serde(default)]
+    pub routing_strategy: String,
+    #[serde(default)]
+    pub providers: Vec<LlmProviderEntry>,
+}
+
+/// A user-configured LLM provider entry for the priority list.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LlmProviderEntry {
+    pub id: String,
+    pub provider_type: String,
+    pub display_name: String,
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default)]
+    pub base_url: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub priority: u32,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Per-agent LLM assignment stored in config.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentLlmAssignment {
+    #[serde(default)]
+    pub provider_id: String,
+    #[serde(default)]
+    pub local_only: bool,
+    #[serde(default)]
+    pub budget_dollars: u32,
+    #[serde(default)]
+    pub budget_tokens: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -165,7 +208,11 @@ impl Default for NexusConfig {
                 default_model: "claude-sonnet-4-5".to_string(),
                 anthropic_api_key: String::new(),
                 openai_api_key: String::new(),
+                deepseek_api_key: String::new(),
+                gemini_api_key: String::new(),
                 ollama_url: "http://localhost:11434".to_string(),
+                routing_strategy: String::new(),
+                providers: Vec::new(),
             },
             search: SearchConfig {
                 brave_api_key: String::new(),
@@ -199,6 +246,7 @@ impl Default for NexusConfig {
             ollama: OllamaConfig::default(),
             models: ModelsConfig::default(),
             agents: BTreeMap::new(),
+            agent_llm_assignments: BTreeMap::new(),
         }
     }
 }

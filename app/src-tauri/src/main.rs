@@ -40,7 +40,19 @@ pub struct AgentRow {
     pub name: String,
     pub status: String,
     pub fuel_remaining: u64,
+    pub fuel_budget: u64,
     pub last_action: String,
+    pub capabilities: Vec<String>,
+    pub sandbox_runtime: String,
+    pub did: Option<String>,
+}
+
+/// Lightweight event emitted when agent status changes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentStatusEvent {
+    pub agent_id: String,
+    pub status: String,
+    pub fuel_remaining: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -200,12 +212,25 @@ pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, S
     let manifest: AgentManifest = serde_json::from_str(manifest_json.as_str())
         .map_err(|error| format!("invalid manifest JSON: {error}"))?;
     let agent_name = manifest.name.clone();
+    let agent_caps = manifest.capabilities.clone();
 
     let mut supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
     let agent_id = supervisor.start_agent(manifest).map_err(agent_error)?;
+
+    // Create cryptographic identity (DID) for this agent
+    let did = {
+        let mut id_mgr = match state.identity_mgr.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        match id_mgr.get_or_create(agent_id) {
+            Ok(identity) => Some(identity.did.clone()),
+            Err(_) => None, // identity creation is best-effort; agent still works
+        }
+    };
 
     let mut meta_guard = match state.meta.lock() {
         Ok(guard) => guard,
@@ -222,7 +247,12 @@ pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, S
     state.log_event(
         agent_id,
         EventType::UserAction,
-        json!({"event": "create_agent", "status": "ok"}),
+        json!({
+            "event": "create_agent",
+            "status": "ok",
+            "did": did,
+            "capabilities": agent_caps,
+        }),
     );
     Ok(agent_id.to_string())
 }
@@ -301,6 +331,10 @@ pub fn list_agents(state: &AppState) -> Result<Vec<AgentRow>, String> {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
+    let id_mgr = match state.identity_mgr.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
 
     let mut rows = statuses
         .into_iter()
@@ -309,12 +343,26 @@ pub fn list_agents(state: &AppState) -> Result<Vec<AgentRow>, String> {
                 name: "unknown".to_string(),
                 last_action: "none".to_string(),
             });
+
+            // Pull real capabilities and fuel_budget from the agent handle
+            let (capabilities, fuel_budget) = supervisor
+                .get_agent(status.id)
+                .map(|h| (h.manifest.capabilities.clone(), h.manifest.fuel_budget))
+                .unwrap_or_default();
+
+            // Look up DID if identity exists
+            let did = id_mgr.get(&status.id).map(|id| id.did.clone());
+
             AgentRow {
                 id: status.id.to_string(),
                 name: meta.name,
                 status: status.state.to_string(),
                 fuel_remaining: status.remaining_fuel,
+                fuel_budget,
                 last_action: meta.last_action,
+                capabilities,
+                sandbox_runtime: "in-process".to_string(),
+                did,
             }
         })
         .collect::<Vec<_>>();
@@ -356,22 +404,40 @@ pub fn get_audit_log(
     Ok(filtered[offset..].to_vec())
 }
 
+/// Build a [`ProviderSelectionConfig`] from the persisted config and environment.
+/// Environment variables take precedence over config file values.
+fn build_provider_config(config: &NexusConfig) -> ProviderSelectionConfig {
+    let non_empty = |s: &str| -> Option<String> {
+        if s.trim().is_empty() {
+            None
+        } else {
+            Some(s.to_string())
+        }
+    };
+
+    ProviderSelectionConfig {
+        provider: std::env::var("LLM_PROVIDER").ok(),
+        ollama_url: std::env::var("OLLAMA_URL")
+            .ok()
+            .or_else(|| non_empty(&config.llm.ollama_url)),
+        deepseek_api_key: std::env::var("DEEPSEEK_API_KEY")
+            .ok()
+            .or_else(|| non_empty(&config.llm.deepseek_api_key)),
+        anthropic_api_key: std::env::var("ANTHROPIC_API_KEY")
+            .ok()
+            .or_else(|| non_empty(&config.llm.anthropic_api_key)),
+        openai_api_key: std::env::var("OPENAI_API_KEY")
+            .ok()
+            .or_else(|| non_empty(&config.llm.openai_api_key)),
+        gemini_api_key: std::env::var("GEMINI_API_KEY")
+            .ok()
+            .or_else(|| non_empty(&config.llm.gemini_api_key)),
+    }
+}
+
 pub fn send_chat(state: &AppState, message: String) -> Result<ChatResponse, String> {
     let config = load_config().map_err(agent_error)?;
-    let provider_config = ProviderSelectionConfig {
-        provider: std::env::var("LLM_PROVIDER").ok(),
-        ollama_url: if config.llm.ollama_url.trim().is_empty() {
-            None
-        } else {
-            Some(config.llm.ollama_url.clone())
-        },
-        deepseek_api_key: std::env::var("DEEPSEEK_API_KEY").ok(),
-        anthropic_api_key: if config.llm.anthropic_api_key.trim().is_empty() {
-            None
-        } else {
-            Some(config.llm.anthropic_api_key.clone())
-        },
-    };
+    let provider_config = build_provider_config(&config);
     let provider = select_provider(&provider_config);
     let mut gateway = GovernedLlmGateway::new(provider);
 
@@ -900,9 +966,13 @@ pub fn list_available_models() -> Result<Vec<AvailableModel>, String> {
     Ok(models)
 }
 
-/// Stream a chat completion through Ollama. Returns the full response text.
-/// The `on_token` callback is called with each token for streaming to the frontend.
+/// Stream a chat completion through Ollama with governance enforcement.
+///
+/// Pre-flight: PII redaction + prompt firewall on the last user message.
+/// Post-flight: audit event with token count and model.
+/// The `on_token` callback is called with each token for streaming.
 pub fn chat_with_ollama_streaming<F>(
+    state: &AppState,
     messages: Vec<serde_json::Value>,
     model: String,
     base_url: Option<String>,
@@ -911,19 +981,93 @@ pub fn chat_with_ollama_streaming<F>(
 where
     F: FnMut(&str),
 {
-    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let config = load_config().map_err(|e| e.to_string())?;
+    let url = base_url.unwrap_or_else(|| {
+        let cfg_url = config.llm.ollama_url.trim();
+        if cfg_url.is_empty() {
+            "http://localhost:11434".to_string()
+        } else {
+            cfg_url.to_string()
+        }
+    });
     let provider = OllamaProvider::new(&url);
 
     // Ensure Ollama is running first
     if !provider.health_check().unwrap_or(false) {
-        return Err("Ollama is not running. Start it with: ollama serve".into());
+        return Err(format!(
+            "Ollama is not running at {url}. Start it with: ollama serve"
+        ));
     }
 
-    provider
-        .chat_stream(&messages, &model, |token| {
+    // Governance pre-flight: redact PII and check firewall on last user message
+    let chat_agent_id = Uuid::new_v4();
+    let mut governed_messages = messages.clone();
+    if let Some(last_user) = governed_messages
+        .iter_mut()
+        .rev()
+        .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
+    {
+        if let Some(content) = last_user.get("content").and_then(|c| c.as_str()) {
+            // PII redaction
+            let mut redaction_engine =
+                nexus_kernel::redaction::RedactionEngine::new(Default::default());
+            let result = redaction_engine.process_prompt(
+                "llm.chat_stream",
+                "strict",
+                vec![chat_agent_id.to_string()],
+                content,
+            );
+            let redacted = result.outbound_prompt.clone();
+
+            // Prompt firewall check
+            let mut input_filter = nexus_kernel::firewall::prompt_firewall::InputFilter::new();
+            let mut audit = match state.audit.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner(),
+            };
+            match input_filter.check(chat_agent_id, &redacted, &mut audit) {
+                nexus_kernel::firewall::prompt_firewall::FirewallAction::Block { reason } => {
+                    return Err(format!("Prompt blocked by firewall: {reason}"));
+                }
+                nexus_kernel::firewall::prompt_firewall::FirewallAction::Redacted {
+                    redacted_text,
+                    ..
+                } => {
+                    *last_user = json!({"role": "user", "content": redacted_text});
+                }
+                nexus_kernel::firewall::prompt_firewall::FirewallAction::Allow => {
+                    // Use the PII-redacted version even if firewall allows
+                    if result.summary.total_findings > 0 {
+                        *last_user = json!({"role": "user", "content": redacted});
+                    }
+                }
+            }
+        }
+    }
+
+    let started = std::time::Instant::now();
+    let result = provider
+        .chat_stream(&governed_messages, &model, |token| {
             on_token(token);
         })
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    let latency_ms = started.elapsed().as_millis() as u64;
+
+    // Post-flight audit
+    state.log_event(
+        chat_agent_id,
+        EventType::LlmCall,
+        json!({
+            "event": "chat_stream",
+            "model": model,
+            "provider": "ollama",
+            "response_length": result.len(),
+            "latency_ms": latency_ms,
+            "governance": "firewall+redaction",
+        }),
+    );
+
+    Ok(result)
 }
 
 /// Save agent-to-model assignment in config.
@@ -936,6 +1080,487 @@ pub fn set_agent_model(agent: String, model: String) -> Result<(), String> {
     });
     entry.model = model;
     save_nexus_config(&config).map_err(|e| e.to_string())
+}
+
+// ── LLM Provider Management ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmProviderStatusEntry {
+    pub name: String,
+    pub available: bool,
+    pub is_paid: bool,
+    pub reason: String,
+    pub latency_ms: Option<u64>,
+    pub error_hint: Option<String>,
+    pub setup_command: Option<String>,
+    pub models_installed: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmStatusResponse {
+    pub active_provider: String,
+    pub providers: Vec<LlmProviderStatusEntry>,
+    pub governance_warning: Option<String>,
+    pub has_any_provider: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmRecommendation {
+    pub provider_type: String,
+    pub display_name: String,
+    pub reason: String,
+    pub setup_command: Option<String>,
+    pub cost_info: String,
+    pub recommended: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmRecommendations {
+    pub ram_mb: u64,
+    pub gpu: String,
+    pub can_run_local: bool,
+    pub recommendations: Vec<LlmRecommendation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderUsageStats {
+    pub provider_name: String,
+    pub total_queries: u64,
+    pub total_tokens: u64,
+    pub estimated_cost_dollars: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestConnectionResult {
+    pub provider: String,
+    pub success: bool,
+    pub latency_ms: u64,
+    pub error: Option<String>,
+    pub model_used: Option<String>,
+}
+
+fn key_present(opt: &Option<String>) -> bool {
+    opt.as_deref()
+        .map(|k| !k.trim().is_empty())
+        .unwrap_or(false)
+}
+
+/// Smart Ollama status detection: diagnose connection refused, not installed, no models.
+fn check_ollama_smart(url: &str) -> LlmProviderStatusEntry {
+    let provider = OllamaProvider::new(url);
+    let start = std::time::Instant::now();
+    let health = provider.health_check();
+    let latency = start.elapsed().as_millis() as u64;
+
+    match health {
+        Ok(true) => {
+            // Connected! Check how many models are installed.
+            let models = provider.list_models().unwrap_or_default();
+            if models.is_empty() {
+                // Ollama running but no models — detect system RAM for recommendation.
+                let sys = sysinfo::System::new_all();
+                let ram_mb = sys.total_memory() / (1024 * 1024);
+                let (suggestion, cmd) = if ram_mb < 8_000 {
+                    ("phi3:mini (2.7B, ~1.6GB)", "ollama pull phi3:mini")
+                } else if ram_mb < 16_000 {
+                    ("llama3:8b (8B, ~4.7GB)", "ollama pull llama3:8b")
+                } else if ram_mb < 32_000 {
+                    ("llama3:70b-q4 or mixtral:8x7b", "ollama pull mixtral:8x7b")
+                } else {
+                    ("llama3:70b", "ollama pull llama3:70b")
+                };
+                LlmProviderStatusEntry {
+                    name: "ollama".to_string(),
+                    available: false,
+                    is_paid: false,
+                    reason: format!(
+                        "Ollama is running but has no models. Based on your system ({ram_mb} MB RAM), try: {suggestion}"
+                    ),
+                    latency_ms: Some(latency),
+                    error_hint: Some("No models installed".to_string()),
+                    setup_command: Some(cmd.to_string()),
+                    models_installed: Some(0),
+                }
+            } else {
+                LlmProviderStatusEntry {
+                    name: "ollama".to_string(),
+                    available: true,
+                    is_paid: false,
+                    reason: format!(
+                        "connected to {url} ({} model{})",
+                        models.len(),
+                        if models.len() == 1 { "" } else { "s" }
+                    ),
+                    latency_ms: Some(latency),
+                    error_hint: None,
+                    setup_command: None,
+                    models_installed: Some(models.len() as u32),
+                }
+            }
+        }
+        _ => {
+            // Not reachable. Detect whether Ollama binary exists.
+            let ollama_installed = Command::new("which")
+                .arg("ollama")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+
+            if !ollama_installed {
+                LlmProviderStatusEntry {
+                    name: "ollama".to_string(),
+                    available: false,
+                    is_paid: false,
+                    reason: "Ollama not found on this system. Download it from https://ollama.com"
+                        .to_string(),
+                    latency_ms: None,
+                    error_hint: Some("Not installed".to_string()),
+                    setup_command: Some(
+                        "curl -fsSL https://ollama.com/install.sh | sh".to_string(),
+                    ),
+                    models_installed: None,
+                }
+            } else {
+                LlmProviderStatusEntry {
+                    name: "ollama".to_string(),
+                    available: false,
+                    is_paid: false,
+                    reason: "Ollama is not running. Start it with: ollama serve".to_string(),
+                    latency_ms: None,
+                    error_hint: Some("Not running".to_string()),
+                    setup_command: Some("ollama serve".to_string()),
+                    models_installed: None,
+                }
+            }
+        }
+    }
+}
+
+fn cloud_provider_entry(name: &str, has_key: bool, cost_info: &str) -> LlmProviderStatusEntry {
+    LlmProviderStatusEntry {
+        name: name.to_string(),
+        available: has_key,
+        is_paid: true,
+        reason: if has_key {
+            "API key configured".to_string()
+        } else {
+            format!("no API key configured ({cost_info})")
+        },
+        latency_ms: None,
+        error_hint: if has_key {
+            None
+        } else {
+            Some("No API key".to_string())
+        },
+        setup_command: None,
+        models_installed: None,
+    }
+}
+
+/// Check which LLM providers are configured, reachable, and active.
+pub fn check_llm_status() -> Result<LlmStatusResponse, String> {
+    let config = load_config().map_err(|e| e.to_string())?;
+    let prov_config = build_provider_config(&config);
+    let active = select_provider(&prov_config);
+    let active_name = active.name().to_string();
+
+    let mut providers = Vec::new();
+
+    // Ollama — local, free, smart diagnostics
+    let ollama_url = prov_config
+        .ollama_url
+        .as_deref()
+        .unwrap_or("http://localhost:11434");
+    providers.push(check_ollama_smart(ollama_url));
+
+    // OpenAI
+    providers.push(cloud_provider_entry(
+        "openai",
+        key_present(&prov_config.openai_api_key),
+        "~$5/M tokens",
+    ));
+
+    // DeepSeek
+    providers.push(cloud_provider_entry(
+        "deepseek",
+        key_present(&prov_config.deepseek_api_key),
+        "~$0.14/M tokens, cheapest cloud option",
+    ));
+
+    // Gemini
+    providers.push(cloud_provider_entry(
+        "gemini",
+        key_present(&prov_config.gemini_api_key),
+        "~$3.50/M tokens",
+    ));
+
+    // Claude / Anthropic
+    {
+        let has_key = key_present(&prov_config.anthropic_api_key);
+        #[cfg(feature = "real-claude")]
+        let feature_ok = true;
+        #[cfg(not(feature = "real-claude"))]
+        let feature_ok = false;
+        let available = has_key && feature_ok;
+        let reason = if !has_key {
+            "no API key configured (~$3/M tokens)".to_string()
+        } else if !feature_ok {
+            "real-claude feature not enabled in build".to_string()
+        } else {
+            "API key configured, feature enabled".to_string()
+        };
+        providers.push(LlmProviderStatusEntry {
+            name: "claude".to_string(),
+            available,
+            is_paid: true,
+            reason,
+            latency_ms: None,
+            error_hint: if !feature_ok && has_key {
+                Some("Feature gate".to_string())
+            } else if !has_key {
+                Some("No API key".to_string())
+            } else {
+                None
+            },
+            setup_command: None,
+            models_installed: None,
+        });
+    }
+
+    // Mock — always available
+    providers.push(LlmProviderStatusEntry {
+        name: "mock".to_string(),
+        available: true,
+        is_paid: false,
+        reason: "built-in fallback".to_string(),
+        latency_ms: None,
+        error_hint: None,
+        setup_command: None,
+        models_installed: None,
+    });
+
+    let has_real = providers.iter().any(|p| p.available && p.name != "mock");
+
+    // Governance warning: if no local provider, warn about cloud governance
+    let governance_warning = if !providers.iter().any(|p| p.available && p.name == "ollama") {
+        if has_real {
+            Some(
+                "Governance tasks are using cloud LLM. For maximum privacy, install a local model."
+                    .to_string(),
+            )
+        } else {
+            Some("Governance features limited. Configure an LLM provider in Settings.".to_string())
+        }
+    } else {
+        None
+    };
+
+    Ok(LlmStatusResponse {
+        active_provider: active_name,
+        providers,
+        governance_warning,
+        has_any_provider: has_real,
+    })
+}
+
+/// Get system-appropriate LLM recommendations.
+pub fn get_llm_recommendations() -> Result<LlmRecommendations, String> {
+    let sys = sysinfo::System::new_all();
+    let ram_mb = sys.total_memory() / (1024 * 1024);
+
+    // Try to detect GPU name from sysinfo cpus (basic heuristic)
+    let gpu = "auto-detect".to_string();
+    let can_run_local = ram_mb >= 8_000;
+
+    let mut recs = Vec::new();
+
+    // Local recommendations based on RAM
+    if ram_mb < 8_000 {
+        recs.push(LlmRecommendation {
+            provider_type: "ollama".to_string(),
+            display_name: "Ollama (phi3:mini)".to_string(),
+            reason: format!("Your system has {ram_mb} MB RAM. phi3:mini is the lightest option."),
+            setup_command: Some("ollama pull phi3:mini".to_string()),
+            cost_info: "Free (local)".to_string(),
+            recommended: false,
+        });
+    } else if ram_mb < 16_000 {
+        recs.push(LlmRecommendation {
+            provider_type: "ollama".to_string(),
+            display_name: "Ollama (llama3:8b)".to_string(),
+            reason: format!(
+                "Your system has {ram_mb} MB RAM. llama3:8b is a great balance of quality and speed."
+            ),
+            setup_command: Some("ollama pull llama3:8b".to_string()),
+            cost_info: "Free (local)".to_string(),
+            recommended: true,
+        });
+    } else if ram_mb < 32_000 {
+        recs.push(LlmRecommendation {
+            provider_type: "ollama".to_string(),
+            display_name: "Ollama (mixtral:8x7b)".to_string(),
+            reason: format!(
+                "Your system has {ram_mb} MB RAM. mixtral:8x7b offers excellent quality."
+            ),
+            setup_command: Some("ollama pull mixtral:8x7b".to_string()),
+            cost_info: "Free (local)".to_string(),
+            recommended: true,
+        });
+    } else {
+        recs.push(LlmRecommendation {
+            provider_type: "ollama".to_string(),
+            display_name: "Ollama (llama3:70b)".to_string(),
+            reason: format!(
+                "Your system has {ram_mb} MB RAM. llama3:70b is the most capable local model."
+            ),
+            setup_command: Some("ollama pull llama3:70b".to_string()),
+            cost_info: "Free (local)".to_string(),
+            recommended: true,
+        });
+    }
+
+    // Cloud recommendations — always show
+    recs.push(LlmRecommendation {
+        provider_type: "deepseek".to_string(),
+        display_name: "DeepSeek".to_string(),
+        reason: "Cheapest cloud option with strong coding performance.".to_string(),
+        setup_command: None,
+        cost_info: "~$0.14/M tokens".to_string(),
+        recommended: !can_run_local,
+    });
+
+    recs.push(LlmRecommendation {
+        provider_type: "openai".to_string(),
+        display_name: "OpenAI (GPT-4o)".to_string(),
+        reason: "Industry standard with broad capabilities.".to_string(),
+        setup_command: None,
+        cost_info: "~$5/M tokens".to_string(),
+        recommended: false,
+    });
+
+    recs.push(LlmRecommendation {
+        provider_type: "gemini".to_string(),
+        display_name: "Google Gemini".to_string(),
+        reason: "Strong multimodal capabilities and competitive pricing.".to_string(),
+        setup_command: None,
+        cost_info: "~$3.50/M tokens".to_string(),
+        recommended: false,
+    });
+
+    recs.push(LlmRecommendation {
+        provider_type: "claude".to_string(),
+        display_name: "Anthropic Claude".to_string(),
+        reason: "Best for reasoning and safety-conscious tasks.".to_string(),
+        setup_command: None,
+        cost_info: "~$3/M tokens".to_string(),
+        recommended: false,
+    });
+
+    Ok(LlmRecommendations {
+        ram_mb,
+        gpu,
+        can_run_local,
+        recommendations: recs,
+    })
+}
+
+/// Set the LLM provider assignment for a specific agent.
+pub fn set_agent_llm_provider(
+    agent_id: String,
+    provider_id: String,
+    local_only: bool,
+    budget_dollars: u32,
+    budget_tokens: u64,
+) -> Result<(), String> {
+    let mut config = load_config().map_err(agent_error)?;
+    let assignment = nexus_kernel::config::AgentLlmAssignment {
+        provider_id,
+        local_only,
+        budget_dollars,
+        budget_tokens,
+    };
+    config.agent_llm_assignments.insert(agent_id, assignment);
+    save_nexus_config(&config).map_err(agent_error)
+}
+
+/// Get provider usage stats (from audit trail oracle events).
+pub fn get_provider_usage_stats(state: &AppState) -> Result<Vec<ProviderUsageStats>, String> {
+    let audit = match state.audit.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    let events = audit.events();
+
+    // Aggregate by provider from LlmCall audit events
+    let mut stats: HashMap<String, (u64, u64, f64)> = HashMap::new();
+    for event in events {
+        if event.event_type == EventType::LlmCall {
+            let provider = event
+                .payload
+                .get("provider")
+                .or_else(|| event.payload.get("model"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_string();
+            let tokens = event
+                .payload
+                .get("token_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let cost = event
+                .payload
+                .get("cost")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            let entry = stats.entry(provider).or_insert((0, 0, 0.0));
+            entry.0 += 1;
+            entry.1 += tokens;
+            entry.2 += cost;
+        }
+    }
+
+    let result = stats
+        .into_iter()
+        .map(|(name, (queries, tokens, cost))| ProviderUsageStats {
+            provider_name: name,
+            total_queries: queries,
+            total_tokens: tokens,
+            estimated_cost_dollars: cost,
+        })
+        .collect();
+
+    Ok(result)
+}
+
+/// Test connection to a specific provider by sending a simple prompt.
+pub fn test_llm_connection(provider_name: String) -> Result<TestConnectionResult, String> {
+    let config = load_config().map_err(agent_error)?;
+    let prov_config = build_provider_config(&config);
+
+    let mut test_config = prov_config.clone();
+    test_config.provider = Some(provider_name.clone());
+    let provider = select_provider(&test_config);
+
+    let start = std::time::Instant::now();
+    let result = provider.query("Reply with exactly: ok", 10, &config.llm.default_model);
+    let latency = start.elapsed().as_millis() as u64;
+
+    match result {
+        Ok(response) => Ok(TestConnectionResult {
+            provider: provider_name,
+            success: true,
+            latency_ms: latency,
+            error: None,
+            model_used: Some(response.model_name),
+        }),
+        Err(e) => Ok(TestConnectionResult {
+            provider: provider_name,
+            success: false,
+            latency_ms: latency,
+            error: Some(e.to_string()),
+            model_used: None,
+        }),
+    }
 }
 
 // ── Permission Dashboard Commands ──
@@ -3042,30 +3667,83 @@ mod runtime {
 
     #[tauri::command]
     fn create_agent(
+        window: tauri::Window,
         state: tauri::State<'_, AppState>,
         manifest_json: String,
     ) -> Result<String, String> {
-        super::create_agent(state.inner(), manifest_json)
+        let id = super::create_agent(state.inner(), manifest_json)?;
+        emit_agent_status(&window, state.inner(), &id);
+        Ok(id)
     }
 
     #[tauri::command]
-    fn start_agent(state: tauri::State<'_, AppState>, agent_id: String) -> Result<(), String> {
-        super::start_agent(state.inner(), agent_id)
+    fn start_agent(
+        window: tauri::Window,
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<(), String> {
+        super::start_agent(state.inner(), agent_id.clone())?;
+        emit_agent_status(&window, state.inner(), &agent_id);
+        Ok(())
     }
 
     #[tauri::command]
-    fn stop_agent(state: tauri::State<'_, AppState>, agent_id: String) -> Result<(), String> {
-        super::stop_agent(state.inner(), agent_id)
+    fn stop_agent(
+        window: tauri::Window,
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<(), String> {
+        super::stop_agent(state.inner(), agent_id.clone())?;
+        emit_agent_status(&window, state.inner(), &agent_id);
+        Ok(())
     }
 
     #[tauri::command]
-    fn pause_agent(state: tauri::State<'_, AppState>, agent_id: String) -> Result<(), String> {
-        super::pause_agent(state.inner(), agent_id)
+    fn pause_agent(
+        window: tauri::Window,
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<(), String> {
+        super::pause_agent(state.inner(), agent_id.clone())?;
+        emit_agent_status(&window, state.inner(), &agent_id);
+        Ok(())
     }
 
     #[tauri::command]
-    fn resume_agent(state: tauri::State<'_, AppState>, agent_id: String) -> Result<(), String> {
-        super::resume_agent(state.inner(), agent_id)
+    fn resume_agent(
+        window: tauri::Window,
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<(), String> {
+        super::resume_agent(state.inner(), agent_id.clone())?;
+        emit_agent_status(&window, state.inner(), &agent_id);
+        Ok(())
+    }
+
+    /// Emit an agent-status-changed event to the frontend.
+    fn emit_agent_status(window: &tauri::Window, state: &AppState, agent_id: &str) {
+        let parsed = match uuid::Uuid::parse_str(agent_id) {
+            Ok(id) => id,
+            Err(_) => return,
+        };
+        let supervisor = match state.supervisor.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if let Some(status) = supervisor
+            .health_check()
+            .into_iter()
+            .find(|s| s.id == parsed)
+        {
+            let _ = window.emit(
+                "agent-status-changed",
+                AgentStatusEvent {
+                    agent_id: agent_id.to_string(),
+                    status: status.state.to_string(),
+                    fuel_remaining: status.remaining_fuel,
+                },
+            );
+        }
     }
 
     #[tauri::command]
@@ -3191,10 +3869,12 @@ mod runtime {
     #[tauri::command]
     async fn chat_with_ollama(
         window: tauri::Window,
+        state: tauri::State<'_, AppState>,
         messages: Vec<serde_json::Value>,
         model: String,
         base_url: Option<String>,
     ) -> Result<String, String> {
+        let app_state = state.inner().clone();
         let (tx, rx) = std::sync::mpsc::channel::<Result<String, String>>();
         std::thread::spawn(move || {
             let mut last_emit = std::time::Instant::now()
@@ -3202,23 +3882,24 @@ mod runtime {
                 .unwrap_or_else(std::time::Instant::now);
             let mut full = String::new();
 
-            let result = super::chat_with_ollama_streaming(messages, model, base_url, |token| {
-                full.push_str(token);
+            let result =
+                super::chat_with_ollama_streaming(&app_state, messages, model, base_url, |token| {
+                    full.push_str(token);
 
-                // Throttle: emit at most every 50ms
-                let now = std::time::Instant::now();
-                if now.duration_since(last_emit).as_millis() >= 50 {
-                    let _ = window.emit(
-                        "chat-token",
-                        serde_json::json!({
-                            "token": token,
-                            "full": &full,
-                            "done": false,
-                        }),
-                    );
-                    last_emit = now;
-                }
-            });
+                    // Throttle: emit at most every 50ms
+                    let now = std::time::Instant::now();
+                    if now.duration_since(last_emit).as_millis() >= 50 {
+                        let _ = window.emit(
+                            "chat-token",
+                            serde_json::json!({
+                                "token": token,
+                                "full": &full,
+                                "done": false,
+                            }),
+                        );
+                        last_emit = now;
+                    }
+                });
 
             match &result {
                 Ok(text) => {
@@ -3253,6 +3934,45 @@ mod runtime {
     #[tauri::command]
     fn set_agent_model(agent: String, model: String) -> Result<(), String> {
         super::set_agent_model(agent, model)
+    }
+
+    #[tauri::command]
+    fn check_llm_status() -> Result<super::LlmStatusResponse, String> {
+        super::check_llm_status()
+    }
+
+    #[tauri::command]
+    fn get_llm_recommendations() -> Result<super::LlmRecommendations, String> {
+        super::get_llm_recommendations()
+    }
+
+    #[tauri::command]
+    fn set_agent_llm_provider(
+        agent_id: String,
+        provider_id: String,
+        local_only: bool,
+        budget_dollars: u32,
+        budget_tokens: u64,
+    ) -> Result<(), String> {
+        super::set_agent_llm_provider(
+            agent_id,
+            provider_id,
+            local_only,
+            budget_dollars,
+            budget_tokens,
+        )
+    }
+
+    #[tauri::command]
+    fn get_provider_usage_stats(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<super::ProviderUsageStats>, String> {
+        super::get_provider_usage_stats(state.inner())
+    }
+
+    #[tauri::command]
+    fn test_llm_connection(provider_name: String) -> Result<super::TestConnectionResult, String> {
+        super::test_llm_connection(provider_name)
     }
 
     #[tauri::command]
@@ -3666,6 +4386,11 @@ mod runtime {
                 list_available_models,
                 chat_with_ollama,
                 set_agent_model,
+                check_llm_status,
+                get_llm_recommendations,
+                set_agent_llm_provider,
+                get_provider_usage_stats,
+                test_llm_connection,
                 get_system_info,
                 get_agent_permissions,
                 update_agent_permission,

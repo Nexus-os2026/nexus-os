@@ -7,17 +7,21 @@ use std::process::Command;
 
 pub mod claude;
 pub mod deepseek;
+pub mod gemini;
 #[cfg(feature = "local-slm")]
 pub mod local_slm;
 pub mod mock;
 pub mod ollama;
+pub mod openai;
 
 pub use claude::ClaudeProvider;
 pub use deepseek::DeepSeekProvider;
+pub use gemini::GeminiProvider;
 #[cfg(feature = "local-slm")]
 pub use local_slm::LocalSlmProvider;
 pub use mock::MockProvider;
 pub use ollama::OllamaProvider;
+pub use openai::OpenAiProvider;
 
 const REAL_API_DISABLED_ERROR: &str =
     "Real API disabled. Set ENABLE_REAL_API=1 to allow external calls.";
@@ -189,7 +193,8 @@ pub(crate) fn curl_post_json(
 #[cfg(test)]
 mod tests {
     use super::{
-        require_real_api_with, ClaudeProvider, DeepSeekProvider, LlmProvider, OllamaProvider,
+        require_real_api_with, ClaudeProvider, DeepSeekProvider, GeminiProvider, LlmProvider,
+        OllamaProvider, OpenAiProvider,
     };
     use serde_json::json;
 
@@ -282,5 +287,81 @@ mod tests {
 
         let guard = require_real_api_with(true, None);
         assert!(guard.is_err());
+    }
+
+    #[test]
+    fn test_openai_request_format() {
+        let provider = OpenAiProvider::new(Some("sk-openai-test".to_string()));
+        let request = provider.build_request("Hello world", 64, "gpt-4o");
+
+        assert_eq!(
+            request.endpoint,
+            "https://api.openai.com/v1/chat/completions"
+        );
+        assert_eq!(
+            request.headers.get("authorization").map(String::as_str),
+            Some("Bearer sk-openai-test")
+        );
+        assert_eq!(
+            request.body,
+            json!({
+                "model": "gpt-4o",
+                "messages": [{"role": "user", "content": "Hello world"}],
+                "max_tokens": 64
+            })
+        );
+    }
+
+    #[test]
+    fn test_openai_provider_traits() {
+        let provider = OpenAiProvider::new(Some("key".to_string()));
+        assert_eq!(provider.name(), "openai");
+        assert!(provider.cost_per_token() > 0.0);
+        assert!(provider.is_paid());
+        assert!(provider.requires_real_api_opt_in());
+    }
+
+    #[test]
+    fn test_gemini_request_format() {
+        let provider = GeminiProvider::new(Some("gemini-key-test".to_string()));
+        let request = provider.build_request("Explain rust", 96, "gemini-2.0-flash");
+
+        assert!(request
+            .endpoint
+            .contains("generativelanguage.googleapis.com"));
+        assert_eq!(
+            request.headers.get("authorization").map(String::as_str),
+            Some("Bearer gemini-key-test")
+        );
+        assert_eq!(
+            request.body,
+            json!({
+                "model": "gemini-2.0-flash",
+                "messages": [{"role": "user", "content": "Explain rust"}],
+                "max_tokens": 96
+            })
+        );
+    }
+
+    #[test]
+    fn test_gemini_provider_traits() {
+        let provider = GeminiProvider::new(Some("key".to_string()));
+        assert_eq!(provider.name(), "gemini");
+        assert!(provider.cost_per_token() > 0.0);
+        assert!(provider.is_paid());
+        assert!(provider.requires_real_api_opt_in());
+    }
+
+    #[test]
+    fn test_openai_custom_endpoint() {
+        let provider = OpenAiProvider::with_endpoint(
+            Some("key".to_string()),
+            "http://my-proxy.local/v1/chat/completions".to_string(),
+        );
+        let request = provider.build_request("test", 32, "local-model");
+        assert_eq!(
+            request.endpoint,
+            "http://my-proxy.local/v1/chat/completions"
+        );
     }
 }
