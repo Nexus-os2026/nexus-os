@@ -72,6 +72,7 @@ import DeployPipeline from "./pages/DeployPipeline";
 import LearningCenter from "./pages/LearningCenter";
 import PolicyManagement from "./pages/PolicyManagement";
 import Documents from "./pages/Documents";
+import ModelHub from "./pages/ModelHub";
 import type {
   AgentStatusEvent,
   AgentSummary,
@@ -87,7 +88,7 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents";
+type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -120,6 +121,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "file-manager", label: "Files", icon: "📁", shortcut: "" },
   { id: "system-monitor", label: "Monitor", icon: "⊙", shortcut: "" },
   { id: "documents", label: "Documents", icon: "📑", shortcut: "" },
+  { id: "model-hub", label: "Models", icon: "🧠", shortcut: "" },
   { id: "notes", label: "Notes", icon: "📝", shortcut: "" },
   { id: "project-manager", label: "Projects", icon: "◫", shortcut: "" },
   { id: "database", label: "Database", icon: "◆", shortcut: "" },
@@ -1194,6 +1196,9 @@ export default function App(): JSX.Element {
     }
     if (page === "documents") {
       return <Documents />;
+    }
+    if (page === "model-hub") {
+      return <ModelHub />;
     }
     if (page === "notes") {
       return <NotesApp />;

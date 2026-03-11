@@ -5,6 +5,7 @@ pub mod circuit_breaker;
 pub mod defense;
 pub mod gateway;
 pub mod governance_slm;
+pub mod model_hub;
 pub mod model_registry;
 pub mod providers;
 pub mod rag;

@@ -581,3 +581,46 @@ export function getDocumentAccessLog(docPath: string): Promise<string> {
     doc_path: docPath,
   });
 }
+
+// ── Model Hub API ──
+
+export function searchModels(query: string, limit?: number): Promise<string> {
+  return invokeDesktop<string>("search_models", { query, limit: limit ?? null });
+}
+
+export function getModelInfo(modelId: string): Promise<string> {
+  return invokeDesktop<string>("get_model_info", {
+    modelId,
+    model_id: modelId,
+  });
+}
+
+export function checkModelCompatibility(fileSizeBytes: number): Promise<string> {
+  return invokeDesktop<string>("check_model_compatibility", {
+    fileSizeBytes,
+    file_size_bytes: fileSizeBytes,
+  });
+}
+
+export function downloadModel(modelId: string, filename: string): Promise<string> {
+  return invokeDesktop<string>("download_model", {
+    modelId,
+    model_id: modelId,
+    filename,
+  });
+}
+
+export function listLocalModels(): Promise<string> {
+  return invokeDesktop<string>("list_local_models");
+}
+
+export function deleteLocalModel(modelId: string): Promise<string> {
+  return invokeDesktop<string>("delete_local_model", {
+    modelId,
+    model_id: modelId,
+  });
+}
+
+export function getSystemSpecs(): Promise<string> {
+  return invokeDesktop<string>("get_system_specs");
+}

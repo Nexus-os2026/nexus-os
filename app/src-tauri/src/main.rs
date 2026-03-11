@@ -2,6 +2,8 @@ use nexus_connectors_llm::chunking::SupportedFormat;
 use nexus_connectors_llm::gateway::{
     select_provider, AgentRuntimeContext, GovernedLlmGateway, ProviderSelectionConfig,
 };
+use nexus_connectors_llm::model_hub::{self, DownloadProgress, DownloadStatus};
+use nexus_connectors_llm::model_registry::ModelRegistry;
 use nexus_connectors_llm::providers::{MockProvider, OllamaProvider};
 use nexus_connectors_llm::rag::{RagConfig, RagPipeline};
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
@@ -110,6 +112,7 @@ pub struct AppState {
     learning: Arc<Mutex<LearningManager>>,
     rag: Arc<Mutex<RagPipeline>>,
     redaction_engine: Arc<Mutex<RedactionEngine>>,
+    model_registry: Arc<Mutex<ModelRegistry>>,
 }
 
 impl Default for AppState {
@@ -138,6 +141,7 @@ impl AppState {
             learning: Arc::new(Mutex::new(LearningManager::new())),
             rag: Arc::new(Mutex::new(RagPipeline::new(RagConfig::default()))),
             redaction_engine: Arc::new(Mutex::new(RedactionEngine::default())),
+            model_registry: Arc::new(Mutex::new(ModelRegistry::default_dir())),
         }
     }
 
@@ -3825,6 +3829,110 @@ pub fn get_document_access_log(state: &AppState, doc_path: String) -> Result<Str
     serde_json::to_string(&entries).map_err(|e| format!("serialize error: {e}"))
 }
 
+// ── Model Hub Commands ──────────────────────────────────────────────────────
+
+pub fn search_models(
+    state: &AppState,
+    query: String,
+    limit: Option<u32>,
+) -> Result<String, String> {
+    let limit = limit.unwrap_or(20) as usize;
+    state.log_event(
+        AgentId::nil(),
+        EventType::ToolCall,
+        json!({"operation": "model_hub.search", "query": &query, "limit": limit}),
+    );
+    let result = model_hub::search_huggingface(&query, limit)?;
+    serde_json::to_string(&result).map_err(|e| format!("serialize error: {e}"))
+}
+
+pub fn get_model_info(_state: &AppState, model_id: String) -> Result<String, String> {
+    let info = model_hub::get_model_details(&model_id)?;
+    serde_json::to_string(&info).map_err(|e| format!("serialize error: {e}"))
+}
+
+pub fn check_model_compatibility(
+    _state: &AppState,
+    file_size_bytes: u64,
+) -> Result<String, String> {
+    let compat = model_hub::check_compatibility(file_size_bytes);
+    serde_json::to_string(&compat).map_err(|e| format!("serialize error: {e}"))
+}
+
+pub fn list_local_models(state: &AppState) -> Result<String, String> {
+    let mut registry = state
+        .model_registry
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    registry.discover();
+    let models = registry.available_models().to_vec();
+    serde_json::to_string(&models).map_err(|e| format!("serialize error: {e}"))
+}
+
+pub fn delete_local_model(state: &AppState, model_id: String) -> Result<String, String> {
+    let mut registry = state
+        .model_registry
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    registry.discover();
+
+    let model_dir = match registry.find_model(&model_id) {
+        Some(config) => config.model_path.clone(),
+        None => {
+            return Ok(serde_json::to_string(
+                &json!({"deleted": false, "model_id": &model_id, "error": "model not found"}),
+            )
+            .unwrap());
+        }
+    };
+
+    // Safety: only delete within the models directory
+    let models_root = registry.models_dir().clone();
+    if !model_dir.starts_with(&models_root) {
+        return Err("refusing to delete path outside models directory".to_string());
+    }
+
+    drop(registry); // unlock before filesystem operation
+
+    match std::fs::remove_dir_all(&model_dir) {
+        Ok(()) => {
+            state.log_event(
+                AgentId::nil(),
+                EventType::ToolCall,
+                json!({"operation": "model_hub.delete", "model_id": &model_id, "path": model_dir.display().to_string()}),
+            );
+            Ok(serde_json::to_string(&json!({"deleted": true, "model_id": &model_id})).unwrap())
+        }
+        Err(e) => Ok(serde_json::to_string(
+            &json!({"deleted": false, "model_id": &model_id, "error": e.to_string()}),
+        )
+        .unwrap()),
+    }
+}
+
+pub fn get_system_specs() -> Result<String, String> {
+    use sysinfo::System;
+    let mut sys = System::new();
+    sys.refresh_memory();
+    sys.refresh_cpu_usage();
+
+    let cpu_name = sys
+        .cpus()
+        .first()
+        .map(|c| c.brand().to_string())
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    let cpu_cores = sys.cpus().len();
+
+    Ok(serde_json::to_string(&json!({
+        "total_ram_mb": sys.total_memory() / (1024 * 1024),
+        "available_ram_mb": sys.available_memory() / (1024 * 1024),
+        "cpu_name": cpu_name,
+        "cpu_cores": cpu_cores,
+    }))
+    .unwrap())
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -4543,6 +4651,129 @@ mod runtime {
         super::get_document_access_log(state.inner(), doc_path)
     }
 
+    // ── Model Hub Commands ──
+
+    #[tauri::command]
+    fn search_models(
+        state: tauri::State<'_, AppState>,
+        query: String,
+        limit: Option<u32>,
+    ) -> Result<String, String> {
+        super::search_models(state.inner(), query, limit)
+    }
+
+    #[tauri::command]
+    fn get_model_info(
+        state: tauri::State<'_, AppState>,
+        model_id: String,
+    ) -> Result<String, String> {
+        super::get_model_info(state.inner(), model_id)
+    }
+
+    #[tauri::command]
+    fn check_model_compatibility(
+        state: tauri::State<'_, AppState>,
+        file_size_bytes: u64,
+    ) -> Result<String, String> {
+        super::check_model_compatibility(state.inner(), file_size_bytes)
+    }
+
+    #[tauri::command]
+    async fn download_model(
+        window: tauri::Window,
+        state: tauri::State<'_, AppState>,
+        model_id: String,
+        filename: String,
+    ) -> Result<String, String> {
+        // Read models_dir from registry (lock briefly)
+        let models_dir = {
+            let registry = state
+                .model_registry
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            registry.models_dir().clone()
+        };
+
+        let model_id_clone = model_id.clone();
+        let filename_clone = filename.clone();
+
+        let (tx, rx) = std::sync::mpsc::channel::<Result<String, String>>();
+
+        std::thread::spawn(move || {
+            let target_dir = models_dir.display().to_string();
+            let last_emit = std::cell::Cell::new(
+                std::time::Instant::now()
+                    .checked_sub(std::time::Duration::from_secs(1))
+                    .unwrap_or_else(std::time::Instant::now),
+            );
+
+            let result = super::model_hub::download_model_file(
+                &model_id_clone,
+                &filename_clone,
+                &target_dir,
+                |progress: DownloadProgress| {
+                    let now = std::time::Instant::now();
+                    let is_terminal = matches!(
+                        progress.status,
+                        DownloadStatus::Completed | DownloadStatus::Failed(_)
+                    );
+
+                    // Throttle at 300ms, but always emit terminal states
+                    if is_terminal || now.duration_since(last_emit.get()).as_millis() >= 300 {
+                        let _ = window.emit("model-download-progress", &progress);
+                        last_emit.set(now);
+                    }
+                },
+            );
+
+            match &result {
+                Ok(model_path) => {
+                    // Generate nexus-model.toml so ModelRegistry can discover it
+                    let _ = super::model_hub::generate_model_config(
+                        &model_id_clone,
+                        &filename_clone,
+                        model_path,
+                    );
+                    let _ = window.emit(
+                        "model-download-complete",
+                        serde_json::json!({"model_id": &model_id_clone, "path": model_path}),
+                    );
+                }
+                Err(e) => {
+                    let _ = window.emit(
+                        "model-download-complete",
+                        serde_json::json!({"model_id": &model_id_clone, "error": e}),
+                    );
+                }
+            }
+
+            let _ = tx.send(result);
+        });
+
+        // Return immediately — the thread will emit progress events
+        // But we still wait for the result so Tauri knows when the command finishes
+        rx.recv()
+            .unwrap_or(Err("Download thread terminated unexpectedly".to_string()))
+    }
+
+    #[tauri::command]
+    fn list_local_models(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::list_local_models(state.inner())
+    }
+
+    #[tauri::command]
+    fn delete_local_model(
+        state: tauri::State<'_, AppState>,
+        model_id: String,
+    ) -> Result<String, String> {
+        super::delete_local_model(state.inner(), model_id)
+    }
+
+    #[tauri::command]
+    fn get_system_specs() -> Result<String, String> {
+        super::get_system_specs()
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -4678,6 +4909,13 @@ mod runtime {
                 get_document_governance,
                 get_semantic_map,
                 get_document_access_log,
+                search_models,
+                get_model_info,
+                check_model_compatibility,
+                download_model,
+                list_local_models,
+                delete_local_model,
+                get_system_specs,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
