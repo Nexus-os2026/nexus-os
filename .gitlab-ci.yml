@@ -67,13 +67,31 @@ build-release:
         librsvg2-dev
         libssl-dev
         pkg-config
+        python3
+        nodejs
+        npm
   script:
     - cargo build --release --workspace
+    # Install npm dependencies for SBOM npm parsing
+    - cd app && npm ci && cd ..
+    # Generate SBOM
+    - ./scripts/generate-sbom.sh --output sbom.cdx.json
+    # Generate provenance attestation
+    - ./scripts/generate-provenance.sh
+        --artifacts
+          target/release/nexus-server
+          target/release/coding-agent
+          target/release/social-poster-agent
+        --output provenance.intoto.jsonl
+        --sbom-ref sbom.cdx.json
+        --builder-id "https://gitlab.com/nexaiceo/nexus-os/-/pipelines/${CI_PIPELINE_ID}"
   artifacts:
     paths:
       - target/release/nexus-server
       - target/release/coding-agent
       - target/release/social-poster-agent
+      - sbom.cdx.json
+      - provenance.intoto.jsonl
     expire_in: 30 days
 
 build-agent-bundles:
@@ -126,14 +144,25 @@ sign-release:
     - chmod +x /usr/local/bin/cosign
   script:
     - mkdir -p signatures
+    # Sign release binaries
     - |
       for artifact in target/release/nexus-server target/release/coding-agent target/release/social-poster-agent; do
         if [ -f "$artifact" ]; then
           ./scripts/sign-release.sh --artifact "$artifact" --output-dir signatures
         fi
       done
+    # Sign SBOM
     - |
-      # Merge per-artifact manifests into a single signing-manifest.json
+      if [ -f "sbom.cdx.json" ]; then
+        ./scripts/sign-release.sh --artifact sbom.cdx.json --output-dir signatures
+      fi
+    # Sign provenance attestation
+    - |
+      if [ -f "provenance.intoto.jsonl" ]; then
+        ./scripts/sign-release.sh --artifact provenance.intoto.jsonl --output-dir signatures
+      fi
+    # Merge all per-artifact manifests into a single signing-manifest.json
+    - |
       jq -s '{
         version: "1.0.0",
         artifacts: [.[].artifacts[]],
@@ -165,3 +194,53 @@ verify-signatures:
     - chmod +x /usr/local/bin/cosign
   script:
     - ./scripts/verify-release.sh signatures/signing-manifest.json
+
+verify-sbom:
+  stage: sign
+  image: python:3.12
+  rules:
+    - if: $CI_COMMIT_TAG
+  needs:
+    - job: build-release
+      artifacts: true
+  script:
+    # Verify SBOM against current lock files
+    - ./scripts/generate-sbom.sh --verify sbom.cdx.json
+    # Validate SBOM is well-formed JSON with expected component counts
+    - |
+      python3 -c "
+      import json, sys
+
+      with open('sbom.cdx.json') as f:
+          sbom = json.load(f)
+
+      assert sbom['bomFormat'] == 'CycloneDX', 'bomFormat must be CycloneDX'
+      assert sbom['specVersion'] == '1.5', 'specVersion must be 1.5'
+
+      components = sbom.get('components', [])
+      total = len(components)
+
+      rust_count = sum(
+          1 for c in components
+          if any(p.get('value') in ('RustCrate', 'WorkspaceCrate')
+                 for p in c.get('properties', [])
+                 if p.get('name') == 'nexus:entry_type')
+      )
+      npm_count = sum(
+          1 for c in components
+          if any(p.get('value') == 'NpmPackage'
+                 for p in c.get('properties', [])
+                 if p.get('name') == 'nexus:entry_type')
+      )
+
+      print(f'SBOM validation: {total} total, {rust_count} Rust, {npm_count} npm')
+
+      if rust_count < 100:
+          print(f'ERROR: expected at least 100 Rust crates, found {rust_count}')
+          sys.exit(1)
+      if npm_count < 10:
+          print(f'ERROR: expected at least 10 npm packages, found {npm_count}')
+          sys.exit(1)
+
+      print('SBOM validation: passed')
+      "

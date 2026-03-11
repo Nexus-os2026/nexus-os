@@ -1,6 +1,7 @@
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MarketplaceError {
@@ -43,6 +44,12 @@ pub struct InTotoAttestation {
     pub invocation_id: String,
     pub materials_sha256: String,
     pub generated_at_unix: u64,
+    #[serde(default)]
+    pub slsa_level: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_environment: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sbom_reference: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -90,6 +97,13 @@ pub fn bundle_materials_hash(
     Ok(hex::encode(hasher.finalize()))
 }
 
+fn current_unix_timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 pub fn create_attestation(
     manifest_toml: &str,
     agent_code: &str,
@@ -97,13 +111,36 @@ pub fn create_attestation(
     source_uri: &str,
     builder_id: &str,
 ) -> Result<InTotoAttestation, MarketplaceError> {
+    create_attestation_with_options(
+        manifest_toml,
+        agent_code,
+        metadata,
+        source_uri,
+        builder_id,
+        None,
+    )
+}
+
+/// Create an attestation with optional overrides for testing.
+/// Pass `timestamp_override` to use a deterministic timestamp instead of real time.
+pub fn create_attestation_with_options(
+    manifest_toml: &str,
+    agent_code: &str,
+    metadata: &PackageMetadata,
+    source_uri: &str,
+    builder_id: &str,
+    timestamp_override: Option<u64>,
+) -> Result<InTotoAttestation, MarketplaceError> {
     Ok(InTotoAttestation {
         predicate_type: "https://in-toto.io/Statement/v1".to_string(),
         builder_id: builder_id.to_string(),
         source_uri: source_uri.to_string(),
         invocation_id: uuid::Uuid::new_v4().to_string(),
         materials_sha256: bundle_materials_hash(manifest_toml, agent_code, metadata)?,
-        generated_at_unix: 1_700_000_000,
+        generated_at_unix: timestamp_override.unwrap_or_else(current_unix_timestamp),
+        slsa_level: 1,
+        build_environment: None,
+        sbom_reference: None,
     })
 }
 
@@ -232,28 +269,35 @@ fn derive_package_id(name: &str, version: &str, materials_sha256: &str) -> Strin
 #[cfg(test)]
 mod tests {
     use super::{
-        create_unsigned_bundle, sign_package, verify_package, MarketplaceError, PackageMetadata,
+        create_attestation, create_attestation_with_options, create_unsigned_bundle, sign_package,
+        verify_package, InTotoAttestation, MarketplaceError, PackageMetadata,
     };
     use ed25519_dalek::SigningKey;
 
-    #[test]
-    fn test_package_sign_and_verify() {
-        let metadata = PackageMetadata {
+    fn test_metadata() -> PackageMetadata {
+        PackageMetadata {
             name: "rust-social-poster".to_string(),
             version: "1.0.0".to_string(),
             description: "Posts Rust updates every morning".to_string(),
             capabilities: vec!["social.post".to_string(), "llm.query".to_string()],
             tags: vec!["social".to_string(), "rust".to_string()],
             author_id: "author-123".to_string(),
-        };
-        let unsigned = create_unsigned_bundle(
-            r#"name = "rust-social-poster"
+        }
+    }
+
+    const TEST_MANIFEST: &str = r#"name = "rust-social-poster"
 version = "1.0.0"
 capabilities = ["social.post", "llm.query"]
 fuel_budget = 5000
-"#,
-            "fn run() { /* publish */ }",
-            metadata,
+"#;
+    const TEST_CODE: &str = "fn run() { /* publish */ }";
+
+    #[test]
+    fn test_package_sign_and_verify() {
+        let unsigned = create_unsigned_bundle(
+            TEST_MANIFEST,
+            TEST_CODE,
+            test_metadata(),
             "https://github.com/example/agent",
             "nexus-buildkit",
         )
@@ -271,5 +315,58 @@ fuel_budget = 5000
             tampered == Err(MarketplaceError::AttestationInvalid)
                 || tampered == Err(MarketplaceError::SignatureInvalid)
         );
+    }
+
+    #[test]
+    fn test_attestation_uses_real_timestamp() {
+        let attestation = create_attestation(
+            TEST_MANIFEST,
+            TEST_CODE,
+            &test_metadata(),
+            "https://github.com/example/agent",
+            "nexus-buildkit",
+        )
+        .expect("attestation should be created");
+
+        // Real timestamp should be well past the old hardcoded 1_700_000_000
+        assert!(attestation.generated_at_unix > 1_700_000_000);
+        assert_eq!(attestation.slsa_level, 1);
+        assert!(attestation.build_environment.is_none());
+        assert!(attestation.sbom_reference.is_none());
+    }
+
+    #[test]
+    fn test_attestation_with_timestamp_override() {
+        let attestation = create_attestation_with_options(
+            TEST_MANIFEST,
+            TEST_CODE,
+            &test_metadata(),
+            "https://github.com/example/agent",
+            "nexus-buildkit",
+            Some(1_700_000_000),
+        )
+        .expect("attestation should be created");
+
+        assert_eq!(attestation.generated_at_unix, 1_700_000_000);
+        assert_eq!(attestation.slsa_level, 1);
+    }
+
+    #[test]
+    fn test_attestation_new_fields_default_on_deserialize() {
+        // Simulate a legacy attestation without the new fields
+        let legacy_json = serde_json::json!({
+            "predicate_type": "https://in-toto.io/Statement/v1",
+            "builder_id": "nexus-buildkit",
+            "source_uri": "https://example.com",
+            "invocation_id": "test-id",
+            "materials_sha256": "deadbeef",
+            "generated_at_unix": 1_700_000_000
+        });
+
+        let attestation: InTotoAttestation =
+            serde_json::from_value(legacy_json).expect("legacy attestation should deserialize");
+        assert_eq!(attestation.slsa_level, 0);
+        assert!(attestation.build_environment.is_none());
+        assert!(attestation.sbom_reference.is_none());
     }
 }
