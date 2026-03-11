@@ -1,10 +1,13 @@
 use crate::audit::{AuditTrail, EventType};
+use crate::hardware_security::sealed_store::SealedKeyStore;
 use crate::hardware_security::software::SoftwareBackend;
-use crate::hardware_security::stubs::{SecureEnclaveBackend, TeeBackend, TpmBackend};
+use crate::hardware_security::stubs::{SecureEnclaveBackend, TpmBackend};
+use crate::hardware_security::tee_backend::TeeBackend;
 use crate::hardware_security::types::{hex_encode, KeyBackend, KeyError, KeyHandle, KeyPurpose};
 use crate::hardware_security::{AttestationReport, PublicKeyBytes, SignatureBytes};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::path::PathBuf;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -15,10 +18,17 @@ pub enum KeyBackendKind {
     Tee,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// Configuration for [`KeyManager`].
+///
+/// When `sealed_store_dir` is set with a `Software` backend, keys are
+/// encrypted at rest using AES-256-GCM with an HKDF-derived sealing key.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeyManagerConfig {
     pub preferred_backend: KeyBackendKind,
     pub enable_hardware: bool,
+    /// Directory for sealed key files. `None` means in-memory only.
+    #[serde(default)]
+    pub sealed_store_dir: Option<PathBuf>,
 }
 
 impl Default for KeyManagerConfig {
@@ -26,6 +36,7 @@ impl Default for KeyManagerConfig {
         Self {
             preferred_backend: KeyBackendKind::Software,
             enable_hardware: false,
+            sealed_store_dir: None,
         }
     }
 }
@@ -47,6 +58,16 @@ pub struct KeyManager {
     deprecated_handles: Vec<KeyHandle>,
 }
 
+impl std::fmt::Debug for KeyManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KeyManager")
+            .field("backend_kind", &self.backend_kind)
+            .field("backend_name", &self.backend.backend_name())
+            .field("deprecated_handles", &self.deprecated_handles.len())
+            .finish()
+    }
+}
+
 impl Default for KeyManager {
     fn default() -> Self {
         Self::from_config(KeyManagerConfig::default())
@@ -60,11 +81,19 @@ impl KeyManager {
 
     pub fn from_config(config: KeyManagerConfig) -> Self {
         let mut backend_kind = config.preferred_backend;
-        let mut backend = build_backend(config.preferred_backend, config.enable_hardware);
+        let mut backend = build_backend(
+            config.preferred_backend,
+            config.enable_hardware,
+            config.sealed_store_dir.as_ref(),
+        );
 
         if backend_kind != KeyBackendKind::Software && !backend.is_available() {
             backend_kind = KeyBackendKind::Software;
-            backend = Box::new(SoftwareBackend::default());
+            backend = build_backend(
+                KeyBackendKind::Software,
+                false,
+                config.sealed_store_dir.as_ref(),
+            );
         }
 
         Self {
@@ -176,10 +205,11 @@ impl KeyManager {
 
     pub fn generate_attestation(
         &self,
+        nonce: &str,
         audit: &mut AuditTrail,
         actor_id: Uuid,
     ) -> Result<AttestationReport, KeyError> {
-        let report = self.backend.attest()?;
+        let report = self.backend.attest(nonce)?;
         audit
             .append_event(
                 actor_id,
@@ -197,12 +227,29 @@ impl KeyManager {
     }
 }
 
-fn build_backend(kind: KeyBackendKind, enable_hardware: bool) -> Box<dyn KeyBackend> {
+fn build_backend(
+    kind: KeyBackendKind,
+    enable_hardware: bool,
+    sealed_store_dir: Option<&PathBuf>,
+) -> Box<dyn KeyBackend> {
     match kind {
-        KeyBackendKind::Software => Box::new(SoftwareBackend::default()),
+        KeyBackendKind::Software => {
+            if let Some(dir) = sealed_store_dir {
+                let master_secret = crate::hardware_security::sealed_store::derive_machine_secret();
+                let store = SealedKeyStore::new(dir, &master_secret);
+                match SoftwareBackend::with_sealed_store(store) {
+                    Ok(backend) => Box::new(backend),
+                    Err(_) => Box::new(SoftwareBackend::default()),
+                }
+            } else {
+                Box::new(SoftwareBackend::default())
+            }
+        }
         KeyBackendKind::Tpm => Box::new(TpmBackend::new(enable_hardware)),
         KeyBackendKind::SecureEnclave => Box::new(SecureEnclaveBackend::new(enable_hardware)),
-        KeyBackendKind::Tee => Box::new(TeeBackend::new(enable_hardware)),
+        KeyBackendKind::Tee => {
+            Box::new(TeeBackend::new(enable_hardware, sealed_store_dir.cloned()))
+        }
     }
 }
 

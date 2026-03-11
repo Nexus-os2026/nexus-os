@@ -78,8 +78,15 @@ fn validate_jwt(
 }
 
 /// Create a signed EdDSA JWT for testing.
-pub fn create_test_jwt(identity: &AgentIdentity, token_mgr: &TokenManager, ttl: u64) -> String {
-    token_mgr.issue_token(identity, &[], ttl, None)
+pub fn create_test_jwt(
+    identity: &AgentIdentity,
+    key_manager: &nexus_kernel::hardware_security::KeyManager,
+    token_mgr: &TokenManager,
+    ttl: u64,
+) -> String {
+    token_mgr
+        .issue_token(identity, key_manager, &[], ttl, None)
+        .expect("test JWT signing should not fail")
 }
 
 #[derive(Debug)]
@@ -290,8 +297,11 @@ impl GatewayState {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
+        let mut identity_manager = IdentityManager::in_memory();
         let gateway_id = Uuid::new_v4();
-        let gateway_identity = AgentIdentity::generate(gateway_id);
+        let gateway_identity =
+            AgentIdentity::generate(gateway_id, identity_manager.key_manager_mut())
+                .expect("gateway identity generation must succeed");
         let token_manager = TokenManager::new("nexus-gateway", "nexus-agents");
         let (ws_tx, _) = broadcast::channel(WS_BROADCAST_CAPACITY);
 
@@ -303,7 +313,7 @@ impl GatewayState {
                 agent_ids: HashMap::new(),
                 token_manager,
                 gateway_identity,
-                identity_manager: IdentityManager::in_memory(),
+                identity_manager,
                 started_at: now,
                 supervisor: Supervisor::new(),
                 audit_trail: AuditTrail::new(),
@@ -374,7 +384,14 @@ impl GatewayState {
         let inner = self.inner.lock().expect("lock poisoned");
         inner
             .token_manager
-            .issue_token(&inner.gateway_identity, scopes, ttl, None)
+            .issue_token(
+                &inner.gateway_identity,
+                inner.identity_manager.key_manager(),
+                scopes,
+                ttl,
+                None,
+            )
+            .expect("gateway token signing must succeed")
     }
 
     /// Return the JWKS JSON for OIDC discovery.
@@ -1873,9 +1890,13 @@ mod tests {
     async fn task_submission_wrong_key_rejected() {
         let (router, _) = setup_gateway();
         // Token signed by a completely different identity → signature mismatch.
-        let rogue_identity = AgentIdentity::generate(Uuid::new_v4());
+        let mut rogue_km = nexus_kernel::hardware_security::KeyManager::new();
+        let rogue_identity =
+            AgentIdentity::generate(Uuid::new_v4(), &mut rogue_km).expect("rogue identity");
         let rogue_mgr = TokenManager::new("rogue", "nexus-agents");
-        let bad_token = rogue_mgr.issue_token(&rogue_identity, &[], 3600, None);
+        let bad_token = rogue_mgr
+            .issue_token(&rogue_identity, &rogue_km, &[], 3600, None)
+            .expect("rogue token");
         let body = serde_json::json!({
             "agent": "test-agent",
             "message": "Hello!"
@@ -2580,9 +2601,13 @@ mod tests {
         );
         let addr = start_test_server(state).await;
 
-        let rogue_identity = AgentIdentity::generate(Uuid::new_v4());
+        let mut rogue_km = nexus_kernel::hardware_security::KeyManager::new();
+        let rogue_identity =
+            AgentIdentity::generate(Uuid::new_v4(), &mut rogue_km).expect("rogue identity");
         let rogue_mgr = TokenManager::new("rogue", "nexus-agents");
-        let bad_token = rogue_mgr.issue_token(&rogue_identity, &[], 3600, None);
+        let bad_token = rogue_mgr
+            .issue_token(&rogue_identity, &rogue_km, &[], 3600, None)
+            .expect("rogue token");
 
         let url = format!("ws://{addr}/ws?token={bad_token}");
         let result = tokio_tungstenite::connect_async(&url).await;

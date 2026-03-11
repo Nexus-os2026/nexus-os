@@ -384,9 +384,13 @@ async fn all_rest_endpoints_require_jwt_auth() {
     );
 
     // Verify a token signed by a different key is rejected
-    let rogue_identity = AgentIdentity::generate(Uuid::new_v4());
+    let mut rogue_km = nexus_kernel::hardware_security::KeyManager::new();
+    let rogue_identity =
+        AgentIdentity::generate(Uuid::new_v4(), &mut rogue_km).expect("rogue identity");
     let rogue_mgr = TokenManager::new("rogue-issuer", "nexus-agents");
-    let bad_token = rogue_mgr.issue_token(&rogue_identity, &[], 3600, None);
+    let bad_token = rogue_mgr
+        .issue_token(&rogue_identity, &rogue_km, &[], 3600, None)
+        .expect("rogue token");
 
     let req = Request::builder()
         .uri("/api/agents")

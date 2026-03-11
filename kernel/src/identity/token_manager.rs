@@ -4,6 +4,7 @@
 //! signatures can be verified by anyone holding the public key (exposed via
 //! a JWKS endpoint).
 
+use crate::hardware_security::KeyManager;
 use crate::identity::agent_identity::AgentIdentity;
 use ed25519_dalek::{Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
@@ -102,17 +103,19 @@ impl TokenManager {
 
     /// Issue a new EdDSA-signed JWT for the given agent identity.
     ///
-    /// * `identity` — the agent's cryptographic identity (holds the signing key).
+    /// * `identity` — the agent's cryptographic identity.
+    /// * `key_manager` — holds the signing key referenced by the identity.
     /// * `scopes` — capability-derived scopes (e.g. `["web.search", "llm.query"]`).
     /// * `ttl_secs` — token lifetime in seconds (0 → [`DEFAULT_TTL_SECS`]).
     /// * `delegator_sub` — optional delegator DID from consent records.
     pub fn issue_token(
         &self,
         identity: &AgentIdentity,
+        key_manager: &KeyManager,
         scopes: &[String],
         ttl_secs: u64,
         delegator_sub: Option<String>,
-    ) -> String {
+    ) -> Result<String, TokenError> {
         let now = now_secs();
         let ttl = if ttl_secs == 0 {
             DEFAULT_TTL_SECS
@@ -132,7 +135,7 @@ impl TokenManager {
             delegator_sub,
         };
 
-        self.encode_and_sign(identity, &claims)
+        self.encode_and_sign(identity, key_manager, &claims)
     }
 
     /// Refresh a token: validate the old one (ignoring expiry), then issue a
@@ -141,12 +144,10 @@ impl TokenManager {
         &mut self,
         old_token: &str,
         identity: &AgentIdentity,
+        key_manager: &KeyManager,
         ttl_secs: u64,
     ) -> Result<String, TokenError> {
-        // Decode without expiry check.
         let old_claims = self.decode_and_verify(old_token, identity, true)?;
-
-        // Revoke the old JTI so it cannot be replayed.
         self.revoked.insert(old_claims.jti.clone());
 
         let now = now_secs();
@@ -168,7 +169,7 @@ impl TokenManager {
             delegator_sub: old_claims.delegator_sub,
         };
 
-        Ok(self.encode_and_sign(identity, &new_claims))
+        self.encode_and_sign(identity, key_manager, &new_claims)
     }
 
     /// Revoke a token by its JTI.
@@ -177,6 +178,9 @@ impl TokenManager {
     }
 
     /// Validate a token: check signature, expiration, and revocation.
+    ///
+    /// Verification uses only the public key stored in `identity` — no
+    /// [`KeyManager`] access is needed.
     pub fn validate_token(
         &self,
         token: &str,
@@ -203,7 +207,12 @@ impl TokenManager {
 
     // -- internal -------------------------------------------------------------
 
-    fn encode_and_sign(&self, identity: &AgentIdentity, claims: &OidcAClaims) -> String {
+    fn encode_and_sign(
+        &self,
+        identity: &AgentIdentity,
+        key_manager: &KeyManager,
+        claims: &OidcAClaims,
+    ) -> Result<String, TokenError> {
         let header = JwtHeader {
             alg: "EdDSA".to_string(),
             typ: "JWT".to_string(),
@@ -214,10 +223,12 @@ impl TokenManager {
         let payload_b64 = base64_url_encode(&serde_json::to_vec(claims).expect("serialize claims"));
 
         let signing_input = format!("{header_b64}.{payload_b64}");
-        let signature = identity.sign(signing_input.as_bytes());
+        let signature = identity
+            .sign(signing_input.as_bytes(), key_manager)
+            .map_err(TokenError::Identity)?;
         let sig_b64 = base64_url_encode(&signature);
 
-        format!("{signing_input}.{sig_b64}")
+        Ok(format!("{signing_input}.{sig_b64}"))
     }
 
     fn decode_and_verify(
@@ -358,8 +369,10 @@ fn base64_url_decode(input: &str) -> Result<Vec<u8>, ()> {
 mod tests {
     use super::*;
 
-    fn test_identity() -> AgentIdentity {
-        AgentIdentity::generate(Uuid::new_v4())
+    fn test_identity_and_km() -> (AgentIdentity, KeyManager) {
+        let mut km = KeyManager::new();
+        let id = AgentIdentity::generate(Uuid::new_v4(), &mut km).expect("generate identity");
+        (id, km)
     }
 
     fn test_manager() -> TokenManager {
@@ -368,10 +381,12 @@ mod tests {
 
     #[test]
     fn token_with_correct_claims() {
-        let id = test_identity();
+        let (id, km) = test_identity_and_km();
         let mgr = test_manager();
         let scopes = vec!["web.search".into(), "llm.query".into()];
-        let token = mgr.issue_token(&id, &scopes, 3600, Some("did:key:zDelegator".into()));
+        let token = mgr
+            .issue_token(&id, &km, &scopes, 3600, Some("did:key:zDelegator".into()))
+            .expect("issue token");
 
         let claims = mgr.validate_token(&token, &id).expect("valid token");
         assert_eq!(claims.iss, "https://nexus.local");
@@ -386,7 +401,7 @@ mod tests {
 
     #[test]
     fn expired_token_rejected() {
-        let id = test_identity();
+        let (id, km) = test_identity_and_km();
         let mgr = test_manager();
 
         // Issue a token that expired 10 seconds ago.
@@ -402,7 +417,7 @@ mod tests {
             agent_did: id.did.clone(),
             delegator_sub: None,
         };
-        let token = mgr.encode_and_sign(&id, &claims);
+        let token = mgr.encode_and_sign(&id, &km, &claims).expect("sign");
 
         let err = mgr.validate_token(&token, &id).unwrap_err();
         assert!(matches!(err, TokenError::Expired));
@@ -410,9 +425,11 @@ mod tests {
 
     #[test]
     fn revoked_token_rejected() {
-        let id = test_identity();
+        let (id, km) = test_identity_and_km();
         let mut mgr = test_manager();
-        let token = mgr.issue_token(&id, &[], 3600, None);
+        let token = mgr
+            .issue_token(&id, &km, &[], 3600, None)
+            .expect("issue token");
 
         // Extract JTI from the token.
         let claims = mgr.validate_token(&token, &id).unwrap();
@@ -426,12 +443,14 @@ mod tests {
 
     #[test]
     fn refresh_works() {
-        let id = test_identity();
+        let (id, km) = test_identity_and_km();
         let mut mgr = test_manager();
-        let old_token = mgr.issue_token(&id, &["a.b".into()], 3600, None);
+        let old_token = mgr
+            .issue_token(&id, &km, &["a.b".into()], 3600, None)
+            .expect("issue");
         let old_claims = mgr.validate_token(&old_token, &id).unwrap();
 
-        let new_token = mgr.refresh_token(&old_token, &id, 7200).unwrap();
+        let new_token = mgr.refresh_token(&old_token, &id, &km, 7200).unwrap();
         let new_claims = mgr.validate_token(&new_token, &id).unwrap();
 
         // Old token is now revoked.
@@ -449,7 +468,7 @@ mod tests {
 
     #[test]
     fn jwks_returns_valid_key() {
-        let id = test_identity();
+        let (id, _km) = test_identity_and_km();
         let jwks = TokenManager::jwks_json(&id);
 
         let keys = jwks["keys"].as_array().expect("keys array");
@@ -470,10 +489,12 @@ mod tests {
 
     #[test]
     fn invalid_signature_rejected() {
-        let id_a = test_identity();
-        let id_b = test_identity();
+        let (id_a, km_a) = test_identity_and_km();
+        let (id_b, _km_b) = test_identity_and_km();
         let mgr = test_manager();
-        let token = mgr.issue_token(&id_a, &[], 3600, None);
+        let token = mgr
+            .issue_token(&id_a, &km_a, &[], 3600, None)
+            .expect("issue");
 
         // Verify with wrong identity → signature mismatch.
         let err = mgr.validate_token(&token, &id_b).unwrap_err();
@@ -482,9 +503,9 @@ mod tests {
 
     #[test]
     fn default_ttl_used_when_zero() {
-        let id = test_identity();
+        let (id, km) = test_identity_and_km();
         let mgr = test_manager();
-        let token = mgr.issue_token(&id, &[], 0, None);
+        let token = mgr.issue_token(&id, &km, &[], 0, None).expect("issue");
         let claims = mgr.validate_token(&token, &id).unwrap();
         assert_eq!(claims.exp - claims.iat, DEFAULT_TTL_SECS);
     }

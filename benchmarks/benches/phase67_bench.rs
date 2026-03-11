@@ -231,17 +231,18 @@ fn bench_pii_redaction_throughput(c: &mut Criterion) {
 
 fn bench_jwt_token_roundtrip(c: &mut Criterion) {
     let mut group = c.benchmark_group("jwt_token");
-    let identity = AgentIdentity::generate(Uuid::new_v4());
+    let mut km = nexus_kernel::hardware_security::KeyManager::new();
+    let identity = AgentIdentity::generate(Uuid::new_v4(), &mut km).expect("generate identity");
     let mgr = TokenManager::new("nexus-bench", "nexus-agents");
 
     group.bench_function("issue", |b| {
         b.iter(|| {
-            let token = mgr.issue_token(&identity, &[], 3600, None);
+            let token = mgr.issue_token(&identity, &km, &[], 3600, None).unwrap();
             black_box(token);
         });
     });
 
-    let token = mgr.issue_token(&identity, &[], 3600, None);
+    let token = mgr.issue_token(&identity, &km, &[], 3600, None).unwrap();
     group.bench_function("validate", |b| {
         b.iter(|| {
             let claims = mgr.validate_token(black_box(&token), &identity).unwrap();
@@ -251,7 +252,7 @@ fn bench_jwt_token_roundtrip(c: &mut Criterion) {
 
     group.bench_function("issue_and_validate_roundtrip", |b| {
         b.iter(|| {
-            let token = mgr.issue_token(&identity, &[], 3600, None);
+            let token = mgr.issue_token(&identity, &km, &[], 3600, None).unwrap();
             let claims = mgr.validate_token(&token, &identity).unwrap();
             black_box(claims);
         });

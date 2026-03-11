@@ -1096,14 +1096,18 @@ fn token_issue(agent_id: Uuid, scopes: &[String], ttl: Option<u64>) -> CliOutput
     use nexus_kernel::identity::{IdentityManager, TokenManager, DEFAULT_TTL_SECS};
 
     let mut mgr = IdentityManager::in_memory();
+    // Clone the identity to release the borrow on mgr, so we can access key_manager().
     let identity = match mgr.get_or_create(agent_id) {
-        Ok(id) => id,
+        Ok(id) => id.clone(),
         Err(e) => return CliOutput::err(format!("identity error: {e}")),
     };
 
     let tm = TokenManager::new("nexus-os", "nexus-agents");
     let ttl_secs = ttl.unwrap_or(DEFAULT_TTL_SECS);
-    let token = tm.issue_token(identity, scopes, ttl_secs, None);
+    let token = match tm.issue_token(&identity, mgr.key_manager(), scopes, ttl_secs, None) {
+        Ok(t) => t,
+        Err(e) => return CliOutput::err(format!("token signing error: {e}")),
+    };
 
     CliOutput::ok_with_data(
         format!("Token issued for agent {agent_id}"),
