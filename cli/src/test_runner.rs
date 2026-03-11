@@ -56,7 +56,8 @@ pub fn run_agent_test_with_manifest(manifest: &AgentManifest) -> Result<TestRepo
         Uuid::new_v4(),
         manifest.capabilities.clone(),
         manifest.fuel_budget,
-    );
+    )
+    .with_filesystem_permissions(manifest.filesystem_permissions.clone());
 
     let mut phases: Vec<PhaseResult> = Vec::new();
     let mut error_msg: Option<String> = None;

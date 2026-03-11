@@ -63,6 +63,7 @@ fn base_manifest(name: &str) -> AgentManifest {
         monthly_fuel_cap: None,
         allowed_endpoints: None,
         domain_tags: vec![],
+        filesystem_permissions: vec![],
     }
 }
 

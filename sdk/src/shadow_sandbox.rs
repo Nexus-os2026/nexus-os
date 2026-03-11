@@ -517,13 +517,14 @@ impl ShadowSandbox {
     ) -> Self {
         let effective_fuel = shadow_fuel_limit.min(real_ctx.fuel_remaining());
 
-        // Clone the real context's identity, capabilities, and audit trail,
-        // but with the shadow fuel budget and recording mode enabled.
+        // Clone the real context's identity, capabilities, filesystem permissions,
+        // and audit trail, but with the shadow fuel budget and recording mode enabled.
         let mut shadow_ctx = AgentContext::new(
             real_ctx.agent_id(),
             real_ctx.capabilities().to_vec(),
             effective_fuel,
-        );
+        )
+        .with_filesystem_permissions(real_ctx.filesystem_permissions().to_vec());
         shadow_ctx.enable_recording();
 
         let audit_count_at_fork = 0; // fresh shadow context starts empty

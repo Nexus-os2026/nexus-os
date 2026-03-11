@@ -2,6 +2,7 @@
 
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::errors::AgentError;
+use nexus_kernel::manifest::{path_matches_pattern, FilesystemPermission, FsPermissionLevel};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
@@ -158,6 +159,10 @@ impl CancelledReservation {
 pub struct AgentContext {
     agent_id: Uuid,
     capabilities: Vec<String>,
+    /// Path-scoped filesystem permissions (C.6). When non-empty, `read_file`
+    /// and `write_file` enforce path-level access control on top of the flat
+    /// `fs.read`/`fs.write` capability check.
+    filesystem_permissions: Vec<FilesystemPermission>,
     fuel_budget: u64,
     fuel_remaining: u64,
     /// Fuel currently held by outstanding reservations (already subtracted
@@ -174,6 +179,7 @@ impl AgentContext {
         Self {
             agent_id,
             capabilities,
+            filesystem_permissions: Vec::new(),
             fuel_budget,
             fuel_remaining: fuel_budget,
             fuel_reserved: 0,
@@ -182,6 +188,25 @@ impl AgentContext {
             recording_mode: false,
             side_effect_log: Vec::new(),
         }
+    }
+
+    /// Attach path-scoped filesystem permissions (C.6 granular FS permissions).
+    ///
+    /// When non-empty, `read_file` and `write_file` enforce path-level access
+    /// control in addition to the flat `fs.read`/`fs.write` capability check.
+    pub fn with_filesystem_permissions(mut self, permissions: Vec<FilesystemPermission>) -> Self {
+        self.filesystem_permissions = permissions;
+        self
+    }
+
+    /// Set path-scoped filesystem permissions on an existing context.
+    pub fn set_filesystem_permissions(&mut self, permissions: Vec<FilesystemPermission>) {
+        self.filesystem_permissions = permissions;
+    }
+
+    /// Read-only access to configured filesystem permissions.
+    pub fn filesystem_permissions(&self) -> &[FilesystemPermission] {
+        &self.filesystem_permissions
     }
 
     pub fn agent_id(&self) -> Uuid {
@@ -289,10 +314,69 @@ impl AgentContext {
         Ok(format!("[mock-llm-response to {} chars]", prompt.len()))
     }
 
-    /// Read a file. Checks "fs.read" capability, costs 2 fuel.
+    /// Check path-scoped filesystem permissions (C.6).
+    ///
+    /// When `filesystem_permissions` is non-empty, verifies `path` against the
+    /// configured scopes. Deny rules take priority; unmatched paths are denied.
+    /// When empty, this is a no-op (backward compatible with flat capabilities).
+    fn check_fs_path_permission(&self, path: &str, needs_write: bool) -> Result<(), AgentError> {
+        if self.filesystem_permissions.is_empty() {
+            return Ok(());
+        }
+
+        let matches: Vec<&FilesystemPermission> = self
+            .filesystem_permissions
+            .iter()
+            .filter(|fp| path_matches_pattern(path, &fp.path_pattern))
+            .collect();
+
+        if matches.is_empty() {
+            let mode = if needs_write { "write" } else { "read" };
+            return Err(AgentError::ManifestError(format!(
+                "Filesystem {mode} denied for path: {path}"
+            )));
+        }
+
+        if matches
+            .iter()
+            .any(|fp| fp.permission == FsPermissionLevel::Deny)
+        {
+            let mode = if needs_write { "write" } else { "read" };
+            return Err(AgentError::ManifestError(format!(
+                "Filesystem {mode} denied for path: {path}"
+            )));
+        }
+
+        if needs_write {
+            if matches
+                .iter()
+                .any(|fp| fp.permission == FsPermissionLevel::ReadWrite)
+            {
+                return Ok(());
+            }
+            return Err(AgentError::ManifestError(format!(
+                "Filesystem write denied for path: {path}"
+            )));
+        }
+
+        // Read: ReadOnly or ReadWrite both suffice.
+        if matches.iter().any(|fp| {
+            fp.permission == FsPermissionLevel::ReadOnly
+                || fp.permission == FsPermissionLevel::ReadWrite
+        }) {
+            return Ok(());
+        }
+
+        Err(AgentError::ManifestError(format!(
+            "Filesystem read denied for path: {path}"
+        )))
+    }
+
+    /// Read a file. Checks "fs.read" capability and path scope, costs 2 fuel.
     /// In recording mode, logs the side-effect and returns a placeholder.
     pub fn read_file(&mut self, path: &str) -> Result<String, AgentError> {
         self.require_capability("fs.read")?;
+        self.check_fs_path_permission(path, false)?;
         self.deduct_fuel(READ_FILE_FUEL_COST)?;
 
         if self.recording_mode {
@@ -318,10 +402,11 @@ impl AgentContext {
         Ok(format!("[mock-file-content of {}]", path))
     }
 
-    /// Write a file. Checks "fs.write" capability, costs 8 fuel.
+    /// Write a file. Checks "fs.write" capability and path scope, costs 8 fuel.
     /// In recording mode, logs the side-effect instead of writing.
     pub fn write_file(&mut self, path: &str, content: &str) -> Result<(), AgentError> {
         self.require_capability("fs.write")?;
+        self.check_fs_path_permission(path, true)?;
         self.deduct_fuel(WRITE_FILE_FUEL_COST)?;
 
         if self.recording_mode {
@@ -843,5 +928,97 @@ mod tests {
         ctx.llm_query("test", 50).unwrap();
         assert_eq!(ctx.fuel_remaining(), 90); // 100 - 10 (LLM cost)
         assert_eq!(ctx.fuel_reserved(), 0); // No outstanding reservations
+    }
+
+    // --- Filesystem path permission tests (C.6) ---
+
+    #[test]
+    fn test_read_file_no_scopes_allowed() {
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec!["fs.read".to_string()], 1000);
+        // No filesystem_permissions → flat capability governs, any path allowed
+        assert!(ctx.read_file("/any/path/file.txt").is_ok());
+    }
+
+    #[test]
+    fn test_read_file_scoped_allowed() {
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec!["fs.read".to_string()], 1000)
+            .with_filesystem_permissions(vec![FilesystemPermission {
+                path_pattern: "/src/".to_string(),
+                permission: FsPermissionLevel::ReadOnly,
+            }]);
+        assert!(ctx.read_file("/src/foo.rs").is_ok());
+    }
+
+    #[test]
+    fn test_read_file_scoped_denied() {
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec!["fs.read".to_string()], 1000)
+            .with_filesystem_permissions(vec![FilesystemPermission {
+                path_pattern: "/src/".to_string(),
+                permission: FsPermissionLevel::ReadOnly,
+            }]);
+        let result = ctx.read_file("/etc/passwd");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_write_file_readonly_denied() {
+        let mut ctx = AgentContext::new(
+            Uuid::new_v4(),
+            vec!["fs.read".to_string(), "fs.write".to_string()],
+            1000,
+        )
+        .with_filesystem_permissions(vec![FilesystemPermission {
+            path_pattern: "/src/".to_string(),
+            permission: FsPermissionLevel::ReadOnly,
+        }]);
+        let result = ctx.write_file("/src/foo.rs", "data");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_write_file_readwrite_allowed() {
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec!["fs.write".to_string()], 1000)
+            .with_filesystem_permissions(vec![FilesystemPermission {
+                path_pattern: "/output/".to_string(),
+                permission: FsPermissionLevel::ReadWrite,
+            }]);
+        assert!(ctx.write_file("/output/result.txt", "data").is_ok());
+    }
+
+    #[test]
+    fn test_deny_overrides_in_context() {
+        let mut ctx = AgentContext::new(
+            Uuid::new_v4(),
+            vec!["fs.read".to_string(), "fs.write".to_string()],
+            1000,
+        )
+        .with_filesystem_permissions(vec![
+            FilesystemPermission {
+                path_pattern: "/src/".to_string(),
+                permission: FsPermissionLevel::ReadWrite,
+            },
+            FilesystemPermission {
+                path_pattern: "/src/secret.rs".to_string(),
+                permission: FsPermissionLevel::Deny,
+            },
+        ]);
+        // Deny overrides ReadWrite
+        assert!(ctx.read_file("/src/secret.rs").is_err());
+        // Other files under /src/ still allowed
+        assert!(ctx.read_file("/src/main.rs").is_ok());
+    }
+
+    #[test]
+    fn test_set_filesystem_permissions_mutator() {
+        let mut ctx = AgentContext::new(Uuid::new_v4(), vec!["fs.read".to_string()], 1000);
+        assert!(ctx.filesystem_permissions().is_empty());
+
+        ctx.set_filesystem_permissions(vec![FilesystemPermission {
+            path_pattern: "/safe/".to_string(),
+            permission: FsPermissionLevel::ReadOnly,
+        }]);
+        assert_eq!(ctx.filesystem_permissions().len(), 1);
+        assert!(ctx.read_file("/safe/data.txt").is_ok());
+        assert!(ctx.read_file("/unsafe/data.txt").is_err());
     }
 }

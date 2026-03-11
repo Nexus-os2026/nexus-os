@@ -5,6 +5,18 @@ fuel_budget = 50000
 autonomy_level = 1
 llm_model = "claude-sonnet-4-5"
 
+[[filesystem_permissions]]
+path_pattern = "/src/**"
+permission = "ReadWrite"
+
+[[filesystem_permissions]]
+path_pattern = "/output/"
+permission = "ReadWrite"
+
+[[filesystem_permissions]]
+path_pattern = "*.rs"
+permission = "ReadOnly"
+
 [config]
 repo_path = "."
 objective = "Read the repository, apply fixes, and keep iterating until tests pass."

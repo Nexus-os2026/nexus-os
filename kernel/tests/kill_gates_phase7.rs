@@ -20,6 +20,7 @@ fn sample_manifest(fuel_budget: u64) -> AgentManifest {
         monthly_fuel_cap: None,
         allowed_endpoints: None,
         domain_tags: vec![],
+        filesystem_permissions: vec![],
     }
 }
 

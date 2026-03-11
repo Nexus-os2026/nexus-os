@@ -1370,6 +1370,7 @@ async fn api_compliance_status(State(state): State<GatewayState>) -> Json<serde_
                         monthly_fuel_cap: None,
                         allowed_endpoints: None,
                         domain_tags: vec![],
+                        filesystem_permissions: vec![],
                     });
                 AgentSnapshot {
                     agent_id: s.id,
@@ -1706,6 +1707,7 @@ mod tests {
             monthly_fuel_cap: None,
             allowed_endpoints: None,
             domain_tags: vec![],
+            filesystem_permissions: vec![],
         }
     }
 

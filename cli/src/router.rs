@@ -511,6 +511,7 @@ fn compliance_classify(agent_id: Uuid) -> CliOutput {
         monthly_fuel_cap: None,
         allowed_endpoints: None,
         domain_tags: vec![],
+        filesystem_permissions: vec![],
     };
 
     let classifier = RiskClassifier::new();
@@ -1176,6 +1177,7 @@ fn protocols_agent_card(agent_name: &str) -> CliOutput {
         monthly_fuel_cap: None,
         allowed_endpoints: None,
         domain_tags: vec![],
+        filesystem_permissions: vec![],
     };
 
     let card = AgentCard::from_manifest(&manifest, "http://localhost:3000");

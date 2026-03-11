@@ -119,7 +119,8 @@ autonomy_level = 2
         agent_id,
         manifest.capabilities.clone(),
         manifest.fuel_budget,
-    );
+    )
+    .with_filesystem_permissions(manifest.filesystem_permissions.clone());
 
     // Capability checks: allowed capabilities pass
     assert!(ctx.require_capability("fs.read").is_ok());

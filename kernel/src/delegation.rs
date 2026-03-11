@@ -86,6 +86,10 @@ impl DelegationEngine {
     }
 
     /// Check if an agent has a capability — either owned or via active delegation.
+    ///
+    /// TODO(C.6): When filesystem_permissions are delegated, the grantee's
+    /// path scopes should be the intersection of the grantor's scopes and the
+    /// delegation request. For now, only flat capability strings are delegated.
     pub fn has_capability(&self, agent_id: Uuid, capability: &str) -> bool {
         // Check own capabilities
         if let Some(caps) = self.agent_capabilities.get(&agent_id) {

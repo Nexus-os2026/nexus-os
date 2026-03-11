@@ -45,6 +45,7 @@ fn phase5_exhaustion_triggers_autonomy_downgrade() {
         monthly_fuel_cap: Some(1),
         allowed_endpoints: None,
         domain_tags: vec![],
+        filesystem_permissions: vec![],
     };
 
     let id = supervisor

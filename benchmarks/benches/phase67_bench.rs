@@ -40,6 +40,7 @@ fn test_manifest() -> AgentManifest {
         monthly_fuel_cap: None,
         allowed_endpoints: None,
         domain_tags: vec!["general".to_string()],
+        filesystem_permissions: vec![],
     }
 }
 

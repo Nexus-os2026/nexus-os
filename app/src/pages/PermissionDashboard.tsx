@@ -21,6 +21,7 @@ import {
 } from "../api/backend";
 import type {
   CapabilityRequest,
+  FilesystemPermissionScope,
   Permission,
   PermissionCategory,
   PermissionHistoryEntry,
@@ -92,8 +93,8 @@ function mockCategories(): PermissionCategory[] {
     {
       id: "filesystem", display_name: "Filesystem", icon: "folder",
       permissions: [
-        { capability_key: "fs.read", display_name: "Read files", description: "Allows the agent to read files from the filesystem", risk_level: "medium", enabled: true, granted_by: "manifest", granted_at: Date.now() / 1000, can_user_toggle: true },
-        { capability_key: "fs.write", display_name: "Write files", description: "Allows the agent to create or modify files on the filesystem. Changes can be destructive.", risk_level: "high", enabled: false, granted_by: "", granted_at: 0, can_user_toggle: true },
+        { capability_key: "fs.read", display_name: "Read files", description: "Allows the agent to read files from the filesystem", risk_level: "medium", enabled: true, granted_by: "manifest", granted_at: Date.now() / 1000, can_user_toggle: true, filesystem_scopes: [{ path_pattern: "/src/**", permission: "ReadOnly" as const }, { path_pattern: "*.rs", permission: "ReadOnly" as const }] },
+        { capability_key: "fs.write", display_name: "Write files", description: "Allows the agent to create or modify files on the filesystem. Changes can be destructive.", risk_level: "high", enabled: false, granted_by: "", granted_at: 0, can_user_toggle: true, filesystem_scopes: [{ path_pattern: "/output/", permission: "ReadWrite" as const }, { path_pattern: "/src/secret.rs", permission: "Deny" as const }] },
       ],
     },
     {
@@ -285,11 +286,46 @@ export function PermissionDashboard({
 
   const [openTooltip, setOpenTooltip] = useState<string | null>(null);
 
+  const FS_SCOPE_BADGE: Record<string, { label: string; className: string }> = {
+    ReadOnly: { label: "Read", className: "fs-scope-readonly" },
+    ReadWrite: { label: "Read/Write", className: "fs-scope-readwrite" },
+    Deny: { label: "Deny", className: "fs-scope-deny" },
+  };
+
+  const renderFsScopes = (scopes?: FilesystemPermissionScope[]) => {
+    const isFs = true; // caller only invokes for fs.* capabilities
+    if (!isFs) return null;
+    if (!scopes || scopes.length === 0) {
+      return (
+        <div className="fs-scope-section">
+          <span className="fs-scope-note">Unrestricted (no path scopes configured)</span>
+        </div>
+      );
+    }
+    return (
+      <div className="fs-scope-section">
+        <div className="fs-scope-note">Default: deny unlisted paths</div>
+        <div className="fs-scope-list">
+          {scopes.map((s, i) => {
+            const badge = FS_SCOPE_BADGE[s.permission] || { label: s.permission, className: "" };
+            return (
+              <div className="fs-scope-entry" key={`${s.path_pattern}-${i}`}>
+                <code className="fs-scope-pattern">{s.path_pattern}</code>
+                <span className={`fs-scope-badge ${badge.className}`}>{badge.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const renderToggle = (perm: Permission) => {
     const isPending = pendingToggles.has(perm.capability_key);
     const risk = RISK_LABELS[perm.risk_level];
     const tooltip = CAPABILITY_TOOLTIPS[perm.capability_key];
     const isTooltipOpen = openTooltip === perm.capability_key;
+    const isFsCap = perm.capability_key === "fs.read" || perm.capability_key === "fs.write";
 
     return (
       <div className="perm-row" key={perm.capability_key}>
@@ -324,6 +360,7 @@ export function PermissionDashboard({
           />
           <span className="perm-toggle-slider" />
         </label>
+        {isFsCap && renderFsScopes(perm.filesystem_scopes)}
       </div>
     );
   };

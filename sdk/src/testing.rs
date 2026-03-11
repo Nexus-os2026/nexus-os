@@ -1,10 +1,12 @@
 //! Test harness for agent developers to test without a real kernel.
 
 use crate::context::AgentContext;
+use nexus_kernel::manifest::FilesystemPermission;
 use uuid::Uuid;
 
 pub struct TestHarness {
     capabilities: Vec<String>,
+    filesystem_permissions: Vec<FilesystemPermission>,
     fuel: u64,
     agent_id: Uuid,
 }
@@ -13,6 +15,7 @@ impl TestHarness {
     pub fn new() -> Self {
         Self {
             capabilities: Vec::new(),
+            filesystem_permissions: Vec::new(),
             fuel: 10_000,
             agent_id: Uuid::new_v4(),
         }
@@ -33,8 +36,14 @@ impl TestHarness {
         self
     }
 
+    pub fn with_filesystem_permissions(mut self, perms: Vec<FilesystemPermission>) -> Self {
+        self.filesystem_permissions = perms;
+        self
+    }
+
     pub fn build_context(self) -> AgentContext {
         AgentContext::new(self.agent_id, self.capabilities, self.fuel)
+            .with_filesystem_permissions(self.filesystem_permissions)
     }
 }
 

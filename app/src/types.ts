@@ -321,6 +321,13 @@ export interface SimulationPreview {
 
 export type PermissionRiskLevel = "low" | "medium" | "high" | "critical";
 
+export type FsPermissionLevel = "ReadOnly" | "ReadWrite" | "Deny";
+
+export interface FilesystemPermissionScope {
+  path_pattern: string;
+  permission: FsPermissionLevel;
+}
+
 export interface Permission {
   capability_key: string;
   display_name: string;
@@ -330,6 +337,7 @@ export interface Permission {
   granted_by: string;
   granted_at: number;
   can_user_toggle: boolean;
+  filesystem_scopes?: FilesystemPermissionScope[];
 }
 
 export interface PermissionCategory {
