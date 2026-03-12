@@ -2,6 +2,7 @@
 
 pub mod bft_bridge;
 pub mod device_pairing;
+pub mod ghost_protocol;
 pub mod gossip;
 pub mod immutable_audit;
 pub mod membership;

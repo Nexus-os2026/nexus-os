@@ -8,6 +8,7 @@ use nexus_connectors_llm::model_registry::ModelRegistry;
 use nexus_connectors_llm::nexus_link::NexusLink;
 use nexus_connectors_llm::providers::{MockProvider, OllamaProvider};
 use nexus_connectors_llm::rag::{RagConfig, RagPipeline};
+use nexus_distributed::ghost_protocol::{GhostConfig, GhostProtocol, SyncPeer as GhostSyncPeer};
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
 use nexus_kernel::config::{
     load_config, save_config as save_nexus_config, AgentLlmConfig, HardwareConfig, ModelsConfig,
@@ -119,6 +120,7 @@ pub struct AppState {
     nexus_link: Arc<Mutex<NexusLink>>,
     evolution: Arc<Mutex<EvolutionEngine>>,
     mcp_host: Arc<Mutex<McpHostManager>>,
+    ghost_protocol: Arc<Mutex<GhostProtocol>>,
 }
 
 impl Default for AppState {
@@ -158,6 +160,7 @@ impl AppState {
             })),
             evolution: Arc::new(Mutex::new(EvolutionEngine::new(EvolutionConfig::default()))),
             mcp_host: Arc::new(Mutex::new(McpHostManager::new())),
+            ghost_protocol: Arc::new(Mutex::new(GhostProtocol::new(GhostConfig::default()))),
         }
     }
 
@@ -4472,6 +4475,159 @@ pub fn mcp_host_call_tool(
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
+// ── Ghost Protocol commands ─────────────────────────────────────────────
+
+pub fn ghost_protocol_status(state: &AppState) -> Result<String, String> {
+    let gp = state
+        .ghost_protocol
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let stats = gp.get_stats();
+    let result = json!({
+        "enabled": gp.enabled(),
+        "device_id": gp.device_id(),
+        "device_name": gp.device_name(),
+        "version": gp.current_version(),
+        "peer_count": gp.list_peers().len(),
+        "stats": {
+            "total_syncs": stats.total_syncs,
+            "total_conflicts": stats.total_conflicts,
+            "total_changes_sent": stats.total_changes_sent,
+            "total_changes_received": stats.total_changes_received,
+            "last_sync_time": stats.last_sync_time,
+            "connected_peers": stats.connected_peers,
+        },
+    });
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn ghost_protocol_toggle(state: &AppState, enabled: bool) -> Result<String, String> {
+    let mut gp = state
+        .ghost_protocol
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    gp.set_enabled(enabled);
+
+    drop(gp);
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "ghost-protocol",
+            "action": if enabled { "enabled" } else { "disabled" },
+        }),
+    );
+
+    let result = json!({ "enabled": enabled });
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn ghost_protocol_add_peer(
+    state: &AppState,
+    address: String,
+    name: String,
+) -> Result<String, String> {
+    let mut gp = state
+        .ghost_protocol
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+
+    let peer = GhostSyncPeer {
+        device_id: Uuid::new_v4().to_string(),
+        device_name: name.clone(),
+        address: address.clone(),
+        last_synced_version: 0,
+        last_seen: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        is_connected: true,
+    };
+
+    let peer_json = serde_json::to_value(&peer).map_err(|e| e.to_string())?;
+    gp.add_peer(peer);
+
+    drop(gp);
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "ghost-protocol",
+            "action": "add_peer",
+            "address": address,
+            "name": name,
+        }),
+    );
+
+    serde_json::to_string(&peer_json).map_err(|e| e.to_string())
+}
+
+pub fn ghost_protocol_remove_peer(state: &AppState, device_id: String) -> Result<String, String> {
+    let mut gp = state
+        .ghost_protocol
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let removed = gp.remove_peer(&device_id);
+
+    drop(gp);
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "ghost-protocol",
+            "action": "remove_peer",
+            "device_id": device_id,
+            "removed": removed,
+        }),
+    );
+
+    let result = json!({ "removed": removed });
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn ghost_protocol_sync_now(state: &AppState) -> Result<String, String> {
+    let mut gp = state
+        .ghost_protocol
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+
+    // In a real implementation this would contact peers over the network.
+    // For now, prepare the delta as proof the engine works.
+    let version = gp.current_version();
+    let delta = gp.prepare_delta(version.saturating_sub(1));
+    let changes_sent = match &delta {
+        nexus_distributed::ghost_protocol::SyncMessage::StateDelta { changes, .. } => changes.len(),
+        _ => 0,
+    };
+
+    drop(gp);
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "ghost-protocol",
+            "action": "sync_now",
+            "changes_sent": changes_sent,
+        }),
+    );
+
+    let result = json!({
+        "changes_sent": changes_sent,
+        "changes_received": 0,
+        "conflicts": 0,
+    });
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn ghost_protocol_get_state(state: &AppState) -> Result<String, String> {
+    let gp = state
+        .ghost_protocol
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let sync_state = gp.get_state();
+    serde_json::to_string(sync_state).map_err(|e| e.to_string())
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -5553,6 +5709,48 @@ mod runtime {
         super::mcp_host_call_tool(state.inner(), tool_name, arguments)
     }
 
+    // ── Ghost Protocol commands ─────────────────────────────────────────
+
+    #[tauri::command]
+    fn ghost_protocol_status(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::ghost_protocol_status(state.inner())
+    }
+
+    #[tauri::command]
+    fn ghost_protocol_toggle(
+        state: tauri::State<'_, AppState>,
+        enabled: bool,
+    ) -> Result<String, String> {
+        super::ghost_protocol_toggle(state.inner(), enabled)
+    }
+
+    #[tauri::command]
+    fn ghost_protocol_add_peer(
+        state: tauri::State<'_, AppState>,
+        address: String,
+        name: String,
+    ) -> Result<String, String> {
+        super::ghost_protocol_add_peer(state.inner(), address, name)
+    }
+
+    #[tauri::command]
+    fn ghost_protocol_remove_peer(
+        state: tauri::State<'_, AppState>,
+        device_id: String,
+    ) -> Result<String, String> {
+        super::ghost_protocol_remove_peer(state.inner(), device_id)
+    }
+
+    #[tauri::command]
+    fn ghost_protocol_sync_now(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::ghost_protocol_sync_now(state.inner())
+    }
+
+    #[tauri::command]
+    fn ghost_protocol_get_state(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::ghost_protocol_get_state(state.inner())
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -5721,6 +5919,12 @@ mod runtime {
                 mcp_host_disconnect,
                 mcp_host_list_tools,
                 mcp_host_call_tool,
+                ghost_protocol_status,
+                ghost_protocol_toggle,
+                ghost_protocol_add_peer,
+                ghost_protocol_remove_peer,
+                ghost_protocol_sync_now,
+                ghost_protocol_get_state,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
