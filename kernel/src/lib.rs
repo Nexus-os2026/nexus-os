@@ -12,6 +12,7 @@ pub mod consent_display;
 pub mod delegation;
 pub mod distributed;
 pub mod drift_detector;
+pub mod economic_identity;
 pub mod errors;
 pub mod firewall;
 pub mod fuel_hardening;

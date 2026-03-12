@@ -16,6 +16,7 @@ use nexus_kernel::config::{
     load_config, save_config as save_nexus_config, AgentLlmConfig, HardwareConfig, ModelsConfig,
     NexusConfig, OllamaConfig,
 };
+use nexus_kernel::economic_identity::{EconomicConfig, EconomicEngine, TransactionType};
 use nexus_kernel::errors::AgentError;
 use nexus_kernel::hardware::{recommend_agent_configs, HardwareProfile};
 use nexus_kernel::manifest::AgentManifest;
@@ -135,6 +136,7 @@ pub struct AppState {
     factory: Arc<Mutex<FactoryPipeline>>,
     computer_control: Arc<Mutex<ComputerControlEngine>>,
     neural_bridge: Arc<Mutex<NeuralBridge>>,
+    economic_engine: Arc<Mutex<EconomicEngine>>,
 }
 
 impl Default for AppState {
@@ -179,6 +181,7 @@ impl AppState {
             factory: Arc::new(Mutex::new(FactoryPipeline::new())),
             computer_control: Arc::new(Mutex::new(ComputerControlEngine::new())),
             neural_bridge: Arc::new(Mutex::new(NeuralBridge::new(NeuralBridgeConfig::default()))),
+            economic_engine: Arc::new(Mutex::new(EconomicEngine::new(EconomicConfig::default()))),
         }
     }
 
@@ -5084,6 +5087,118 @@ pub fn neural_bridge_clear_old(state: &AppState, before_timestamp: u64) -> Resul
     Ok(json!({ "cleared_count": cleared_count }).to_string())
 }
 
+// ---------------------------------------------------------------------------
+// Economic Identity commands
+// ---------------------------------------------------------------------------
+
+pub fn economy_create_wallet(state: &AppState, agent_id: String) -> Result<String, String> {
+    let mut engine = state
+        .economic_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let wallet = engine.create_wallet(&agent_id);
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({ "source": "economy", "action": "create_wallet", "agent_id": agent_id }),
+    );
+    serde_json::to_string(&wallet).map_err(|e| e.to_string())
+}
+
+pub fn economy_get_wallet(state: &AppState, agent_id: String) -> Result<String, String> {
+    let engine = state
+        .economic_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    match engine.get_wallet(&agent_id) {
+        Some(w) => serde_json::to_string(w).map_err(|e| e.to_string()),
+        None => Err(format!("wallet not found: {agent_id}")),
+    }
+}
+
+pub fn economy_spend(
+    state: &AppState,
+    agent_id: String,
+    amount: f64,
+    tx_type: String,
+    description: String,
+) -> Result<String, String> {
+    let parsed_type = match tx_type.as_str() {
+        "ApiCall" => TransactionType::ApiCall,
+        "ServicePurchase" => TransactionType::ServicePurchase,
+        "DataPurchase" => TransactionType::DataPurchase,
+        "Refund" => TransactionType::Refund,
+        other => return Err(format!("unknown transaction type: {other}")),
+    };
+    let mut engine = state
+        .economic_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let tx = engine.spend(&agent_id, amount, parsed_type, &description, None)?;
+    serde_json::to_string(&tx).map_err(|e| e.to_string())
+}
+
+pub fn economy_earn(
+    state: &AppState,
+    agent_id: String,
+    amount: f64,
+    description: String,
+) -> Result<String, String> {
+    let mut engine = state
+        .economic_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let tx = engine.earn(&agent_id, amount, &description)?;
+    serde_json::to_string(&tx).map_err(|e| e.to_string())
+}
+
+pub fn economy_transfer(
+    state: &AppState,
+    from: String,
+    to: String,
+    amount: f64,
+    description: String,
+) -> Result<String, String> {
+    let mut engine = state
+        .economic_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let (debit, credit) = engine.transfer(&from, &to, amount, &description)?;
+    Ok(json!({ "debit": debit, "credit": credit }).to_string())
+}
+
+pub fn economy_freeze_wallet(state: &AppState, agent_id: String) -> Result<String, String> {
+    let mut engine = state
+        .economic_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    engine.freeze_wallet(&agent_id)?;
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({ "source": "economy", "action": "freeze", "agent_id": agent_id }),
+    );
+    Ok(json!({ "frozen": true }).to_string())
+}
+
+pub fn economy_get_history(state: &AppState, agent_id: String) -> Result<String, String> {
+    let engine = state
+        .economic_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let history = engine.get_transaction_history(&agent_id);
+    serde_json::to_string(&history).map_err(|e| e.to_string())
+}
+
+pub fn economy_get_stats(state: &AppState) -> Result<String, String> {
+    let engine = state
+        .economic_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let stats = engine.total_economy_stats();
+    serde_json::to_string(&stats).map_err(|e| e.to_string())
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -6365,6 +6480,75 @@ mod runtime {
         super::neural_bridge_clear_old(state.inner(), before_timestamp)
     }
 
+    #[tauri::command]
+    fn economy_create_wallet(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<String, String> {
+        super::economy_create_wallet(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn economy_get_wallet(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<String, String> {
+        super::economy_get_wallet(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn economy_spend(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        amount: f64,
+        tx_type: String,
+        description: String,
+    ) -> Result<String, String> {
+        super::economy_spend(state.inner(), agent_id, amount, tx_type, description)
+    }
+
+    #[tauri::command]
+    fn economy_earn(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        amount: f64,
+        description: String,
+    ) -> Result<String, String> {
+        super::economy_earn(state.inner(), agent_id, amount, description)
+    }
+
+    #[tauri::command]
+    fn economy_transfer(
+        state: tauri::State<'_, AppState>,
+        from: String,
+        to: String,
+        amount: f64,
+        description: String,
+    ) -> Result<String, String> {
+        super::economy_transfer(state.inner(), from, to, amount, description)
+    }
+
+    #[tauri::command]
+    fn economy_freeze_wallet(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<String, String> {
+        super::economy_freeze_wallet(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn economy_get_history(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<String, String> {
+        super::economy_get_history(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn economy_get_stats(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::economy_get_stats(state.inner())
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -6560,6 +6744,14 @@ mod runtime {
                 neural_bridge_search,
                 neural_bridge_delete,
                 neural_bridge_clear_old,
+                economy_create_wallet,
+                economy_get_wallet,
+                economy_spend,
+                economy_earn,
+                economy_transfer,
+                economy_freeze_wallet,
+                economy_get_history,
+                economy_get_stats,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
