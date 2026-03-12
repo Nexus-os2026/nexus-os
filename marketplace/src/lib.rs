@@ -3,6 +3,7 @@
 pub mod install;
 pub mod manifest_verify;
 pub mod package;
+pub mod payments;
 pub mod registry;
 pub mod scanner;
 pub mod sqlite_registry;

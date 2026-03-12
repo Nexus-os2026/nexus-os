@@ -28,6 +28,7 @@ use nexus_kernel::permissions::{
 use nexus_kernel::redaction::RedactionEngine;
 use nexus_kernel::supervisor::{AgentId, Supervisor};
 use nexus_kernel::tracing::{SpanStatus, TracingEngine};
+use nexus_marketplace::payments::{BillingInterval, PaymentEngine, RevenueSplit};
 use nexus_protocols::mcp_client::{McpAuth, McpHostManager, McpServerConfig, McpTransport};
 use nexus_sdk::memory::{AgentMemory, MemoryConfig, MemoryType};
 use serde::{Deserialize, Serialize};
@@ -141,6 +142,7 @@ pub struct AppState {
     economic_engine: Arc<Mutex<EconomicEngine>>,
     agent_memory: Arc<Mutex<AgentMemory>>,
     tracing_engine: Arc<Mutex<TracingEngine>>,
+    payment_engine: Arc<Mutex<PaymentEngine>>,
 }
 
 impl Default for AppState {
@@ -188,6 +190,7 @@ impl AppState {
             economic_engine: Arc::new(Mutex::new(EconomicEngine::new(EconomicConfig::default()))),
             agent_memory: Arc::new(Mutex::new(AgentMemory::new(MemoryConfig::default()))),
             tracing_engine: Arc::new(Mutex::new(TracingEngine::new(1000))),
+            payment_engine: Arc::new(Mutex::new(PaymentEngine::new(RevenueSplit::default()))),
         }
     }
 
@@ -5373,6 +5376,90 @@ pub fn tracing_get_trace(state: &AppState, trace_id: String) -> Result<String, S
     }
 }
 
+// ---------------------------------------------------------------------------
+// Payment commands
+// ---------------------------------------------------------------------------
+
+fn parse_billing_interval(s: &str) -> Result<BillingInterval, String> {
+    match s {
+        "Monthly" => Ok(BillingInterval::Monthly),
+        "Yearly" => Ok(BillingInterval::Yearly),
+        "OneTime" => Ok(BillingInterval::OneTime),
+        other => Err(format!("unknown billing interval: {other}")),
+    }
+}
+
+pub fn payment_create_plan(
+    state: &AppState,
+    name: String,
+    price_cents: u64,
+    interval: String,
+    features: Vec<String>,
+) -> Result<String, String> {
+    let bi = parse_billing_interval(&interval)?;
+    let mut engine = state
+        .payment_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let plan = engine.create_plan(&name, price_cents, bi, features);
+    serde_json::to_string(&plan).map_err(|e| e.to_string())
+}
+
+pub fn payment_list_plans(state: &AppState) -> Result<String, String> {
+    let engine = state
+        .payment_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let plans: Vec<_> = engine.list_plans();
+    serde_json::to_string(&plans).map_err(|e| e.to_string())
+}
+
+pub fn payment_create_invoice(
+    state: &AppState,
+    plan_id: String,
+    buyer_id: String,
+) -> Result<String, String> {
+    let mut engine = state
+        .payment_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let invoice = engine.create_invoice(&plan_id, &buyer_id)?;
+    serde_json::to_string(&invoice).map_err(|e| e.to_string())
+}
+
+pub fn payment_pay_invoice(state: &AppState, invoice_id: String) -> Result<String, String> {
+    let mut engine = state
+        .payment_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let invoice = engine.pay_invoice(&invoice_id)?;
+    serde_json::to_string(&invoice).map_err(|e| e.to_string())
+}
+
+pub fn payment_get_revenue_stats(state: &AppState) -> Result<String, String> {
+    let engine = state
+        .payment_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let stats = engine.get_revenue_stats();
+    serde_json::to_string(&stats).map_err(|e| e.to_string())
+}
+
+pub fn payment_create_payout(
+    state: &AppState,
+    developer_id: String,
+    agent_id: String,
+    amount_cents: u64,
+    period: String,
+) -> Result<String, String> {
+    let mut engine = state
+        .payment_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let payout = engine.create_payout(&developer_id, &agent_id, amount_cents, &period);
+    serde_json::to_string(&payout).map_err(|e| e.to_string())
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -6855,6 +6942,55 @@ mod runtime {
         super::tracing_get_trace(state.inner(), trace_id)
     }
 
+    #[tauri::command]
+    fn payment_create_plan(
+        state: tauri::State<'_, AppState>,
+        name: String,
+        price_cents: u64,
+        interval: String,
+        features: Vec<String>,
+    ) -> Result<String, String> {
+        super::payment_create_plan(state.inner(), name, price_cents, interval, features)
+    }
+
+    #[tauri::command]
+    fn payment_list_plans(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::payment_list_plans(state.inner())
+    }
+
+    #[tauri::command]
+    fn payment_create_invoice(
+        state: tauri::State<'_, AppState>,
+        plan_id: String,
+        buyer_id: String,
+    ) -> Result<String, String> {
+        super::payment_create_invoice(state.inner(), plan_id, buyer_id)
+    }
+
+    #[tauri::command]
+    fn payment_pay_invoice(
+        state: tauri::State<'_, AppState>,
+        invoice_id: String,
+    ) -> Result<String, String> {
+        super::payment_pay_invoice(state.inner(), invoice_id)
+    }
+
+    #[tauri::command]
+    fn payment_get_revenue_stats(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::payment_get_revenue_stats(state.inner())
+    }
+
+    #[tauri::command]
+    fn payment_create_payout(
+        state: tauri::State<'_, AppState>,
+        developer_id: String,
+        agent_id: String,
+        amount_cents: u64,
+        period: String,
+    ) -> Result<String, String> {
+        super::payment_create_payout(state.inner(), developer_id, agent_id, amount_cents, period)
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -7071,6 +7207,12 @@ mod runtime {
                 tracing_end_trace,
                 tracing_list_traces,
                 tracing_get_trace,
+                payment_create_plan,
+                payment_list_plans,
+                payment_create_invoice,
+                payment_pay_invoice,
+                payment_get_revenue_stats,
+                payment_create_payout,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
