@@ -94,6 +94,10 @@ fn now_secs() -> u64 {
 }
 
 /// Run a shell command in a given directory. Returns (success, stdout+stderr).
+///
+/// **DEPRECATED**: Prefer `run_typed_tool()` which uses `TypedTool` for
+/// injection-safe execution. This function is kept for backward compatibility
+/// with user-defined build/test/deploy commands that don't map to a TypedTool.
 fn run_command(command: &str, cwd: &str) -> (bool, String, u64) {
     let start = std::time::Instant::now();
 
@@ -117,6 +121,51 @@ fn run_command(command: &str, cwd: &str) -> (bool, String, u64) {
             (output.status.success(), combined, duration)
         }
         Err(e) => (false, format!("Failed to execute command: {e}"), duration),
+    }
+}
+
+/// Execute a `TypedTool` in the given working directory.
+/// Returns (success, output, duration_ms) — same shape as `run_command`
+/// but without shell injection risk.
+fn run_typed_tool(tool: &nexus_kernel::typed_tools::TypedTool, cwd: &str) -> (bool, String, u64) {
+    let path = std::path::Path::new(cwd);
+    match nexus_kernel::typed_tools::execute_typed_tool(tool, path) {
+        Ok(output) => {
+            let combined = if output.stderr.is_empty() {
+                output.stdout
+            } else {
+                format!("{}\n{}", output.stdout, output.stderr)
+            };
+            (output.exit_code == 0, combined, output.duration_ms)
+        }
+        Err(e) => (false, format!("TypedTool execution failed: {e}"), 0),
+    }
+}
+
+/// Try to convert a language's default build command to a TypedTool.
+/// Returns None if no mapping exists (falls back to shell).
+fn build_tool_for_language(language: &str) -> Option<nexus_kernel::typed_tools::TypedTool> {
+    use nexus_kernel::typed_tools::TypedTool;
+    match language {
+        "rust" => Some(TypedTool::CargoBuild {
+            package: None,
+            release: false,
+        }),
+        "javascript" | "typescript" => Some(TypedTool::NpmBuild),
+        _ => None,
+    }
+}
+
+/// Try to convert a language's default test command to a TypedTool.
+fn test_tool_for_language(language: &str) -> Option<nexus_kernel::typed_tools::TypedTool> {
+    use nexus_kernel::typed_tools::TypedTool;
+    match language {
+        "rust" => Some(TypedTool::CargoTest {
+            package: None,
+            test_name: None,
+        }),
+        "javascript" | "typescript" => Some(TypedTool::NpmTest),
+        _ => None,
     }
 }
 
@@ -188,6 +237,9 @@ impl FactoryPipeline {
     }
 
     /// Run the build step for a project.
+    ///
+    /// Uses `TypedTool` for known languages (Rust, JS/TS) to avoid shell
+    /// injection. Falls back to `run_command` for custom build commands.
     pub fn build_project(&mut self, project_id: &str) -> Result<BuildResult, String> {
         let project = self
             .projects
@@ -195,7 +247,18 @@ impl FactoryPipeline {
             .ok_or_else(|| format!("Project not found: {project_id}"))?;
 
         project.status = ProjectStatus::Building;
-        let (success, output, duration) = run_command(&project.build_command, &project.source_dir);
+
+        // Prefer TypedTool when the build command matches the default for the language
+        let (success, output, duration) =
+            if project.build_command == default_build_command(&project.language) {
+                if let Some(tool) = build_tool_for_language(&project.language) {
+                    run_typed_tool(&tool, &project.source_dir)
+                } else {
+                    run_command(&project.build_command, &project.source_dir)
+                }
+            } else {
+                run_command(&project.build_command, &project.source_dir)
+            };
 
         let errors: Vec<String> = if success {
             Vec::new()
@@ -232,6 +295,9 @@ impl FactoryPipeline {
     }
 
     /// Run the test step for a project.
+    ///
+    /// Uses `TypedTool` for known languages (Rust, JS/TS) to avoid shell
+    /// injection. Falls back to `run_command` for custom test commands.
     pub fn test_project(&mut self, project_id: &str) -> Result<TestResult, String> {
         let project = self
             .projects
@@ -239,7 +305,17 @@ impl FactoryPipeline {
             .ok_or_else(|| format!("Project not found: {project_id}"))?;
 
         project.status = ProjectStatus::Testing;
-        let (success, output, duration) = run_command(&project.test_command, &project.source_dir);
+
+        let (success, output, duration) =
+            if project.test_command == default_test_command(&project.language) {
+                if let Some(tool) = test_tool_for_language(&project.language) {
+                    run_typed_tool(&tool, &project.source_dir)
+                } else {
+                    run_command(&project.test_command, &project.source_dir)
+                }
+            } else {
+                run_command(&project.test_command, &project.source_dir)
+            };
 
         // Parse test counts from output (best-effort).
         let (passed, failed, skipped) = parse_test_counts(&output);

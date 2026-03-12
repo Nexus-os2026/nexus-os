@@ -145,6 +145,8 @@ pub struct AppState {
     tracing_engine: Arc<Mutex<TracingEngine>>,
     payment_engine: Arc<Mutex<PaymentEngine>>,
     whisper: Arc<Mutex<WhisperTranscriber>>,
+    replay_recorder: Arc<Mutex<nexus_kernel::replay::recorder::ReplayRecorder>>,
+    reputation_registry: Arc<Mutex<nexus_kernel::reputation::ReputationRegistry>>,
 }
 
 impl Default for AppState {
@@ -194,6 +196,12 @@ impl AppState {
             tracing_engine: Arc::new(Mutex::new(TracingEngine::new(1000))),
             payment_engine: Arc::new(Mutex::new(PaymentEngine::new(RevenueSplit::default()))),
             whisper: Arc::new(Mutex::new(WhisperTranscriber::new())),
+            replay_recorder: Arc::new(Mutex::new(
+                nexus_kernel::replay::recorder::ReplayRecorder::new(500),
+            )),
+            reputation_registry: Arc::new(Mutex::new(
+                nexus_kernel::reputation::ReputationRegistry::new(),
+            )),
         }
     }
 
@@ -5130,6 +5138,307 @@ pub fn factory_get_build_history(state: &AppState, project_id: String) -> Result
     serde_json::to_string(&history).map_err(|e| e.to_string())
 }
 
+// ── Typed Tools ─────────────────────────────────────────────────────
+
+pub fn execute_tool(state: &AppState, tool_json: String) -> Result<String, String> {
+    use nexus_kernel::typed_tools::{self, TypedTool};
+
+    let tool: TypedTool =
+        serde_json::from_str(&tool_json).map_err(|e| format!("invalid tool JSON: {e}"))?;
+
+    // Validate arguments first
+    tool.validate()?;
+
+    // Check fuel cost
+    let cost = tool.fuel_cost();
+
+    // If destructive or custom-with-approval, flag for HITL
+    let needs_hitl = tool.is_destructive()
+        || matches!(
+            &tool,
+            TypedTool::Custom {
+                requires_approval: true,
+                ..
+            }
+        );
+
+    // Execute
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let output = typed_tools::execute_typed_tool(&tool, &cwd)?;
+
+    // Audit log
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "typed-tools",
+            "tool": output.tool,
+            "exit_code": output.exit_code,
+            "duration_ms": output.duration_ms,
+            "fuel_cost": cost,
+            "capability": tool.capability_required(),
+            "destructive": tool.is_destructive(),
+            "hitl_required": needs_hitl,
+        }),
+    );
+
+    serde_json::to_string(&output).map_err(|e| e.to_string())
+}
+
+pub fn list_tools() -> Result<String, String> {
+    let tools = nexus_kernel::typed_tools::list_available_tools();
+    serde_json::to_string(&tools).map_err(|e| e.to_string())
+}
+
+// ── Replay Evidence ─────────────────────────────────────────────────
+
+pub fn replay_list_bundles(
+    state: &AppState,
+    agent_id: Option<String>,
+    limit: Option<usize>,
+) -> Result<String, String> {
+    let recorder = state
+        .replay_recorder
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let bundles = recorder.list_bundles(agent_id.as_deref(), limit.unwrap_or(50));
+    serde_json::to_string(&bundles).map_err(|e| e.to_string())
+}
+
+pub fn replay_get_bundle(state: &AppState, bundle_id: String) -> Result<String, String> {
+    let recorder = state
+        .replay_recorder
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let bundle = recorder
+        .get_bundle(&bundle_id)
+        .ok_or_else(|| format!("bundle '{bundle_id}' not found"))?;
+    serde_json::to_string(bundle).map_err(|e| e.to_string())
+}
+
+pub fn replay_verify_bundle(state: &AppState, bundle_id: String) -> Result<String, String> {
+    use nexus_kernel::replay::player::ReplayPlayer;
+
+    let recorder = state
+        .replay_recorder
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let bundle = recorder
+        .get_bundle(&bundle_id)
+        .ok_or_else(|| format!("bundle '{bundle_id}' not found"))?;
+    let verdict = ReplayPlayer::verify_bundle(bundle);
+
+    drop(recorder);
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "replay-evidence",
+            "action": "verify_bundle",
+            "bundle_id": bundle_id,
+            "verdict": serde_json::to_value(&verdict).unwrap_or_default(),
+        }),
+    );
+
+    serde_json::to_string(&verdict).map_err(|e| e.to_string())
+}
+
+pub fn replay_export_bundle(state: &AppState, bundle_id: String) -> Result<String, String> {
+    let recorder = state
+        .replay_recorder
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    recorder.export_bundle(&bundle_id)
+}
+
+pub fn replay_toggle_recording(state: &AppState, enabled: bool) -> Result<String, String> {
+    let mut recorder = state
+        .replay_recorder
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    if enabled {
+        recorder.start_recording();
+    } else {
+        recorder.stop_recording();
+    }
+
+    drop(recorder);
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "replay-evidence",
+            "action": "toggle_recording",
+            "enabled": enabled,
+        }),
+    );
+
+    serde_json::to_string(&serde_json::json!({"recording": enabled})).map_err(|e| e.to_string())
+}
+
+// ── Air-Gap Deployment ──────────────────────────────────────────────
+
+pub fn airgap_create_bundle(
+    _state: &AppState,
+    target_os: String,
+    target_arch: String,
+    output_path: String,
+    components: Option<String>,
+) -> Result<String, String> {
+    let mut builder = nexus_airgap::AirgapBuilder::new(&target_os, &target_arch);
+
+    // If components JSON array provided, add each
+    if let Some(comp_json) = components {
+        let comps: Vec<nexus_airgap::BundleComponent> =
+            serde_json::from_str(&comp_json).map_err(|e| format!("invalid components: {e}"))?;
+        for comp in comps {
+            builder.add_component(comp);
+        }
+    }
+
+    let bundle = builder.build(&output_path)?;
+    serde_json::to_string(&bundle).map_err(|e| e.to_string())
+}
+
+pub fn airgap_validate_bundle(_state: &AppState, bundle_path: String) -> Result<String, String> {
+    let result = nexus_airgap::AirgapInstaller::validate_bundle(&bundle_path);
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn airgap_install_bundle(
+    state: &AppState,
+    bundle_path: String,
+    install_dir: String,
+) -> Result<String, String> {
+    let bundle = nexus_airgap::AirgapInstaller::install(&bundle_path, &install_dir)?;
+
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "airgap",
+            "action": "install_bundle",
+            "bundle_id": bundle.id,
+            "install_dir": install_dir,
+        }),
+    );
+
+    serde_json::to_string(&bundle).map_err(|e| e.to_string())
+}
+
+pub fn airgap_get_system_info(_state: &AppState) -> Result<String, String> {
+    let info = nexus_airgap::get_system_info();
+    serde_json::to_string(&info).map_err(|e| e.to_string())
+}
+
+// ── Reputation Registry ─────────────────────────────────────────────
+
+pub fn reputation_register(state: &AppState, did: String, name: String) -> Result<String, String> {
+    let mut reg = state
+        .reputation_registry
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let rep = reg.register_agent(&did, &name);
+
+    drop(reg);
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "reputation",
+            "action": "register",
+            "agent_did": did,
+        }),
+    );
+
+    serde_json::to_string(&rep).map_err(|e| e.to_string())
+}
+
+pub fn reputation_record_task(
+    state: &AppState,
+    did: String,
+    success: bool,
+) -> Result<String, String> {
+    let mut reg = state
+        .reputation_registry
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    reg.record_task_completion(&did, success);
+    reg.award_badges(&did);
+    let rep = reg
+        .get_reputation(&did)
+        .ok_or_else(|| format!("agent '{did}' not found"))?;
+    serde_json::to_string(rep).map_err(|e| e.to_string())
+}
+
+pub fn reputation_rate_agent(
+    state: &AppState,
+    did: String,
+    rater_did: String,
+    score: f64,
+    comment: Option<String>,
+) -> Result<String, String> {
+    let mut reg = state
+        .reputation_registry
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    reg.add_peer_rating(&did, &rater_did, score, comment);
+    reg.award_badges(&did);
+    let rep = reg
+        .get_reputation(&did)
+        .ok_or_else(|| format!("agent '{did}' not found"))?;
+    serde_json::to_string(rep).map_err(|e| e.to_string())
+}
+
+pub fn reputation_get(state: &AppState, did: String) -> Result<String, String> {
+    let reg = state
+        .reputation_registry
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let rep = reg
+        .get_reputation(&did)
+        .ok_or_else(|| format!("agent '{did}' not found"))?;
+    serde_json::to_string(rep).map_err(|e| e.to_string())
+}
+
+pub fn reputation_top(state: &AppState, limit: Option<usize>) -> Result<String, String> {
+    let reg = state
+        .reputation_registry
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let top = reg.top_agents(limit.unwrap_or(10));
+    serde_json::to_string(&top).map_err(|e| e.to_string())
+}
+
+pub fn reputation_export(state: &AppState, did: String) -> Result<String, String> {
+    let reg = state
+        .reputation_registry
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    reg.export_reputation(&did)
+}
+
+pub fn reputation_import(state: &AppState, json: String) -> Result<String, String> {
+    let mut reg = state
+        .reputation_registry
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let rep = reg.import_reputation(&json)?;
+
+    drop(reg);
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "reputation",
+            "action": "import",
+            "agent_did": rep.agent_did,
+        }),
+    );
+
+    serde_json::to_string(&rep).map_err(|e| e.to_string())
+}
+
 // ── Computer Control Engine ──────────────────────────────────────────
 
 pub fn computer_control_capture_screen(
@@ -5718,6 +6027,210 @@ pub fn payment_create_payout(
         .unwrap_or_else(|p| p.into_inner());
     let payout = engine.create_payout(&developer_id, &agent_id, amount_cents, &period);
     serde_json::to_string(&payout).map_err(|e| e.to_string())
+}
+
+// ── Governance verification commands ────────────────────────────────────────
+
+pub fn verify_governance_invariants(state: &AppState) -> Result<String, String> {
+    use nexus_kernel::manifest::{FilesystemPermission, FsPermissionLevel};
+    use nexus_kernel::verification::GovernanceVerifier;
+
+    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+
+    let mut verifier = GovernanceVerifier::new();
+
+    // Use first agent's data if available, otherwise use defaults.
+    let agents: Vec<_> = supervisor.health_check();
+    let (fuel_remaining, fuel_budget, capabilities) = if let Some(status) = agents.first() {
+        if let Some(handle) = supervisor.get_agent(status.id) {
+            (
+                handle.remaining_fuel,
+                handle.manifest.fuel_budget,
+                handle.manifest.capabilities.clone(),
+            )
+        } else {
+            (0u64, 1000u64, vec!["llm.query".to_string()])
+        }
+    } else {
+        (0u64, 1000u64, vec!["llm.query".to_string()])
+    };
+
+    let manifest = nexus_kernel::manifest::AgentManifest {
+        name: "verification-probe".to_string(),
+        version: "1.0.0".to_string(),
+        capabilities: capabilities.clone(),
+        fuel_budget,
+        autonomy_level: None,
+        consent_policy_path: None,
+        requester_id: None,
+        schedule: None,
+        llm_model: None,
+        fuel_period_id: None,
+        monthly_fuel_cap: None,
+        allowed_endpoints: None,
+        domain_tags: vec![],
+        filesystem_permissions: vec![
+            FilesystemPermission {
+                path_pattern: "/safe/".to_string(),
+                permission: FsPermissionLevel::ReadOnly,
+            },
+            FilesystemPermission {
+                path_pattern: "/safe/secret.key".to_string(),
+                permission: FsPermissionLevel::Deny,
+            },
+        ],
+    };
+
+    let test_paths: Vec<&str> = vec!["/safe/readme.txt", "/safe/secret.key"];
+    let results = verifier.verify_all(
+        fuel_remaining,
+        fuel_budget,
+        &capabilities,
+        &capabilities,
+        &audit,
+        &manifest,
+        &test_paths,
+    );
+
+    serde_json::to_string(&results).map_err(|e| e.to_string())
+}
+
+pub fn verify_specific_invariant(
+    state: &AppState,
+    invariant_name: String,
+) -> Result<String, String> {
+    use nexus_kernel::verification::GovernanceVerifier;
+
+    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+
+    let mut verifier = GovernanceVerifier::new();
+
+    let agents: Vec<_> = supervisor.health_check();
+    let (fuel_remaining, fuel_budget, capabilities) = if let Some(status) = agents.first() {
+        if let Some(handle) = supervisor.get_agent(status.id) {
+            (
+                handle.remaining_fuel,
+                handle.manifest.fuel_budget,
+                handle.manifest.capabilities.clone(),
+            )
+        } else {
+            (0u64, 1000u64, vec!["llm.query".to_string()])
+        }
+    } else {
+        (0u64, 1000u64, vec!["llm.query".to_string()])
+    };
+
+    let proof = match invariant_name.as_str() {
+        "FuelNeverNegative" => verifier.verify_fuel_invariant(fuel_remaining, fuel_budget),
+        "FuelNeverExceedsBudget" => {
+            verifier.verify_fuel_budget_invariant(fuel_remaining, fuel_budget)
+        }
+        "CapabilityCheckBeforeAction" => {
+            verifier.verify_capability_invariant(&capabilities, "llm.query")
+        }
+        "AuditChainIntegrity" => verifier.verify_audit_chain(&audit),
+        "RedactionBeforeLlmCall" => verifier.verify_redaction_invariant(&audit),
+        "HitlApprovalForDestructive" => verifier.verify_hitl_invariant(&audit),
+        "NoCapabilityEscalation" => verifier.verify_no_escalation(&capabilities, &capabilities),
+        "DenyOverridesAllow" => {
+            use nexus_kernel::manifest::{FilesystemPermission, FsPermissionLevel};
+            let manifest = nexus_kernel::manifest::AgentManifest {
+                name: "verification-probe".to_string(),
+                version: "1.0.0".to_string(),
+                capabilities: capabilities.clone(),
+                fuel_budget,
+                autonomy_level: None,
+                consent_policy_path: None,
+                requester_id: None,
+                schedule: None,
+                llm_model: None,
+                fuel_period_id: None,
+                monthly_fuel_cap: None,
+                allowed_endpoints: None,
+                domain_tags: vec![],
+                filesystem_permissions: vec![
+                    FilesystemPermission {
+                        path_pattern: "/safe/".to_string(),
+                        permission: FsPermissionLevel::ReadOnly,
+                    },
+                    FilesystemPermission {
+                        path_pattern: "/safe/secret.key".to_string(),
+                        permission: FsPermissionLevel::Deny,
+                    },
+                ],
+            };
+            verifier.verify_filesystem_deny_override(&manifest, &["/safe/secret.key"])
+        }
+        _ => return Err(format!("Unknown invariant: {invariant_name}")),
+    };
+
+    serde_json::to_string(&proof).map_err(|e| e.to_string())
+}
+
+pub fn export_compliance_report(state: &AppState) -> Result<String, String> {
+    use nexus_kernel::manifest::{FilesystemPermission, FsPermissionLevel};
+    use nexus_kernel::verification::GovernanceVerifier;
+
+    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+
+    let mut verifier = GovernanceVerifier::new();
+
+    let agents: Vec<_> = supervisor.health_check();
+    let (fuel_remaining, fuel_budget, capabilities) = if let Some(status) = agents.first() {
+        if let Some(handle) = supervisor.get_agent(status.id) {
+            (
+                handle.remaining_fuel,
+                handle.manifest.fuel_budget,
+                handle.manifest.capabilities.clone(),
+            )
+        } else {
+            (0u64, 1000u64, vec!["llm.query".to_string()])
+        }
+    } else {
+        (0u64, 1000u64, vec!["llm.query".to_string()])
+    };
+
+    let manifest = nexus_kernel::manifest::AgentManifest {
+        name: "verification-probe".to_string(),
+        version: "1.0.0".to_string(),
+        capabilities: capabilities.clone(),
+        fuel_budget,
+        autonomy_level: None,
+        consent_policy_path: None,
+        requester_id: None,
+        schedule: None,
+        llm_model: None,
+        fuel_period_id: None,
+        monthly_fuel_cap: None,
+        allowed_endpoints: None,
+        domain_tags: vec![],
+        filesystem_permissions: vec![
+            FilesystemPermission {
+                path_pattern: "/safe/".to_string(),
+                permission: FsPermissionLevel::ReadOnly,
+            },
+            FilesystemPermission {
+                path_pattern: "/safe/secret.key".to_string(),
+                permission: FsPermissionLevel::Deny,
+            },
+        ],
+    };
+
+    let test_paths: Vec<&str> = vec!["/safe/readme.txt", "/safe/secret.key"];
+    verifier.verify_all(
+        fuel_remaining,
+        fuel_budget,
+        &capabilities,
+        &capabilities,
+        &audit,
+        &manifest,
+        &test_paths,
+    );
+
+    Ok(verifier.generate_compliance_report())
 }
 
 #[cfg(all(
@@ -6931,6 +7444,154 @@ mod runtime {
     }
 
     #[tauri::command]
+    fn execute_tool(
+        state: tauri::State<'_, AppState>,
+        tool_json: String,
+    ) -> Result<String, String> {
+        super::execute_tool(state.inner(), tool_json)
+    }
+
+    #[tauri::command]
+    fn list_tools() -> Result<String, String> {
+        super::list_tools()
+    }
+
+    #[tauri::command]
+    fn replay_list_bundles(
+        state: tauri::State<'_, AppState>,
+        agent_id: Option<String>,
+        limit: Option<usize>,
+    ) -> Result<String, String> {
+        super::replay_list_bundles(state.inner(), agent_id, limit)
+    }
+
+    #[tauri::command]
+    fn replay_get_bundle(
+        state: tauri::State<'_, AppState>,
+        bundle_id: String,
+    ) -> Result<String, String> {
+        super::replay_get_bundle(state.inner(), bundle_id)
+    }
+
+    #[tauri::command]
+    fn replay_verify_bundle(
+        state: tauri::State<'_, AppState>,
+        bundle_id: String,
+    ) -> Result<String, String> {
+        super::replay_verify_bundle(state.inner(), bundle_id)
+    }
+
+    #[tauri::command]
+    fn replay_export_bundle(
+        state: tauri::State<'_, AppState>,
+        bundle_id: String,
+    ) -> Result<String, String> {
+        super::replay_export_bundle(state.inner(), bundle_id)
+    }
+
+    #[tauri::command]
+    fn replay_toggle_recording(
+        state: tauri::State<'_, AppState>,
+        enabled: bool,
+    ) -> Result<String, String> {
+        super::replay_toggle_recording(state.inner(), enabled)
+    }
+
+    #[tauri::command]
+    fn airgap_create_bundle(
+        state: tauri::State<'_, AppState>,
+        target_os: String,
+        target_arch: String,
+        output_path: String,
+        components: Option<String>,
+    ) -> Result<String, String> {
+        super::airgap_create_bundle(
+            state.inner(),
+            target_os,
+            target_arch,
+            output_path,
+            components,
+        )
+    }
+
+    #[tauri::command]
+    fn airgap_validate_bundle(
+        state: tauri::State<'_, AppState>,
+        bundle_path: String,
+    ) -> Result<String, String> {
+        super::airgap_validate_bundle(state.inner(), bundle_path)
+    }
+
+    #[tauri::command]
+    fn airgap_install_bundle(
+        state: tauri::State<'_, AppState>,
+        bundle_path: String,
+        install_dir: String,
+    ) -> Result<String, String> {
+        super::airgap_install_bundle(state.inner(), bundle_path, install_dir)
+    }
+
+    #[tauri::command]
+    fn airgap_get_system_info(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::airgap_get_system_info(state.inner())
+    }
+
+    #[tauri::command]
+    fn reputation_register(
+        state: tauri::State<'_, AppState>,
+        did: String,
+        name: String,
+    ) -> Result<String, String> {
+        super::reputation_register(state.inner(), did, name)
+    }
+
+    #[tauri::command]
+    fn reputation_record_task(
+        state: tauri::State<'_, AppState>,
+        did: String,
+        success: bool,
+    ) -> Result<String, String> {
+        super::reputation_record_task(state.inner(), did, success)
+    }
+
+    #[tauri::command]
+    fn reputation_rate_agent(
+        state: tauri::State<'_, AppState>,
+        did: String,
+        rater_did: String,
+        score: f64,
+        comment: Option<String>,
+    ) -> Result<String, String> {
+        super::reputation_rate_agent(state.inner(), did, rater_did, score, comment)
+    }
+
+    #[tauri::command]
+    fn reputation_get(state: tauri::State<'_, AppState>, did: String) -> Result<String, String> {
+        super::reputation_get(state.inner(), did)
+    }
+
+    #[tauri::command]
+    fn reputation_top(
+        state: tauri::State<'_, AppState>,
+        limit: Option<usize>,
+    ) -> Result<String, String> {
+        super::reputation_top(state.inner(), limit)
+    }
+
+    #[tauri::command]
+    fn reputation_export(state: tauri::State<'_, AppState>, did: String) -> Result<String, String> {
+        super::reputation_export(state.inner(), did)
+    }
+
+    #[tauri::command]
+    fn reputation_import(
+        state: tauri::State<'_, AppState>,
+        json: String,
+    ) -> Result<String, String> {
+        super::reputation_import(state.inner(), json)
+    }
+
+    #[tauri::command]
     fn computer_control_capture_screen(
         state: tauri::State<'_, AppState>,
         region: Option<String>,
@@ -7264,6 +7925,24 @@ mod runtime {
         super::payment_create_payout(state.inner(), developer_id, agent_id, amount_cents, period)
     }
 
+    #[tauri::command]
+    fn verify_governance_invariants(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::verify_governance_invariants(state.inner())
+    }
+
+    #[tauri::command]
+    fn verify_specific_invariant(
+        state: tauri::State<'_, AppState>,
+        invariant_name: String,
+    ) -> Result<String, String> {
+        super::verify_specific_invariant(state.inner(), invariant_name)
+    }
+
+    #[tauri::command]
+    fn export_compliance_report(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::export_compliance_report(state.inner())
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -7450,6 +8129,24 @@ mod runtime {
                 factory_run_pipeline,
                 factory_list_projects,
                 factory_get_build_history,
+                execute_tool,
+                list_tools,
+                replay_list_bundles,
+                replay_get_bundle,
+                replay_verify_bundle,
+                replay_export_bundle,
+                replay_toggle_recording,
+                airgap_create_bundle,
+                airgap_validate_bundle,
+                airgap_install_bundle,
+                airgap_get_system_info,
+                reputation_register,
+                reputation_record_task,
+                reputation_rate_agent,
+                reputation_get,
+                reputation_top,
+                reputation_export,
+                reputation_import,
                 computer_control_capture_screen,
                 computer_control_execute_action,
                 computer_control_get_history,
@@ -7488,6 +8185,9 @@ mod runtime {
                 payment_pay_invoice,
                 payment_get_revenue_stats,
                 payment_create_payout,
+                verify_governance_invariants,
+                verify_specific_invariant,
+                export_compliance_report,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
@@ -7528,11 +8228,13 @@ mod tests {
         navigate_to, neural_bridge_delete, neural_bridge_ingest, neural_bridge_search,
         neural_bridge_status, neural_bridge_toggle, pause_agent, payment_create_invoice,
         payment_create_plan, payment_get_revenue_stats, payment_list_plans, payment_pay_invoice,
-        remove_indexed_document, resume_agent, search_documents, start_build, start_learning,
-        start_research, time_machine_create_checkpoint, time_machine_list_checkpoints,
-        time_machine_redo, time_machine_undo, tracing_end_span, tracing_end_trace,
-        tracing_get_trace, tracing_list_traces, tracing_start_span, tracing_start_trace,
-        voice_get_status, voice_load_whisper_model, voice_transcribe, AppState, LearningSource,
+        remove_indexed_document, replay_export_bundle, replay_get_bundle, replay_list_bundles,
+        replay_toggle_recording, replay_verify_bundle, resume_agent, search_documents, start_build,
+        start_learning, start_research, time_machine_create_checkpoint,
+        time_machine_list_checkpoints, time_machine_redo, time_machine_undo, tracing_end_span,
+        tracing_end_trace, tracing_get_trace, tracing_list_traces, tracing_start_span,
+        tracing_start_trace, voice_get_status, voice_load_whisper_model, voice_transcribe,
+        AppState, LearningSource,
     };
     use serde_json::json;
 
@@ -8556,5 +9258,76 @@ mod tests {
         let stats = payment_get_revenue_stats(&state).unwrap();
         let s: serde_json::Value = serde_json::from_str(&stats).unwrap();
         assert!(s.get("total_revenue_cents").is_some());
+    }
+
+    #[test]
+    fn test_tauri_replay_evidence_flow() {
+        let state = AppState::new();
+
+        // Toggle recording on
+        let toggle = replay_toggle_recording(&state, true).unwrap();
+        let t: serde_json::Value = serde_json::from_str(&toggle).unwrap();
+        assert_eq!(t["recording"], true);
+
+        // Initially no bundles
+        let list = replay_list_bundles(&state, None, Some(50)).unwrap();
+        let bundles: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap();
+        assert!(bundles.is_empty());
+
+        // Record a bundle manually via the recorder
+        {
+            let mut recorder = state.replay_recorder.lock().unwrap();
+            let bid = recorder.capture_pre_state(
+                "test-agent",
+                "tool_call",
+                vec!["fs.read".into()],
+                1000,
+                vec![],
+                Some("mock".into()),
+                json!({"cmd": "ls"}),
+            );
+            recorder.record_governance_check(&bid, "capability", true, "ok");
+            recorder.record_governance_check(&bid, "fuel", true, "ok");
+            recorder
+                .capture_post_state(
+                    &bid,
+                    vec!["fs.read".into()],
+                    998,
+                    vec![],
+                    json!({"out": "ok"}),
+                )
+                .unwrap();
+        }
+
+        // List bundles — should have 1
+        let list2 = replay_list_bundles(&state, None, Some(50)).unwrap();
+        let bundles2: Vec<serde_json::Value> = serde_json::from_str(&list2).unwrap();
+        assert_eq!(bundles2.len(), 1);
+        let bundle_id = bundles2[0]["id"].as_str().unwrap().to_string();
+
+        // Get full bundle
+        let full = replay_get_bundle(&state, bundle_id.clone()).unwrap();
+        let b: serde_json::Value = serde_json::from_str(&full).unwrap();
+        assert_eq!(b["agent_id"], "test-agent");
+        assert_eq!(b["action_type"], "tool_call");
+
+        // Verify bundle
+        let verdict = replay_verify_bundle(&state, bundle_id.clone()).unwrap();
+        assert!(verdict.contains("Verified"));
+
+        // Export bundle
+        let exported = replay_export_bundle(&state, bundle_id).unwrap();
+        assert!(exported.contains("test-agent"));
+        assert!(exported.contains("bundle_hash"));
+
+        // Filter by agent
+        let filtered = replay_list_bundles(&state, Some("nonexistent".into()), Some(50)).unwrap();
+        let empty: Vec<serde_json::Value> = serde_json::from_str(&filtered).unwrap();
+        assert!(empty.is_empty());
+
+        // Toggle off
+        let off = replay_toggle_recording(&state, false).unwrap();
+        let o: serde_json::Value = serde_json::from_str(&off).unwrap();
+        assert_eq!(o["recording"], false);
     }
 }

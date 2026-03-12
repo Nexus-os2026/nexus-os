@@ -22,6 +22,7 @@ nexus-distributed = { path = "../../distributed" }
 nexus-factory = { path = "../../factory" }
 nexus-marketplace = { path = "../../marketplace" }
 nexus-sdk = { path = "../../sdk" }
+nexus-airgap = { path = "../../packaging/airgap" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "0.8"

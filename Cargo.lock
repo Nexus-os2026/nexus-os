@@ -3648,6 +3648,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-airgap"
+version = "7.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "uuid",
+]
+
+[[package]]
 name = "nexus-analytics"
 version = "7.0.0"
 dependencies = [
@@ -3821,6 +3831,7 @@ name = "nexus-desktop-backend"
 version = "7.0.0"
 dependencies = [
  "nexus-adaptation",
+ "nexus-airgap",
  "nexus-connectors-core",
  "nexus-connectors-llm",
  "nexus-connectors-messaging",
