@@ -1,62 +1,147 @@
 stages:
   - security
   - test
+  - deploy
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
 
 variables:
   CARGO_BUILD_JOBS: "2"
   CARGO_PROFILE_DEV_DEBUG: "1"
+  CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
+
+# ---------------------------------------------------------------------------
+# Security stage — only on main and MRs
+# ---------------------------------------------------------------------------
 
 cargo-audit:
   stage: security
   image: rust:latest
+  timeout: 10 minutes
   cache:
     key: "${CI_COMMIT_REF_SLUG}-audit"
     paths:
       - .cargo/registry/
+      - .cargo/bin/
+    policy: pull-push
   before_script:
-    - cargo install cargo-audit
+    - test -f .cargo/bin/cargo-audit || cargo install cargo-audit
   script:
+    - export PATH="${CI_PROJECT_DIR}/.cargo/bin:${PATH}"
     - cargo audit --config audit.toml
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 cargo-deny:
   stage: security
   image: rust:latest
+  timeout: 10 minutes
   cache:
     key: "${CI_COMMIT_REF_SLUG}-deny"
     paths:
       - .cargo/registry/
+      - .cargo/bin/
+    policy: pull-push
   before_script:
-    - cargo install cargo-deny
+    - test -f .cargo/bin/cargo-deny || cargo install cargo-deny
   script:
+    - export PATH="${CI_PROJECT_DIR}/.cargo/bin:${PATH}"
     - cargo deny check
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
-rust-tests:
+# ---------------------------------------------------------------------------
+# Test stage — runs on every pipeline
+# ---------------------------------------------------------------------------
+
+.rust-base:
   stage: test
   image: rust:latest
   variables:
+    CARGO_INCREMENTAL: "1"
+    RUSTC_WRAPPER: ""
     RUSTFLAGS: "-C debuginfo=1"
   cache:
     key: "${CI_COMMIT_REF_SLUG}-rust"
     paths:
       - target/
       - .cargo/registry/
+    policy: pull-push
   before_script:
     - apt-get update && apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev pkg-config
     - rustup component add rustfmt clippy
     - rustup target add wasm32-wasip1
+
+rust-lint:
+  extends: .rust-base
+  timeout: 15 minutes
   script:
     - cargo fmt --all -- --check
     - cargo clippy --workspace --all-targets -- -D warnings
-    - cargo test --workspace
+
+rust-tests-core:
+  extends: .rust-base
+  timeout: 30 minutes
+  script:
+    - cargo test -p nexus-kernel -p nexus-sdk -p nexus-cli
+
+rust-tests-full:
+  extends: .rust-base
+  timeout: 30 minutes
+  script:
+    - cargo test --workspace --exclude nexus-kernel --exclude nexus-sdk --exclude nexus-cli
 
 frontend-tests:
   stage: test
   image: node:22
+  timeout: 15 minutes
   cache:
     key: "${CI_COMMIT_REF_SLUG}-node"
     paths:
       - app/node_modules/
+    policy: pull-push
   script:
     - cd app
     - npm ci
     - npm run build
+  artifacts:
+    paths:
+      - app/dist/
+    expire_in: 7 days
+
+# ---------------------------------------------------------------------------
+# Deploy stage — manual release on tags
+# ---------------------------------------------------------------------------
+
+release-build:
+  stage: deploy
+  image: rust:latest
+  timeout: 45 minutes
+  variables:
+    CARGO_INCREMENTAL: "0"
+    RUSTFLAGS: "-C debuginfo=0"
+  cache:
+    key: "release-rust"
+    paths:
+      - target/
+      - .cargo/registry/
+    policy: pull-push
+  before_script:
+    - apt-get update && apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev pkg-config
+  script:
+    - cargo build --release -p nexus-cli
+  artifacts:
+    paths:
+      - target/release/nexus-cli
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v/
+      when: manual
