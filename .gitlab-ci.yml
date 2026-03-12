@@ -2,9 +2,17 @@ stages:
   - security
   - test
 
+variables:
+  CARGO_BUILD_JOBS: "2"
+  CARGO_PROFILE_DEV_DEBUG: "1"
+
 cargo-audit:
   stage: security
   image: rust:latest
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}-audit"
+    paths:
+      - .cargo/registry/
   before_script:
     - cargo install cargo-audit
   script:
@@ -13,6 +21,10 @@ cargo-audit:
 cargo-deny:
   stage: security
   image: rust:latest
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}-deny"
+    paths:
+      - .cargo/registry/
   before_script:
     - cargo install cargo-deny
   script:
@@ -22,8 +34,12 @@ rust-tests:
   stage: test
   image: rust:latest
   variables:
-    CARGO_BUILD_JOBS: "2"
     RUSTFLAGS: "-C debuginfo=1"
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}-rust"
+    paths:
+      - target/
+      - .cargo/registry/
   before_script:
     - apt-get update && apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev pkg-config
     - rustup component add rustfmt clippy
@@ -36,6 +52,10 @@ rust-tests:
 frontend-tests:
   stage: test
   image: node:22
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}-node"
+    paths:
+      - app/node_modules/
   script:
     - cd app
     - npm ci

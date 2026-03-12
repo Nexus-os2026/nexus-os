@@ -523,6 +523,7 @@ pub fn transcribe_push_to_talk() -> Result<String, String> {
     }
 }
 
+// TODO: Wire to frontend system tray indicator
 pub fn tray_status(state: &AppState) -> Result<TrayStatus, String> {
     let agents = list_agents(state)?;
     let running_agents = agents
