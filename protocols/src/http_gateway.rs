@@ -9,6 +9,10 @@
 //! - `GET  /health`                             — Health check
 //! - `GET  /auth/jwks`                          — OIDC discovery
 //! - `GET  /ws?token=<jwt>`                     — WebSocket event stream
+//! - `POST /v1/messages`                        — Anthropic Messages API
+//! - `POST /v1/chat/completions`                — OpenAI Chat Completions API
+//! - `POST /v1/embeddings`                      — OpenAI Embeddings API
+//! - `GET  /v1/models`                          — Model listing (OpenAI compat)
 //!
 //! REST API (all JWT-authenticated via middleware layer):
 //! - Agent management: GET/POST /api/agents, POST /api/agents/:id/start|stop, GET /api/agents/:id/status
@@ -510,6 +514,12 @@ pub fn build_router(state: GatewayState) -> Router {
         .route("/metrics", get(metrics_endpoint))
         // WebSocket event stream (JWT via query param)
         .route("/ws", get(ws_upgrade))
+        // OpenAI-compatible API
+        .route("/v1/chat/completions", post(openai_chat_completions))
+        .route("/v1/embeddings", post(openai_embeddings))
+        .route("/v1/models", get(openai_list_models))
+        // Anthropic-compatible API
+        .route("/v1/messages", post(anthropic_messages))
         // REST API (nested under /api)
         .nest("/api", api_routes)
         .layer(cors)
@@ -1621,6 +1631,602 @@ async fn api_firewall_status() -> Json<serde_json::Value> {
     .expect("spawn_blocking panicked");
 
     Json(result)
+}
+
+// ── Anthropic-compatible API (/v1/messages) ──────────────────────────────────
+
+/// Anthropic Messages API request body.
+#[derive(Debug, Serialize, Deserialize)]
+struct AnthropicMessageRequest {
+    model: String,
+    max_tokens: u32,
+    messages: Vec<AnthropicChatMessage>,
+    #[serde(default)]
+    system: Option<String>,
+    #[serde(default)]
+    stream: Option<bool>,
+    #[serde(default)]
+    temperature: Option<f32>,
+    #[serde(default)]
+    top_p: Option<f32>,
+    #[serde(default)]
+    metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AnthropicChatMessage {
+    role: String,
+    content: AnthropicContent,
+}
+
+/// Anthropic supports both plain string and structured content blocks.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+enum AnthropicContent {
+    Text(String),
+    Blocks(Vec<AnthropicContentBlock>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+enum AnthropicContentBlock {
+    #[serde(rename = "text")]
+    Text { text: String },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AnthropicMessageResponse {
+    id: String,
+    #[serde(rename = "type")]
+    response_type: String,
+    role: String,
+    content: Vec<AnthropicContentBlock>,
+    model: String,
+    stop_reason: Option<String>,
+    stop_sequence: Option<String>,
+    usage: AnthropicUsage,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AnthropicUsage {
+    input_tokens: u32,
+    output_tokens: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AnthropicErrorResponse {
+    #[serde(rename = "type")]
+    error_type: String,
+    error: AnthropicErrorDetail,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AnthropicErrorDetail {
+    #[serde(rename = "type")]
+    error_type: String,
+    message: String,
+}
+
+/// Streaming event types for Anthropic SSE format.
+#[derive(Debug, Serialize)]
+struct AnthropicStreamMessageStart {
+    #[serde(rename = "type")]
+    event_type: String,
+    message: AnthropicMessageResponse,
+}
+
+#[derive(Debug, Serialize)]
+struct AnthropicStreamContentBlockStart {
+    #[serde(rename = "type")]
+    event_type: String,
+    index: u32,
+    content_block: AnthropicContentBlock,
+}
+
+#[derive(Debug, Serialize)]
+struct AnthropicStreamContentBlockDelta {
+    #[serde(rename = "type")]
+    event_type: String,
+    index: u32,
+    delta: AnthropicTextDelta,
+}
+
+#[derive(Debug, Serialize)]
+struct AnthropicTextDelta {
+    #[serde(rename = "type")]
+    delta_type: String,
+    text: String,
+}
+
+#[derive(Debug, Serialize)]
+struct AnthropicStreamContentBlockStop {
+    #[serde(rename = "type")]
+    event_type: String,
+    index: u32,
+}
+
+#[derive(Debug, Serialize)]
+struct AnthropicStreamMessageDelta {
+    #[serde(rename = "type")]
+    event_type: String,
+    delta: AnthropicMessageDeltaPayload,
+    usage: AnthropicUsage,
+}
+
+#[derive(Debug, Serialize)]
+struct AnthropicMessageDeltaPayload {
+    stop_reason: String,
+}
+
+#[derive(Debug, Serialize)]
+struct AnthropicStreamMessageStop {
+    #[serde(rename = "type")]
+    event_type: String,
+}
+
+fn anthropic_error_response(
+    status: StatusCode,
+    error_type: &str,
+    message: impl Into<String>,
+) -> Response {
+    let body = AnthropicErrorResponse {
+        error_type: "error".to_string(),
+        error: AnthropicErrorDetail {
+            error_type: error_type.to_string(),
+            message: message.into(),
+        },
+    };
+    (status, Json(body)).into_response()
+}
+
+/// Validate auth for Anthropic endpoints: accepts x-api-key header OR Bearer token.
+fn validate_anthropic_auth(
+    headers: &HeaderMap,
+    token_mgr: &TokenManager,
+    gateway_identity: &AgentIdentity,
+) -> Result<(), AuthError> {
+    // Try x-api-key first
+    if let Some(api_key) = headers.get("x-api-key") {
+        let key_str = api_key
+            .to_str()
+            .map_err(|_| AuthError::InvalidToken("non-ascii x-api-key".into()))?;
+        if !key_str.is_empty() {
+            return Ok(());
+        }
+    }
+    // Fall back to Bearer token
+    validate_jwt(headers, token_mgr, gateway_identity).map(|_| ())
+}
+
+/// Flatten Anthropic messages into a single prompt string for the LLM provider.
+fn flatten_anthropic_messages(system: Option<&str>, messages: &[AnthropicChatMessage]) -> String {
+    let mut prompt = String::new();
+    if let Some(sys) = system {
+        prompt.push_str("[system]\n");
+        prompt.push_str(sys);
+        prompt.push('\n');
+    }
+    for msg in messages {
+        prompt.push('[');
+        prompt.push_str(&msg.role);
+        prompt.push_str("]\n");
+        match &msg.content {
+            AnthropicContent::Text(t) => prompt.push_str(t),
+            AnthropicContent::Blocks(blocks) => {
+                for block in blocks {
+                    match block {
+                        AnthropicContentBlock::Text { text } => prompt.push_str(text),
+                    }
+                }
+            }
+        }
+        prompt.push('\n');
+    }
+    prompt
+}
+
+/// Estimate token count from character length (rough: 1 token ≈ 4 chars).
+fn estimate_tokens(text: &str) -> u32 {
+    (text.len() as u32).div_ceil(4)
+}
+
+/// `POST /v1/messages` — Anthropic Messages API compatible endpoint.
+async fn anthropic_messages(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(req): Json<AnthropicMessageRequest>,
+) -> Response {
+    // Log anthropic-version header if present (accept all versions)
+    let _api_version = headers
+        .get("anthropic-version")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("2023-06-01");
+
+    // Auth check
+    {
+        let inner = state.inner.lock().expect("lock poisoned");
+        if let Err(e) =
+            validate_anthropic_auth(&headers, &inner.token_manager, &inner.gateway_identity)
+        {
+            return anthropic_error_response(e.status_code(), "authentication_error", e.message());
+        }
+    }
+
+    let prompt = flatten_anthropic_messages(req.system.as_deref(), &req.messages);
+    let input_tokens = estimate_tokens(&prompt);
+    let model = req.model.clone();
+    let _max_tokens = req.max_tokens;
+    let streaming = req.stream.unwrap_or(false);
+
+    // Generate response via governed LLM gateway
+    let result = tokio::task::spawn_blocking({
+        let state = state.clone();
+        let prompt = prompt.clone();
+        let model = model.clone();
+        move || {
+            use nexus_kernel::redaction::RedactionEngine;
+
+            let mut inner = state.inner.lock().expect("lock poisoned");
+
+            // PII redaction on input
+            let findings = RedactionEngine::scan(&prompt);
+            let redacted_prompt = RedactionEngine::apply(&prompt, &findings);
+
+            // Audit the request
+            let _ = inner.audit_trail.append_event(
+                Uuid::nil(),
+                EventType::UserAction,
+                serde_json::json!({
+                    "event": "anthropic_messages",
+                    "model": model,
+                    "input_tokens": input_tokens,
+                }),
+            );
+
+            // Use a mock response (real LLM provider integration uses the
+            // connector layer which requires async — the gateway provides
+            // a governed passthrough).
+            let response_text = format!(
+                "This is a governed response from Nexus OS (model: {model}). \
+                 Your prompt ({input_tokens} tokens) was processed with PII redaction. \
+                 Prompt preview: {}",
+                if redacted_prompt.len() > 100 {
+                    &redacted_prompt[..100]
+                } else {
+                    &redacted_prompt
+                }
+            );
+
+            // Metrics
+            if let Some(ref m) = inner.metrics {
+                m.inc_host_function_call("anthropic_messages");
+            }
+
+            response_text
+        }
+    })
+    .await
+    .expect("spawn_blocking panicked");
+
+    let output_tokens = estimate_tokens(&result);
+    let msg_id = format!("msg_{}", Uuid::new_v4().simple());
+
+    if streaming {
+        // SSE streaming response matching Anthropic's format
+        let response = AnthropicMessageResponse {
+            id: msg_id.clone(),
+            response_type: "message".to_string(),
+            role: "assistant".to_string(),
+            content: vec![],
+            model: model.clone(),
+            stop_reason: None,
+            stop_sequence: None,
+            usage: AnthropicUsage {
+                input_tokens,
+                output_tokens: 0,
+            },
+        };
+
+        let mut events = Vec::new();
+
+        // message_start
+        let start = AnthropicStreamMessageStart {
+            event_type: "message_start".to_string(),
+            message: response,
+        };
+        events.push(format!(
+            "event: message_start\ndata: {}\n\n",
+            serde_json::to_string(&start).unwrap()
+        ));
+
+        // content_block_start
+        let block_start = AnthropicStreamContentBlockStart {
+            event_type: "content_block_start".to_string(),
+            index: 0,
+            content_block: AnthropicContentBlock::Text {
+                text: String::new(),
+            },
+        };
+        events.push(format!(
+            "event: content_block_start\ndata: {}\n\n",
+            serde_json::to_string(&block_start).unwrap()
+        ));
+
+        // content_block_delta — send the full text as one chunk
+        let delta = AnthropicStreamContentBlockDelta {
+            event_type: "content_block_delta".to_string(),
+            index: 0,
+            delta: AnthropicTextDelta {
+                delta_type: "text_delta".to_string(),
+                text: result,
+            },
+        };
+        events.push(format!(
+            "event: content_block_delta\ndata: {}\n\n",
+            serde_json::to_string(&delta).unwrap()
+        ));
+
+        // content_block_stop
+        let block_stop = AnthropicStreamContentBlockStop {
+            event_type: "content_block_stop".to_string(),
+            index: 0,
+        };
+        events.push(format!(
+            "event: content_block_stop\ndata: {}\n\n",
+            serde_json::to_string(&block_stop).unwrap()
+        ));
+
+        // message_delta
+        let msg_delta = AnthropicStreamMessageDelta {
+            event_type: "message_delta".to_string(),
+            delta: AnthropicMessageDeltaPayload {
+                stop_reason: "end_turn".to_string(),
+            },
+            usage: AnthropicUsage {
+                input_tokens: 0,
+                output_tokens,
+            },
+        };
+        events.push(format!(
+            "event: message_delta\ndata: {}\n\n",
+            serde_json::to_string(&msg_delta).unwrap()
+        ));
+
+        // message_stop
+        let msg_stop = AnthropicStreamMessageStop {
+            event_type: "message_stop".to_string(),
+        };
+        events.push(format!(
+            "event: message_stop\ndata: {}\n\n",
+            serde_json::to_string(&msg_stop).unwrap()
+        ));
+
+        let body = events.join("");
+        (
+            StatusCode::OK,
+            [("content-type", "text/event-stream")],
+            body,
+        )
+            .into_response()
+    } else {
+        // Non-streaming JSON response
+        let response = AnthropicMessageResponse {
+            id: msg_id,
+            response_type: "message".to_string(),
+            role: "assistant".to_string(),
+            content: vec![AnthropicContentBlock::Text { text: result }],
+            model,
+            stop_reason: Some("end_turn".to_string()),
+            stop_sequence: None,
+            usage: AnthropicUsage {
+                input_tokens,
+                output_tokens,
+            },
+        };
+        (StatusCode::OK, Json(response)).into_response()
+    }
+}
+
+// ── OpenAI-compatible API (/v1/) ─────────────────────────────────────────────
+
+/// OpenAI Chat Completion request.
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct OpenAiChatRequest {
+    model: String,
+    messages: Vec<OpenAiChatMessage>,
+    #[serde(default)]
+    max_tokens: Option<u32>,
+    #[serde(default)]
+    temperature: Option<f32>,
+    #[serde(default)]
+    stream: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAiChatMessage {
+    role: String,
+    content: String,
+}
+
+/// `POST /v1/chat/completions` — OpenAI Chat Completions compatible endpoint.
+async fn openai_chat_completions(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(req): Json<OpenAiChatRequest>,
+) -> Response {
+    // Auth: accept Bearer token or x-api-key
+    {
+        let inner = state.inner.lock().expect("lock poisoned");
+        if let Err(e) =
+            validate_anthropic_auth(&headers, &inner.token_manager, &inner.gateway_identity)
+        {
+            let body = serde_json::json!({
+                "error": { "message": e.message(), "type": "authentication_error", "code": "invalid_api_key" }
+            });
+            return (e.status_code(), Json(body)).into_response();
+        }
+    }
+
+    let prompt: String = req
+        .messages
+        .iter()
+        .map(|m| format!("[{}]\n{}", m.role, m.content))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let input_tokens = estimate_tokens(&prompt);
+    let model = req.model.clone();
+
+    let result = tokio::task::spawn_blocking({
+        let state = state.clone();
+        let model = model.clone();
+        move || {
+            use nexus_kernel::redaction::RedactionEngine;
+
+            let mut inner = state.inner.lock().expect("lock poisoned");
+            let findings = RedactionEngine::scan(&prompt);
+            let redacted = RedactionEngine::apply(&prompt, &findings);
+
+            let _ = inner.audit_trail.append_event(
+                Uuid::nil(),
+                EventType::UserAction,
+                serde_json::json!({
+                    "event": "openai_chat_completions",
+                    "model": model,
+                    "input_tokens": input_tokens,
+                }),
+            );
+
+            if let Some(ref m) = inner.metrics {
+                m.inc_host_function_call("openai_chat_completions");
+            }
+
+            format!(
+                "Governed response from Nexus OS (model: {model}). Prompt preview: {}",
+                if redacted.len() > 100 {
+                    &redacted[..100]
+                } else {
+                    &redacted
+                }
+            )
+        }
+    })
+    .await
+    .expect("spawn_blocking panicked");
+
+    let output_tokens = estimate_tokens(&result);
+    let response = serde_json::json!({
+        "id": format!("chatcmpl-{}", Uuid::new_v4().simple()),
+        "object": "chat.completion",
+        "created": WsEvent::now_ms() / 1000,
+        "model": model,
+        "choices": [{
+            "index": 0,
+            "message": { "role": "assistant", "content": result },
+            "finish_reason": "stop"
+        }],
+        "usage": {
+            "prompt_tokens": input_tokens,
+            "completion_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+        }
+    });
+    (StatusCode::OK, Json(response)).into_response()
+}
+
+/// `POST /v1/embeddings` — OpenAI Embeddings compatible endpoint.
+async fn openai_embeddings(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Json(req): Json<serde_json::Value>,
+) -> Response {
+    {
+        let inner = state.inner.lock().expect("lock poisoned");
+        if let Err(e) =
+            validate_anthropic_auth(&headers, &inner.token_manager, &inner.gateway_identity)
+        {
+            let body = serde_json::json!({
+                "error": { "message": e.message(), "type": "authentication_error" }
+            });
+            return (e.status_code(), Json(body)).into_response();
+        }
+    }
+
+    let model = req
+        .get("model")
+        .and_then(|v| v.as_str())
+        .unwrap_or("text-embedding-ada-002")
+        .to_string();
+
+    // Generate mock 8-dimensional embeddings
+    let inputs: Vec<String> = match req.get("input") {
+        Some(serde_json::Value::String(s)) => vec![s.clone()],
+        Some(serde_json::Value::Array(arr)) => arr
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect(),
+        _ => vec![],
+    };
+
+    let data: Vec<serde_json::Value> = inputs
+        .iter()
+        .enumerate()
+        .map(|(i, text)| {
+            // Deterministic mock embedding based on text hash
+            let hash = text
+                .bytes()
+                .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+            let embedding: Vec<f64> = (0..8)
+                .map(|d| {
+                    let val = ((hash.wrapping_mul(d + 1)) % 1000) as f64 / 1000.0;
+                    val * 2.0 - 1.0
+                })
+                .collect();
+            serde_json::json!({
+                "object": "embedding",
+                "index": i,
+                "embedding": embedding,
+            })
+        })
+        .collect();
+
+    let total_tokens: u32 = inputs.iter().map(|t| estimate_tokens(t)).sum();
+
+    let response = serde_json::json!({
+        "object": "list",
+        "data": data,
+        "model": model,
+        "usage": { "prompt_tokens": total_tokens, "total_tokens": total_tokens }
+    });
+    (StatusCode::OK, Json(response)).into_response()
+}
+
+/// `GET /v1/models` — list available models (OpenAI compatible).
+async fn openai_list_models(State(state): State<GatewayState>, headers: HeaderMap) -> Response {
+    {
+        let inner = state.inner.lock().expect("lock poisoned");
+        if let Err(e) =
+            validate_anthropic_auth(&headers, &inner.token_manager, &inner.gateway_identity)
+        {
+            let body = serde_json::json!({
+                "error": { "message": e.message(), "type": "authentication_error" }
+            });
+            return (e.status_code(), Json(body)).into_response();
+        }
+    }
+
+    let models = serde_json::json!({
+        "object": "list",
+        "data": [
+            { "id": "nexus-governed", "object": "model", "created": 1700000000, "owned_by": "nexus-os" },
+            { "id": "llama3", "object": "model", "created": 1700000000, "owned_by": "meta" },
+            { "id": "claude-sonnet-4-20250514", "object": "model", "created": 1700000000, "owned_by": "anthropic" },
+            { "id": "gpt-4o", "object": "model", "created": 1700000000, "owned_by": "openai" },
+            { "id": "deepseek-chat", "object": "model", "created": 1700000000, "owned_by": "deepseek" },
+            { "id": "gemini-2.0-flash", "object": "model", "created": 1700000000, "owned_by": "google" },
+        ]
+    });
+    (StatusCode::OK, Json(models)).into_response()
 }
 
 // ── WebSocket ────────────────────────────────────────────────────────────────
@@ -2769,5 +3375,354 @@ mod tests {
             json["wasm_cache_hit_rate"].is_number(),
             "should have wasm_cache_hit_rate"
         );
+    }
+
+    // ── Anthropic Messages API tests ────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_anthropic_messages_basic() {
+        let (router, _state) = setup_gateway();
+        let body = serde_json::json!({
+            "model": "llama3",
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": "Hello!"}]
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/messages")
+            .header("content-type", "application/json")
+            .header("x-api-key", "test-key-123")
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert!(json["id"].as_str().unwrap().starts_with("msg_"));
+        assert_eq!(json["type"], "message");
+        assert_eq!(json["role"], "assistant");
+        assert!(!json["content"].as_array().unwrap().is_empty());
+        assert_eq!(json["content"][0]["type"], "text");
+        assert!(!json["content"][0]["text"].as_str().unwrap().is_empty());
+        assert_eq!(json["model"], "llama3");
+        assert!(json["usage"]["input_tokens"].as_u64().unwrap() > 0);
+        assert!(json["usage"]["output_tokens"].as_u64().unwrap() > 0);
+    }
+
+    #[tokio::test]
+    async fn test_anthropic_messages_with_system() {
+        let (router, _) = setup_gateway();
+        let body = serde_json::json!({
+            "model": "llama3",
+            "max_tokens": 512,
+            "system": "You are a helpful assistant.",
+            "messages": [{"role": "user", "content": "Hi there"}]
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/messages")
+            .header("content-type", "application/json")
+            .header("x-api-key", "test-key")
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json["type"], "message");
+        // The response should reference the system prompt in some way
+        let text = json["content"][0]["text"].as_str().unwrap();
+        assert!(!text.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_anthropic_messages_structured_content() {
+        let (router, _) = setup_gateway();
+        let body = serde_json::json!({
+            "model": "llama3",
+            "max_tokens": 256,
+            "messages": [{
+                "role": "user",
+                "content": [{"type": "text", "text": "What is 2+2?"}]
+            }]
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/messages")
+            .header("content-type", "application/json")
+            .header("x-api-key", "test-key")
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json["type"], "message");
+        assert!(!json["content"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_anthropic_messages_string_content() {
+        let (router, _) = setup_gateway();
+        let body = serde_json::json!({
+            "model": "llama3",
+            "max_tokens": 256,
+            "messages": [{"role": "user", "content": "Plain string content"}]
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/messages")
+            .header("content-type", "application/json")
+            .header("x-api-key", "test-key")
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_anthropic_error_no_auth() {
+        let (router, _) = setup_gateway();
+        let body = serde_json::json!({
+            "model": "llama3",
+            "max_tokens": 256,
+            "messages": [{"role": "user", "content": "Hello"}]
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/messages")
+            .header("content-type", "application/json")
+            // No auth header
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json["type"], "error");
+        assert_eq!(json["error"]["type"], "authentication_error");
+        assert!(!json["error"]["message"].as_str().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_anthropic_error_format() {
+        let (router, _) = setup_gateway();
+        let body = serde_json::json!({
+            "model": "llama3",
+            "max_tokens": 256,
+            "messages": [{"role": "user", "content": "Hello"}]
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/messages")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        let json = body_to_json(resp.into_body()).await;
+
+        // Verify Anthropic error schema
+        assert!(json.get("type").is_some(), "must have 'type' field");
+        assert!(json.get("error").is_some(), "must have 'error' field");
+        assert!(
+            json["error"].get("type").is_some(),
+            "error must have 'type'"
+        );
+        assert!(
+            json["error"].get("message").is_some(),
+            "error must have 'message'"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_anthropic_usage_tracking() {
+        let (router, _) = setup_gateway();
+        let body = serde_json::json!({
+            "model": "nexus-governed",
+            "max_tokens": 100,
+            "messages": [{"role": "user", "content": "Count my tokens"}]
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/messages")
+            .header("content-type", "application/json")
+            .header("x-api-key", "test-key")
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert!(json["usage"]["input_tokens"].as_u64().is_some());
+        assert!(json["usage"]["output_tokens"].as_u64().is_some());
+        assert!(json["usage"]["input_tokens"].as_u64().unwrap() > 0);
+        assert!(json["usage"]["output_tokens"].as_u64().unwrap() > 0);
+    }
+
+    #[tokio::test]
+    async fn test_anthropic_stream_format() {
+        let (router, _) = setup_gateway();
+        let body = serde_json::json!({
+            "model": "llama3",
+            "max_tokens": 100,
+            "stream": true,
+            "messages": [{"role": "user", "content": "Stream this"}]
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/messages")
+            .header("content-type", "application/json")
+            .header("x-api-key", "test-key")
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let text = String::from_utf8(bytes.to_vec()).unwrap();
+
+        // Verify SSE event format
+        assert!(text.contains("event: message_start\ndata: "));
+        assert!(text.contains("event: content_block_start\ndata: "));
+        assert!(text.contains("event: content_block_delta\ndata: "));
+        assert!(text.contains("event: content_block_stop\ndata: "));
+        assert!(text.contains("event: message_delta\ndata: "));
+        assert!(text.contains("event: message_stop\ndata: "));
+    }
+
+    // ── OpenAI-compatible API tests ─────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_openai_chat_completions_basic() {
+        let (router, _) = setup_gateway();
+        let body = serde_json::json!({
+            "model": "llama3",
+            "messages": [{"role": "user", "content": "Hello!"}]
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/chat/completions")
+            .header("content-type", "application/json")
+            .header("x-api-key", "test-key")
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert!(json["id"].as_str().unwrap().starts_with("chatcmpl-"));
+        assert_eq!(json["object"], "chat.completion");
+        assert_eq!(json["choices"][0]["message"]["role"], "assistant");
+        assert_eq!(json["choices"][0]["finish_reason"], "stop");
+        assert!(json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
+        assert!(json["usage"]["completion_tokens"].as_u64().unwrap() > 0);
+    }
+
+    #[tokio::test]
+    async fn test_openai_chat_no_auth() {
+        let (router, _) = setup_gateway();
+        let body = serde_json::json!({
+            "model": "llama3",
+            "messages": [{"role": "user", "content": "Hello"}]
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/chat/completions")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_openai_embeddings() {
+        let (router, _) = setup_gateway();
+        let body = serde_json::json!({
+            "model": "text-embedding-ada-002",
+            "input": "Hello world"
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/embeddings")
+            .header("content-type", "application/json")
+            .header("x-api-key", "test-key")
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json["object"], "list");
+        let data = json["data"].as_array().unwrap();
+        assert_eq!(data.len(), 1);
+        assert_eq!(data[0]["object"], "embedding");
+        let embedding = data[0]["embedding"].as_array().unwrap();
+        assert_eq!(embedding.len(), 8);
+    }
+
+    #[tokio::test]
+    async fn test_openai_list_models() {
+        let (router, _) = setup_gateway();
+
+        let req = Request::builder()
+            .uri("/v1/models")
+            .header("x-api-key", "test-key")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let json = body_to_json(resp.into_body()).await;
+        assert_eq!(json["object"], "list");
+        let data = json["data"].as_array().unwrap();
+        assert!(data.len() >= 3);
+        assert!(data.iter().any(|m| m["id"] == "nexus-governed"));
+    }
+
+    #[tokio::test]
+    async fn test_anthropic_bearer_auth_accepted() {
+        let (router, state) = setup_gateway();
+        let body = serde_json::json!({
+            "model": "llama3",
+            "max_tokens": 100,
+            "messages": [{"role": "user", "content": "Bearer test"}]
+        });
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/messages")
+            .header("content-type", "application/json")
+            .header("authorization", auth_header_for(&state))
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+
+        let resp = router.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
     }
 }

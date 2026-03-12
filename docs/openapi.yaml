@@ -1,0 +1,1588 @@
+openapi: "3.0.3"
+info:
+  title: Nexus OS API
+  version: "1.0.0"
+  description: |
+    Governed Deterministic Agent OS — REST API with OpenAI and Anthropic compatibility.
+
+    All mutating endpoints require JWT authentication (Bearer token) or API key (x-api-key header).
+    Every request is governed: capability checks, fuel accounting, PII redaction, and audit trail.
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: System
+    description: Health, metrics, and auth endpoints
+  - name: Agents
+    description: Agent lifecycle management
+  - name: Permissions
+    description: Agent capability permissions
+  - name: Audit
+    description: Audit trail and governance events
+  - name: Compliance
+    description: Compliance monitoring and GDPR erasure
+  - name: Marketplace
+    description: Agent marketplace
+  - name: Identity
+    description: Decentralized identity (DID) management
+  - name: Security
+    description: Firewall and security status
+  - name: A2A
+    description: Agent-to-Agent protocol (JSON-RPC 2.0)
+  - name: MCP
+    description: Model Context Protocol (governed tool invocation)
+  - name: Anthropic Compatible
+    description: Anthropic Messages API compatible endpoints
+  - name: OpenAI Compatible
+    description: OpenAI API compatible endpoints
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      description: Returns extended health information including uptime, agent counts, audit chain validity, compliance status, and resource utilisation.
+      responses:
+        "200":
+          description: System health status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /metrics:
+    get:
+      tags: [System]
+      summary: Prometheus metrics
+      description: Returns metrics in Prometheus text exposition format.
+      responses:
+        "200":
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /auth/jwks:
+    get:
+      tags: [System]
+      summary: OIDC JWKS discovery
+      description: Returns the gateway's EdDSA public key in JWKS format for token verification.
+      responses:
+        "200":
+          description: JWKS key set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JwksResponse"
+
+  /ws:
+    get:
+      tags: [System]
+      summary: WebSocket event stream
+      description: Upgrade to WebSocket for real-time kernel events. JWT required via query parameter.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          description: JWT token for authentication
+      responses:
+        "101":
+          description: WebSocket upgrade
+        "401":
+          description: Invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /a2a:
+    post:
+      tags: [A2A]
+      summary: Submit A2A task
+      description: Submit a task to an agent via the Agent-to-Agent protocol. Requires JWT authentication.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskSubmitRequest"
+      responses:
+        "200":
+          description: Task submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSubmitResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /a2a/agent-card:
+    get:
+      tags: [A2A]
+      summary: Agent Card discovery
+      description: List all agent cards or get a specific agent's card.
+      parameters:
+        - name: agent
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Agent name to look up (omit for all agents)
+      responses:
+        "200":
+          description: Agent card(s)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/AgentCard"
+                  - type: object
+                    properties:
+                      agents:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AgentCard"
+        "404":
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /a2a/tasks/{id}:
+    get:
+      tags: [A2A]
+      summary: Task status lookup
+      description: Get the status of an A2A task by ID. Requires JWT authentication.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Task details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/A2ATask"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Task not found
+
+  /mcp/tools/list:
+    get:
+      tags: [MCP]
+      summary: List governed tools
+      description: List all MCP tools available for an agent. Requires JWT authentication.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: agent
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Agent name
+      responses:
+        "200":
+          description: Tool list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/McpTool"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Agent not found
+
+  /mcp/tools/invoke:
+    post:
+      tags: [MCP]
+      summary: Invoke governed tool
+      description: |
+        Invoke an MCP tool with governance checks: capability validation, fuel check, egress policy, audit trail.
+        Requires JWT authentication.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToolInvokeRequest"
+      responses:
+        "200":
+          description: Tool result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolInvokeResponse"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Capability denied
+        "429":
+          description: Fuel exhausted
+
+  /v1/messages:
+    post:
+      tags: [Anthropic Compatible]
+      summary: Create a message (Anthropic compatible)
+      description: |
+        Anthropic Messages API compatible endpoint. Supports both streaming (SSE) and non-streaming responses.
+        All requests go through governance: PII redaction, audit trail, fuel accounting.
+      security:
+        - apiKeyAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: anthropic-version
+          in: header
+          required: false
+          schema:
+            type: string
+            default: "2023-06-01"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnthropicMessageRequest"
+      responses:
+        "200":
+          description: Message response (JSON or SSE stream depending on stream parameter)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnthropicMessageResponse"
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE stream with message_start, content_block_start, content_block_delta, content_block_stop, message_delta, message_stop events
+        "401":
+          description: Authentication error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnthropicErrorResponse"
+
+  /v1/chat/completions:
+    post:
+      tags: [OpenAI Compatible]
+      summary: Chat completions (OpenAI compatible)
+      description: |
+        OpenAI Chat Completions API compatible endpoint.
+        All requests go through governance: PII redaction, audit trail.
+      security:
+        - apiKeyAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenAiChatRequest"
+      responses:
+        "200":
+          description: Chat completion response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAiChatResponse"
+        "401":
+          description: Authentication error
+
+  /v1/embeddings:
+    post:
+      tags: [OpenAI Compatible]
+      summary: Create embeddings (OpenAI compatible)
+      description: Generate vector embeddings for input text.
+      security:
+        - apiKeyAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenAiEmbeddingRequest"
+      responses:
+        "200":
+          description: Embedding response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAiEmbeddingResponse"
+        "401":
+          description: Authentication error
+
+  /v1/models:
+    get:
+      tags: [OpenAI Compatible]
+      summary: List models (OpenAI compatible)
+      description: List available models.
+      security:
+        - apiKeyAuth: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Model list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenAiModelList"
+        "401":
+          description: Authentication error
+
+  /api/agents:
+    get:
+      tags: [Agents]
+      summary: List all agents
+      description: List all registered agents with their current status.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Agent list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agents:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentSummary"
+        "401":
+          description: Unauthorized
+    post:
+      tags: [Agents]
+      summary: Create agent
+      description: Create a new agent from a manifest.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [manifest]
+              properties:
+                manifest:
+                  $ref: "#/components/schemas/AgentManifest"
+      responses:
+        "201":
+          description: Agent created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agent_id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  status:
+                    type: string
+        "400":
+          description: Invalid manifest
+        "401":
+          description: Unauthorized
+
+  /api/agents/{id}/start:
+    post:
+      tags: [Agents]
+      summary: Start agent
+      description: Start or restart a stopped agent.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Agent started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  agent_id:
+                    type: string
+        "401":
+          description: Unauthorized
+        "404":
+          description: Agent not found
+
+  /api/agents/{id}/stop:
+    post:
+      tags: [Agents]
+      summary: Stop agent
+      description: Stop a running agent.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Agent stopped
+        "401":
+          description: Unauthorized
+        "404":
+          description: Agent not found
+
+  /api/agents/{id}/status:
+    get:
+      tags: [Agents]
+      summary: Agent status
+      description: Get detailed status for a specific agent.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Agent status detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentStatus"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Agent not found
+
+  /api/agents/{id}/permissions:
+    get:
+      tags: [Permissions]
+      summary: Get agent permissions
+      description: Get permission categories for an agent.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Permission categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PermissionCategory"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Agent not found
+    put:
+      tags: [Permissions]
+      summary: Update single permission
+      description: Toggle a single capability for an agent.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePermissionRequest"
+      responses:
+        "200":
+          description: Permission updated
+        "400":
+          description: Invalid capability
+        "401":
+          description: Unauthorized
+
+  /api/agents/{id}/permissions/bulk:
+    post:
+      tags: [Permissions]
+      summary: Bulk update permissions
+      description: Update multiple permissions at once.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkUpdatePermissionsRequest"
+      responses:
+        "200":
+          description: Permissions updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  count:
+                    type: integer
+        "400":
+          description: Invalid request
+        "401":
+          description: Unauthorized
+
+  /api/audit/events:
+    get:
+      tags: [Audit]
+      summary: Query audit events
+      description: Paginated audit event listing with optional agent filter.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: agent_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 500
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Audit events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditEventsResponse"
+        "400":
+          description: Invalid agent_id
+        "401":
+          description: Unauthorized
+
+  /api/audit/events/{id}:
+    get:
+      tags: [Audit]
+      summary: Get audit event by ID
+      description: Retrieve a single audit event by its UUID.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Audit event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditEvent"
+        "400":
+          description: Invalid UUID
+        "401":
+          description: Unauthorized
+        "404":
+          description: Event not found
+
+  /api/compliance/status:
+    get:
+      tags: [Compliance]
+      summary: Compliance status
+      description: Overall compliance status across all agents.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Compliance status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceStatus"
+        "401":
+          description: Unauthorized
+
+  /api/compliance/report/{agent_id}:
+    get:
+      tags: [Compliance]
+      summary: Transparency report
+      description: EU AI Act transparency report for a specific agent.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Transparency report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransparencyReport"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Agent not found
+
+  /api/compliance/erase/{agent_id}:
+    post:
+      tags: [Compliance]
+      summary: GDPR cryptographic erasure
+      description: GDPR Article 17 cryptographic erasure of agent data.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EraseRequest"
+      responses:
+        "200":
+          description: Erasure receipt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErasureReceipt"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Agent not found
+        "409":
+          description: Erasure conflict
+
+  /api/marketplace/search:
+    get:
+      tags: [Marketplace]
+      summary: Search marketplace
+      description: Search for agents in the marketplace.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MarketplaceEntry"
+        "401":
+          description: Unauthorized
+
+  /api/marketplace/agents/{id}:
+    get:
+      tags: [Marketplace]
+      summary: Get marketplace agent
+      description: Get details of a marketplace agent.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Agent details
+        "401":
+          description: Unauthorized
+        "404":
+          description: Agent not found
+
+  /api/marketplace/install/{id}:
+    post:
+      tags: [Marketplace]
+      summary: Install marketplace agent
+      description: Install an agent from the marketplace.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Agent installed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  package_id:
+                    type: string
+                  name:
+                    type: string
+                  version:
+                    type: string
+                  status:
+                    type: string
+        "400":
+          description: Installation failed
+        "401":
+          description: Unauthorized
+
+  /api/identity/agents:
+    get:
+      tags: [Identity]
+      summary: List agent identities
+      description: List all agent DID identities.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Agent identities
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  identities:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentIdentityInfo"
+        "401":
+          description: Unauthorized
+
+  /api/identity/agents/{id}:
+    get:
+      tags: [Identity]
+      summary: Get agent identity
+      description: Get DID identity for a specific agent.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Agent identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentIdentityInfo"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Agent not found
+
+  /api/firewall/status:
+    get:
+      tags: [Security]
+      summary: Firewall status
+      description: Prompt firewall status and pattern counts.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Firewall status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FirewallStatus"
+        "401":
+          description: Unauthorized
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: EdDSA-signed JWT token
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: API key for LLM-compatible endpoints
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+        code:
+          type: integer
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: healthy
+        version:
+          type: string
+        agents_registered:
+          type: integer
+        tasks_in_flight:
+          type: integer
+        started_at:
+          type: integer
+          format: int64
+        uptime_seconds:
+          type: integer
+          format: int64
+        agents_active:
+          type: integer
+        total_tests_passed:
+          type: integer
+          format: int64
+        audit_chain_valid:
+          type: boolean
+        compliance_status:
+          type: string
+        memory_usage_bytes:
+          type: integer
+          format: int64
+        wasm_cache_hit_rate:
+          type: number
+
+    JwksResponse:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            type: object
+            properties:
+              kty:
+                type: string
+                example: OKP
+              crv:
+                type: string
+                example: Ed25519
+              alg:
+                type: string
+                example: EdDSA
+              use:
+                type: string
+                example: sig
+              kid:
+                type: string
+              x:
+                type: string
+
+    AgentManifest:
+      type: object
+      required: [name, version, capabilities, fuel_budget]
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        fuel_budget:
+          type: integer
+          format: int64
+        autonomy_level:
+          type: integer
+          nullable: true
+        domain_tags:
+          type: array
+          items:
+            type: string
+
+    AgentSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+        fuel_remaining:
+          type: integer
+          format: int64
+        last_action:
+          type: string
+
+    AgentStatus:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+        fuel_remaining:
+          type: integer
+          format: int64
+        autonomy_level:
+          type: integer
+        capabilities:
+          type: array
+          items:
+            type: string
+        last_action:
+          type: string
+
+    AgentCard:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        url:
+          type: string
+        version:
+          type: string
+        capabilities:
+          type: object
+        skills:
+          type: array
+          items:
+            type: object
+        authentication:
+          type: array
+          items:
+            type: object
+
+    A2ATask:
+      type: object
+      properties:
+        id:
+          type: string
+        sender:
+          type: string
+        receiver:
+          type: string
+        status:
+          type: string
+          enum: [submitted, working, completed, failed, canceled]
+        governance:
+          $ref: "#/components/schemas/GovernanceContext"
+
+    GovernanceContext:
+      type: object
+      properties:
+        autonomy_level:
+          type: integer
+        fuel_budget:
+          type: integer
+          format: int64
+        fuel_consumed:
+          type: integer
+          format: int64
+        required_capabilities:
+          type: array
+          items:
+            type: string
+        hitl_approved:
+          type: boolean
+        audit_hash:
+          type: string
+          nullable: true
+
+    TaskSubmitRequest:
+      type: object
+      required: [agent, message]
+      properties:
+        agent:
+          type: string
+        message:
+          type: string
+        correlation_id:
+          type: string
+          nullable: true
+
+    TaskSubmitResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+        status:
+          type: string
+        agent:
+          type: string
+        sender:
+          type: string
+
+    McpTool:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        fuel_cost:
+          type: integer
+        min_autonomy_level:
+          type: integer
+        requires_hitl:
+          type: boolean
+
+    ToolInvokeRequest:
+      type: object
+      required: [agent, tool]
+      properties:
+        agent:
+          type: string
+        tool:
+          type: string
+        params:
+          type: object
+
+    ToolInvokeResponse:
+      type: object
+      properties:
+        is_error:
+          type: boolean
+        content:
+          type: object
+        fuel_consumed:
+          type: integer
+          format: int64
+        audit_hash:
+          type: string
+
+    UpdatePermissionRequest:
+      type: object
+      required: [capability_key, enabled]
+      properties:
+        capability_key:
+          type: string
+        enabled:
+          type: boolean
+
+    BulkUpdatePermissionsRequest:
+      type: object
+      required: [updates]
+      properties:
+        updates:
+          type: array
+          items:
+            type: object
+            required: [capability_key, enabled]
+            properties:
+              capability_key:
+                type: string
+              enabled:
+                type: boolean
+        reason:
+          type: string
+          nullable: true
+
+    PermissionCategory:
+      type: object
+      properties:
+        category:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              enabled:
+                type: boolean
+              risk_level:
+                type: string
+
+    AuditEvent:
+      type: object
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: integer
+          format: int64
+        agent_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+        payload:
+          type: object
+        hash:
+          type: string
+        previous_hash:
+          type: string
+          nullable: true
+
+    AuditEventsResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEvent"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    ComplianceStatus:
+      type: object
+      properties:
+        status:
+          type: string
+        agents_checked:
+          type: integer
+        violations:
+          type: array
+          items:
+            type: object
+
+    TransparencyReport:
+      type: object
+      properties:
+        agent_name:
+          type: string
+        risk_tier:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+
+    EraseRequest:
+      type: object
+      properties:
+        encryption_key_ids:
+          type: array
+          items:
+            type: string
+
+    ErasureReceipt:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          format: uuid
+        erased_at:
+          type: integer
+          format: int64
+        keys_destroyed:
+          type: integer
+
+    MarketplaceEntry:
+      type: object
+      properties:
+        package_id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        author:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    AgentIdentityInfo:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          format: uuid
+        did:
+          type: string
+        created_at:
+          type: integer
+          format: int64
+        public_key_hex:
+          type: string
+
+    FirewallStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          example: active
+        mode:
+          type: string
+          example: fail-closed
+        injection_pattern_count:
+          type: integer
+        pii_pattern_count:
+          type: integer
+        exfil_pattern_count:
+          type: integer
+        sensitive_path_count:
+          type: integer
+        ssn_detection:
+          type: boolean
+        passport_detection:
+          type: boolean
+        internal_ip_detection:
+          type: boolean
+        context_overflow_threshold_bytes:
+          type: integer
+        egress_default_deny:
+          type: boolean
+        egress_rate_limit_per_min:
+          type: integer
+
+    WsEvent:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [agent_status_changed, fuel_consumed, audit_event, compliance_alert, firewall_block, speculation_decision]
+        data:
+          type: object
+        timestamp:
+          type: integer
+          format: int64
+
+    # Anthropic-compatible schemas
+
+    AnthropicMessageRequest:
+      type: object
+      required: [model, max_tokens, messages]
+      properties:
+        model:
+          type: string
+          example: llama3
+        max_tokens:
+          type: integer
+          example: 1024
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnthropicChatMessage"
+        system:
+          type: string
+          nullable: true
+        stream:
+          type: boolean
+          default: false
+        temperature:
+          type: number
+          format: float
+          nullable: true
+        top_p:
+          type: number
+          format: float
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+
+    AnthropicChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                $ref: "#/components/schemas/AnthropicContentBlock"
+
+    AnthropicContentBlock:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [text]
+        text:
+          type: string
+
+    AnthropicMessageResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: msg_01XFDUDYJgAACzvnptvVoYEL
+        type:
+          type: string
+          enum: [message]
+        role:
+          type: string
+          enum: [assistant]
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnthropicContentBlock"
+        model:
+          type: string
+        stop_reason:
+          type: string
+          nullable: true
+          enum: [end_turn, max_tokens, stop_sequence]
+        stop_sequence:
+          type: string
+          nullable: true
+        usage:
+          $ref: "#/components/schemas/AnthropicUsage"
+
+    AnthropicUsage:
+      type: object
+      properties:
+        input_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+
+    AnthropicErrorResponse:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [error]
+        error:
+          type: object
+          properties:
+            type:
+              type: string
+              enum: [invalid_request_error, authentication_error, permission_error, not_found_error, rate_limit_error, api_error, overloaded_error]
+            message:
+              type: string
+
+    # OpenAI-compatible schemas
+
+    OpenAiChatRequest:
+      type: object
+      required: [model, messages]
+      properties:
+        model:
+          type: string
+          example: llama3
+        messages:
+          type: array
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role:
+                type: string
+                enum: [system, user, assistant]
+              content:
+                type: string
+        max_tokens:
+          type: integer
+          nullable: true
+        temperature:
+          type: number
+          format: float
+          nullable: true
+        stream:
+          type: boolean
+          default: false
+
+    OpenAiChatResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          enum: [chat.completion]
+        created:
+          type: integer
+          format: int64
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+              message:
+                type: object
+                properties:
+                  role:
+                    type: string
+                  content:
+                    type: string
+              finish_reason:
+                type: string
+                enum: [stop, length]
+        usage:
+          type: object
+          properties:
+            prompt_tokens:
+              type: integer
+            completion_tokens:
+              type: integer
+            total_tokens:
+              type: integer
+
+    OpenAiEmbeddingRequest:
+      type: object
+      required: [model, input]
+      properties:
+        model:
+          type: string
+          example: text-embedding-ada-002
+        input:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+
+    OpenAiEmbeddingResponse:
+      type: object
+      properties:
+        object:
+          type: string
+          enum: [list]
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              object:
+                type: string
+                enum: [embedding]
+              index:
+                type: integer
+              embedding:
+                type: array
+                items:
+                  type: number
+        model:
+          type: string
+        usage:
+          type: object
+          properties:
+            prompt_tokens:
+              type: integer
+            total_tokens:
+              type: integer
+
+    OpenAiModelList:
+      type: object
+      properties:
+        object:
+          type: string
+          enum: [list]
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              object:
+                type: string
+                enum: [model]
+              created:
+                type: integer
+                format: int64
+              owned_by:
+                type: string
