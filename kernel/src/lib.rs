@@ -42,3 +42,4 @@ pub mod safety_supervisor;
 pub mod speculative;
 pub mod supervisor;
 pub mod time_machine;
+pub mod tracing;

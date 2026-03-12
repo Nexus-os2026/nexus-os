@@ -13,6 +13,7 @@
 pub mod agent_trait;
 pub mod context;
 pub mod manifest;
+pub mod memory;
 pub mod module_cache;
 pub mod prelude;
 pub mod sandbox;

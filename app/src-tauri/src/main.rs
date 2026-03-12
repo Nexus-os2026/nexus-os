@@ -27,7 +27,9 @@ use nexus_kernel::permissions::{
 };
 use nexus_kernel::redaction::RedactionEngine;
 use nexus_kernel::supervisor::{AgentId, Supervisor};
+use nexus_kernel::tracing::{SpanStatus, TracingEngine};
 use nexus_protocols::mcp_client::{McpAuth, McpHostManager, McpServerConfig, McpTransport};
+use nexus_sdk::memory::{AgentMemory, MemoryConfig, MemoryType};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -137,6 +139,8 @@ pub struct AppState {
     computer_control: Arc<Mutex<ComputerControlEngine>>,
     neural_bridge: Arc<Mutex<NeuralBridge>>,
     economic_engine: Arc<Mutex<EconomicEngine>>,
+    agent_memory: Arc<Mutex<AgentMemory>>,
+    tracing_engine: Arc<Mutex<TracingEngine>>,
 }
 
 impl Default for AppState {
@@ -182,6 +186,8 @@ impl AppState {
             computer_control: Arc::new(Mutex::new(ComputerControlEngine::new())),
             neural_bridge: Arc::new(Mutex::new(NeuralBridge::new(NeuralBridgeConfig::default()))),
             economic_engine: Arc::new(Mutex::new(EconomicEngine::new(EconomicConfig::default()))),
+            agent_memory: Arc::new(Mutex::new(AgentMemory::new(MemoryConfig::default()))),
+            tracing_engine: Arc::new(Mutex::new(TracingEngine::new(1000))),
         }
     }
 
@@ -5199,6 +5205,174 @@ pub fn economy_get_stats(state: &AppState) -> Result<String, String> {
     serde_json::to_string(&stats).map_err(|e| e.to_string())
 }
 
+// ---------------------------------------------------------------------------
+// Agent Memory commands
+// ---------------------------------------------------------------------------
+
+pub fn agent_memory_remember(
+    state: &AppState,
+    agent_id: String,
+    content: String,
+    memory_type: String,
+    importance: f64,
+    tags: Vec<String>,
+) -> Result<String, String> {
+    let mt = parse_memory_type(&memory_type)?;
+    let mut mem = state.agent_memory.lock().unwrap_or_else(|p| p.into_inner());
+    let entry = mem.remember(&agent_id, &content, mt, importance, tags);
+    serde_json::to_string(&entry).map_err(|e| e.to_string())
+}
+
+pub fn agent_memory_recall(
+    state: &AppState,
+    agent_id: String,
+    query: String,
+    max_results: Option<usize>,
+) -> Result<String, String> {
+    let mut mem = state.agent_memory.lock().unwrap_or_else(|p| p.into_inner());
+    let results = mem.recall(&agent_id, &query, max_results.unwrap_or(10));
+    serde_json::to_string(&results).map_err(|e| e.to_string())
+}
+
+pub fn agent_memory_recall_by_type(
+    state: &AppState,
+    agent_id: String,
+    memory_type: String,
+    max_results: Option<usize>,
+) -> Result<String, String> {
+    let mt = parse_memory_type(&memory_type)?;
+    let mem = state.agent_memory.lock().unwrap_or_else(|p| p.into_inner());
+    let results = mem.recall_by_type(&agent_id, &mt, max_results.unwrap_or(10));
+    serde_json::to_string(&results).map_err(|e| e.to_string())
+}
+
+pub fn agent_memory_forget(
+    state: &AppState,
+    agent_id: String,
+    memory_id: String,
+) -> Result<String, String> {
+    let mut mem = state.agent_memory.lock().unwrap_or_else(|p| p.into_inner());
+    let removed = mem.forget(&agent_id, &memory_id);
+    Ok(json!({ "removed": removed }).to_string())
+}
+
+pub fn agent_memory_get_stats(state: &AppState, agent_id: String) -> Result<String, String> {
+    let mem = state.agent_memory.lock().unwrap_or_else(|p| p.into_inner());
+    let stats = mem.get_stats(&agent_id);
+    serde_json::to_string(&stats).map_err(|e| e.to_string())
+}
+
+pub fn agent_memory_save(state: &AppState, agent_id: String) -> Result<String, String> {
+    let mem = state.agent_memory.lock().unwrap_or_else(|p| p.into_inner());
+    mem.save(&agent_id)?;
+    Ok(json!({ "saved": true }).to_string())
+}
+
+pub fn agent_memory_clear(state: &AppState, agent_id: String) -> Result<String, String> {
+    let mut mem = state.agent_memory.lock().unwrap_or_else(|p| p.into_inner());
+    mem.clear(&agent_id);
+    Ok(json!({ "cleared": true }).to_string())
+}
+
+fn parse_memory_type(s: &str) -> Result<MemoryType, String> {
+    match s {
+        "Fact" => Ok(MemoryType::Fact),
+        "Preference" => Ok(MemoryType::Preference),
+        "Conversation" => Ok(MemoryType::Conversation),
+        "Task" => Ok(MemoryType::Task),
+        "Error" => Ok(MemoryType::Error),
+        "Strategy" => Ok(MemoryType::Strategy),
+        other => Err(format!("unknown memory type: {other}")),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Distributed Tracing commands
+// ---------------------------------------------------------------------------
+
+pub fn tracing_start_trace(
+    state: &AppState,
+    operation_name: String,
+    agent_id: Option<String>,
+) -> Result<String, String> {
+    let mut engine = state
+        .tracing_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let (trace_id, span_id) = engine.start_trace(&operation_name, agent_id.as_deref());
+    Ok(json!({ "trace_id": trace_id, "span_id": span_id }).to_string())
+}
+
+pub fn tracing_start_span(
+    state: &AppState,
+    trace_id: String,
+    parent_span_id: String,
+    operation_name: String,
+    agent_id: Option<String>,
+) -> Result<String, String> {
+    let mut engine = state
+        .tracing_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let span_id = engine.start_span(
+        &trace_id,
+        &parent_span_id,
+        &operation_name,
+        agent_id.as_deref(),
+    );
+    Ok(json!({ "span_id": span_id }).to_string())
+}
+
+pub fn tracing_end_span(
+    state: &AppState,
+    span_id: String,
+    status: String,
+    error_message: Option<String>,
+) -> Result<String, String> {
+    let span_status = match status.as_str() {
+        "Ok" => SpanStatus::Ok,
+        "Error" => SpanStatus::Error(error_message.unwrap_or_default()),
+        _ => return Err(format!("unknown span status: {status}")),
+    };
+    let mut engine = state
+        .tracing_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    engine.end_span(&span_id, span_status);
+    Ok(json!({ "ended": true }).to_string())
+}
+
+pub fn tracing_end_trace(state: &AppState, trace_id: String) -> Result<String, String> {
+    let mut engine = state
+        .tracing_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    match engine.end_trace(&trace_id) {
+        Some(trace) => serde_json::to_string(&trace).map_err(|e| e.to_string()),
+        None => Err(format!("trace not found: {trace_id}")),
+    }
+}
+
+pub fn tracing_list_traces(state: &AppState, limit: Option<usize>) -> Result<String, String> {
+    let engine = state
+        .tracing_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let traces: Vec<_> = engine.list_traces(limit.unwrap_or(50));
+    serde_json::to_string(&traces).map_err(|e| e.to_string())
+}
+
+pub fn tracing_get_trace(state: &AppState, trace_id: String) -> Result<String, String> {
+    let engine = state
+        .tracing_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    match engine.get_trace(&trace_id) {
+        Some(trace) => serde_json::to_string(trace).map_err(|e| e.to_string()),
+        None => Err(format!("trace not found: {trace_id}")),
+    }
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -6549,6 +6723,138 @@ mod runtime {
         super::economy_get_stats(state.inner())
     }
 
+    #[tauri::command]
+    fn agent_memory_remember(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        content: String,
+        memory_type: String,
+        importance: f64,
+        tags: Vec<String>,
+    ) -> Result<String, String> {
+        super::agent_memory_remember(
+            state.inner(),
+            agent_id,
+            content,
+            memory_type,
+            importance,
+            tags,
+        )
+    }
+
+    #[tauri::command]
+    fn agent_memory_recall(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        query: String,
+        max_results: Option<usize>,
+    ) -> Result<String, String> {
+        super::agent_memory_recall(state.inner(), agent_id, query, max_results)
+    }
+
+    #[tauri::command]
+    fn agent_memory_recall_by_type(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        memory_type: String,
+        max_results: Option<usize>,
+    ) -> Result<String, String> {
+        super::agent_memory_recall_by_type(state.inner(), agent_id, memory_type, max_results)
+    }
+
+    #[tauri::command]
+    fn agent_memory_forget(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        memory_id: String,
+    ) -> Result<String, String> {
+        super::agent_memory_forget(state.inner(), agent_id, memory_id)
+    }
+
+    #[tauri::command]
+    fn agent_memory_get_stats(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<String, String> {
+        super::agent_memory_get_stats(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn agent_memory_save(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<String, String> {
+        super::agent_memory_save(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn agent_memory_clear(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<String, String> {
+        super::agent_memory_clear(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn tracing_start_trace(
+        state: tauri::State<'_, AppState>,
+        operation_name: String,
+        agent_id: Option<String>,
+    ) -> Result<String, String> {
+        super::tracing_start_trace(state.inner(), operation_name, agent_id)
+    }
+
+    #[tauri::command]
+    fn tracing_start_span(
+        state: tauri::State<'_, AppState>,
+        trace_id: String,
+        parent_span_id: String,
+        operation_name: String,
+        agent_id: Option<String>,
+    ) -> Result<String, String> {
+        super::tracing_start_span(
+            state.inner(),
+            trace_id,
+            parent_span_id,
+            operation_name,
+            agent_id,
+        )
+    }
+
+    #[tauri::command]
+    fn tracing_end_span(
+        state: tauri::State<'_, AppState>,
+        span_id: String,
+        status: String,
+        error_message: Option<String>,
+    ) -> Result<String, String> {
+        super::tracing_end_span(state.inner(), span_id, status, error_message)
+    }
+
+    #[tauri::command]
+    fn tracing_end_trace(
+        state: tauri::State<'_, AppState>,
+        trace_id: String,
+    ) -> Result<String, String> {
+        super::tracing_end_trace(state.inner(), trace_id)
+    }
+
+    #[tauri::command]
+    fn tracing_list_traces(
+        state: tauri::State<'_, AppState>,
+        limit: Option<usize>,
+    ) -> Result<String, String> {
+        super::tracing_list_traces(state.inner(), limit)
+    }
+
+    #[tauri::command]
+    fn tracing_get_trace(
+        state: tauri::State<'_, AppState>,
+        trace_id: String,
+    ) -> Result<String, String> {
+        super::tracing_get_trace(state.inner(), trace_id)
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -6752,6 +7058,19 @@ mod runtime {
                 economy_freeze_wallet,
                 economy_get_history,
                 economy_get_stats,
+                agent_memory_remember,
+                agent_memory_recall,
+                agent_memory_recall_by_type,
+                agent_memory_forget,
+                agent_memory_get_stats,
+                agent_memory_save,
+                agent_memory_clear,
+                tracing_start_trace,
+                tracing_start_span,
+                tracing_end_span,
+                tracing_end_trace,
+                tracing_list_traces,
+                tracing_get_trace,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");

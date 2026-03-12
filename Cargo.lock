@@ -3831,6 +3831,7 @@ dependencies = [
  "nexus-kernel",
  "nexus-marketplace",
  "nexus-protocols",
+ "nexus-sdk",
  "serde",
  "serde_json",
  "sysinfo",
