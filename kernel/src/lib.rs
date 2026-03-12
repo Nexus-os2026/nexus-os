@@ -5,6 +5,7 @@ pub mod audit;
 pub mod autonomy;
 pub mod behavioral_profile;
 pub mod compliance;
+pub mod computer_control;
 pub mod config;
 pub mod consent;
 pub mod consent_display;

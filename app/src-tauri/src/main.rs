@@ -9,7 +9,9 @@ use nexus_connectors_llm::nexus_link::NexusLink;
 use nexus_connectors_llm::providers::{MockProvider, OllamaProvider};
 use nexus_connectors_llm::rag::{RagConfig, RagPipeline};
 use nexus_distributed::ghost_protocol::{GhostConfig, GhostProtocol, SyncPeer as GhostSyncPeer};
+use nexus_factory::pipeline::FactoryPipeline;
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
+use nexus_kernel::computer_control::{ComputerControlEngine, InputAction};
 use nexus_kernel::config::{
     load_config, save_config as save_nexus_config, AgentLlmConfig, HardwareConfig, ModelsConfig,
     NexusConfig, OllamaConfig,
@@ -103,6 +105,13 @@ pub struct VoiceRuntimeState {
     pub overlay_visible: bool,
 }
 
+/// Tracks the Python voice server subprocess.
+#[derive(Default)]
+struct VoiceProcess {
+    child: Option<std::process::Child>,
+    running: bool,
+}
+
 #[derive(Clone)]
 pub struct AppState {
     supervisor: Arc<Mutex<Supervisor>>,
@@ -121,6 +130,9 @@ pub struct AppState {
     evolution: Arc<Mutex<EvolutionEngine>>,
     mcp_host: Arc<Mutex<McpHostManager>>,
     ghost_protocol: Arc<Mutex<GhostProtocol>>,
+    voice_process: Arc<Mutex<VoiceProcess>>,
+    factory: Arc<Mutex<FactoryPipeline>>,
+    computer_control: Arc<Mutex<ComputerControlEngine>>,
 }
 
 impl Default for AppState {
@@ -161,6 +173,9 @@ impl AppState {
             evolution: Arc::new(Mutex::new(EvolutionEngine::new(EvolutionConfig::default()))),
             mcp_host: Arc::new(Mutex::new(McpHostManager::new())),
             ghost_protocol: Arc::new(Mutex::new(GhostProtocol::new(GhostConfig::default()))),
+            voice_process: Arc::new(Mutex::new(VoiceProcess::default())),
+            factory: Arc::new(Mutex::new(FactoryPipeline::new())),
+            computer_control: Arc::new(Mutex::new(ComputerControlEngine::new())),
         }
     }
 
@@ -4628,6 +4643,310 @@ pub fn ghost_protocol_get_state(state: &AppState) -> Result<String, String> {
     serde_json::to_string(sync_state).map_err(|e| e.to_string())
 }
 
+// ── Voice Assistant commands ────────────────────────────────────────────
+
+pub fn voice_start_listening(state: &AppState) -> Result<String, String> {
+    let mut vp = state
+        .voice_process
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+
+    // Spawn the Python voice server if not already running.
+    if !vp.running {
+        let script = std::path::Path::new("services/voice/nexus_voice/voice_server.py");
+
+        match Command::new("python3")
+            .arg(script)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            Ok(child) => {
+                vp.child = Some(child);
+                vp.running = true;
+            }
+            Err(_) => {
+                // Python not available — voice works in stub mode.
+                vp.running = false;
+            }
+        }
+    }
+
+    // Update the voice runtime state.
+    let mut voice = state.voice.lock().unwrap_or_else(|p| p.into_inner());
+    voice.wake_word_enabled = true;
+    voice.overlay_visible = true;
+
+    drop(voice);
+    drop(vp);
+
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "voice-assistant",
+            "action": "start_listening",
+        }),
+    );
+
+    let result = json!({ "status": "listening" });
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn voice_stop_listening(state: &AppState) -> Result<String, String> {
+    let mut vp = state
+        .voice_process
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+
+    // Kill the Python process if running.
+    if let Some(ref mut child) = vp.child {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    vp.child = None;
+    vp.running = false;
+
+    let mut voice = state.voice.lock().unwrap_or_else(|p| p.into_inner());
+    voice.wake_word_enabled = false;
+    voice.overlay_visible = false;
+
+    drop(voice);
+    drop(vp);
+
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "voice-assistant",
+            "action": "stop_listening",
+        }),
+    );
+
+    let result = json!({ "status": "stopped" });
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn voice_get_status(state: &AppState) -> Result<String, String> {
+    let voice = state.voice.lock().unwrap_or_else(|p| p.into_inner());
+    let vp = state
+        .voice_process
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+
+    let result = json!({
+        "is_listening": voice.wake_word_enabled,
+        "wake_word": "nexus",
+        "python_server_running": vp.running,
+    });
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn voice_transcribe(_state: &AppState, audio_base64: String) -> Result<String, String> {
+    // Stub transcription — returns a placeholder.
+    // Real implementation will forward to the Python voice server via WebSocket
+    // or route through the LLM gateway for cloud/local STT.
+    let decoded_len = audio_base64.len() * 3 / 4;
+    let size_kb = decoded_len as f64 / 1024.0;
+
+    let result = json!({
+        "text": format!("[transcription placeholder — {:.1} KB audio received]", size_kb),
+    });
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+// ── Software Factory commands ───────────────────────────────────────────
+
+pub fn factory_create_project(
+    state: &AppState,
+    name: String,
+    language: String,
+    source_dir: String,
+) -> Result<String, String> {
+    let mut factory = state.factory.lock().unwrap_or_else(|p| p.into_inner());
+    let project = factory.create_project(&name, &language, &source_dir);
+
+    drop(factory);
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "software-factory",
+            "action": "create_project",
+            "project_id": project.id,
+            "name": name,
+            "language": language,
+        }),
+    );
+
+    serde_json::to_string(&project).map_err(|e| e.to_string())
+}
+
+pub fn factory_build_project(state: &AppState, project_id: String) -> Result<String, String> {
+    let mut factory = state.factory.lock().unwrap_or_else(|p| p.into_inner());
+    let result = factory.build_project(&project_id)?;
+
+    drop(factory);
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "software-factory",
+            "action": "build",
+            "project_id": project_id,
+            "success": result.success,
+            "duration_ms": result.duration_ms,
+        }),
+    );
+
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn factory_test_project(state: &AppState, project_id: String) -> Result<String, String> {
+    let mut factory = state.factory.lock().unwrap_or_else(|p| p.into_inner());
+    let result = factory.test_project(&project_id)?;
+
+    drop(factory);
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "software-factory",
+            "action": "test",
+            "project_id": project_id,
+            "success": result.success,
+            "passed": result.passed,
+            "failed": result.failed,
+        }),
+    );
+
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn factory_run_pipeline(state: &AppState, project_id: String) -> Result<String, String> {
+    let mut factory = state.factory.lock().unwrap_or_else(|p| p.into_inner());
+    let result = factory.run_full_pipeline(&project_id)?;
+
+    drop(factory);
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "software-factory",
+            "action": "full_pipeline",
+            "project_id": project_id,
+            "overall_success": result.overall_success,
+            "total_duration_ms": result.total_duration_ms,
+        }),
+    );
+
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn factory_list_projects(state: &AppState) -> Result<String, String> {
+    let factory = state.factory.lock().unwrap_or_else(|p| p.into_inner());
+    let projects = factory.list_projects();
+    serde_json::to_string(&projects).map_err(|e| e.to_string())
+}
+
+pub fn factory_get_build_history(state: &AppState, project_id: String) -> Result<String, String> {
+    let factory = state.factory.lock().unwrap_or_else(|p| p.into_inner());
+    let history = factory.get_build_history(&project_id);
+    serde_json::to_string(&history).map_err(|e| e.to_string())
+}
+
+// ── Computer Control Engine ──────────────────────────────────────────
+
+pub fn computer_control_capture_screen(
+    state: &AppState,
+    region: Option<String>,
+) -> Result<String, String> {
+    let engine = state
+        .computer_control
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    if !engine.is_enabled() {
+        return Err("Computer control engine is disabled".into());
+    }
+    let region_parsed: Option<nexus_kernel::computer_control::ScreenRegion> = match region {
+        Some(r) => Some(serde_json::from_str(&r).map_err(|e| e.to_string())?),
+        None => None,
+    };
+    let result = engine.capture_screen(region_parsed.as_ref());
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn computer_control_execute_action(
+    state: &AppState,
+    action_json: String,
+) -> Result<String, String> {
+    let mut engine = state
+        .computer_control
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    if !engine.is_enabled() {
+        return Err("Computer control engine is disabled".into());
+    }
+    let action: InputAction = serde_json::from_str(&action_json).map_err(|e| e.to_string())?;
+    let result = engine.execute(action);
+    state.log_event(
+        Uuid::nil(),
+        EventType::UserAction,
+        json!({
+            "source": "computer-control",
+            "action": "execute",
+            "success": result.is_ok(),
+        }),
+    );
+    match result {
+        Ok(record) => serde_json::to_string(&record).map_err(|e| e.to_string()),
+        Err(e) => Err(e),
+    }
+}
+
+pub fn computer_control_get_history(state: &AppState) -> Result<String, String> {
+    let engine = state
+        .computer_control
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let history = engine.action_history();
+    serde_json::to_string(&history).map_err(|e| e.to_string())
+}
+
+pub fn computer_control_toggle(state: &AppState, enabled: bool) -> Result<String, String> {
+    let mut engine = state
+        .computer_control
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    if enabled {
+        engine.enable();
+    } else {
+        engine.disable();
+    }
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "computer-control",
+            "action": if enabled { "enable" } else { "disable" },
+        }),
+    );
+    Ok(json!({ "enabled": engine.is_enabled() }).to_string())
+}
+
+pub fn computer_control_status(state: &AppState) -> Result<String, String> {
+    let engine = state
+        .computer_control
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    Ok(json!({
+        "enabled": engine.is_enabled(),
+        "max_actions_per_minute": engine.max_actions_per_minute(),
+        "total_actions": engine.total_actions(),
+    })
+    .to_string())
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -5751,6 +6070,114 @@ mod runtime {
         super::ghost_protocol_get_state(state.inner())
     }
 
+    // ── Voice Assistant commands ─────────────────────────────────────
+
+    #[tauri::command]
+    fn voice_start_listening(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::voice_start_listening(state.inner())
+    }
+
+    #[tauri::command]
+    fn voice_stop_listening(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::voice_stop_listening(state.inner())
+    }
+
+    #[tauri::command]
+    fn voice_get_status(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::voice_get_status(state.inner())
+    }
+
+    #[tauri::command]
+    fn voice_transcribe(
+        state: tauri::State<'_, AppState>,
+        audio_base64: String,
+    ) -> Result<String, String> {
+        super::voice_transcribe(state.inner(), audio_base64)
+    }
+
+    // ── Software Factory commands ────────────────────────────────────
+
+    #[tauri::command]
+    fn factory_create_project(
+        state: tauri::State<'_, AppState>,
+        name: String,
+        language: String,
+        source_dir: String,
+    ) -> Result<String, String> {
+        super::factory_create_project(state.inner(), name, language, source_dir)
+    }
+
+    #[tauri::command]
+    fn factory_build_project(
+        state: tauri::State<'_, AppState>,
+        project_id: String,
+    ) -> Result<String, String> {
+        super::factory_build_project(state.inner(), project_id)
+    }
+
+    #[tauri::command]
+    fn factory_test_project(
+        state: tauri::State<'_, AppState>,
+        project_id: String,
+    ) -> Result<String, String> {
+        super::factory_test_project(state.inner(), project_id)
+    }
+
+    #[tauri::command]
+    fn factory_run_pipeline(
+        state: tauri::State<'_, AppState>,
+        project_id: String,
+    ) -> Result<String, String> {
+        super::factory_run_pipeline(state.inner(), project_id)
+    }
+
+    #[tauri::command]
+    fn factory_list_projects(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::factory_list_projects(state.inner())
+    }
+
+    #[tauri::command]
+    fn factory_get_build_history(
+        state: tauri::State<'_, AppState>,
+        project_id: String,
+    ) -> Result<String, String> {
+        super::factory_get_build_history(state.inner(), project_id)
+    }
+
+    #[tauri::command]
+    fn computer_control_capture_screen(
+        state: tauri::State<'_, AppState>,
+        region: Option<String>,
+    ) -> Result<String, String> {
+        super::computer_control_capture_screen(state.inner(), region)
+    }
+
+    #[tauri::command]
+    fn computer_control_execute_action(
+        state: tauri::State<'_, AppState>,
+        action_json: String,
+    ) -> Result<String, String> {
+        super::computer_control_execute_action(state.inner(), action_json)
+    }
+
+    #[tauri::command]
+    fn computer_control_get_history(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::computer_control_get_history(state.inner())
+    }
+
+    #[tauri::command]
+    fn computer_control_toggle(
+        state: tauri::State<'_, AppState>,
+        enabled: bool,
+    ) -> Result<String, String> {
+        super::computer_control_toggle(state.inner(), enabled)
+    }
+
+    #[tauri::command]
+    fn computer_control_status(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::computer_control_status(state.inner())
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -5925,6 +6352,21 @@ mod runtime {
                 ghost_protocol_remove_peer,
                 ghost_protocol_sync_now,
                 ghost_protocol_get_state,
+                voice_start_listening,
+                voice_stop_listening,
+                voice_get_status,
+                voice_transcribe,
+                factory_create_project,
+                factory_build_project,
+                factory_test_project,
+                factory_run_pipeline,
+                factory_list_projects,
+                factory_get_build_history,
+                computer_control_capture_screen,
+                computer_control_execute_action,
+                computer_control_get_history,
+                computer_control_toggle,
+                computer_control_status,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");

@@ -3827,6 +3827,7 @@ dependencies = [
  "nexus-connectors-social",
  "nexus-connectors-web",
  "nexus-distributed",
+ "nexus-factory",
  "nexus-kernel",
  "nexus-marketplace",
  "nexus-protocols",

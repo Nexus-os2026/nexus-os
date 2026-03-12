@@ -228,6 +228,17 @@ fn capability_metadata() -> HashMap<&'static str, CapabilityMeta> {
         },
     );
 
+    // Desktop control
+    map.insert(
+        "computer.control",
+        CapabilityMeta {
+            display_name: "Desktop control",
+            description: "Allows the agent to capture screenshots and simulate keyboard/mouse input on the desktop. Extremely powerful.",
+            risk_level: PermissionRiskLevel::Critical,
+            category_id: "desktop",
+        },
+    );
+
     map
 }
 
@@ -286,6 +297,14 @@ fn category_metadata() -> HashMap<&'static str, CategoryMeta> {
             display_name: "Messaging",
             icon: "chat",
             order: 5,
+        },
+    );
+    map.insert(
+        "desktop",
+        CategoryMeta {
+            display_name: "Desktop Control",
+            icon: "monitor",
+            order: 6,
         },
     );
     map
@@ -689,8 +708,8 @@ mod tests {
         let manifest = test_manifest();
         let categories = mgr.get_permissions(agent_id, &manifest);
 
-        // Should have 6 categories
-        assert_eq!(categories.len(), 6);
+        // Should have 7 categories
+        assert_eq!(categories.len(), 7);
         let cat_ids: Vec<&str> = categories.iter().map(|c| c.id.as_str()).collect();
         assert!(cat_ids.contains(&"filesystem"));
         assert!(cat_ids.contains(&"network"));
@@ -698,6 +717,7 @@ mod tests {
         assert!(cat_ids.contains(&"system"));
         assert!(cat_ids.contains(&"social"));
         assert!(cat_ids.contains(&"messaging"));
+        assert!(cat_ids.contains(&"desktop"));
     }
 
     #[test]

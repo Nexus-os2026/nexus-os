@@ -74,6 +74,7 @@ import PolicyManagement from "./pages/PolicyManagement";
 import Documents from "./pages/Documents";
 import ModelHub from "./pages/ModelHub";
 import TimeMachine from "./pages/TimeMachine";
+import VoiceAssistant from "./pages/VoiceAssistant";
 import type {
   AgentStatusEvent,
   AgentSummary,
@@ -89,7 +90,7 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine";
+type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -116,6 +117,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "media-studio", label: "Media", icon: "🖼", shortcut: "" },
   { id: "app-store", label: "App Store", icon: "◈", shortcut: "" },
   { id: "ai-chat-hub", label: "AI Chat", icon: "✦", shortcut: "" },
+  { id: "voice-assistant", label: "Voice", icon: "🎙", shortcut: "" },
   { id: "deploy-pipeline", label: "Deploy", icon: "🚀", shortcut: "" },
   { id: "learning-center", label: "Learn", icon: "🎓", shortcut: "" },
   { id: "code-editor", label: "Code", icon: "⌨", shortcut: "" },
@@ -1231,6 +1233,9 @@ export default function App(): JSX.Element {
     }
     if (page === "ai-chat-hub") {
       return <AiChatHub />;
+    }
+    if (page === "voice-assistant") {
+      return <VoiceAssistant />;
     }
     if (page === "deploy-pipeline") {
       return <DeployPipeline />;

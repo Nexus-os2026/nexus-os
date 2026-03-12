@@ -654,3 +654,24 @@ export function timeMachineRedo(): Promise<string> {
 export function timeMachineGetDiff(id: string): Promise<string> {
   return invokeDesktop<string>("time_machine_get_diff", { id });
 }
+
+// ── Voice Assistant API ──
+
+export function voiceStartListening(): Promise<string> {
+  return invokeDesktop<string>("voice_start_listening");
+}
+
+export function voiceStopListening(): Promise<string> {
+  return invokeDesktop<string>("voice_stop_listening");
+}
+
+export function voiceGetStatus(): Promise<string> {
+  return invokeDesktop<string>("voice_get_status");
+}
+
+export function voiceTranscribe(audioBase64: string): Promise<string> {
+  return invokeDesktop<string>("voice_transcribe", {
+    audioBase64,
+    audio_base64: audioBase64,
+  });
+}

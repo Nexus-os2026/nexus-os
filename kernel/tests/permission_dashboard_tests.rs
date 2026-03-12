@@ -43,7 +43,7 @@ fn get_permissions_returns_all_categories() {
     let (sup, id) = setup();
     let categories = sup.get_agent_permissions(id).unwrap();
 
-    assert_eq!(categories.len(), 6, "should have 6 permission categories");
+    assert_eq!(categories.len(), 7, "should have 7 permission categories");
 
     let cat_ids: Vec<&str> = categories.iter().map(|c| c.id.as_str()).collect();
     assert!(cat_ids.contains(&"filesystem"));
@@ -52,6 +52,7 @@ fn get_permissions_returns_all_categories() {
     assert!(cat_ids.contains(&"system"));
     assert!(cat_ids.contains(&"social"));
     assert!(cat_ids.contains(&"messaging"));
+    assert!(cat_ids.contains(&"desktop"));
 
     // Verify risk levels
     let sys = categories.iter().find(|c| c.id == "system").unwrap();

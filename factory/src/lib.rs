@@ -6,6 +6,7 @@ pub mod code_gen;
 pub mod intent;
 pub mod manifest_gen;
 pub mod notifications;
+pub mod pipeline;
 pub mod remote;
 
 use crate::intent::TaskType;

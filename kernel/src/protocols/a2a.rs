@@ -118,6 +118,14 @@ fn capability_to_skill(capability: &str) -> Option<CapabilityMapping> {
             input_modes: &["application/json"],
             output_modes: &["application/json"],
         }),
+        "computer.control" => Some(CapabilityMapping {
+            id: "computer-control",
+            name: "Desktop Control",
+            description: "Capture screenshots and simulate keyboard/mouse input on the desktop",
+            tags: &["desktop", "automation", "ui", "control"],
+            input_modes: &["application/json"],
+            output_modes: &["application/json", "image/png"],
+        }),
         _ => None,
     }
 }
