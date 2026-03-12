@@ -1,168 +1,163 @@
-[![CI](https://github.com/nexai-lang/nexus-os/actions/workflows/ci.yml/badge.svg)](https://github.com/nexai-lang/nexus-os/actions/workflows/ci.yml)
+[![CI](https://gitlab.com/nexaiceo/nexus-os/badges/main/pipeline.svg)](https://gitlab.com/nexaiceo/nexus-os/-/pipelines)
 [![Version](https://img.shields.io/badge/version-7.0.0-blue.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-1941_passing-brightgreen.svg)](#)
+[![Rust](https://img.shields.io/badge/rust-1.94+-orange.svg)](#)
 
-# Nexus OS
+# Nexus OS — Governed Deterministic Agent OS
 
-**Governed AI Agent Operating System**
+> The world's first operating system where AI agents run with full governance, security, and transparency.
 
-> Don't trust. Verify.
+Nexus OS is a 130k+ line Rust operating system for AI agents where every action passes through capability checks, fuel metering, and cryptographic audit trails. Agents don't get trust by default — they earn it through track records, and lose it through violations.
 
-Nexus OS is a Rust-based operating system for AI agents where every action passes through capability checks, fuel metering, and cryptographic audit trails. Agents don't get trust by default -- they earn it through track records, and lose it through violations.
+## What Makes Nexus OS Different
 
-## Feature Matrix
+- **Governed by Design** — Every agent action is audited, capability-checked, and fuel-metered. No action executes without governance approval.
+- **Local-First AI** — Run LLMs locally via Ollama — your data never leaves your device. No cloud API keys required.
+- **15 Built-In Apps** — Code Editor, Terminal, File Manager, AI Chat, Database Manager, API Client, and more.
+- **Deterministic Execution** — WASM sandboxing ensures reproducible agent behavior across runs.
+- **Enterprise-Ready Security** — EU AI Act compliance, PII redaction at LLM boundaries, SOC 2 Type II reporting, supply chain signing.
+- **Zero Unsafe Rust** — `unsafe_code = "forbid"` enforced across all 33 workspace crates.
 
-| Category | Feature | Status |
-|----------|---------|--------|
-| **Governance** | Capability-based access control | Stable |
-| **Governance** | 6-level autonomy system (L0-L5) | Stable |
-| **Governance** | Fuel metering with anomaly detection | Stable |
-| **Governance** | Human-in-the-loop approval gates | Stable |
-| **Governance** | Adaptive trust scoring + auto-promotion/demotion | Stable |
-| **Governance** | Transitive delegation with cascade revocation | Stable |
-| **Audit** | Hash-chained append-only audit trail | Stable |
-| **Audit** | Deterministic replay with evidence bundles | Stable |
-| **Audit** | PII redaction at LLM gateway boundary | Stable |
-| **Distributed** | TCP transport with length-prefix framing | Stable |
-| **Distributed** | Audit replication across nodes | Stable |
-| **Distributed** | Quorum-based governance voting | Stable |
-| **Distributed** | SWIM-style membership protocol | Stable |
-| **Enterprise** | Role-based access control (RBAC) | Stable |
-| **Enterprise** | SOC 2 Type II compliance reporting | Stable |
-| **Marketplace** | Signed agent bundles with trust scoring | Stable |
-| **Marketplace** | Security scanning + manifest verification | Stable |
-| **Desktop** | Tauri shell with 33 pages + 15 built-in apps | Stable |
-| **CLI** | 24 commands across 8 subsystems | Stable |
-| **Apps** | Code Editor — Monaco, 50+ languages, agent-assisted coding | Stable |
-| **Apps** | Design Studio — AI canvas, component library, design tokens | Stable |
-| **Apps** | Terminal — 30+ commands, governed execution, HITL blocking | Stable |
-| **Apps** | File Manager — grid/list view, drag-drop, encrypted vault | Stable |
-| **Apps** | Database Manager — SQL editor, visual builder, ERD schema | Stable |
-| **Apps** | API Client — request builder, governed vault, rate limiting | Stable |
-| **Apps** | Notes — rich markdown, templates, agent auto-notes | Stable |
-| **Apps** | Email Client — IMAP/SMTP, threading, PII redaction | Stable |
-| **Apps** | Project Manager — kanban, sprints, burndown charts | Stable |
-| **Apps** | Media Studio — editor, AI generation, OCR, before/after | Stable |
-| **Apps** | System Monitor — CPU/RAM/GPU graphs, per-agent resources | Stable |
-| **Apps** | App Store — Ed25519 verification, reviews, publishing | Stable |
-| **Apps** | AI Chat Hub — 9 models, comparison, voice/Jarvis mode | Stable |
-| **Apps** | Deploy Pipeline — 4 providers, environments, SSL/domains | Stable |
-| **Apps** | Learning Center — courses, code challenges, XP leveling | Stable |
-| **Safety** | Kill gates for emergency shutdown | Stable |
-| **Safety** | Zero unsafe Rust (`unsafe_code = "forbid"`) | Enforced |
-
-## Architecture
-
-```mermaid
-graph TD
-    UI[Desktop UI - Tauri + React] --> CLI[CLI Layer - 24 commands]
-    CLI --> ENT[Enterprise - RBAC + Compliance]
-    CLI --> MKT[Marketplace - Registry + Trust]
-    ENT --> K[Kernel]
-    MKT --> K
-    UI --> K
-
-    K --> SUP[Supervisor - Agent Lifecycle]
-    K --> AUT[Autonomy Guard - L0 to L5]
-    K --> AUD[Audit Trail - Hash-Chained]
-    K --> FUEL[Fuel Metering - Anomaly Detection]
-    K --> DEL[Delegation - Transitive + Revocable]
-    K --> ADAPT[Adaptive Policy - Trust Scoring]
-    K --> CON[Consent - HITL Approval]
-    K --> PRIV[Privacy - PII Redaction]
-
-    DIST[Distributed Layer] --> REP[Replication]
-    DIST --> QUO[Quorum Voting]
-    DIST --> MEM[Membership - SWIM]
-    DIST --> TCP[TCP Transport]
-
-    K --> DIST
-    SDK[Agent SDK] --> K
-```
-
-## Quickstart
+## Quick Start
 
 ### Prerequisites
 
-- Rust 1.75+ stable toolchain
-- Node.js 20+ and npm
-- Platform dependencies for Tauri (see CI workflow for Linux packages)
+- Rust 1.94+ (`rustup install stable`)
+- Node.js 22+ (for the desktop frontend)
+- Platform libraries for Tauri (see [Setup Guide](docs/SETUP.md))
+- Optional: [Ollama](https://ollama.ai) (for local LLM inference)
 
-### Build and Verify
+### Build & Run
 
 ```bash
-git clone https://github.com/nexai-lang/nexus-os.git
+git clone https://gitlab.com/nexaiceo/nexus-os.git
 cd nexus-os
-
-# Build and test
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --all-features
-
-# Build desktop UI
-cd app && npm ci && npm run build
+cargo build --workspace
+cd app && npm install && npm run build
+cargo tauri dev
 ```
 
-### Run Desktop Shell
+### First Steps
+
+1. Launch Nexus OS — the Setup Wizard starts automatically
+2. Connect Ollama — the wizard detects your hardware and helps install Ollama
+3. Download a Model — pick a recommended model for your GPU/RAM
+4. Assign Agents — configure which model powers each built-in agent
+5. Start Building — open the Code Editor, Chat Hub, or Terminal
+
+## Architecture
+
+```
++---------------------------------------------------------------+
+|                   Desktop UI (Tauri + React)                   |
+|    15 Built-In Apps | Command Center | Setup Wizard            |
++---------------------------------------------------------------+
+|                        CLI Layer                               |
+|  nexus agent | nexus audit | nexus cluster | nexus marketplace |
++---------------------------------------------------------------+
+|              Enterprise | Marketplace | Distributed            |
+|   RBAC | SOC 2 | Signed Bundles | Quorum | TCP Replication     |
++---------------------------------------------------------------+
+|                       SDK Layer                                |
+|   NexusAgent Trait | AgentContext | ManifestBuilder | Sandbox  |
++---------------------------------------------------------------+
+|                        Kernel                                  |
+|  Supervisor | Autonomy (L0-L5) | Audit (hash-chained)         |
+|  Fuel Metering | Delegation | HITL Consent | PII Redaction     |
++---------------------------------------------------------------+
+```
+
+- **33 workspace crates** — kernel, SDK, 9 agents, 5 connectors, distributed, enterprise, marketplace, CLI, desktop app
+- **1,941 tests** — unit, integration, and property tests across all crates
+- **WASM sandboxing** — wasmtime-based sandbox with host function governance bridge
+- **Local LLM** — Candle-based inference + Ollama integration for GGUF models
+
+## Features
+
+| # | Category | Feature | Status |
+|---|----------|---------|--------|
+| 1 | Governance | Capability-based access control | Done |
+| 2 | Governance | 6-level autonomy system (L0-L5) | Done |
+| 3 | Governance | Fuel metering with anomaly detection | Done |
+| 4 | Governance | Human-in-the-loop approval gates | Done |
+| 5 | Governance | Adaptive trust scoring + auto-promotion/demotion | Done |
+| 6 | Governance | Transitive delegation with cascade revocation | Done |
+| 7 | Audit | Hash-chained append-only audit trail | Done |
+| 8 | Audit | Deterministic replay with evidence bundles | Done |
+| 9 | Audit | PII redaction at LLM gateway boundary | Done |
+| 10 | Distributed | TCP transport with length-prefix framing | Done |
+| 11 | Distributed | Audit replication across nodes | Done |
+| 12 | Distributed | Quorum-based governance voting | Done |
+| 13 | Distributed | SWIM-style membership protocol | Done |
+| 14 | Enterprise | Role-based access control (RBAC) | Done |
+| 15 | Enterprise | SOC 2 Type II compliance reporting | Done |
+| 16 | Marketplace | Signed agent bundles with trust scoring | Done |
+| 17 | Safety | Kill gates, zero unsafe Rust | Done |
+| 18 | App | Code Editor — Monaco, 50+ languages, agent coding | Done |
+| 19 | App | Design Studio — AI canvas, components, tokens | Done |
+| 20 | App | Terminal — 30+ commands, governed execution | Done |
+| 21 | App | File Manager — grid/list, drag-drop, vault | Done |
+| 22 | App | Database Manager — SQL editor, visual builder, ERD | Done |
+| 23 | App | API Client — request builder, governed vault | Done |
+| 24 | App | Notes — rich markdown, templates, agent notes | Done |
+| 25 | App | Email Client — IMAP/SMTP, threading, PII redaction | Done |
+| 26 | App | Project Manager — kanban, sprints, burndown | Done |
+| 27 | App | Media Studio — editor, AI generation, OCR | Done |
+| 28 | App | System Monitor — CPU/RAM/GPU, per-agent stats | Done |
+| 29 | App | App Store — Ed25519 verification, reviews | Done |
+| 30 | App | AI Chat Hub — 9 models, comparison, voice mode | Done |
+| 31 | App | Deploy Pipeline — 4 providers, environments, SSL | Done |
+
+## SDKs
+
+| SDK | Path | Language |
+|-----|------|----------|
+| Rust SDK | `sdk/` | Rust — `NexusAgent` trait, `AgentContext`, `ManifestBuilder` |
+| TypeScript SDK | `sdk/typescript/` | TypeScript — browser/Node.js client |
+| Python SDK | `sdk/python/` | Python — agent development and scripting |
+
+## API Compatibility
+
+Nexus OS exposes OpenAI-compatible and Anthropic-compatible API endpoints for local LLM inference:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/chat/completions` | POST | OpenAI-compatible chat (streaming supported) |
+| `/v1/embeddings` | POST | OpenAI-compatible text embeddings |
+| `/v1/models` | GET | List available models |
+| `/v1/messages` | POST | Anthropic-compatible messages (streaming supported) |
+
+## CLI
 
 ```bash
-cd app
-npm run tauri dev
+nexus agent list|start|stop|status      # Agent management
+nexus audit show|verify|export          # Audit verification
+nexus cluster status|join|leave         # Cluster operations
+nexus marketplace search|install        # Agent marketplace
+nexus compliance report|status          # Compliance reporting
+nexus delegation grant|revoke|list      # Capability delegation
 ```
 
-### CLI Usage
-
-```bash
-# Agent management
-nexus agent list
-nexus agent start --id my-agent
-nexus agent status --id my-agent
-
-# Audit verification
-nexus audit verify
-nexus audit show
-
-# Cluster operations
-nexus cluster status
-nexus cluster join --seed 10.0.1.10:9090
-
-# Marketplace
-nexus marketplace search "code generator"
-nexus marketplace install agent-coder
-
-# Compliance
-nexus compliance report
-nexus compliance status
-```
-
-## Workspace Crates
-
-| Crate | Purpose |
-|-------|---------|
-| `kernel` | Core governance runtime -- capability checks, fuel, audit, autonomy |
-| `sdk` | Agent development SDK -- NexusAgent trait, AgentContext, TestHarness |
-| `distributed` | Cross-node networking -- TCP transport, replication, quorum, membership |
-| `enterprise` | RBAC and SOC 2 compliance reporting |
-| `marketplace` | Agent package registry, trust scoring, security scanning |
-| `cli` | 24-command CLI covering all subsystems |
-| `app` | Tauri desktop shell with React/TypeScript frontend |
-| `connectors/*` | External service connectors (web, social, messaging, LLM) |
-| `agents/*` | 9 built-in agents (coder, designer, web-builder, etc.) |
-| `benchmarks` | Performance benchmark suite |
+All commands support `--json` for structured output.
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [Architecture Guide](docs/ARCHITECTURE.md) | Layered system design, module reference, governance pipeline |
+| [Setup Guide](docs/SETUP.md) | Platform-specific installation and Ollama setup |
+| [Architecture Guide](docs/ARCHITECTURE.md) | Layered design, module reference, governance pipeline |
 | [SDK Tutorial](docs/SDK_TUTORIAL.md) | Build your first governed agent step-by-step |
-| [Deployment Guide](docs/DEPLOYMENT.md) | Single node and cluster setup, configuration reference |
-| [Security Hardening](docs/SECURITY_HARDENING.md) | Production hardening checklist with verification commands |
+| [Developer Guide](docs/DEVELOPER_GUIDE.md) | Contributing and development workflow |
 | [API Reference](docs/API_REFERENCE.md) | Complete public type and function reference |
 | [User Guide](docs/USER_GUIDE.md) | End-user guide for the desktop application |
-| [Developer Guide](docs/DEVELOPER_GUIDE.md) | Contributing and development workflow |
+| [Security Hardening](docs/SECURITY_HARDENING.md) | Production hardening checklist |
+| [Deployment Guide](docs/DEPLOYMENT.md) | Single node and cluster setup |
 | [Threat Model](docs/THREAT_MODEL.md) | Attack surfaces and mitigations |
-| [Performance](docs/PERFORMANCE.md) | Benchmark results and optimization notes |
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and PR process.
 
 ## Security Invariants
 
@@ -173,14 +168,16 @@ These are enforced at the code level and must never be violated:
 3. Audit trail is append-only with hash-chain integrity
 4. PII redaction at LLM gateway boundary
 5. HITL approval mandatory for Tier 1+ operations
-6. `unsafe_code = "forbid"` -- zero unsafe Rust
+6. `unsafe_code = "forbid"` — zero unsafe Rust
 7. All tests must pass before merging
 8. Agents declare capabilities in TOML manifests
-
-## Built By
-
-Created by Suresh Karicheti -- a self-taught developer who built an entire governed agent operating system from scratch.
 
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE).
+
+## Built By
+
+**Suresh Karicheti** (Creator & Builder) + **Claude** (Lead Architect)
+
+> Don't trust. Verify.

@@ -1,12 +1,19 @@
 //! Ghost Protocol — Privacy-First P2P Agent Sync
 //!
 //! End-to-end encrypted agent state syncing across devices.
-//! State changes propagate via encrypted gossip protocol so your
-//! AI brain follows you without touching the cloud.
+//! State changes propagate via AES-256-GCM encrypted gossip protocol
+//! so your AI brain follows you without touching the cloud.
 
+use aes_gcm::aead::Aead;
+use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Global nonce counter — ensures no two encryptions in the same process
+/// ever reuse a nonce, even if the system clock is coarse.
+static NONCE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -103,56 +110,70 @@ pub struct SyncStats {
     pub connected_peers: usize,
 }
 
-// ── Encryption helpers ──────────────────────────────────────────────────
-//
-// NOTE: This is a demonstrative XOR cipher for the protocol skeleton.
-// Production deployments MUST replace this with AES-256-GCM via the
-// `ring` or `aes-gcm` crate for authenticated encryption.
+// ── AES-256-GCM Encryption ─────────────────────────────────────────────
 
-/// Derive a 32-byte sync key from a shared secret using SHA-256.
-pub fn derive_sync_key(shared_secret: &str) -> Vec<u8> {
+/// Derive a 256-bit encryption key from a shared secret using SHA-256.
+pub fn derive_sync_key(shared_secret: &str) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(shared_secret.as_bytes());
-    hasher.finalize().to_vec()
+    hasher.finalize().into()
 }
 
-/// Encrypt data with a cycling XOR key, prepending a 16-byte nonce.
+/// Generate a unique 96-bit (12-byte) nonce.
 ///
-/// **Not production-safe** — use AES-256-GCM in production.
-pub fn encrypt_state(data: &[u8], key: &[u8]) -> Vec<u8> {
-    // Generate a deterministic nonce from data length + a fixed seed.
-    // (A real implementation would use a random nonce.)
-    let mut nonce_hasher = Sha256::new();
-    nonce_hasher.update(data.len().to_le_bytes());
-    nonce_hasher.update(b"ghost-nonce-seed");
-    let nonce_hash = nonce_hasher.finalize();
-    let nonce = &nonce_hash[..16];
+/// Uses SHA-256 of (system-time nanoseconds ‖ atomic counter) truncated to
+/// 12 bytes.  The atomic counter guarantees uniqueness even when the clock
+/// resolution is coarser than the call rate.
+fn generate_nonce() -> [u8; 12] {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let counter = NONCE_COUNTER.fetch_add(1, Ordering::Relaxed);
 
-    let mut out = Vec::with_capacity(16 + data.len());
-    out.extend_from_slice(nonce);
+    let mut hasher = Sha256::new();
+    hasher.update(ts.to_le_bytes());
+    hasher.update(counter.to_le_bytes());
+    let hash = hasher.finalize();
 
-    for (i, &byte) in data.iter().enumerate() {
-        out.push(byte ^ key[i % key.len()]);
-    }
-    out
+    let mut nonce = [0u8; 12];
+    nonce.copy_from_slice(&hash[..12]);
+    nonce
 }
 
-/// Decrypt data encrypted with [`encrypt_state`].
+/// Encrypt `data` with AES-256-GCM.
 ///
-/// **Not production-safe** — use AES-256-GCM in production.
-pub fn decrypt_state(encrypted: &[u8], key: &[u8]) -> Result<Vec<u8>, String> {
-    if encrypted.len() < 16 {
-        return Err("Encrypted data too short — missing nonce".to_string());
-    }
+/// Returns `nonce (12 bytes) || ciphertext || tag (16 bytes)`.
+pub fn encrypt_state(data: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
+    let cipher = Aes256Gcm::new(key.into());
+    let nonce_bytes = generate_nonce();
+    let nonce = Nonce::from_slice(&nonce_bytes);
 
-    // Strip the 16-byte nonce prefix.
-    let ciphertext = &encrypted[16..];
-    let mut out = Vec::with_capacity(ciphertext.len());
+    let ciphertext = cipher
+        .encrypt(nonce, data)
+        .map_err(|e| format!("AES-256-GCM encryption failed: {e}"))?;
 
-    for (i, &byte) in ciphertext.iter().enumerate() {
-        out.push(byte ^ key[i % key.len()]);
-    }
+    let mut out = Vec::with_capacity(12 + ciphertext.len());
+    out.extend_from_slice(&nonce_bytes);
+    out.extend_from_slice(&ciphertext);
     Ok(out)
+}
+
+/// Decrypt `encrypted` (nonce || ciphertext || tag) with AES-256-GCM.
+///
+/// Returns the plaintext, or an error if the key is wrong or data is tampered.
+pub fn decrypt_state(encrypted: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
+    if encrypted.len() < 12 + 16 {
+        return Err("Encrypted data too short — need at least nonce + tag (28 bytes)".to_string());
+    }
+
+    let (nonce_bytes, ciphertext) = encrypted.split_at(12);
+    let nonce = Nonce::from_slice(nonce_bytes);
+    let cipher = Aes256Gcm::new(key.into());
+
+    cipher
+        .decrypt(nonce, ciphertext)
+        .map_err(|_| "AES-256-GCM decryption failed — wrong key or tampered data".to_string())
 }
 
 // ── GhostProtocol ───────────────────────────────────────────────────────
@@ -162,7 +183,7 @@ pub struct GhostProtocol {
     current_state: SyncState,
     peers: Vec<SyncPeer>,
     pending_changes: Vec<StateChange>,
-    sync_key: Option<Vec<u8>>,
+    sync_key: Option<[u8; 32]>,
     stats: SyncStats,
     conflict_resolution: ConflictResolution,
 }
@@ -235,10 +256,10 @@ impl GhostProtocol {
             self.config.encryption_enabled && self.sync_key.is_some() && !changes.is_empty();
 
         let final_changes = if encrypted {
-            // Encrypt serialized changes.
+            // Encrypt serialized changes with AES-256-GCM.
             let serialized = serde_json::to_vec(&changes).unwrap_or_default();
             let key = self.sync_key.as_ref().unwrap();
-            let enc = encrypt_state(&serialized, key);
+            let enc = encrypt_state(&serialized, key).expect("encryption must not fail");
 
             // Wrap encrypted blob as a single opaque change.
             vec![StateChange {
@@ -276,7 +297,7 @@ impl GhostProtocol {
         };
 
         let resolved_changes = if *encrypted {
-            // Decrypt the opaque blob.
+            // Decrypt the opaque blob with AES-256-GCM.
             let key = self
                 .sync_key
                 .as_ref()
@@ -518,13 +539,16 @@ mod tests {
         assert_eq!(agent_state.get("fuel").unwrap(), 1000);
     }
 
+    // ── AES-256-GCM encryption tests ────────────────────────────────────
+
     #[test]
     fn test_encryption_roundtrip() {
         let key = derive_sync_key("my-secret-passphrase");
         let plaintext = b"Hello, Ghost Protocol!";
 
-        let encrypted = encrypt_state(plaintext, &key);
-        assert_ne!(&encrypted[16..], plaintext); // Ciphertext differs from plaintext.
+        let encrypted = encrypt_state(plaintext, &key).unwrap();
+        // Ciphertext (after nonce) differs from plaintext.
+        assert_ne!(&encrypted[12..], plaintext);
 
         let decrypted = decrypt_state(&encrypted, &key).unwrap();
         assert_eq!(decrypted, plaintext);
@@ -536,12 +560,118 @@ mod tests {
         let key_b = derive_sync_key("wrong-key");
         let plaintext = b"Secret agent state";
 
-        let encrypted = encrypt_state(plaintext, &key_a);
-        let decrypted = decrypt_state(&encrypted, &key_b).unwrap();
-
-        // Wrong key produces garbage, not the original plaintext.
-        assert_ne!(decrypted, plaintext);
+        let encrypted = encrypt_state(plaintext, &key_a).unwrap();
+        // AES-GCM authenticated decryption must fail with the wrong key.
+        let result = decrypt_state(&encrypted, &key_b);
+        assert!(result.is_err());
     }
+
+    #[test]
+    fn test_encryption_tampered_data() {
+        let key = derive_sync_key("tamper-test-key");
+        let plaintext = b"Integrity-protected payload";
+
+        let mut encrypted = encrypt_state(plaintext, &key).unwrap();
+        // Flip a byte in the ciphertext body (after the 12-byte nonce).
+        let idx = 14;
+        encrypted[idx] ^= 0xFF;
+
+        let result = decrypt_state(&encrypted, &key);
+        assert!(result.is_err(), "tampered data must fail authentication");
+    }
+
+    #[test]
+    fn test_nonce_uniqueness() {
+        let key = derive_sync_key("nonce-uniqueness-key");
+        let plaintext = b"same data encrypted twice";
+
+        let enc1 = encrypt_state(plaintext, &key).unwrap();
+        let enc2 = encrypt_state(plaintext, &key).unwrap();
+
+        // Different nonces → different ciphertext.
+        assert_ne!(enc1, enc2);
+
+        // But both decrypt to the same plaintext.
+        assert_eq!(
+            decrypt_state(&enc1, &key).unwrap(),
+            decrypt_state(&enc2, &key).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_encryption_empty_data() {
+        let key = derive_sync_key("empty-test");
+        let encrypted = encrypt_state(b"", &key).unwrap();
+        let decrypted = decrypt_state(&encrypted, &key).unwrap();
+        assert!(decrypted.is_empty());
+    }
+
+    #[test]
+    fn test_decrypt_too_short() {
+        let key = derive_sync_key("short-test");
+        // Less than 28 bytes (12 nonce + 16 tag minimum).
+        let result = decrypt_state(&[0u8; 20], &key);
+        assert!(result.is_err());
+    }
+
+    // ── Encrypted sync tests ────────────────────────────────────────────
+
+    #[test]
+    fn test_encrypted_delta_sync() {
+        let mut alice = GhostProtocol::new(GhostConfig {
+            encryption_enabled: true,
+            ..test_config("alice")
+        });
+        alice.set_sync_key("shared-secret-123");
+
+        alice.record_change("agent-1", "status", serde_json::json!("active"));
+        alice.record_change("agent-1", "fuel", serde_json::json!(1000));
+
+        let delta = alice.prepare_delta(0);
+
+        // Verify the delta is encrypted.
+        match &delta {
+            SyncMessage::StateDelta {
+                encrypted, changes, ..
+            } => {
+                assert!(encrypted);
+                assert_eq!(changes.len(), 1); // Single encrypted blob.
+                assert_eq!(changes[0].agent_id, "__encrypted__");
+            }
+            _ => panic!("Expected StateDelta"),
+        }
+
+        // Bob decrypts with the same key.
+        let mut bob = GhostProtocol::new(test_config("bob"));
+        bob.set_sync_key("shared-secret-123");
+
+        let applied = bob.apply_delta(&delta).unwrap();
+        assert_eq!(applied, 2);
+
+        let state = bob.get_state();
+        let agent = state.agent_states.get("agent-1").unwrap();
+        assert_eq!(agent.get("status").unwrap(), "active");
+        assert_eq!(agent.get("fuel").unwrap(), 1000);
+    }
+
+    #[test]
+    fn test_encrypted_delta_wrong_key_fails() {
+        let mut alice = GhostProtocol::new(GhostConfig {
+            encryption_enabled: true,
+            ..test_config("alice")
+        });
+        alice.set_sync_key("alice-secret");
+        alice.record_change("agent-1", "data", serde_json::json!("classified"));
+        let delta = alice.prepare_delta(0);
+
+        let mut eve = GhostProtocol::new(test_config("eve"));
+        eve.set_sync_key("eve-wrong-key");
+
+        let result = eve.apply_delta(&delta);
+        assert!(result.is_err());
+    }
+
+    // ── Other protocol tests ────────────────────────────────────────────
 
     #[test]
     fn test_conflict_last_writer_wins() {

@@ -1,6 +1,6 @@
 # Nexus OS Architecture Guide
 
-> Version 5.0.0 | Don't trust. Verify.
+> Version 7.0.0 | Don't trust. Verify.
 
 ## Overview
 
@@ -11,7 +11,7 @@ Nexus OS is a governed AI agent operating system written in Rust. Every agent ac
 ```
 +---------------------------------------------------------------+
 |                     Desktop UI (Tauri + React)                 |
-|  Command Center | Audit Timeline | Marketplace | Compliance   |
+|  15 Built-In Apps | Command Center | Setup Wizard | 33 Pages  |
 +---------------------------------------------------------------+
 |                          CLI Layer                             |
 |  nexus agent | nexus audit | nexus cluster | nexus marketplace|
@@ -202,9 +202,9 @@ Messages use 4-byte big-endian length-prefix framing. Message types:
 
 ## Desktop UI (`app/`)
 
-Tauri desktop shell with React/TypeScript frontend.
+Tauri desktop shell with React/TypeScript frontend. 33 pages including 15 built-in apps.
 
-### Pages
+### Core Pages
 
 | Page | Description |
 |------|-------------|
@@ -214,6 +214,27 @@ Tauri desktop shell with React/TypeScript frontend.
 | Compliance Dashboard | SOC 2 control status with evidence tracking |
 | Cluster Status | Node health, heartbeat monitoring, quorum status |
 | Trust Dashboard | Per-agent trust scores with promotion/demotion indicators |
+| Setup Wizard | Hardware detection, Ollama setup, model download, agent configuration |
+
+### Built-In Apps (Phase 7)
+
+| App | Description |
+|-----|-------------|
+| Code Editor | Monaco-based, 50+ languages, agent-assisted coding |
+| Design Studio | AI canvas, component library, design tokens |
+| Terminal | 30+ commands, governed execution, HITL blocking |
+| File Manager | Grid/list view, drag-drop, encrypted vault |
+| Database Manager | SQL editor, visual query builder, ERD schema |
+| API Client | Request builder, governed vault, rate limiting |
+| Notes | Rich markdown, templates, agent auto-notes |
+| Email Client | IMAP/SMTP, threading, PII redaction |
+| Project Manager | Kanban, sprints, burndown charts |
+| Media Studio | Image editor, AI generation, OCR |
+| System Monitor | CPU/RAM/GPU graphs, per-agent resource tracking |
+| App Store | Ed25519 verification, reviews, publishing |
+| AI Chat Hub | 9 models, comparison mode, voice/Jarvis mode |
+| Deploy Pipeline | 4 providers, environments, SSL/domains |
+| Learning Center | Courses, code challenges, XP leveling |
 
 ## CLI (`cli/`)
 
@@ -270,6 +291,112 @@ Built-in agents live in `agents/`:
 | `workflow-studio` | Visual workflow creation |
 | `collaboration` | Multi-agent collaboration |
 
+## Crate Dependency Graph
+
+```
+                         app (Tauri desktop)
+                              |
+                         cli (24 commands)
+                        /     |     \
+                enterprise  marketplace  distributed
+                    |         |    |        |
+                    +---------+----+--------+
+                              |
+                   connectors (LLM, web, social, messaging, control)
+                              |
+                     +--------+--------+
+                     |                 |
+                  agents (9)         sdk
+                     |                 |
+                     +---------+-------+
+                               |
+                            kernel (governance root)
+```
+
+**Dependency rule:** Agents depend on `nexus-sdk`, never on `nexus-kernel` directly. The SDK re-exports kernel types via `nexus_sdk::prelude::*`.
+
+## Data Flow
+
+### Agent Action Flow
+
+```
+User/Trigger
+    |
+    v
+Agent.execute()
+    |
+    v
+AgentContext.require_capability("web.search")
+    |
+    v
+Kernel Supervisor
+    |--- Capability Check (manifest registry)
+    |--- Fuel Check (budget remaining?)
+    |--- Autonomy Gate (level sufficient?)
+    |--- HITL Gate (Tier1+ needs approval)
+    |
+    v
+Execute Action
+    |
+    v
+AuditTrail.append_event() --- hash-chained, append-only
+    |
+    v
+Fuel Ledger.deduct() --- anomaly detection
+    |
+    v
+Result returned to agent
+```
+
+### LLM Query Flow (Local)
+
+```
+Agent requests LLM query
+    |
+    v
+PII Redaction (gateway boundary)
+    |
+    v
+Ollama / Candle inference (local)
+    |
+    v
+Response returned (never leaves device)
+```
+
+### Distributed Consensus Flow
+
+```
+Node A proposes governance change
+    |
+    v
+QuorumPropose message (TCP, length-prefix framed)
+    |
+    v
+Nodes B, C, D receive and vote
+    |
+    v
+Quorum reached? --- Yes: apply change, replicate audit event
+                 --- No: reject proposal
+```
+
+## Key Design Decisions
+
+1. **Kernel as trust root** — All governance flows through the kernel. No bypass path exists. This makes the security surface auditable.
+
+2. **Fuel before execution** — Fuel is checked *before* an action runs, not after. An agent that exhausts its budget mid-action would leave the system in an inconsistent state.
+
+3. **Hash-chained audit** — Each audit event includes the hash of the previous event. Tampering with any event breaks the chain, making corruption detectable.
+
+4. **PII redaction at boundary** — PII is stripped before data reaches the LLM, not after. This is a design constraint, not a feature flag.
+
+5. **TOML manifests** — Agent capabilities are declared statically in TOML, not requested dynamically. The kernel rejects any action not declared in the manifest.
+
+6. **SDK indirection** — Agents use the SDK, not the kernel directly. This allows the kernel to evolve its internals without breaking agent code.
+
+7. **Zero unsafe Rust** — `#![forbid(unsafe_code)]` is set workspace-wide. All memory safety is guaranteed by the compiler.
+
+8. **Local-first AI** — LLM inference runs on the user's device via Ollama/Candle. No data leaves the machine unless the user explicitly configures a cloud endpoint.
+
 ## Security Invariants
 
 These invariants are enforced at the code level and must never be violated:
@@ -279,6 +406,6 @@ These invariants are enforced at the code level and must never be violated:
 3. Audit trail is append-only with hash-chain integrity
 4. PII redaction at LLM gateway boundary
 5. HITL approval mandatory for Tier 1+ operations
-6. `unsafe_code = "forbid"` - zero unsafe Rust
+6. `unsafe_code = "forbid"` — zero unsafe Rust
 7. All tests must pass before merging
 8. Agents declare capabilities in TOML manifests

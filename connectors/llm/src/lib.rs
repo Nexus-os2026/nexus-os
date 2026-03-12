@@ -13,3 +13,4 @@ pub mod providers;
 pub mod rag;
 pub mod routing;
 pub mod vector_store;
+pub mod whisper;

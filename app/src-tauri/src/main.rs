@@ -6,8 +6,9 @@ use nexus_connectors_llm::gateway::{
 use nexus_connectors_llm::model_hub::{self, DownloadProgress, DownloadStatus};
 use nexus_connectors_llm::model_registry::ModelRegistry;
 use nexus_connectors_llm::nexus_link::NexusLink;
-use nexus_connectors_llm::providers::{MockProvider, OllamaProvider};
+use nexus_connectors_llm::providers::{LlmProvider, MockProvider, OllamaProvider};
 use nexus_connectors_llm::rag::{RagConfig, RagPipeline};
+use nexus_connectors_llm::whisper::WhisperTranscriber;
 use nexus_distributed::ghost_protocol::{GhostConfig, GhostProtocol, SyncPeer as GhostSyncPeer};
 use nexus_factory::pipeline::FactoryPipeline;
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
@@ -143,6 +144,7 @@ pub struct AppState {
     agent_memory: Arc<Mutex<AgentMemory>>,
     tracing_engine: Arc<Mutex<TracingEngine>>,
     payment_engine: Arc<Mutex<PaymentEngine>>,
+    whisper: Arc<Mutex<WhisperTranscriber>>,
 }
 
 impl Default for AppState {
@@ -191,6 +193,7 @@ impl AppState {
             agent_memory: Arc::new(Mutex::new(AgentMemory::new(MemoryConfig::default()))),
             tracing_engine: Arc::new(Mutex::new(TracingEngine::new(1000))),
             payment_engine: Arc::new(Mutex::new(PaymentEngine::new(RevenueSplit::default()))),
+            whisper: Arc::new(Mutex::new(WhisperTranscriber::new())),
         }
     }
 
@@ -493,6 +496,37 @@ fn build_provider_config(config: &NexusConfig) -> ProviderSelectionConfig {
             .ok()
             .or_else(|| non_empty(&config.llm.gemini_api_key)),
     }
+}
+
+/// Select the configured LLM provider using the same logic as `send_chat`.
+/// Falls back to `MockProvider` when no real provider is available.
+fn get_configured_provider() -> Box<dyn LlmProvider> {
+    match load_config() {
+        Ok(config) => {
+            let prov_config = build_provider_config(&config);
+            let provider = select_provider(&prov_config);
+            eprintln!("[nexus-rag] selected LLM provider: {}", provider.name());
+            provider
+        }
+        Err(_) => {
+            eprintln!("[nexus-rag] config unavailable, falling back to MockProvider");
+            Box::new(MockProvider::new())
+        }
+    }
+}
+
+/// Return the default chat/completion model from config (or `"mock-1"`).
+fn get_default_model() -> String {
+    load_config()
+        .map(|c| {
+            let m = c.llm.default_model.trim().to_string();
+            if m.is_empty() {
+                "mock-1".to_string()
+            } else {
+                m
+            }
+        })
+        .unwrap_or_else(|_| "mock-1".to_string())
 }
 
 pub fn send_chat(state: &AppState, message: String) -> Result<ChatResponse, String> {
@@ -3737,8 +3771,41 @@ pub fn index_document(state: &AppState, file_path: String) -> Result<String, Str
 
     let format = format_from_extension(&file_path)?;
 
-    let provider = MockProvider::new();
+    let provider = get_configured_provider();
+
+    // Detect embedding dimension from the provider on first ingest.
+    // Probe with a short text to discover the actual dimension.
     let mut rag = state.rag.lock().unwrap_or_else(|p| p.into_inner());
+    if rag.documents.is_empty() {
+        if let Ok(probe) = provider.embed(&["dimension probe"], &rag.config.embedding_model) {
+            if let Some(first) = probe.embeddings.first() {
+                let detected = first.len();
+                if detected != rag.config.embedding_dimension {
+                    eprintln!(
+                        "[nexus-rag] embedding dimension changed: {} -> {} (provider: {}). Recreating vector store.",
+                        rag.config.embedding_dimension, detected, provider.name()
+                    );
+                    rag.config.embedding_dimension = detected;
+                    rag.vector_store =
+                        nexus_connectors_llm::vector_store::VectorStore::new(detected);
+                }
+            }
+        }
+    } else {
+        // Documents already indexed — warn if dimension would change
+        if let Ok(probe) = provider.embed(&["dimension probe"], &rag.config.embedding_model) {
+            if let Some(first) = probe.embeddings.first() {
+                let detected = first.len();
+                if detected != rag.config.embedding_dimension {
+                    eprintln!(
+                        "[nexus-rag] WARNING: provider {} produces {}-dim embeddings but store uses {}. Re-index to switch.",
+                        provider.name(), detected, rag.config.embedding_dimension
+                    );
+                }
+            }
+        }
+    }
+
     let mut redaction = state
         .redaction_engine
         .lock()
@@ -3759,6 +3826,7 @@ pub fn index_document(state: &AppState, file_path: String) -> Result<String, Str
             "file_path": file_path,
             "format": doc.format,
             "chunk_count": doc.chunk_count,
+            "provider": provider.name(),
         }),
     );
 
@@ -3776,7 +3844,7 @@ pub fn search_documents(
         rag.config.top_k = k as usize;
     }
 
-    let provider = MockProvider::new();
+    let provider = get_configured_provider();
     let results = rag
         .query(&query, &provider)
         .map_err(|e| format!("search failed: {e}"))?;
@@ -3800,7 +3868,7 @@ pub fn search_documents(
 
 pub fn chat_with_documents(state: &AppState, question: String) -> Result<String, String> {
     let mut rag = state.rag.lock().unwrap_or_else(|p| p.into_inner());
-    let provider = MockProvider::new();
+    let provider = get_configured_provider();
 
     let results = rag
         .query(&question, &provider)
@@ -3822,21 +3890,56 @@ pub fn chat_with_documents(state: &AppState, question: String) -> Result<String,
 
     drop(rag);
 
-    state.log_event(
-        Uuid::new_v4(),
-        EventType::ToolCall,
-        json!({
-            "event": "rag.query",
-            "question_len": question.len(),
-            "chunk_count": chunk_count,
-        }),
-    );
+    let model = get_default_model();
+    let provider_name = provider.name().to_string();
 
-    let response = json!({
-        "prompt": prompt,
-        "sources": sources,
-        "chunk_count": chunk_count,
-    });
+    // Call the real LLM with the assembled RAG prompt.
+    let response = match provider.query(&prompt, 1024, &model) {
+        Ok(llm_resp) => {
+            state.log_event(
+                Uuid::new_v4(),
+                EventType::LlmCall,
+                json!({
+                    "event": "rag.chat",
+                    "question_len": question.len(),
+                    "chunk_count": chunk_count,
+                    "provider": provider_name,
+                    "model": llm_resp.model_name,
+                    "tokens": llm_resp.token_count,
+                }),
+            );
+
+            json!({
+                "answer": llm_resp.output_text,
+                "sources": sources,
+                "model": format!("{}/{}", provider_name, llm_resp.model_name),
+                "tokens": llm_resp.token_count,
+            })
+        }
+        Err(e) => {
+            eprintln!("[nexus-rag] LLM query failed, returning raw prompt: {e}");
+
+            state.log_event(
+                Uuid::new_v4(),
+                EventType::ToolCall,
+                json!({
+                    "event": "rag.chat_fallback",
+                    "question_len": question.len(),
+                    "chunk_count": chunk_count,
+                    "error": e.to_string(),
+                }),
+            );
+
+            json!({
+                "answer": prompt,
+                "sources": sources,
+                "model": format!("{}/fallback", provider_name),
+                "tokens": 0,
+                "fallback": true,
+                "error": format!("LLM query failed: {e}. Returning raw RAG prompt."),
+            })
+        }
+    };
 
     serde_json::to_string(&response).map_err(|e| format!("serialize error: {e}"))
 }
@@ -3877,6 +3980,38 @@ pub fn get_document_access_log(state: &AppState, doc_path: String) -> Result<Str
     let rag = state.rag.lock().unwrap_or_else(|p| p.into_inner());
     let entries: Vec<_> = rag.get_document_access_log(&doc_path);
     serde_json::to_string(&entries).map_err(|e| format!("serialize error: {e}"))
+}
+
+pub fn get_active_llm_provider(_state: &AppState) -> Result<String, String> {
+    let provider = get_configured_provider();
+    let provider_name = provider.name().to_string();
+    let model = get_default_model();
+
+    let (status, message) = if provider_name == "mock" {
+        (
+            "no_provider_available",
+            "Install Ollama or configure an API key".to_string(),
+        )
+    } else {
+        ("connected", format!("Using {provider_name}"))
+    };
+
+    // Determine embedding model from RAG config default
+    let embedding_model = if provider_name == "ollama" {
+        "nomic-embed-text".to_string()
+    } else {
+        "all-minilm".to_string()
+    };
+
+    let response = json!({
+        "provider": provider_name,
+        "model": model,
+        "embedding_model": embedding_model,
+        "status": status,
+        "message": message,
+    });
+
+    serde_json::to_string(&response).map_err(|e| format!("serialize error: {e}"))
 }
 
 // ── Model Hub Commands ──────────────────────────────────────────────────────
@@ -4748,26 +4883,151 @@ pub fn voice_get_status(state: &AppState) -> Result<String, String> {
         .voice_process
         .lock()
         .unwrap_or_else(|p| p.into_inner());
+    let whisper = state.whisper.lock().unwrap_or_else(|p| p.into_inner());
+
+    let engine = if whisper.is_loaded() {
+        "candle-whisper"
+    } else if vp.running {
+        "python-server"
+    } else {
+        "stub"
+    };
 
     let result = json!({
         "is_listening": voice.wake_word_enabled,
         "wake_word": "nexus",
         "python_server_running": vp.running,
+        "whisper_loaded": whisper.is_loaded(),
+        "whisper_model": whisper.model_info(),
+        "transcription_engine": engine,
     });
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
-pub fn voice_transcribe(_state: &AppState, audio_base64: String) -> Result<String, String> {
-    // Stub transcription — returns a placeholder.
-    // Real implementation will forward to the Python voice server via WebSocket
-    // or route through the LLM gateway for cloud/local STT.
+pub fn voice_transcribe(state: &AppState, audio_base64: String) -> Result<String, String> {
+    let start = std::time::Instant::now();
     let decoded_len = audio_base64.len() * 3 / 4;
-    let size_kb = decoded_len as f64 / 1024.0;
 
+    // ── Fallback chain: Candle Whisper → Python server → stub ───────
+
+    // 1. Try Candle Whisper if model is loaded
+    let whisper = state.whisper.lock().unwrap_or_else(|p| p.into_inner());
+    if whisper.is_loaded() {
+        // Decode base64 → raw bytes → interpret as 16-bit PCM → f32 samples
+        let raw_bytes = base64_decode_audio(&audio_base64)?;
+        let pcm: Vec<f32> = raw_bytes
+            .chunks_exact(2)
+            .map(|c| i16::from_le_bytes([c[0], c[1]]) as f32 / 32768.0)
+            .collect();
+        match whisper.transcribe(&pcm, 16000) {
+            Ok(result) => {
+                let json_result = json!({
+                    "text": result.text,
+                    "engine": result.engine,
+                    "duration_ms": result.duration_ms,
+                });
+                return serde_json::to_string(&json_result).map_err(|e| e.to_string());
+            }
+            Err(e) => {
+                eprintln!("[nexus-voice] candle whisper failed, falling back: {e}");
+            }
+        }
+    }
+    drop(whisper);
+
+    // 2. Try Python voice server if running
+    let vp = state
+        .voice_process
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    if vp.running {
+        drop(vp);
+        // Python server transcription would go here via WebSocket/HTTP
+        // For now, fall through to stub since the Python bridge isn't wired yet
+        eprintln!("[nexus-voice] python server running but bridge not wired, using stub");
+    } else {
+        drop(vp);
+    }
+
+    // 3. Stub fallback
+    let size_kb = decoded_len as f64 / 1024.0;
+    let elapsed = start.elapsed();
     let result = json!({
-        "text": format!("[transcription placeholder — {:.1} KB audio received]", size_kb),
+        "text": format!("[transcription stub — {:.1} KB audio received]", size_kb),
+        "engine": "stub",
+        "duration_ms": elapsed.as_millis() as u64,
     });
     serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Load a Whisper model for on-device speech-to-text.
+pub fn voice_load_whisper_model(state: &AppState, model_path: String) -> Result<String, String> {
+    let transcriber = WhisperTranscriber::load_model(&model_path)?;
+    let info = transcriber.model_info().unwrap_or_default();
+
+    let mut whisper = state.whisper.lock().unwrap_or_else(|p| p.into_inner());
+    *whisper = transcriber;
+    drop(whisper);
+
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "voice-assistant",
+            "action": "load_whisper_model",
+            "model_path": model_path,
+        }),
+    );
+
+    let result = json!({
+        "status": "loaded",
+        "engine": "candle-whisper",
+        "model_path": info,
+    });
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Decode base64-encoded audio data to raw bytes.
+fn base64_decode_audio(encoded: &str) -> Result<Vec<u8>, String> {
+    // Simple base64 decoder — handles standard base64 alphabet
+    let table: Vec<u8> = (0..256u16)
+        .map(|i| {
+            let c = i as u8;
+            match c {
+                b'A'..=b'Z' => c - b'A',
+                b'a'..=b'z' => c - b'a' + 26,
+                b'0'..=b'9' => c - b'0' + 52,
+                b'+' => 62,
+                b'/' => 63,
+                _ => 255,
+            }
+        })
+        .collect();
+
+    let input: Vec<u8> = encoded
+        .bytes()
+        .filter(|&b| b != b'=' && b != b'\n' && b != b'\r')
+        .collect();
+    let mut output = Vec::with_capacity(input.len() * 3 / 4);
+
+    for chunk in input.chunks(4) {
+        let mut buf = [0u8; 4];
+        for (i, &b) in chunk.iter().enumerate() {
+            buf[i] = table[b as usize];
+            if buf[i] == 255 {
+                return Err(format!("invalid base64 character: {}", b as char));
+            }
+        }
+        output.push((buf[0] << 2) | (buf[1] >> 4));
+        if chunk.len() > 2 {
+            output.push((buf[1] << 4) | (buf[2] >> 2));
+        }
+        if chunk.len() > 3 {
+            output.push((buf[2] << 6) | buf[3]);
+        }
+    }
+
+    Ok(output)
 }
 
 // ── Software Factory commands ───────────────────────────────────────────
@@ -6178,6 +6438,11 @@ mod runtime {
         super::get_document_access_log(state.inner(), doc_path)
     }
 
+    #[tauri::command]
+    fn get_active_llm_provider(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::get_active_llm_provider(state.inner())
+    }
+
     // ── Model Hub Commands ──
 
     #[tauri::command]
@@ -6606,6 +6871,14 @@ mod runtime {
         audio_base64: String,
     ) -> Result<String, String> {
         super::voice_transcribe(state.inner(), audio_base64)
+    }
+
+    #[tauri::command]
+    fn voice_load_whisper_model(
+        state: tauri::State<'_, AppState>,
+        model_path: String,
+    ) -> Result<String, String> {
+        super::voice_load_whisper_model(state.inner(), model_path)
     }
 
     // ── Software Factory commands ────────────────────────────────────
@@ -7126,6 +7399,7 @@ mod runtime {
                 get_document_governance,
                 get_semantic_map,
                 get_document_access_log,
+                get_active_llm_provider,
                 search_models,
                 get_model_info,
                 check_model_compatibility,
@@ -7169,6 +7443,7 @@ mod runtime {
                 voice_stop_listening,
                 voice_get_status,
                 voice_transcribe,
+                voice_load_whisper_model,
                 factory_create_project,
                 factory_build_project,
                 factory_test_project,
@@ -7238,9 +7513,26 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        complete_build, complete_research, create_agent, get_agent_activity, get_browser_history,
-        get_knowledge_base, learning_agent_action, list_agents, navigate_to, pause_agent,
-        resume_agent, start_build, start_learning, start_research, AppState, LearningSource,
+        agent_memory_clear, agent_memory_forget, agent_memory_get_stats, agent_memory_recall,
+        agent_memory_remember, chat_with_documents, check_model_compatibility, complete_build,
+        complete_research, create_agent, economy_create_wallet, economy_earn,
+        economy_freeze_wallet, economy_get_history, economy_get_stats, economy_get_wallet,
+        economy_spend, economy_transfer, evolution_evolve_once, evolution_get_active_strategy,
+        evolution_get_history, evolution_get_status, evolution_register_strategy,
+        evolution_rollback, factory_create_project, factory_get_build_history,
+        factory_list_projects, get_active_llm_provider, get_agent_activity, get_browser_history,
+        get_configured_provider, get_knowledge_base, get_system_specs, ghost_protocol_add_peer,
+        ghost_protocol_remove_peer, ghost_protocol_status, ghost_protocol_toggle, index_document,
+        learning_agent_action, list_agents, list_indexed_documents, list_local_models,
+        mcp_host_add_server, mcp_host_list_servers, mcp_host_list_tools, mcp_host_remove_server,
+        navigate_to, neural_bridge_delete, neural_bridge_ingest, neural_bridge_search,
+        neural_bridge_status, neural_bridge_toggle, pause_agent, payment_create_invoice,
+        payment_create_plan, payment_get_revenue_stats, payment_list_plans, payment_pay_invoice,
+        remove_indexed_document, resume_agent, search_documents, start_build, start_learning,
+        start_research, time_machine_create_checkpoint, time_machine_list_checkpoints,
+        time_machine_redo, time_machine_undo, tracing_end_span, tracing_end_trace,
+        tracing_get_trace, tracing_list_traces, tracing_start_span, tracing_start_trace,
+        voice_get_status, voice_load_whisper_model, voice_transcribe, AppState, LearningSource,
     };
     use serde_json::json;
 
@@ -7521,5 +7813,748 @@ mod tests {
             None,
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_configured_provider_fallback() {
+        // Without Ollama running or API keys set, should fall back to MockProvider.
+        let provider = get_configured_provider();
+        // In CI / test environments, mock is the expected fallback.
+        // If a real provider is configured, that's fine too — just verify it returns something.
+        assert!(!provider.name().is_empty());
+    }
+
+    #[test]
+    fn test_chat_with_documents_returns_answer() {
+        // Force MockProvider so the test works without Ollama embedding models.
+        std::env::set_var("LLM_PROVIDER", "mock");
+
+        let state = AppState::new();
+
+        // Write a temp file to index
+        let tmp = std::env::temp_dir().join("nexus_rag_test_chat.txt");
+        std::fs::write(
+            &tmp,
+            "Rust is a systems programming language focused on safety.",
+        )
+        .unwrap();
+
+        // Index the document
+        let ingest_result = index_document(&state, tmp.to_string_lossy().to_string());
+        assert!(
+            ingest_result.is_ok(),
+            "ingest failed: {:?}",
+            ingest_result.err()
+        );
+
+        // Chat with documents
+        let chat_result = chat_with_documents(&state, "What is Rust?".to_string());
+        assert!(chat_result.is_ok(), "chat failed: {:?}", chat_result.err());
+
+        let parsed: serde_json::Value = serde_json::from_str(&chat_result.unwrap()).unwrap();
+        assert!(parsed.get("answer").is_some());
+        assert!(parsed.get("sources").is_some());
+        assert!(parsed.get("model").is_some());
+        assert!(parsed.get("tokens").is_some());
+
+        let _ = std::fs::remove_file(&tmp);
+        // Note: don't remove LLM_PROVIDER — tests run in parallel in the same process.
+    }
+
+    #[test]
+    fn test_provider_status_command() {
+        let state = AppState::new();
+        let result = get_active_llm_provider(&state);
+        assert!(result.is_ok());
+
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert!(parsed.get("provider").is_some());
+        assert!(parsed.get("model").is_some());
+        assert!(parsed.get("embedding_model").is_some());
+        assert!(parsed.get("status").is_some());
+        assert!(parsed.get("message").is_some());
+
+        let provider = parsed["provider"].as_str().unwrap();
+        assert!(!provider.is_empty());
+    }
+
+    // ── RAG wiring tests ────────────────────────────────────────────────
+
+    #[test]
+    fn test_index_document_end_to_end() {
+        std::env::set_var("LLM_PROVIDER", "mock");
+        let state = AppState::new();
+        let tmp = std::env::temp_dir().join("nexus_test_index_e2e.md");
+        std::fs::write(&tmp, "# Heading\n\nSome markdown content about Nexus OS.").unwrap();
+
+        let result = index_document(&state, tmp.to_string_lossy().to_string());
+        assert!(result.is_ok(), "index_document failed: {:?}", result.err());
+
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert!(parsed["chunk_count"].as_u64().unwrap() > 0);
+        assert_eq!(parsed["path"].as_str().unwrap(), tmp.to_string_lossy());
+
+        let _ = std::fs::remove_file(&tmp);
+        // Note: don't remove LLM_PROVIDER — tests run in parallel in the same process.
+    }
+
+    #[test]
+    fn test_search_documents_end_to_end() {
+        std::env::set_var("LLM_PROVIDER", "mock");
+        let state = AppState::new();
+        let tmp = std::env::temp_dir().join("nexus_test_search_e2e.txt");
+        std::fs::write(
+            &tmp,
+            "Quantum computing uses qubits for parallel computation.",
+        )
+        .unwrap();
+
+        let _ = index_document(&state, tmp.to_string_lossy().to_string()).unwrap();
+        let result = search_documents(&state, "quantum".to_string(), Some(5));
+        assert!(result.is_ok(), "search failed: {:?}", result.err());
+
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&result.unwrap()).unwrap();
+        // MockProvider embeddings may not produce high cosine similarity for all queries,
+        // so we only verify the response parses as an array of valid result objects.
+        for r in &parsed {
+            assert!(r.get("chunk_id").is_some());
+            assert!(r.get("score").is_some());
+        }
+
+        let _ = std::fs::remove_file(&tmp);
+        // Note: don't remove LLM_PROVIDER — tests run in parallel in the same process.
+    }
+
+    #[test]
+    fn test_list_indexed_documents_two_docs() {
+        std::env::set_var("LLM_PROVIDER", "mock");
+        let state = AppState::new();
+        let tmp1 = std::env::temp_dir().join("nexus_test_list_a.txt");
+        let tmp2 = std::env::temp_dir().join("nexus_test_list_b.txt");
+        std::fs::write(&tmp1, "Document A content.").unwrap();
+        std::fs::write(&tmp2, "Document B content.").unwrap();
+
+        let _ = index_document(&state, tmp1.to_string_lossy().to_string()).unwrap();
+        let _ = index_document(&state, tmp2.to_string_lossy().to_string()).unwrap();
+
+        let result = list_indexed_documents(&state).unwrap();
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed.len(), 2);
+
+        let _ = std::fs::remove_file(&tmp1);
+        let _ = std::fs::remove_file(&tmp2);
+        // Note: don't remove LLM_PROVIDER — tests run in parallel in the same process.
+    }
+
+    #[test]
+    fn test_remove_indexed_document() {
+        std::env::set_var("LLM_PROVIDER", "mock");
+        let state = AppState::new();
+        let tmp = std::env::temp_dir().join("nexus_test_remove.txt");
+        std::fs::write(&tmp, "Content to be removed.").unwrap();
+        let path_str = tmp.to_string_lossy().to_string();
+
+        let _ = index_document(&state, path_str.clone()).unwrap();
+        let result = remove_indexed_document(&state, path_str).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(parsed["removed"].as_bool().unwrap());
+
+        let list = list_indexed_documents(&state).unwrap();
+        let docs: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap();
+        assert!(docs.is_empty());
+
+        let _ = std::fs::remove_file(&tmp);
+        // Note: don't remove LLM_PROVIDER — tests run in parallel in the same process.
+    }
+
+    // ── Model Hub wiring tests ──────────────────────────────────────────
+
+    #[test]
+    fn test_list_local_models_returns_array() {
+        let state = AppState::new();
+        let result = list_local_models(&state);
+        assert!(result.is_ok());
+        // Must parse as a JSON array (may be empty)
+        let _: Vec<serde_json::Value> = serde_json::from_str(&result.unwrap()).unwrap();
+    }
+
+    #[test]
+    fn test_get_system_specs_has_fields() {
+        let result = get_system_specs();
+        assert!(result.is_ok());
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert!(parsed.get("total_ram_mb").is_some());
+        assert!(parsed.get("cpu_name").is_some());
+        assert!(parsed.get("cpu_cores").is_some());
+        assert!(parsed["total_ram_mb"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn test_check_model_compatibility() {
+        let state = AppState::new();
+        // 500 MB file
+        let result = check_model_compatibility(&state, 500_000_000);
+        assert!(result.is_ok());
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert!(parsed.get("can_run").is_some());
+    }
+
+    // ── Time Machine wiring tests ───────────────────────────────────────
+
+    #[test]
+    fn test_time_machine_create_and_list_checkpoints() {
+        let state = AppState::new();
+
+        let created = time_machine_create_checkpoint(&state, "test-checkpoint".to_string());
+        assert!(created.is_ok());
+        let cp_id = created.unwrap();
+        assert!(!cp_id.is_empty());
+
+        let list_result = time_machine_list_checkpoints(&state).unwrap();
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&list_result).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0]["label"].as_str().unwrap(), "test-checkpoint");
+        assert_eq!(parsed[0]["id"].as_str().unwrap(), cp_id);
+    }
+
+    #[test]
+    fn test_time_machine_undo_empty() {
+        let state = AppState::new();
+        let result = time_machine_undo(&state);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_time_machine_create_undo_redo_cycle() {
+        let state = AppState::new();
+
+        let _ = time_machine_create_checkpoint(&state, "cycle-test".to_string()).unwrap();
+
+        // Undo
+        let undo_result = time_machine_undo(&state);
+        assert!(undo_result.is_ok());
+        let undo_parsed: serde_json::Value = serde_json::from_str(&undo_result.unwrap()).unwrap();
+        assert_eq!(undo_parsed["label"].as_str().unwrap(), "cycle-test");
+
+        // Redo
+        let redo_result = time_machine_redo(&state);
+        assert!(redo_result.is_ok());
+        let redo_parsed: serde_json::Value = serde_json::from_str(&redo_result.unwrap()).unwrap();
+        assert_eq!(redo_parsed["label"].as_str().unwrap(), "cycle-test");
+    }
+
+    // ── Voice wiring tests ──────────────────────────────────────────────
+
+    #[test]
+    fn test_voice_get_status_json() {
+        let state = AppState::new();
+        let result = voice_get_status(&state);
+        assert!(result.is_ok());
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert!(parsed.get("is_listening").is_some());
+        assert!(parsed.get("wake_word").is_some());
+        assert!(parsed.get("python_server_running").is_some());
+        assert!(parsed.get("whisper_loaded").is_some());
+        assert!(parsed.get("transcription_engine").is_some());
+        // Default state: whisper not loaded, engine is stub
+        assert_eq!(parsed["whisper_loaded"].as_bool(), Some(false));
+        assert_eq!(parsed["transcription_engine"].as_str(), Some("stub"));
+    }
+
+    #[test]
+    fn test_voice_transcribe_fallback_stub() {
+        std::env::set_var("LLM_PROVIDER", "mock");
+        let state = AppState::new();
+        // With no whisper model loaded and no python server, should fall back to stub
+        let result = voice_transcribe(&state, "AAAA".to_string());
+        assert!(result.is_ok());
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert!(parsed.get("text").is_some());
+        assert_eq!(parsed["engine"].as_str(), Some("stub"));
+        assert!(parsed.get("duration_ms").is_some());
+    }
+
+    #[test]
+    fn test_voice_load_whisper_model_missing() {
+        let state = AppState::new();
+        let result = voice_load_whisper_model(&state, "/nonexistent/whisper/model".to_string());
+        assert!(result.is_err());
+        // Whisper should still not be loaded
+        let status = voice_get_status(&state).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&status).unwrap();
+        assert_eq!(parsed["whisper_loaded"].as_bool(), Some(false));
+    }
+
+    #[test]
+    fn test_voice_transcribe_returns_engine_field() {
+        std::env::set_var("LLM_PROVIDER", "mock");
+        let state = AppState::new();
+        // Send some base64 data (doesn't matter what — stub ignores content)
+        let result = voice_transcribe(&state, "SGVsbG8gV29ybGQ=".to_string());
+        assert!(result.is_ok());
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+        // Must always have text, engine, and duration_ms
+        assert!(parsed["text"].is_string());
+        assert!(parsed["engine"].is_string());
+        assert!(parsed["duration_ms"].is_number());
+    }
+
+    // ── Economy wiring tests ────────────────────────────────────────────
+
+    #[test]
+    fn test_economy_full_cycle() {
+        let state = AppState::new();
+        let agent_id = uuid::Uuid::new_v4().to_string();
+
+        // Create wallet
+        let wallet_result = economy_create_wallet(&state, agent_id.clone());
+        assert!(wallet_result.is_ok());
+
+        // Earn credits
+        let earn_result =
+            economy_earn(&state, agent_id.clone(), 100.0, "test earnings".to_string());
+        assert!(earn_result.is_ok());
+
+        // Check balance (default_balance=100 + earned=100 = 200)
+        let wallet = economy_get_wallet(&state, agent_id.clone()).unwrap();
+        let wallet_parsed: serde_json::Value = serde_json::from_str(&wallet).unwrap();
+        let balance = wallet_parsed["balance"].as_f64().unwrap();
+        assert!((balance - 200.0).abs() < 0.01);
+
+        // Spend credits (within default spending_limit of 10.0)
+        let spend_result = economy_spend(
+            &state,
+            agent_id.clone(),
+            5.0,
+            "ApiCall".to_string(),
+            "test spend".to_string(),
+        );
+        assert!(spend_result.is_ok());
+
+        // Verify balance after spend (200 - 5 = 195)
+        let wallet2 = economy_get_wallet(&state, agent_id.clone()).unwrap();
+        let w2: serde_json::Value = serde_json::from_str(&wallet2).unwrap();
+        let balance2 = w2["balance"].as_f64().unwrap();
+        assert!((balance2 - 195.0).abs() < 0.01);
+
+        // History should have 2 transactions
+        let history = economy_get_history(&state, agent_id.clone()).unwrap();
+        let h: Vec<serde_json::Value> = serde_json::from_str(&history).unwrap();
+        assert_eq!(h.len(), 2);
+
+        // Stats
+        let stats = economy_get_stats(&state).unwrap();
+        let s: serde_json::Value = serde_json::from_str(&stats).unwrap();
+        assert!(s.get("total_wallets").is_some());
+    }
+
+    #[test]
+    fn test_economy_transfer_between_wallets() {
+        let state = AppState::new();
+        let from_id = uuid::Uuid::new_v4().to_string();
+        let to_id = uuid::Uuid::new_v4().to_string();
+
+        economy_create_wallet(&state, from_id.clone()).unwrap();
+        economy_create_wallet(&state, to_id.clone()).unwrap();
+        economy_earn(&state, from_id.clone(), 200.0, "seed".to_string()).unwrap();
+
+        let transfer = economy_transfer(
+            &state,
+            from_id.clone(),
+            to_id.clone(),
+            50.0,
+            "pay".to_string(),
+        );
+        assert!(transfer.is_ok());
+
+        // from: default(100) + earn(200) - transfer(50) = 250
+        let from_w = economy_get_wallet(&state, from_id).unwrap();
+        let from_v: serde_json::Value = serde_json::from_str(&from_w).unwrap();
+        assert!((from_v["balance"].as_f64().unwrap() - 250.0).abs() < 0.01);
+
+        // to: default(100) + received(50) = 150
+        let to_w = economy_get_wallet(&state, to_id).unwrap();
+        let to_v: serde_json::Value = serde_json::from_str(&to_w).unwrap();
+        assert!((to_v["balance"].as_f64().unwrap() - 150.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_economy_freeze_wallet() {
+        let state = AppState::new();
+        let agent_id = uuid::Uuid::new_v4().to_string();
+        economy_create_wallet(&state, agent_id.clone()).unwrap();
+        economy_earn(&state, agent_id.clone(), 100.0, "seed".to_string()).unwrap();
+
+        let freeze = economy_freeze_wallet(&state, agent_id.clone());
+        assert!(freeze.is_ok());
+
+        // Spending on frozen wallet should fail
+        let spend = economy_spend(
+            &state,
+            agent_id,
+            10.0,
+            "ApiCall".to_string(),
+            "test".to_string(),
+        );
+        assert!(spend.is_err());
+    }
+
+    // ── Ghost Protocol wiring tests ─────────────────────────────────────
+
+    #[test]
+    fn test_ghost_protocol_status_has_device_id() {
+        let state = AppState::new();
+        let result = ghost_protocol_status(&state).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(parsed.get("device_id").is_some());
+        assert!(parsed.get("enabled").is_some());
+        assert!(parsed.get("peer_count").is_some());
+        assert!(parsed.get("stats").is_some());
+    }
+
+    #[test]
+    fn test_ghost_protocol_toggle() {
+        let state = AppState::new();
+
+        let toggle = ghost_protocol_toggle(&state, true).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&toggle).unwrap();
+        assert!(parsed["enabled"].as_bool().unwrap());
+
+        let status = ghost_protocol_status(&state).unwrap();
+        let s: serde_json::Value = serde_json::from_str(&status).unwrap();
+        assert!(s["enabled"].as_bool().unwrap());
+    }
+
+    #[test]
+    fn test_ghost_protocol_add_remove_peer() {
+        let state = AppState::new();
+        ghost_protocol_toggle(&state, true).unwrap();
+
+        let add_result = ghost_protocol_add_peer(
+            &state,
+            "127.0.0.1:9090".to_string(),
+            "test-peer".to_string(),
+        );
+        assert!(add_result.is_ok());
+        let added: serde_json::Value = serde_json::from_str(&add_result.unwrap()).unwrap();
+        let peer_device_id = added["device_id"].as_str().unwrap().to_string();
+
+        // Verify peer count
+        let status = ghost_protocol_status(&state).unwrap();
+        let s: serde_json::Value = serde_json::from_str(&status).unwrap();
+        assert_eq!(s["peer_count"].as_u64().unwrap(), 1);
+
+        // Remove peer
+        let remove = ghost_protocol_remove_peer(&state, peer_device_id);
+        assert!(remove.is_ok());
+    }
+
+    // ── Evolution wiring tests ──────────────────────────────────────────
+
+    #[test]
+    fn test_evolution_status() {
+        let state = AppState::new();
+        let result = evolution_get_status(&state).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(parsed.get("enabled").is_some());
+        assert!(parsed.get("total_strategies").is_some());
+        assert!(parsed.get("active_agents").is_some());
+    }
+
+    #[test]
+    fn test_evolution_register_and_evolve() {
+        let state = AppState::new();
+        let agent_id = uuid::Uuid::new_v4().to_string();
+        let params = json!({"learning_rate": 0.01, "batch_size": 32}).to_string();
+
+        let reg = evolution_register_strategy(
+            &state,
+            agent_id.clone(),
+            "test-strategy".to_string(),
+            params,
+        );
+        assert!(reg.is_ok());
+        let strategy: serde_json::Value = serde_json::from_str(&reg.unwrap()).unwrap();
+        assert_eq!(strategy["name"].as_str().unwrap(), "test-strategy");
+
+        // Evolve
+        let evolve = evolution_evolve_once(&state, agent_id.clone());
+        assert!(evolve.is_ok());
+        let evolved: serde_json::Value = serde_json::from_str(&evolve.unwrap()).unwrap();
+        assert!(evolved.get("generation").is_some());
+
+        // History
+        let history = evolution_get_history(&state, agent_id.clone()).unwrap();
+        let h: serde_json::Value = serde_json::from_str(&history).unwrap();
+        assert!(h.get("total_generations").is_some());
+
+        // Active strategy
+        let active = evolution_get_active_strategy(&state, agent_id.clone());
+        assert!(active.is_ok());
+
+        // Rollback — may fail if evolve_once didn't accept the child (no parent to rollback to).
+        // We just verify it doesn't panic.
+        let _ = evolution_rollback(&state, agent_id);
+    }
+
+    // ── MCP Host wiring tests ───────────────────────────────────────────
+
+    #[test]
+    fn test_mcp_host_add_list_remove_server() {
+        let state = AppState::new();
+
+        // Initially empty
+        let list = mcp_host_list_servers(&state).unwrap();
+        let servers: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap();
+        assert!(servers.is_empty());
+
+        // Add server
+        let add = mcp_host_add_server(
+            &state,
+            "test-server".to_string(),
+            "http://localhost:8080".to_string(),
+            "http".to_string(),
+            None,
+        );
+        assert!(add.is_ok());
+        let added: serde_json::Value = serde_json::from_str(&add.unwrap()).unwrap();
+        let server_id = added["id"].as_str().unwrap().to_string();
+
+        // List should have 1
+        let list2 = mcp_host_list_servers(&state).unwrap();
+        let servers2: Vec<serde_json::Value> = serde_json::from_str(&list2).unwrap();
+        assert_eq!(servers2.len(), 1);
+        assert_eq!(servers2[0]["name"].as_str().unwrap(), "test-server");
+
+        // Tools should be empty (not connected)
+        let tools = mcp_host_list_tools(&state).unwrap();
+        let tools_parsed: Vec<serde_json::Value> = serde_json::from_str(&tools).unwrap();
+        assert!(tools_parsed.is_empty());
+
+        // Remove
+        let remove = mcp_host_remove_server(&state, server_id);
+        assert!(remove.is_ok());
+
+        // List should be empty again
+        let list3 = mcp_host_list_servers(&state).unwrap();
+        let servers3: Vec<serde_json::Value> = serde_json::from_str(&list3).unwrap();
+        assert!(servers3.is_empty());
+    }
+
+    // ── Neural Bridge wiring tests ──────────────────────────────────────
+
+    #[test]
+    fn test_neural_bridge_status() {
+        let state = AppState::new();
+        let result = neural_bridge_status(&state).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert!(parsed.get("stats").is_some());
+        assert!(parsed.get("config").is_some());
+    }
+
+    #[test]
+    fn test_neural_bridge_ingest_and_search() {
+        let state = AppState::new();
+        neural_bridge_toggle(&state, true).unwrap();
+
+        // Ingest content
+        let ingest = neural_bridge_ingest(
+            &state,
+            "Clipboard".to_string(),
+            "Nexus OS uses capability-based security for agent governance.".to_string(),
+            json!({}),
+        );
+        assert!(ingest.is_ok());
+        let entry: serde_json::Value = serde_json::from_str(&ingest.unwrap()).unwrap();
+        let entry_id = entry["id"].as_str().unwrap().to_string();
+        assert!(!entry_id.is_empty());
+
+        // Search
+        let search = neural_bridge_search(
+            &state,
+            "capability security".to_string(),
+            None,
+            None,
+            Some(5),
+        );
+        assert!(search.is_ok());
+        let results: Vec<serde_json::Value> = serde_json::from_str(&search.unwrap()).unwrap();
+        assert!(!results.is_empty());
+
+        // Delete
+        let del = neural_bridge_delete(&state, entry_id);
+        assert!(del.is_ok());
+        let d: serde_json::Value = serde_json::from_str(&del.unwrap()).unwrap();
+        assert!(d["deleted"].as_bool().unwrap());
+    }
+
+    // ── Tracing wiring tests ────────────────────────────────────────────
+
+    #[test]
+    fn test_tracing_full_lifecycle() {
+        let state = AppState::new();
+
+        // Start trace
+        let trace_result = tracing_start_trace(&state, "test-operation".to_string(), None);
+        assert!(trace_result.is_ok());
+        let t: serde_json::Value = serde_json::from_str(&trace_result.unwrap()).unwrap();
+        let trace_id = t["trace_id"].as_str().unwrap().to_string();
+        let root_span_id = t["span_id"].as_str().unwrap().to_string();
+
+        // Start child span
+        let span_result = tracing_start_span(
+            &state,
+            trace_id.clone(),
+            root_span_id.clone(),
+            "child-op".to_string(),
+            None,
+        );
+        assert!(span_result.is_ok());
+        let s: serde_json::Value = serde_json::from_str(&span_result.unwrap()).unwrap();
+        let child_span_id = s["span_id"].as_str().unwrap().to_string();
+
+        // End child span
+        let end_child = tracing_end_span(&state, child_span_id, "Ok".to_string(), None);
+        assert!(end_child.is_ok());
+
+        // End root span
+        let end_root = tracing_end_span(&state, root_span_id, "Ok".to_string(), None);
+        assert!(end_root.is_ok());
+
+        // End trace
+        let end_trace = tracing_end_trace(&state, trace_id.clone());
+        assert!(end_trace.is_ok());
+        let completed: serde_json::Value = serde_json::from_str(&end_trace.unwrap()).unwrap();
+        assert!(completed.get("spans").is_some());
+
+        // List traces
+        let list = tracing_list_traces(&state, Some(10)).unwrap();
+        let traces: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap();
+        assert!(!traces.is_empty());
+
+        // Get specific trace
+        let get = tracing_get_trace(&state, trace_id);
+        assert!(get.is_ok());
+    }
+
+    // ── Agent Memory wiring tests ───────────────────────────────────────
+
+    #[test]
+    fn test_agent_memory_remember_and_recall() {
+        let state = AppState::new();
+        let agent_id = uuid::Uuid::new_v4().to_string();
+
+        // Remember
+        let mem_result = agent_memory_remember(
+            &state,
+            agent_id.clone(),
+            "The sky is blue.".to_string(),
+            "Fact".to_string(),
+            0.9,
+            vec!["science".to_string()],
+        );
+        assert!(mem_result.is_ok());
+        let entry: serde_json::Value = serde_json::from_str(&mem_result.unwrap()).unwrap();
+        assert!(entry.get("id").is_some());
+
+        // Recall
+        let recall = agent_memory_recall(&state, agent_id.clone(), "sky".to_string(), Some(5));
+        assert!(recall.is_ok());
+        let results: Vec<serde_json::Value> = serde_json::from_str(&recall.unwrap()).unwrap();
+        assert!(!results.is_empty());
+
+        // Stats
+        let stats = agent_memory_get_stats(&state, agent_id.clone()).unwrap();
+        let s: serde_json::Value = serde_json::from_str(&stats).unwrap();
+        assert!(s.get("total").is_some());
+
+        // Forget
+        let memory_id = entry["id"].as_str().unwrap().to_string();
+        let forget = agent_memory_forget(&state, agent_id.clone(), memory_id);
+        assert!(forget.is_ok());
+
+        // Clear
+        let clear = agent_memory_clear(&state, agent_id);
+        assert!(clear.is_ok());
+    }
+
+    // ── Factory wiring tests ────────────────────────────────────────────
+
+    #[test]
+    fn test_factory_create_project_and_list() {
+        let state = AppState::new();
+        let tmp_dir = std::env::temp_dir().join("nexus_test_factory");
+        let _ = std::fs::create_dir_all(&tmp_dir);
+
+        let create = factory_create_project(
+            &state,
+            "test-project".to_string(),
+            "rust".to_string(),
+            tmp_dir.to_string_lossy().to_string(),
+        );
+        assert!(create.is_ok());
+        let project: serde_json::Value = serde_json::from_str(&create.unwrap()).unwrap();
+        assert_eq!(project["name"].as_str().unwrap(), "test-project");
+        assert!(project.get("id").is_some());
+
+        // List
+        let list = factory_list_projects(&state).unwrap();
+        let projects: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap();
+        assert_eq!(projects.len(), 1);
+
+        // Build history (empty initially)
+        let project_id = project["id"].as_str().unwrap().to_string();
+        let history = factory_get_build_history(&state, project_id).unwrap();
+        let h: Vec<serde_json::Value> = serde_json::from_str(&history).unwrap();
+        assert!(h.is_empty());
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
+    // ── Payments wiring tests ───────────────────────────────────────────
+
+    #[test]
+    fn test_payment_plan_and_invoice() {
+        let state = AppState::new();
+
+        // Create plan
+        let plan = payment_create_plan(
+            &state,
+            "Pro Plan".to_string(),
+            999,
+            "Monthly".to_string(),
+            vec![
+                "unlimited-agents".to_string(),
+                "priority-support".to_string(),
+            ],
+        );
+        assert!(plan.is_ok());
+        let plan_parsed: serde_json::Value = serde_json::from_str(&plan.unwrap()).unwrap();
+        let plan_id = plan_parsed["id"].as_str().unwrap().to_string();
+        assert_eq!(plan_parsed["name"].as_str().unwrap(), "Pro Plan");
+        assert_eq!(plan_parsed["price_cents"].as_u64().unwrap(), 999);
+
+        // List plans
+        let plans = payment_list_plans(&state).unwrap();
+        let plans_parsed: Vec<serde_json::Value> = serde_json::from_str(&plans).unwrap();
+        assert_eq!(plans_parsed.len(), 1);
+
+        // Create invoice
+        let invoice = payment_create_invoice(&state, plan_id, "buyer-123".to_string());
+        assert!(invoice.is_ok());
+        let inv: serde_json::Value = serde_json::from_str(&invoice.unwrap()).unwrap();
+        let invoice_id = inv["id"].as_str().unwrap().to_string();
+        assert_eq!(inv["status"].as_str().unwrap(), "Pending");
+
+        // Pay invoice
+        let pay = payment_pay_invoice(&state, invoice_id);
+        assert!(pay.is_ok());
+        let paid: serde_json::Value = serde_json::from_str(&pay.unwrap()).unwrap();
+        assert_eq!(paid["status"].as_str().unwrap(), "Paid");
+
+        // Revenue stats
+        let stats = payment_get_revenue_stats(&state).unwrap();
+        let s: serde_json::Value = serde_json::from_str(&stats).unwrap();
+        assert!(s.get("total_revenue_cents").is_some());
     }
 }

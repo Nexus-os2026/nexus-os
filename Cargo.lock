@@ -3845,6 +3845,7 @@ dependencies = [
 name = "nexus-distributed"
 version = "7.0.0"
 dependencies = [
+ "aes-gcm",
  "ed25519-dalek",
  "nexus-kernel",
  "serde",

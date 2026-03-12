@@ -19,6 +19,23 @@ interface VoiceSettings {
   autoListen: boolean;
 }
 
+type TranscriptionEngine = "candle-whisper" | "python-server" | "stub";
+
+interface EngineStatus {
+  engine: TranscriptionEngine;
+  whisperLoaded: boolean;
+  whisperModel: string | null;
+}
+
+/* ================================================================== */
+/*  Tauri invoke helper                                                */
+/* ================================================================== */
+
+async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<T>(cmd, args);
+}
+
 /* ================================================================== */
 /*  Styles                                                             */
 /* ================================================================== */
@@ -263,11 +280,32 @@ export default function VoiceAssistant() {
     autoListen: false,
   });
   const [serverRunning, setServerRunning] = useState(false);
+  const [engineStatus, setEngineStatus] = useState<EngineStatus>({
+    engine: "stub",
+    whisperLoaded: false,
+    whisperModel: null,
+  });
+  const [modelLoading, setModelLoading] = useState(false);
   const nextId = useRef(2);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     ensurePulseAnimation();
+  }, []);
+
+  // Fetch engine status from backend on mount
+  useEffect(() => {
+    tauriInvoke<string>("voice_get_status")
+      .then((raw) => {
+        const data = JSON.parse(raw);
+        setEngineStatus({
+          engine: data.transcription_engine ?? "stub",
+          whisperLoaded: data.whisper_loaded ?? false,
+          whisperModel: data.whisper_model ?? null,
+        });
+        setServerRunning(data.python_server_running ?? false);
+      })
+      .catch(() => { /* running outside Tauri — use defaults */ });
   }, []);
 
   // Auto-scroll transcript area
@@ -320,6 +358,29 @@ export default function VoiceAssistant() {
       }, 800);
     }, 600);
   }, [status, addTranscript]);
+
+  const handleLoadWhisper = useCallback(() => {
+    setModelLoading(true);
+    addTranscript("Loading Whisper model...", "system");
+    const modelPath = "~/.nexus/models/whisper-base";
+    tauriInvoke<string>("voice_load_whisper_model", { modelPath })
+      .then((raw) => {
+        const data = JSON.parse(raw);
+        setEngineStatus({
+          engine: "candle-whisper",
+          whisperLoaded: true,
+          whisperModel: data.model_path ?? modelPath,
+        });
+        addTranscript(
+          `Whisper model loaded (${data.engine ?? "candle-whisper"})`,
+          "system",
+        );
+      })
+      .catch((err) => {
+        addTranscript(`Failed to load Whisper model: ${err}`, "system");
+      })
+      .finally(() => setModelLoading(false));
+  }, [addTranscript]);
 
   const handleClear = useCallback(() => {
     setTranscripts([
@@ -520,8 +581,46 @@ export default function VoiceAssistant() {
                 On startup
               </label>
             </div>
-            <div style={{ marginLeft: "auto", fontSize: "0.7rem", color: "var(--text-secondary, #64748b)" }}>
-              Transcription: stub (LLM gateway pending)
+            <div>
+              <div style={S.settingLabel}>Transcription Engine</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={S.indicator(engineStatus.engine === "candle-whisper")} />
+                <span style={{ fontSize: "0.8rem", color: "var(--text-primary, #e2e8f0)" }}>
+                  {engineStatus.engine === "candle-whisper"
+                    ? "Candle Whisper"
+                    : engineStatus.engine === "python-server"
+                      ? "Python Server"
+                      : "Stub"}
+                </span>
+              </div>
+            </div>
+            <div style={{ marginLeft: "auto" }}>
+              {!engineStatus.whisperLoaded && (
+                <button
+                  onClick={handleLoadWhisper}
+                  disabled={modelLoading}
+                  style={{
+                    background: modelLoading
+                      ? "var(--bg-tertiary, #0f172a)"
+                      : "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+                    border: "1px solid var(--border, #334155)",
+                    borderRadius: 6,
+                    padding: "0.4rem 0.8rem",
+                    color: modelLoading ? "var(--text-secondary, #64748b)" : "#fff",
+                    cursor: modelLoading ? "not-allowed" : "pointer",
+                    fontSize: "0.75rem",
+                    fontFamily: "var(--font-mono, monospace)",
+                    fontWeight: 600,
+                  }}
+                >
+                  {modelLoading ? "Loading..." : "Load Whisper Model"}
+                </button>
+              )}
+              {engineStatus.whisperLoaded && (
+                <span style={{ fontSize: "0.7rem", color: "#10b981" }}>
+                  Whisper Ready
+                </span>
+              )}
             </div>
           </div>
         </div>
