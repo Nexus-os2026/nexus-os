@@ -14,7 +14,6 @@ workflow:
 variables:
   CARGO_BUILD_JOBS: "2"
   CARGO_PROFILE_DEV_DEBUG: "1"
-  CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
 
 # ---------------------------------------------------------------------------
 # Security stage — only on main and MRs
@@ -27,13 +26,12 @@ cargo-audit:
   cache:
     key: "${CI_COMMIT_REF_SLUG}-audit"
     paths:
-      - .cargo/registry/
-      - .cargo/bin/
+      - /usr/local/cargo/registry/
+      - target/
     policy: pull-push
   before_script:
-    - test -f .cargo/bin/cargo-audit || cargo install cargo-audit
+    - cargo install cargo-audit --locked 2>/dev/null || true
   script:
-    - export PATH="${CI_PROJECT_DIR}/.cargo/bin:${PATH}"
     - cargo audit --config audit.toml
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
@@ -46,13 +44,12 @@ cargo-deny:
   cache:
     key: "${CI_COMMIT_REF_SLUG}-deny"
     paths:
-      - .cargo/registry/
-      - .cargo/bin/
+      - /usr/local/cargo/registry/
+      - target/
     policy: pull-push
   before_script:
-    - test -f .cargo/bin/cargo-deny || cargo install cargo-deny
+    - cargo install cargo-deny --locked 2>/dev/null || true
   script:
-    - export PATH="${CI_PROJECT_DIR}/.cargo/bin:${PATH}"
     - cargo deny check
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
@@ -72,8 +69,8 @@ cargo-deny:
   cache:
     key: "${CI_COMMIT_REF_SLUG}-rust"
     paths:
+      - /usr/local/cargo/registry/
       - target/
-      - .cargo/registry/
     policy: pull-push
   before_script:
     - apt-get update && apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev pkg-config
@@ -131,8 +128,8 @@ release-build:
   cache:
     key: "release-rust"
     paths:
+      - /usr/local/cargo/registry/
       - target/
-      - .cargo/registry/
     policy: pull-push
   before_script:
     - apt-get update && apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev pkg-config
