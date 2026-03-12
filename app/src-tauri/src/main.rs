@@ -19,6 +19,7 @@ use nexus_kernel::config::{
 use nexus_kernel::errors::AgentError;
 use nexus_kernel::hardware::{recommend_agent_configs, HardwareProfile};
 use nexus_kernel::manifest::AgentManifest;
+use nexus_kernel::neural_bridge::{ContextQuery, ContextSource, NeuralBridge, NeuralBridgeConfig};
 use nexus_kernel::permissions::{
     CapabilityRequest as KernelCapabilityRequest, PermissionCategory as KernelPermissionCategory,
     PermissionHistoryEntry as KernelPermissionHistoryEntry,
@@ -133,6 +134,7 @@ pub struct AppState {
     voice_process: Arc<Mutex<VoiceProcess>>,
     factory: Arc<Mutex<FactoryPipeline>>,
     computer_control: Arc<Mutex<ComputerControlEngine>>,
+    neural_bridge: Arc<Mutex<NeuralBridge>>,
 }
 
 impl Default for AppState {
@@ -176,6 +178,7 @@ impl AppState {
             voice_process: Arc::new(Mutex::new(VoiceProcess::default())),
             factory: Arc::new(Mutex::new(FactoryPipeline::new())),
             computer_control: Arc::new(Mutex::new(ComputerControlEngine::new())),
+            neural_bridge: Arc::new(Mutex::new(NeuralBridge::new(NeuralBridgeConfig::default()))),
         }
     }
 
@@ -4947,6 +4950,140 @@ pub fn computer_control_status(state: &AppState) -> Result<String, String> {
     .to_string())
 }
 
+// ---------------------------------------------------------------------------
+// Neural Bridge commands
+// ---------------------------------------------------------------------------
+
+pub fn neural_bridge_status(state: &AppState) -> Result<String, String> {
+    let bridge = state
+        .neural_bridge
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let stats = bridge.get_stats();
+    let config = bridge.config().clone();
+    Ok(json!({
+        "stats": stats,
+        "config": config,
+    })
+    .to_string())
+}
+
+pub fn neural_bridge_toggle(state: &AppState, enabled: bool) -> Result<String, String> {
+    let mut bridge = state
+        .neural_bridge
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    bridge.set_enabled(enabled);
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "neural-bridge",
+            "action": if enabled { "enable" } else { "disable" },
+        }),
+    );
+    Ok(json!({ "enabled": enabled }).to_string())
+}
+
+pub fn neural_bridge_ingest(
+    state: &AppState,
+    source_type: String,
+    content: String,
+    metadata: serde_json::Value,
+) -> Result<String, String> {
+    let source = match source_type.as_str() {
+        "Screen" => ContextSource::Screen {
+            app_name: metadata
+                .get("app_name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_string(),
+            window_title: metadata
+                .get("window_title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("untitled")
+                .to_string(),
+        },
+        "Audio" => ContextSource::Audio {
+            duration_secs: metadata
+                .get("duration_secs")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0) as f32,
+        },
+        "Clipboard" => ContextSource::Clipboard,
+        "Document" => ContextSource::Document {
+            path: metadata
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        },
+        "UserInput" => ContextSource::UserInput {
+            source: metadata
+                .get("source")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_string(),
+        },
+        other => return Err(format!("unknown source type: {other}")),
+    };
+
+    let mut bridge = state
+        .neural_bridge
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let entry = bridge.ingest(source, &content)?;
+    serde_json::to_string(&entry).map_err(|e| e.to_string())
+}
+
+pub fn neural_bridge_search(
+    state: &AppState,
+    query: String,
+    time_range: Option<(u64, u64)>,
+    source_filter: Option<Vec<String>>,
+    max_results: Option<usize>,
+) -> Result<String, String> {
+    let bridge = state
+        .neural_bridge
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let results = bridge.search(&ContextQuery {
+        query,
+        time_range,
+        source_filter,
+        max_results: max_results.unwrap_or(20),
+    });
+    serde_json::to_string(&results).map_err(|e| e.to_string())
+}
+
+pub fn neural_bridge_delete(state: &AppState, id: String) -> Result<String, String> {
+    let mut bridge = state
+        .neural_bridge
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let deleted = bridge.delete_entry(&id);
+    Ok(json!({ "deleted": deleted }).to_string())
+}
+
+pub fn neural_bridge_clear_old(state: &AppState, before_timestamp: u64) -> Result<String, String> {
+    let mut bridge = state
+        .neural_bridge
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let cleared_count = bridge.clear_before(before_timestamp);
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "neural-bridge",
+            "action": "clear_old",
+            "cleared_count": cleared_count,
+            "before_timestamp": before_timestamp,
+        }),
+    );
+    Ok(json!({ "cleared_count": cleared_count }).to_string())
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -6178,6 +6315,56 @@ mod runtime {
         super::computer_control_status(state.inner())
     }
 
+    #[tauri::command]
+    fn neural_bridge_status(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::neural_bridge_status(state.inner())
+    }
+
+    #[tauri::command]
+    fn neural_bridge_toggle(
+        state: tauri::State<'_, AppState>,
+        enabled: bool,
+    ) -> Result<String, String> {
+        super::neural_bridge_toggle(state.inner(), enabled)
+    }
+
+    #[tauri::command]
+    fn neural_bridge_ingest(
+        state: tauri::State<'_, AppState>,
+        source_type: String,
+        content: String,
+        metadata: serde_json::Value,
+    ) -> Result<String, String> {
+        super::neural_bridge_ingest(state.inner(), source_type, content, metadata)
+    }
+
+    #[tauri::command]
+    fn neural_bridge_search(
+        state: tauri::State<'_, AppState>,
+        query: String,
+        time_range: Option<(u64, u64)>,
+        source_filter: Option<Vec<String>>,
+        max_results: Option<usize>,
+    ) -> Result<String, String> {
+        super::neural_bridge_search(state.inner(), query, time_range, source_filter, max_results)
+    }
+
+    #[tauri::command]
+    fn neural_bridge_delete(
+        state: tauri::State<'_, AppState>,
+        id: String,
+    ) -> Result<String, String> {
+        super::neural_bridge_delete(state.inner(), id)
+    }
+
+    #[tauri::command]
+    fn neural_bridge_clear_old(
+        state: tauri::State<'_, AppState>,
+        before_timestamp: u64,
+    ) -> Result<String, String> {
+        super::neural_bridge_clear_old(state.inner(), before_timestamp)
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -6367,6 +6554,12 @@ mod runtime {
                 computer_control_get_history,
                 computer_control_toggle,
                 computer_control_status,
+                neural_bridge_status,
+                neural_bridge_toggle,
+                neural_bridge_ingest,
+                neural_bridge_search,
+                neural_bridge_delete,
+                neural_bridge_clear_old,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");

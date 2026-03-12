@@ -21,6 +21,7 @@ pub mod identity;
 pub mod kill_gates;
 pub mod lifecycle;
 pub mod manifest;
+pub mod neural_bridge;
 pub mod orchestration;
 pub mod permissions;
 pub mod policy_engine;
