@@ -5778,6 +5778,84 @@ pub fn economy_get_stats(state: &AppState) -> Result<String, String> {
 }
 
 // ---------------------------------------------------------------------------
+// Outcome contract commands
+// ---------------------------------------------------------------------------
+
+#[allow(clippy::too_many_arguments)]
+pub fn economy_create_contract(
+    state: &AppState,
+    agent_id: String,
+    client_id: String,
+    description: String,
+    criteria_json: String,
+    reward: f64,
+    penalty: f64,
+    deadline: Option<u64>,
+) -> Result<String, String> {
+    let criteria: nexus_kernel::economic_identity::SuccessCriteria =
+        serde_json::from_str(&criteria_json).map_err(|e| format!("invalid criteria JSON: {e}"))?;
+    let mut engine = state
+        .economic_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let contract = engine.create_contract(
+        &agent_id,
+        &client_id,
+        &description,
+        criteria,
+        reward,
+        penalty,
+        deadline,
+    )?;
+    serde_json::to_string(&contract).map_err(|e| e.to_string())
+}
+
+pub fn economy_complete_contract(
+    state: &AppState,
+    contract_id: String,
+    success: bool,
+    evidence: Option<String>,
+) -> Result<String, String> {
+    let mut engine = state
+        .economic_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let tx = engine.complete_contract(&contract_id, success, evidence)?;
+    serde_json::to_string(&tx).map_err(|e| e.to_string())
+}
+
+pub fn economy_list_contracts(state: &AppState, agent_id: String) -> Result<String, String> {
+    let engine = state
+        .economic_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let contracts = engine.list_contracts(&agent_id);
+    serde_json::to_string(&contracts).map_err(|e| e.to_string())
+}
+
+pub fn economy_dispute_contract(
+    state: &AppState,
+    contract_id: String,
+    reason: String,
+) -> Result<String, String> {
+    let mut engine = state
+        .economic_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    engine.dispute_contract(&contract_id, &reason)?;
+    Ok("disputed".to_string())
+}
+
+pub fn economy_agent_performance(state: &AppState, agent_id: String) -> Result<String, String> {
+    let engine = state
+        .economic_engine
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let revenue = engine.revenue_by_outcome(&agent_id);
+    serde_json::to_string(&revenue).map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
 // Agent Memory commands
 // ---------------------------------------------------------------------------
 
@@ -7745,6 +7823,65 @@ mod runtime {
     }
 
     #[tauri::command]
+    #[allow(clippy::too_many_arguments)]
+    fn economy_create_contract(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        client_id: String,
+        description: String,
+        criteria_json: String,
+        reward: f64,
+        penalty: f64,
+        deadline: Option<u64>,
+    ) -> Result<String, String> {
+        super::economy_create_contract(
+            state.inner(),
+            agent_id,
+            client_id,
+            description,
+            criteria_json,
+            reward,
+            penalty,
+            deadline,
+        )
+    }
+
+    #[tauri::command]
+    fn economy_complete_contract(
+        state: tauri::State<'_, AppState>,
+        contract_id: String,
+        success: bool,
+        evidence: Option<String>,
+    ) -> Result<String, String> {
+        super::economy_complete_contract(state.inner(), contract_id, success, evidence)
+    }
+
+    #[tauri::command]
+    fn economy_list_contracts(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<String, String> {
+        super::economy_list_contracts(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn economy_dispute_contract(
+        state: tauri::State<'_, AppState>,
+        contract_id: String,
+        reason: String,
+    ) -> Result<String, String> {
+        super::economy_dispute_contract(state.inner(), contract_id, reason)
+    }
+
+    #[tauri::command]
+    fn economy_agent_performance(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<String, String> {
+        super::economy_agent_performance(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
     fn agent_memory_remember(
         state: tauri::State<'_, AppState>,
         agent_id: String,
@@ -8166,6 +8303,11 @@ mod runtime {
                 economy_freeze_wallet,
                 economy_get_history,
                 economy_get_stats,
+                economy_create_contract,
+                economy_complete_contract,
+                economy_list_contracts,
+                economy_dispute_contract,
+                economy_agent_performance,
                 agent_memory_remember,
                 agent_memory_recall,
                 agent_memory_recall_by_type,

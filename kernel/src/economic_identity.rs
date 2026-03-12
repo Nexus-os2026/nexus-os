@@ -92,6 +92,69 @@ pub struct EconomyStats {
 }
 
 // ---------------------------------------------------------------------------
+// Outcome-based billing
+// ---------------------------------------------------------------------------
+
+/// An outcome-based contract: agent gets paid when a task succeeds.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutcomeContract {
+    pub id: String,
+    pub agent_id: String,
+    /// Who is paying for results.
+    pub client_id: String,
+    pub task_description: String,
+    pub success_criteria: SuccessCriteria,
+    /// Credits transferred to agent on success.
+    pub reward_amount: f64,
+    /// Credits deducted from agent on failure (0 = no penalty).
+    pub penalty_amount: f64,
+    /// Optional deadline (unix timestamp).
+    pub deadline: Option<u64>,
+    pub status: ContractStatus,
+    pub created_at: u64,
+    pub completed_at: Option<u64>,
+    /// Proof of completion or failure.
+    pub evidence: Option<String>,
+}
+
+/// What constitutes "success" for an outcome contract.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SuccessCriteria {
+    /// Simple completion flag.
+    TaskComplete,
+    /// Code must pass at least `min_pass_rate`% of tests.
+    TestsPassing { min_pass_rate: f64 },
+    /// Output quality must be above threshold.
+    QualityScore { min_score: f64 },
+    /// Must complete within time limit (seconds from contract activation).
+    DeliveryTime { max_seconds: u64 },
+    /// Custom criteria with a human-readable description and verifier identity.
+    Custom {
+        description: String,
+        verifier: String,
+    },
+}
+
+/// Lifecycle status of an outcome contract.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ContractStatus {
+    Proposed,
+    Active,
+    Completed { success: bool },
+    Disputed,
+    Expired,
+    Cancelled,
+}
+
+/// Revenue statistics for outcome-based work.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutcomeRevenue {
+    pub total_earned_by_outcome: f64,
+    pub total_contracts: usize,
+    pub success_rate: f64,
+}
+
+// ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -99,6 +162,7 @@ pub struct EconomyStats {
 pub struct EconomicEngine {
     config: EconomicConfig,
     wallets: HashMap<String, AgentWallet>,
+    contracts: Vec<OutcomeContract>,
 }
 
 impl EconomicEngine {
@@ -106,6 +170,7 @@ impl EconomicEngine {
         Self {
             config,
             wallets: HashMap::new(),
+            contracts: Vec::new(),
         }
     }
 
@@ -383,6 +448,279 @@ impl EconomicEngine {
     pub fn config(&self) -> &EconomicConfig {
         &self.config
     }
+
+    // ── Outcome-based billing ──────────────────────────────────────────
+
+    /// Create a new outcome contract. The client must have sufficient balance
+    /// to cover the reward (escrow check).
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_contract(
+        &mut self,
+        agent_id: &str,
+        client_id: &str,
+        description: &str,
+        criteria: SuccessCriteria,
+        reward_amount: f64,
+        penalty_amount: f64,
+        deadline: Option<u64>,
+    ) -> Result<OutcomeContract, String> {
+        if reward_amount <= 0.0 {
+            return Err("reward_amount must be positive".to_string());
+        }
+        if penalty_amount < 0.0 {
+            return Err("penalty_amount cannot be negative".to_string());
+        }
+        // Verify client wallet exists and has sufficient balance for escrow.
+        let client_wallet = self
+            .wallets
+            .get(client_id)
+            .ok_or_else(|| format!("client wallet not found: {client_id}"))?;
+        if client_wallet.balance < reward_amount {
+            return Err(format!(
+                "client has insufficient balance for escrow: have {}, need {reward_amount}",
+                client_wallet.balance
+            ));
+        }
+        // Verify agent wallet exists.
+        if !self.wallets.contains_key(agent_id) {
+            return Err(format!("agent wallet not found: {agent_id}"));
+        }
+
+        let contract = OutcomeContract {
+            id: Uuid::new_v4().to_string(),
+            agent_id: agent_id.to_string(),
+            client_id: client_id.to_string(),
+            task_description: description.to_string(),
+            success_criteria: criteria,
+            reward_amount,
+            penalty_amount,
+            deadline,
+            status: ContractStatus::Active,
+            created_at: now_secs(),
+            completed_at: None,
+            evidence: None,
+        };
+        self.contracts.push(contract.clone());
+        Ok(contract)
+    }
+
+    /// Complete a contract. On success: transfer reward from client to agent.
+    /// On failure with penalty > 0: deduct penalty from agent.
+    pub fn complete_contract(
+        &mut self,
+        contract_id: &str,
+        success: bool,
+        evidence: Option<String>,
+    ) -> Result<Transaction, String> {
+        // Find the contract and validate state.
+        let contract = self
+            .contracts
+            .iter()
+            .find(|c| c.id == contract_id)
+            .ok_or_else(|| format!("contract not found: {contract_id}"))?;
+
+        match &contract.status {
+            ContractStatus::Active => {}
+            ContractStatus::Expired => {
+                return Err("cannot complete an expired contract".to_string())
+            }
+            _ => {
+                return Err(format!(
+                    "contract is not active (status: {:?})",
+                    contract.status
+                ))
+            }
+        }
+
+        let agent_id = contract.agent_id.clone();
+        let client_id = contract.client_id.clone();
+        let reward = contract.reward_amount;
+        let penalty = contract.penalty_amount;
+
+        // Update contract status.
+        let contract = self
+            .contracts
+            .iter_mut()
+            .find(|c| c.id == contract_id)
+            .unwrap();
+        contract.status = ContractStatus::Completed { success };
+        contract.completed_at = Some(now_secs());
+        contract.evidence = evidence.clone();
+
+        let now = now_secs();
+
+        if success {
+            // Transfer reward from client to agent.
+            let client_wallet = self
+                .wallets
+                .get_mut(&client_id)
+                .ok_or("client wallet missing")?;
+            if client_wallet.balance < reward {
+                return Err(format!(
+                    "client has insufficient balance: have {}, need {reward}",
+                    client_wallet.balance
+                ));
+            }
+            client_wallet.balance -= reward;
+            client_wallet.total_spent += reward;
+
+            let agent_wallet = self
+                .wallets
+                .get_mut(&agent_id)
+                .ok_or("agent wallet missing")?;
+            agent_wallet.balance += reward;
+            agent_wallet.total_earned += reward;
+
+            let tx = Transaction {
+                id: Uuid::new_v4().to_string(),
+                wallet_id: agent_id,
+                amount: reward,
+                transaction_type: TransactionType::Reward,
+                description: format!("outcome contract {contract_id} — success"),
+                timestamp: now,
+                approved: true,
+                counterparty: Some(client_id),
+            };
+            self.wallets
+                .get_mut(&tx.wallet_id)
+                .unwrap()
+                .transaction_history
+                .push(tx.clone());
+            Ok(tx)
+        } else if penalty > 0.0 {
+            // Deduct penalty from agent.
+            let agent_wallet = self
+                .wallets
+                .get_mut(&agent_id)
+                .ok_or("agent wallet missing")?;
+            let actual_penalty = penalty.min(agent_wallet.balance);
+            agent_wallet.balance -= actual_penalty;
+            agent_wallet.total_spent += actual_penalty;
+
+            let tx = Transaction {
+                id: Uuid::new_v4().to_string(),
+                wallet_id: agent_id,
+                amount: actual_penalty,
+                transaction_type: TransactionType::ServicePurchase,
+                description: format!("outcome contract {contract_id} — failure penalty"),
+                timestamp: now,
+                approved: true,
+                counterparty: Some(client_id),
+            };
+            self.wallets
+                .get_mut(&tx.wallet_id)
+                .unwrap()
+                .transaction_history
+                .push(tx.clone());
+            Ok(tx)
+        } else {
+            // Failure with no penalty — record a zero-amount transaction.
+            let tx = Transaction {
+                id: Uuid::new_v4().to_string(),
+                wallet_id: agent_id.clone(),
+                amount: 0.0,
+                transaction_type: TransactionType::ServicePurchase,
+                description: format!("outcome contract {contract_id} — failure (no penalty)"),
+                timestamp: now,
+                approved: true,
+                counterparty: Some(client_id),
+            };
+            self.wallets
+                .get_mut(&agent_id)
+                .unwrap()
+                .transaction_history
+                .push(tx.clone());
+            Ok(tx)
+        }
+    }
+
+    /// Mark a contract as disputed.
+    pub fn dispute_contract(&mut self, contract_id: &str, reason: &str) -> Result<(), String> {
+        let contract = self
+            .contracts
+            .iter_mut()
+            .find(|c| c.id == contract_id)
+            .ok_or_else(|| format!("contract not found: {contract_id}"))?;
+        contract.status = ContractStatus::Disputed;
+        contract.evidence = Some(format!("DISPUTE: {reason}"));
+        Ok(())
+    }
+
+    /// List all contracts for an agent (as agent or client).
+    pub fn list_contracts(&self, agent_id: &str) -> Vec<&OutcomeContract> {
+        self.contracts
+            .iter()
+            .filter(|c| c.agent_id == agent_id || c.client_id == agent_id)
+            .collect()
+    }
+
+    /// Get a single contract by ID.
+    pub fn get_contract(&self, id: &str) -> Option<&OutcomeContract> {
+        self.contracts.iter().find(|c| c.id == id)
+    }
+
+    /// Expire all contracts past their deadline. Returns count of newly expired.
+    pub fn expire_overdue_contracts(&mut self) -> usize {
+        let now = now_secs();
+        let mut count = 0;
+        for contract in &mut self.contracts {
+            if let ContractStatus::Active = contract.status {
+                if let Some(deadline) = contract.deadline {
+                    if now > deadline {
+                        contract.status = ContractStatus::Expired;
+                        contract.completed_at = Some(now);
+                        count += 1;
+                    }
+                }
+            }
+        }
+        count
+    }
+
+    /// Success rate for an agent across all completed contracts.
+    pub fn agent_success_rate(&self, agent_id: &str) -> f64 {
+        let completed: Vec<&OutcomeContract> = self
+            .contracts
+            .iter()
+            .filter(|c| c.agent_id == agent_id)
+            .filter(|c| matches!(c.status, ContractStatus::Completed { .. }))
+            .collect();
+
+        if completed.is_empty() {
+            return 0.0;
+        }
+
+        let successes = completed
+            .iter()
+            .filter(|c| matches!(c.status, ContractStatus::Completed { success: true }))
+            .count();
+
+        successes as f64 / completed.len() as f64
+    }
+
+    /// Revenue statistics for an agent's outcome-based work.
+    pub fn revenue_by_outcome(&self, agent_id: &str) -> OutcomeRevenue {
+        let agent_contracts: Vec<&OutcomeContract> = self
+            .contracts
+            .iter()
+            .filter(|c| c.agent_id == agent_id)
+            .collect();
+
+        let total_contracts = agent_contracts.len();
+        let success_rate = self.agent_success_rate(agent_id);
+
+        let total_earned: f64 = agent_contracts
+            .iter()
+            .filter(|c| matches!(c.status, ContractStatus::Completed { success: true }))
+            .map(|c| c.reward_amount)
+            .sum();
+
+        OutcomeRevenue {
+            total_earned_by_outcome: total_earned,
+            total_contracts,
+            success_rate,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -614,6 +952,300 @@ mod tests {
         // Double-approve fails
         let result = engine.approve_transaction("agent-1", &tx_high.id);
         assert!(result.is_err());
+    }
+
+    // ── Outcome contract tests ──────────────────────────────────────────
+
+    fn engine_with_wallets() -> EconomicEngine {
+        let mut engine = EconomicEngine::new(EconomicConfig {
+            default_balance: 1000.0,
+            default_spending_limit: 500.0,
+            default_daily_limit: 1000.0,
+            require_approval_above: 1000.0,
+            ..EconomicConfig::default()
+        });
+        engine.create_wallet("agent-1");
+        engine.create_wallet("client-1");
+        engine
+    }
+
+    #[test]
+    fn test_create_contract() {
+        let mut engine = engine_with_wallets();
+        let contract = engine
+            .create_contract(
+                "agent-1",
+                "client-1",
+                "Build landing page",
+                SuccessCriteria::TaskComplete,
+                50.0,
+                0.0,
+                None,
+            )
+            .unwrap();
+        assert_eq!(contract.agent_id, "agent-1");
+        assert_eq!(contract.client_id, "client-1");
+        assert_eq!(contract.reward_amount, 50.0);
+        assert!(matches!(contract.status, ContractStatus::Active));
+        assert!(engine.get_contract(&contract.id).is_some());
+    }
+
+    #[test]
+    fn test_complete_contract_success() {
+        let mut engine = engine_with_wallets();
+        let contract = engine
+            .create_contract(
+                "agent-1",
+                "client-1",
+                "Write tests",
+                SuccessCriteria::TestsPassing { min_pass_rate: 0.9 },
+                100.0,
+                10.0,
+                None,
+            )
+            .unwrap();
+
+        let tx = engine
+            .complete_contract(&contract.id, true, Some("all tests pass".to_string()))
+            .unwrap();
+        assert_eq!(tx.amount, 100.0);
+        assert_eq!(tx.transaction_type, TransactionType::Reward);
+
+        // Agent earned 100, client paid 100.
+        assert_eq!(engine.get_wallet("agent-1").unwrap().balance, 1100.0);
+        assert_eq!(engine.get_wallet("client-1").unwrap().balance, 900.0);
+    }
+
+    #[test]
+    fn test_complete_contract_failure_with_penalty() {
+        let mut engine = engine_with_wallets();
+        let contract = engine
+            .create_contract(
+                "agent-1",
+                "client-1",
+                "Deploy service",
+                SuccessCriteria::TaskComplete,
+                100.0,
+                25.0,
+                None,
+            )
+            .unwrap();
+
+        let tx = engine
+            .complete_contract(&contract.id, false, Some("deployment failed".to_string()))
+            .unwrap();
+        assert_eq!(tx.amount, 25.0);
+        // Agent lost 25, client unchanged.
+        assert_eq!(engine.get_wallet("agent-1").unwrap().balance, 975.0);
+        assert_eq!(engine.get_wallet("client-1").unwrap().balance, 1000.0);
+    }
+
+    #[test]
+    fn test_complete_contract_failure_no_penalty() {
+        let mut engine = engine_with_wallets();
+        let contract = engine
+            .create_contract(
+                "agent-1",
+                "client-1",
+                "Try something",
+                SuccessCriteria::TaskComplete,
+                50.0,
+                0.0,
+                None,
+            )
+            .unwrap();
+
+        let tx = engine.complete_contract(&contract.id, false, None).unwrap();
+        assert_eq!(tx.amount, 0.0);
+        // No balance changes.
+        assert_eq!(engine.get_wallet("agent-1").unwrap().balance, 1000.0);
+        assert_eq!(engine.get_wallet("client-1").unwrap().balance, 1000.0);
+    }
+
+    #[test]
+    fn test_expire_overdue() {
+        let mut engine = engine_with_wallets();
+        // Create a contract with a deadline in the past.
+        let contract = engine
+            .create_contract(
+                "agent-1",
+                "client-1",
+                "Urgent task",
+                SuccessCriteria::DeliveryTime { max_seconds: 60 },
+                50.0,
+                0.0,
+                Some(1), // deadline = 1 second after epoch (already expired)
+            )
+            .unwrap();
+
+        let expired = engine.expire_overdue_contracts();
+        assert_eq!(expired, 1);
+
+        let c = engine.get_contract(&contract.id).unwrap();
+        assert!(matches!(c.status, ContractStatus::Expired));
+    }
+
+    #[test]
+    fn test_dispute_contract() {
+        let mut engine = engine_with_wallets();
+        let contract = engine
+            .create_contract(
+                "agent-1",
+                "client-1",
+                "Ambiguous task",
+                SuccessCriteria::Custom {
+                    description: "client satisfaction".to_string(),
+                    verifier: "human-reviewer".to_string(),
+                },
+                75.0,
+                0.0,
+                None,
+            )
+            .unwrap();
+
+        engine
+            .dispute_contract(&contract.id, "Quality not acceptable")
+            .unwrap();
+
+        let c = engine.get_contract(&contract.id).unwrap();
+        assert!(matches!(c.status, ContractStatus::Disputed));
+        assert!(c.evidence.as_ref().unwrap().contains("DISPUTE"));
+    }
+
+    #[test]
+    fn test_success_rate_calculation() {
+        let mut engine = engine_with_wallets();
+        // 3 contracts: 2 succeed, 1 fails → 66.7% rate.
+        for i in 0..3 {
+            let c = engine
+                .create_contract(
+                    "agent-1",
+                    "client-1",
+                    &format!("task-{i}"),
+                    SuccessCriteria::TaskComplete,
+                    10.0,
+                    0.0,
+                    None,
+                )
+                .unwrap();
+            engine.complete_contract(&c.id, i < 2, None).unwrap();
+        }
+
+        let rate = engine.agent_success_rate("agent-1");
+        assert!((rate - 2.0 / 3.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_revenue_by_outcome() {
+        let mut engine = engine_with_wallets();
+        for i in 0..4 {
+            let c = engine
+                .create_contract(
+                    "agent-1",
+                    "client-1",
+                    &format!("task-{i}"),
+                    SuccessCriteria::TaskComplete,
+                    25.0,
+                    0.0,
+                    None,
+                )
+                .unwrap();
+            engine.complete_contract(&c.id, i < 3, None).unwrap();
+        }
+
+        let rev = engine.revenue_by_outcome("agent-1");
+        assert_eq!(rev.total_contracts, 4);
+        assert_eq!(rev.total_earned_by_outcome, 75.0); // 3 × 25
+        assert!((rev.success_rate - 0.75).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_contract_requires_sufficient_client_balance() {
+        let mut engine = EconomicEngine::new(EconomicConfig {
+            default_balance: 10.0,
+            ..EconomicConfig::default()
+        });
+        engine.create_wallet("agent-1");
+        engine.create_wallet("client-1"); // balance = 10
+
+        let result = engine.create_contract(
+            "agent-1",
+            "client-1",
+            "Expensive task",
+            SuccessCriteria::TaskComplete,
+            999.0,
+            0.0,
+            None,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("insufficient balance"));
+    }
+
+    #[test]
+    fn test_list_contracts_by_agent() {
+        let mut engine = engine_with_wallets();
+        engine.create_wallet("agent-2");
+
+        engine
+            .create_contract(
+                "agent-1",
+                "client-1",
+                "task A",
+                SuccessCriteria::TaskComplete,
+                10.0,
+                0.0,
+                None,
+            )
+            .unwrap();
+        engine
+            .create_contract(
+                "agent-2",
+                "client-1",
+                "task B",
+                SuccessCriteria::TaskComplete,
+                10.0,
+                0.0,
+                None,
+            )
+            .unwrap();
+        engine
+            .create_contract(
+                "agent-1",
+                "client-1",
+                "task C",
+                SuccessCriteria::TaskComplete,
+                10.0,
+                0.0,
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(engine.list_contracts("agent-1").len(), 2);
+        assert_eq!(engine.list_contracts("agent-2").len(), 1);
+        // client-1 appears in all 3 contracts.
+        assert_eq!(engine.list_contracts("client-1").len(), 3);
+    }
+
+    #[test]
+    fn test_cannot_complete_expired_contract() {
+        let mut engine = engine_with_wallets();
+        let contract = engine
+            .create_contract(
+                "agent-1",
+                "client-1",
+                "Expired task",
+                SuccessCriteria::TaskComplete,
+                50.0,
+                0.0,
+                Some(1), // already expired
+            )
+            .unwrap();
+
+        engine.expire_overdue_contracts();
+
+        let result = engine.complete_contract(&contract.id, true, None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("expired"));
     }
 
     #[test]
