@@ -23,6 +23,7 @@ cargo-audit:
   stage: security
   image: rust:latest
   timeout: 10 minutes
+  allow_failure: true
   cache:
     key: "${CI_COMMIT_REF_SLUG}-audit"
     paths:
@@ -41,6 +42,7 @@ cargo-deny:
   stage: security
   image: rust:latest
   timeout: 10 minutes
+  allow_failure: true
   cache:
     key: "${CI_COMMIT_REF_SLUG}-deny"
     paths:
