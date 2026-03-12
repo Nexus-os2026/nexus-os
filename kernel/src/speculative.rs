@@ -411,6 +411,14 @@ impl SpeculativeEngine {
                 impact.fuel_cost += 25;
                 impact.network_calls += 1;
             }
+            GovernedOperation::TimeMachineUndo => {
+                changes.push(ActionPreview::DataModification(DataModification {
+                    resource: "time_machine".to_string(),
+                    description: "Undo previous checkpoint via Time Machine".to_string(),
+                }));
+                impact.fuel_cost += 5;
+                impact.file_operations += 1;
+            }
         }
 
         // Check if fuel is sufficient
@@ -439,6 +447,7 @@ impl SpeculativeEngine {
             GovernedOperation::SelfMutationApply => "agent self-mutation",
             GovernedOperation::MultiAgentOrchestrate => "multi-agent orchestration",
             GovernedOperation::DistributedEnable => "distributed operation enablement",
+            GovernedOperation::TimeMachineUndo => "time machine undo",
         };
         format!(
             "Simulated {op_desc}: {risk} risk, estimated {fuel} fuel, {files} file ops, {net} network calls, {llm} LLM calls",

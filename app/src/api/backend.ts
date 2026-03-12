@@ -624,3 +624,33 @@ export function deleteLocalModel(modelId: string): Promise<string> {
 export function getSystemSpecs(): Promise<string> {
   return invokeDesktop<string>("get_system_specs");
 }
+
+// ── Time Machine API ──
+
+export function timeMachineListCheckpoints(): Promise<string> {
+  return invokeDesktop<string>("time_machine_list_checkpoints");
+}
+
+export function timeMachineGetCheckpoint(id: string): Promise<string> {
+  return invokeDesktop<string>("time_machine_get_checkpoint", { id });
+}
+
+export function timeMachineCreateCheckpoint(label: string): Promise<string> {
+  return invokeDesktop<string>("time_machine_create_checkpoint", { label });
+}
+
+export function timeMachineUndo(): Promise<string> {
+  return invokeDesktop<string>("time_machine_undo");
+}
+
+export function timeMachineUndoCheckpoint(id: string): Promise<string> {
+  return invokeDesktop<string>("time_machine_undo_checkpoint", { id });
+}
+
+export function timeMachineRedo(): Promise<string> {
+  return invokeDesktop<string>("time_machine_redo");
+}
+
+export function timeMachineGetDiff(id: string): Promise<string> {
+  return invokeDesktop<string>("time_machine_get_diff", { id });
+}

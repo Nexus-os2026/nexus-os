@@ -38,3 +38,4 @@ pub mod resource_limiter;
 pub mod safety_supervisor;
 pub mod speculative;
 pub mod supervisor;
+pub mod time_machine;

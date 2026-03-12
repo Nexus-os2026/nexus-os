@@ -47,6 +47,7 @@ pub enum GovernedOperation {
     SelfMutationApply,
     MultiAgentOrchestrate,
     DistributedEnable,
+    TimeMachineUndo,
 }
 
 impl GovernedOperation {
@@ -58,6 +59,7 @@ impl GovernedOperation {
             GovernedOperation::SelfMutationApply => "self_mutation_apply",
             GovernedOperation::MultiAgentOrchestrate => "multi_agent_orchestrate",
             GovernedOperation::DistributedEnable => "distributed_enable",
+            GovernedOperation::TimeMachineUndo => "time_machine_undo",
         }
     }
 
@@ -70,6 +72,7 @@ impl GovernedOperation {
             GovernedOperation::SelfMutationApply => "Self-mutation apply",
             GovernedOperation::MultiAgentOrchestrate => "Multi-agent orchestration",
             GovernedOperation::DistributedEnable => "Distributed enable",
+            GovernedOperation::TimeMachineUndo => "Time Machine undo",
         }
     }
 
@@ -81,6 +84,7 @@ impl GovernedOperation {
             "self_mutation_apply" => Some(GovernedOperation::SelfMutationApply),
             "multi_agent_orchestrate" => Some(GovernedOperation::MultiAgentOrchestrate),
             "distributed_enable" => Some(GovernedOperation::DistributedEnable),
+            "time_machine_undo" => Some(GovernedOperation::TimeMachineUndo),
             _ => None,
         }
     }
@@ -148,6 +152,13 @@ impl Default for ConsentPolicyEngine {
             GovernedOperation::DistributedEnable,
             OperationConsentPolicy {
                 required_tier: HitlTier::Tier3,
+                allowed_approvers: Vec::new(),
+            },
+        );
+        policies.insert(
+            GovernedOperation::TimeMachineUndo,
+            OperationConsentPolicy {
+                required_tier: HitlTier::Tier1,
                 allowed_approvers: Vec::new(),
             },
         );

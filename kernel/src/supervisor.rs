@@ -14,6 +14,7 @@ use crate::permissions::{
 use crate::policy_engine::PolicyEngine;
 use crate::safety_supervisor::{KpiKind, SafetyAction, SafetySupervisor};
 use crate::speculative::{SimulationResult, SpeculativeEngine};
+use crate::time_machine::TimeMachine;
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -48,6 +49,7 @@ pub struct Supervisor {
     speculative_engine: SpeculativeEngine,
     permission_manager: PermissionManager,
     policy_engine: PolicyEngine,
+    time_machine: TimeMachine,
 }
 
 impl Default for Supervisor {
@@ -66,6 +68,7 @@ impl Supervisor {
             speculative_engine: SpeculativeEngine::new(),
             permission_manager: PermissionManager::new(),
             policy_engine: PolicyEngine::default(),
+            time_machine: TimeMachine::default(),
         }
     }
 
@@ -81,6 +84,7 @@ impl Supervisor {
             speculative_engine: SpeculativeEngine::new(),
             permission_manager: PermissionManager::new(),
             policy_engine: engine,
+            time_machine: TimeMachine::default(),
         }
     }
 
@@ -97,6 +101,16 @@ impl Supervisor {
     /// Access the policy engine.
     pub fn policy_engine(&self) -> &PolicyEngine {
         &self.policy_engine
+    }
+
+    /// Access the time machine.
+    pub fn time_machine(&self) -> &TimeMachine {
+        &self.time_machine
+    }
+
+    /// Mutable access to the time machine.
+    pub fn time_machine_mut(&mut self) -> &mut TimeMachine {
+        &mut self.time_machine
     }
 
     pub fn start_agent(&mut self, manifest: AgentManifest) -> Result<AgentId, AgentError> {

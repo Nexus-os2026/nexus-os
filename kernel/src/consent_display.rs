@@ -53,7 +53,9 @@ pub fn render_approval(request: &ApprovalRequest) -> ApprovalDisplay {
         GovernedOperation::DistributedEnable => {
             warnings.push("This operation will access the network".to_string());
         }
-        GovernedOperation::ToolCall | GovernedOperation::MultiAgentOrchestrate => {}
+        GovernedOperation::ToolCall
+        | GovernedOperation::MultiAgentOrchestrate
+        | GovernedOperation::TimeMachineUndo => {}
     }
     if request.risk_level == RiskLevel::Critical {
         warnings.push("This is a critical operation requiring careful review".to_string());

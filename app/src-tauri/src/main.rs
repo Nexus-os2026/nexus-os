@@ -3934,6 +3934,290 @@ pub fn get_system_specs() -> Result<String, String> {
     .unwrap())
 }
 
+// ---------------------------------------------------------------------------
+// Time Machine commands
+// ---------------------------------------------------------------------------
+
+pub fn time_machine_list_checkpoints(state: &AppState) -> Result<String, String> {
+    let supervisor = match state.supervisor.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    let checkpoints = supervisor.time_machine().list_checkpoints();
+    let summaries: Vec<serde_json::Value> = checkpoints
+        .iter()
+        .map(|cp| {
+            json!({
+                "id": cp.id,
+                "label": cp.label,
+                "timestamp": cp.timestamp,
+                "agent_id": cp.agent_id,
+                "change_count": cp.changes.len(),
+                "undone": cp.undone,
+            })
+        })
+        .collect();
+    serde_json::to_string(&summaries).map_err(|e| e.to_string())
+}
+
+pub fn time_machine_get_checkpoint(state: &AppState, id: String) -> Result<String, String> {
+    let supervisor = match state.supervisor.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    let cp = supervisor
+        .time_machine()
+        .get_checkpoint(&id)
+        .ok_or_else(|| format!("checkpoint not found: {id}"))?;
+    serde_json::to_string(cp).map_err(|e| e.to_string())
+}
+
+pub fn time_machine_create_checkpoint(state: &AppState, label: String) -> Result<String, String> {
+    let mut supervisor = match state.supervisor.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    let builder = supervisor.time_machine().begin_checkpoint(&label, None);
+    let cp = builder.build();
+    let id = supervisor
+        .time_machine_mut()
+        .commit_checkpoint(cp)
+        .map_err(|e| e.to_string())?;
+
+    state.log_event(
+        uuid::Uuid::nil(),
+        nexus_kernel::audit::EventType::StateChange,
+        json!({ "action": "time_machine.checkpoint_created", "checkpoint_id": id, "label": label }),
+    );
+    Ok(id)
+}
+
+pub fn time_machine_undo(state: &AppState) -> Result<String, String> {
+    let mut supervisor = match state.supervisor.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    let (cp, non_file_actions) = supervisor
+        .time_machine_mut()
+        .undo()
+        .map_err(|e| e.to_string())?;
+
+    let files_restored: Vec<String> = cp
+        .changes
+        .iter()
+        .filter_map(|c| match c {
+            nexus_kernel::time_machine::ChangeEntry::FileWrite { path, .. }
+            | nexus_kernel::time_machine::ChangeEntry::FileCreate { path, .. }
+            | nexus_kernel::time_machine::ChangeEntry::FileDelete { path, .. } => {
+                Some(path.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    let agents_affected: Vec<String> = non_file_actions
+        .iter()
+        .filter_map(|a| match a {
+            nexus_kernel::time_machine::UndoAction::RestoreAgentState { agent_id, .. } => {
+                Some(agent_id.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    let actions_applied = files_restored.len() + non_file_actions.len();
+
+    drop(supervisor);
+
+    state.log_event(
+        uuid::Uuid::nil(),
+        nexus_kernel::audit::EventType::StateChange,
+        json!({
+            "action": "time_machine.undo",
+            "checkpoint_id": cp.id,
+            "label": cp.label,
+            "actions_applied": actions_applied,
+        }),
+    );
+
+    serde_json::to_string(&json!({
+        "checkpoint_id": cp.id,
+        "label": cp.label,
+        "actions_applied": actions_applied,
+        "files_restored": files_restored,
+        "agents_affected": agents_affected,
+    }))
+    .map_err(|e| e.to_string())
+}
+
+pub fn time_machine_undo_checkpoint(state: &AppState, id: String) -> Result<String, String> {
+    let mut supervisor = match state.supervisor.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    let (cp, non_file_actions) = supervisor
+        .time_machine_mut()
+        .undo_checkpoint(&id)
+        .map_err(|e| e.to_string())?;
+
+    let files_restored: Vec<String> = cp
+        .changes
+        .iter()
+        .filter_map(|c| match c {
+            nexus_kernel::time_machine::ChangeEntry::FileWrite { path, .. }
+            | nexus_kernel::time_machine::ChangeEntry::FileCreate { path, .. }
+            | nexus_kernel::time_machine::ChangeEntry::FileDelete { path, .. } => {
+                Some(path.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    let agents_affected: Vec<String> = non_file_actions
+        .iter()
+        .filter_map(|a| match a {
+            nexus_kernel::time_machine::UndoAction::RestoreAgentState { agent_id, .. } => {
+                Some(agent_id.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    let actions_applied = files_restored.len() + non_file_actions.len();
+
+    drop(supervisor);
+
+    state.log_event(
+        uuid::Uuid::nil(),
+        nexus_kernel::audit::EventType::StateChange,
+        json!({
+            "action": "time_machine.undo_checkpoint",
+            "checkpoint_id": cp.id,
+            "label": cp.label,
+            "actions_applied": actions_applied,
+        }),
+    );
+
+    serde_json::to_string(&json!({
+        "checkpoint_id": cp.id,
+        "label": cp.label,
+        "actions_applied": actions_applied,
+        "files_restored": files_restored,
+        "agents_affected": agents_affected,
+    }))
+    .map_err(|e| e.to_string())
+}
+
+pub fn time_machine_redo(state: &AppState) -> Result<String, String> {
+    let mut supervisor = match state.supervisor.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    let (cp, non_file_actions) = supervisor
+        .time_machine_mut()
+        .redo()
+        .map_err(|e| e.to_string())?;
+
+    let files_restored: Vec<String> = cp
+        .changes
+        .iter()
+        .filter_map(|c| match c {
+            nexus_kernel::time_machine::ChangeEntry::FileWrite { path, .. }
+            | nexus_kernel::time_machine::ChangeEntry::FileCreate { path, .. }
+            | nexus_kernel::time_machine::ChangeEntry::FileDelete { path, .. } => {
+                Some(path.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    let agents_affected: Vec<String> = non_file_actions
+        .iter()
+        .filter_map(|a| match a {
+            nexus_kernel::time_machine::UndoAction::RestoreAgentState { agent_id, .. } => {
+                Some(agent_id.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    let actions_applied = files_restored.len() + non_file_actions.len();
+
+    drop(supervisor);
+
+    state.log_event(
+        uuid::Uuid::nil(),
+        nexus_kernel::audit::EventType::StateChange,
+        json!({
+            "action": "time_machine.redo",
+            "checkpoint_id": cp.id,
+            "label": cp.label,
+            "actions_applied": actions_applied,
+        }),
+    );
+
+    serde_json::to_string(&json!({
+        "checkpoint_id": cp.id,
+        "label": cp.label,
+        "actions_applied": actions_applied,
+        "files_restored": files_restored,
+        "agents_affected": agents_affected,
+    }))
+    .map_err(|e| e.to_string())
+}
+
+pub fn time_machine_get_diff(state: &AppState, id: String) -> Result<String, String> {
+    let supervisor = match state.supervisor.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    let cp = supervisor
+        .time_machine()
+        .get_checkpoint(&id)
+        .ok_or_else(|| format!("checkpoint not found: {id}"))?;
+
+    let diffs: Vec<serde_json::Value> = cp
+        .changes
+        .iter()
+        .map(|entry| match entry {
+            nexus_kernel::time_machine::ChangeEntry::FileWrite {
+                path,
+                before,
+                after,
+            } => json!({
+                "path": path,
+                "change_type": "modify",
+                "size_before": before.as_ref().map(|b| b.len()).unwrap_or(0),
+                "size_after": after.len(),
+            }),
+            nexus_kernel::time_machine::ChangeEntry::FileCreate { path, after } => json!({
+                "path": path,
+                "change_type": "create",
+                "size_before": 0,
+                "size_after": after.len(),
+            }),
+            nexus_kernel::time_machine::ChangeEntry::FileDelete { path, before } => json!({
+                "path": path,
+                "change_type": "delete",
+                "size_before": before.len(),
+                "size_after": 0,
+            }),
+            nexus_kernel::time_machine::ChangeEntry::AgentStateChange {
+                agent_id,
+                field,
+                before,
+                after,
+            } => json!({
+                "path": format!("agent://{agent_id}/{field}"),
+                "change_type": "modify",
+                "before_value": before,
+                "after_value": after,
+            }),
+            nexus_kernel::time_machine::ChangeEntry::ConfigChange { key, before, after } => json!({
+                "path": format!("config://{key}"),
+                "change_type": "modify",
+                "before_value": before,
+                "after_value": after,
+            }),
+        })
+        .collect();
+    serde_json::to_string(&diffs).map_err(|e| e.to_string())
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -4775,6 +5059,53 @@ mod runtime {
         super::get_system_specs()
     }
 
+    #[tauri::command]
+    fn time_machine_list_checkpoints(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::time_machine_list_checkpoints(state.inner())
+    }
+
+    #[tauri::command]
+    fn time_machine_get_checkpoint(
+        state: tauri::State<'_, AppState>,
+        id: String,
+    ) -> Result<String, String> {
+        super::time_machine_get_checkpoint(state.inner(), id)
+    }
+
+    #[tauri::command]
+    fn time_machine_create_checkpoint(
+        state: tauri::State<'_, AppState>,
+        label: String,
+    ) -> Result<String, String> {
+        super::time_machine_create_checkpoint(state.inner(), label)
+    }
+
+    #[tauri::command]
+    fn time_machine_undo(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::time_machine_undo(state.inner())
+    }
+
+    #[tauri::command]
+    fn time_machine_undo_checkpoint(
+        state: tauri::State<'_, AppState>,
+        id: String,
+    ) -> Result<String, String> {
+        super::time_machine_undo_checkpoint(state.inner(), id)
+    }
+
+    #[tauri::command]
+    fn time_machine_redo(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::time_machine_redo(state.inner())
+    }
+
+    #[tauri::command]
+    fn time_machine_get_diff(
+        state: tauri::State<'_, AppState>,
+        id: String,
+    ) -> Result<String, String> {
+        super::time_machine_get_diff(state.inner(), id)
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -4917,6 +5248,13 @@ mod runtime {
                 list_local_models,
                 delete_local_model,
                 get_system_specs,
+                time_machine_list_checkpoints,
+                time_machine_get_checkpoint,
+                time_machine_create_checkpoint,
+                time_machine_undo,
+                time_machine_undo_checkpoint,
+                time_machine_redo,
+                time_machine_get_diff,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
