@@ -3820,6 +3820,7 @@ dependencies = [
 name = "nexus-desktop-backend"
 version = "7.0.0"
 dependencies = [
+ "nexus-adaptation",
  "nexus-connectors-core",
  "nexus-connectors-llm",
  "nexus-connectors-messaging",
@@ -3827,6 +3828,7 @@ dependencies = [
  "nexus-connectors-web",
  "nexus-kernel",
  "nexus-marketplace",
+ "nexus-protocols",
  "serde",
  "serde_json",
  "sysinfo",

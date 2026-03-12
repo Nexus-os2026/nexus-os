@@ -9,6 +9,7 @@
 //! fuel accounting, audit trail) before executing agent operations.
 
 pub mod http_gateway;
+pub mod mcp_client;
 pub mod metrics;
 
 // Re-export core types from kernel for convenience.

@@ -2,6 +2,7 @@
 
 pub mod adapter;
 pub mod authority;
+pub mod evolution;
 pub mod preferences;
 pub mod suggestions;
 pub mod tracker;

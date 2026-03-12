@@ -1,9 +1,11 @@
+use nexus_adaptation::evolution::{EvolutionConfig, EvolutionEngine, MutationType, Strategy};
 use nexus_connectors_llm::chunking::SupportedFormat;
 use nexus_connectors_llm::gateway::{
     select_provider, AgentRuntimeContext, GovernedLlmGateway, ProviderSelectionConfig,
 };
 use nexus_connectors_llm::model_hub::{self, DownloadProgress, DownloadStatus};
 use nexus_connectors_llm::model_registry::ModelRegistry;
+use nexus_connectors_llm::nexus_link::NexusLink;
 use nexus_connectors_llm::providers::{MockProvider, OllamaProvider};
 use nexus_connectors_llm::rag::{RagConfig, RagPipeline};
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
@@ -20,6 +22,7 @@ use nexus_kernel::permissions::{
 };
 use nexus_kernel::redaction::RedactionEngine;
 use nexus_kernel::supervisor::{AgentId, Supervisor};
+use nexus_protocols::mcp_client::{McpAuth, McpHostManager, McpServerConfig, McpTransport};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -113,6 +116,9 @@ pub struct AppState {
     rag: Arc<Mutex<RagPipeline>>,
     redaction_engine: Arc<Mutex<RedactionEngine>>,
     model_registry: Arc<Mutex<ModelRegistry>>,
+    nexus_link: Arc<Mutex<NexusLink>>,
+    evolution: Arc<Mutex<EvolutionEngine>>,
+    mcp_host: Arc<Mutex<McpHostManager>>,
 }
 
 impl Default for AppState {
@@ -142,6 +148,16 @@ impl AppState {
             rag: Arc::new(Mutex::new(RagPipeline::new(RagConfig::default()))),
             redaction_engine: Arc::new(Mutex::new(RedactionEngine::default())),
             model_registry: Arc::new(Mutex::new(ModelRegistry::default_dir())),
+            nexus_link: Arc::new(Mutex::new({
+                let hostname = std::env::var("HOSTNAME")
+                    .or_else(|_| std::env::var("COMPUTERNAME"))
+                    .unwrap_or_else(|_| "nexus-device".to_string());
+                let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+                let models_dir = std::path::Path::new(&home).join(".nexus").join("models");
+                NexusLink::new(&hostname, &models_dir.display().to_string())
+            })),
+            evolution: Arc::new(Mutex::new(EvolutionEngine::new(EvolutionConfig::default()))),
+            mcp_host: Arc::new(Mutex::new(McpHostManager::new())),
         }
     }
 
@@ -4218,6 +4234,244 @@ pub fn time_machine_get_diff(state: &AppState, id: String) -> Result<String, Str
     serde_json::to_string(&diffs).map_err(|e| e.to_string())
 }
 
+// ── Nexus Link (peer-to-peer model sharing) ─────────────────────────────
+
+pub fn nexus_link_status(state: &AppState) -> Result<String, String> {
+    let link = state.nexus_link.lock().unwrap_or_else(|p| p.into_inner());
+    let local_model_count = link.get_local_models().unwrap_or_default().len();
+    let result = json!({
+        "device_id": link.device_id(),
+        "device_name": link.device_name(),
+        "sharing_enabled": link.sharing_enabled(),
+        "peer_count": link.list_peers().len(),
+        "local_model_count": local_model_count,
+    });
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn nexus_link_toggle_sharing(state: &AppState, enabled: bool) -> Result<String, String> {
+    let mut link = state.nexus_link.lock().unwrap_or_else(|p| p.into_inner());
+    if enabled {
+        link.enable_sharing();
+    } else {
+        link.disable_sharing();
+    }
+    let result = json!({ "sharing_enabled": link.sharing_enabled() });
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn nexus_link_add_peer(
+    state: &AppState,
+    address: String,
+    name: String,
+) -> Result<String, String> {
+    let mut link = state.nexus_link.lock().unwrap_or_else(|p| p.into_inner());
+    let peer = link.add_peer(&address, &name);
+    serde_json::to_string(&peer).map_err(|e| e.to_string())
+}
+
+pub fn nexus_link_remove_peer(state: &AppState, device_id: String) -> Result<String, String> {
+    let mut link = state.nexus_link.lock().unwrap_or_else(|p| p.into_inner());
+    let removed = link.remove_peer(&device_id);
+    let result = json!({ "removed": removed });
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn nexus_link_list_peers(state: &AppState) -> Result<String, String> {
+    let link = state.nexus_link.lock().unwrap_or_else(|p| p.into_inner());
+    serde_json::to_string(link.list_peers()).map_err(|e| e.to_string())
+}
+
+// ── Evolution engine (self-improving agent strategies) ───────────────────
+
+pub fn evolution_get_status(state: &AppState) -> Result<String, String> {
+    let engine = state.evolution.lock().unwrap_or_else(|p| p.into_inner());
+    let result = json!({
+        "enabled": engine.config().enabled,
+        "total_strategies": engine.total_strategies(),
+        "active_agents": engine.active_agent_count(),
+    });
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn evolution_register_strategy(
+    state: &AppState,
+    agent_id: String,
+    name: String,
+    parameters: String,
+) -> Result<String, String> {
+    let params: serde_json::Value =
+        serde_json::from_str(&parameters).map_err(|e| format!("Invalid parameters JSON: {e}"))?;
+    let strategy = Strategy {
+        id: uuid::Uuid::new_v4().to_string(),
+        version: 1,
+        agent_id,
+        name,
+        parameters: params,
+        score: 0.0,
+        created_at: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        parent_id: None,
+    };
+    let mut engine = state.evolution.lock().unwrap_or_else(|p| p.into_inner());
+    engine.register_strategy(strategy.clone())?;
+    serde_json::to_string(&strategy).map_err(|e| e.to_string())
+}
+
+pub fn evolution_evolve_once(state: &AppState, agent_id: String) -> Result<String, String> {
+    let mut engine = state.evolution.lock().unwrap_or_else(|p| p.into_inner());
+    // Simple scoring: count non-null fields in parameters
+    let result = engine.evolve_once(&agent_id, MutationType::ParameterTweak, |s| {
+        let param_count = s.parameters.as_object().map(|o| o.len()).unwrap_or(0);
+        (param_count as f64 * 0.1).min(1.0)
+    })?;
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn evolution_get_history(state: &AppState, agent_id: String) -> Result<String, String> {
+    let engine = state.evolution.lock().unwrap_or_else(|p| p.into_inner());
+    match engine.get_history(&agent_id) {
+        Some(history) => serde_json::to_string(history).map_err(|e| e.to_string()),
+        None => Ok(json!({
+            "agent_id": agent_id,
+            "total_generations": 0,
+            "total_improvements": 0,
+            "total_regressions": 0,
+            "current_best_score": 0.0,
+            "results": []
+        })
+        .to_string()),
+    }
+}
+
+pub fn evolution_rollback(state: &AppState, agent_id: String) -> Result<String, String> {
+    let mut engine = state.evolution.lock().unwrap_or_else(|p| p.into_inner());
+    let strategy = engine.rollback(&agent_id)?;
+    serde_json::to_string(&strategy).map_err(|e| e.to_string())
+}
+
+pub fn evolution_get_active_strategy(state: &AppState, agent_id: String) -> Result<String, String> {
+    let engine = state.evolution.lock().unwrap_or_else(|p| p.into_inner());
+    match engine.get_active_strategy(&agent_id) {
+        Some(strategy) => serde_json::to_string(strategy).map_err(|e| e.to_string()),
+        None => Err(format!("No active strategy for agent {agent_id}")),
+    }
+}
+
+// ── MCP Host Mode (external MCP tool consumption) ───────────────────────
+
+pub fn mcp_host_list_servers(state: &AppState) -> Result<String, String> {
+    let manager = state.mcp_host.lock().unwrap_or_else(|p| p.into_inner());
+    let servers: Vec<serde_json::Value> = manager
+        .list_servers()
+        .iter()
+        .map(|s| {
+            let connected = manager.is_server_connected(&s.id);
+            json!({
+                "id": s.id,
+                "name": s.name,
+                "url": s.url,
+                "transport": s.transport,
+                "enabled": s.enabled,
+                "connected": connected,
+                "tool_count": if connected {
+                    manager.list_all_tools().iter().filter(|t| t.server_id == s.id).count()
+                } else {
+                    0
+                },
+            })
+        })
+        .collect();
+    serde_json::to_string(&servers).map_err(|e| e.to_string())
+}
+
+pub fn mcp_host_add_server(
+    state: &AppState,
+    name: String,
+    url: String,
+    transport: String,
+    auth_token: Option<String>,
+) -> Result<String, String> {
+    let transport_enum = match transport.as_str() {
+        "http" | "Http" => McpTransport::Http,
+        "sse" | "Sse" => McpTransport::Sse,
+        "stdio" | "Stdio" => McpTransport::Stdio,
+        _ => return Err(format!("Unknown transport: {transport}")),
+    };
+    let auth = auth_token.map(McpAuth::Bearer);
+    let config = McpServerConfig {
+        id: Uuid::new_v4().to_string(),
+        name,
+        url,
+        transport: transport_enum,
+        auth,
+        enabled: true,
+    };
+    let mut manager = state.mcp_host.lock().unwrap_or_else(|p| p.into_inner());
+    let result = serde_json::to_string(&config).map_err(|e| e.to_string())?;
+    manager.add_server(config)?;
+    Ok(result)
+}
+
+pub fn mcp_host_remove_server(state: &AppState, server_id: String) -> Result<String, String> {
+    let mut manager = state.mcp_host.lock().unwrap_or_else(|p| p.into_inner());
+    let removed = manager.remove_server(&server_id);
+    Ok(json!({ "removed": removed }).to_string())
+}
+
+pub fn mcp_host_connect(state: &AppState, server_id: String) -> Result<String, String> {
+    let mut manager = state.mcp_host.lock().unwrap_or_else(|p| p.into_inner());
+    let tools = manager.connect_server(&server_id)?;
+    let result = json!({
+        "server_id": server_id,
+        "tools_discovered": tools.len(),
+        "tools": tools,
+    });
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+pub fn mcp_host_disconnect(state: &AppState, server_id: String) -> Result<String, String> {
+    let mut manager = state.mcp_host.lock().unwrap_or_else(|p| p.into_inner());
+    manager.disconnect_server(&server_id);
+    Ok(json!({ "disconnected": true }).to_string())
+}
+
+pub fn mcp_host_list_tools(state: &AppState) -> Result<String, String> {
+    let manager = state.mcp_host.lock().unwrap_or_else(|p| p.into_inner());
+    let tools = manager.list_all_tools();
+    serde_json::to_string(&tools).map_err(|e| e.to_string())
+}
+
+pub fn mcp_host_call_tool(
+    state: &AppState,
+    tool_name: String,
+    arguments: String,
+) -> Result<String, String> {
+    let args: serde_json::Value =
+        serde_json::from_str(&arguments).map_err(|e| format!("Invalid arguments JSON: {e}"))?;
+
+    let mut manager = state.mcp_host.lock().unwrap_or_else(|p| p.into_inner());
+    let result = manager.call_tool(&tool_name, args)?;
+
+    // Audit the tool call
+    drop(manager); // release mcp_host lock before acquiring audit lock
+    state.log_event(
+        Uuid::nil(),
+        EventType::ToolCall,
+        json!({
+            "source": "mcp-host",
+            "tool_name": result.tool_name,
+            "server_id": result.server_id,
+            "is_error": result.is_error,
+            "execution_ms": result.execution_ms,
+        }),
+    );
+
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -5106,6 +5360,199 @@ mod runtime {
         super::time_machine_get_diff(state.inner(), id)
     }
 
+    // ── Nexus Link commands ─────────────────────────────────────────────
+
+    #[tauri::command]
+    fn nexus_link_status(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::nexus_link_status(state.inner())
+    }
+
+    #[tauri::command]
+    fn nexus_link_toggle_sharing(
+        state: tauri::State<'_, AppState>,
+        enabled: bool,
+    ) -> Result<String, String> {
+        super::nexus_link_toggle_sharing(state.inner(), enabled)
+    }
+
+    #[tauri::command]
+    fn nexus_link_add_peer(
+        state: tauri::State<'_, AppState>,
+        address: String,
+        name: String,
+    ) -> Result<String, String> {
+        super::nexus_link_add_peer(state.inner(), address, name)
+    }
+
+    #[tauri::command]
+    fn nexus_link_remove_peer(
+        state: tauri::State<'_, AppState>,
+        device_id: String,
+    ) -> Result<String, String> {
+        super::nexus_link_remove_peer(state.inner(), device_id)
+    }
+
+    #[tauri::command]
+    fn nexus_link_list_peers(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::nexus_link_list_peers(state.inner())
+    }
+
+    #[tauri::command]
+    async fn nexus_link_send_model(
+        window: tauri::Window,
+        state: tauri::State<'_, AppState>,
+        peer_address: String,
+        model_id: String,
+        filename: String,
+    ) -> Result<String, String> {
+        // Clone what we need from state before spawning thread
+        let link_arc = state.nexus_link.clone();
+
+        let (tx, rx) = std::sync::mpsc::channel::<Result<String, String>>();
+
+        std::thread::spawn(move || {
+            let link = link_arc.lock().unwrap_or_else(|p| p.into_inner());
+
+            let last_emit = std::cell::Cell::new(
+                std::time::Instant::now()
+                    .checked_sub(std::time::Duration::from_secs(1))
+                    .unwrap_or_else(std::time::Instant::now),
+            );
+
+            let result = link.send_model(
+                &peer_address,
+                &model_id,
+                &filename,
+                |progress: nexus_connectors_llm::nexus_link::TransferProgress| {
+                    let now = std::time::Instant::now();
+                    let is_terminal = matches!(
+                        progress.status,
+                        nexus_connectors_llm::nexus_link::TransferStatus::Completed
+                            | nexus_connectors_llm::nexus_link::TransferStatus::Failed(_)
+                    );
+
+                    if is_terminal || now.duration_since(last_emit.get()).as_millis() >= 300 {
+                        let _ = window.emit("nexus-link-transfer-progress", &progress);
+                        last_emit.set(now);
+                    }
+                },
+            );
+
+            let _ = tx.send(result.map(|()| "completed".to_string()));
+        });
+
+        // Return immediately — progress is emitted via events
+        match rx.recv() {
+            Ok(result) => result,
+            Err(e) => Err(format!("Transfer thread failed: {e}")),
+        }
+    }
+
+    // ── Evolution commands ───────────────────────────────────────────────
+
+    #[tauri::command]
+    fn evolution_get_status(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::evolution_get_status(state.inner())
+    }
+
+    #[tauri::command]
+    fn evolution_register_strategy(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        name: String,
+        parameters: String,
+    ) -> Result<String, String> {
+        super::evolution_register_strategy(state.inner(), agent_id, name, parameters)
+    }
+
+    #[tauri::command]
+    fn evolution_evolve_once(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<String, String> {
+        super::evolution_evolve_once(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn evolution_get_history(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<String, String> {
+        super::evolution_get_history(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn evolution_rollback(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<String, String> {
+        super::evolution_rollback(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn evolution_get_active_strategy(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<String, String> {
+        super::evolution_get_active_strategy(state.inner(), agent_id)
+    }
+
+    // ── MCP Host commands ───────────────────────────────────────────────
+
+    #[tauri::command]
+    fn mcp_host_list_servers(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::mcp_host_list_servers(state.inner())
+    }
+
+    #[tauri::command]
+    fn mcp_host_add_server(
+        state: tauri::State<'_, AppState>,
+        name: String,
+        url: String,
+        transport: String,
+        auth_token: Option<String>,
+    ) -> Result<String, String> {
+        super::mcp_host_add_server(state.inner(), name, url, transport, auth_token)
+    }
+
+    #[tauri::command]
+    fn mcp_host_remove_server(
+        state: tauri::State<'_, AppState>,
+        server_id: String,
+    ) -> Result<String, String> {
+        super::mcp_host_remove_server(state.inner(), server_id)
+    }
+
+    #[tauri::command]
+    fn mcp_host_connect(
+        state: tauri::State<'_, AppState>,
+        server_id: String,
+    ) -> Result<String, String> {
+        super::mcp_host_connect(state.inner(), server_id)
+    }
+
+    #[tauri::command]
+    fn mcp_host_disconnect(
+        state: tauri::State<'_, AppState>,
+        server_id: String,
+    ) -> Result<String, String> {
+        super::mcp_host_disconnect(state.inner(), server_id)
+    }
+
+    #[tauri::command]
+    fn mcp_host_list_tools(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::mcp_host_list_tools(state.inner())
+    }
+
+    #[tauri::command]
+    fn mcp_host_call_tool(
+        state: tauri::State<'_, AppState>,
+        tool_name: String,
+        arguments: String,
+    ) -> Result<String, String> {
+        super::mcp_host_call_tool(state.inner(), tool_name, arguments)
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -5255,6 +5702,25 @@ mod runtime {
                 time_machine_undo_checkpoint,
                 time_machine_redo,
                 time_machine_get_diff,
+                nexus_link_status,
+                nexus_link_toggle_sharing,
+                nexus_link_add_peer,
+                nexus_link_remove_peer,
+                nexus_link_list_peers,
+                nexus_link_send_model,
+                evolution_get_status,
+                evolution_register_strategy,
+                evolution_evolve_once,
+                evolution_get_history,
+                evolution_rollback,
+                evolution_get_active_strategy,
+                mcp_host_list_servers,
+                mcp_host_add_server,
+                mcp_host_remove_server,
+                mcp_host_connect,
+                mcp_host_disconnect,
+                mcp_host_list_tools,
+                mcp_host_call_tool,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
