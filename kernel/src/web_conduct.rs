@@ -204,8 +204,8 @@ impl WebConductEngine {
 
         match (best_allow, best_disallow) {
             (Some(a), Some(d)) => a >= d, // Equal length: allow wins.
-            (_, Some(_)) => false,         // Only disallow matched.
-            _ => true,                     // Only allow matched or neither.
+            (_, Some(_)) => false,        // Only disallow matched.
+            _ => true,                    // Only allow matched or neither.
         }
     }
 
