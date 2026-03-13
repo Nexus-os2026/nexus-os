@@ -64,25 +64,39 @@ class NexusClient:
         method: str,
         path: str,
         body: Any = None,
+        max_retries: int = 3,
+        backoff_factor: float = 1.5,
     ) -> Any:
         url = f"{self.base_url}{path}"
-        response = self._client.request(
-            method,
-            url,
-            headers=self._headers(),
-            json=body,
-        )
-        if response.status_code == 401:
-            raise NexusAuthError(401, path, response.text)
-        if response.status_code == 404:
-            raise NexusNotFoundError(404, path, response.text)
-        if response.status_code == 429:
-            raise NexusRateLimitError(429, path, response.text)
-        if response.status_code >= 400:
-            raise NexusApiError(response.status_code, path, response.text)
-        if not response.text:
-            return {}
-        return response.json()
+        import time
+
+        last_exc: Optional[Exception] = None
+        for attempt in range(max_retries):
+            response = self._client.request(
+                method,
+                url,
+                headers=self._headers(),
+                json=body,
+            )
+            if response.status_code == 401:
+                raise NexusAuthError(401, path, response.text)
+            if response.status_code == 404:
+                raise NexusNotFoundError(404, path, response.text)
+            # Retry on rate limit or server errors
+            if response.status_code in (429, 502, 503, 504):
+                last_exc = NexusRateLimitError(429, path, response.text) if response.status_code == 429 else NexusApiError(response.status_code, path, response.text)
+                if attempt < max_retries - 1:
+                    time.sleep(backoff_factor ** attempt)
+                    continue
+                if response.status_code == 429:
+                    raise NexusRateLimitError(429, path, response.text)
+                raise NexusApiError(response.status_code, path, response.text)
+            if response.status_code >= 400:
+                raise NexusApiError(response.status_code, path, response.text)
+            if not response.text:
+                return {}
+            return response.json()
+        raise last_exc  # type: ignore[misc]
 
     def close(self) -> None:
         """Close the underlying HTTP client."""

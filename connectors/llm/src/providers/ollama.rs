@@ -12,6 +12,10 @@ use std::process::Command;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OllamaProvider {
     base_url: String,
+    /// Timeout for streaming requests in seconds (default: 900 = 15 minutes).
+    streaming_timeout_secs: u32,
+    /// Timeout for non-streaming requests in seconds (default: 300 = 5 minutes).
+    request_timeout_secs: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -32,7 +36,21 @@ impl OllamaProvider {
     pub fn new(base_url: impl Into<String>) -> Self {
         Self {
             base_url: base_url.into(),
+            streaming_timeout_secs: 900,
+            request_timeout_secs: 300,
         }
+    }
+
+    /// Set timeout for streaming requests (chat, pull) in seconds.
+    pub fn with_streaming_timeout(mut self, secs: u32) -> Self {
+        self.streaming_timeout_secs = secs;
+        self
+    }
+
+    /// Set timeout for non-streaming requests in seconds.
+    pub fn with_request_timeout(mut self, secs: u32) -> Self {
+        self.request_timeout_secs = secs;
+        self
     }
 
     pub fn from_env() -> Self {
@@ -81,10 +99,7 @@ impl OllamaProvider {
     /// List all locally installed Ollama models.
     pub fn list_models(&self) -> Result<Vec<OllamaModel>, AgentError> {
         let endpoint = self.tags_endpoint();
-        let mut headers = BTreeMap::new();
-        headers.insert("content-type".to_string(), "application/json".to_string());
-
-        let (status, payload) = curl_post_json_get(&endpoint)?;
+        let (status, payload) = curl_get_json(&endpoint)?;
         if !(200..300).contains(&status) {
             return Err(AgentError::SupervisorError(format!(
                 "Ollama list models failed with status {status}"
@@ -139,8 +154,9 @@ impl OllamaProvider {
         let encoded = serde_json::to_string(&body)
             .map_err(|e| AgentError::SupervisorError(format!("failed to encode chat body: {e}")))?;
 
-        let child = Command::new("curl")
-            .args(["-sS", "-N", "-X", "POST", "-m", "300"])
+        let timeout_str = self.streaming_timeout_secs.to_string();
+        let mut child = Command::new("curl")
+            .args(["-sS", "-N", "-X", "POST", "-m", &timeout_str])
             .arg("-H")
             .arg("content-type: application/json")
             .arg("-d")
@@ -152,6 +168,7 @@ impl OllamaProvider {
 
         let stdout = child
             .stdout
+            .take()
             .ok_or_else(|| AgentError::SupervisorError("no stdout from curl".to_string()))?;
 
         let reader = BufReader::new(stdout);
@@ -175,10 +192,21 @@ impl OllamaProvider {
                     .and_then(Value::as_str)
                 {
                     full_response.push_str(token);
-                    on_token(token);
+                    // Panic-safe callback invocation
+                    let token_owned = token.to_string();
+                    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        on_token(&token_owned);
+                    }))
+                    .is_err()
+                    {
+                        eprintln!("warning: on_token callback panicked, continuing stream");
+                    }
                 }
             }
         }
+
+        // Wait for child process to avoid zombies
+        let _ = child.wait();
 
         Ok(full_response)
     }
@@ -194,8 +222,9 @@ impl OllamaProvider {
         let encoded_body = serde_json::to_string(&body)
             .map_err(|e| AgentError::SupervisorError(format!("failed to encode pull body: {e}")))?;
 
-        let child = Command::new("curl")
-            .args(["-sS", "-N", "-X", "POST"])
+        let timeout_str = self.streaming_timeout_secs.to_string();
+        let mut child = Command::new("curl")
+            .args(["-sS", "-N", "-X", "POST", "-m", &timeout_str])
             .arg("-H")
             .arg("content-type: application/json")
             .arg("-d")
@@ -207,6 +236,7 @@ impl OllamaProvider {
 
         let stdout = child
             .stdout
+            .take()
             .ok_or_else(|| AgentError::SupervisorError("no stdout from curl".to_string()))?;
 
         let reader = BufReader::new(stdout);
@@ -230,12 +260,15 @@ impl OllamaProvider {
             }
         }
 
+        // Wait for child process to avoid zombies
+        let _ = child.wait();
+
         Ok(last_status)
     }
 }
 
 /// GET request using curl (returns status + json body).
-fn curl_post_json_get(endpoint: &str) -> Result<(u16, Value), AgentError> {
+fn curl_get_json(endpoint: &str) -> Result<(u16, Value), AgentError> {
     let marker = "__NEXUS_STATUS__:";
     let output = Command::new("curl")
         .args(["-sS", "-L", "-m", "10"])

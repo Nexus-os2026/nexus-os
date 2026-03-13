@@ -85,7 +85,7 @@ const COMPONENT_LIBRARY: LibraryComponent[] = [
 ];
 
 const DESIGN_TOKENS: DesignToken[] = [
-  { id: "dt-1", category: "color", name: "Primary", value: "#22d3ee", cssVar: "--nx-primary" },
+  { id: "dt-1", category: "color", name: "Primary", value: "var(--nexus-accent)", cssVar: "--nx-primary" },
   { id: "dt-2", category: "color", name: "Secondary", value: "#a78bfa", cssVar: "--nx-secondary" },
   { id: "dt-3", category: "color", name: "Success", value: "#34d399", cssVar: "--nx-success" },
   { id: "dt-4", category: "color", name: "Warning", value: "#fbbf24", cssVar: "--nx-warning" },

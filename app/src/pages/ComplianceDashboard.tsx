@@ -1,80 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getComplianceStatus, getComplianceAgents, getAuditLog, hasDesktopRuntime } from "../api/backend";
+import type { ComplianceStatusRow, ComplianceAgentRow, AuditEventRow } from "../types";
 import "./compliance-dashboard.css";
 
 // ---------------------------------------------------------------------------
-// Types
+// Types (UI-only)
 // ---------------------------------------------------------------------------
 
-type OverallStatus = "compliant" | "warning" | "violation";
-type AlertSeverity = "info" | "warning" | "violation";
-type RiskTier = "minimal" | "limited" | "high" | "unacceptable";
-
-interface ComplianceAlert {
-  severity: AlertSeverity;
-  checkId: string;
-  message: string;
-  agentId: string | null;
-}
-
-interface AgentComplianceCard {
-  id: string;
-  name: string;
-  riskTier: RiskTier;
-  autonomyLevel: string;
-  capabilities: string[];
-  status: "running" | "stopped";
-}
+type Tab = "overview" | "agents" | "reports" | "erasure" | "provenance" | "retention";
 
 interface RetentionRule {
   dataClass: string;
   maxAgeDays: number;
 }
-
-interface ProvenanceEntry {
-  dataId: string;
-  origin: string;
-  label: string;
-  transformations: number;
-  classification: string;
-  currentHolder: string;
-}
-
-// ---------------------------------------------------------------------------
-// Mock data
-// ---------------------------------------------------------------------------
-
-const MOCK_STATUS: OverallStatus = "warning";
-const MOCK_CHECKS_PASSED = 5;
-const MOCK_CHECKS_FAILED = 1;
-
-const MOCK_ALERTS: ComplianceAlert[] = [
-  { severity: "warning", checkId: "MISSING_AGENT_IDENTITY", message: "Agent 'web-builder' has no DID identity — cannot verify authenticity", agentId: "a0000000-0000-4000-8000-000000000004" },
-  { severity: "info", checkId: "RETENTION_OK", message: "Audit trail retention within 365-day policy", agentId: null },
-  { severity: "info", checkId: "AUDIT_CHAIN_VALID", message: "Audit hash-chain integrity verified successfully", agentId: null },
-];
-
-const MOCK_AGENTS: AgentComplianceCard[] = [
-  { id: "a0000000-0000-4000-8000-000000000001", name: "Coder", riskTier: "high", autonomyLevel: "L2", capabilities: ["llm.query", "fs.read", "fs.write"], status: "running" },
-  { id: "a0000000-0000-4000-8000-000000000002", name: "Designer", riskTier: "limited", autonomyLevel: "L1", capabilities: ["llm.query", "fs.read"], status: "running" },
-  { id: "a0000000-0000-4000-8000-000000000003", name: "Screen Poster", riskTier: "high", autonomyLevel: "L2", capabilities: ["social.x.post", "llm.query", "web.search"], status: "running" },
-  { id: "a0000000-0000-4000-8000-000000000004", name: "Web Builder", riskTier: "high", autonomyLevel: "L2", capabilities: ["fs.write", "web.read", "process.exec"], status: "running" },
-  { id: "a0000000-0000-4000-8000-000000000005", name: "Workflow Studio", riskTier: "limited", autonomyLevel: "L1", capabilities: ["llm.query"], status: "stopped" },
-  { id: "a0000000-0000-4000-8000-000000000006", name: "Self Improve", riskTier: "minimal", autonomyLevel: "L0", capabilities: ["audit.read"], status: "stopped" },
-];
-
-const MOCK_RETENTION_RULES: RetentionRule[] = [
-  { dataClass: "Audit Events", maxAgeDays: 365 },
-  { dataClass: "Evidence Bundles", maxAgeDays: 730 },
-  { dataClass: "Agent Identity", maxAgeDays: 365 },
-  { dataClass: "Permission History", maxAgeDays: 180 },
-];
-
-const MOCK_PROVENANCE: ProvenanceEntry[] = [
-  { dataId: "d001", origin: "user_input", label: "User query", transformations: 2, classification: "confidential", currentHolder: "Coder" },
-  { dataId: "d002", origin: "file_read", label: "config.toml", transformations: 1, classification: "internal", currentHolder: "Coder" },
-  { dataId: "d003", origin: "llm_response", label: "Code analysis", transformations: 3, classification: "internal", currentHolder: "Designer" },
-  { dataId: "d004", origin: "external_api", label: "API response", transformations: 1, classification: "public", currentHolder: "Web Builder" },
-];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -113,7 +51,12 @@ function statusLabel(s: string): string {
   return s;
 }
 
-type Tab = "overview" | "agents" | "reports" | "erasure" | "provenance" | "retention";
+const RETENTION_RULES: RetentionRule[] = [
+  { dataClass: "Audit Events", maxAgeDays: 365 },
+  { dataClass: "Evidence Bundles", maxAgeDays: 730 },
+  { dataClass: "Agent Identity", maxAgeDays: 365 },
+  { dataClass: "Permission History", maxAgeDays: 180 },
+];
 
 // ---------------------------------------------------------------------------
 // Component
@@ -125,16 +68,44 @@ export default function ComplianceDashboard(): JSX.Element {
   const [reportGenerated, setReportGenerated] = useState(false);
   const [eraseConfirm, setEraseConfirm] = useState<string | null>(null);
   const [erased, setErased] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+
+  // Real data from backend
+  const [complianceStatus, setComplianceStatus] = useState<ComplianceStatusRow | null>(null);
+  const [agents, setAgents] = useState<ComplianceAgentRow[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AuditEventRow[]>([]);
+
+  useEffect(() => {
+    if (!hasDesktopRuntime()) {
+      setLoading(false);
+      return;
+    }
+    Promise.all([
+      getComplianceStatus().catch(() => null),
+      getComplianceAgents().catch(() => []),
+      getAuditLog(undefined, 50).catch(() => []),
+    ]).then(([status, agentRows, events]) => {
+      if (status) setComplianceStatus(status);
+      setAgents(agentRows);
+      setAuditEvents(events);
+      setLoading(false);
+    });
+  }, []);
+
+  const overallStatus = complianceStatus?.status ?? "compliant";
+  const checksPassed = complianceStatus?.checks_passed ?? 0;
+  const checksFailed = complianceStatus?.checks_failed ?? 0;
+  const alerts = complianceStatus?.alerts ?? [];
 
   // --- Report generation ---
   function handleGenerateReport(agentId: string): void {
-    const agent = MOCK_AGENTS.find((a) => a.id === agentId);
+    const agent = agents.find((a) => a.id === agentId);
     if (!agent) return;
     const lines = [
       `Transparency Report: ${agent.name}`,
       `Generated: ${new Date().toISOString()}`,
-      `Risk Tier: ${agent.riskTier}`,
-      `Autonomy Level: ${agent.autonomyLevel}`,
+      `Risk Tier: ${agent.risk_tier}`,
+      `Autonomy Level: ${agent.autonomy_level}`,
       `Capabilities: ${agent.capabilities.join(", ")}`,
       `Status: ${agent.status}`,
       "",
@@ -157,6 +128,16 @@ export default function ComplianceDashboard(): JSX.Element {
     setEraseConfirm(null);
   }
 
+  // Build provenance from real audit events
+  const provenanceEntries = auditEvents.slice(0, 10).map((evt) => ({
+    dataId: evt.event_id.slice(0, 8),
+    origin: evt.event_type,
+    label: evt.event_type.replace(/_/g, " "),
+    transformations: 1,
+    classification: "internal",
+    currentHolder: evt.agent_id.slice(0, 8),
+  }));
+
   // --- Tab navigation ---
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
@@ -166,6 +147,17 @@ export default function ComplianceDashboard(): JSX.Element {
     { id: "provenance", label: "Provenance" },
     { id: "retention", label: "Retention" },
   ];
+
+  if (loading) {
+    return (
+      <section className="cd-hub">
+        <header className="cd-header">
+          <h2 className="cd-title">COMPLIANCE DASHBOARD</h2>
+          <p className="cd-subtitle">Loading compliance data...</p>
+        </header>
+      </section>
+    );
+  }
 
   return (
     <section className="cd-hub">
@@ -195,48 +187,57 @@ export default function ComplianceDashboard(): JSX.Element {
         <div className="cd-section">
           {/* Overall status indicator */}
           <div className="cd-overall">
-            <div className="cd-overall-indicator" style={{ background: STATUS_COLORS[MOCK_STATUS] }} />
+            <div className="cd-overall-indicator" style={{ background: STATUS_COLORS[overallStatus] }} />
             <div className="cd-overall-text">
               <span className="cd-overall-label">Overall Status</span>
-              <span className="cd-overall-value" style={{ color: STATUS_COLORS[MOCK_STATUS] }}>
-                {statusLabel(MOCK_STATUS)}
+              <span className="cd-overall-value" style={{ color: STATUS_COLORS[overallStatus] }}>
+                {statusLabel(overallStatus)}
               </span>
             </div>
             <div className="cd-overall-stats">
-              <span className="cd-stat cd-stat--pass">{MOCK_CHECKS_PASSED} passed</span>
-              <span className="cd-stat cd-stat--fail">{MOCK_CHECKS_FAILED} failed</span>
+              <span className="cd-stat cd-stat--pass">{checksPassed} passed</span>
+              <span className="cd-stat cd-stat--fail">{checksFailed} failed</span>
             </div>
           </div>
 
           {/* Active alerts */}
           <h3 className="cd-section-title">Active Alerts</h3>
           <div className="cd-alerts">
-            {MOCK_ALERTS.map((alert, i) => (
-              <div
-                key={`${alert.checkId}-${i}`}
-                className="cd-alert"
-                style={{ borderLeftColor: STATUS_COLORS[alert.severity] }}
-              >
-                <span
-                  className="cd-alert-badge"
-                  style={{ color: STATUS_COLORS[alert.severity], background: STATUS_BG[alert.severity] }}
-                >
-                  {alert.severity.toUpperCase()}
+            {alerts.length === 0 ? (
+              <div className="cd-alert" style={{ borderLeftColor: STATUS_COLORS.compliant }}>
+                <span className="cd-alert-badge" style={{ color: STATUS_COLORS.info, background: STATUS_BG.info }}>
+                  INFO
                 </span>
-                <span className="cd-alert-id">{alert.checkId}</span>
-                <span className="cd-alert-msg">{alert.message}</span>
+                <span className="cd-alert-msg">No active alerts — all compliance checks passed</span>
               </div>
-            ))}
+            ) : (
+              alerts.map((alert, i) => (
+                <div
+                  key={`${alert.check_id}-${i}`}
+                  className="cd-alert"
+                  style={{ borderLeftColor: STATUS_COLORS[alert.severity] }}
+                >
+                  <span
+                    className="cd-alert-badge"
+                    style={{ color: STATUS_COLORS[alert.severity], background: STATUS_BG[alert.severity] }}
+                  >
+                    {alert.severity.toUpperCase()}
+                  </span>
+                  <span className="cd-alert-id">{alert.check_id}</span>
+                  <span className="cd-alert-msg">{alert.message}</span>
+                </div>
+              ))
+            )}
           </div>
 
           {/* Quick stats */}
           <div className="cd-quick-stats">
             <div className="cd-qstat">
-              <span className="cd-qstat-val">{MOCK_AGENTS.length}</span>
+              <span className="cd-qstat-val">{agents.length}</span>
               <span className="cd-qstat-label">Agents</span>
             </div>
             <div className="cd-qstat">
-              <span className="cd-qstat-val">{MOCK_AGENTS.filter((a) => a.riskTier === "high").length}</span>
+              <span className="cd-qstat-val">{agents.filter((a) => a.risk_tier === "high").length}</span>
               <span className="cd-qstat-label">High Risk</span>
             </div>
             <div className="cd-qstat">
@@ -244,8 +245,8 @@ export default function ComplianceDashboard(): JSX.Element {
               <span className="cd-qstat-label">Frameworks</span>
             </div>
             <div className="cd-qstat">
-              <span className="cd-qstat-val">{MOCK_PROVENANCE.length}</span>
-              <span className="cd-qstat-label">Data Lineage</span>
+              <span className="cd-qstat-val">{auditEvents.length}</span>
+              <span className="cd-qstat-label">Audit Events</span>
             </div>
           </div>
         </div>
@@ -257,37 +258,41 @@ export default function ComplianceDashboard(): JSX.Element {
       {tab === "agents" && (
         <div className="cd-section">
           <h3 className="cd-section-title">Per-Agent EU AI Act Risk Classification</h3>
-          <div className="cd-grid">
-            {MOCK_AGENTS.map((agent) => (
-              <article
-                key={agent.id}
-                className="cd-card"
-                style={{ borderLeftColor: STATUS_COLORS[agent.riskTier] }}
-              >
-                <div className="cd-card-top">
-                  <span className="cd-control-id">{agent.name}</span>
-                  <span
-                    className="cd-status-badge"
-                    style={{ color: STATUS_COLORS[agent.riskTier], background: STATUS_BG[agent.riskTier] }}
-                  >
-                    {statusLabel(agent.riskTier)}
-                  </span>
-                </div>
-                <div className="cd-card-meta">
-                  <span className="cd-meta-item">Autonomy: {agent.autonomyLevel}</span>
-                  <span className="cd-meta-item">Status: {agent.status}</span>
-                </div>
-                <div className="cd-cap-list">
-                  {agent.capabilities.map((cap) => (
-                    <span key={cap} className="cd-cap-tag">{cap}</span>
-                  ))}
-                </div>
-                <div className="cd-card-footer">
-                  <span className="cd-evidence-count">ID: {agent.id.slice(0, 13)}...</span>
-                </div>
-              </article>
-            ))}
-          </div>
+          {agents.length === 0 ? (
+            <p className="cd-desc">No agents registered — create agents to see risk classification.</p>
+          ) : (
+            <div className="cd-grid">
+              {agents.map((agent) => (
+                <article
+                  key={agent.id}
+                  className="cd-card"
+                  style={{ borderLeftColor: STATUS_COLORS[agent.risk_tier] }}
+                >
+                  <div className="cd-card-top">
+                    <span className="cd-control-id">{agent.name}</span>
+                    <span
+                      className="cd-status-badge"
+                      style={{ color: STATUS_COLORS[agent.risk_tier], background: STATUS_BG[agent.risk_tier] }}
+                    >
+                      {statusLabel(agent.risk_tier)}
+                    </span>
+                  </div>
+                  <div className="cd-card-meta">
+                    <span className="cd-meta-item">Autonomy: {agent.autonomy_level}</span>
+                    <span className="cd-meta-item">Status: {agent.status}</span>
+                  </div>
+                  <div className="cd-cap-list">
+                    {agent.capabilities.map((cap) => (
+                      <span key={cap} className="cd-cap-tag">{cap}</span>
+                    ))}
+                  </div>
+                  <div className="cd-card-footer">
+                    <span className="cd-evidence-count">ID: {agent.id.slice(0, 13)}...</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -299,34 +304,38 @@ export default function ComplianceDashboard(): JSX.Element {
           <h3 className="cd-section-title">Transparency Report Viewer</h3>
           <p className="cd-desc">Select an agent to generate an EU AI Act Article 13 transparency report.</p>
 
-          <div className="cd-report-select">
-            {MOCK_AGENTS.map((agent) => (
-              <button
-                type="button"
-                key={agent.id}
-                className={`cd-report-agent ${reportAgent === agent.id ? "cd-report-agent--selected" : ""}`}
-                onClick={() => setReportAgent(agent.id)}
-              >
-                {agent.name}
-                <span
-                  className="cd-mini-badge"
-                  style={{ background: STATUS_BG[agent.riskTier], color: STATUS_COLORS[agent.riskTier] }}
+          {agents.length === 0 ? (
+            <p className="cd-desc">No agents registered.</p>
+          ) : (
+            <div className="cd-report-select">
+              {agents.map((agent) => (
+                <button
+                  type="button"
+                  key={agent.id}
+                  className={`cd-report-agent ${reportAgent === agent.id ? "cd-report-agent--selected" : ""}`}
+                  onClick={() => setReportAgent(agent.id)}
                 >
-                  {statusLabel(agent.riskTier)}
-                </span>
-              </button>
-            ))}
-          </div>
+                  {agent.name}
+                  <span
+                    className="cd-mini-badge"
+                    style={{ background: STATUS_BG[agent.risk_tier], color: STATUS_COLORS[agent.risk_tier] }}
+                  >
+                    {statusLabel(agent.risk_tier)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {reportAgent && (() => {
-            const agent = MOCK_AGENTS.find((a) => a.id === reportAgent);
+            const agent = agents.find((a) => a.id === reportAgent);
             if (!agent) return null;
             return (
               <div className="cd-report-preview">
                 <h4 className="cd-report-title">Transparency Report: {agent.name}</h4>
                 <div className="cd-report-fields">
-                  <div className="cd-report-field"><span className="cd-field-label">Risk Tier:</span> <span style={{ color: STATUS_COLORS[agent.riskTier] }}>{statusLabel(agent.riskTier)}</span></div>
-                  <div className="cd-report-field"><span className="cd-field-label">Autonomy Level:</span> {agent.autonomyLevel}</div>
+                  <div className="cd-report-field"><span className="cd-field-label">Risk Tier:</span> <span style={{ color: STATUS_COLORS[agent.risk_tier] }}>{statusLabel(agent.risk_tier)}</span></div>
+                  <div className="cd-report-field"><span className="cd-field-label">Autonomy Level:</span> {agent.autonomy_level}</div>
                   <div className="cd-report-field"><span className="cd-field-label">Status:</span> {agent.status}</div>
                   <div className="cd-report-field"><span className="cd-field-label">Capabilities:</span> {agent.capabilities.join(", ")}</div>
                   <div className="cd-report-field"><span className="cd-field-label">Agent ID:</span> <code>{agent.id}</code></div>
@@ -352,38 +361,42 @@ export default function ComplianceDashboard(): JSX.Element {
           <h3 className="cd-section-title">Cryptographic Erasure (GDPR Article 17)</h3>
           <p className="cd-desc">Trigger complete agent data erasure: audit events redacted, encryption keys destroyed, identity purged.</p>
 
-          <div className="cd-erasure-list">
-            {MOCK_AGENTS.map((agent) => {
-              const isErased = erased.has(agent.id);
-              return (
-                <div key={agent.id} className={`cd-erasure-row ${isErased ? "cd-erasure-row--erased" : ""}`}>
-                  <span className="cd-erasure-name">{agent.name}</span>
-                  <span className="cd-erasure-id">{agent.id.slice(0, 13)}...</span>
-                  {isErased ? (
-                    <span className="cd-erasure-done">Erased</span>
-                  ) : eraseConfirm === agent.id ? (
-                    <div className="cd-erasure-confirm">
-                      <span className="cd-erasure-warn">This action is irreversible. Confirm?</span>
-                      <button type="button" className="cd-btn-danger" onClick={() => handleErase(agent.id)}>
-                        Confirm Erase
+          {agents.length === 0 ? (
+            <p className="cd-desc">No agents registered.</p>
+          ) : (
+            <div className="cd-erasure-list">
+              {agents.map((agent) => {
+                const isErased = erased.has(agent.id);
+                return (
+                  <div key={agent.id} className={`cd-erasure-row ${isErased ? "cd-erasure-row--erased" : ""}`}>
+                    <span className="cd-erasure-name">{agent.name}</span>
+                    <span className="cd-erasure-id">{agent.id.slice(0, 13)}...</span>
+                    {isErased ? (
+                      <span className="cd-erasure-done">Erased</span>
+                    ) : eraseConfirm === agent.id ? (
+                      <div className="cd-erasure-confirm">
+                        <span className="cd-erasure-warn">This action is irreversible. Confirm?</span>
+                        <button type="button" className="cd-btn-danger" onClick={() => handleErase(agent.id)}>
+                          Confirm Erase
+                        </button>
+                        <button type="button" className="cd-btn-cancel" onClick={() => setEraseConfirm(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="cd-btn-erase"
+                        onClick={() => setEraseConfirm(agent.id)}
+                      >
+                        Erase Agent Data
                       </button>
-                      <button type="button" className="cd-btn-cancel" onClick={() => setEraseConfirm(null)}>
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="cd-btn-erase"
-                      onClick={() => setEraseConfirm(agent.id)}
-                    >
-                      Erase Agent Data
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -395,26 +408,30 @@ export default function ComplianceDashboard(): JSX.Element {
           <h3 className="cd-section-title">Data Provenance & Lineage</h3>
           <p className="cd-desc">Track data origin, transformations, and flow through agents.</p>
 
-          <div className="cd-prov-table">
-            <div className="cd-prov-header">
-              <span>Label</span>
-              <span>Origin</span>
-              <span>Classification</span>
-              <span>Transforms</span>
-              <span>Holder</span>
-            </div>
-            {MOCK_PROVENANCE.map((entry) => (
-              <div key={entry.dataId} className="cd-prov-row">
-                <span className="cd-prov-label">{entry.label}</span>
-                <span className="cd-prov-origin">{entry.origin.replace(/_/g, " ")}</span>
-                <span className={`cd-prov-class cd-prov-class--${entry.classification}`}>
-                  {entry.classification}
-                </span>
-                <span className="cd-prov-transforms">{entry.transformations}</span>
-                <span className="cd-prov-holder">{entry.currentHolder}</span>
+          {provenanceEntries.length === 0 ? (
+            <p className="cd-desc">No audit events recorded yet — provenance data will appear as agents operate.</p>
+          ) : (
+            <div className="cd-prov-table">
+              <div className="cd-prov-header">
+                <span>Label</span>
+                <span>Origin</span>
+                <span>Classification</span>
+                <span>Transforms</span>
+                <span>Holder</span>
               </div>
-            ))}
-          </div>
+              {provenanceEntries.map((entry) => (
+                <div key={entry.dataId} className="cd-prov-row">
+                  <span className="cd-prov-label">{entry.label}</span>
+                  <span className="cd-prov-origin">{entry.origin.replace(/_/g, " ")}</span>
+                  <span className={`cd-prov-class cd-prov-class--${entry.classification}`}>
+                    {entry.classification}
+                  </span>
+                  <span className="cd-prov-transforms">{entry.transformations}</span>
+                  <span className="cd-prov-holder">{entry.currentHolder}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -427,7 +444,7 @@ export default function ComplianceDashboard(): JSX.Element {
           <p className="cd-desc">Configure data retention periods per data class. Events beyond the retention period are purged (redacted) during enforcement.</p>
 
           <div className="cd-retention-grid">
-            {MOCK_RETENTION_RULES.map((rule) => (
+            {RETENTION_RULES.map((rule) => (
               <div key={rule.dataClass} className="cd-retention-card">
                 <span className="cd-retention-class">{rule.dataClass}</span>
                 <span className="cd-retention-days">{rule.maxAgeDays} days</span>
@@ -445,7 +462,11 @@ export default function ComplianceDashboard(): JSX.Element {
             <button type="button" className="cd-generate-btn">
               Run Retention Enforcement
             </button>
-            <span className="cd-retention-note">Last run: never — 0 events purged</span>
+            <span className="cd-retention-note">
+              {auditEvents.length > 0
+                ? `${auditEvents.length} audit events in trail`
+                : "Last run: never — 0 events purged"}
+            </span>
           </div>
         </div>
       )}

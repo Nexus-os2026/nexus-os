@@ -240,9 +240,21 @@ mod tests {
     use crate::errors::AgentError;
     use crate::orchestration::roles::AgentRole;
 
+    fn setup_orchestrator() -> Orchestrator {
+        let mut orchestrator = Orchestrator::with_autonomy_level(AutonomyLevel::L2);
+        // Configure allowed approvers for operations used in tests
+        let policy = orchestrator.consent_runtime.policy_engine_mut();
+        policy.set_policy(
+            crate::consent::GovernedOperation::MultiAgentOrchestrate,
+            crate::consent::HitlTier::Tier2,
+            vec!["approver.a".to_string()],
+        );
+        orchestrator
+    }
+
     #[test]
     fn test_team_creation() {
-        let mut orchestrator = Orchestrator::with_autonomy_level(AutonomyLevel::L2);
+        let mut orchestrator = setup_orchestrator();
         let initial = orchestrator.create_team(&[
             AgentRole::Researcher,
             AgentRole::Writer,
@@ -278,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_task_distribution() {
-        let mut orchestrator = Orchestrator::with_autonomy_level(AutonomyLevel::L2);
+        let mut orchestrator = setup_orchestrator();
         let initial = orchestrator.create_team(&[
             AgentRole::Researcher,
             AgentRole::Writer,

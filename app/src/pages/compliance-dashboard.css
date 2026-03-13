@@ -27,9 +27,9 @@
 }
 .cd-tab:hover { color: #a5f3fc; background: rgba(15, 23, 42, 0.4); }
 .cd-tab--active {
-  color: #22d3ee;
+  color: var(--nexus-accent);
   background: rgba(15, 23, 42, 0.6);
-  border-color: rgba(34, 211, 238, 0.3);
+  border-color: rgba(0, 255, 157, 0.3);
   border-bottom-color: transparent;
 }
 
@@ -97,7 +97,7 @@
   border: 1px solid rgba(56, 189, 248, 0.1);
   border-radius: 0.75rem;
 }
-.cd-qstat-val { font-size: 1.4rem; font-weight: 700; color: #22d3ee; }
+.cd-qstat-val { font-size: 1.4rem; font-weight: 700; color: var(--nexus-accent); }
 .cd-qstat-label { font-size: 0.65rem; color: rgba(165, 243, 252, 0.5); text-transform: uppercase; letter-spacing: 0.06em; }
 
 /* Grid cards */
@@ -130,8 +130,8 @@
 .cd-cap-tag {
   font-size: 0.6rem;
   padding: 0.15rem 0.4rem;
-  background: rgba(34, 211, 238, 0.08);
-  border: 1px solid rgba(34, 211, 238, 0.15);
+  background: rgba(0, 255, 157, 0.08);
+  border: 1px solid rgba(0, 255, 157, 0.15);
   border-radius: 0.2rem;
   color: #a5f3fc;
   font-family: monospace;
@@ -147,14 +147,14 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  border: 1px solid rgba(34, 211, 238, 0.3);
+  border: 1px solid rgba(0, 255, 157, 0.3);
   border-radius: 0.4rem;
   background: rgba(15, 23, 42, 0.6);
-  color: #22d3ee;
+  color: var(--nexus-accent);
   cursor: pointer;
   transition: all 0.15s;
 }
-.cd-generate-btn:hover { background: rgba(34, 211, 238, 0.15); border-color: rgba(34, 211, 238, 0.5); }
+.cd-generate-btn:hover { background: rgba(0, 255, 157, 0.15); border-color: rgba(0, 255, 157, 0.5); }
 
 /* Report viewer */
 .cd-report-select { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
@@ -172,7 +172,7 @@
   transition: all 0.15s;
 }
 .cd-report-agent:hover { border-color: rgba(56, 189, 248, 0.35); color: #e0f2fe; }
-.cd-report-agent--selected { border-color: rgba(34, 211, 238, 0.5); background: rgba(34, 211, 238, 0.08); color: #22d3ee; }
+.cd-report-agent--selected { border-color: rgba(0, 255, 157, 0.5); background: rgba(0, 255, 157, 0.08); color: var(--nexus-accent); }
 .cd-mini-badge { font-size: 0.55rem; padding: 0.1rem 0.35rem; border-radius: 0.15rem; font-weight: 600; text-transform: uppercase; }
 
 .cd-report-preview {
@@ -292,9 +292,9 @@
   gap: 0.4rem;
 }
 .cd-retention-class { font-size: 0.78rem; color: #e0f2fe; font-weight: 600; }
-.cd-retention-days { font-size: 0.72rem; color: #22d3ee; font-family: monospace; }
+.cd-retention-days { font-size: 0.72rem; color: var(--nexus-accent); font-family: monospace; }
 .cd-retention-bar { height: 4px; background: rgba(30, 41, 59, 0.8); border-radius: 2px; overflow: hidden; }
-.cd-retention-fill { height: 100%; background: #22d3ee; border-radius: 2px; transition: width 0.3s; }
+.cd-retention-fill { height: 100%; background: var(--nexus-accent); border-radius: 2px; transition: width 0.3s; }
 .cd-retention-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .cd-retention-note { font-size: 0.7rem; color: #64748b; }
 

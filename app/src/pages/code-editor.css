@@ -82,7 +82,7 @@
   overflow: hidden;
 }
 .ce-fuel-bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
-.ce-fuel-value { color: #22d3ee; font-weight: 600; font-size: 0.7rem; }
+.ce-fuel-value { color: var(--nexus-accent); font-weight: 600; font-size: 0.7rem; }
 
 /* Toolbar buttons */
 .ce-toolbar-btns { display: flex; gap: 0.25rem; }
@@ -102,7 +102,7 @@
   white-space: nowrap;
 }
 .ce-tool-btn:hover { border-color: rgba(56, 189, 248, 0.35); color: #a5f3fc; }
-.ce-tool-active { background: rgba(34, 211, 238, 0.08); border-color: rgba(34, 211, 238, 0.3); color: #22d3ee; }
+.ce-tool-active { background: rgba(0, 255, 157, 0.08); border-color: rgba(0, 255, 157, 0.3); color: var(--nexus-accent); }
 
 /* ================================================================== */
 /*  Search bar                                                         */
@@ -224,14 +224,14 @@
   font-size: 0.75rem;
   transition: all 0.15s;
 }
-.ce-icon-btn:hover { border-color: rgba(34, 211, 238, 0.4); color: #22d3ee; }
+.ce-icon-btn:hover { border-color: rgba(0, 255, 157, 0.4); color: var(--nexus-accent); }
 
 .ce-new-file-row { padding: 0.3rem 0.4rem; }
 .ce-new-file-input {
   width: 100%;
   padding: 0.25rem 0.35rem;
   background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(34, 211, 238, 0.3);
+  border: 1px solid rgba(0, 255, 157, 0.3);
   border-radius: 3px;
   color: #e2e8f0;
   font-family: var(--font-mono, monospace);
@@ -239,7 +239,7 @@
   outline: none;
   box-sizing: border-box;
 }
-.ce-new-file-input:focus { border-color: #22d3ee; }
+.ce-new-file-input:focus { border-color: var(--nexus-accent); }
 
 .ce-tree { flex: 1; overflow-y: auto; padding: 0.2rem 0; }
 
@@ -259,7 +259,7 @@
   transition: background 0.1s;
 }
 .ce-tree-item:hover { background: rgba(56, 189, 248, 0.06); }
-.ce-tree-active { background: rgba(34, 211, 238, 0.1) !important; color: #22d3ee; }
+.ce-tree-active { background: rgba(0, 255, 157, 0.1) !important; color: var(--nexus-accent); }
 .ce-tree-arrow { font-size: 0.6rem; width: 12px; text-align: center; flex-shrink: 0; color: rgba(165, 243, 252, 0.4); }
 .ce-tree-lang {
   font-size: 0.6rem;
@@ -339,7 +339,7 @@
   white-space: nowrap;
 }
 .ce-tab-label:hover { color: #a5f3fc; }
-.ce-tab-active .ce-tab-label { color: #22d3ee; border-bottom-color: #22d3ee; }
+.ce-tab-active .ce-tab-label { color: var(--nexus-accent); border-bottom-color: var(--nexus-accent); }
 .ce-tab-icon { font-size: 0.6rem; }
 .ce-tab-dirty { color: #f59e0b; font-size: 0.5rem; margin-left: 0.1rem; }
 .ce-tab-close {
@@ -413,11 +413,11 @@
   transition: all 0.15s;
 }
 .ce-split-apply {
-  background: rgba(34, 211, 238, 0.15);
-  color: #22d3ee;
-  border-color: rgba(34, 211, 238, 0.3);
+  background: rgba(0, 255, 157, 0.15);
+  color: var(--nexus-accent);
+  border-color: rgba(0, 255, 157, 0.3);
 }
-.ce-split-apply:hover { background: rgba(34, 211, 238, 0.25); }
+.ce-split-apply:hover { background: rgba(0, 255, 157, 0.25); }
 .ce-split-dismiss { background: transparent; color: rgba(165, 243, 252, 0.5); }
 .ce-split-dismiss:hover { color: #ef4444; border-color: rgba(239, 68, 68, 0.3); }
 .ce-split-content {
@@ -475,7 +475,7 @@
   transition: color 0.15s;
 }
 .ce-bottom-tab:hover { color: #a5f3fc; }
-.ce-bottom-tab-active { color: #22d3ee; border-bottom-color: #22d3ee; }
+.ce-bottom-tab-active { color: var(--nexus-accent); border-bottom-color: var(--nexus-accent); }
 .ce-bottom-close {
   margin-left: auto;
   background: transparent;
@@ -516,7 +516,7 @@
   border-top: 1px solid rgba(56, 189, 248, 0.08);
   flex-shrink: 0;
 }
-.ce-term-prompt { color: #22d3ee; font-family: var(--font-mono, monospace); font-size: 0.75rem; font-weight: 700; }
+.ce-term-prompt { color: var(--nexus-accent); font-family: var(--font-mono, monospace); font-size: 0.75rem; font-weight: 700; }
 .ce-term-input {
   flex: 1;
   background: transparent;
@@ -597,21 +597,21 @@
   font-size: 0.68rem;
   outline: none;
 }
-.ce-git-commit-input:focus { border-color: #22d3ee; }
+.ce-git-commit-input:focus { border-color: var(--nexus-accent); }
 .ce-git-commit-input::placeholder { color: rgba(165, 243, 252, 0.2); }
 .ce-git-commit-btn {
   padding: 0.25rem 0.5rem;
-  background: rgba(34, 211, 238, 0.12);
-  border: 1px solid rgba(34, 211, 238, 0.25);
+  background: rgba(0, 255, 157, 0.12);
+  border: 1px solid rgba(0, 255, 157, 0.25);
   border-radius: 3px;
-  color: #22d3ee;
+  color: var(--nexus-accent);
   cursor: pointer;
   font-family: var(--font-mono, monospace);
   font-size: 0.65rem;
   font-weight: 600;
   transition: all 0.15s;
 }
-.ce-git-commit-btn:hover:not(:disabled) { background: rgba(34, 211, 238, 0.2); }
+.ce-git-commit-btn:hover:not(:disabled) { background: rgba(0, 255, 157, 0.2); }
 .ce-git-commit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .ce-git-log { flex: 1; overflow-y: auto; }
@@ -623,7 +623,7 @@
   font-family: var(--font-mono, monospace);
   font-size: 0.65rem;
 }
-.ce-git-hash { color: #22d3ee; font-weight: 600; flex-shrink: 0; }
+.ce-git-hash { color: var(--nexus-accent); font-weight: 600; flex-shrink: 0; }
 .ce-git-msg { color: #cbd5e1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ce-git-author { color: rgba(165, 243, 252, 0.35); flex-shrink: 0; }
 
@@ -674,7 +674,7 @@
   padding: 0.1rem 0.3rem;
   border-radius: 0.2rem;
 }
-.ce-worker-status-working { color: #22d3ee; background: rgba(34, 211, 238, 0.1); }
+.ce-worker-status-working { color: var(--nexus-accent); background: rgba(0, 255, 157, 0.1); }
 .ce-worker-status-waiting { color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
 .ce-worker-status-done { color: #34d399; background: rgba(52, 211, 153, 0.1); }
 .ce-worker-status-error { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
@@ -777,7 +777,7 @@
 .ce-thinking-dots span {
   width: 5px; height: 5px;
   border-radius: 50%;
-  background: #22d3ee;
+  background: var(--nexus-accent);
   animation: ce-pulse 1.2s ease-in-out infinite;
 }
 .ce-thinking-dots span:nth-child(2) { animation-delay: 0.15s; }
@@ -805,7 +805,7 @@
 }
 .ce-result-label {
   font-size: 0.62rem;
-  color: #22d3ee;
+  color: var(--nexus-accent);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-weight: 600;
@@ -831,16 +831,16 @@
 .ce-result-split-btn {
   margin: 0.3rem 0.4rem;
   padding: 0.25rem 0.5rem;
-  background: rgba(34, 211, 238, 0.08);
-  border: 1px solid rgba(34, 211, 238, 0.2);
+  background: rgba(0, 255, 157, 0.08);
+  border: 1px solid rgba(0, 255, 157, 0.2);
   border-radius: 0.25rem;
-  color: #22d3ee;
+  color: var(--nexus-accent);
   cursor: pointer;
   font-family: var(--font-mono, monospace);
   font-size: 0.62rem;
   transition: all 0.15s;
 }
-.ce-result-split-btn:hover { background: rgba(34, 211, 238, 0.15); }
+.ce-result-split-btn:hover { background: rgba(0, 255, 157, 0.15); }
 
 /* Audit mini-log */
 .ce-audit {
@@ -872,6 +872,59 @@
   font-family: var(--font-mono, monospace);
 }
 .ce-audit-time { color: rgba(165, 243, 252, 0.3); flex-shrink: 0; }
-.ce-audit-event { color: #22d3ee; flex-shrink: 0; font-weight: 500; }
+.ce-audit-event { color: var(--nexus-accent); flex-shrink: 0; font-weight: 500; }
 .ce-audit-detail { color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ce-audit-empty { color: rgba(165, 243, 252, 0.2); font-size: 0.62rem; padding: 0.4rem; text-align: center; }
+
+/* ================================================================== */
+/*  Responsive: hide sidebars on small screens                         */
+/* ================================================================== */
+
+/* ================================================================== */
+/*  Notice / error bar                                                 */
+/* ================================================================== */
+
+.ce-notice-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.3rem 0.6rem;
+  background: rgba(245, 158, 11, 0.1);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+  font-size: 0.7rem;
+  color: #f59e0b;
+  font-family: var(--font-mono, monospace);
+}
+.ce-notice-close {
+  background: transparent;
+  border: none;
+  color: #f59e0b;
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0 0.3rem;
+}
+.ce-notice-close:hover { color: #ef4444; }
+
+.ce-tree-loading {
+  padding: 0.5rem;
+  font-size: 0.65rem;
+  color: rgba(165, 243, 252, 0.4);
+  text-align: center;
+}
+.ce-tree-notice {
+  padding: 0.5rem;
+  font-size: 0.6rem;
+  color: rgba(245, 158, 11, 0.6);
+  text-align: center;
+  font-style: italic;
+}
+
+/* ================================================================== */
+/*  Responsive: hide sidebars on small screens                         */
+/* ================================================================== */
+
+@media (max-width: 768px) {
+  .ce-explorer { display: none; }
+  .ce-agent { display: none; }
+  .ce-center { width: 100%; }
+}

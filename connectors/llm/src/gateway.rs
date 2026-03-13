@@ -245,11 +245,8 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
         }
 
         let estimated_tokens = u64::from(max_tokens);
-        if self.provider.is_paid() && self.provider.requires_real_api_opt_in() {
-            let estimated_cost = f64::from(max_tokens) * self.provider.cost_per_token();
-            if agent.fuel_remaining < estimated_tokens || estimated_cost.is_sign_negative() {
-                return Err(AgentError::FuelExhausted);
-            }
+        if agent.fuel_remaining < estimated_tokens {
+            return Err(AgentError::FuelExhausted);
         }
 
         // ── Semantic boundary (before redaction + input firewall) ───────
@@ -336,7 +333,9 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
                 )));
             }
             FirewallAction::Redacted { redacted_text, .. } => {
-                // Replace outbound prompt with further-redacted version.
+                // Replace outbound prompt with further-redacted version
+                // and recalculate the hash to match the actual sent content.
+                redaction_result.outbound_prompt_hash_hex = sha256_hex(redacted_text.as_bytes());
                 redaction_result.outbound_prompt = redacted_text;
             }
             FirewallAction::Allow => {}
@@ -355,17 +354,46 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
             }
         }
 
+        // ── Pre-flight fuel check (before provider call) ─────────────
+        if agent.fuel_remaining < estimated_tokens {
+            return Err(AgentError::FuelExhausted);
+        }
+
+        // Pre-deduct estimated fuel BEFORE provider call (fail-fast on budget)
+        agent.fuel_remaining -= estimated_tokens;
+
         let started = Instant::now();
-        let response =
-            self.provider
-                .query(redaction_result.outbound_prompt.as_str(), max_tokens, model)?;
+        let mut response =
+            match self
+                .provider
+                .query(redaction_result.outbound_prompt.as_str(), max_tokens, model)
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    // Refund pre-deducted fuel on provider error
+                    agent.fuel_remaining += estimated_tokens;
+                    let _ = self.audit_trail.append_event(
+                        agent.agent_id,
+                        EventType::Error,
+                        json!({
+                            "event_kind": "llm.provider_error",
+                            "model": model,
+                            "provider": self.provider.name(),
+                            "error": e.to_string(),
+                        }),
+                    );
+                    return Err(e);
+                }
+            };
         let latency_ms = started.elapsed().as_millis() as u64;
 
+        // Adjust fuel: refund estimate, charge actual
         let actual_tokens = u64::from(response.token_count);
+        agent.fuel_remaining += estimated_tokens; // refund estimate
         if agent.fuel_remaining < actual_tokens {
             return Err(AgentError::FuelExhausted);
         }
-        agent.fuel_remaining -= actual_tokens;
+        agent.fuel_remaining -= actual_tokens; // charge actual
 
         let estimated_input_tokens = self
             .provider
@@ -514,7 +542,10 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
                     "output firewall blocked: {reason}"
                 )));
             }
-            FirewallAction::Allow | FirewallAction::Redacted { .. } => {}
+            FirewallAction::Redacted { redacted_text, .. } => {
+                response.output_text = redacted_text;
+            }
+            FirewallAction::Allow => {}
         }
 
         self.oracle_events.push(OracleEvent {

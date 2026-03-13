@@ -58,7 +58,7 @@ struct QueueEntry {
 pub struct InferenceQueue {
     /// Priority-sorted pending requests (lower priority value = front of queue).
     pending: Mutex<Vec<QueueEntry>>,
-    /// Signalled when a new request is enqueued.
+    /// Signalled when a new request is enqueued or an in-flight request completes.
     notify: Condvar,
     /// Monotonically increasing request ID counter.
     next_id: AtomicUsize,
@@ -70,6 +70,8 @@ pub struct InferenceQueue {
     total_submitted: AtomicUsize,
     /// Whether the queue has been shut down.
     shutdown: AtomicBool,
+    /// Maximum number of concurrent in-flight requests (0 = unlimited).
+    max_concurrent: AtomicUsize,
 }
 
 impl InferenceQueue {
@@ -82,7 +84,31 @@ impl InferenceQueue {
             completed: AtomicUsize::new(0),
             total_submitted: AtomicUsize::new(0),
             shutdown: AtomicBool::new(false),
+            max_concurrent: AtomicUsize::new(0),
         }
+    }
+
+    /// Create a queue with a maximum number of concurrent in-flight requests.
+    pub fn with_max_concurrent(max: usize) -> Self {
+        Self {
+            pending: Mutex::new(Vec::new()),
+            notify: Condvar::new(),
+            next_id: AtomicUsize::new(1),
+            in_flight: AtomicUsize::new(0),
+            completed: AtomicUsize::new(0),
+            total_submitted: AtomicUsize::new(0),
+            shutdown: AtomicBool::new(false),
+            max_concurrent: AtomicUsize::new(max),
+        }
+    }
+
+    /// Returns true if in-flight count is below the max_concurrent limit (or unlimited).
+    fn can_dispatch(&self) -> bool {
+        let max = self.max_concurrent.load(Ordering::Relaxed);
+        if max == 0 {
+            return true; // unlimited
+        }
+        self.in_flight.load(Ordering::Relaxed) < max
     }
 
     /// Submit a request and receive a channel to await the result.
@@ -211,7 +237,11 @@ impl InferenceScheduler {
     }
 
     fn drain_local<P: LlmProvider>(&self, provider: &Arc<P>) {
-        while let Some(entry) = self.queue.take_next() {
+        while self.queue.can_dispatch() {
+            let entry = match self.queue.take_next() {
+                Some(e) => e,
+                None => break,
+            };
             self.queue.in_flight.fetch_add(1, Ordering::Relaxed);
             let result = execute_request(provider.as_ref(), &entry.request);
             self.queue.in_flight.fetch_sub(1, Ordering::Relaxed);
@@ -221,10 +251,13 @@ impl InferenceScheduler {
     }
 
     fn drain_external<P: LlmProvider + 'static>(&self, provider: &Arc<P>, worker_count: usize) {
-        // Collect all pending entries.
+        // Collect pending entries up to max_concurrent limit.
         let mut entries = Vec::new();
-        while let Some(entry) = self.queue.take_next() {
-            entries.push(entry);
+        while self.queue.can_dispatch() {
+            match self.queue.take_next() {
+                Some(entry) => entries.push(entry),
+                None => break,
+            }
         }
         if entries.is_empty() {
             return;

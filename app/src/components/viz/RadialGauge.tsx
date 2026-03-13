@@ -37,7 +37,7 @@ export function RadialGauge({ value, max = 100, label = "Fuel", size = 132 }: Ra
       <svg viewBox={`0 0 ${size} ${size}`} className="viz-radial-gauge__svg" role="img" aria-label={`${label} ${Math.round(normalized * 100)} percent`}>
         <defs>
           <linearGradient id="arc-reactor-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#22d3ee" />
+            <stop offset="0%" stopColor="var(--nexus-accent)" />
             <stop offset="60%" stopColor="#38bdf8" />
             <stop offset="100%" stopColor="#a78bfa" />
           </linearGradient>

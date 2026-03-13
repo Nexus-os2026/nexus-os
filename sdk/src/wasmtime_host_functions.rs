@@ -118,16 +118,13 @@ fn threat_scan_side_effect(
     state: &WasmAgentState,
     effect: &ContextSideEffect,
 ) -> SpeculativeDecision {
-    if state.speculative_policy.is_none() {
-        return SpeculativeDecision::Commit;
-    }
-
     let (capabilities, fuel_budget) = match state.agent_context.as_ref() {
         Some(ctx) => {
             let ctx = ctx.borrow();
             (ctx.capabilities().to_vec(), ctx.fuel_budget())
         }
-        None => (vec![], 0),
+        // No agent context means no governance data to scan against
+        None => return SpeculativeDecision::Commit,
     };
 
     let detector = ThreatDetector::new(capabilities, fuel_budget);
@@ -210,7 +207,14 @@ fn link_nexus_log(linker: &mut Linker<WasmAgentState>) -> Result<(), SandboxErro
              msg_len: i32| {
                 let memory = match caller.get_export("memory") {
                     Some(wasmtime::Extern::Memory(mem)) => mem,
-                    _ => return,
+                    _ => {
+                        // BUG 3 FIX: Log error internally when WASM module lacks exported memory
+                        eprintln!("[nexus_log] WASM module missing exported memory — cannot read log message");
+                        let state = caller.data_mut();
+                        state.outputs.push("[nexus_log] error: no exported memory".to_string());
+                        state.host_calls_made += 1;
+                        return;
+                    }
                 };
                 let msg = read_wasm_str(&caller, &memory, msg_ptr, msg_len);
                 let state = caller.data_mut();
@@ -276,7 +280,7 @@ fn link_nexus_llm_query(linker: &mut Linker<WasmAgentState>) -> Result<(), Sandb
 
                 // Threat detection: even if policy says Commit, scan the
                 // side-effect and escalate if threats are found.
-                if state.speculative_policy.is_some() && decision == SpeculativeDecision::Commit {
+                if decision == SpeculativeDecision::Commit {
                     let effect = ContextSideEffect::LlmQuery {
                         prompt: prompt.clone(),
                         max_tokens: max_tokens as u32,
@@ -373,7 +377,7 @@ fn link_nexus_fs_read(linker: &mut Linker<WasmAgentState>) -> Result<(), Sandbox
                 let mut decision = check_speculation(state, "fs_read");
 
                 // Threat detection on file read path
-                if state.speculative_policy.is_some() && decision == SpeculativeDecision::Commit {
+                if decision == SpeculativeDecision::Commit {
                     let effect = ContextSideEffect::FileRead {
                         path: path.clone(),
                         fuel_cost: 2,
@@ -468,7 +472,7 @@ fn link_nexus_fs_write(linker: &mut Linker<WasmAgentState>) -> Result<(), Sandbo
                 let mut decision = check_speculation(state, "fs_write");
 
                 // Threat detection on file write path
-                if state.speculative_policy.is_some() && decision == SpeculativeDecision::Commit {
+                if decision == SpeculativeDecision::Commit {
                     let effect = ContextSideEffect::FileWrite {
                         path: path.clone(),
                         content_size: content.len(),
@@ -570,7 +574,7 @@ fn link_nexus_request_approval(linker: &mut Linker<WasmAgentState>) -> Result<()
                 let mut decision = check_speculation(state, "request_approval");
 
                 // Threat detection on approval request
-                if state.speculative_policy.is_some() && decision == SpeculativeDecision::Commit {
+                if decision == SpeculativeDecision::Commit {
                     let effect = ContextSideEffect::ApprovalRequest {
                         description: desc.clone(),
                     };
@@ -723,6 +727,29 @@ fn link_nexus_exec_tool(linker: &mut Linker<WasmAgentState>) -> Result<(), Sandb
                         json_input.len(),
                     ));
                     return if decision == SpeculativeDecision::Block {
+                        -6
+                    } else {
+                        -7
+                    };
+                }
+
+                // BUG 5 FIX: Run threat_scan_side_effect before tool execution
+                let threat_effect = ContextSideEffect::ToolExec {
+                    tool_name: "exec_tool".to_string(),
+                    input_json: json_input.clone(),
+                };
+                let threat_decision = threat_scan_side_effect(state, &threat_effect);
+                if threat_decision != SpeculativeDecision::Commit {
+                    state.host_calls_made += 1;
+                    state.outputs.push(format!(
+                        "[threat-{}: exec_tool blocked by threat scan]",
+                        if threat_decision == SpeculativeDecision::Block {
+                            "blocked"
+                        } else {
+                            "review"
+                        },
+                    ));
+                    return if threat_decision == SpeculativeDecision::Block {
                         -6
                     } else {
                         -7
@@ -896,6 +923,98 @@ mod tests {
         assert_eq!(
             parsed["args"],
             serde_json::json!(["test", "-p", "nexus-sdk"])
+        );
+    }
+
+    // ── threat_scan_side_effect tests (BUG 4 FIX) ──────────────────
+
+    #[test]
+    fn test_threat_scan_clean() {
+        // Threat scan always runs — safe paths should pass.
+        // With no agent_context and empty capabilities, ThreatDetector may
+        // flag due to missing capabilities. Use a benign side-effect that
+        // won't trigger suspicion even with empty capabilities.
+        let state = WasmAgentState {
+            agent_id: "test".to_string(),
+            capabilities: vec!["fs.read".to_string(), "llm.query".to_string()],
+            allowed_host_functions: vec![],
+            outputs: vec![],
+            host_calls_made: 0,
+            killed: false,
+            kill_reason: None,
+            limiter: wasmtime::StoreLimitsBuilder::new().build(),
+            agent_context: None,
+            speculative_policy: None,
+        };
+        let effect = ContextSideEffect::FileRead {
+            path: "/tmp/safe.txt".into(),
+            fuel_cost: 2,
+        };
+        assert_eq!(
+            threat_scan_side_effect(&state, &effect),
+            SpeculativeDecision::Commit
+        );
+    }
+
+    fn make_test_agent_context() -> Rc<std::cell::RefCell<crate::context::AgentContext>> {
+        Rc::new(std::cell::RefCell::new(crate::context::AgentContext::new(
+            uuid::Uuid::new_v4(),
+            vec!["fs.read".into(), "fs.write".into(), "llm.query".into()],
+            10000,
+        )))
+    }
+
+    #[test]
+    fn test_threat_scan_suspicious_pattern() {
+        // Known injection pattern detected — threat scan always runs
+        let state = WasmAgentState {
+            agent_id: "test".to_string(),
+            capabilities: vec![],
+            allowed_host_functions: vec![],
+            outputs: vec![],
+            host_calls_made: 0,
+            killed: false,
+            kill_reason: None,
+            limiter: wasmtime::StoreLimitsBuilder::new().build(),
+            agent_context: Some(make_test_agent_context()),
+            speculative_policy: Some(SpeculativePolicy::allow_all()),
+        };
+        // Path traversal is a known dangerous pattern
+        let effect = ContextSideEffect::FileWrite {
+            path: "/tmp/../../etc/shadow".into(),
+            content_size: 100,
+            fuel_cost: 8,
+        };
+        let decision = threat_scan_side_effect(&state, &effect);
+        assert_eq!(
+            decision,
+            SpeculativeDecision::Block,
+            "path traversal should be blocked by threat scan"
+        );
+    }
+
+    #[test]
+    fn test_threat_scan_empty_input() {
+        // Benign side-effect passes — threat scan always runs.
+        let state = WasmAgentState {
+            agent_id: "test".to_string(),
+            capabilities: vec![],
+            allowed_host_functions: vec![],
+            outputs: vec![],
+            host_calls_made: 0,
+            killed: false,
+            kill_reason: None,
+            limiter: wasmtime::StoreLimitsBuilder::new().build(),
+            agent_context: Some(make_test_agent_context()),
+            speculative_policy: Some(SpeculativePolicy::allow_all()),
+        };
+        let effect = ContextSideEffect::ApprovalRequest {
+            description: "safe operation".to_string(),
+        };
+        assert_eq!(
+            threat_scan_side_effect(&state, &effect),
+            SpeculativeDecision::Commit,
+            "clean input should pass threat scan"
         );
     }
 

@@ -113,7 +113,7 @@ fn test_audit_chain_detects_tampering() {
     );
 
     // Tamper with the 5th event's payload
-    audit.events_mut()[4].payload = json!({ "seq": 999, "tampered": true });
+    audit.events_mut_for_testing()[4].payload = json!({ "seq": 999, "tampered": true });
 
     assert!(
         !audit.verify_integrity(),

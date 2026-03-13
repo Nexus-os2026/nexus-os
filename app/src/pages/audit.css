@@ -4,7 +4,7 @@
   grid-template-rows: auto auto 1fr auto;
   gap: 0.75rem;
   height: calc(100vh - 10rem);
-  border: 1px solid rgba(0, 255, 213, 0.2);
+  border: 1px solid rgba(0, 255, 157, 0.2);
   background: linear-gradient(155deg, rgba(5, 10, 18, 0.95), rgba(10, 22, 40, 0.86));
   backdrop-filter: blur(12px);
   overflow: hidden;
@@ -16,8 +16,8 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 0.85rem 1rem;
-  border-bottom: 1px solid rgba(0, 255, 213, 0.2);
-  background: linear-gradient(90deg, rgba(0, 255, 213, 0.08), rgba(0, 255, 213, 0.01));
+  border-bottom: 1px solid rgba(0, 255, 157, 0.2);
+  background: linear-gradient(90deg, rgba(0, 255, 157, 0.08), rgba(0, 255, 157, 0.01));
 }
 
 .audit-header-left {
@@ -84,8 +84,8 @@
 
 .audit-verify-bar {
   height: 100%;
-  background: linear-gradient(90deg, #10b981, #00ffd5);
-  box-shadow: 0 0 12px rgba(0, 255, 213, 0.5);
+  background: linear-gradient(90deg, #10b981, var(--nexus-accent));
+  box-shadow: 0 0 12px rgba(0, 255, 157, 0.5);
   transition: width 60ms linear;
 }
 
@@ -121,7 +121,7 @@
 .audit-search {
   flex: 1;
   min-width: 200px;
-  border: 1px solid rgba(0, 255, 213, 0.25);
+  border: 1px solid rgba(0, 255, 157, 0.25);
   background: rgba(5, 10, 18, 0.85);
   color: var(--text-primary);
   font-family: var(--font-body);
@@ -132,12 +132,12 @@
 }
 
 .audit-search:focus {
-  border-color: rgba(0, 255, 213, 0.6);
-  box-shadow: 0 0 12px rgba(0, 255, 213, 0.15);
+  border-color: rgba(0, 255, 157, 0.6);
+  box-shadow: 0 0 12px rgba(0, 255, 157, 0.15);
 }
 
 .audit-select {
-  border: 1px solid rgba(0, 255, 213, 0.25);
+  border: 1px solid rgba(0, 255, 157, 0.25);
   background: rgba(5, 10, 18, 0.85);
   color: var(--text-accent);
   font-family: var(--font-mono);
@@ -183,7 +183,7 @@
   text-transform: uppercase;
   color: var(--text-accent);
   background: rgba(5, 10, 18, 0.95);
-  border-bottom: 1px solid rgba(0, 255, 213, 0.3);
+  border-bottom: 1px solid rgba(0, 255, 157, 0.3);
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
@@ -207,16 +207,16 @@
 }
 
 .audit-row:hover {
-  background: rgba(0, 255, 213, 0.06);
+  background: rgba(0, 255, 157, 0.06);
 }
 
 .audit-row.expanded {
-  background: rgba(0, 255, 213, 0.08);
+  background: rgba(0, 255, 157, 0.08);
 }
 
 .audit-td {
   padding: 0.5rem 0.65rem;
-  border-bottom: 1px solid rgba(0, 255, 213, 0.06);
+  border-bottom: 1px solid rgba(0, 255, 157, 0.06);
   color: var(--text-primary);
   font-family: var(--font-body);
   white-space: nowrap;
@@ -252,7 +252,7 @@
 }
 
 .audit-copy-btn {
-  border: 1px solid rgba(0, 255, 213, 0.2);
+  border: 1px solid rgba(0, 255, 157, 0.2);
   background: transparent;
   color: var(--text-secondary);
   font-size: 0.72rem;
@@ -262,7 +262,7 @@
 }
 
 .audit-copy-btn:hover {
-  border-color: rgba(0, 255, 213, 0.5);
+  border-color: rgba(0, 255, 157, 0.5);
   color: var(--text-accent);
 }
 
@@ -304,7 +304,7 @@
 }
 
 .audit-detail-panel {
-  border-top: 1px solid rgba(0, 255, 213, 0.2);
+  border-top: 1px solid rgba(0, 255, 157, 0.2);
   background: rgba(13, 31, 60, 0.5);
   padding: 0.85rem 1rem;
   animation: fade-slide-up 200ms ease;
@@ -326,7 +326,7 @@
 }
 
 .audit-detail-close {
-  border: 1px solid rgba(0, 255, 213, 0.3);
+  border: 1px solid rgba(0, 255, 157, 0.3);
   background: transparent;
   color: var(--text-secondary);
   width: 28px;
@@ -337,7 +337,7 @@
 
 .audit-detail-close:hover {
   color: var(--text-accent);
-  border-color: rgba(0, 255, 213, 0.6);
+  border-color: rgba(0, 255, 157, 0.6);
 }
 
 .audit-detail-grid {
@@ -380,7 +380,7 @@
 .audit-detail-json {
   margin: 0;
   padding: 0.65rem;
-  border: 1px solid rgba(0, 255, 213, 0.15);
+  border: 1px solid rgba(0, 255, 157, 0.15);
   background: rgba(5, 10, 18, 0.8);
   color: var(--text-accent);
   font-family: var(--font-mono);

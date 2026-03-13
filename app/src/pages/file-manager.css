@@ -41,7 +41,7 @@
 .fm-fuel-label { color: rgba(165, 243, 252, 0.4); font-size: 0.55rem; letter-spacing: 0.08em; }
 .fm-fuel-bar { width: 36px; height: 4px; background: rgba(30, 41, 59, 0.8); border-radius: 2px; overflow: hidden; }
 .fm-fuel-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
-.fm-fuel-value { color: #22d3ee; font-weight: 600; font-size: 0.68rem; }
+.fm-fuel-value { color: var(--nexus-accent); font-weight: 600; font-size: 0.68rem; }
 
 /* Toolbar */
 .fm-toolbar { display: flex; gap: 0.25rem; }
@@ -52,7 +52,7 @@
   font-size: 0.75rem; font-family: var(--font-mono, monospace); transition: all 0.15s;
 }
 .fm-tool-btn:hover { border-color: rgba(56, 189, 248, 0.35); color: #a5f3fc; }
-.fm-tool-active { background: rgba(34, 211, 238, 0.08); border-color: rgba(34, 211, 238, 0.3); color: #22d3ee; }
+.fm-tool-active { background: rgba(0, 255, 157, 0.08); border-color: rgba(0, 255, 157, 0.3); color: var(--nexus-accent); }
 
 /* ================================================================== */
 /*  Action bar                                                         */
@@ -79,7 +79,7 @@
   padding: 0.15rem 0.3rem; border-radius: 0.2rem; transition: all 0.1s;
 }
 .fm-crumb:hover { color: #a5f3fc; background: rgba(56, 189, 248, 0.06); }
-.fm-crumb-current { color: #22d3ee; font-weight: 600; }
+.fm-crumb-current { color: var(--nexus-accent); font-weight: 600; }
 
 .fm-action-btns { display: flex; gap: 0.25rem; }
 .fm-action-btn {
@@ -89,7 +89,7 @@
   font-family: var(--font-mono, monospace); font-size: 0.65rem; transition: all 0.15s;
 }
 .fm-action-btn:hover { border-color: rgba(56, 189, 248, 0.35); color: #a5f3fc; }
-.fm-action-paste { border-color: rgba(34, 211, 238, 0.3); color: #22d3ee; }
+.fm-action-paste { border-color: rgba(0, 255, 157, 0.3); color: var(--nexus-accent); }
 
 /* ================================================================== */
 /*  Search bar                                                         */
@@ -116,21 +116,21 @@
 
 .fm-new-item-bar {
   display: flex; align-items: center; gap: 0.4rem;
-  padding: 0.3rem 0.8rem; background: rgba(34, 211, 238, 0.04);
-  border-bottom: 1px solid rgba(34, 211, 238, 0.12); flex-shrink: 0;
+  padding: 0.3rem 0.8rem; background: rgba(0, 255, 157, 0.04);
+  border-bottom: 1px solid rgba(0, 255, 157, 0.12); flex-shrink: 0;
 }
 .fm-new-item-label { color: rgba(165, 243, 252, 0.5); font-size: 0.7rem; font-family: var(--font-mono, monospace); }
 .fm-new-item-input {
   flex: 1; padding: 0.2rem 0.4rem; background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(34, 211, 238, 0.25); border-radius: 3px;
+  border: 1px solid rgba(0, 255, 157, 0.25); border-radius: 3px;
   color: #e2e8f0; font-family: var(--font-mono, monospace); font-size: 0.72rem; outline: none;
 }
-.fm-new-item-input:focus { border-color: #22d3ee; }
+.fm-new-item-input:focus { border-color: var(--nexus-accent); }
 .fm-new-item-create, .fm-new-item-cancel {
   padding: 0.2rem 0.5rem; border-radius: 0.25rem; cursor: pointer;
   font-family: var(--font-mono, monospace); font-size: 0.65rem; transition: all 0.15s;
 }
-.fm-new-item-create { background: rgba(34, 211, 238, 0.12); border: 1px solid rgba(34, 211, 238, 0.25); color: #22d3ee; }
+.fm-new-item-create { background: rgba(0, 255, 157, 0.12); border: 1px solid rgba(0, 255, 157, 0.25); color: var(--nexus-accent); }
 .fm-new-item-cancel { background: transparent; border: 1px solid rgba(56, 189, 248, 0.12); color: rgba(165, 243, 252, 0.4); }
 
 /* ================================================================== */
@@ -139,18 +139,18 @@
 
 .fm-agent-strip {
   display: flex; gap: 0.8rem; padding: 0.3rem 0.8rem;
-  background: rgba(34, 211, 238, 0.03); border-bottom: 1px solid rgba(34, 211, 238, 0.08);
+  background: rgba(0, 255, 157, 0.03); border-bottom: 1px solid rgba(0, 255, 157, 0.08);
   overflow-x: auto; flex-shrink: 0;
 }
 .fm-agent-op {
   display: flex; align-items: center; gap: 0.3rem;
   font-family: var(--font-mono, monospace); font-size: 0.62rem; flex-shrink: 0;
 }
-.fm-agent-op-name { color: #22d3ee; font-weight: 600; }
+.fm-agent-op-name { color: var(--nexus-accent); font-weight: 600; }
 .fm-agent-op-action { color: rgba(165, 243, 252, 0.5); }
 .fm-agent-op-file { color: #a5f3fc; }
 .fm-agent-op-bar { width: 40px; height: 3px; background: rgba(30, 41, 59, 0.8); border-radius: 2px; overflow: hidden; }
-.fm-agent-op-fill { height: 100%; background: #22d3ee; border-radius: 2px; transition: width 0.5s ease; }
+.fm-agent-op-fill { height: 100%; background: var(--nexus-accent); border-radius: 2px; transition: width 0.5s ease; }
 .fm-agent-op-pct { color: rgba(165, 243, 252, 0.35); }
 
 /* ================================================================== */
@@ -200,8 +200,8 @@
   border: 1px solid transparent;
 }
 .fm-file-grid:hover { background: rgba(56, 189, 248, 0.05); }
-.fm-file-grid.fm-file-selected { background: rgba(34, 211, 238, 0.08); border-color: rgba(34, 211, 238, 0.25); }
-.fm-file-grid.fm-file-drag-over { background: rgba(34, 211, 238, 0.12); border-color: rgba(34, 211, 238, 0.4); }
+.fm-file-grid.fm-file-selected { background: rgba(0, 255, 157, 0.08); border-color: rgba(0, 255, 157, 0.25); }
+.fm-file-grid.fm-file-drag-over { background: rgba(0, 255, 157, 0.12); border-color: rgba(0, 255, 157, 0.4); }
 
 .fm-file-icon-large { font-size: 1.8rem; line-height: 1; }
 .fm-file-name-grid {
@@ -213,7 +213,7 @@
   position: absolute; top: 4px; right: 4px; font-size: 0.55rem;
 }
 .fm-agent-badge {
-  font-size: 0.5rem; color: #22d3ee; background: rgba(34, 211, 238, 0.1);
+  font-size: 0.5rem; color: var(--nexus-accent); background: rgba(0, 255, 157, 0.1);
   padding: 0.05rem 0.25rem; border-radius: 0.15rem; letter-spacing: 0.02em;
 }
 
@@ -225,8 +225,8 @@
   transition: background 0.1s; border-bottom: 1px solid rgba(56, 189, 248, 0.03);
 }
 .fm-file-row:hover { background: rgba(56, 189, 248, 0.04); }
-.fm-file-row.fm-file-selected { background: rgba(34, 211, 238, 0.08); }
-.fm-file-row.fm-file-drag-over { background: rgba(34, 211, 238, 0.12); }
+.fm-file-row.fm-file-selected { background: rgba(0, 255, 157, 0.08); }
+.fm-file-row.fm-file-drag-over { background: rgba(0, 255, 157, 0.12); }
 
 .fm-file-icon { font-size: 0.85rem; width: 22px; text-align: center; flex-shrink: 0; }
 .fm-file-name { flex: 1; color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -238,7 +238,7 @@
 
 /* Rename input */
 .fm-rename-input {
-  background: rgba(15, 23, 42, 0.8); border: 1px solid #22d3ee; border-radius: 3px;
+  background: rgba(15, 23, 42, 0.8); border: 1px solid var(--nexus-accent); border-radius: 3px;
   color: #e2e8f0; font-family: var(--font-mono, monospace); font-size: 0.68rem;
   padding: 0.15rem 0.3rem; outline: none; text-align: center; width: 90%;
 }
@@ -289,7 +289,7 @@
   letter-spacing: 0.03em; text-transform: uppercase; transition: color 0.15s;
 }
 .fm-stab:hover { color: #a5f3fc; }
-.fm-stab-active { color: #22d3ee; border-bottom-color: #22d3ee; }
+.fm-stab-active { color: var(--nexus-accent); border-bottom-color: var(--nexus-accent); }
 
 .fm-sidebar-body { flex: 1; overflow-y: auto; padding: 0.4rem; }
 
@@ -349,7 +349,7 @@
   font-size: 0.6rem; font-family: var(--font-mono, monospace);
 }
 .fm-audit-time { color: rgba(165, 243, 252, 0.25); }
-.fm-audit-event { color: #22d3ee; }
+.fm-audit-event { color: var(--nexus-accent); }
 
 /* Vault */
 .fm-vault-header {
@@ -417,7 +417,7 @@
   letter-spacing: 0.04em; margin-bottom: 0.5rem;
 }
 .fm-confirm-text { font-size: 0.78rem; color: #e2e8f0; margin-bottom: 0.3rem; }
-.fm-confirm-text strong { color: #22d3ee; }
+.fm-confirm-text strong { color: var(--nexus-accent); }
 .fm-confirm-path { font-size: 0.65rem; color: rgba(165, 243, 252, 0.3); font-family: var(--font-mono, monospace); margin-bottom: 0.8rem; }
 .fm-confirm-actions { display: flex; gap: 0.5rem; }
 .fm-confirm-btn {
@@ -441,3 +441,12 @@
 }
 .fm-status-sep { color: rgba(165, 243, 252, 0.15); }
 .fm-status-right { margin-left: auto; display: flex; align-items: center; gap: 0.4rem; }
+
+/* ================================================================== */
+/*  Responsive: hide sidebar on small screens                          */
+/* ================================================================== */
+
+@media (max-width: 768px) {
+  .fm-sidebar { display: none; }
+  .fm-files-area { width: 100%; }
+}

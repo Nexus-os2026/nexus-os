@@ -15,12 +15,21 @@ use crate::policy_engine::PolicyEngine;
 use crate::safety_supervisor::{KpiKind, SafetyAction, SafetySupervisor};
 use crate::speculative::{SimulationResult, SpeculativeEngine};
 use crate::time_machine::TimeMachine;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use uuid::Uuid;
 
 pub type AgentId = Uuid;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExecutionMode {
+    /// Built-in agent managed by Tauri commands (no WASM binary).
+    Native,
+    /// WASM-sandboxed agent with binary at the given path.
+    Wasm { binary_path: PathBuf },
+}
 
 #[derive(Debug, Clone)]
 pub struct AgentHandle {
@@ -31,6 +40,7 @@ pub struct AgentHandle {
     pub autonomy_level: u8,
     pub state: AgentState,
     pub remaining_fuel: u64,
+    pub execution_mode: ExecutionMode,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -135,6 +145,20 @@ impl Supervisor {
             consent_runtime.set_cedar_engine(self.policy_engine.clone());
         }
 
+        // Determine execution mode: WASM if manifest declares a binary, Native otherwise.
+        let execution_mode = if let Some(wasm_path) = manifest
+            .capabilities
+            .iter()
+            .find(|c| c.starts_with("wasm.binary:"))
+        {
+            let path = wasm_path.strip_prefix("wasm.binary:").unwrap_or_default();
+            ExecutionMode::Wasm {
+                binary_path: PathBuf::from(path),
+            }
+        } else {
+            ExecutionMode::Native
+        };
+
         let handle = AgentHandle {
             id,
             manifest,
@@ -143,6 +167,7 @@ impl Supervisor {
             autonomy_level: autonomy_level_numeric(autonomy_level),
             state: AgentState::Created,
             remaining_fuel: monthly_cap,
+            execution_mode: execution_mode.clone(),
         };
 
         self.agents.insert(id, handle);
@@ -172,6 +197,7 @@ impl Supervisor {
             json!({
                 "event": "autonomy.level_initialized",
                 "level": autonomy_level.as_str(),
+                "execution_mode": format!("{execution_mode:?}"),
             }),
         )?;
 
@@ -189,23 +215,59 @@ impl Supervisor {
             .get_mut(&id)
             .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
         entry.state = transition_state(entry.state, AgentState::Running)?;
+
+        // Create a time machine checkpoint for agent start
+        let mut builder = self
+            .time_machine
+            .begin_checkpoint("agent_lifecycle", Some(id.to_string()));
+        builder.record_agent_state(
+            &id.to_string(),
+            "status",
+            json!("not_running"),
+            json!("running"),
+        );
+        let checkpoint = builder.build();
+        let _ = self.time_machine.commit_checkpoint(checkpoint);
+
         Ok(id)
     }
 
     pub fn stop_agent(&mut self, id: AgentId) -> Result<(), AgentError> {
-        let handle = self
-            .agents
-            .get_mut(&id)
-            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
-        match handle.state {
+        let current_state = {
+            let handle = self
+                .agents
+                .get(&id)
+                .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+            handle.state
+        };
+        match current_state {
             AgentState::Running | AgentState::Paused => {
+                // Consume fuel for stop operation (symmetric with start)
+                self.consume_fuel_units(id, "supervisor.stop", 2)?;
+                let handle = self.agents.get_mut(&id).ok_or_else(|| {
+                    AgentError::SupervisorError(format!("agent '{id}' not found"))
+                })?;
                 handle.state = transition_state(handle.state, AgentState::Stopping)?;
                 handle.state = transition_state(handle.state, AgentState::Stopped)?;
+
+                // Create a time machine checkpoint for agent stop
+                let mut builder = self
+                    .time_machine
+                    .begin_checkpoint("agent_lifecycle", Some(id.to_string()));
+                builder.record_agent_state(
+                    &id.to_string(),
+                    "status",
+                    json!("running"),
+                    json!("stopped"),
+                );
+                let checkpoint = builder.build();
+                let _ = self.time_machine.commit_checkpoint(checkpoint);
+
                 Ok(())
             }
             AgentState::Stopping | AgentState::Stopped | AgentState::Destroyed => Ok(()),
             _ => Err(AgentError::InvalidTransition {
-                from: handle.state,
+                from: current_state,
                 to: AgentState::Stopping,
             }),
         }
@@ -447,7 +509,9 @@ impl Supervisor {
             .map_err(AgentError::from)?;
         // Policy engine autonomy override (only when policies exist)
         if let Some(ref pe) = policy_ref {
-            let handle = self.agents.get_mut(&id).unwrap();
+            let handle = self.agents.get_mut(&id).ok_or_else(|| {
+                AgentError::SupervisorError(format!("agent '{id}' not found during policy check"))
+            })?;
             let default_min = handle.autonomy_guard.level();
             handle
                 .autonomy_guard
@@ -616,7 +680,11 @@ impl Supervisor {
             }) => {
                 // Auto-simulate for Tier2+ operations
                 if SpeculativeEngine::should_simulate(tier) {
-                    let handle = self.agents.get(&id).unwrap();
+                    let handle = self.agents.get(&id).ok_or_else(|| {
+                        AgentError::SupervisorError(format!(
+                            "agent '{id}' not found during speculative simulation"
+                        ))
+                    })?;
                     let snapshot = self.speculative_engine.fork_state(
                         id,
                         handle.remaining_fuel,
@@ -727,7 +795,22 @@ impl Supervisor {
             .agents
             .get_mut(&id)
             .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        let old_caps = handle.manifest.capabilities.clone();
         handle.manifest = updated;
+
+        // Create a time machine checkpoint for permission change
+        let mut builder = self
+            .time_machine
+            .begin_checkpoint("permission_change", Some(id.to_string()));
+        builder.record_agent_state(
+            &id.to_string(),
+            "capabilities",
+            json!(old_caps),
+            json!(handle.manifest.capabilities),
+        );
+        let checkpoint = builder.build();
+        let _ = self.time_machine.commit_checkpoint(checkpoint);
+
         Ok(())
     }
 
@@ -823,30 +906,61 @@ impl Supervisor {
     }
 
     fn consume_fuel(&mut self, id: AgentId, reason: &str) -> Result<(), AgentError> {
-        let model_name = {
+        self.consume_fuel_units(id, reason, 1)
+    }
+
+    fn consume_fuel_units(
+        &mut self,
+        id: AgentId,
+        reason: &str,
+        units: u64,
+    ) -> Result<(), AgentError> {
+        let (model_name, actual_units) = {
             let handle = self
                 .agents
                 .get_mut(&id)
                 .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
-            if handle.remaining_fuel == 0 {
+            let actual = units.min(handle.remaining_fuel);
+            if actual == 0 && units > 0 {
                 return Err(self.apply_fuel_violation(
                     id,
                     FuelViolation::OverMonthlyCap,
                     "runtime fuel exhausted",
                 ));
             }
-            handle.remaining_fuel -= 1;
-            handle
+            handle.remaining_fuel -= actual;
+            let model = handle
                 .manifest
                 .llm_model
                 .clone()
-                .unwrap_or_else(|| "runtime".to_string())
+                .unwrap_or_else(|| "runtime".to_string());
+            (model, actual)
         };
+
+        // Record fuel consumption in time machine
+        let mut builder = self
+            .time_machine
+            .begin_checkpoint("fuel_consumption", Some(id.to_string()));
+        builder.record_agent_state(
+            &id.to_string(),
+            "fuel",
+            json!(actual_units + self.agents.get(&id).map(|h| h.remaining_fuel).unwrap_or(0)),
+            json!(self.agents.get(&id).map(|h| h.remaining_fuel).unwrap_or(0)),
+        );
+        let checkpoint = builder.build();
+        let _ = self.time_machine.commit_checkpoint(checkpoint);
 
         let ledger = self.fuel_ledgers.get_mut(&id).ok_or_else(|| {
             AgentError::SupervisorError(format!("agent '{id}' missing fuel ledger"))
         })?;
-        match ledger.record_llm_spend(id, model_name.as_str(), 0, 1, 1, &mut self.audit_trail) {
+        match ledger.record_llm_spend(
+            id,
+            model_name.as_str(),
+            0,
+            actual_units as u32,
+            actual_units,
+            &mut self.audit_trail,
+        ) {
             Ok(()) => Ok(()),
             Err(violation) => Err(self.apply_fuel_violation(id, violation, reason)),
         }
@@ -934,7 +1048,7 @@ fn autonomy_level_numeric(level: AutonomyLevel) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consent::GovernedOperation;
+    use crate::consent::{GovernedOperation, HitlTier};
     use crate::manifest::AgentManifest;
 
     fn test_manifest() -> AgentManifest {
@@ -959,6 +1073,25 @@ mod tests {
     fn setup_supervisor_with_agent() -> (Supervisor, AgentId) {
         let mut sup = Supervisor::new();
         let id = sup.start_agent(test_manifest()).unwrap();
+        // Configure allowed approvers for operations used in tests
+        if let Some(handle) = sup.agents.get_mut(&id) {
+            let policy = handle.consent_runtime.policy_engine_mut();
+            policy.set_policy(
+                GovernedOperation::TerminalCommand,
+                HitlTier::Tier2,
+                vec!["admin".to_string()],
+            );
+            policy.set_policy(
+                GovernedOperation::SocialPostPublish,
+                HitlTier::Tier2,
+                vec!["admin".to_string()],
+            );
+            policy.set_policy(
+                GovernedOperation::SelfMutationApply,
+                HitlTier::Tier3,
+                vec!["admin".to_string(), "admin2".to_string()],
+            );
+        }
         (sup, id)
     }
 

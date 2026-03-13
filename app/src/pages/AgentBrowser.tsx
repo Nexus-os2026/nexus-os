@@ -65,12 +65,16 @@ export function AgentBrowser(): JSX.Element {
           content,
         },
       ]);
-      // Track governance stats
+      // Track governance stats — fuel is estimated per-action, not hardcoded
+      const fuelCost =
+        type === "navigating" ? 10 :
+        type === "blocked" ? 2 :
+        type === "deciding" ? 5 : 1;
       setGovStats((prev) => ({
         ...prev,
         auditEvents: prev.auditEvents + 1,
         domainsBlocked: prev.domainsBlocked + (type === "blocked" ? 1 : 0),
-        fuelConsumed: prev.fuelConsumed + 25,
+        fuelConsumed: prev.fuelConsumed + fuelCost,
       }));
     },
     []
@@ -94,16 +98,18 @@ export function AgentBrowser(): JSX.Element {
           }
           addActivity("info", `Loaded: ${result.title || result.url}`);
         } catch (err) {
-          addActivity("blocked", `Error: ${String(err)}`);
-          setBlocked(String(err));
+          const errorMsg = String(err);
+          console.error("[AgentBrowser] Navigation error:", err);
+          addActivity("blocked", `Error: ${errorMsg}`);
+          setBlocked(errorMsg);
           setLoading(false);
           return;
         }
       } else {
-        // Mock mode — simulate governance check
-        addActivity("deciding", "Checking egress governance policy...", "Firewall");
+        // Demo mode — simulate governance check (no desktop runtime)
+        addActivity("deciding", "[Demo Mode] Checking egress governance policy...", "Firewall");
         await new Promise((r) => setTimeout(r, 300));
-        addActivity("info", `Page loaded: ${target}`);
+        addActivity("info", `[Demo Mode] Page loaded: ${target}`);
       }
 
       setUrl(target);
@@ -225,7 +231,18 @@ export function AgentBrowser(): JSX.Element {
 
       {blocked && (
         <div className="browser-blocked-banner">
-          {blocked}
+          <span>{blocked}</span>
+          <button
+            className="browser-retry-button"
+            onClick={() => {
+              setBlocked(null);
+              if (url) {
+                void handleNavigate(url);
+              }
+            }}
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -304,22 +321,45 @@ export function AgentBrowser(): JSX.Element {
               </div>
             </div>
             <div className="governance-info">
-              <div className="governance-info-item">
-                <span className="governance-info-dot governance-info-dot--green" />
-                Egress policy active
-              </div>
-              <div className="governance-info-item">
-                <span className="governance-info-dot governance-info-dot--green" />
-                PII firewall enabled
-              </div>
-              <div className="governance-info-item">
-                <span className="governance-info-dot governance-info-dot--green" />
-                Audit chain verified
-              </div>
-              <div className="governance-info-item">
-                <span className="governance-info-dot governance-info-dot--green" />
-                Fuel metering on
-              </div>
+              {hasDesktopRuntime() ? (
+                <>
+                  <div className="governance-info-item">
+                    <span className="governance-info-dot governance-info-dot--green" />
+                    Egress policy active
+                  </div>
+                  <div className="governance-info-item">
+                    <span className="governance-info-dot governance-info-dot--green" />
+                    PII firewall enabled
+                  </div>
+                  <div className="governance-info-item">
+                    <span className="governance-info-dot governance-info-dot--green" />
+                    Audit chain verified
+                  </div>
+                  <div className="governance-info-item">
+                    <span className="governance-info-dot governance-info-dot--green" />
+                    Fuel metering on
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="governance-info-item">
+                    <span className="governance-info-dot governance-info-dot--gray" />
+                    Egress policy: Unknown (demo)
+                  </div>
+                  <div className="governance-info-item">
+                    <span className="governance-info-dot governance-info-dot--gray" />
+                    PII firewall: Unknown (demo)
+                  </div>
+                  <div className="governance-info-item">
+                    <span className="governance-info-dot governance-info-dot--gray" />
+                    Audit chain: Unknown (demo)
+                  </div>
+                  <div className="governance-info-item">
+                    <span className="governance-info-dot governance-info-dot--gray" />
+                    Fuel metering: Unknown (demo)
+                  </div>
+                </>
+              )}
             </div>
             <div className="governance-shortcuts">
               <div className="governance-shortcut">

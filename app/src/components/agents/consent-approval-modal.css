@@ -152,7 +152,7 @@
 .consent-raw-btn {
   background: transparent;
   border: 1px solid var(--border-color, #334155);
-  color: var(--text-accent, #00f0ff);
+  color: var(--text-accent, var(--nexus-accent));
   font-size: 0.8rem;
   padding: 0.3rem 0.6rem;
   border-radius: 4px;
@@ -160,7 +160,7 @@
 }
 
 .consent-raw-btn:hover {
-  background: rgba(0, 240, 255, 0.08);
+  background: rgba(0, 255, 157, 0.08);
 }
 
 .consent-raw-view {

@@ -395,7 +395,7 @@ fn kernel_events_flow_through_batcher_into_audit_blocks() {
     );
 
     // Flush remaining
-    trail.flush_batcher();
+    trail.flush_batcher().expect("flush should succeed");
     assert_eq!(trail.sealed_batch_count(), 3);
     assert_eq!(trail.pending_batch_count(), 0);
 

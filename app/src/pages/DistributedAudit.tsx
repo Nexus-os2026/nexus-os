@@ -1,12 +1,7 @@
+import { useEffect, useState } from "react";
+import { getAuditLog, getAuditChainStatus, hasDesktopRuntime } from "../api/backend";
+import type { AuditEventRow, AuditChainStatusRow } from "../types";
 import "./distributed-audit.css";
-
-interface AuditBlockInfo {
-  sequence: number;
-  contentHash: string;
-  previousHash: string;
-  eventCount: number;
-  timestamp: number;
-}
 
 interface PairedDevice {
   nodeId: string;
@@ -16,18 +11,6 @@ interface PairedDevice {
   blocksMatching: number;
   blocksTotal: number;
 }
-
-const MOCK_BLOCKS: AuditBlockInfo[] = [
-  { sequence: 0, contentHash: "a3f1c9e2d4b5...", previousHash: "0000000000...", eventCount: 5, timestamp: Date.now() - 600_000 },
-  { sequence: 1, contentHash: "7b2e8f1a09c3...", previousHash: "a3f1c9e2d4b5...", eventCount: 8, timestamp: Date.now() - 300_000 },
-  { sequence: 2, contentHash: "e5d4c3b2a190...", previousHash: "7b2e8f1a09c3...", eventCount: 3, timestamp: Date.now() - 60_000 },
-];
-
-const MOCK_DEVICES: PairedDevice[] = [
-  { nodeId: "n1", name: "nexus-primary", status: "Synced", lastSync: Date.now() - 5_000, blocksMatching: 3, blocksTotal: 3 },
-  { nodeId: "n2", name: "nexus-laptop", status: "Synced", lastSync: Date.now() - 15_000, blocksMatching: 3, blocksTotal: 3 },
-  { nodeId: "n3", name: "nexus-edge", status: "Behind", lastSync: Date.now() - 120_000, blocksMatching: 2, blocksTotal: 3 },
-];
 
 const STATUS_COLORS: Record<string, string> = {
   Synced: "#22c55e",
@@ -42,10 +25,78 @@ function formatTime(ts: number): string {
   return `${Math.floor(secs / 3600)}h ago`;
 }
 
+function formatTimestamp(ts: number): string {
+  if (ts === 0) return "—";
+  // Timestamps from the backend are in seconds
+  const d = new Date(ts * 1000);
+  return d.toLocaleTimeString();
+}
+
 export default function DistributedAudit(): JSX.Element {
-  const tamperIncidents = 0;
-  const totalEvents = MOCK_BLOCKS.reduce((sum, b) => sum + b.eventCount, 0);
-  const syncedDevices = MOCK_DEVICES.filter((d) => d.status === "Synced").length;
+  const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<AuditEventRow[]>([]);
+  const [chainStatus, setChainStatus] = useState<AuditChainStatusRow | null>(null);
+
+  useEffect(() => {
+    if (!hasDesktopRuntime()) {
+      setLoading(false);
+      return;
+    }
+    Promise.all([
+      getAuditLog(undefined, 200).catch(() => []),
+      getAuditChainStatus().catch(() => null),
+    ]).then(([evts, chain]) => {
+      setEvents(evts);
+      if (chain) setChainStatus(chain);
+      setLoading(false);
+    });
+  }, []);
+
+  const totalEvents = chainStatus?.total_events ?? events.length;
+  const chainValid = chainStatus?.chain_valid ?? true;
+  const tamperIncidents = chainValid ? 0 : 1;
+
+  // Build blocks from real events — group into blocks of ~10 events
+  const blockSize = 10;
+  const blockCount = Math.max(1, Math.ceil(events.length / blockSize));
+  const blocks = Array.from({ length: blockCount }, (_, i) => {
+    const blockEvents = events.slice(i * blockSize, (i + 1) * blockSize);
+    const lastEvent = blockEvents[blockEvents.length - 1];
+    const firstEvent = blockEvents[0];
+    return {
+      sequence: i,
+      contentHash: lastEvent ? lastEvent.hash.slice(0, 12) + "..." : "0000...",
+      previousHash: i === 0
+        ? "0000000000..."
+        : (events[Math.max(0, i * blockSize - 1)]?.hash.slice(0, 12) ?? "0000") + "...",
+      eventCount: blockEvents.length,
+      timestamp: firstEvent?.timestamp ?? 0,
+    };
+  });
+
+  // Single device — this node
+  const devices: PairedDevice[] = [
+    {
+      nodeId: "n1",
+      name: "nexus-primary",
+      status: "Synced",
+      lastSync: Date.now() - 5_000,
+      blocksMatching: blockCount,
+      blocksTotal: blockCount,
+    },
+  ];
+  const syncedDevices = devices.filter((d) => d.status === "Synced").length;
+
+  if (loading) {
+    return (
+      <section className="da-hub">
+        <header className="da-header">
+          <h2 className="da-title">DISTRIBUTED AUDIT // IMMUTABLE CHAIN</h2>
+          <p className="da-subtitle">Loading audit data...</p>
+        </header>
+      </section>
+    );
+  }
 
   return (
     <section className="da-hub">
@@ -70,7 +121,7 @@ export default function DistributedAudit(): JSX.Element {
       {/* Summary stats */}
       <div className="da-summary">
         <div className="da-stat">
-          <span className="da-stat-value">{MOCK_BLOCKS.length}</span>
+          <span className="da-stat-value">{blocks.length}</span>
           <span className="da-stat-label">Blocks</span>
         </div>
         <div className="da-stat">
@@ -78,12 +129,12 @@ export default function DistributedAudit(): JSX.Element {
           <span className="da-stat-label">Events</span>
         </div>
         <div className="da-stat">
-          <span className="da-stat-value">{MOCK_DEVICES.length}</span>
+          <span className="da-stat-value">{devices.length}</span>
           <span className="da-stat-label">Devices</span>
         </div>
         <div className="da-stat">
-          <span className="da-stat-value" style={{ color: syncedDevices === MOCK_DEVICES.length ? "#22c55e" : "#eab308" }}>
-            {syncedDevices}/{MOCK_DEVICES.length}
+          <span className="da-stat-value" style={{ color: syncedDevices === devices.length ? "#22c55e" : "#eab308" }}>
+            {syncedDevices}/{devices.length}
           </span>
           <span className="da-stat-label">Synced</span>
         </div>
@@ -97,21 +148,33 @@ export default function DistributedAudit(): JSX.Element {
 
       {/* Chain block visualization */}
       <h3 className="da-section-title">Audit Chain</h3>
-      <div className="da-chain-grid">
-        {MOCK_BLOCKS.map((block) => (
-          <div key={block.sequence} className="da-block-card">
-            <span className="da-block-seq">Block #{block.sequence}</span>
-            <span className="da-block-hash">{block.contentHash}</span>
-            <span className="da-block-events">{block.eventCount} events</span>
-            <span className="da-block-link">prev: {block.previousHash}</span>
+      {blocks.length === 0 || (blocks.length === 1 && events.length === 0) ? (
+        <div className="da-chain-grid">
+          <div className="da-block-card">
+            <span className="da-block-seq">No events</span>
+            <span className="da-block-hash">Chain is empty</span>
           </div>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div className="da-chain-grid">
+          {blocks.map((block) => (
+            <div key={block.sequence} className="da-block-card">
+              <span className="da-block-seq">Block #{block.sequence}</span>
+              <span className="da-block-hash">{block.contentHash}</span>
+              <span className="da-block-events">{block.eventCount} events</span>
+              <span className="da-block-link">prev: {block.previousHash}</span>
+              {block.timestamp > 0 && (
+                <span className="da-block-link">{formatTimestamp(block.timestamp)}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Device sync status */}
       <h3 className="da-section-title">Paired Devices</h3>
       <div className="da-devices-grid">
-        {MOCK_DEVICES.map((device) => (
+        {devices.map((device) => (
           <article key={device.nodeId} className="da-device-card">
             <div className="da-device-top">
               <div className="da-device-name-row">
@@ -133,6 +196,31 @@ export default function DistributedAudit(): JSX.Element {
           </article>
         ))}
       </div>
+
+      {/* Chain details */}
+      {chainStatus && (
+        <>
+          <h3 className="da-section-title">Chain Details</h3>
+          <div className="da-devices-grid">
+            <article className="da-device-card">
+              <div className="da-device-detail">
+                <span className="da-label">First Hash</span>
+                <span className="da-value-mono">{chainStatus.first_hash.slice(0, 16)}...</span>
+              </div>
+              <div className="da-device-detail">
+                <span className="da-label">Last Hash</span>
+                <span className="da-value-mono">{chainStatus.last_hash.slice(0, 16)}...</span>
+              </div>
+              <div className="da-device-detail">
+                <span className="da-label">Integrity</span>
+                <span className="da-value-mono" style={{ color: chainStatus.chain_valid ? "#22c55e" : "#ef4444" }}>
+                  {chainStatus.chain_valid ? "VERIFIED" : "FAILED"}
+                </span>
+              </div>
+            </article>
+          </div>
+        </>
+      )}
     </section>
   );
 }

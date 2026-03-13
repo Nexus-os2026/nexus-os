@@ -16,6 +16,8 @@ use uuid::Uuid;
 pub enum AuditError {
     #[error("audit batcher mutex poisoned — audit integrity compromised")]
     BatcherPoisoned,
+    #[error("audit event serialization failed — fail-closed, no hash without payload")]
+    SerializationFailed,
 }
 
 const GENESIS_HASH: &str = "0000000000000000000000000000000000000000000000000000000000000000";
@@ -144,16 +146,16 @@ impl BatcherHandle {
         Ok(())
     }
 
-    fn flush(&self) {
+    fn flush(&self) -> Result<(), AuditError> {
         if let Some(inner) = &self.inner {
-            if let Ok(mut state) = inner.lock() {
-                if !state.pending.is_empty() {
-                    let batch = std::mem::take(&mut state.pending);
-                    state.sink.seal_batch(batch);
-                    state.sealed_count += 1;
-                }
+            let mut state = inner.lock().map_err(|_| AuditError::BatcherPoisoned)?;
+            if !state.pending.is_empty() {
+                let batch = std::mem::take(&mut state.pending);
+                state.sink.seal_batch(batch);
+                state.sealed_count += 1;
             }
         }
+        Ok(())
     }
 
     fn sealed_count(&self) -> u64 {
@@ -205,8 +207,9 @@ impl AuditTrail {
     }
 
     /// Flush any pending events in the batcher, sealing a partial batch.
-    pub fn flush_batcher(&self) {
-        self.batcher.flush();
+    /// Returns an error if the batcher mutex is poisoned.
+    pub fn flush_batcher(&self) -> Result<(), AuditError> {
+        self.batcher.flush()
     }
 
     /// Number of batches sealed so far (0 if batcher not enabled).
@@ -239,7 +242,7 @@ impl AuditTrail {
             &event_type,
             &payload,
             &previous_hash,
-        );
+        )?;
 
         let event = AuditEvent {
             event_id,
@@ -259,7 +262,20 @@ impl AuditTrail {
         &self.events
     }
 
-    pub fn events_mut(&mut self) -> &mut [AuditEvent] {
+    /// Mutable access to events — restricted to kernel crate internals.
+    /// External code should use `events()` for read-only access.
+    /// For test-only tampering, use `events_mut_for_testing()`.
+    pub(crate) fn events_mut(&mut self) -> &mut [AuditEvent] {
+        &mut self.events
+    }
+
+    /// Mutable access to events for testing purposes (tampering detection tests).
+    ///
+    /// WARNING: This method exists solely for testing integrity verification.
+    /// Production code MUST NOT use this — the audit trail is append-only.
+    /// Available in test builds only (unit tests and integration tests).
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn events_mut_for_testing(&mut self) -> &mut [AuditEvent] {
         &mut self.events
     }
 
@@ -271,14 +287,17 @@ impl AuditTrail {
                 return false;
             }
 
-            let expected_hash = compute_hash(
+            let expected_hash = match compute_hash(
                 event.event_id,
                 event.timestamp,
                 event.agent_id,
                 &event.event_type,
                 &event.payload,
                 &event.previous_hash,
-            );
+            ) {
+                Ok(h) => h,
+                Err(_) => return false,
+            };
             if event.hash != expected_hash {
                 return false;
             }
@@ -297,6 +316,10 @@ fn current_unix_timestamp() -> u64 {
     }
 }
 
+/// Compute the SHA-256 hash for an audit event.
+///
+/// Fail-closed: if payload serialization fails, return an error instead of
+/// computing a hash without the payload (which would allow payload swap attacks).
 fn compute_hash(
     event_id: Uuid,
     timestamp: u64,
@@ -304,7 +327,7 @@ fn compute_hash(
     event_type: &EventType,
     payload: &Value,
     previous_hash: &str,
-) -> String {
+) -> Result<String, AuditError> {
     #[derive(Serialize)]
     struct CanonicalEventData<'a> {
         event_id: &'a str,
@@ -324,18 +347,15 @@ fn compute_hash(
         payload,
     };
 
-    // Fallback to hashing the debug representation if serialization fails,
-    // preserving hash-chain continuity without panicking.
-    let serialized = match serde_json::to_vec(&canonical) {
-        Ok(bytes) => bytes,
-        Err(_) => format!("{event_id}:{timestamp}:{agent_id}:{event_type:?}").into_bytes(),
-    };
+    // Fail-closed: reject the event entirely if serialization fails.
+    // Computing a hash without the payload would allow payload swap attacks.
+    let serialized = serde_json::to_vec(&canonical).map_err(|_| AuditError::SerializationFailed)?;
 
     let mut hasher = Sha256::new();
     hasher.update(previous_hash.as_bytes());
     hasher.update(serialized);
     let digest = hasher.finalize();
-    format!("{digest:x}")
+    Ok(format!("{digest:x}"))
 }
 
 #[cfg(test)]
@@ -468,7 +488,7 @@ mod tests {
         assert_eq!(trail.pending_batch_count(), 7);
 
         // Manual flush
-        trail.flush_batcher();
+        trail.flush_batcher().expect("flush should succeed");
 
         assert_eq!(trail.sealed_batch_count(), 1);
         assert_eq!(trail.pending_batch_count(), 0);

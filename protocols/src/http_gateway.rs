@@ -33,6 +33,7 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use nexus_connectors_llm::providers::LlmProvider;
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::compliance::data_governance::AgentDataEraser;
 use nexus_kernel::compliance::monitor::{AgentSnapshot, ComplianceMonitor};
@@ -51,8 +52,9 @@ use nexus_sdk::module_cache::ModuleCache;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tokio::sync::broadcast;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 use uuid::Uuid;
 
 // ── JWT auth (EdDSA / Ed25519) ──────────────────────────────────────────────
@@ -208,6 +210,47 @@ impl WsEvent {
 /// Channel capacity for the broadcast sender.
 const WS_BROADCAST_CAPACITY: usize = 256;
 
+// ── Rate limiter ────────────────────────────────────────────────────────────
+
+/// Maximum requests per window per key.
+const RATE_LIMIT_MAX_REQUESTS: u32 = 100;
+/// Rate limit window duration in seconds.
+const RATE_LIMIT_WINDOW_SECS: u64 = 60;
+
+/// Simple in-memory rate limiter: tracks request counts per key with a rolling window.
+#[derive(Debug, Clone)]
+struct RateLimiter {
+    /// Map from key (IP or API key) to (request count, window start).
+    buckets: Arc<Mutex<HashMap<String, (u32, Instant)>>>,
+}
+
+impl RateLimiter {
+    fn new() -> Self {
+        Self {
+            buckets: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Returns `true` if the request is allowed, `false` if rate-limited.
+    fn check_and_increment(&self, key: &str) -> bool {
+        let mut buckets = self.buckets.lock().unwrap_or_else(|p| p.into_inner());
+        let now = Instant::now();
+        let entry = buckets.entry(key.to_string()).or_insert((0, now));
+
+        // Reset window if expired
+        if now.duration_since(entry.1).as_secs() >= RATE_LIMIT_WINDOW_SECS {
+            entry.0 = 0;
+            entry.1 = now;
+        }
+
+        if entry.0 >= RATE_LIMIT_MAX_REQUESTS {
+            return false;
+        }
+        entry.0 += 1;
+        true
+    }
+}
+
 // ── JWT middleware layer ────────────────────────────────────────────────────
 
 /// Axum middleware that validates JWT on every request in the wrapped router.
@@ -219,7 +262,7 @@ async fn jwt_auth_middleware(
 ) -> Response {
     let headers = req.headers().clone();
     let claims = {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         validate_jwt(&headers, &inner.token_manager, &inner.gateway_identity)
     };
 
@@ -246,7 +289,6 @@ pub struct GatewayState {
     inner: Arc<Mutex<GatewayInner>>,
 }
 
-#[derive(Debug)]
 struct GatewayInner {
     /// Agent cards keyed by agent name.
     agent_cards: HashMap<String, AgentCard>,
@@ -280,6 +322,27 @@ struct GatewayInner {
     metrics: Option<NexusMetrics>,
     /// Shared WASM module cache for hit-rate reporting.
     wasm_module_cache: Option<ModuleCache>,
+    /// Optional LLM provider for real inference on Anthropic/OpenAI endpoints.
+    llm_provider: Option<Box<dyn LlmProvider>>,
+    /// Per-key rate limiter.
+    rate_limiter: RateLimiter,
+    /// Map agent name → owner (JWT subject) for authorization checks.
+    agent_owners: HashMap<String, String>,
+}
+
+impl std::fmt::Debug for GatewayInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GatewayInner")
+            .field("agent_cards", &self.agent_cards.len())
+            .field("tasks", &self.tasks.len())
+            .field("agent_ids", &self.agent_ids.len())
+            .field("started_at", &self.started_at)
+            .field(
+                "llm_provider",
+                &self.llm_provider.as_ref().map(|p| p.name()),
+            )
+            .finish_non_exhaustive()
+    }
 }
 
 /// Metadata about an agent tracked alongside the supervisor.
@@ -327,13 +390,24 @@ impl GatewayState {
                 ws_tx,
                 metrics: None,
                 wasm_module_cache: None,
+                llm_provider: None,
+                rate_limiter: RateLimiter::new(),
+                agent_owners: HashMap::new(),
             })),
         }
     }
 
+    /// Attach an LLM provider for real inference on Anthropic/OpenAI endpoints.
+    pub fn with_llm_provider(self, provider: Box<dyn LlmProvider>) -> Self {
+        let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        inner.llm_provider = Some(provider);
+        drop(inner);
+        self
+    }
+
     /// Attach a [`NexusMetrics`] instance to this gateway for Prometheus export.
     pub fn with_metrics(self, metrics: NexusMetrics) -> Self {
-        let mut inner = self.inner.lock().expect("lock poisoned");
+        let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         inner.metrics = Some(metrics);
         drop(inner);
         self
@@ -341,7 +415,7 @@ impl GatewayState {
 
     /// Attach a shared [`ModuleCache`] for WASM cache hit-rate reporting on `/health`.
     pub fn with_wasm_cache(self, cache: ModuleCache) -> Self {
-        let mut inner = self.inner.lock().expect("lock poisoned");
+        let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         inner.wasm_module_cache = Some(cache);
         drop(inner);
         self
@@ -349,7 +423,7 @@ impl GatewayState {
 
     /// Register an agent with the gateway.
     pub fn register_agent(&self, manifest: AgentManifest, base_url: &str) {
-        let mut inner = self.inner.lock().expect("lock poisoned");
+        let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         let card = AgentCard::from_manifest(&manifest, base_url);
         let name = manifest.name.clone();
 
@@ -385,7 +459,7 @@ impl GatewayState {
 
     /// Issue an EdDSA-signed JWT for testing or programmatic use.
     pub fn issue_token(&self, scopes: &[String], ttl: u64) -> String {
-        let inner = self.inner.lock().expect("lock poisoned");
+        let inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         inner
             .token_manager
             .issue_token(
@@ -400,26 +474,26 @@ impl GatewayState {
 
     /// Return the JWKS JSON for OIDC discovery.
     pub fn jwks(&self) -> serde_json::Value {
-        let inner = self.inner.lock().expect("lock poisoned");
+        let inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         TokenManager::jwks_json(&inner.gateway_identity)
     }
 
     /// Subscribe to the WebSocket event broadcast channel.
     pub fn subscribe(&self) -> broadcast::Receiver<WsEvent> {
-        let inner = self.inner.lock().expect("lock poisoned");
+        let inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         inner.ws_tx.subscribe()
     }
 
     /// Broadcast a WebSocket event to all connected clients.
     pub fn broadcast(&self, event: WsEvent) {
-        let inner = self.inner.lock().expect("lock poisoned");
+        let inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         // Ignore send errors — they just mean no active subscribers.
         let _ = inner.ws_tx.send(event);
     }
 
     /// Graceful shutdown: stop agents, flush audit, log completion.
     pub fn shutdown(&self) {
-        let mut inner = self.inner.lock().expect("lock poisoned");
+        let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
 
         // 1. Stop all running agents
         let agent_ids: Vec<Uuid> = inner
@@ -433,7 +507,7 @@ impl GatewayState {
         }
 
         // 2. Flush audit trail batcher to persist pending events
-        inner.audit_trail.flush_batcher();
+        let _ = inner.audit_trail.flush_batcher();
 
         // 3. Log shutdown event
         let _ = inner.audit_trail.append_event(
@@ -452,17 +526,97 @@ impl GatewayState {
     }
 }
 
+// ── Rate limiting middleware ────────────────────────────────────────────────
+
+/// Axum middleware that enforces per-key rate limits.
+/// Extracts the key from the Authorization header, x-api-key, or falls back to "anonymous".
+async fn rate_limit_middleware(
+    State(state): State<GatewayState>,
+    req: Request<axum::body::Body>,
+    next: Next,
+) -> Response {
+    // Extract rate limit key: prefer API key / Bearer token subject, fall back to "anonymous"
+    let key = req
+        .headers()
+        .get("x-api-key")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .or_else(|| {
+            req.headers()
+                .get("authorization")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.strip_prefix("Bearer "))
+                .map(|s| s.to_string())
+        })
+        .unwrap_or_else(|| "anonymous".to_string());
+
+    let limiter = {
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
+        inner.rate_limiter.clone()
+    };
+
+    if !limiter.check_and_increment(&key) {
+        let body = serde_json::json!({
+            "error": "Too many requests. Limit: 100 requests per minute.",
+            "code": 429,
+        });
+        return (StatusCode::TOO_MANY_REQUESTS, Json(body)).into_response();
+    }
+
+    next.run(req).await
+}
+
 // ── Router construction ─────────────────────────────────────────────────────
 
 /// Build the axum Router with all protocol routes and CORS middleware.
 pub fn build_router(state: GatewayState) -> Router {
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    // CORS configuration: restrict origins/methods/headers for production.
+    // Set NEXUS_CORS_ORIGINS env var to override defaults:
+    //   - "*" → allow any origin (development only)
+    //   - comma-separated list → allow those specific origins
+    //   - unset → default localhost origins for Tauri + dev servers
+    let cors = {
+        let default_origins: Vec<axum::http::HeaderValue> = vec![
+            "http://localhost:1420".parse().unwrap(),
+            "http://localhost:3000".parse().unwrap(),
+            "http://127.0.0.1:1420".parse().unwrap(),
+            "tauri://localhost".parse().unwrap(),
+        ];
+
+        let origin_layer = match std::env::var("NEXUS_CORS_ORIGINS").ok().as_deref() {
+            Some("*") => AllowOrigin::any(),
+            Some(origins) => {
+                let parsed: Vec<axum::http::HeaderValue> = origins
+                    .split(',')
+                    .filter_map(|s| s.trim().parse().ok())
+                    .collect();
+                AllowOrigin::list(if parsed.is_empty() {
+                    default_origins
+                } else {
+                    parsed
+                })
+            }
+            None => AllowOrigin::list(default_origins),
+        };
+
+        CorsLayer::new()
+            .allow_origin(origin_layer)
+            .allow_methods(AllowMethods::list([
+                axum::http::Method::GET,
+                axum::http::Method::POST,
+                axum::http::Method::PUT,
+                axum::http::Method::DELETE,
+                axum::http::Method::OPTIONS,
+            ]))
+            .allow_headers(AllowHeaders::list([
+                axum::http::header::CONTENT_TYPE,
+                axum::http::header::AUTHORIZATION,
+                axum::http::HeaderName::from_static("x-api-key"),
+            ]))
+    };
 
     // Authenticated REST API routes — JWT validated via middleware layer
-    let api_routes = Router::new()
+    let api_auth_routes = Router::new()
         // Agent management
         .route("/agents", get(api_list_agents).post(api_create_agent))
         .route("/agents/{id}/start", post(api_start_agent))
@@ -484,9 +638,7 @@ pub fn build_router(state: GatewayState) -> Router {
         .route("/compliance/status", get(api_compliance_status))
         .route("/compliance/report/{agent_id}", get(api_compliance_report))
         .route("/compliance/erase/{agent_id}", post(api_compliance_erase))
-        // Marketplace
-        .route("/marketplace/search", get(api_marketplace_search))
-        .route("/marketplace/agents/{id}", get(api_marketplace_agent))
+        // Marketplace: only install (POST) requires auth
         .route("/marketplace/install/{id}", post(api_marketplace_install))
         // Identity
         .route("/identity/agents", get(api_identity_list))
@@ -498,6 +650,16 @@ pub fn build_router(state: GatewayState) -> Router {
             jwt_auth_middleware,
         ))
         .with_state(state.clone());
+
+    // Public marketplace routes — no JWT required for browsing
+    let api_public_routes = Router::new()
+        .route("/marketplace/search", get(api_marketplace_search))
+        .route("/marketplace/agents/{id}", get(api_marketplace_agent))
+        .with_state(state.clone());
+
+    let api_routes = Router::new()
+        .merge(api_auth_routes)
+        .merge(api_public_routes);
 
     Router::new()
         // A2A routes
@@ -522,6 +684,10 @@ pub fn build_router(state: GatewayState) -> Router {
         .route("/v1/messages", post(anthropic_messages))
         // REST API (nested under /api)
         .nest("/api", api_routes)
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_middleware,
+        ))
         .layer(cors)
         .with_state(state)
 }
@@ -678,7 +844,7 @@ fn read_rss_bytes() -> u64 {
 /// audit chain validity, compliance status, and resource utilisation.
 async fn health_check(State(state): State<GatewayState>) -> impl IntoResponse {
     let result = tokio::task::spawn_blocking(move || {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
 
         let now_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -732,7 +898,7 @@ async fn health_check(State(state): State<GatewayState>) -> impl IntoResponse {
 /// `GET /metrics` — Prometheus text exposition format.
 async fn metrics_endpoint(State(state): State<GatewayState>) -> impl IntoResponse {
     let result = tokio::task::spawn_blocking(move || {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         match &inner.metrics {
             Some(m) => {
                 // Sync the agents_active gauge before rendering.
@@ -764,11 +930,16 @@ async fn a2a_agent_card(
     Query(query): Query<AgentCardQuery>,
 ) -> impl IntoResponse {
     let result = tokio::task::spawn_blocking(move || {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
 
         if let Some(agent_name) = &query.agent {
             match inner.agent_cards.get(agent_name) {
-                Some(card) => Ok(serde_json::to_value(card).unwrap()),
+                Some(card) => serde_json::to_value(card).map_err(|e| {
+                    error_json(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("serialization error: {e}"),
+                    )
+                }),
                 None => Err(error_json(
                     StatusCode::NOT_FOUND,
                     format!("agent '{}' not found", agent_name),
@@ -801,7 +972,7 @@ async fn a2a_task_submit(
 ) -> impl IntoResponse {
     // Validate JWT outside spawn_blocking (headers aren't Send)
     let claims = {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         match validate_jwt(&headers, &inner.token_manager, &inner.gateway_identity) {
             Ok(c) => c,
             Err(e) => return Err(error_json(e.status_code(), e.message())),
@@ -809,7 +980,7 @@ async fn a2a_task_submit(
     };
 
     let result = tokio::task::spawn_blocking(move || {
-        let mut inner = state.inner.lock().expect("lock poisoned");
+        let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
 
         // Resolve agent
         let agent_id = match inner.agent_ids.get(&req.agent) {
@@ -821,6 +992,19 @@ async fn a2a_task_submit(
                 ))
             }
         };
+
+        // Authorization: check if the JWT subject owns or may control this agent
+        if let Some(owner) = inner.agent_owners.get(&req.agent) {
+            if *owner != claims.sub {
+                return Err(error_json(
+                    StatusCode::FORBIDDEN,
+                    format!(
+                        "user '{}' is not authorized to control agent '{}'",
+                        claims.sub, req.agent
+                    ),
+                ));
+            }
+        }
 
         // Create governed A2A task
         let payload = TaskPayload {
@@ -868,16 +1052,21 @@ async fn a2a_task_status(
     Path(task_id): Path<String>,
 ) -> impl IntoResponse {
     {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         if let Err(e) = validate_jwt(&headers, &inner.token_manager, &inner.gateway_identity) {
             return Err(error_json(e.status_code(), e.message()));
         }
     }
 
     let result = tokio::task::spawn_blocking(move || {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         match inner.tasks.get(&task_id) {
-            Some(task) => Ok(serde_json::to_value(task).unwrap()),
+            Some(task) => serde_json::to_value(task).map_err(|e| {
+                error_json(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("serialization error: {e}"),
+                )
+            }),
             None => Err(error_json(
                 StatusCode::NOT_FOUND,
                 format!("task '{task_id}' not found"),
@@ -897,14 +1086,14 @@ async fn mcp_tool_list(
     Query(query): Query<ToolListQuery>,
 ) -> impl IntoResponse {
     {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         if let Err(e) = validate_jwt(&headers, &inner.token_manager, &inner.gateway_identity) {
             return Err(error_json(e.status_code(), e.message()));
         }
     }
 
     let result = tokio::task::spawn_blocking(move || {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
 
         let agent_id = match inner.agent_ids.get(&query.agent) {
             Some(id) => *id,
@@ -934,14 +1123,14 @@ async fn mcp_tool_invoke(
     Json(req): Json<ToolInvokeRequest>,
 ) -> impl IntoResponse {
     {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         if let Err(e) = validate_jwt(&headers, &inner.token_manager, &inner.gateway_identity) {
             return Err(error_json(e.status_code(), e.message()));
         }
     }
 
     let result = tokio::task::spawn_blocking(move || {
-        let mut inner = state.inner.lock().expect("lock poisoned");
+        let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
 
         let agent_id = match inner.agent_ids.get(&req.agent) {
             Some(id) => *id,
@@ -967,7 +1156,12 @@ async fn mcp_tool_invoke(
                     m.inc_host_function_call(&tool_name);
                     m.inc_fuel_consumed(result.fuel_consumed);
                 }
-                Ok(serde_json::to_value(result).unwrap())
+                serde_json::to_value(result).map_err(|e| {
+                    error_json(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("serialization error: {e}"),
+                    )
+                })
             }
             Err(e) => {
                 let status = match &e {
@@ -992,7 +1186,7 @@ async fn mcp_tool_invoke(
 /// `GET /api/agents` — list all agents with status.
 async fn api_list_agents(State(state): State<GatewayState>) -> impl IntoResponse {
     let result = tokio::task::spawn_blocking(move || {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         let statuses = inner.supervisor.health_check();
         let rows: Vec<serde_json::Value> = statuses
             .into_iter()
@@ -1018,10 +1212,12 @@ async fn api_list_agents(State(state): State<GatewayState>) -> impl IntoResponse
 /// `POST /api/agents` — create a new agent from a manifest.
 async fn api_create_agent(
     State(state): State<GatewayState>,
+    claims: Option<axum::Extension<OidcAClaims>>,
     Json(req): Json<CreateAgentRequest>,
 ) -> Response {
+    let owner_sub = claims.map(|c| c.0.sub.clone());
     let result: ApiResult = tokio::task::spawn_blocking(move || {
-        let mut inner = state.inner.lock().expect("lock poisoned");
+        let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         let agent_name = req.manifest.name.clone();
 
         let agent_id = inner
@@ -1042,6 +1238,11 @@ async fn api_create_agent(
                 last_action: "created".to_string(),
             },
         );
+
+        // Record ownership for authorization checks
+        if let Some(ref sub) = owner_sub {
+            inner.agent_owners.insert(agent_name.clone(), sub.clone());
+        }
 
         // Metrics: agent spawned
         if let Some(ref m) = inner.metrics {
@@ -1084,7 +1285,7 @@ async fn api_create_agent(
 async fn api_start_agent(State(state): State<GatewayState>, Path(id): Path<String>) -> ApiResult {
     tokio::task::spawn_blocking(move || {
         let agent_id = parse_uuid(&id)?;
-        let mut inner = state.inner.lock().expect("lock poisoned");
+        let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         inner
             .supervisor
             .restart_agent(agent_id)
@@ -1116,7 +1317,7 @@ async fn api_start_agent(State(state): State<GatewayState>, Path(id): Path<Strin
 async fn api_stop_agent(State(state): State<GatewayState>, Path(id): Path<String>) -> ApiResult {
     tokio::task::spawn_blocking(move || {
         let agent_id = parse_uuid(&id)?;
-        let mut inner = state.inner.lock().expect("lock poisoned");
+        let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         inner
             .supervisor
             .stop_agent(agent_id)
@@ -1148,7 +1349,7 @@ async fn api_stop_agent(State(state): State<GatewayState>, Path(id): Path<String
 async fn api_agent_status(State(state): State<GatewayState>, Path(id): Path<String>) -> ApiResult {
     tokio::task::spawn_blocking(move || {
         let agent_id = parse_uuid(&id)?;
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         let handle = inner
             .supervisor
             .get_agent(agent_id)
@@ -1177,11 +1378,17 @@ async fn api_get_permissions(
 ) -> ApiResult {
     tokio::task::spawn_blocking(move || {
         let agent_id = parse_uuid(&id)?;
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         inner
             .supervisor
             .get_agent_permissions(agent_id)
-            .map(|perms| Json(serde_json::to_value(perms).unwrap()))
+            .and_then(|perms| {
+                serde_json::to_value(perms).map(Json).map_err(|e| {
+                    nexus_kernel::errors::AgentError::SupervisorError(format!(
+                        "serialization error: {e}"
+                    ))
+                })
+            })
             .map_err(|e| error_json(StatusCode::NOT_FOUND, e.to_string()))
     })
     .await
@@ -1196,7 +1403,7 @@ async fn api_update_permission(
 ) -> ApiResult {
     tokio::task::spawn_blocking(move || {
         let agent_id = parse_uuid(&id)?;
-        let mut inner = state.inner.lock().expect("lock poisoned");
+        let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         inner
             .supervisor
             .update_agent_permission(agent_id, &req.capability_key, req.enabled, "api-user", None)
@@ -1228,7 +1435,7 @@ async fn api_bulk_update_permissions(
 ) -> ApiResult {
     tokio::task::spawn_blocking(move || {
         let agent_id = parse_uuid(&id)?;
-        let mut inner = state.inner.lock().expect("lock poisoned");
+        let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         let pairs: Vec<(String, bool)> = req
             .updates
             .iter()
@@ -1268,7 +1475,7 @@ async fn api_audit_events(
     Query(query): Query<AuditQuery>,
 ) -> ApiResult {
     tokio::task::spawn_blocking(move || {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         let agent_filter = query
             .agent_id
             .as_deref()
@@ -1327,7 +1534,7 @@ async fn api_audit_event_by_id(
     tokio::task::spawn_blocking(move || {
         let event_id = Uuid::parse_str(&id)
             .map_err(|_| error_json(StatusCode::BAD_REQUEST, "invalid UUID"))?;
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         let event = inner
             .audit_trail
             .events()
@@ -1353,7 +1560,7 @@ async fn api_audit_event_by_id(
 /// `GET /api/compliance/status` — overall compliance status.
 async fn api_compliance_status(State(state): State<GatewayState>) -> Json<serde_json::Value> {
     let result = tokio::task::spawn_blocking(move || {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         let monitor = ComplianceMonitor::new();
 
         // Build agent snapshots from supervisor
@@ -1392,7 +1599,8 @@ async fn api_compliance_status(State(state): State<GatewayState>) -> Json<serde_
 
         let status =
             monitor.check_compliance(&snapshots, &inner.audit_trail, &inner.identity_manager);
-        serde_json::to_value(status).unwrap()
+        serde_json::to_value(status)
+            .unwrap_or_else(|e| serde_json::json!({"error": format!("serialization error: {e}")}))
     })
     .await
     .expect("spawn_blocking panicked");
@@ -1407,7 +1615,7 @@ async fn api_compliance_report(
 ) -> ApiResult {
     tokio::task::spawn_blocking(move || {
         let parsed = parse_uuid(&agent_id)?;
-        let mut inner = state.inner.lock().expect("lock poisoned");
+        let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         let manifest = inner
             .supervisor
             .get_agent(parsed)
@@ -1421,7 +1629,13 @@ async fn api_compliance_report(
             .ok()
             .map(|i| i.did.clone());
         let report = generator.generate(&manifest, did.as_deref(), &inner.audit_trail, parsed);
-        Ok(Json(serde_json::to_value(report).unwrap()))
+        let val = serde_json::to_value(report).map_err(|e| {
+            error_json(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("serialization error: {e}"),
+            )
+        })?;
+        Ok(Json(val))
     })
     .await
     .expect("spawn_blocking panicked")
@@ -1435,7 +1649,7 @@ async fn api_compliance_erase(
 ) -> ApiResult {
     tokio::task::spawn_blocking(move || {
         let parsed = parse_uuid(&agent_id)?;
-        let mut inner = state.inner.lock().expect("lock poisoned");
+        let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
 
         // Ensure agent exists
         if inner.supervisor.get_agent(parsed).is_none() {
@@ -1468,7 +1682,13 @@ async fn api_compliance_erase(
             "agent data erased (GDPR Article 17)",
         ));
 
-        Ok(Json(serde_json::to_value(receipt).unwrap()))
+        let val = serde_json::to_value(receipt).map_err(|e| {
+            error_json(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("serialization error: {e}"),
+            )
+        })?;
+        Ok(Json(val))
     })
     .await
     .expect("spawn_blocking panicked")
@@ -1521,7 +1741,13 @@ async fn api_marketplace_agent(Path(id): Path<String>) -> ApiResult {
         let detail = registry
             .get_agent(&id)
             .map_err(|e| error_json(StatusCode::NOT_FOUND, e.to_string()))?;
-        Ok(Json(serde_json::to_value(detail).unwrap()))
+        let val = serde_json::to_value(detail).map_err(|e| {
+            error_json(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("serialization error: {e}"),
+            )
+        })?;
+        Ok(Json(val))
     })
     .await
     .expect("spawn_blocking panicked")
@@ -1539,7 +1765,7 @@ async fn api_marketplace_install(
             .map_err(|e| error_json(StatusCode::BAD_REQUEST, e.to_string()))?;
 
         // Metrics: marketplace install
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(ref m) = inner.metrics {
             m.inc_marketplace_installs();
         }
@@ -1565,7 +1791,7 @@ async fn api_marketplace_install(
 /// `GET /api/identity/agents` — list all agent identities (DID).
 async fn api_identity_list(State(state): State<GatewayState>) -> Json<serde_json::Value> {
     let result = tokio::task::spawn_blocking(move || {
-        let mut inner = state.inner.lock().expect("lock poisoned");
+        let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         let statuses = inner.supervisor.health_check();
         let mut rows = Vec::new();
         for s in &statuses {
@@ -1590,7 +1816,7 @@ async fn api_identity_list(State(state): State<GatewayState>) -> Json<serde_json
 async fn api_identity_get(State(state): State<GatewayState>, Path(id): Path<String>) -> ApiResult {
     tokio::task::spawn_blocking(move || {
         let agent_id = parse_uuid(&id)?;
-        let mut inner = state.inner.lock().expect("lock poisoned");
+        let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         let identity = inner
             .identity_manager
             .get_or_create(agent_id)
@@ -1780,18 +2006,25 @@ fn anthropic_error_response(
 }
 
 /// Validate auth for Anthropic endpoints: accepts x-api-key header OR Bearer token.
+/// The x-api-key must be validated against the gateway's configured API keys —
+/// arbitrary non-empty strings are NOT accepted.
 fn validate_anthropic_auth(
     headers: &HeaderMap,
     token_mgr: &TokenManager,
     gateway_identity: &AgentIdentity,
 ) -> Result<(), AuthError> {
-    // Try x-api-key first
+    // Try x-api-key first — must match a configured key, not just be non-empty
     if let Some(api_key) = headers.get("x-api-key") {
         let key_str = api_key
             .to_str()
             .map_err(|_| AuthError::InvalidToken("non-ascii x-api-key".into()))?;
         if !key_str.is_empty() {
-            return Ok(());
+            // Validate x-api-key as a signed JWT (same trust chain as Bearer tokens).
+            // This prevents accepting arbitrary strings as valid credentials.
+            return token_mgr
+                .validate_token(key_str, gateway_identity)
+                .map(|_| ())
+                .map_err(|e| AuthError::InvalidToken(format!("invalid x-api-key: {e}")));
         }
     }
     // Fall back to Bearer token
@@ -1844,7 +2077,7 @@ async fn anthropic_messages(
 
     // Auth check
     {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         if let Err(e) =
             validate_anthropic_auth(&headers, &inner.token_manager, &inner.gateway_identity)
         {
@@ -1859,14 +2092,14 @@ async fn anthropic_messages(
     let streaming = req.stream.unwrap_or(false);
 
     // Generate response via governed LLM gateway
-    let result = tokio::task::spawn_blocking({
+    let result: Result<String, String> = tokio::task::spawn_blocking({
         let state = state.clone();
         let prompt = prompt.clone();
         let model = model.clone();
         move || {
             use nexus_kernel::redaction::RedactionEngine;
 
-            let mut inner = state.inner.lock().expect("lock poisoned");
+            let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
 
             // PII redaction on input
             let findings = RedactionEngine::scan(&prompt);
@@ -1883,30 +2116,33 @@ async fn anthropic_messages(
                 }),
             );
 
-            // Use a mock response (real LLM provider integration uses the
-            // connector layer which requires async — the gateway provides
-            // a governed passthrough).
-            let response_text = format!(
-                "This is a governed response from Nexus OS (model: {model}). \
-                 Your prompt ({input_tokens} tokens) was processed with PII redaction. \
-                 Prompt preview: {}",
-                if redacted_prompt.len() > 100 {
-                    &redacted_prompt[..100]
-                } else {
-                    &redacted_prompt
-                }
-            );
-
             // Metrics
             if let Some(ref m) = inner.metrics {
                 m.inc_host_function_call("anthropic_messages");
             }
 
-            response_text
+            // Route through real LLM provider if configured
+            match &inner.llm_provider {
+                Some(provider) => match provider.query(&redacted_prompt, _max_tokens, &model) {
+                    Ok(resp) => Ok(resp.output_text),
+                    Err(e) => Err(format!("LLM provider error: {e}")),
+                },
+                None => {
+                    Err("No LLM provider configured. Install Ollama or set an API key.".to_string())
+                }
+            }
         }
     })
     .await
     .expect("spawn_blocking panicked");
+
+    // Return error if no provider or provider failed
+    let result = match result {
+        Ok(text) => text,
+        Err(msg) => {
+            return anthropic_error_response(StatusCode::SERVICE_UNAVAILABLE, "api_error", msg);
+        }
+    };
 
     let output_tokens = estimate_tokens(&result);
     let msg_id = format!("msg_{}", Uuid::new_v4().simple());
@@ -1936,7 +2172,7 @@ async fn anthropic_messages(
         };
         events.push(format!(
             "event: message_start\ndata: {}\n\n",
-            serde_json::to_string(&start).unwrap()
+            serde_json::to_string(&start).unwrap_or_default()
         ));
 
         // content_block_start
@@ -1949,7 +2185,7 @@ async fn anthropic_messages(
         };
         events.push(format!(
             "event: content_block_start\ndata: {}\n\n",
-            serde_json::to_string(&block_start).unwrap()
+            serde_json::to_string(&block_start).unwrap_or_default()
         ));
 
         // content_block_delta — send the full text as one chunk
@@ -1963,7 +2199,7 @@ async fn anthropic_messages(
         };
         events.push(format!(
             "event: content_block_delta\ndata: {}\n\n",
-            serde_json::to_string(&delta).unwrap()
+            serde_json::to_string(&delta).unwrap_or_default()
         ));
 
         // content_block_stop
@@ -1973,7 +2209,7 @@ async fn anthropic_messages(
         };
         events.push(format!(
             "event: content_block_stop\ndata: {}\n\n",
-            serde_json::to_string(&block_stop).unwrap()
+            serde_json::to_string(&block_stop).unwrap_or_default()
         ));
 
         // message_delta
@@ -1989,7 +2225,7 @@ async fn anthropic_messages(
         };
         events.push(format!(
             "event: message_delta\ndata: {}\n\n",
-            serde_json::to_string(&msg_delta).unwrap()
+            serde_json::to_string(&msg_delta).unwrap_or_default()
         ));
 
         // message_stop
@@ -1998,7 +2234,7 @@ async fn anthropic_messages(
         };
         events.push(format!(
             "event: message_stop\ndata: {}\n\n",
-            serde_json::to_string(&msg_stop).unwrap()
+            serde_json::to_string(&msg_stop).unwrap_or_default()
         ));
 
         let body = events.join("");
@@ -2057,7 +2293,7 @@ async fn openai_chat_completions(
 ) -> Response {
     // Auth: accept Bearer token or x-api-key
     {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         if let Err(e) =
             validate_anthropic_auth(&headers, &inner.token_manager, &inner.gateway_identity)
         {
@@ -2077,13 +2313,14 @@ async fn openai_chat_completions(
     let input_tokens = estimate_tokens(&prompt);
     let model = req.model.clone();
 
-    let result = tokio::task::spawn_blocking({
+    let max_tokens = req.max_tokens.unwrap_or(1024);
+    let result: Result<String, String> = tokio::task::spawn_blocking({
         let state = state.clone();
         let model = model.clone();
         move || {
             use nexus_kernel::redaction::RedactionEngine;
 
-            let mut inner = state.inner.lock().expect("lock poisoned");
+            let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
             let findings = RedactionEngine::scan(&prompt);
             let redacted = RedactionEngine::apply(&prompt, &findings);
 
@@ -2101,18 +2338,31 @@ async fn openai_chat_completions(
                 m.inc_host_function_call("openai_chat_completions");
             }
 
-            format!(
-                "Governed response from Nexus OS (model: {model}). Prompt preview: {}",
-                if redacted.len() > 100 {
-                    &redacted[..100]
-                } else {
-                    &redacted
+            // Route through real LLM provider if configured
+            match &inner.llm_provider {
+                Some(provider) => match provider.query(&redacted, max_tokens, &model) {
+                    Ok(resp) => Ok(resp.output_text),
+                    Err(e) => Err(format!("LLM provider error: {e}")),
+                },
+                None => {
+                    Err("No LLM provider configured. Install Ollama or set an API key.".to_string())
                 }
-            )
+            }
         }
     })
     .await
     .expect("spawn_blocking panicked");
+
+    // Return error if no provider or provider failed
+    let result = match result {
+        Ok(text) => text,
+        Err(msg) => {
+            let body = serde_json::json!({
+                "error": { "message": msg, "type": "api_error", "code": "no_provider" }
+            });
+            return (StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response();
+        }
+    };
 
     let output_tokens = estimate_tokens(&result);
     let response = serde_json::json!({
@@ -2141,7 +2391,7 @@ async fn openai_embeddings(
     Json(req): Json<serde_json::Value>,
 ) -> Response {
     {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         if let Err(e) =
             validate_anthropic_auth(&headers, &inner.token_manager, &inner.gateway_identity)
         {
@@ -2158,7 +2408,6 @@ async fn openai_embeddings(
         .unwrap_or("text-embedding-ada-002")
         .to_string();
 
-    // Generate mock 8-dimensional embeddings
     let inputs: Vec<String> = match req.get("input") {
         Some(serde_json::Value::String(s)) => vec![s.clone()],
         Some(serde_json::Value::Array(arr)) => arr
@@ -2168,43 +2417,59 @@ async fn openai_embeddings(
         _ => vec![],
     };
 
-    let data: Vec<serde_json::Value> = inputs
-        .iter()
-        .enumerate()
-        .map(|(i, text)| {
-            // Deterministic mock embedding based on text hash
-            let hash = text
-                .bytes()
-                .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
-            let embedding: Vec<f64> = (0..8)
-                .map(|d| {
-                    let val = ((hash.wrapping_mul(d + 1)) % 1000) as f64 / 1000.0;
-                    val * 2.0 - 1.0
+    // Route through real LLM provider if configured
+    let embed_result = {
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
+        match &inner.llm_provider {
+            Some(provider) => {
+                let text_refs: Vec<&str> = inputs.iter().map(|s| s.as_str()).collect();
+                match provider.embed(&text_refs, &model) {
+                    Ok(resp) => Ok(resp),
+                    Err(e) => Err(format!("Embedding provider error: {e}")),
+                }
+            }
+            None => Err(
+                "No LLM provider configured. Install Ollama or set an API key for embeddings."
+                    .to_string(),
+            ),
+        }
+    };
+
+    match embed_result {
+        Ok(resp) => {
+            let data: Vec<serde_json::Value> = resp
+                .embeddings
+                .iter()
+                .enumerate()
+                .map(|(i, emb)| {
+                    serde_json::json!({
+                        "object": "embedding",
+                        "index": i,
+                        "embedding": emb,
+                    })
                 })
                 .collect();
-            serde_json::json!({
-                "object": "embedding",
-                "index": i,
-                "embedding": embedding,
-            })
-        })
-        .collect();
-
-    let total_tokens: u32 = inputs.iter().map(|t| estimate_tokens(t)).sum();
-
-    let response = serde_json::json!({
-        "object": "list",
-        "data": data,
-        "model": model,
-        "usage": { "prompt_tokens": total_tokens, "total_tokens": total_tokens }
-    });
-    (StatusCode::OK, Json(response)).into_response()
+            let response = serde_json::json!({
+                "object": "list",
+                "data": data,
+                "model": resp.model_name,
+                "usage": { "prompt_tokens": resp.token_count, "total_tokens": resp.token_count }
+            });
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Err(msg) => {
+            let body = serde_json::json!({
+                "error": { "message": msg, "type": "api_error", "code": "no_provider" }
+            });
+            (StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response()
+        }
+    }
 }
 
 /// `GET /v1/models` — list available models (OpenAI compatible).
 async fn openai_list_models(State(state): State<GatewayState>, headers: HeaderMap) -> Response {
     {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         if let Err(e) =
             validate_anthropic_auth(&headers, &inner.token_manager, &inner.gateway_identity)
         {
@@ -2239,7 +2504,7 @@ async fn ws_upgrade(
 ) -> Response {
     // Validate JWT from query parameter before upgrading.
     let claims = {
-        let inner = state.inner.lock().expect("lock poisoned");
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         inner
             .token_manager
             .validate_token(&query.token, &inner.gateway_identity)
@@ -2318,7 +2583,9 @@ mod tests {
     }
 
     fn setup_gateway() -> (Router, GatewayState) {
-        let state = GatewayState::new("ignored");
+        let state = GatewayState::new("ignored").with_llm_provider(Box::new(
+            nexus_connectors_llm::providers::mock::MockProvider::new(),
+        ));
         state.register_agent(
             test_manifest("test-agent", vec!["web.search", "llm.query"], 10_000),
             "https://example.com",
@@ -2330,6 +2597,11 @@ mod tests {
     fn auth_header_for(state: &GatewayState) -> String {
         let token = state.issue_token(&[], 3600);
         format!("Bearer {token}")
+    }
+
+    /// Return a valid x-api-key JWT for Anthropic/OpenAI endpoint tests.
+    fn api_key_for(state: &GatewayState) -> String {
+        state.issue_token(&[], 3600)
     }
 
     async fn body_to_json(body: Body) -> serde_json::Value {
@@ -3381,7 +3653,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_anthropic_messages_basic() {
-        let (router, _state) = setup_gateway();
+        let (router, state) = setup_gateway();
         let body = serde_json::json!({
             "model": "llama3",
             "max_tokens": 1024,
@@ -3392,7 +3664,7 @@ mod tests {
             .method(Method::POST)
             .uri("/v1/messages")
             .header("content-type", "application/json")
-            .header("x-api-key", "test-key-123")
+            .header("x-api-key", api_key_for(&state))
             .body(Body::from(serde_json::to_vec(&body).unwrap()))
             .unwrap();
 
@@ -3413,7 +3685,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_anthropic_messages_with_system() {
-        let (router, _) = setup_gateway();
+        let (router, state) = setup_gateway();
         let body = serde_json::json!({
             "model": "llama3",
             "max_tokens": 512,
@@ -3425,7 +3697,7 @@ mod tests {
             .method(Method::POST)
             .uri("/v1/messages")
             .header("content-type", "application/json")
-            .header("x-api-key", "test-key")
+            .header("x-api-key", api_key_for(&state))
             .body(Body::from(serde_json::to_vec(&body).unwrap()))
             .unwrap();
 
@@ -3441,7 +3713,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_anthropic_messages_structured_content() {
-        let (router, _) = setup_gateway();
+        let (router, state) = setup_gateway();
         let body = serde_json::json!({
             "model": "llama3",
             "max_tokens": 256,
@@ -3455,7 +3727,7 @@ mod tests {
             .method(Method::POST)
             .uri("/v1/messages")
             .header("content-type", "application/json")
-            .header("x-api-key", "test-key")
+            .header("x-api-key", api_key_for(&state))
             .body(Body::from(serde_json::to_vec(&body).unwrap()))
             .unwrap();
 
@@ -3469,7 +3741,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_anthropic_messages_string_content() {
-        let (router, _) = setup_gateway();
+        let (router, state) = setup_gateway();
         let body = serde_json::json!({
             "model": "llama3",
             "max_tokens": 256,
@@ -3480,7 +3752,7 @@ mod tests {
             .method(Method::POST)
             .uri("/v1/messages")
             .header("content-type", "application/json")
-            .header("x-api-key", "test-key")
+            .header("x-api-key", api_key_for(&state))
             .body(Body::from(serde_json::to_vec(&body).unwrap()))
             .unwrap();
 
@@ -3548,7 +3820,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_anthropic_usage_tracking() {
-        let (router, _) = setup_gateway();
+        let (router, state) = setup_gateway();
         let body = serde_json::json!({
             "model": "nexus-governed",
             "max_tokens": 100,
@@ -3559,7 +3831,7 @@ mod tests {
             .method(Method::POST)
             .uri("/v1/messages")
             .header("content-type", "application/json")
-            .header("x-api-key", "test-key")
+            .header("x-api-key", api_key_for(&state))
             .body(Body::from(serde_json::to_vec(&body).unwrap()))
             .unwrap();
 
@@ -3575,7 +3847,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_anthropic_stream_format() {
-        let (router, _) = setup_gateway();
+        let (router, state) = setup_gateway();
         let body = serde_json::json!({
             "model": "llama3",
             "max_tokens": 100,
@@ -3587,7 +3859,7 @@ mod tests {
             .method(Method::POST)
             .uri("/v1/messages")
             .header("content-type", "application/json")
-            .header("x-api-key", "test-key")
+            .header("x-api-key", api_key_for(&state))
             .body(Body::from(serde_json::to_vec(&body).unwrap()))
             .unwrap();
 
@@ -3612,7 +3884,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_openai_chat_completions_basic() {
-        let (router, _) = setup_gateway();
+        let (router, state) = setup_gateway();
         let body = serde_json::json!({
             "model": "llama3",
             "messages": [{"role": "user", "content": "Hello!"}]
@@ -3622,7 +3894,7 @@ mod tests {
             .method(Method::POST)
             .uri("/v1/chat/completions")
             .header("content-type", "application/json")
-            .header("x-api-key", "test-key")
+            .header("x-api-key", api_key_for(&state))
             .body(Body::from(serde_json::to_vec(&body).unwrap()))
             .unwrap();
 
@@ -3659,7 +3931,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_openai_embeddings() {
-        let (router, _) = setup_gateway();
+        let (router, state) = setup_gateway();
         let body = serde_json::json!({
             "model": "text-embedding-ada-002",
             "input": "Hello world"
@@ -3669,7 +3941,7 @@ mod tests {
             .method(Method::POST)
             .uri("/v1/embeddings")
             .header("content-type", "application/json")
-            .header("x-api-key", "test-key")
+            .header("x-api-key", api_key_for(&state))
             .body(Body::from(serde_json::to_vec(&body).unwrap()))
             .unwrap();
 
@@ -3682,16 +3954,16 @@ mod tests {
         assert_eq!(data.len(), 1);
         assert_eq!(data[0]["object"], "embedding");
         let embedding = data[0]["embedding"].as_array().unwrap();
-        assert_eq!(embedding.len(), 8);
+        assert_eq!(embedding.len(), 384);
     }
 
     #[tokio::test]
     async fn test_openai_list_models() {
-        let (router, _) = setup_gateway();
+        let (router, state) = setup_gateway();
 
         let req = Request::builder()
             .uri("/v1/models")
-            .header("x-api-key", "test-key")
+            .header("x-api-key", api_key_for(&state))
             .body(Body::empty())
             .unwrap();
 

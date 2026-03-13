@@ -77,7 +77,7 @@ const S = {
     minHeight: 0,
   },
   vizPanel: {
-    flex: "0 0 340px",
+    flex: "0 0 min(340px, 40vw)",
     display: "flex",
     flexDirection: "column" as const,
     alignItems: "center",
@@ -269,7 +269,7 @@ export default function VoiceAssistant() {
   const [transcripts, setTranscripts] = useState<Transcript[]>([
     {
       id: 1,
-      text: "Voice assistant initialized. Say the wake word or press Start to begin.",
+      text: "Voice assistant initialized. Checking backend availability...",
       source: "system",
       ts: Date.now(),
     },
@@ -280,6 +280,8 @@ export default function VoiceAssistant() {
     autoListen: false,
   });
   const [serverRunning, setServerRunning] = useState(false);
+  const [pythonAvailable, setPythonAvailable] = useState(false);
+  const [backendChecked, setBackendChecked] = useState(false);
   const [engineStatus, setEngineStatus] = useState<EngineStatus>({
     engine: "stub",
     whisperLoaded: false,
@@ -298,14 +300,22 @@ export default function VoiceAssistant() {
     tauriInvoke<string>("voice_get_status")
       .then((raw) => {
         const data = JSON.parse(raw);
+        const engine: TranscriptionEngine = data.transcription_engine ?? "stub";
+        const pyRunning: boolean = data.python_server_running ?? false;
+        const pyAvail: boolean = data.python_available ?? pyRunning;
         setEngineStatus({
-          engine: data.transcription_engine ?? "stub",
+          engine,
           whisperLoaded: data.whisper_loaded ?? false,
           whisperModel: data.whisper_model ?? null,
         });
-        setServerRunning(data.python_server_running ?? false);
+        setServerRunning(pyRunning);
+        setPythonAvailable(pyAvail);
+        setBackendChecked(true);
       })
-      .catch(() => { /* running outside Tauri — use defaults */ });
+      .catch(() => {
+        // Running outside Tauri — stub mode only
+        setBackendChecked(true);
+      });
   }, []);
 
   // Auto-scroll transcript area
@@ -329,12 +339,25 @@ export default function VoiceAssistant() {
     if (status === "listening") {
       setStatus("ready");
       addTranscript("Listening stopped.", "system");
+    } else if (pythonAvailable) {
+      // Real voice: spawn Python subprocess via Tauri
+      setStatus("listening");
+      tauriInvoke<string>("voice_start_listening")
+        .then(() => {
+          setServerRunning(true);
+          addTranscript("Listening started (Python backend) — waiting for voice input...", "system");
+        })
+        .catch((err) => {
+          setStatus("error");
+          addTranscript(`Failed to start listening: ${err}`, "system");
+        });
     } else {
+      // Stub mode — local-only simulation
       setStatus("listening");
       setServerRunning(true);
-      addTranscript("Listening started — waiting for voice input...", "system");
+      addTranscript("Listening started (stub mode) — use Simulate button for demo.", "system");
     }
-  }, [status, addTranscript]);
+  }, [status, addTranscript, pythonAvailable]);
 
   const handleSimulateInput = useCallback(() => {
     if (status !== "listening") return;
@@ -481,6 +504,23 @@ export default function VoiceAssistant() {
             </strong>
           </div>
 
+          {/* Python availability notice */}
+          {backendChecked && !pythonAvailable && (
+            <div style={{
+              padding: "0.5rem 0.8rem",
+              borderRadius: 8,
+              background: "rgba(245,158,11,0.1)",
+              border: "1px solid rgba(245,158,11,0.3)",
+              fontSize: "0.72rem",
+              color: "#fbbf24",
+              textAlign: "center" as const,
+              lineHeight: 1.5,
+            }}>
+              Voice requires Python.<br />
+              Install: <code style={{ color: "var(--text-primary, #e2e8f0)" }}>pip install websockets numpy</code>
+            </div>
+          )}
+
           <button onClick={handleToggle} style={S.toggleBtn(status === "listening")}>
             {status === "listening" ? "Stop Listening" : "Start Listening"}
           </button>
@@ -491,15 +531,15 @@ export default function VoiceAssistant() {
               style={{
                 padding: "0.5rem 1.2rem",
                 borderRadius: 999,
-                border: "1px solid var(--border, #334155)",
-                background: "transparent",
-                color: "var(--text-secondary, #94a3b8)",
+                border: "1px solid rgba(245,158,11,0.3)",
+                background: "rgba(245,158,11,0.06)",
+                color: "#fbbf24",
                 cursor: "pointer",
                 fontFamily: "var(--font-mono, monospace)",
                 fontSize: "0.75rem",
               }}
             >
-              Simulate Voice Input
+              Simulate (Demo)
             </button>
           )}
         </div>
@@ -584,13 +624,13 @@ export default function VoiceAssistant() {
             <div>
               <div style={S.settingLabel}>Transcription Engine</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={S.indicator(engineStatus.engine === "candle-whisper")} />
+                <span style={S.indicator(engineStatus.engine !== "stub")} />
                 <span style={{ fontSize: "0.8rem", color: "var(--text-primary, #e2e8f0)" }}>
                   {engineStatus.engine === "candle-whisper"
                     ? "Candle Whisper"
                     : engineStatus.engine === "python-server"
                       ? "Python Server"
-                      : "Stub"}
+                      : "Stub (install Whisper model for real transcription)"}
                 </span>
               </div>
             </div>

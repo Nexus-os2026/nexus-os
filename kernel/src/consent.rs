@@ -29,9 +29,16 @@ impl HitlTier {
         }
     }
 
-    fn approvals_required(self) -> usize {
+    fn approvals_required(self, auto_approve_tier1: bool) -> usize {
         match self {
-            HitlTier::Tier0 | HitlTier::Tier1 => 0,
+            HitlTier::Tier0 => 0,
+            HitlTier::Tier1 => {
+                if auto_approve_tier1 {
+                    0
+                } else {
+                    1
+                }
+            }
             HitlTier::Tier2 => 1,
             HitlTier::Tier3 => 2,
         }
@@ -404,6 +411,17 @@ pub enum ConsentError {
     QueueStorage(String),
     #[error("policy denied: {reason}")]
     PolicyDenied { reason: String },
+    #[error("audit trail failed: {0}")]
+    AuditFailed(String),
+    #[error("approval request '{request_id}' timed out after {timeout_secs}s")]
+    TimedOut {
+        request_id: String,
+        timeout_secs: u64,
+    },
+    #[error("no approvers configured for request '{request_id}' — cannot approve")]
+    NoApproversConfigured { request_id: String },
+    #[error("payload integrity check failed for request '{request_id}': hash mismatch")]
+    PayloadIntegrityFailed { request_id: String },
 }
 
 impl From<ConsentError> for AgentError {
@@ -422,6 +440,11 @@ pub struct ApprovalQueue {
     records: BTreeMap<String, ApprovalRecord>,
     fingerprint_index: BTreeMap<String, String>,
     storage_path: Option<PathBuf>,
+    /// When true (default), Tier1 operations auto-approve with 0 approvals.
+    /// When false, Tier1 requires at least 1 approval.
+    pub auto_approve_tier1: bool,
+    /// Default timeout for pending approvals in seconds (24 hours by default).
+    pub approval_timeout_secs: u64,
 }
 
 impl Default for ApprovalQueue {
@@ -436,6 +459,8 @@ impl ApprovalQueue {
             records: BTreeMap::new(),
             fingerprint_index: BTreeMap::new(),
             storage_path: None,
+            auto_approve_tier1: true,
+            approval_timeout_secs: 86400, // 24 hours
         }
     }
 
@@ -464,6 +489,8 @@ impl ApprovalQueue {
             records,
             fingerprint_index,
             storage_path: Some(path),
+            auto_approve_tier1: true,
+            approval_timeout_secs: 86400,
         })
     }
 
@@ -519,6 +546,10 @@ impl ApprovalQueue {
             required_tier,
             created_seq,
         );
+        let now_unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
         let record = ApprovalRecord {
             request: request.clone(),
             approvals: BTreeSet::new(),
@@ -526,10 +557,11 @@ impl ApprovalQueue {
             decisions: Vec::new(),
             executed: false,
             fingerprint: fingerprint.clone(),
+            created_at_unix: now_unix,
         };
         self.records.insert(request_id.clone(), record);
         self.fingerprint_index.insert(fingerprint, request_id);
-        append_requested_event(audit, &request);
+        append_requested_event(audit, &request)?;
         self.persist()?;
         Ok(request)
     }
@@ -552,9 +584,13 @@ impl ApprovalQueue {
                 approver_id: approver_id.to_string(),
             });
         }
-        if !allowed_approvers.is_empty()
-            && !allowed_approvers.iter().any(|item| item == approver_id)
-        {
+        // BUG 10 FIX: If allowed_approvers is empty, reject — no one is authorized
+        if allowed_approvers.is_empty() {
+            return Err(ConsentError::NoApproversConfigured {
+                request_id: request_id.to_string(),
+            });
+        }
+        if !allowed_approvers.iter().any(|item| item == approver_id) {
             return Err(ConsentError::ApproverNotAllowed {
                 request_id: request_id.to_string(),
                 approver_id: approver_id.to_string(),
@@ -575,15 +611,23 @@ impl ApprovalQueue {
                 record.denials.insert(approver_id.to_string());
             }
         }
+        // SECURITY-TODO: Ed25519 signing required for non-repudiation on Tier2+ approvals
+        // See: https://docs.rs/ed25519-dalek for implementation
+        if record.request.required_tier >= HitlTier::Tier2 {
+            eprintln!(
+                "[SECURITY] Tier2+ approval decision for request '{}' lacks cryptographic signature — non-repudiation not enforced",
+                request_id
+            );
+        }
         let decision_event = ApprovalDecision {
             id: request_id.to_string(),
             approver_id: approver_id.to_string(),
             decision,
-            signature: None,
+            signature: None, // SECURITY-TODO: Ed25519 signing required for Tier2+ non-repudiation
             decision_seq: next_audit_sequence(audit),
         };
         record.decisions.push(decision_event.clone());
-        append_decision_event(audit, &record.request, &decision_event);
+        append_decision_event(audit, &record.request, &decision_event)?;
         self.persist()?;
         Ok(decision_event)
     }
@@ -598,7 +642,21 @@ impl ApprovalQueue {
             return Ok(ApprovalState::Denied);
         }
 
-        let required = record.request.required_tier.approvals_required();
+        // BUG 11 FIX: Check for timeout on pending approvals
+        if !record.executed && self.approval_timeout_secs > 0 && record.created_at_unix > 0 {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            if now.saturating_sub(record.created_at_unix) > self.approval_timeout_secs {
+                return Ok(ApprovalState::Denied);
+            }
+        }
+
+        let required = record
+            .request
+            .required_tier
+            .approvals_required(self.auto_approve_tier1);
         if required == 0 || record.approvals.len() >= required {
             return Ok(ApprovalState::Approved);
         }
@@ -626,7 +684,10 @@ impl ApprovalQueue {
             return Ok(());
         }
 
-        let required = record.request.required_tier.approvals_required();
+        let required = record
+            .request
+            .required_tier
+            .approvals_required(self.auto_approve_tier1);
         if required > 0 && record.approvals.len() < required {
             return Err(ConsentError::ApprovalRequired {
                 request_id: request_id.to_string(),
@@ -637,7 +698,7 @@ impl ApprovalQueue {
 
         record.executed = true;
         self.fingerprint_index.remove(record.fingerprint.as_str());
-        append_executed_event(audit, &record.request, record.approver_ids().as_slice());
+        append_executed_event(audit, &record.request, record.approver_ids().as_slice())?;
         self.persist()?;
         Ok(())
     }
@@ -764,7 +825,24 @@ impl ConsentRuntime {
                 let ctx = EvaluationContext::default();
                 let decision = cedar.evaluate(&agent_id.to_string(), operation.as_str(), "*", &ctx);
                 match decision {
-                    PolicyDecision::Allow => return Ok(()),
+                    PolicyDecision::Allow => {
+                        // Cedar Allow downgrades to Tier0 (auto-approve with audit)
+                        // instead of bypassing the entire approval hierarchy.
+                        // Always log the decision for governance transparency.
+                        audit
+                            .append_event(
+                                agent_id,
+                                EventType::StateChange,
+                                json!({
+                                    "event": "consent.cedar_allow",
+                                    "operation": operation.as_str(),
+                                    "decision": "allow",
+                                    "effective_tier": "tier0",
+                                }),
+                            )
+                            .map_err(|e| ConsentError::AuditFailed(e.to_string()))?;
+                        return Ok(());
+                    }
                     PolicyDecision::Deny { reason } => {
                         return Err(ConsentError::PolicyDenied { reason });
                     }
@@ -797,11 +875,18 @@ impl ConsentRuntime {
         let request = self.approval_queue.request_or_get(
             operation,
             agent_id,
-            payload_hash,
+            payload_hash.clone(),
             self.requester_id.clone(),
             required_tier,
             audit,
         )?;
+
+        // BUG 12 FIX: Verify payload integrity — hash at proposal must match hash at execution
+        if request.payload_hash != payload_hash {
+            return Err(ConsentError::PayloadIntegrityFailed {
+                request_id: request.id,
+            });
+        }
 
         match required_tier {
             HitlTier::Tier1 => self
@@ -877,7 +962,10 @@ impl ConsentRuntime {
     }
 }
 
-fn append_requested_event(audit: &mut AuditTrail, request: &ApprovalRequest) {
+fn append_requested_event(
+    audit: &mut AuditTrail,
+    request: &ApprovalRequest,
+) -> Result<(), ConsentError> {
     audit
         .append_event(
             parse_or_nil_uuid(request.agent_id.as_str()),
@@ -892,14 +980,15 @@ fn append_requested_event(audit: &mut AuditTrail, request: &ApprovalRequest) {
                 "decision_result": "pending",
             }),
         )
-        .expect("audit: fail-closed");
+        .map_err(|e| ConsentError::AuditFailed(e.to_string()))?;
+    Ok(())
 }
 
 fn append_decision_event(
     audit: &mut AuditTrail,
     request: &ApprovalRequest,
     decision: &ApprovalDecision,
-) {
+) -> Result<(), ConsentError> {
     let decision_result = match decision.decision {
         ApprovalVerdict::Approve => "approved",
         ApprovalVerdict::Deny => "denied",
@@ -922,14 +1011,15 @@ fn append_decision_event(
                 "decision_result": decision_result,
             }),
         )
-        .expect("audit: fail-closed");
+        .map_err(|e| ConsentError::AuditFailed(e.to_string()))?;
+    Ok(())
 }
 
 fn append_executed_event(
     audit: &mut AuditTrail,
     request: &ApprovalRequest,
     approver_ids: &[String],
-) {
+) -> Result<(), ConsentError> {
     audit
         .append_event(
             parse_or_nil_uuid(request.agent_id.as_str()),
@@ -944,7 +1034,8 @@ fn append_executed_event(
                 "decision_result": "executed",
             }),
         )
-        .expect("audit: fail-closed");
+        .map_err(|e| ConsentError::AuditFailed(e.to_string()))?;
+    Ok(())
 }
 
 fn next_audit_sequence(audit: &AuditTrail) -> u64 {
@@ -1012,6 +1103,9 @@ struct ApprovalRecord {
     decisions: Vec<ApprovalDecision>,
     executed: bool,
     fingerprint: String,
+    /// Unix timestamp when this record was created (for timeout enforcement).
+    #[serde(default)]
+    created_at_unix: u64,
 }
 
 impl ApprovalRecord {

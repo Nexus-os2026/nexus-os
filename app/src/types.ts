@@ -497,6 +497,41 @@ export interface FirewallPatterns {
   internal_ip_regex: string;
 }
 
+// ── Compliance Dashboard Types ──
+
+export interface ComplianceAlertRow {
+  severity: string;
+  check_id: string;
+  message: string;
+  agent_id: string | null;
+}
+
+export interface ComplianceStatusRow {
+  status: string;
+  checks_passed: number;
+  checks_failed: number;
+  agents_checked: number;
+  alerts: ComplianceAlertRow[];
+}
+
+export interface ComplianceAgentRow {
+  id: string;
+  name: string;
+  risk_tier: string;
+  autonomy_level: string;
+  capabilities: string[];
+  status: string;
+}
+
+// ── Audit Chain Types ──
+
+export interface AuditChainStatusRow {
+  total_events: number;
+  chain_valid: boolean;
+  first_hash: string;
+  last_hash: string;
+}
+
 // ── Marketplace Types ──
 
 export interface MarketplaceAgent {

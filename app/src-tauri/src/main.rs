@@ -210,9 +210,9 @@ impl AppState {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
         };
-        guard
-            .append_event(agent_id, event_type, payload)
-            .expect("audit: fail-closed — no unrecorded operations allowed");
+        if let Err(e) = guard.append_event(agent_id, event_type, payload) {
+            eprintln!("audit append failed: {e}");
+        }
     }
 }
 
@@ -3368,7 +3368,10 @@ fn learning_agent_action(
 
     // Perform session mutations in a block so we can access lm.knowledge afterward
     let (result, entries_to_merge) = {
-        let session = lm.sessions.get_mut(&session_id).unwrap();
+        let session = lm
+            .sessions
+            .get_mut(&session_id)
+            .ok_or_else(|| format!("Session {} not found", session_id))?;
 
         match action.as_str() {
             "browse" => {
@@ -4072,10 +4075,10 @@ pub fn delete_local_model(state: &AppState, model_id: String) -> Result<String, 
     let model_dir = match registry.find_model(&model_id) {
         Some(config) => config.model_path.clone(),
         None => {
-            return Ok(serde_json::to_string(
+            return serde_json::to_string(
                 &json!({"deleted": false, "model_id": &model_id, "error": "model not found"}),
             )
-            .unwrap());
+            .map_err(|e| format!("Serialization error: {}", e));
         }
     };
 
@@ -4094,12 +4097,13 @@ pub fn delete_local_model(state: &AppState, model_id: String) -> Result<String, 
                 EventType::ToolCall,
                 json!({"operation": "model_hub.delete", "model_id": &model_id, "path": model_dir.display().to_string()}),
             );
-            Ok(serde_json::to_string(&json!({"deleted": true, "model_id": &model_id})).unwrap())
+            serde_json::to_string(&json!({"deleted": true, "model_id": &model_id}))
+                .map_err(|e| format!("Serialization error: {}", e))
         }
-        Err(e) => Ok(serde_json::to_string(
+        Err(e) => serde_json::to_string(
             &json!({"deleted": false, "model_id": &model_id, "error": e.to_string()}),
         )
-        .unwrap()),
+        .map_err(|e| format!("Serialization error: {}", e)),
     }
 }
 
@@ -4117,13 +4121,138 @@ pub fn get_system_specs() -> Result<String, String> {
 
     let cpu_cores = sys.cpus().len();
 
-    Ok(serde_json::to_string(&json!({
+    serde_json::to_string(&json!({
         "total_ram_mb": sys.total_memory() / (1024 * 1024),
         "available_ram_mb": sys.available_memory() / (1024 * 1024),
         "cpu_name": cpu_name,
         "cpu_cores": cpu_cores,
     }))
-    .unwrap())
+    .map_err(|e| format!("Serialization error: {}", e))
+}
+
+pub fn get_live_system_metrics(state: &AppState) -> Result<String, String> {
+    use sysinfo::{Disks, System};
+
+    let mut sys = System::new();
+    sys.refresh_memory();
+    sys.refresh_cpu_usage();
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+
+    let cpu_name = sys
+        .cpus()
+        .first()
+        .map(|c| c.brand().to_string())
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    let cpu_cores = sys.cpus().len();
+
+    let per_core_usage: Vec<f32> = sys.cpus().iter().map(|c| c.cpu_usage()).collect();
+    let cpu_avg = if cpu_cores > 0 {
+        per_core_usage.iter().sum::<f32>() / cpu_cores as f32
+    } else {
+        0.0
+    };
+
+    let total_ram = sys.total_memory();
+    let used_ram = sys.used_memory();
+    let available_ram = sys.available_memory();
+
+    let uptime = System::uptime();
+    let process_count = sys.processes().len();
+
+    // Disk usage for ~/.nexus/ directory
+    let nexus_dir = std::env::var("HOME")
+        .map(|h| std::path::PathBuf::from(h).join(".nexus"))
+        .unwrap_or_default();
+    let nexus_disk_bytes: u64 = if nexus_dir.exists() {
+        fn dir_size(path: &std::path::Path) -> u64 {
+            let mut total = 0u64;
+            if let Ok(entries) = std::fs::read_dir(path) {
+                for entry in entries.flatten() {
+                    let p = entry.path();
+                    if p.is_dir() {
+                        total += dir_size(&p);
+                    } else if let Ok(meta) = p.metadata() {
+                        total += meta.len();
+                    }
+                }
+            }
+            total
+        }
+        dir_size(&nexus_dir)
+    } else {
+        0
+    };
+
+    // Total disk info from sysinfo
+    let disks = Disks::new_with_refreshed_list();
+    let (disk_total, disk_available) = disks
+        .list()
+        .iter()
+        .find(|d| d.mount_point() == std::path::Path::new("/"))
+        .map(|d| (d.total_space(), d.available_space()))
+        .unwrap_or_else(|| {
+            disks
+                .list()
+                .first()
+                .map(|d| (d.total_space(), d.available_space()))
+                .unwrap_or((0, 0))
+        });
+
+    // Per-agent fuel from Supervisor
+    let supervisor = match state.supervisor.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    let meta_guard = match state.meta.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+
+    let statuses = supervisor.health_check();
+    let mut agent_fuel = Vec::new();
+    for status in &statuses {
+        let name = meta_guard
+            .get(&status.id)
+            .map(|m| m.name.clone())
+            .unwrap_or_else(|| status.id.to_string());
+        let (fuel_budget, fuel_used) = if let Some(report) = supervisor.fuel_audit_report(status.id)
+        {
+            (report.cap_units, report.spent_units)
+        } else {
+            let budget = supervisor
+                .get_agent(status.id)
+                .map(|h| h.manifest.fuel_budget)
+                .unwrap_or(0);
+            let remaining = status.remaining_fuel;
+            (budget, budget.saturating_sub(remaining))
+        };
+        agent_fuel.push(json!({
+            "id": status.id.to_string(),
+            "name": name,
+            "state": status.state.to_string(),
+            "fuel_budget": fuel_budget,
+            "fuel_used": fuel_used,
+            "remaining_fuel": status.remaining_fuel,
+        }));
+    }
+
+    serde_json::to_string(&json!({
+        "cpu_name": cpu_name,
+        "cpu_cores": cpu_cores,
+        "cpu_avg": (cpu_avg * 10.0).round() / 10.0,
+        "per_core_usage": per_core_usage,
+        "total_ram": total_ram,
+        "used_ram": used_ram,
+        "available_ram": available_ram,
+        "uptime_secs": uptime,
+        "process_count": process_count,
+        "nexus_disk_bytes": nexus_disk_bytes,
+        "disk_total": disk_total,
+        "disk_available": disk_available,
+        "agents": agent_fuel,
+    }))
+    .map_err(|e| format!("Serialization error: {}", e))
 }
 
 // ---------------------------------------------------------------------------
@@ -4171,7 +4300,7 @@ pub fn time_machine_create_checkpoint(state: &AppState, label: String) -> Result
     };
     let builder = supervisor.time_machine().begin_checkpoint(&label, None);
     let cp = builder.build();
-    let id = supervisor
+    let (id, _evicted) = supervisor
         .time_machine_mut()
         .commit_checkpoint(cp)
         .map_err(|e| e.to_string())?;
@@ -5190,6 +5319,380 @@ pub fn list_tools() -> Result<String, String> {
     serde_json::to_string(&tools).map_err(|e| e.to_string())
 }
 
+/// Parse a shell command string into a TypedTool and execute it.
+///
+/// Maps well-known commands to safe TypedTool variants.  Unknown commands
+/// become `TypedTool::Custom` with `requires_approval: true`.
+///
+/// Returns JSON-serialised `TerminalResult`.
+pub fn terminal_execute(state: &AppState, command: String, cwd: String) -> Result<String, String> {
+    use nexus_kernel::typed_tools::{self, TypedTool};
+
+    #[derive(serde::Serialize)]
+    struct TerminalResult {
+        stdout: String,
+        stderr: String,
+        exit_code: i32,
+        duration_ms: u64,
+        tool: String,
+        needs_approval: bool,
+        fuel_cost: u64,
+    }
+
+    let parts: Vec<&str> = command.split_whitespace().collect();
+    if parts.is_empty() {
+        return Err("empty command".into());
+    }
+
+    let working_dir = std::path::PathBuf::from(&cwd);
+    if !working_dir.is_dir() {
+        return Err(format!("directory does not exist: {cwd}"));
+    }
+
+    // Parse command string → TypedTool
+    let tool: TypedTool = match parts[0] {
+        "git" => match parts.get(1).copied() {
+            Some("status") => TypedTool::GitStatus,
+            Some("diff") => {
+                let path = parts.get(2).map(|s| s.to_string());
+                TypedTool::GitDiff { path }
+            }
+            Some("log") => {
+                let count = parts
+                    .iter()
+                    .find_map(|p| p.strip_prefix('-').and_then(|n| n.parse::<usize>().ok()))
+                    .unwrap_or(10);
+                TypedTool::GitLog { count }
+            }
+            Some("commit") => {
+                let msg = if let Some(pos) = parts.iter().position(|p| *p == "-m") {
+                    parts[pos + 1..]
+                        .join(" ")
+                        .trim_matches('"')
+                        .trim_matches('\'')
+                        .to_string()
+                } else {
+                    String::new()
+                };
+                TypedTool::GitCommit { message: msg }
+            }
+            Some("push") => {
+                let remote = parts.get(2).unwrap_or(&"origin").to_string();
+                let branch = parts.get(3).unwrap_or(&"main").to_string();
+                TypedTool::GitPush { remote, branch }
+            }
+            Some("pull") => {
+                let remote = parts.get(2).unwrap_or(&"origin").to_string();
+                let branch = parts.get(3).unwrap_or(&"main").to_string();
+                TypedTool::GitPull { remote, branch }
+            }
+            Some("checkout") => {
+                let branch = parts.get(2).unwrap_or(&"main").to_string();
+                TypedTool::GitCheckout { branch }
+            }
+            _ => TypedTool::Custom {
+                program: "git".into(),
+                args: parts[1..].iter().map(|s| s.to_string()).collect(),
+                requires_approval: false,
+            },
+        },
+        "cargo" => match parts.get(1).copied() {
+            Some("build") | Some("b") => {
+                let release = parts.contains(&"--release");
+                let package = parts
+                    .iter()
+                    .position(|p| *p == "-p" || *p == "--package")
+                    .and_then(|i| parts.get(i + 1))
+                    .map(|s| s.to_string());
+                TypedTool::CargoBuild { package, release }
+            }
+            Some("test") | Some("t") => {
+                let package = parts
+                    .iter()
+                    .position(|p| *p == "-p" || *p == "--package")
+                    .and_then(|i| parts.get(i + 1))
+                    .map(|s| s.to_string());
+                let test_name = parts.get(2).and_then(|s| {
+                    if s.starts_with('-') {
+                        None
+                    } else {
+                        Some(s.to_string())
+                    }
+                });
+                TypedTool::CargoTest { package, test_name }
+            }
+            Some("fmt") => {
+                let check = parts.contains(&"--check");
+                TypedTool::CargoFmt { check }
+            }
+            Some("clippy") => {
+                let deny_warnings = parts.contains(&"-D") || parts.contains(&"warnings");
+                TypedTool::CargoClippy { deny_warnings }
+            }
+            Some("run") | Some("r") => {
+                let package = parts
+                    .iter()
+                    .position(|p| *p == "-p" || *p == "--package")
+                    .and_then(|i| parts.get(i + 1))
+                    .map(|s| s.to_string());
+                let extra_args: Vec<String> =
+                    if let Some(pos) = parts.iter().position(|p| *p == "--") {
+                        parts[pos + 1..].iter().map(|s| s.to_string()).collect()
+                    } else {
+                        vec![]
+                    };
+                TypedTool::CargoRun {
+                    package,
+                    args: extra_args,
+                }
+            }
+            _ => TypedTool::Custom {
+                program: "cargo".into(),
+                args: parts[1..].iter().map(|s| s.to_string()).collect(),
+                requires_approval: false,
+            },
+        },
+        "npm" => match (parts.get(1).copied(), parts.get(2).copied()) {
+            (Some("install") | Some("ci") | Some("i"), _) => TypedTool::NpmInstall,
+            (Some("test"), _) => TypedTool::NpmTest,
+            (Some("run"), Some("build")) => TypedTool::NpmBuild,
+            (Some("run"), Some(script)) => TypedTool::NpmRun {
+                script: script.to_string(),
+            },
+            _ => TypedTool::Custom {
+                program: "npm".into(),
+                args: parts[1..].iter().map(|s| s.to_string()).collect(),
+                requires_approval: false,
+            },
+        },
+        "ls" => {
+            let recursive = parts.iter().any(|p| p.contains('R'));
+            let path = parts
+                .iter()
+                .find(|p| !p.starts_with('-') && **p != "ls")
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| ".".into());
+            TypedTool::FileList { path, recursive }
+        }
+        "dir" => TypedTool::FileList {
+            path: ".".into(),
+            recursive: false,
+        },
+        "pwd" => TypedTool::Custom {
+            program: "pwd".into(),
+            args: vec![],
+            requires_approval: false,
+        },
+        "cat" | "head" | "tail" => TypedTool::Custom {
+            program: parts[0].to_string(),
+            args: parts[1..].iter().map(|s| s.to_string()).collect(),
+            requires_approval: false,
+        },
+        "echo" => TypedTool::Custom {
+            program: "echo".into(),
+            args: parts[1..].iter().map(|s| s.to_string()).collect(),
+            requires_approval: false,
+        },
+        "whoami" | "date" | "uname" | "uptime" | "hostname" => TypedTool::Custom {
+            program: parts[0].to_string(),
+            args: parts[1..].iter().map(|s| s.to_string()).collect(),
+            requires_approval: false,
+        },
+        "ps" => TypedTool::ProcessList,
+        "df" => TypedTool::DiskUsage {
+            path: parts.get(1).unwrap_or(&".").to_string(),
+        },
+        "free" => TypedTool::Custom {
+            program: "free".into(),
+            args: parts[1..].iter().map(|s| s.to_string()).collect(),
+            requires_approval: false,
+        },
+        "mkdir" => {
+            let path = parts
+                .iter()
+                .find(|p| !p.starts_with('-') && **p != "mkdir")
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            if path.is_empty() {
+                return Err("mkdir: missing operand".into());
+            }
+            TypedTool::MakeDirectory { path }
+        }
+        "cp" => {
+            if parts.len() < 3 {
+                return Err("cp: missing operand".into());
+            }
+            TypedTool::FileCopy {
+                from: parts[parts.len() - 2].to_string(),
+                to: parts[parts.len() - 1].to_string(),
+            }
+        }
+        "mv" => {
+            if parts.len() < 3 {
+                return Err("mv: missing operand".into());
+            }
+            TypedTool::FileMove {
+                from: parts[1].to_string(),
+                to: parts[2].to_string(),
+            }
+        }
+        "rm" => {
+            let path = parts
+                .iter()
+                .find(|p| !p.starts_with('-') && **p != "rm")
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            if path.is_empty() {
+                return Err("rm: missing operand".into());
+            }
+            TypedTool::FileRemove { path }
+        }
+        "python3" | "python" => {
+            let script = parts.get(1).unwrap_or(&"--version").to_string();
+            let args: Vec<String> = parts[2..].iter().map(|s| s.to_string()).collect();
+            TypedTool::PythonRun { script, args }
+        }
+        "pip3" | "pip" => {
+            if parts.get(1).copied() == Some("install") {
+                TypedTool::PipInstall {
+                    packages: parts[2..].iter().map(|s| s.to_string()).collect(),
+                }
+            } else {
+                TypedTool::Custom {
+                    program: parts[0].to_string(),
+                    args: parts[1..].iter().map(|s| s.to_string()).collect(),
+                    requires_approval: true,
+                }
+            }
+        }
+        "grep" | "rg" | "find" | "wc" | "sort" | "uniq" | "tree" | "which" | "env" | "printenv"
+        | "touch" => TypedTool::Custom {
+            program: parts[0].to_string(),
+            args: parts[1..].iter().map(|s| s.to_string()).collect(),
+            requires_approval: false,
+        },
+        _ => TypedTool::Custom {
+            program: parts[0].to_string(),
+            args: parts[1..].iter().map(|s| s.to_string()).collect(),
+            requires_approval: true,
+        },
+    };
+
+    let needs_approval = tool.is_destructive()
+        || matches!(
+            &tool,
+            TypedTool::Custom {
+                requires_approval: true,
+                ..
+            }
+        );
+
+    // If it needs approval, return early — frontend handles HITL confirmation
+    if needs_approval {
+        let result = TerminalResult {
+            stdout: String::new(),
+            stderr: String::new(),
+            exit_code: -1,
+            duration_ms: 0,
+            tool: tool.tool_name(),
+            needs_approval: true,
+            fuel_cost: tool.fuel_cost(),
+        };
+        return serde_json::to_string(&result).map_err(|e| e.to_string());
+    }
+
+    // Execute
+    let output = typed_tools::execute_typed_tool(&tool, &working_dir)?;
+    let fuel_cost = tool.fuel_cost();
+
+    // Audit log
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "terminal",
+            "command": command,
+            "tool": output.tool,
+            "exit_code": output.exit_code,
+            "duration_ms": output.duration_ms,
+            "fuel_cost": fuel_cost,
+        }),
+    );
+
+    let result = TerminalResult {
+        stdout: output.stdout,
+        stderr: output.stderr,
+        exit_code: output.exit_code,
+        duration_ms: output.duration_ms,
+        tool: output.tool,
+        needs_approval: false,
+        fuel_cost,
+    };
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
+/// Force-execute a command that previously required HITL approval.
+/// Called after the user clicks "Approve" in the terminal UI.
+pub fn terminal_execute_approved(
+    state: &AppState,
+    command: String,
+    cwd: String,
+) -> Result<String, String> {
+    use nexus_kernel::typed_tools::{self, TypedTool};
+
+    #[derive(serde::Serialize)]
+    struct TerminalResult {
+        stdout: String,
+        stderr: String,
+        exit_code: i32,
+        duration_ms: u64,
+        tool: String,
+        needs_approval: bool,
+        fuel_cost: u64,
+    }
+
+    let parts: Vec<&str> = command.split_whitespace().collect();
+    if parts.is_empty() {
+        return Err("empty command".into());
+    }
+
+    let working_dir = std::path::PathBuf::from(&cwd);
+
+    // For approved commands, build the tool the same way but force-execute
+    let tool = TypedTool::Custom {
+        program: parts[0].to_string(),
+        args: parts[1..].iter().map(|s| s.to_string()).collect(),
+        requires_approval: false, // Already approved by HITL
+    };
+
+    let output = typed_tools::execute_typed_tool(&tool, &working_dir)?;
+    let fuel_cost = tool.fuel_cost();
+
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "terminal-hitl-approved",
+            "command": command,
+            "tool": output.tool,
+            "exit_code": output.exit_code,
+            "duration_ms": output.duration_ms,
+            "fuel_cost": fuel_cost,
+        }),
+    );
+
+    let result = TerminalResult {
+        stdout: output.stdout,
+        stderr: output.stderr,
+        exit_code: output.exit_code,
+        duration_ms: output.duration_ms,
+        tool: output.tool,
+        needs_approval: false,
+        fuel_cost,
+    };
+    serde_json::to_string(&result).map_err(|e| e.to_string())
+}
+
 // ── Replay Evidence ─────────────────────────────────────────────────
 
 pub fn replay_list_bundles(
@@ -6107,6 +6610,134 @@ pub fn payment_create_payout(
     serde_json::to_string(&payout).map_err(|e| e.to_string())
 }
 
+// ── Compliance Dashboard API ────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComplianceAlertRow {
+    pub severity: String,
+    pub check_id: String,
+    pub message: String,
+    pub agent_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComplianceStatusRow {
+    pub status: String,
+    pub checks_passed: usize,
+    pub checks_failed: usize,
+    pub agents_checked: usize,
+    pub alerts: Vec<ComplianceAlertRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComplianceAgentRow {
+    pub id: String,
+    pub name: String,
+    pub risk_tier: String,
+    pub autonomy_level: String,
+    pub capabilities: Vec<String>,
+    pub status: String,
+}
+
+pub fn get_compliance_status(state: &AppState) -> Result<ComplianceStatusRow, String> {
+    use nexus_kernel::compliance::monitor::{AgentSnapshot, ComplianceMonitor};
+
+    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+    let identity_mgr = state.identity_mgr.lock().unwrap_or_else(|p| p.into_inner());
+
+    let snapshots: Vec<AgentSnapshot> = supervisor
+        .health_check()
+        .iter()
+        .filter_map(|s| {
+            supervisor.get_agent(s.id).map(|h| AgentSnapshot {
+                agent_id: s.id,
+                manifest: h.manifest.clone(),
+                running: matches!(
+                    s.state,
+                    nexus_kernel::lifecycle::AgentState::Running
+                        | nexus_kernel::lifecycle::AgentState::Starting
+                ),
+            })
+        })
+        .collect();
+
+    let monitor = ComplianceMonitor::new();
+    let result = monitor.check_compliance(&snapshots, &audit, &identity_mgr);
+
+    Ok(ComplianceStatusRow {
+        status: result.status.as_str().to_string(),
+        checks_passed: result.checks_passed,
+        checks_failed: result.checks_failed,
+        agents_checked: result.agents_checked,
+        alerts: result
+            .alerts
+            .into_iter()
+            .map(|a| ComplianceAlertRow {
+                severity: a.severity.as_str().to_string(),
+                check_id: a.check_id,
+                message: a.message,
+                agent_id: a.agent_id.map(|id| id.to_string()),
+            })
+            .collect(),
+    })
+}
+
+pub fn get_compliance_agents(state: &AppState) -> Result<Vec<ComplianceAgentRow>, String> {
+    use nexus_kernel::autonomy::AutonomyLevel;
+    use nexus_kernel::compliance::eu_ai_act::RiskClassifier;
+
+    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    let classifier = RiskClassifier::new();
+
+    let mut rows = Vec::new();
+    for agent_status in supervisor.health_check() {
+        if let Some(handle) = supervisor.get_agent(agent_status.id) {
+            let profile = classifier.classify_agent(&handle.manifest);
+            let autonomy = AutonomyLevel::from_manifest(handle.manifest.autonomy_level);
+            rows.push(ComplianceAgentRow {
+                id: agent_status.id.to_string(),
+                name: handle.manifest.name.clone(),
+                risk_tier: profile.tier.as_str().to_string(),
+                autonomy_level: autonomy.as_str().to_string(),
+                capabilities: handle.manifest.capabilities.clone(),
+                status: format!("{}", agent_status.state),
+            });
+        }
+    }
+    Ok(rows)
+}
+
+// ── Distributed Audit API ──────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditChainStatusRow {
+    pub total_events: usize,
+    pub chain_valid: bool,
+    pub first_hash: String,
+    pub last_hash: String,
+}
+
+pub fn get_audit_chain_status(state: &AppState) -> Result<AuditChainStatusRow, String> {
+    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+    let events = audit.events();
+    let total = events.len();
+    let chain_valid = if total == 0 {
+        true
+    } else {
+        audit.verify_integrity()
+    };
+    let first_hash = events.first().map(|e| e.hash.clone()).unwrap_or_default();
+    let last_hash = events.last().map(|e| e.hash.clone()).unwrap_or_default();
+
+    Ok(AuditChainStatusRow {
+        total_events: total,
+        chain_valid,
+        first_hash,
+        last_hash,
+    })
+}
+
 // ── Governance verification commands ────────────────────────────────────────
 
 pub fn verify_governance_invariants(state: &AppState) -> Result<String, String> {
@@ -6309,6 +6940,768 @@ pub fn export_compliance_report(state: &AppState) -> Result<String, String> {
     );
 
     Ok(verifier.generate_compliance_report())
+}
+
+/* ================================================================== */
+/*  File Manager — real filesystem operations                          */
+/*                                                                     */
+/*  These commands are USER-initiated via the Tauri frontend, not      */
+/*  agent-initiated.  Agent file operations go through the kernel's    */
+/*  capability system (CapabilityCheck + fuel budget).  User-facing    */
+/*  commands rely on OS-level permissions and path sandboxing below    */
+/*  (allowed_roots + reject "..") rather than agent capability gates.  */
+/* ================================================================== */
+
+/// Allowed root directories for the file manager.  Operations outside these
+/// are rejected.  The user's home directory is always allowed.
+fn file_manager_allowed_roots() -> Vec<std::path::PathBuf> {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    vec![home]
+}
+
+/// Validate that `path` is under one of the allowed roots.  Returns the
+/// canonical path on success.
+fn file_manager_validate_path(path: &str) -> Result<std::path::PathBuf, String> {
+    let candidate = std::path::PathBuf::from(path);
+    // Canonicalize — resolves symlinks and `..` segments
+    let canonical = if candidate.exists() {
+        candidate
+            .canonicalize()
+            .map_err(|e| format!("path error: {e}"))?
+    } else {
+        // For creation: parent must exist and be valid
+        let parent = candidate
+            .parent()
+            .ok_or_else(|| "invalid path: no parent".to_string())?;
+        let parent_canon = parent
+            .canonicalize()
+            .map_err(|e| format!("parent path error: {e}"))?;
+        parent_canon.join(candidate.file_name().unwrap_or_default())
+    };
+    let roots = file_manager_allowed_roots();
+    if roots.iter().any(|r| canonical.starts_with(r)) {
+        Ok(canonical)
+    } else {
+        Err(format!(
+            "access denied: path outside allowed directories: {}",
+            path
+        ))
+    }
+}
+
+pub fn file_manager_list(state: &AppState, path: String) -> Result<String, String> {
+    let canonical = file_manager_validate_path(&path)?;
+
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        serde_json::json!({"action": "file_manager_list", "path": path}),
+    );
+
+    let mut entries = Vec::new();
+    let read_dir = std::fs::read_dir(&canonical).map_err(|e| format!("read_dir failed: {e}"))?;
+
+    for entry in read_dir {
+        let entry = entry.map_err(|e| format!("entry error: {e}"))?;
+        let metadata = entry
+            .metadata()
+            .map_err(|e| format!("metadata error: {e}"))?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        let entry_path = entry.path().to_string_lossy().to_string();
+        let is_dir = metadata.is_dir();
+        let size = if is_dir { 0 } else { metadata.len() };
+        let modified = metadata
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+
+        entries.push(serde_json::json!({
+            "name": name,
+            "path": entry_path,
+            "is_dir": is_dir,
+            "size": size,
+            "modified": modified,
+        }));
+    }
+
+    serde_json::to_string(&entries).map_err(|e| format!("json error: {e}"))
+}
+
+pub fn file_manager_read(state: &AppState, path: String) -> Result<String, String> {
+    let canonical = file_manager_validate_path(&path)?;
+
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        serde_json::json!({"action": "file_manager_read", "path": path}),
+    );
+
+    std::fs::read_to_string(&canonical).map_err(|e| format!("read failed: {e}"))
+}
+
+pub fn file_manager_write(
+    state: &AppState,
+    path: String,
+    content: String,
+) -> Result<String, String> {
+    let canonical = file_manager_validate_path(&path)?;
+
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        serde_json::json!({"action": "file_manager_write", "path": path, "size": content.len()}),
+    );
+
+    std::fs::write(&canonical, &content).map_err(|e| format!("write failed: {e}"))?;
+    Ok("ok".to_string())
+}
+
+pub fn file_manager_create_dir(state: &AppState, path: String) -> Result<String, String> {
+    let canonical = file_manager_validate_path(&path)?;
+
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        serde_json::json!({"action": "file_manager_create_dir", "path": path}),
+    );
+
+    std::fs::create_dir_all(&canonical).map_err(|e| format!("create_dir failed: {e}"))?;
+    Ok("ok".to_string())
+}
+
+pub fn file_manager_delete(state: &AppState, path: String) -> Result<String, String> {
+    let canonical = file_manager_validate_path(&path)?;
+
+    let is_dir = canonical.is_dir();
+
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        serde_json::json!({"action": "file_manager_delete", "path": path, "is_dir": is_dir}),
+    );
+
+    if is_dir {
+        std::fs::remove_dir_all(&canonical).map_err(|e| format!("remove_dir failed: {e}"))?;
+    } else {
+        std::fs::remove_file(&canonical).map_err(|e| format!("remove_file failed: {e}"))?;
+    }
+    Ok("ok".to_string())
+}
+
+pub fn file_manager_rename(state: &AppState, from: String, to: String) -> Result<String, String> {
+    let from_canonical = file_manager_validate_path(&from)?;
+    let to_canonical = file_manager_validate_path(&to)?;
+
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        serde_json::json!({"action": "file_manager_rename", "from": from, "to": to}),
+    );
+
+    std::fs::rename(&from_canonical, &to_canonical).map_err(|e| format!("rename failed: {e}"))?;
+    Ok("ok".to_string())
+}
+
+pub fn file_manager_home() -> Result<String, String> {
+    std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|_| "cannot determine home directory".to_string())
+}
+
+// ── Database Manager ──────────────────────────────────────────────────
+// User-initiated commands (not agent-initiated).  Agent DB access goes
+// through kernel capability checks.  These user-facing commands use
+// SQL keyword blocking (DB_BLOCKED_KEYWORDS) as a governance safeguard.
+
+/// Blocked SQL keywords that require HITL approval.
+const DB_BLOCKED_KEYWORDS: &[&str] = &["DROP", "TRUNCATE", "ALTER", "DELETE", "GRANT", "REVOKE"];
+
+fn db_check_governance(sql: &str) -> Result<(), String> {
+    let upper = sql.trim().to_uppercase();
+    for kw in DB_BLOCKED_KEYWORDS {
+        // Check if the keyword appears as a standalone word
+        if upper.split_whitespace().any(|w| w == *kw) {
+            return Err(format!(
+                "BLOCKED: \"{kw}\" queries require Tier2+ HITL approval. Agent write access is governed."
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn nexus_data_dir() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|_| "cannot determine home directory".to_string())?;
+    Ok(PathBuf::from(home).join(".nexus"))
+}
+
+pub fn db_connect(state: &AppState, connection_string: String) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "db_connect", "connection_string": connection_string}),
+    );
+
+    // Validate the path exists or can be created
+    let db_path = std::path::Path::new(&connection_string);
+    if let Some(parent) = db_path.parent() {
+        if !parent.exists() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("cannot create db directory: {e}"))?;
+        }
+    }
+
+    // Test that we can open the database
+    let conn = rusqlite::Connection::open(&connection_string)
+        .map_err(|e| format!("SQLite connection failed: {e}"))?;
+
+    // Get table list
+    let mut stmt = conn
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        .map_err(|e| format!("Failed to query tables: {e}"))?;
+    let tables: Vec<String> = stmt
+        .query_map([], |row| row.get(0))
+        .map_err(|e| format!("Failed to fetch tables: {e}"))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let conn_id = Uuid::new_v4().to_string();
+    let result = json!({
+        "conn_id": conn_id,
+        "path": connection_string,
+        "tables": tables,
+    });
+    serde_json::to_string(&result).map_err(|e| format!("json error: {e}"))
+}
+
+pub fn db_execute_query(
+    state: &AppState,
+    connection_string: String,
+    query: String,
+) -> Result<String, String> {
+    // Governance check
+    db_check_governance(&query)?;
+
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "db_execute_query", "query": query}),
+    );
+
+    let start = std::time::Instant::now();
+    let conn = rusqlite::Connection::open(&connection_string)
+        .map_err(|e| format!("SQLite connection failed: {e}"))?;
+
+    let trimmed = query.trim().to_uppercase();
+    if trimmed.starts_with("SELECT")
+        || trimmed.starts_with("PRAGMA")
+        || trimmed.starts_with("EXPLAIN")
+    {
+        let mut stmt = conn
+            .prepare(query.trim().trim_end_matches(';'))
+            .map_err(|e| format!("SQL error: {e}"))?;
+
+        let col_count = stmt.column_count();
+        let columns: Vec<String> = (0..col_count)
+            .map(|i| stmt.column_name(i).unwrap_or("?").to_string())
+            .collect();
+
+        let rows: Vec<Vec<serde_json::Value>> = stmt
+            .query_map([], |row| {
+                let mut vals = Vec::with_capacity(col_count);
+                for i in 0..col_count {
+                    let val: rusqlite::Result<String> = row.get(i);
+                    vals.push(match val {
+                        Ok(s) => serde_json::Value::String(s),
+                        Err(_) => {
+                            // Try as integer
+                            let int_val: rusqlite::Result<i64> = row.get(i);
+                            match int_val {
+                                Ok(n) => serde_json::Value::Number(n.into()),
+                                Err(_) => {
+                                    // Try as float
+                                    let float_val: rusqlite::Result<f64> = row.get(i);
+                                    match float_val {
+                                        Ok(f) => serde_json::json!(f),
+                                        Err(_) => serde_json::Value::Null,
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+                Ok(vals)
+            })
+            .map_err(|e| format!("Query failed: {e}"))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let duration = start.elapsed().as_millis() as u64;
+        let result = json!({
+            "columns": columns,
+            "rows": rows,
+            "row_count": rows.len(),
+            "duration_ms": duration,
+        });
+        serde_json::to_string(&result).map_err(|e| format!("json error: {e}"))
+    } else {
+        // INSERT / UPDATE / CREATE TABLE etc.
+        let affected = conn
+            .execute(query.trim().trim_end_matches(';'), [])
+            .map_err(|e| format!("SQL error: {e}"))?;
+        let duration = start.elapsed().as_millis() as u64;
+        let result = json!({
+            "columns": [],
+            "rows": [],
+            "row_count": affected,
+            "duration_ms": duration,
+        });
+        serde_json::to_string(&result).map_err(|e| format!("json error: {e}"))
+    }
+}
+
+pub fn db_list_tables(state: &AppState, connection_string: String) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "db_list_tables", "path": connection_string}),
+    );
+
+    let conn = rusqlite::Connection::open(&connection_string)
+        .map_err(|e| format!("SQLite connection failed: {e}"))?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT m.name, m.type, \
+             (SELECT COUNT(*) FROM pragma_table_info(m.name)) as col_count \
+             FROM sqlite_master m WHERE m.type='table' ORDER BY m.name",
+        )
+        .map_err(|e| format!("Failed to query tables: {e}"))?;
+
+    let tables: Vec<serde_json::Value> = stmt
+        .query_map([], |row| {
+            let name: String = row.get(0)?;
+            let ttype: String = row.get(1)?;
+            let col_count: i64 = row.get(2)?;
+            Ok(json!({"name": name, "type": ttype, "col_count": col_count}))
+        })
+        .map_err(|e| format!("Failed to fetch tables: {e}"))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // For each table, get column info
+    let mut detailed = Vec::new();
+    for tbl in &tables {
+        let name = tbl["name"].as_str().unwrap_or("");
+        let mut col_stmt = conn
+            .prepare(&format!("PRAGMA table_info(\"{}\")", name.replace('"', "")))
+            .map_err(|e| format!("pragma error: {e}"))?;
+        let columns: Vec<serde_json::Value> = col_stmt
+            .query_map([], |row| {
+                let col_name: String = row.get(1)?;
+                let col_type: String = row.get(2)?;
+                let notnull: i64 = row.get(3)?;
+                let pk: i64 = row.get(5)?;
+                Ok(json!({
+                    "name": col_name,
+                    "type": col_type,
+                    "nullable": notnull == 0,
+                    "primaryKey": pk > 0,
+                }))
+            })
+            .map_err(|e| format!("col info error: {e}"))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        // Get row count
+        let row_count: i64 = conn
+            .query_row(
+                &format!("SELECT COUNT(*) FROM \"{}\"", name.replace('"', "")),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        detailed.push(json!({
+            "name": name,
+            "columns": columns,
+            "rowCount": row_count,
+        }));
+    }
+
+    serde_json::to_string(&detailed).map_err(|e| format!("json error: {e}"))
+}
+
+// ── API Client ────────────────────────────────────────────────────────
+// User-initiated HTTP requests from the UI (governed Postman).  Agent
+// network access goes through kernel capability checks.  These commands
+// are scoped to the authenticated desktop user, not agent identities.
+
+pub fn api_client_request(
+    state: &AppState,
+    method: String,
+    url: String,
+    headers_json: String,
+    body: String,
+) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "api_client_request", "method": method, "url": url}),
+    );
+
+    let start = std::time::Instant::now();
+
+    let mut args: Vec<String> = vec![
+        "-sS".to_string(),
+        "-w".to_string(),
+        "\n__NEXUS_STATUS__%{http_code}\n__NEXUS_HEADERS__%{header_json}".to_string(),
+        "-X".to_string(),
+        method.clone(),
+    ];
+
+    // Parse headers
+    let headers: Vec<(String, String)> = serde_json::from_str(&headers_json).unwrap_or_default();
+    for (k, v) in &headers {
+        args.push("-H".to_string());
+        args.push(format!("{k}: {v}"));
+    }
+
+    // Add body for methods that support it
+    if !body.is_empty() && method != "GET" && method != "HEAD" {
+        args.push("-d".to_string());
+        args.push(body);
+    }
+
+    args.push(url.clone());
+
+    let output = Command::new("curl")
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to run curl: {e}"))?;
+
+    let duration_ms = start.elapsed().as_millis() as u64;
+    let raw = String::from_utf8_lossy(&output.stdout).to_string();
+
+    // Parse status code from our -w format
+    let mut response_body = raw.clone();
+    let mut status_code: u16 = 0;
+    let mut resp_headers = json!({});
+
+    if let Some(status_pos) = raw.rfind("__NEXUS_STATUS__") {
+        response_body = raw[..status_pos].to_string();
+        let after_status = &raw[status_pos + 16..];
+        // Parse status code (first line after marker)
+        if let Some(newline) = after_status.find('\n') {
+            status_code = after_status[..newline].trim().parse().unwrap_or(0);
+            // Parse headers json after __NEXUS_HEADERS__
+            let header_part = &after_status[newline + 1..];
+            if let Some(hdr_pos) = header_part.find("__NEXUS_HEADERS__") {
+                let hdr_json = &header_part[hdr_pos + 17..];
+                resp_headers = serde_json::from_str(hdr_json.trim()).unwrap_or_else(|_| json!({}));
+            }
+        } else {
+            status_code = after_status.trim().parse().unwrap_or(0);
+        }
+    }
+
+    if !output.status.success() && status_code == 0 {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("curl failed: {stderr}"));
+    }
+
+    let status_text = match status_code {
+        200 => "OK",
+        201 => "Created",
+        204 => "No Content",
+        301 => "Moved Permanently",
+        302 => "Found",
+        304 => "Not Modified",
+        400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
+        404 => "Not Found",
+        405 => "Method Not Allowed",
+        429 => "Too Many Requests",
+        500 => "Internal Server Error",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
+        _ => "Unknown",
+    };
+
+    let size = response_body.len();
+    let result = json!({
+        "status": status_code,
+        "statusText": status_text,
+        "headers": resp_headers,
+        "body": response_body,
+        "duration": duration_ms,
+        "size": size,
+    });
+    serde_json::to_string(&result).map_err(|e| format!("json error: {e}"))
+}
+
+// ── Notes App ─────────────────────────────────────────────────────────
+
+fn notes_dir() -> Result<PathBuf, String> {
+    let dir = nexus_data_dir()?.join("notes");
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create notes dir: {e}"))?;
+    }
+    Ok(dir)
+}
+
+pub fn notes_list(state: &AppState) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "notes_list"}),
+    );
+
+    let dir = notes_dir()?;
+    let mut notes = Vec::new();
+
+    if dir.exists() {
+        let read_dir = std::fs::read_dir(&dir).map_err(|e| format!("read_dir failed: {e}"))?;
+        for entry in read_dir {
+            let entry = entry.map_err(|e| format!("entry error: {e}"))?;
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                let content =
+                    std::fs::read_to_string(&path).map_err(|e| format!("read failed: {e}"))?;
+                if let Ok(note) = serde_json::from_str::<serde_json::Value>(&content) {
+                    notes.push(note);
+                }
+            }
+        }
+    }
+
+    serde_json::to_string(&notes).map_err(|e| format!("json error: {e}"))
+}
+
+pub fn notes_get(state: &AppState, id: String) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "notes_get", "id": id}),
+    );
+
+    let path = notes_dir()?.join(format!("{id}.json"));
+    if !path.exists() {
+        return Err(format!("note not found: {id}"));
+    }
+    std::fs::read_to_string(&path).map_err(|e| format!("read failed: {e}"))
+}
+
+pub fn notes_save(
+    state: &AppState,
+    id: String,
+    title: String,
+    content: String,
+    folder_id: String,
+    tags_json: String,
+) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "notes_save", "id": id, "title": title}),
+    );
+
+    let dir = notes_dir()?;
+    let path = dir.join(format!("{id}.json"));
+
+    let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+
+    // Load existing note to preserve createdAt, or create new timestamp
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+
+    let created_at = if path.exists() {
+        let existing = std::fs::read_to_string(&path).unwrap_or_default();
+        serde_json::from_str::<serde_json::Value>(&existing)
+            .ok()
+            .and_then(|v| v["createdAt"].as_u64())
+            .unwrap_or(now)
+    } else {
+        now
+    };
+
+    let word_count = content.split_whitespace().count();
+
+    let note = json!({
+        "id": id,
+        "title": title,
+        "content": content,
+        "folderId": folder_id,
+        "tags": tags,
+        "createdAt": created_at,
+        "updatedAt": now,
+        "wordCount": word_count,
+    });
+
+    let serialized = serde_json::to_string_pretty(&note).map_err(|e| format!("json error: {e}"))?;
+    std::fs::write(&path, &serialized).map_err(|e| format!("write failed: {e}"))?;
+    Ok(serialized)
+}
+
+pub fn notes_delete(state: &AppState, id: String) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "notes_delete", "id": id}),
+    );
+
+    let path = notes_dir()?.join(format!("{id}.json"));
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| format!("delete failed: {e}"))?;
+    }
+    Ok("ok".to_string())
+}
+
+// ── Email Client (local drafts) ───────────────────────────────────────
+
+fn emails_dir() -> Result<PathBuf, String> {
+    let dir = nexus_data_dir()?.join("emails");
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create emails dir: {e}"))?;
+    }
+    Ok(dir)
+}
+
+pub fn email_list(state: &AppState) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "email_list"}),
+    );
+    let dir = emails_dir()?;
+    let mut emails = Vec::new();
+    if dir.exists() {
+        let read_dir = std::fs::read_dir(&dir).map_err(|e| format!("read_dir failed: {e}"))?;
+        for entry in read_dir {
+            let entry = entry.map_err(|e| format!("entry error: {e}"))?;
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                let content =
+                    std::fs::read_to_string(&path).map_err(|e| format!("read failed: {e}"))?;
+                if let Ok(email) = serde_json::from_str::<serde_json::Value>(&content) {
+                    emails.push(email);
+                }
+            }
+        }
+    }
+    serde_json::to_string(&emails).map_err(|e| format!("json error: {e}"))
+}
+
+pub fn email_save(state: &AppState, id: String, data_json: String) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "email_save", "id": id}),
+    );
+    let dir = emails_dir()?;
+    let path = dir.join(format!("{id}.json"));
+    // Validate JSON
+    let _parsed: serde_json::Value =
+        serde_json::from_str(&data_json).map_err(|e| format!("invalid json: {e}"))?;
+    std::fs::write(&path, &data_json).map_err(|e| format!("write failed: {e}"))?;
+    Ok("ok".to_string())
+}
+
+pub fn email_delete(state: &AppState, id: String) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "email_delete", "id": id}),
+    );
+    let path = emails_dir()?.join(format!("{id}.json"));
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| format!("delete failed: {e}"))?;
+    }
+    Ok("ok".to_string())
+}
+
+// ── Project Manager ───────────────────────────────────────────────────
+
+fn projects_dir() -> Result<PathBuf, String> {
+    let dir = nexus_data_dir()?.join("projects");
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create projects dir: {e}"))?;
+    }
+    Ok(dir)
+}
+
+pub fn project_list(state: &AppState) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "project_list"}),
+    );
+    let dir = projects_dir()?;
+    let mut projects = Vec::new();
+    if dir.exists() {
+        let read_dir = std::fs::read_dir(&dir).map_err(|e| format!("read_dir failed: {e}"))?;
+        for entry in read_dir {
+            let entry = entry.map_err(|e| format!("entry error: {e}"))?;
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                let content =
+                    std::fs::read_to_string(&path).map_err(|e| format!("read failed: {e}"))?;
+                if let Ok(project) = serde_json::from_str::<serde_json::Value>(&content) {
+                    projects.push(project);
+                }
+            }
+        }
+    }
+    serde_json::to_string(&projects).map_err(|e| format!("json error: {e}"))
+}
+
+pub fn project_get(state: &AppState, id: String) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "project_get", "id": id}),
+    );
+    let path = projects_dir()?.join(format!("{id}.json"));
+    if !path.exists() {
+        return Err(format!("project not found: {id}"));
+    }
+    std::fs::read_to_string(&path).map_err(|e| format!("read failed: {e}"))
+}
+
+pub fn project_save(state: &AppState, id: String, data_json: String) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "project_save", "id": id}),
+    );
+    let dir = projects_dir()?;
+    let path = dir.join(format!("{id}.json"));
+    let _parsed: serde_json::Value =
+        serde_json::from_str(&data_json).map_err(|e| format!("invalid json: {e}"))?;
+    std::fs::write(&path, &data_json).map_err(|e| format!("write failed: {e}"))?;
+    Ok("ok".to_string())
+}
+
+pub fn project_delete(state: &AppState, id: String) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "project_delete", "id": id}),
+    );
+    let path = projects_dir()?.join(format!("{id}.json"));
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| format!("delete failed: {e}"))?;
+    }
+    Ok("ok".to_string())
 }
 
 #[cfg(all(
@@ -7158,6 +8551,11 @@ mod runtime {
     }
 
     #[tauri::command]
+    fn get_live_system_metrics(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::get_live_system_metrics(state.inner())
+    }
+
+    #[tauri::command]
     fn time_machine_list_checkpoints(state: tauri::State<'_, AppState>) -> Result<String, String> {
         super::time_machine_list_checkpoints(state.inner())
     }
@@ -7532,6 +8930,24 @@ mod runtime {
     #[tauri::command]
     fn list_tools() -> Result<String, String> {
         super::list_tools()
+    }
+
+    #[tauri::command]
+    fn terminal_execute(
+        state: tauri::State<'_, AppState>,
+        command: String,
+        cwd: String,
+    ) -> Result<String, String> {
+        super::terminal_execute(state.inner(), command, cwd)
+    }
+
+    #[tauri::command]
+    fn terminal_execute_approved(
+        state: tauri::State<'_, AppState>,
+        command: String,
+        cwd: String,
+    ) -> Result<String, String> {
+        super::terminal_execute_approved(state.inner(), command, cwd)
     }
 
     #[tauri::command]
@@ -8063,6 +9479,27 @@ mod runtime {
     }
 
     #[tauri::command]
+    fn get_compliance_status(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<super::ComplianceStatusRow, String> {
+        super::get_compliance_status(state.inner())
+    }
+
+    #[tauri::command]
+    fn get_compliance_agents(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<super::ComplianceAgentRow>, String> {
+        super::get_compliance_agents(state.inner())
+    }
+
+    #[tauri::command]
+    fn get_audit_chain_status(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<super::AuditChainStatusRow, String> {
+        super::get_audit_chain_status(state.inner())
+    }
+
+    #[tauri::command]
     fn verify_governance_invariants(state: tauri::State<'_, AppState>) -> Result<String, String> {
         super::verify_governance_invariants(state.inner())
     }
@@ -8078,6 +9515,172 @@ mod runtime {
     #[tauri::command]
     fn export_compliance_report(state: tauri::State<'_, AppState>) -> Result<String, String> {
         super::export_compliance_report(state.inner())
+    }
+
+    #[tauri::command]
+    fn file_manager_list(
+        state: tauri::State<'_, AppState>,
+        path: String,
+    ) -> Result<String, String> {
+        super::file_manager_list(state.inner(), path)
+    }
+
+    #[tauri::command]
+    fn file_manager_read(
+        state: tauri::State<'_, AppState>,
+        path: String,
+    ) -> Result<String, String> {
+        super::file_manager_read(state.inner(), path)
+    }
+
+    #[tauri::command]
+    fn file_manager_write(
+        state: tauri::State<'_, AppState>,
+        path: String,
+        content: String,
+    ) -> Result<String, String> {
+        super::file_manager_write(state.inner(), path, content)
+    }
+
+    #[tauri::command]
+    fn file_manager_create_dir(
+        state: tauri::State<'_, AppState>,
+        path: String,
+    ) -> Result<String, String> {
+        super::file_manager_create_dir(state.inner(), path)
+    }
+
+    #[tauri::command]
+    fn file_manager_delete(
+        state: tauri::State<'_, AppState>,
+        path: String,
+    ) -> Result<String, String> {
+        super::file_manager_delete(state.inner(), path)
+    }
+
+    #[tauri::command]
+    fn file_manager_rename(
+        state: tauri::State<'_, AppState>,
+        from: String,
+        to: String,
+    ) -> Result<String, String> {
+        super::file_manager_rename(state.inner(), from, to)
+    }
+
+    #[tauri::command]
+    fn file_manager_home() -> Result<String, String> {
+        super::file_manager_home()
+    }
+
+    // ── Database Manager commands ──
+    #[tauri::command]
+    fn db_connect(
+        state: tauri::State<'_, AppState>,
+        connection_string: String,
+    ) -> Result<String, String> {
+        super::db_connect(state.inner(), connection_string)
+    }
+
+    #[tauri::command]
+    fn db_execute_query(
+        state: tauri::State<'_, AppState>,
+        connection_string: String,
+        query: String,
+    ) -> Result<String, String> {
+        super::db_execute_query(state.inner(), connection_string, query)
+    }
+
+    #[tauri::command]
+    fn db_list_tables(
+        state: tauri::State<'_, AppState>,
+        connection_string: String,
+    ) -> Result<String, String> {
+        super::db_list_tables(state.inner(), connection_string)
+    }
+
+    // ── API Client commands ──
+    #[tauri::command]
+    fn api_client_request(
+        state: tauri::State<'_, AppState>,
+        method: String,
+        url: String,
+        headers_json: String,
+        body: String,
+    ) -> Result<String, String> {
+        super::api_client_request(state.inner(), method, url, headers_json, body)
+    }
+
+    // ── Email Client commands ──
+    #[tauri::command]
+    fn email_list(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::email_list(state.inner())
+    }
+
+    #[tauri::command]
+    fn email_save(
+        state: tauri::State<'_, AppState>,
+        id: String,
+        data_json: String,
+    ) -> Result<String, String> {
+        super::email_save(state.inner(), id, data_json)
+    }
+
+    #[tauri::command]
+    fn email_delete(state: tauri::State<'_, AppState>, id: String) -> Result<String, String> {
+        super::email_delete(state.inner(), id)
+    }
+
+    // ── Project Manager commands ──
+    #[tauri::command]
+    fn project_list(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::project_list(state.inner())
+    }
+
+    #[tauri::command]
+    fn project_get(state: tauri::State<'_, AppState>, id: String) -> Result<String, String> {
+        super::project_get(state.inner(), id)
+    }
+
+    #[tauri::command]
+    fn project_save(
+        state: tauri::State<'_, AppState>,
+        id: String,
+        data_json: String,
+    ) -> Result<String, String> {
+        super::project_save(state.inner(), id, data_json)
+    }
+
+    #[tauri::command]
+    fn project_delete(state: tauri::State<'_, AppState>, id: String) -> Result<String, String> {
+        super::project_delete(state.inner(), id)
+    }
+
+    // ── Notes App commands ──
+    #[tauri::command]
+    fn notes_list(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::notes_list(state.inner())
+    }
+
+    #[tauri::command]
+    fn notes_get(state: tauri::State<'_, AppState>, id: String) -> Result<String, String> {
+        super::notes_get(state.inner(), id)
+    }
+
+    #[tauri::command]
+    fn notes_save(
+        state: tauri::State<'_, AppState>,
+        id: String,
+        title: String,
+        content: String,
+        folder_id: String,
+        tags_json: String,
+    ) -> Result<String, String> {
+        super::notes_save(state.inner(), id, title, content, folder_id, tags_json)
+    }
+
+    #[tauri::command]
+    fn notes_delete(state: tauri::State<'_, AppState>, id: String) -> Result<String, String> {
+        super::notes_delete(state.inner(), id)
     }
 
     pub fn run() {
@@ -8223,6 +9826,7 @@ mod runtime {
                 list_local_models,
                 delete_local_model,
                 get_system_specs,
+                get_live_system_metrics,
                 time_machine_list_checkpoints,
                 time_machine_get_checkpoint,
                 time_machine_create_checkpoint,
@@ -8268,6 +9872,8 @@ mod runtime {
                 factory_get_build_history,
                 execute_tool,
                 list_tools,
+                terminal_execute,
+                terminal_execute_approved,
                 replay_list_bundles,
                 replay_get_bundle,
                 replay_verify_bundle,
@@ -8327,9 +9933,34 @@ mod runtime {
                 payment_pay_invoice,
                 payment_get_revenue_stats,
                 payment_create_payout,
+                get_compliance_status,
+                get_compliance_agents,
+                get_audit_chain_status,
                 verify_governance_invariants,
                 verify_specific_invariant,
                 export_compliance_report,
+                file_manager_list,
+                file_manager_read,
+                file_manager_write,
+                file_manager_create_dir,
+                file_manager_delete,
+                file_manager_rename,
+                file_manager_home,
+                db_connect,
+                db_execute_query,
+                db_list_tables,
+                api_client_request,
+                notes_list,
+                notes_get,
+                notes_save,
+                notes_delete,
+                email_list,
+                email_save,
+                email_delete,
+                project_list,
+                project_get,
+                project_save,
+                project_delete,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
@@ -8363,20 +9994,20 @@ mod tests {
         evolution_get_history, evolution_get_status, evolution_register_strategy,
         evolution_rollback, factory_create_project, factory_get_build_history,
         factory_list_projects, get_active_llm_provider, get_agent_activity, get_browser_history,
-        get_configured_provider, get_knowledge_base, get_system_specs, ghost_protocol_add_peer,
-        ghost_protocol_remove_peer, ghost_protocol_status, ghost_protocol_toggle, index_document,
-        learning_agent_action, list_agents, list_indexed_documents, list_local_models,
-        mcp_host_add_server, mcp_host_list_servers, mcp_host_list_tools, mcp_host_remove_server,
-        navigate_to, neural_bridge_delete, neural_bridge_ingest, neural_bridge_search,
-        neural_bridge_status, neural_bridge_toggle, pause_agent, payment_create_invoice,
-        payment_create_plan, payment_get_revenue_stats, payment_list_plans, payment_pay_invoice,
-        remove_indexed_document, replay_export_bundle, replay_get_bundle, replay_list_bundles,
-        replay_toggle_recording, replay_verify_bundle, resume_agent, search_documents, start_build,
-        start_learning, start_research, time_machine_create_checkpoint,
-        time_machine_list_checkpoints, time_machine_redo, time_machine_undo, tracing_end_span,
-        tracing_end_trace, tracing_get_trace, tracing_list_traces, tracing_start_span,
-        tracing_start_trace, voice_get_status, voice_load_whisper_model, voice_transcribe,
-        AppState, LearningSource,
+        get_configured_provider, get_knowledge_base, get_live_system_metrics, get_system_specs,
+        ghost_protocol_add_peer, ghost_protocol_remove_peer, ghost_protocol_status,
+        ghost_protocol_toggle, index_document, learning_agent_action, list_agents,
+        list_indexed_documents, list_local_models, mcp_host_add_server, mcp_host_list_servers,
+        mcp_host_list_tools, mcp_host_remove_server, navigate_to, neural_bridge_delete,
+        neural_bridge_ingest, neural_bridge_search, neural_bridge_status, neural_bridge_toggle,
+        pause_agent, payment_create_invoice, payment_create_plan, payment_get_revenue_stats,
+        payment_list_plans, payment_pay_invoice, remove_indexed_document, replay_export_bundle,
+        replay_get_bundle, replay_list_bundles, replay_toggle_recording, replay_verify_bundle,
+        resume_agent, search_documents, start_build, start_learning, start_research,
+        time_machine_create_checkpoint, time_machine_list_checkpoints, time_machine_redo,
+        time_machine_undo, tracing_end_span, tracing_end_trace, tracing_get_trace,
+        tracing_list_traces, tracing_start_span, tracing_start_trace, voice_get_status,
+        voice_load_whisper_model, voice_transcribe, AppState, LearningSource,
     };
     use serde_json::json;
 
@@ -8831,6 +10462,22 @@ mod tests {
         assert!(parsed.get("cpu_name").is_some());
         assert!(parsed.get("cpu_cores").is_some());
         assert!(parsed["total_ram_mb"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn test_get_live_system_metrics_has_fields() {
+        let state = AppState::new();
+        let result = get_live_system_metrics(&state);
+        assert!(result.is_ok());
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert!(parsed.get("cpu_avg").is_some());
+        assert!(parsed.get("cpu_cores").is_some());
+        assert!(parsed.get("total_ram").is_some());
+        assert!(parsed.get("used_ram").is_some());
+        assert!(parsed.get("uptime_secs").is_some());
+        assert!(parsed.get("process_count").is_some());
+        assert!(parsed.get("agents").is_some());
+        assert!(parsed["total_ram"].as_u64().unwrap() > 0);
     }
 
     #[test]

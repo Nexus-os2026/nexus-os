@@ -22,7 +22,7 @@ const MOCK_AGENTS: CommandAgent[] = [
 ];
 
 const STATUS_COLORS: Record<string, string> = {
-  running: "#22d3ee",
+  running: "var(--nexus-accent)",
   stopped: "#6b7280",
   error: "#ef4444",
   paused: "#f59e0b",
@@ -79,7 +79,7 @@ export default function CommandCenter(): JSX.Element {
                     className="cc-fuel-fill"
                     style={{
                       width: `${fuelPct}%`,
-                      background: fuelPct > 50 ? "#22d3ee" : fuelPct > 20 ? "#f59e0b" : "#ef4444",
+                      background: fuelPct > 50 ? "var(--nexus-accent)" : fuelPct > 20 ? "#f59e0b" : "#ef4444",
                     }}
                   />
                 </div>

@@ -20,7 +20,7 @@ function makeId(): string {
 }
 
 const AGENT_COLORS = [
-  "#00ffd5",
+  "var(--nexus-accent)",
   "#3b82f6",
   "#f59e0b",
   "#8b5cf6",
@@ -100,7 +100,9 @@ async function simulateAgent(
     await delay(1200 + Math.random() * 600);
 
     // Extract
-    const finding = `Key finding from ${new URL(url).hostname}: ${agent.query.slice(0, 60)}`;
+    const finding = hasDesktopRuntime()
+      ? `Key finding from ${new URL(url).hostname}: ${agent.query.slice(0, 60)}`
+      : `[Demo] Simulated finding from ${new URL(url).hostname}: ${agent.query.slice(0, 60)}`;
     onActivity(
       "extracting",
       `Extracted finding from ${new URL(url).hostname}`,
@@ -238,7 +240,7 @@ export function ResearchMode({
           ? {
               ...prev,
               status: "complete",
-              summary: `Research complete: ${topic}. Found key insights across ${numAgents} agents.`,
+              summary: `[Demo Mode] Research complete: ${topic}. Simulated findings across ${numAgents} agents. Connect a real backend for actual content extraction.`,
             }
           : prev,
       );

@@ -37,7 +37,9 @@ fn test_manifest(name: &str, caps: Vec<&str>, fuel: u64) -> AgentManifest {
 }
 
 fn setup_gateway() -> (axum::Router, GatewayState) {
-    let state = GatewayState::new("integration-test");
+    let state = GatewayState::new("integration-test").with_llm_provider(Box::new(
+        nexus_connectors_llm::providers::mock::MockProvider::new(),
+    ));
     state.register_agent(
         test_manifest(
             "test-agent",
@@ -343,7 +345,7 @@ async fn all_rest_endpoints_require_jwt_auth() {
         ("GET", "/api/audit/events".to_string()),
         ("GET", "/api/compliance/status".to_string()),
         ("GET", format!("/api/compliance/report/{agent_id}")),
-        ("GET", "/api/marketplace/search".to_string()),
+        // Marketplace search/browse is now public (no auth required)
         ("GET", "/api/identity/agents".to_string()),
         ("GET", format!("/api/identity/agents/{agent_id}")),
         ("GET", "/api/firewall/status".to_string()),

@@ -71,14 +71,14 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  border: 1px solid rgba(34, 211, 238, 0.3);
+  border: 1px solid rgba(0, 255, 157, 0.3);
   border-radius: 0.4rem;
   background: rgba(15, 23, 42, 0.6);
-  color: #22d3ee;
+  color: var(--nexus-accent);
   cursor: pointer;
   transition: all 0.15s;
 }
-.mb-install-btn:hover { background: rgba(34, 211, 238, 0.15); border-color: rgba(34, 211, 238, 0.5); }
+.mb-install-btn:hover { background: rgba(0, 255, 157, 0.15); border-color: rgba(0, 255, 157, 0.5); }
 
 .mb-installed-badge {
   display: inline-block;

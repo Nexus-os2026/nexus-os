@@ -3,7 +3,7 @@
   display: grid;
   grid-template-rows: auto 1fr auto;
   height: calc(100vh - 10rem);
-  border: 1px solid rgba(0, 240, 255, 0.2);
+  border: 1px solid rgba(0, 255, 157, 0.2);
   background: linear-gradient(155deg, rgba(10, 10, 15, 0.95), rgba(13, 17, 23, 0.85));
   backdrop-filter: blur(12px);
   overflow: hidden;
@@ -12,8 +12,8 @@
 .jarvis-hud-grid {
   position: absolute;
   inset: 0;
-  background-image: linear-gradient(rgba(0, 240, 255, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 240, 255, 0.06) 1px, transparent 1px);
+  background-image: linear-gradient(rgba(0, 255, 157, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 157, 0.06) 1px, transparent 1px);
   background-size: 32px 32px;
   opacity: 0.3;
   pointer-events: none;
@@ -22,7 +22,7 @@
 .jarvis-hud-corners {
   position: absolute;
   inset: 14px;
-  border: 1px solid rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(0, 255, 157, 0.08);
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
   padding: 9px;
@@ -36,9 +36,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  border-bottom: 1px solid rgba(0, 240, 255, 0.2);
+  border-bottom: 1px solid rgba(0, 255, 157, 0.2);
   padding: 0.85rem 1rem;
-  background: linear-gradient(90deg, rgba(0, 240, 255, 0.08), rgba(0, 240, 255, 0.02));
+  background: linear-gradient(90deg, rgba(0, 255, 157, 0.08), rgba(0, 255, 157, 0.02));
 }
 
 .jarvis-chat-header__left {
@@ -51,7 +51,7 @@
   width: 10px;
   height: 10px;
   border-radius: 100%;
-  background: #00ff88;
+  background: var(--nexus-accent);
   box-shadow: 0 0 10px rgba(0, 255, 136, 0.8);
   animation: glow-pulse 1.6s ease-in-out infinite;
 }
@@ -71,7 +71,7 @@
 }
 
 .jarvis-agent-select {
-  border: 1px solid rgba(0, 240, 255, 0.35);
+  border: 1px solid rgba(0, 255, 157, 0.35);
   background: rgba(0, 10, 20, 0.85);
   color: var(--text-accent);
   font-family: var(--font-mono);
@@ -84,8 +84,8 @@
 }
 
 .jarvis-agent-select:focus {
-  border-color: rgba(0, 240, 255, 0.7);
-  box-shadow: 0 0 12px rgba(0, 240, 255, 0.15);
+  border-color: rgba(0, 255, 157, 0.7);
+  box-shadow: 0 0 12px rgba(0, 255, 157, 0.15);
 }
 
 .jarvis-agent-select option {
@@ -94,8 +94,8 @@
 }
 
 .jarvis-history-button {
-  border: 1px solid rgba(0, 240, 255, 0.45);
-  background: rgba(0, 240, 255, 0.05);
+  border: 1px solid rgba(0, 255, 157, 0.45);
+  background: rgba(0, 255, 157, 0.05);
   color: var(--text-accent);
   font-family: var(--font-mono);
   font-size: 0.73rem;
@@ -105,7 +105,7 @@
 }
 
 .jarvis-history-button:hover {
-  box-shadow: 0 0 16px rgba(0, 240, 255, 0.25);
+  box-shadow: 0 0 16px rgba(0, 255, 157, 0.25);
 }
 
 .jarvis-chat-stream {
@@ -135,7 +135,7 @@
   gap: 0.5rem;
   max-width: min(84%, 760px);
   padding: 0.8rem 0.9rem;
-  border: 1px solid rgba(0, 240, 255, 0.2);
+  border: 1px solid rgba(0, 255, 157, 0.2);
   background: rgba(13, 17, 23, 0.74);
   backdrop-filter: blur(10px);
 }
@@ -152,9 +152,9 @@
 }
 
 .jarvis-message-assistant {
-  border-color: rgba(0, 240, 255, 0.5);
-  box-shadow: 0 0 26px rgba(0, 240, 255, 0.12);
-  background: linear-gradient(140deg, rgba(0, 240, 255, 0.1), rgba(13, 17, 23, 0.86));
+  border-color: rgba(0, 255, 157, 0.5);
+  box-shadow: 0 0 26px rgba(0, 255, 157, 0.12);
+  background: linear-gradient(140deg, rgba(0, 255, 157, 0.1), rgba(13, 17, 23, 0.86));
 }
 
 .nexus-msg-typewriter {
@@ -172,7 +172,7 @@
 .jarvis-chat-footer {
   position: relative;
   z-index: 3;
-  border-top: 1px solid rgba(0, 240, 255, 0.2);
+  border-top: 1px solid rgba(0, 255, 157, 0.2);
   background: linear-gradient(180deg, rgba(10, 10, 15, 0.8), rgba(13, 17, 23, 0.92));
   padding: 0.8rem 1rem 1rem;
 }
@@ -194,8 +194,8 @@
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  border: 1px solid rgba(0, 240, 255, 0.4);
-  background: radial-gradient(circle, rgba(0, 240, 255, 0.22), rgba(10, 10, 15, 0.86));
+  border: 1px solid rgba(0, 255, 157, 0.4);
+  background: radial-gradient(circle, rgba(0, 255, 157, 0.22), rgba(10, 10, 15, 0.86));
   color: var(--text-accent);
   cursor: pointer;
   display: grid;
@@ -213,7 +213,7 @@
 .jarvis-mic-ring {
   position: absolute;
   inset: -6px;
-  border: 1px solid rgba(0, 240, 255, 0.45);
+  border: 1px solid rgba(0, 255, 157, 0.45);
   border-radius: 50%;
   opacity: 0;
 }
@@ -227,14 +227,14 @@
 }
 
 .jarvis-input-shell {
-  border: 1px solid rgba(0, 240, 255, 0.25);
+  border: 1px solid rgba(0, 255, 157, 0.25);
   background: rgba(13, 17, 23, 0.72);
-  box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.05);
+  box-shadow: inset 0 0 20px rgba(0, 255, 157, 0.05);
 }
 
 .jarvis-input-shell:focus-within {
-  border-color: rgba(0, 240, 255, 0.6);
-  box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.1), 0 0 16px rgba(0, 240, 255, 0.2);
+  border-color: rgba(0, 255, 157, 0.6);
+  box-shadow: inset 0 0 20px rgba(0, 255, 157, 0.1), 0 0 16px rgba(0, 255, 157, 0.2);
 }
 
 .jarvis-input {
@@ -251,9 +251,9 @@
 }
 
 .jarvis-send-button {
-  border: 1px solid rgba(0, 240, 255, 0.45);
+  border: 1px solid rgba(0, 255, 157, 0.45);
   color: var(--text-accent);
-  background: linear-gradient(135deg, rgba(0, 240, 255, 0.14), rgba(0, 128, 255, 0.08));
+  background: linear-gradient(135deg, rgba(0, 255, 157, 0.14), rgba(0, 128, 255, 0.08));
   clip-path: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
   min-width: 96px;
   height: 46px;
@@ -273,7 +273,7 @@
 }
 
 .jarvis-send-button:hover:not(:disabled) {
-  box-shadow: 0 0 18px rgba(0, 240, 255, 0.28);
+  box-shadow: 0 0 18px rgba(0, 255, 157, 0.28);
 }
 
 .jarvis-thinking {
@@ -281,18 +281,18 @@
   display: inline-flex;
   align-items: center;
   font-family: var(--font-mono);
-  color: rgba(0, 240, 255, 0.9);
+  color: rgba(0, 255, 157, 0.9);
   font-size: 0.72rem;
   letter-spacing: 0.07em;
   padding: 0.24rem 0.5rem;
-  border: 1px solid rgba(0, 240, 255, 0.25);
+  border: 1px solid rgba(0, 255, 157, 0.25);
   overflow: hidden;
 }
 
 .jarvis-thinking-scan {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.38), transparent);
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 157, 0.38), transparent);
   animation: scan-line 1.6s linear infinite;
 }
 
@@ -303,9 +303,9 @@
 }
 
 .jarvis-suggestion-chip {
-  border: 1px solid rgba(0, 240, 255, 0.34);
-  background: rgba(0, 240, 255, 0.06);
-  color: rgba(0, 240, 255, 0.95);
+  border: 1px solid rgba(0, 255, 157, 0.34);
+  background: rgba(0, 255, 157, 0.06);
+  color: rgba(0, 255, 157, 0.95);
   padding: 0.3rem 0.58rem;
   font-family: var(--font-mono);
   font-size: 0.68rem;
@@ -315,8 +315,8 @@
 }
 
 .jarvis-suggestion-chip:hover {
-  border-color: rgba(0, 240, 255, 0.6);
-  box-shadow: 0 0 14px rgba(0, 240, 255, 0.2);
+  border-color: rgba(0, 255, 157, 0.6);
+  box-shadow: 0 0 14px rgba(0, 255, 157, 0.2);
 }
 
 .voice-visualizer {
@@ -331,8 +331,8 @@
   width: 116px;
   height: 116px;
   border-radius: 50%;
-  border: 1px solid rgba(0, 240, 255, 0.3);
-  background: radial-gradient(circle, rgba(0, 240, 255, 0.08), rgba(13, 17, 23, 0.65) 62%);
+  border: 1px solid rgba(0, 255, 157, 0.3);
+  background: radial-gradient(circle, rgba(0, 255, 157, 0.08), rgba(13, 17, 23, 0.65) 62%);
   display: grid;
   place-items: center;
 }
@@ -341,8 +341,8 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: rgba(0, 240, 255, 0.7);
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.5);
+  background: rgba(0, 255, 157, 0.7);
+  box-shadow: 0 0 20px rgba(0, 255, 157, 0.5);
 }
 
 .voice-arc-bar {
@@ -351,11 +351,11 @@
   height: 15px;
   border-radius: 999px;
   transform-origin: center 58px;
-  background: linear-gradient(180deg, rgba(0, 240, 255, 1), rgba(0, 128, 255, 0.5));
+  background: linear-gradient(180deg, rgba(0, 255, 157, 1), rgba(0, 128, 255, 0.5));
 }
 
 .voice-visualizer--listening .voice-visualizer-core {
-  box-shadow: inset 0 0 18px rgba(0, 240, 255, 0.2), 0 0 18px rgba(0, 240, 255, 0.2);
+  box-shadow: inset 0 0 18px rgba(0, 255, 157, 0.2), 0 0 18px rgba(0, 255, 157, 0.2);
 }
 
 .voice-visualizer--processing .voice-visualizer-core {
@@ -368,7 +368,7 @@
 
 .voice-visualizer-label {
   margin: 0;
-  color: rgba(0, 240, 255, 0.85);
+  color: rgba(0, 255, 157, 0.85);
   font-family: var(--font-mono);
   font-size: 0.66rem;
   letter-spacing: 0.09em;
@@ -382,7 +382,7 @@
   width: min(360px, 90%);
   height: 100%;
   background: linear-gradient(170deg, rgba(10, 10, 15, 0.96), rgba(13, 17, 23, 0.9));
-  border-left: 1px solid rgba(0, 240, 255, 0.28);
+  border-left: 1px solid rgba(0, 255, 157, 0.28);
   transform: translateX(104%);
   transition: transform 280ms ease;
   display: grid;
@@ -398,7 +398,7 @@
   justify-content: space-between;
   align-items: center;
   gap: 0.7rem;
-  border-bottom: 1px solid rgba(0, 240, 255, 0.22);
+  border-bottom: 1px solid rgba(0, 255, 157, 0.22);
   padding: 0.8rem 0.9rem;
 }
 
@@ -411,8 +411,8 @@
 }
 
 .jarvis-history-header button {
-  border: 1px solid rgba(0, 240, 255, 0.4);
-  background: rgba(0, 240, 255, 0.05);
+  border: 1px solid rgba(0, 255, 157, 0.4);
+  background: rgba(0, 255, 157, 0.05);
   color: var(--text-accent);
   width: 30px;
   height: 30px;
@@ -421,12 +421,12 @@
 
 .jarvis-history-search {
   padding: 0.72rem 0.9rem;
-  border-bottom: 1px solid rgba(0, 240, 255, 0.12);
+  border-bottom: 1px solid rgba(0, 255, 157, 0.12);
 }
 
 .jarvis-history-search input {
   width: 100%;
-  border: 1px solid rgba(0, 240, 255, 0.25);
+  border: 1px solid rgba(0, 255, 157, 0.25);
   background: rgba(13, 17, 23, 0.85);
   color: var(--text-primary);
   padding: 0.48rem 0.58rem;
@@ -435,8 +435,8 @@
 }
 
 .jarvis-history-search input:focus {
-  border-color: rgba(0, 240, 255, 0.55);
-  box-shadow: 0 0 14px rgba(0, 240, 255, 0.16);
+  border-color: rgba(0, 255, 157, 0.55);
+  box-shadow: 0 0 14px rgba(0, 255, 157, 0.16);
 }
 
 .jarvis-history-list {
@@ -448,7 +448,7 @@
 
 .jarvis-history-entry {
   text-align: left;
-  border: 1px solid rgba(0, 240, 255, 0.2);
+  border: 1px solid rgba(0, 255, 157, 0.2);
   background: rgba(13, 17, 23, 0.62);
   color: var(--text-primary);
   padding: 0.55rem;
@@ -458,8 +458,8 @@
 }
 
 .jarvis-history-entry:hover {
-  border-color: rgba(0, 240, 255, 0.5);
-  background: rgba(0, 240, 255, 0.08);
+  border-color: rgba(0, 255, 157, 0.5);
+  background: rgba(0, 255, 157, 0.08);
 }
 
 .jarvis-history-time {

@@ -32,14 +32,14 @@
 .ch-sidebar-title {
   font-size: 15px;
   font-weight: 700;
-  color: #22d3ee;
+  color: var(--nexus-accent);
   margin: 0;
 }
 
 .ch-new-btn {
-  background: #22d3ee22;
-  color: #22d3ee;
-  border: 1px solid #22d3ee44;
+  background: var(--nexus-accent)22;
+  color: var(--nexus-accent);
+  border: 1px solid var(--nexus-accent)44;
   padding: 4px 12px;
   border-radius: 4px;
   cursor: pointer;
@@ -47,7 +47,7 @@
   font-size: 12px;
   transition: background 0.2s;
 }
-.ch-new-btn:hover { background: #22d3ee33; }
+.ch-new-btn:hover { background: var(--nexus-accent)33; }
 
 /* ─── Views ─── */
 .ch-views {
@@ -72,9 +72,9 @@
 }
 .ch-view-btn:hover { color: #94a3b8; background: #1e293b; }
 .ch-view-btn.active {
-  color: #22d3ee;
-  background: #22d3ee11;
-  border-color: #22d3ee33;
+  color: var(--nexus-accent);
+  background: var(--nexus-accent)11;
+  border-color: var(--nexus-accent)33;
 }
 
 /* ─── Model Section ─── */
@@ -112,7 +112,7 @@
   color: #e2e8f0;
   transition: border-color 0.2s;
 }
-.ch-model-active:hover { border-color: #22d3ee44; }
+.ch-model-active:hover { border-color: var(--nexus-accent)44; }
 
 .ch-model-icon {
   font-size: 18px;
@@ -172,7 +172,7 @@
 }
 .ch-model-option:last-child { border-bottom: none; }
 .ch-model-option:hover { background: #1e293b; }
-.ch-model-option.active { background: #22d3ee11; }
+.ch-model-option.active { background: var(--nexus-accent)11; }
 
 /* ─── Conversations ─── */
 .ch-conv-list {
@@ -195,7 +195,7 @@
   outline: none;
   box-sizing: border-box;
 }
-.ch-search:focus { border-color: #22d3ee44; }
+.ch-search:focus { border-color: var(--nexus-accent)44; }
 .ch-search::placeholder { color: #475569; }
 
 .ch-conv-item {
@@ -206,7 +206,7 @@
   transition: background 0.15s;
 }
 .ch-conv-item:hover { background: #1e293b; }
-.ch-conv-item.active { background: #22d3ee11; border-left: 2px solid #22d3ee; padding-left: 6px; }
+.ch-conv-item.active { background: var(--nexus-accent)11; border-left: 2px solid var(--nexus-accent); padding-left: 6px; }
 
 .ch-conv-title {
   font-size: 12px;
@@ -261,14 +261,14 @@
 }
 .ch-agent-btn:hover { background: #1e293b; }
 .ch-agent-btn.active {
-  background: #22d3ee11;
-  border-color: #22d3ee33;
+  background: var(--nexus-accent)11;
+  border-color: var(--nexus-accent)33;
   color: #e2e8f0;
 }
 
 .ch-agent-active {
   margin-left: auto;
-  color: #22d3ee;
+  color: var(--nexus-accent);
   font-size: 12px;
 }
 
@@ -354,9 +354,9 @@
 }
 
 .ch-tag {
-  background: #22d3ee11;
-  color: #22d3ee;
-  border: 1px solid #22d3ee22;
+  background: var(--nexus-accent)11;
+  color: var(--nexus-accent);
+  border: 1px solid var(--nexus-accent)22;
   padding: 1px 8px;
   border-radius: 10px;
   font-size: 10px;
@@ -368,7 +368,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
-  background: linear-gradient(90deg, #ef444411, #22d3ee11);
+  background: linear-gradient(90deg, #ef444411, var(--nexus-accent)11);
   border-bottom: 1px solid #ef444433;
   color: #f87171;
   font-size: 12px;
@@ -446,9 +446,9 @@
 }
 
 .ch-msg-user .ch-msg-avatar {
-  background: #22d3ee22;
-  color: #22d3ee;
-  border: 1px solid #22d3ee33;
+  background: var(--nexus-accent)22;
+  color: var(--nexus-accent);
+  border: 1px solid var(--nexus-accent)33;
 }
 
 .ch-msg-assistant .ch-msg-avatar {
@@ -501,8 +501,8 @@
 }
 
 .ch-msg-user .ch-msg-content {
-  background: #22d3ee15;
-  border-color: #22d3ee33;
+  background: var(--nexus-accent)15;
+  border-color: var(--nexus-accent)33;
 }
 
 .ch-msg-agent .ch-msg-content {
@@ -510,7 +510,7 @@
   border-color: #a78bfa33;
 }
 
-.ch-msg-content strong { color: #22d3ee; }
+.ch-msg-content strong { color: var(--nexus-accent); }
 
 .ch-inline-code {
   background: #0f172a;
@@ -549,16 +549,16 @@
 }
 
 .ch-code-run {
-  background: #22d3ee22;
-  color: #22d3ee;
-  border: 1px solid #22d3ee33;
+  background: var(--nexus-accent)22;
+  color: var(--nexus-accent);
+  border: 1px solid var(--nexus-accent)33;
   padding: 1px 8px;
   border-radius: 3px;
   cursor: pointer;
   font-family: inherit;
   font-size: 10px;
 }
-.ch-code-run:hover { background: #22d3ee33; }
+.ch-code-run:hover { background: var(--nexus-accent)33; }
 
 .ch-code-pre {
   margin: 0;
@@ -638,9 +638,9 @@
   transition: all 0.15s;
 }
 .ch-quick-btn:hover {
-  background: #22d3ee11;
-  border-color: #22d3ee33;
-  color: #22d3ee;
+  background: var(--nexus-accent)11;
+  border-color: var(--nexus-accent)33;
+  color: var(--nexus-accent);
 }
 
 .ch-no-conv {
@@ -682,7 +682,7 @@
   min-height: 20px;
   max-height: 120px;
 }
-.ch-input:focus { border-color: #22d3ee44; }
+.ch-input:focus { border-color: var(--nexus-accent)44; }
 .ch-input::placeholder { color: #475569; }
 
 .ch-input-actions {
@@ -708,7 +708,7 @@
 .ch-input-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .ch-send-btn {
-  background: #22d3ee;
+  background: var(--nexus-accent);
   border: none;
   color: #0f172a;
   width: 36px;
@@ -783,7 +783,7 @@
   font-size: 12px;
   outline: none;
 }
-.ch-cmp-select select:focus { border-color: #22d3ee44; }
+.ch-cmp-select select:focus { border-color: var(--nexus-accent)44; }
 
 .ch-cmp-vs {
   font-size: 14px;
@@ -810,13 +810,13 @@
   resize: vertical;
   outline: none;
 }
-.ch-cmp-prompt textarea:focus { border-color: #22d3ee44; }
+.ch-cmp-prompt textarea:focus { border-color: var(--nexus-accent)44; }
 .ch-cmp-prompt textarea::placeholder { color: #475569; }
 
 .ch-cmp-btn {
-  background: #22d3ee22;
-  color: #22d3ee;
-  border: 1px solid #22d3ee44;
+  background: var(--nexus-accent)22;
+  color: var(--nexus-accent);
+  border: 1px solid var(--nexus-accent)44;
   padding: 8px 20px;
   border-radius: 6px;
   cursor: pointer;
@@ -826,7 +826,7 @@
   align-self: flex-start;
   transition: background 0.2s;
 }
-.ch-cmp-btn:hover:not(:disabled) { background: #22d3ee33; }
+.ch-cmp-btn:hover:not(:disabled) { background: var(--nexus-accent)33; }
 .ch-cmp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .ch-cmp-results {
@@ -869,7 +869,7 @@
   line-height: 1.5;
   color: #cbd5e1;
 }
-.ch-cmp-result-body strong { color: #22d3ee; }
+.ch-cmp-result-body strong { color: var(--nexus-accent); }
 
 /* ─── History View ─── */
 .ch-history {

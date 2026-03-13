@@ -4,6 +4,9 @@ use coder_agent::init::init_project_in;
 use coder_agent::terminal::{CommandError, TerminalExecutor, TERMINAL_EXECUTE_CAPABILITY};
 use coder_agent::writer::FileChange;
 use nexus_sdk::autonomy::AutonomyLevel;
+use nexus_sdk::consent::{
+    ApprovalQueue, ConsentPolicyEngine, ConsentRuntime, GovernedOperation, HitlTier,
+};
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
@@ -17,8 +20,24 @@ fn test_safe_command_execution() {
 
     let mut capabilities = HashSet::new();
     capabilities.insert(TERMINAL_EXECUTE_CAPABILITY.to_string());
-    let mut executor =
-        TerminalExecutor::with_capabilities_and_autonomy(capabilities, AutonomyLevel::L1);
+
+    // Configure consent policy with explicit allowed approvers
+    let mut policy = ConsentPolicyEngine::default();
+    policy.set_policy(
+        GovernedOperation::TerminalCommand,
+        HitlTier::Tier2,
+        vec!["approver.a".to_string()],
+    );
+    let consent = ConsentRuntime::new(
+        policy,
+        ApprovalQueue::in_memory(),
+        "terminal.test".to_string(),
+    );
+    let mut executor = TerminalExecutor::with_capabilities_autonomy_and_consent(
+        capabilities,
+        AutonomyLevel::L1,
+        consent,
+    );
 
     let request_id = match executor.execute(
         "git --version",

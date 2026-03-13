@@ -428,7 +428,7 @@ impl TypedTool {
     }
 
     /// Human-readable name for audit logging.
-    fn tool_name(&self) -> String {
+    pub fn tool_name(&self) -> String {
         match self {
             TypedTool::GitCommit { .. } => "GitCommit".into(),
             TypedTool::GitPush { .. } => "GitPush".into(),

@@ -5,8 +5,7 @@ use crate::providers::LlmProvider;
 use crate::vector_store::{SearchResult, StoredEmbedding, VectorStore};
 use nexus_kernel::redaction::RedactionEngine;
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Configuration for the RAG pipeline.
@@ -79,11 +78,11 @@ fn iso_timestamp() -> String {
     format!("{secs}")
 }
 
-/// Compute a hex hash of the given text using DefaultHasher (non-cryptographic, for display).
+/// Compute a SHA-256 hex hash of the given text (cryptographic, for integrity verification).
 fn compute_hex_hash(text: &str) -> String {
-    let mut hasher = DefaultHasher::new();
-    text.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
+    let mut hasher = Sha256::new();
+    hasher.update(text.as_bytes());
+    format!("{:x}", hasher.finalize())
 }
 
 impl RagPipeline {
@@ -163,14 +162,16 @@ impl RagPipeline {
                 .map_err(|e| e.to_string())?;
         }
 
-        // 9. Build governance metadata.
+        // 9. Build governance metadata with integrity verification.
+        let recomputed_hash = compute_hex_hash(content);
+        let integrity_verified = recomputed_hash == content_hash;
         let governance = DocumentGovernance {
             content_hash,
             redacted_hash,
             pii_findings_count,
             pii_types_found,
             redaction_mode,
-            integrity_verified: true,
+            integrity_verified,
         };
 
         // 10. Create and push a RagDocument record.

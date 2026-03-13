@@ -13,6 +13,9 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+// TODO: Replace magic string with proper RBAC check against role registry
+const ADMIN_ROLE: &str = "admin";
+
 // ---------------------------------------------------------------------------
 // Risk Level (re-uses concept from speculative.rs but scoped for permissions)
 // ---------------------------------------------------------------------------
@@ -228,6 +231,38 @@ fn capability_metadata() -> HashMap<&'static str, CapabilityMeta> {
         },
     );
 
+    // RAG (Retrieval-Augmented Generation)
+    map.insert(
+        "rag.ingest",
+        CapabilityMeta {
+            display_name: "Ingest documents",
+            description:
+                "Allows the agent to ingest and index documents into the RAG knowledge base",
+            risk_level: PermissionRiskLevel::Medium,
+            category_id: "ai",
+        },
+    );
+    map.insert(
+        "rag.query",
+        CapabilityMeta {
+            display_name: "Query knowledge base",
+            description: "Allows the agent to query the RAG knowledge base for relevant context",
+            risk_level: PermissionRiskLevel::Low,
+            category_id: "ai",
+        },
+    );
+
+    // MCP (Model Context Protocol)
+    map.insert(
+        "mcp.call",
+        CapabilityMeta {
+            display_name: "MCP tool calls",
+            description: "Allows the agent to invoke tools via the Model Context Protocol. MCP tools may access external services.",
+            risk_level: PermissionRiskLevel::High,
+            category_id: "system",
+        },
+    );
+
     // Desktop control
     map.insert(
         "computer.control",
@@ -432,14 +467,6 @@ impl PermissionManager {
             }
         }
 
-        // Check if Critical risk requires admin
-        let meta = &cap_meta[capability_key];
-        if enabled && meta.risk_level == PermissionRiskLevel::Critical && changed_by != "admin" {
-            return Err(AgentError::SupervisorError(format!(
-                "capability '{capability_key}' has critical risk and requires admin approval"
-            )));
-        }
-
         // Build updated capabilities
         let mut new_caps = manifest.capabilities.clone();
         let currently_enabled = new_caps.contains(&capability_key.to_string());
@@ -447,6 +474,15 @@ impl PermissionManager {
         if enabled == currently_enabled {
             // No change needed
             return Ok(manifest.clone());
+        }
+
+        // Check if Critical risk requires admin — for BOTH grant and revoke.
+        // Non-admins must not be able to modify critical capabilities at all.
+        let meta = &cap_meta[capability_key];
+        if meta.risk_level == PermissionRiskLevel::Critical && changed_by != ADMIN_ROLE {
+            return Err(AgentError::SupervisorError(format!(
+                "capability '{capability_key}' has critical risk and requires admin approval"
+            )));
         }
 
         if enabled {
@@ -488,7 +524,9 @@ impl PermissionManager {
 
         // Flush to distributed audit immediately — permission changes are
         // high-value events that should not wait for the batch threshold.
-        audit_trail.flush_batcher();
+        audit_trail
+            .flush_batcher()
+            .map_err(|e| AgentError::SupervisorError(format!("audit flush failed: {e}")))?;
 
         // Build updated manifest
         let mut updated = manifest.clone();
@@ -548,17 +586,15 @@ impl PermissionManager {
                     reason: None,
                 });
 
-            audit_trail
-                .append_event(
-                    agent_id,
-                    EventType::UserAction,
-                    json!({
-                        "event_kind": "permission.locked",
-                        "capability": capability_key,
-                        "by": "admin",
-                    }),
-                )
-                .expect("audit: fail-closed");
+            let _ = audit_trail.append_event(
+                agent_id,
+                EventType::UserAction,
+                json!({
+                    "event_kind": "permission.locked",
+                    "capability": capability_key,
+                    "by": "admin",
+                }),
+            );
         }
     }
 
@@ -583,29 +619,29 @@ impl PermissionManager {
                     reason: None,
                 });
 
-            audit_trail
-                .append_event(
-                    agent_id,
-                    EventType::UserAction,
-                    json!({
-                        "event_kind": "permission.unlocked",
-                        "capability": capability_key,
-                        "by": "admin",
-                    }),
-                )
-                .expect("audit: fail-closed");
+            let _ = audit_trail.append_event(
+                agent_id,
+                EventType::UserAction,
+                json!({
+                    "event_kind": "permission.unlocked",
+                    "capability": capability_key,
+                    "by": "admin",
+                }),
+            );
         }
     }
 
     /// Add a pending capability request from an agent.
-    pub fn add_capability_request(&mut self, request: CapabilityRequest) {
-        let agent_id_str = request.agent_id.clone();
-        if let Ok(agent_id) = uuid::Uuid::parse_str(&agent_id_str) {
-            self.pending_requests
-                .entry(agent_id)
-                .or_default()
-                .push(request);
-        }
+    /// Returns an error if the agent_id is not a valid UUID.
+    pub fn add_capability_request(&mut self, request: CapabilityRequest) -> Result<(), AgentError> {
+        let agent_id = uuid::Uuid::parse_str(&request.agent_id).map_err(|_| {
+            AgentError::CapabilityDenied(format!("invalid agent UUID: '{}'", request.agent_id))
+        })?;
+        self.pending_requests
+            .entry(agent_id)
+            .or_default()
+            .push(request);
+        Ok(())
     }
 
     /// Get pending capability requests for an agent.
@@ -1037,7 +1073,7 @@ mod tests {
             requested_capabilities: vec!["fs.read".to_string(), "fs.write".to_string()],
         };
 
-        mgr.add_capability_request(request);
+        mgr.add_capability_request(request).unwrap();
         let requests = mgr.get_capability_requests(agent_id);
         assert_eq!(requests.len(), 1);
 

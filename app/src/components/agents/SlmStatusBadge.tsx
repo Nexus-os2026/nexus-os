@@ -18,7 +18,7 @@ function routingLabel(routing: SlmStatus["governance_routing"]): string {
 function routingColor(routing: SlmStatus["governance_routing"]): string {
   switch (routing) {
     case "local":
-      return "#00ffd5";
+      return "var(--nexus-accent)";
     case "cloud":
       return "#60a5fa";
     case "fallback":
@@ -31,7 +31,7 @@ function latencyIndicator(ms: number): { label: string; color: string } {
     return { label: "N/A", color: "#6b7280" };
   }
   if (ms < 100) {
-    return { label: `${ms}ms`, color: "#00ffd5" };
+    return { label: `${ms}ms`, color: "var(--nexus-accent)" };
   }
   if (ms < 500) {
     return { label: `${ms}ms`, color: "#f59e0b" };
@@ -49,7 +49,7 @@ export function SlmStatusBadge({ status }: SlmStatusBadgeProps): JSX.Element {
       <div className="slm-badge-row">
         <span
           className="slm-model-dot"
-          style={{ background: status.loaded ? "#00ffd5" : "#6b7280" }}
+          style={{ background: status.loaded ? "var(--nexus-accent)" : "#6b7280" }}
         />
         <span className="slm-badge-label">
           {status.loaded ? status.model_id ?? "SLM" : "No Model"}

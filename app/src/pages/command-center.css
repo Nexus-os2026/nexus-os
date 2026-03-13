@@ -53,7 +53,7 @@
 }
 .cc-btn:hover:not(:disabled) { background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.4); }
 .cc-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.cc-btn-start { border-color: rgba(34, 211, 238, 0.3); }
+.cc-btn-start { border-color: rgba(0, 255, 157, 0.3); }
 .cc-btn-stop { border-color: rgba(245, 158, 11, 0.3); }
 .cc-btn-kill { border-color: rgba(239, 68, 68, 0.3); color: #fca5a5; }
 .cc-btn-kill:hover:not(:disabled) { background: rgba(239, 68, 68, 0.15); }

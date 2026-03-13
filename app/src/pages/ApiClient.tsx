@@ -1,6 +1,14 @@
 import { useState, useCallback, useMemo } from "react";
 import "./api-client.css";
 
+/* ─── Tauri invoke ─── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const invoke: (cmd: string, args?: Record<string, unknown>) => Promise<any> =
+  typeof window !== "undefined" && "__TAURI__" in window
+    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__TAURI__.invoke
+    : async () => JSON.stringify({ error: "Tauri backend not available" });
+
 /* ─── types ─── */
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
 type BodyType = "json" | "form" | "text" | "none";
@@ -51,14 +59,6 @@ interface Collection {
   collapsed: boolean;
 }
 
-interface VaultKey {
-  id: string;
-  name: string;
-  service: string;
-  maskedValue: string;
-  lastUsed?: number;
-}
-
 interface AuditEntry {
   id: string;
   method: HttpMethod;
@@ -66,7 +66,6 @@ interface AuditEntry {
   status: number;
   duration: number;
   timestamp: number;
-  agent?: string;
   fuelCost: number;
 }
 
@@ -79,14 +78,6 @@ const METHOD_COLORS: Record<HttpMethod, string> = {
 const STATUS_COLORS: Record<string, string> = {
   "2": "#34d399", "3": "#38bdf8", "4": "#fbbf24", "5": "#f87171",
 };
-
-const MOCK_VAULT: VaultKey[] = [
-  { id: "vk-1", name: "Anthropic API Key", service: "api.anthropic.com", maskedValue: "sk-ant-••••••••••••cX4w", lastUsed: Date.now() - 3600000 },
-  { id: "vk-2", name: "GitHub Token", service: "api.github.com", maskedValue: "ghp_••••••••••••9kLm", lastUsed: Date.now() - 86400000 },
-  { id: "vk-3", name: "OpenAI API Key", service: "api.openai.com", maskedValue: "sk-••••••••••••bN7p" },
-  { id: "vk-4", name: "Slack Bot Token", service: "slack.com/api", maskedValue: "xoxb-••••••••••••qR2t", lastUsed: Date.now() - 7200000 },
-  { id: "vk-5", name: "Nexus Internal", service: "localhost:8080", maskedValue: "nxs-••••••••••••mK5j", lastUsed: Date.now() - 600000 },
-];
 
 function newRequest(method: HttpMethod = "GET", name = "New Request", url = ""): ApiRequest {
   return {
@@ -115,95 +106,9 @@ const INITIAL_COLLECTIONS: Collection[] = [
     requests: [
       { ...newRequest("POST", "Claude Chat", "https://api.anthropic.com/v1/messages"), id: "req-7", authType: "api-key", authKeyName: "x-api-key", authKeyValue: "", authKeyIn: "header", bodyType: "json", bodyRaw: '{\n  "model": "claude-sonnet-4-5-20250514",\n  "max_tokens": 1024,\n  "messages": [\n    {"role": "user", "content": "Hello"}\n  ]\n}' },
       { ...newRequest("GET", "GitHub Repos", "https://api.github.com/user/repos"), id: "req-8", authType: "bearer", authToken: "" },
-      { ...newRequest("POST", "Slack Message", "https://slack.com/api/chat.postMessage"), id: "req-9", authType: "bearer", bodyType: "json", bodyRaw: '{\n  "channel": "#general",\n  "text": "Hello from Nexus OS"\n}' },
-    ],
-  },
-  {
-    id: "col-3", name: "Agent Requests", icon: "⬡", collapsed: true,
-    requests: [
-      { ...newRequest("GET", "[Research] Web Search", "http://localhost:8080/api/v1/search?q=rust+async"), id: "req-10" },
-      { ...newRequest("POST", "[Coder] Run Tests", "http://localhost:8080/api/v1/actions/test"), id: "req-11", bodyType: "json", bodyRaw: '{"workspace": "/nexus-os", "command": "cargo test"}' },
     ],
   },
 ];
-
-const INITIAL_AUDIT: AuditEntry[] = [
-  { id: "ae-1", method: "GET", url: "http://localhost:8080/api/v1/agents", status: 200, duration: 23, timestamp: Date.now() - 120000, fuelCost: 2 },
-  { id: "ae-2", method: "POST", url: "https://api.anthropic.com/v1/messages", status: 200, duration: 1240, timestamp: Date.now() - 300000, agent: "Coder Agent", fuelCost: 45 },
-  { id: "ae-3", method: "GET", url: "https://api.github.com/user/repos", status: 200, duration: 340, timestamp: Date.now() - 600000, agent: "Research Agent", fuelCost: 8 },
-  { id: "ae-4", method: "DELETE", url: "http://localhost:8080/api/v1/agents/test-001", status: 403, duration: 5, timestamp: Date.now() - 900000, agent: "Coder Agent", fuelCost: 1 },
-  { id: "ae-5", method: "POST", url: "https://slack.com/api/chat.postMessage", status: 429, duration: 12, timestamp: Date.now() - 1200000, agent: "Content Agent", fuelCost: 3 },
-  { id: "ae-6", method: "GET", url: "http://localhost:8080/api/v1/audit?limit=50", status: 200, duration: 67, timestamp: Date.now() - 1800000, fuelCost: 4 },
-];
-
-/* ─── mock responses ─── */
-function mockResponse(req: ApiRequest): ApiResponse {
-  const duration = Math.floor(Math.random() * 500 + 20);
-  const url = req.url.toLowerCase();
-
-  if (url.includes("/agents") && req.method === "GET") {
-    const body = JSON.stringify({
-      agents: [
-        { id: "coder-001", name: "Coder Agent", status: "active", autonomy_level: 3, fuel_used: 2340, fuel_budget: 5000 },
-        { id: "research-001", name: "Research Agent", status: "active", autonomy_level: 2, fuel_used: 1820, fuel_budget: 3000 },
-        { id: "planner-001", name: "Planner Agent", status: "active", autonomy_level: 2, fuel_used: 640, fuel_budget: 2000 },
-        { id: "self-improve-001", name: "Self-Improve Agent", status: "active", autonomy_level: 4, fuel_used: 2890, fuel_budget: 4000 },
-      ],
-      total: 4,
-    }, null, 2);
-    return { status: 200, statusText: "OK", headers: { "content-type": "application/json", "x-request-id": `nxs-${Date.now()}`, "x-fuel-cost": "2", "x-rate-limit-remaining": "97" }, body, duration, size: body.length, timestamp: Date.now() };
-  }
-
-  if (url.includes("/audit")) {
-    const body = JSON.stringify({
-      events: [
-        { id: 12847, type: "code_gen", agent: "Coder Agent", action: "Generated React component", fuel: 45, risk: "low", timestamp: "2026-03-10T14:23:00Z" },
-        { id: 12846, type: "web_search", agent: "Research Agent", action: "Searched WASM benchmarks", fuel: 12, risk: "low", timestamp: "2026-03-10T14:20:00Z" },
-        { id: 12845, type: "file_write", agent: "Coder Agent", action: "Wrote DatabaseManager.tsx", fuel: 8, risk: "medium", timestamp: "2026-03-10T14:15:00Z" },
-      ],
-      total: 12847,
-    }, null, 2);
-    return { status: 200, statusText: "OK", headers: { "content-type": "application/json", "x-total-count": "12847" }, body, duration, size: body.length, timestamp: Date.now() };
-  }
-
-  if (url.includes("/fuel")) {
-    const body = JSON.stringify({ agent_id: "coder-001", balance: 2660, budget: 5000, used: 2340, efficiency: "0.87" }, null, 2);
-    return { status: 200, statusText: "OK", headers: { "content-type": "application/json" }, body, duration: Math.floor(duration / 3), size: body.length, timestamp: Date.now() };
-  }
-
-  if (req.method === "POST" && url.includes("/agents")) {
-    const body = JSON.stringify({ id: `agent-${Date.now()}`, name: "Test Agent", status: "created", message: "Agent created successfully. Fuel budget allocated." }, null, 2);
-    return { status: 201, statusText: "Created", headers: { "content-type": "application/json", "location": "/api/v1/agents/agent-new" }, body, duration, size: body.length, timestamp: Date.now() };
-  }
-
-  if (req.method === "DELETE") {
-    return { status: 403, statusText: "Forbidden", headers: { "content-type": "application/json" }, body: JSON.stringify({ error: "GOVERNED: DELETE operations require Tier2+ HITL approval", code: "HITL_REQUIRED", tier: 2 }, null, 2), duration: 5, size: 120, timestamp: Date.now() };
-  }
-
-  if (url.includes("anthropic.com")) {
-    const body = JSON.stringify({
-      id: "msg_01XYZ", type: "message", role: "assistant", model: "claude-sonnet-4-5-20250514",
-      content: [{ type: "text", text: "Hello! I'm Claude. How can I help you today?" }],
-      usage: { input_tokens: 12, output_tokens: 15 },
-    }, null, 2);
-    return { status: 200, statusText: "OK", headers: { "content-type": "application/json", "x-ratelimit-remaining": "45" }, body, duration: Math.floor(Math.random() * 2000 + 500), size: body.length, timestamp: Date.now() };
-  }
-
-  if (url.includes("github.com")) {
-    const body = JSON.stringify([
-      { id: 1, name: "nexus-os", full_name: "nexai-lang/nexus-os", private: false, stars: 142 },
-      { id: 2, name: "nexus-sdk", full_name: "nexai-lang/nexus-sdk", private: false, stars: 38 },
-    ], null, 2);
-    return { status: 200, statusText: "OK", headers: { "content-type": "application/json" }, body, duration, size: body.length, timestamp: Date.now() };
-  }
-
-  if (url.includes("slack.com") && req.method === "POST") {
-    return { status: 429, statusText: "Too Many Requests", headers: { "content-type": "application/json", "retry-after": "30", "x-ratelimit-remaining": "0" }, body: JSON.stringify({ ok: false, error: "rate_limited", retry_after: 30 }, null, 2), duration: 12, size: 60, timestamp: Date.now() };
-  }
-
-  const body = JSON.stringify({ message: "OK", timestamp: new Date().toISOString() }, null, 2);
-  return { status: 200, statusText: "OK", headers: { "content-type": "application/json" }, body, duration, size: body.length, timestamp: Date.now() };
-}
 
 /* ─── JSON syntax highlight ─── */
 function highlightJson(json: string): string {
@@ -224,10 +129,10 @@ export default function ApiClient() {
   const [loading, setLoading] = useState(false);
   const [reqTab, setReqTab] = useState<ReqTab>("params");
   const [resTab, setResTab] = useState<ResTab>("body");
-  const [showVault, setShowVault] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
-  const [audit, setAudit] = useState<AuditEntry[]>(INITIAL_AUDIT);
-  const [fuelUsed, setFuelUsed] = useState(63);
+  const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [fuelUsed, setFuelUsed] = useState(0);
+  const [requestError, setRequestError] = useState<string | null>(null);
 
   const activeReq = useMemo(() => {
     for (const col of collections) {
@@ -245,18 +150,90 @@ export default function ApiClient() {
     })));
   }, [activeReqId]);
 
-  /* ─── send request ─── */
-  const sendRequest = useCallback(() => {
+  /* ─── send request (real HTTP via Tauri/curl) ─── */
+  const sendRequest = useCallback(async () => {
     setLoading(true);
     setResTab("body");
-    setTimeout(() => {
-      const res = mockResponse(activeReq);
+    setRequestError(null);
+
+    // Build headers array from enabled headers + auth
+    const headers: [string, string][] = activeReq.headers
+      .filter(h => h.enabled && h.key)
+      .map(h => [h.key, h.value]);
+
+    // Add auth headers
+    if (activeReq.authType === "bearer" && activeReq.authToken) {
+      headers.push(["Authorization", `Bearer ${activeReq.authToken}`]);
+    } else if (activeReq.authType === "basic" && activeReq.authUser) {
+      const encoded = btoa(`${activeReq.authUser}:${activeReq.authPass}`);
+      headers.push(["Authorization", `Basic ${encoded}`]);
+    } else if (activeReq.authType === "api-key" && activeReq.authKeyName && activeReq.authKeyIn === "header") {
+      headers.push([activeReq.authKeyName, activeReq.authKeyValue]);
+    }
+
+    // Build URL with query params
+    let finalUrl = activeReq.url;
+    const enabledParams = activeReq.params.filter(p => p.enabled && p.key);
+    if (enabledParams.length > 0) {
+      const paramStr = enabledParams.map(p => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`).join("&");
+      finalUrl += (finalUrl.includes("?") ? "&" : "?") + paramStr;
+    }
+
+    // Add API key as query param if configured
+    if (activeReq.authType === "api-key" && activeReq.authKeyName && activeReq.authKeyIn === "query") {
+      finalUrl += (finalUrl.includes("?") ? "&" : "?") + `${encodeURIComponent(activeReq.authKeyName)}=${encodeURIComponent(activeReq.authKeyValue)}`;
+    }
+
+    // Build body
+    let body = "";
+    if (activeReq.bodyType === "json" || activeReq.bodyType === "text") {
+      body = activeReq.bodyRaw;
+    } else if (activeReq.bodyType === "form") {
+      body = activeReq.bodyForm.filter(f => f.enabled && f.key).map(f => `${encodeURIComponent(f.key)}=${encodeURIComponent(f.value)}`).join("&");
+    }
+
+    try {
+      const raw: string = await invoke("api_client_request", {
+        method: activeReq.method,
+        url: finalUrl,
+        headersJson: JSON.stringify(headers),
+        body,
+      });
+
+      const data = JSON.parse(raw);
+
+      // Flatten header_json from curl (it's an object with array values)
+      let flatHeaders: Record<string, string> = {};
+      if (data.headers && typeof data.headers === "object") {
+        for (const [k, v] of Object.entries(data.headers)) {
+          if (Array.isArray(v)) {
+            flatHeaders[k] = (v as string[]).join(", ");
+          } else if (typeof v === "string") {
+            flatHeaders[k] = v;
+          }
+        }
+      }
+
+      const res: ApiResponse = {
+        status: data.status,
+        statusText: data.statusText,
+        headers: flatHeaders,
+        body: data.body,
+        duration: data.duration,
+        size: data.size,
+        timestamp: Date.now(),
+      };
+
       setResponse(res);
-      setLoading(false);
-      const cost = Math.floor(Math.random() * 8 + 2);
+      const cost = data.fuel_cost ?? (Math.ceil((data.body?.length ?? 0) / 1000) + 2);
       setFuelUsed(f => f + cost);
-      setAudit(prev => [{ id: `ae-${Date.now()}`, method: activeReq.method, url: activeReq.url, status: res.status, duration: res.duration, timestamp: Date.now(), fuelCost: cost }, ...prev]);
-    }, Math.random() * 400 + 100);
+      setAudit(prev => [{ id: `ae-${Date.now()}`, method: activeReq.method, url: finalUrl, status: res.status, duration: res.duration, timestamp: Date.now(), fuelCost: cost }, ...prev]);
+    } catch (err) {
+      setRequestError(String(err));
+      setResponse(null);
+    } finally {
+      setLoading(false);
+    }
   }, [activeReq]);
 
   /* ─── collection management ─── */
@@ -319,30 +296,15 @@ export default function ApiClient() {
           <h2 className="ac-sidebar-title">API Client</h2>
           <div className="ac-sidebar-actions">
             <button className="ac-btn-icon" onClick={addCollection} title="New collection">+</button>
-            <button className={`ac-btn-icon ${showVault ? "active" : ""}`} onClick={() => { setShowVault(!showVault); setShowAudit(false); }} title="Vault">🔐</button>
-            <button className={`ac-btn-icon ${showAudit ? "active" : ""}`} onClick={() => { setShowAudit(!showAudit); setShowVault(false); }} title="Audit">⧉</button>
+            <button className={`ac-btn-icon ${showAudit ? "active" : ""}`} onClick={() => setShowAudit(!showAudit)} title="Audit">⧉</button>
           </div>
         </div>
-
-        {/* vault panel */}
-        {showVault && (
-          <div className="ac-vault-panel">
-            <div className="ac-vault-header">Governed Vault</div>
-            {MOCK_VAULT.map(key => (
-              <div key={key.id} className="ac-vault-item">
-                <div className="ac-vault-name">{key.name}</div>
-                <div className="ac-vault-service">{key.service}</div>
-                <div className="ac-vault-value">{key.maskedValue}</div>
-                {key.lastUsed && <div className="ac-vault-used">Used {formatTimestamp(key.lastUsed)}</div>}
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* audit panel */}
         {showAudit && (
           <div className="ac-audit-panel">
             <div className="ac-audit-header">Audit Trail</div>
+            {audit.length === 0 && <div style={{ padding: 12, color: "#64748b", fontSize: 12 }}>No requests yet</div>}
             {audit.slice(0, 8).map(entry => (
               <div key={entry.id} className="ac-audit-item">
                 <div className="ac-audit-item-top">
@@ -351,7 +313,6 @@ export default function ApiClient() {
                   <span className="ac-audit-time">{formatTimestamp(entry.timestamp)}</span>
                 </div>
                 <div className="ac-audit-url">{entry.url.replace(/https?:\/\//, "").slice(0, 35)}...</div>
-                {entry.agent && <div className="ac-audit-agent">⬢ {entry.agent}</div>}
                 <div className="ac-audit-meta">{entry.duration}ms · ⚡{entry.fuelCost}</div>
               </div>
             ))}
@@ -359,7 +320,7 @@ export default function ApiClient() {
         )}
 
         {/* collections */}
-        {!showVault && !showAudit && (
+        {!showAudit && (
           <div className="ac-collections">
             {collections.map(col => (
               <div key={col.id} className="ac-collection">
@@ -373,7 +334,7 @@ export default function ApiClient() {
                 {!col.collapsed && (
                   <div className="ac-collection-requests">
                     {col.requests.map(req => (
-                      <div key={req.id} className={`ac-req-item ${activeReqId === req.id ? "active" : ""}`} onClick={() => { setActiveReqId(req.id); setResponse(null); }}>
+                      <div key={req.id} className={`ac-req-item ${activeReqId === req.id ? "active" : ""}`} onClick={() => { setActiveReqId(req.id); setResponse(null); setRequestError(null); }}>
                         <span className="ac-req-method" style={{ color: METHOD_COLORS[req.method] }}>{req.method.slice(0, 3)}</span>
                         <span className="ac-req-name">{req.name}</span>
                         <button className="ac-btn-del" onClick={e => { e.stopPropagation(); deleteRequest(col.id, req.id); }}>×</button>
@@ -566,7 +527,12 @@ export default function ApiClient() {
                 <span>Sending request...</span>
               </div>
             )}
-            {!loading && !response && (
+            {!loading && requestError && (
+              <div style={{ padding: 16, color: "#f87171", fontSize: 13 }}>
+                <strong>Error:</strong> {requestError}
+              </div>
+            )}
+            {!loading && !response && !requestError && (
               <div className="ac-no-response">
                 <div className="ac-no-response-icon">⤴</div>
                 <div>Click Send to make a request</div>

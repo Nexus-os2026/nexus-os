@@ -101,6 +101,8 @@ pub struct PaymentEngine {
     payouts: Vec<DeveloperPayout>,
     /// Maps agent_id to developer_id for revenue routing.
     agent_developers: HashMap<String, String>,
+    /// Maps plan_id to agent_id for revenue attribution.
+    plan_agents: HashMap<String, String>,
     revenue_split: RevenueSplit,
 }
 
@@ -111,6 +113,7 @@ impl PaymentEngine {
             invoices: Vec::new(),
             payouts: Vec::new(),
             agent_developers: HashMap::new(),
+            plan_agents: HashMap::new(),
             revenue_split,
         }
     }
@@ -119,6 +122,12 @@ impl PaymentEngine {
     pub fn register_agent_developer(&mut self, agent_id: &str, developer_id: &str) {
         self.agent_developers
             .insert(agent_id.to_string(), developer_id.to_string());
+    }
+
+    /// Register which agent a plan belongs to (for revenue attribution).
+    pub fn register_plan_agent(&mut self, plan_id: &str, agent_id: &str) {
+        self.plan_agents
+            .insert(plan_id.to_string(), agent_id.to_string());
     }
 
     /// Create a new payment plan.
@@ -227,14 +236,14 @@ impl PaymentEngine {
         }
     }
 
-    /// Calculate the developer's share of a given amount in cents.
+    /// Calculate the developer's share of a given amount in cents (rounded to nearest).
     pub fn developer_share(&self, amount_cents: u64) -> u64 {
-        amount_cents * self.revenue_split.developer_pct / 100
+        (amount_cents * self.revenue_split.developer_pct + 50) / 100 // round to nearest
     }
 
-    /// Calculate the platform's share of a given amount in cents.
+    /// Calculate the platform's share of a given amount in cents (remainder ensures no loss).
     pub fn platform_share(&self, amount_cents: u64) -> u64 {
-        amount_cents * self.revenue_split.platform_pct / 100
+        amount_cents - self.developer_share(amount_cents) // remainder ensures no loss
     }
 
     /// Create a payout for a developer from agent revenue.
@@ -266,11 +275,17 @@ impl PaymentEngine {
     ) -> Option<DeveloperPayout> {
         let developer_id = self.agent_developers.get(agent_id)?.clone();
 
-        // Sum all paid invoices (in a real system, filter by period and agent mapping).
+        // Sum paid invoices for plans associated with this agent.
         let total_paid: u64 = self
             .invoices
             .iter()
-            .filter(|i| i.status == InvoiceStatus::Paid)
+            .filter(|i| {
+                i.status == InvoiceStatus::Paid
+                    && self
+                        .plan_agents
+                        .get(&i.plan_id)
+                        .is_some_and(|aid| aid == agent_id)
+            })
             .map(|i| i.amount_cents)
             .sum();
 
@@ -435,7 +450,7 @@ mod tests {
         let e = engine();
         assert_eq!(e.developer_share(0), 0);
         assert_eq!(e.platform_share(0), 0);
-        assert_eq!(e.developer_share(1), 0); // 70% of 1 cent = 0 (integer math)
+        assert_eq!(e.developer_share(1), 1); // 70% of 1 cent = 1 (rounded to nearest)
         assert_eq!(e.developer_share(10), 7);
         assert_eq!(e.platform_share(10), 3);
     }
@@ -455,6 +470,7 @@ mod tests {
         let mut e = engine();
         e.register_agent_developer("agent-x", "dev-1");
         let plan = e.create_plan("Pro", 10000, BillingInterval::Monthly, vec![]);
+        e.register_plan_agent(&plan.id, "agent-x");
         let inv = e.create_invoice(&plan.id, "buyer-1").unwrap();
         e.pay_invoice(&inv.id).unwrap();
 

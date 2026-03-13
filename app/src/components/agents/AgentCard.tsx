@@ -30,7 +30,7 @@ function statusTone(status: AgentSummary["status"]): "running" | "paused" | "sto
 
 function gaugeColor(percentage: number): string {
   if (percentage > 50) {
-    return "#00ffd5";
+    return "var(--nexus-accent)";
   }
   if (percentage > 20) {
     return "#f59e0b";

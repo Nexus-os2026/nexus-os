@@ -15,8 +15,12 @@ import type {
   AuditEvent,
   AuditEventsResponse,
   AuditQuery,
+  ChatResponse,
+  Checkpoint,
   ComplianceReport,
   ComplianceStatus,
+  DocumentGovernance,
+  DocumentInfo,
   FirewallStatus,
   HealthResponse,
   MarketplaceEntry,
@@ -27,6 +31,9 @@ import type {
   OpenAiEmbeddingResponse,
   OpenAiModelList,
   PermissionCategory,
+  RedoResult,
+  SearchResult,
+  UndoResult,
   UpdatePermissionRequest,
   ToolInvokeRequest,
   ToolInvokeResponse,
@@ -61,6 +68,10 @@ export class NexusClient {
     return headers;
   }
 
+  private static readonly RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
+  private static readonly MAX_RETRIES = 3;
+  private static readonly BACKOFF_DELAYS = [1000, 2000, 4000]; // ms
+
   private async request<T>(
     method: string,
     path: string,
@@ -77,29 +88,59 @@ export class NexusClient {
       headers["content-type"] = "application/json";
     }
 
-    const resp = await fetch(url, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+    let lastError: Error | null = null;
 
-    if (!resp.ok) {
+    for (let attempt = 0; attempt < NexusClient.MAX_RETRIES; attempt++) {
+      const resp = await fetch(url, {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+
+      if (resp.ok) {
+        if (resp.status === 204) {
+          return null as T;
+        }
+        return resp.json() as Promise<T>;
+      }
+
       const text = await resp.text().catch(() => "");
       const message = text || resp.statusText;
 
-      switch (resp.status) {
-        case 401:
-          throw new NexusAuthError(path, message);
-        case 404:
-          throw new NexusNotFoundError(path, message);
-        case 429:
-          throw new NexusRateLimitError(path, message);
-        default:
-          throw new NexusApiError(resp.status, path, message);
+      // Non-retryable errors — throw immediately
+      if (!NexusClient.RETRYABLE_STATUSES.has(resp.status)) {
+        switch (resp.status) {
+          case 401:
+            throw new NexusAuthError(path, message);
+          case 404:
+            throw new NexusNotFoundError(path, message);
+          default:
+            throw new NexusApiError(resp.status, path, message);
+        }
+      }
+
+      // Retryable error — store and maybe retry
+      lastError =
+        resp.status === 429
+          ? new NexusRateLimitError(path, message)
+          : new NexusApiError(resp.status, path, message);
+
+      if (attempt < NexusClient.MAX_RETRIES - 1) {
+        let delay = NexusClient.BACKOFF_DELAYS[attempt];
+        if (resp.status === 429) {
+          const retryAfter = resp.headers.get("retry-after");
+          if (retryAfter) {
+            const parsed = Number(retryAfter);
+            if (!Number.isNaN(parsed)) {
+              delay = parsed * 1000;
+            }
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
 
-    return resp.json() as Promise<T>;
+    throw lastError!;
   }
 
   // ── System ───────────────────────────────────────────────────────────
@@ -348,5 +389,94 @@ export class NexusClient {
 
   async listModels(): Promise<OpenAiModelList> {
     return this.request("GET", "/v1/models");
+  }
+
+  // ── RAG ────────────────────────────────────────────────────────────────
+
+  async indexDocument(
+    filePath: string,
+    options?: { collection?: string }
+  ): Promise<DocumentInfo> {
+    const body: Record<string, unknown> = { file_path: filePath };
+    if (options?.collection) {
+      body.collection = options.collection;
+    }
+    return this.request("POST", "/rag/index", body);
+  }
+
+  async searchDocuments(
+    query: string,
+    options?: { collection?: string; topK?: number }
+  ): Promise<SearchResult[]> {
+    const body: Record<string, unknown> = { query };
+    if (options?.collection) {
+      body.collection = options.collection;
+    }
+    if (options?.topK !== undefined) {
+      body.top_k = options.topK;
+    }
+    const data = await this.request<SearchResult[] | { results: SearchResult[] }>(
+      "POST",
+      "/rag/search",
+      body
+    );
+    return Array.isArray(data) ? data : data.results;
+  }
+
+  async chatWithDocuments(
+    query: string,
+    options?: { collection?: string }
+  ): Promise<ChatResponse> {
+    const body: Record<string, unknown> = { question: query };
+    if (options?.collection) {
+      body.collection = options.collection;
+    }
+    return this.request("POST", "/rag/chat", body);
+  }
+
+  async listIndexedDocuments(collection?: string): Promise<DocumentInfo[]> {
+    const qs = collection
+      ? `?collection=${encodeURIComponent(collection)}`
+      : "";
+    const data = await this.request<
+      DocumentInfo[] | { documents: DocumentInfo[] }
+    >("GET", `/rag/documents${qs}`);
+    return Array.isArray(data) ? data : data.documents;
+  }
+
+  async removeDocument(documentId: string): Promise<void> {
+    await this.request("DELETE", `/rag/documents/${documentId}`);
+  }
+
+  async getDocumentGovernance(
+    documentId: string
+  ): Promise<DocumentGovernance> {
+    return this.request(
+      "GET",
+      `/rag/documents/${documentId}/governance`
+    );
+  }
+
+  // ── Time Machine ──────────────────────────────────────────────────────
+
+  async listCheckpoints(): Promise<Checkpoint[]> {
+    const data = await this.request<
+      Checkpoint[] | { checkpoints: Checkpoint[] }
+    >("GET", "/time-machine/checkpoints");
+    return Array.isArray(data) ? data : data.checkpoints;
+  }
+
+  async createCheckpoint(description: string): Promise<Checkpoint> {
+    return this.request("POST", "/time-machine/checkpoint", {
+      label: description,
+    });
+  }
+
+  async undo(): Promise<UndoResult> {
+    return this.request("POST", "/time-machine/undo");
+  }
+
+  async redo(): Promise<RedoResult> {
+    return this.request("POST", "/time-machine/redo");
   }
 }

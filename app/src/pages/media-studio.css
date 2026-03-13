@@ -29,7 +29,7 @@
 .ms-sidebar-title {
   font-size: 16px;
   font-weight: 700;
-  color: #22d3ee;
+  color: var(--nexus-accent);
   margin: 0;
 }
 
@@ -56,7 +56,7 @@
 }
 
 .ms-view-btn:hover { background: #1e293b; color: #e2e8f0; }
-.ms-view-btn.active { background: #22d3ee15; color: #22d3ee; }
+.ms-view-btn.active { background: var(--nexus-accent)15; color: var(--nexus-accent); }
 .ms-view-icon { font-size: 14px; }
 
 /* folders */
@@ -91,7 +91,7 @@
 }
 
 .ms-folder-btn:hover { background: #1e293b; }
-.ms-folder-btn.active { color: #22d3ee; background: #22d3ee10; }
+.ms-folder-btn.active { color: var(--nexus-accent); background: var(--nexus-accent)10; }
 
 .ms-folder-count {
   font-size: 10px;
@@ -220,7 +220,7 @@
   outline: none;
 }
 
-.ms-search:focus { border-color: #22d3ee; }
+.ms-search:focus { border-color: var(--nexus-accent); }
 
 .ms-select {
   background: #1e293b;
@@ -249,7 +249,7 @@
   border-radius: 3px;
 }
 
-.ms-grid-btn.active { color: #22d3ee; border-color: #22d3ee; }
+.ms-grid-btn.active { color: var(--nexus-accent); border-color: var(--nexus-accent); }
 
 /* grid */
 .ms-grid {
@@ -279,7 +279,7 @@
 }
 
 .ms-card.selected {
-  border-color: #22d3ee;
+  border-color: var(--nexus-accent);
 }
 
 .ms-card-thumb {
@@ -371,7 +371,7 @@
 .ms-editor-name {
   font-size: 12px;
   font-weight: 600;
-  color: #22d3ee;
+  color: var(--nexus-accent);
   margin-right: auto;
 }
 
@@ -395,7 +395,7 @@
 }
 
 .ms-tool-btn:hover { background: #334155; color: #e2e8f0; }
-.ms-tool-btn.active { border-color: #22d3ee; color: #22d3ee; }
+.ms-tool-btn.active { border-color: var(--nexus-accent); color: var(--nexus-accent); }
 
 .ms-tool-sep {
   color: #334155;
@@ -459,7 +459,7 @@
 
 .ms-crop-box {
   position: absolute;
-  border: 2px dashed #22d3ee;
+  border: 2px dashed var(--nexus-accent);
   background: transparent;
 }
 
@@ -467,7 +467,7 @@
   position: absolute;
   width: 10px;
   height: 10px;
-  background: #22d3ee;
+  background: var(--nexus-accent);
   border-radius: 2px;
 }
 
@@ -562,7 +562,7 @@
 }
 
 .ms-filter-btn:hover { border-color: #334155; }
-.ms-filter-btn.active { border-color: #22d3ee; color: #22d3ee; }
+.ms-filter-btn.active { border-color: var(--nexus-accent); color: var(--nexus-accent); }
 
 .ms-filter-preview {
   width: 100%;
@@ -606,7 +606,7 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #22d3ee;
+  background: var(--nexus-accent);
   cursor: pointer;
 }
 
@@ -630,7 +630,7 @@
   cursor: pointer;
 }
 
-.ms-export-btn:hover { background: #334155; color: #22d3ee; }
+.ms-export-btn:hover { background: #334155; color: var(--nexus-accent); }
 
 /* ═══ GENERATE ═══ */
 .ms-generate {
@@ -697,7 +697,7 @@
   box-sizing: border-box;
 }
 
-.ms-gen-prompt:focus { border-color: #22d3ee; }
+.ms-gen-prompt:focus { border-color: var(--nexus-accent); }
 
 .ms-gen-styles, .ms-gen-sizes {
   display: flex;
@@ -717,13 +717,13 @@
 }
 
 .ms-style-btn:hover, .ms-size-btn:hover { background: #334155; }
-.ms-style-btn.active, .ms-size-btn.active { border-color: #22d3ee; color: #22d3ee; }
+.ms-style-btn.active, .ms-size-btn.active { border-color: var(--nexus-accent); color: var(--nexus-accent); }
 
 .ms-gen-btn {
   display: block;
   width: 100%;
   margin-top: 20px;
-  background: #22d3ee;
+  background: var(--nexus-accent);
   color: #0b1120;
   border: none;
   padding: 10px;
@@ -865,7 +865,7 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background: #22d3ee;
+  background: var(--nexus-accent);
   z-index: 3;
   transform: translateX(-50%);
 }
@@ -875,7 +875,7 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: #22d3ee;
+  background: var(--nexus-accent);
   color: #0b1120;
   width: 28px;
   height: 28px;
@@ -934,7 +934,7 @@
   cursor: pointer;
 }
 
-.ms-ocr-card:hover { border-color: #22d3ee; }
+.ms-ocr-card:hover { border-color: var(--nexus-accent); }
 
 .ms-ocr-thumb { height: 90px; }
 
@@ -1001,7 +1001,7 @@
   width: 20px;
   height: 20px;
   border: 2px solid #334155;
-  border-top-color: #22d3ee;
+  border-top-color: var(--nexus-accent);
   border-radius: 50%;
   animation: ms-spin 0.8s linear infinite;
 }
@@ -1046,4 +1046,4 @@
 }
 
 .ms-status-item { white-space: nowrap; }
-.ms-status-right { margin-left: auto; color: #22d3ee; }
+.ms-status-right { margin-left: auto; color: var(--nexus-accent); }

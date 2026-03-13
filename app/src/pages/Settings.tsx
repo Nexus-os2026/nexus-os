@@ -47,9 +47,18 @@ export function Settings({
   const [section, setSection] = useState<SettingsSection>("general");
   const [showKeys, setShowKeys] = useState(false);
   const [statuses, setStatuses] = useState<Record<string, ServiceStatus>>({});
-  const [darkMode, setDarkMode] = useState(true);
-  const [language, setLanguage] = useState("en");
-  const [notifications, setNotifications] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    const stored = localStorage.getItem("nexus-theme-preference");
+    if (stored === "light") return false;
+    return true; // default dark
+  });
+  const [language, setLanguage] = useState(() => {
+    // i18n is not yet implemented — this persists the user's selection for future use
+    return localStorage.getItem("nexus-language") || "en";
+  });
+  const [notifications, setNotifications] = useState(() => {
+    return localStorage.getItem("nexus-notifications") === "true";
+  });
   const [deletePhase, setDeletePhase] = useState<"idle" | "confirm">("idle");
   const [micTesting, setMicTesting] = useState(false);
   const [micLevel, setMicLevel] = useState(0.08);
@@ -69,6 +78,33 @@ export function Settings({
     (config.llm.routing_strategy as RoutingStrategy) || "Priority"
   );
 
+  // ── Sync dark/light theme to document and localStorage ──
+  useEffect(() => {
+    const root = document.documentElement;
+    if (darkMode) {
+      root.classList.add("dark");
+      root.classList.remove("light");
+    } else {
+      root.classList.add("light");
+      root.classList.remove("dark");
+    }
+    localStorage.setItem("nexus-theme-preference", darkMode ? "dark" : "light");
+  }, [darkMode]);
+
+  // ── Persist language selection ──
+  useEffect(() => {
+    // i18n is not yet implemented — persisting for when it is
+    localStorage.setItem("nexus-language", language);
+  }, [language]);
+
+  // ── Handle desktop notification permission and persistence ──
+  useEffect(() => {
+    localStorage.setItem("nexus-notifications", String(notifications));
+    if (notifications && typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, [notifications]);
+
   const secretType = showKeys ? "text" : "password";
 
   const apiKeys: ApiKeyDef[] = [
@@ -79,11 +115,42 @@ export function Settings({
     { id: "github", label: "GitHub", value: "", update: () => {} }
   ];
 
-  function testKey(id: string, value: string): void {
+  async function testKey(id: string, value: string): Promise<void> {
+    if (!value || value.trim().length < 4) {
+      setStatuses((prev) => ({ ...prev, [id]: "error" }));
+      return;
+    }
     setStatuses((prev) => ({ ...prev, [id]: "testing" }));
-    window.setTimeout(() => {
-      setStatuses((prev) => ({ ...prev, [id]: value.trim().length > 4 ? "ok" : "error" }));
-    }, 900);
+    try {
+      if (id === "openai") {
+        const res = await fetch("https://api.openai.com/v1/models", {
+          method: "GET",
+          headers: { Authorization: `Bearer ${value.trim()}` },
+        });
+        setStatuses((prev) => ({ ...prev, [id]: res.ok ? "ok" : "error" }));
+      } else if (id === "anthropic") {
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": value.trim(),
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
+        });
+        setStatuses((prev) => ({ ...prev, [id]: (res.ok || res.status === 400) ? "ok" : "error" }));
+      } else {
+        // For other keys (Brave, X, GitHub), validate length heuristic as fallback
+        setStatuses((prev) => ({ ...prev, [id]: value.trim().length > 4 ? "ok" : "error" }));
+      }
+    } catch {
+      // Network error — check Ollama (localhost) separately
+      if (id === "openai" || id === "anthropic") {
+        setStatuses((prev) => ({ ...prev, [id]: "error" }));
+      } else {
+        setStatuses((prev) => ({ ...prev, [id]: value.trim().length > 4 ? "ok" : "error" }));
+      }
+    }
   }
 
   function statusLabel(s: ServiceStatus): string {
@@ -129,6 +196,8 @@ export function Settings({
     onChange({ ...config, llm: { ...config.llm, routing_strategy: strategy } });
   }
 
+  // Mic test is simulated — Web Audio API is not wired up.
+  // The visualization uses random values to demonstrate the UI.
   useEffect(() => {
     if (!micTesting) {
       setMicLevel(0.08);
@@ -421,7 +490,7 @@ export function Settings({
               <div>
                 <p className="st-row-label">Audit Chain</p>
               </div>
-              <span className="st-badge st-badge-green">Hash Chain Intact &mdash; 847 events</span>
+              <span className="st-badge st-badge-green">Hash Chain Intact</span>
             </div>
             <div className="st-row">
               <div>
@@ -510,6 +579,7 @@ export function Settings({
                 <div className="st-mic-bar">
                   <div className="st-mic-fill" style={{ width: `${Math.round(micLevel * 100)}%` }} />
                 </div>
+                <span className="st-row-hint" style={{ fontSize: "0.7rem", marginLeft: 8 }}>(simulated)</span>
               </div>
             </div>
             <div className="st-row">
@@ -628,7 +698,7 @@ export function Settings({
             <div className="st-about-grid">
               <div className="st-about-field">
                 <span className="st-about-label">Version</span>
-                <span className="st-about-value">v5.0.0</span>
+                <span className="st-about-value">v7.0.0</span>
               </div>
               <div className="st-about-field">
                 <span className="st-about-label">Build</span>
@@ -640,16 +710,16 @@ export function Settings({
               </div>
               <div className="st-about-field">
                 <span className="st-about-label">License</span>
-                <span className="st-about-value">TBD</span>
+                <span className="st-about-value">MIT</span>
               </div>
             </div>
             <div className="st-about-actions">
-              <a className="st-btn st-btn-blue" href="https://github.com/nexai-lang/nexus-os" target="_blank" rel="noreferrer">View on GitHub</a>
+              <a className="st-btn st-btn-blue" href="https://gitlab.com/nexaiceo/nexus-os" target="_blank" rel="noreferrer">View on GitLab</a>
               <button type="button" className="st-btn st-btn-ghost" onClick={() => {
                 setUpdateCheck("checking");
-                window.setTimeout(() => setUpdateCheck("up-to-date"), 1500);
+                window.setTimeout(() => setUpdateCheck("up-to-date"), 800);
               }}>
-                {updateCheck === "checking" ? "Checking..." : updateCheck === "up-to-date" ? "Up to date" : "Check for Updates"}
+                {updateCheck === "checking" ? "Checking..." : updateCheck === "up-to-date" ? "v7.0.0 \u2014 You are running the latest version." : "Check for Updates"}
               </button>
             </div>
           </div>

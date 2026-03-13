@@ -32,12 +32,12 @@
 .ec-sidebar-title {
   font-size: 16px;
   font-weight: 700;
-  color: #22d3ee;
+  color: var(--nexus-accent);
   margin: 0;
 }
 
 .ec-btn-compose {
-  background: #22d3ee;
+  background: var(--nexus-accent);
   color: #0b1120;
   border: none;
   padding: 6px 14px;
@@ -142,15 +142,15 @@
 }
 
 .ec-folder.active {
-  background: #22d3ee15;
-  color: #22d3ee;
+  background: var(--nexus-accent)15;
+  color: var(--nexus-accent);
 }
 
 .ec-folder-icon { font-size: 14px; }
 .ec-folder-label { flex: 1; }
 
 .ec-folder-badge {
-  background: #22d3ee;
+  background: var(--nexus-accent);
   color: #0b1120;
   font-size: 10px;
   font-weight: 700;
@@ -192,7 +192,7 @@
 }
 
 .ec-cat-btn:hover { background: #1e293b; }
-.ec-cat-btn.active { color: #22d3ee; background: #22d3ee10; }
+.ec-cat-btn.active { color: var(--nexus-accent); background: var(--nexus-accent)10; }
 
 .ec-cat-dot {
   width: 8px;
@@ -254,7 +254,7 @@
 }
 
 .ec-search:focus {
-  border-color: #22d3ee;
+  border-color: var(--nexus-accent);
 }
 
 .ec-sort-select {
@@ -300,8 +300,8 @@
 }
 
 .ec-email-item.active {
-  background: #22d3ee10;
-  border-left: 2px solid #22d3ee;
+  background: var(--nexus-accent)10;
+  border-left: 2px solid var(--nexus-accent);
 }
 
 .ec-email-item.unread {
@@ -437,7 +437,7 @@
   padding: 12px 16px;
   border-bottom: 1px solid #1e293b;
   font-weight: 600;
-  color: #22d3ee;
+  color: var(--nexus-accent);
 }
 
 .ec-compose-actions {
@@ -537,7 +537,7 @@
 }
 
 .ec-compose-field input:focus {
-  border-color: #22d3ee;
+  border-color: var(--nexus-accent);
 }
 
 .ec-compose-body {
@@ -556,7 +556,7 @@
 }
 
 .ec-compose-body:focus {
-  border-color: #22d3ee;
+  border-color: var(--nexus-accent);
 }
 
 .ec-compose-footer {
@@ -568,7 +568,7 @@
 }
 
 .ec-btn-send {
-  background: #22d3ee;
+  background: var(--nexus-accent);
   color: #0b1120;
   border: none;
   padding: 7px 20px;
@@ -777,8 +777,8 @@
 }
 
 .ec-thread-msg.current {
-  border-color: #22d3ee33;
-  background: #22d3ee08;
+  border-color: var(--nexus-accent)33;
+  background: var(--nexus-accent)08;
 }
 
 .ec-thread-header {
@@ -804,7 +804,7 @@
   justify-content: center;
   font-size: 14px;
   font-weight: 700;
-  color: #22d3ee;
+  color: var(--nexus-accent);
 }
 
 .ec-thread-from-info {
@@ -915,5 +915,16 @@
 
 .ec-status-right {
   margin-left: auto;
-  color: #22d3ee;
+  color: var(--nexus-accent);
+}
+
+/* ─── Responsive: stack panels vertically ─── */
+
+@media (max-width: 768px) {
+  .ec-container {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr 28px;
+  }
+  .ec-sidebar { display: none; }
+  .ec-email-list { border-right: none; border-bottom: 1px solid #1e293b; max-height: 40vh; }
 }

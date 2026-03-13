@@ -4,7 +4,7 @@
   grid-template-rows: auto auto 1fr;
   gap: 0.85rem;
   height: calc(100vh - 10rem);
-  border: 1px solid rgba(0, 255, 213, 0.2);
+  border: 1px solid rgba(0, 255, 157, 0.2);
   background: linear-gradient(155deg, rgba(5, 10, 18, 0.95), rgba(10, 22, 40, 0.86));
   backdrop-filter: blur(12px);
   overflow-y: auto;
@@ -17,8 +17,8 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 0.85rem 1rem;
-  border-bottom: 1px solid rgba(0, 255, 213, 0.2);
-  background: linear-gradient(90deg, rgba(0, 255, 213, 0.08), rgba(0, 255, 213, 0.01));
+  border-bottom: 1px solid rgba(0, 255, 157, 0.2);
+  background: linear-gradient(90deg, rgba(0, 255, 157, 0.08), rgba(0, 255, 157, 0.01));
 }
 
 .mp-title {
@@ -47,7 +47,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  border: 1px solid rgba(0, 255, 213, 0.25);
+  border: 1px solid rgba(0, 255, 157, 0.25);
   background: rgba(5, 10, 18, 0.85);
   padding: 0 0.7rem;
   backdrop-filter: blur(8px);
@@ -55,8 +55,8 @@
 }
 
 .mp-search-wrap:focus-within {
-  border-color: rgba(0, 255, 213, 0.6);
-  box-shadow: 0 0 16px rgba(0, 255, 213, 0.12);
+  border-color: rgba(0, 255, 157, 0.6);
+  box-shadow: 0 0 16px rgba(0, 255, 157, 0.12);
 }
 
 .mp-search-icon {
@@ -82,7 +82,7 @@
 }
 
 .mp-cat-btn {
-  border: 1px solid rgba(0, 255, 213, 0.2);
+  border: 1px solid rgba(0, 255, 157, 0.2);
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-mono);
@@ -95,13 +95,13 @@
 
 .mp-cat-btn.active {
   color: var(--text-accent);
-  border-color: rgba(0, 255, 213, 0.5);
-  background: rgba(0, 255, 213, 0.08);
-  box-shadow: 0 0 10px rgba(0, 255, 213, 0.12);
+  border-color: rgba(0, 255, 157, 0.5);
+  background: rgba(0, 255, 157, 0.08);
+  box-shadow: 0 0 10px rgba(0, 255, 157, 0.12);
 }
 
 .mp-cat-btn:hover:not(.active) {
-  border-color: rgba(0, 255, 213, 0.35);
+  border-color: rgba(0, 255, 157, 0.35);
   color: var(--text-primary);
 }
 
@@ -133,8 +133,8 @@
 }
 
 .mp-card:hover {
-  border-color: rgba(0, 255, 213, 0.4);
-  box-shadow: 0 0 22px rgba(0, 255, 213, 0.12);
+  border-color: rgba(0, 255, 157, 0.4);
+  box-shadow: 0 0 22px rgba(0, 255, 157, 0.12);
   transform: translateY(-2px);
 }
 
@@ -150,7 +150,7 @@
   font-size: 0.58rem;
   letter-spacing: 0.06em;
   color: var(--text-muted);
-  border: 1px solid rgba(0, 255, 213, 0.15);
+  border: 1px solid rgba(0, 255, 157, 0.15);
   padding: 0.12rem 0.35rem;
   text-transform: uppercase;
 }
@@ -205,8 +205,8 @@
 }
 
 .mp-install-btn {
-  border: 1px solid rgba(0, 255, 213, 0.4);
-  background: linear-gradient(135deg, rgba(0, 255, 213, 0.12), rgba(5, 10, 18, 0.8));
+  border: 1px solid rgba(0, 255, 157, 0.4);
+  background: linear-gradient(135deg, rgba(0, 255, 157, 0.12), rgba(5, 10, 18, 0.8));
   color: var(--text-accent);
   font-family: var(--font-mono);
   font-size: 0.68rem;
@@ -217,8 +217,8 @@
 }
 
 .mp-install-btn:hover:not(.done) {
-  box-shadow: 0 0 14px rgba(0, 255, 213, 0.25);
-  border-color: rgba(0, 255, 213, 0.7);
+  box-shadow: 0 0 14px rgba(0, 255, 157, 0.25);
+  border-color: rgba(0, 255, 157, 0.7);
 }
 
 .mp-install-btn.done {

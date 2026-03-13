@@ -751,7 +751,7 @@ mod tests {
     fn tampered_audit_trail_shows_not_met() {
         let mut trail = trail_with_events();
         // Tamper the trail
-        trail.events_mut()[1].payload = json!({"tampered": true});
+        trail.events_mut_for_testing()[1].payload = json!({"tampered": true});
 
         let report = generate_soc2_report(&trail, true, true, true, "Tampered Org", 0, u64::MAX);
 

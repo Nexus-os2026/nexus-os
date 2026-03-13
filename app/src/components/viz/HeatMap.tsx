@@ -9,7 +9,7 @@ function tone(value: number): string {
     return "#7fffd4";
   }
   if (value > 0.62) {
-    return "#22d3ee";
+    return "var(--nexus-accent)";
   }
   if (value > 0.35) {
     return "#38bdf8";

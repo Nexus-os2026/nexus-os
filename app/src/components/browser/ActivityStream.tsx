@@ -10,10 +10,10 @@ const TYPE_COLORS: Record<string, string> = {
   reading: "#3b82f6",
   extracting: "#8b5cf6",
   deciding: "#10b981",
-  navigating: "#00ffd5",
+  navigating: "var(--nexus-accent)",
   blocked: "#ef4444",
   merging: "#8b5cf6",
-  coding: "#22d3ee",
+  coding: "var(--nexus-accent)",
   designing: "#f472b6",
   info: "#94a3b8",
 };
@@ -32,7 +32,7 @@ const TYPE_ICONS: Record<string, string> = {
 };
 
 const AGENT_COLORS = [
-  "#00ffd5",
+  "var(--nexus-accent)",
   "#3b82f6",
   "#f59e0b",
   "#8b5cf6",

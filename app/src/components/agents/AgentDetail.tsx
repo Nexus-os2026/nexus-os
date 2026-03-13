@@ -18,7 +18,7 @@ function fuelPercentage(fuelRemaining: number): number {
 
 function gaugeColor(percentage: number): string {
   if (percentage > 50) {
-    return "#00f0ff";
+    return "var(--nexus-accent)";
   }
   if (percentage > 20) {
     return "#ffaa00";

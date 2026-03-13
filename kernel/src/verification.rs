@@ -281,11 +281,18 @@ impl GovernanceVerifier {
             if event.event_type == EventType::LlmCall {
                 llm_call_count += 1;
                 // Check that at least one preceding event signals redaction.
+                // A redaction event is an LlmCall with event_kind "redaction.scanned"
+                // or "redaction.applied" in the payload.
                 let has_redaction = events[..i].iter().rev().any(|prev| {
-                    // A redaction event is a UserAction whose payload mentions "redaction"
-                    // or any event type with redaction evidence.
-                    let payload_str = prev.payload.to_string().to_lowercase();
-                    payload_str.contains("redact")
+                    if prev.event_type != EventType::LlmCall {
+                        return false;
+                    }
+                    let event_kind = prev
+                        .payload
+                        .get("event_kind")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    event_kind == "redaction.scanned" || event_kind == "redaction.applied"
                 });
                 if !has_redaction && i > 0 {
                     all_preceded = false;
@@ -342,8 +349,24 @@ impl GovernanceVerifier {
             if is_destructive {
                 destructive_count += 1;
                 let has_approval = events[..i].iter().rev().any(|prev| {
-                    prev.event_type == EventType::UserAction
-                        && prev.payload.to_string().to_lowercase().contains("approv")
+                    if prev.event_type != EventType::UserAction {
+                        return false;
+                    }
+                    // Check for structured approval evidence in the payload
+                    let action = prev
+                        .payload
+                        .get("action")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let event_kind = prev
+                        .payload
+                        .get("event_kind")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    action == "approved"
+                        || action == "hitl_approved"
+                        || event_kind == "hitl.approval"
+                        || event_kind == "approval"
                 });
                 if !has_approval {
                     all_approved = false;
@@ -496,16 +519,22 @@ impl GovernanceVerifier {
         manifest: &AgentManifest,
         test_paths: &[&str],
     ) -> Vec<InvariantProof> {
-        vec![
+        let mut results = vec![
             self.verify_fuel_invariant(fuel_remaining, fuel_budget),
             self.verify_fuel_budget_invariant(fuel_remaining, fuel_budget),
-            self.verify_capability_invariant(agent_capabilities, "llm.query"),
-            self.verify_audit_chain(audit_trail),
-            self.verify_redaction_invariant(audit_trail),
-            self.verify_hitl_invariant(audit_trail),
-            self.verify_no_escalation(agent_capabilities, runtime_capabilities),
-            self.verify_filesystem_deny_override(manifest, test_paths),
-        ]
+        ];
+
+        // Check capability invariant for all declared capabilities
+        for cap in agent_capabilities {
+            results.push(self.verify_capability_invariant(agent_capabilities, cap));
+        }
+
+        results.push(self.verify_audit_chain(audit_trail));
+        results.push(self.verify_redaction_invariant(audit_trail));
+        results.push(self.verify_hitl_invariant(audit_trail));
+        results.push(self.verify_no_escalation(agent_capabilities, runtime_capabilities));
+        results.push(self.verify_filesystem_deny_override(manifest, test_paths));
+        results
     }
 
     /// Return all proofs collected so far.
@@ -691,19 +720,19 @@ mod tests {
         let mut trail = AuditTrail::new();
         let agent_id = Uuid::new_v4();
 
-        // Add a redaction event then an LlmCall.
+        // Add a redaction event (LlmCall with event_kind "redaction.scanned") then an LlmCall.
         trail
             .append_event(
                 agent_id,
-                EventType::UserAction,
-                json!({"action": "redaction_applied", "fields": ["email"]}),
+                EventType::LlmCall,
+                json!({"event_kind": "redaction.scanned", "operation": "llm.query", "total_findings": 1}),
             )
             .expect("append");
         trail
             .append_event(
                 agent_id,
                 EventType::LlmCall,
-                json!({"model": "claude-sonnet-4-5", "tokens": 100}),
+                json!({"event_kind": "OracleEvent", "model": "claude-sonnet-4-5", "tokens": 100}),
             )
             .expect("append");
 
@@ -845,7 +874,12 @@ mod tests {
             &["/safe/readme.txt"],
         );
 
-        assert_eq!(results.len(), 8, "should check all 8 invariants");
+        // 7 fixed invariants + 1 capability check per declared capability (2 caps)
+        assert_eq!(
+            results.len(),
+            9,
+            "should check all invariants (7 fixed + 2 capabilities)"
+        );
         let failed = v.failed_invariants();
         assert!(
             failed.is_empty(),

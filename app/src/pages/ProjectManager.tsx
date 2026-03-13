@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from "recharts";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { hasDesktopRuntime, projectList, projectSave, projectDelete as projectDeleteApi } from "../api/backend";
 import "./project-manager.css";
 
 /* ─── types ─── */
@@ -28,8 +28,8 @@ interface Task {
   assignee: string;
   tags: string[];
   links: TaskLink[];
-  complexity: number; // 1-8 story points
-  timeSpent: number; // minutes
+  complexity: number;
+  timeSpent: number;
   fuelCost: number;
   createdAt: number;
   updatedAt: number;
@@ -60,6 +60,13 @@ interface Automation {
   lastRun?: number;
 }
 
+interface ProjectData {
+  tasks: Task[];
+  sprints: Sprint[];
+  automations: Automation[];
+  savedAt: number;
+}
+
 /* ─── constants ─── */
 const COLUMNS: { id: ColumnId; label: string; color: string; icon: string }[] = [
   { id: "backlog", label: "Backlog", color: "#64748b", icon: "◇" },
@@ -73,7 +80,7 @@ const PRIORITY_MAP: Record<Priority, { label: string; color: string; icon: strin
   critical: { label: "Critical", color: "#ef4444", icon: "🔴" },
   high: { label: "High", color: "#f97316", icon: "🟠" },
   medium: { label: "Medium", color: "#fbbf24", icon: "🟡" },
-  low: { label: "Low", color: "#22d3ee", icon: "🔵" },
+  low: { label: "Low", color: "var(--nexus-accent)", icon: "🔵" },
 };
 
 const TAGS: TaskTag[] = [
@@ -88,113 +95,47 @@ const TAGS: TaskTag[] = [
 
 const ASSIGNEES = ["You", "Coder Agent", "Research Agent", "Planner Agent", "Self-Improve Agent", "Content Agent", "Unassigned"];
 
-const INITIAL_SPRINTS: Sprint[] = [
-  { id: "sp-14", name: "Sprint 14", startDate: Date.now() - 86400000 * 10, endDate: Date.now() + 86400000 * 4, goal: "Complete Phase 7 core apps", velocity: 34, totalPoints: 42, completedPoints: 28, active: true },
-  { id: "sp-13", name: "Sprint 13", startDate: Date.now() - 86400000 * 24, endDate: Date.now() - 86400000 * 10, goal: "System Monitor & governance hardening", velocity: 38, totalPoints: 38, completedPoints: 38, active: false },
-  { id: "sp-12", name: "Sprint 12", startDate: Date.now() - 86400000 * 38, endDate: Date.now() - 86400000 * 24, goal: "File Manager & Terminal", velocity: 32, totalPoints: 35, completedPoints: 32, active: false },
+const PROJECT_ID = "default";
+
+const DEFAULT_SPRINTS: Sprint[] = [
+  { id: "sp-1", name: "Sprint 1", startDate: Date.now() - 86400000 * 10, endDate: Date.now() + 86400000 * 4, goal: "Initial setup", velocity: 0, totalPoints: 0, completedPoints: 0, active: true },
 ];
 
-const INITIAL_TASKS: Task[] = [
-  {
-    id: "task-1", title: "Build Design Studio with canvas", description: "AI-powered visual design tool with drag-and-drop UI components, Designer Agent generates layouts from natural language, component library with governed export.", column: "backlog", priority: "high", assignee: "Coder Agent", tags: ["tg-feat"],
-    links: [{ type: "note", label: "Design Studio Spec", id: "n-ds" }], complexity: 8, timeSpent: 0, fuelCost: 0, createdAt: Date.now() - 86400000 * 5, updatedAt: Date.now() - 86400000 * 5, createdBy: "Planner Agent", sprintId: "sp-14",
-    subtasks: [{ label: "Canvas renderer", done: false }, { label: "Component library", done: false }, { label: "Designer Agent integration", done: false }],
-  },
-  {
-    id: "task-2", title: "Database Manager with visual query builder", description: "Visual database tool supporting SQLite, PostgreSQL, MySQL. Governed agent read/write access, query history in audit trail.", column: "backlog", priority: "medium", assignee: "Coder Agent", tags: ["tg-feat"],
-    links: [], complexity: 5, timeSpent: 0, fuelCost: 0, createdAt: Date.now() - 86400000 * 4, updatedAt: Date.now() - 86400000 * 4, createdBy: "Planner Agent", sprintId: "sp-14",
-    subtasks: [{ label: "Connection manager", done: false }, { label: "Query builder UI", done: false }, { label: "Results viewer", done: false }],
-  },
-  {
-    id: "task-3", title: "API Client with governed vault", description: "HTTP client like Postman. Request builder, response viewer, API collections, governed vault for API keys.", column: "todo", priority: "medium", assignee: "Coder Agent", tags: ["tg-feat"],
-    links: [], complexity: 5, timeSpent: 0, fuelCost: 0, createdAt: Date.now() - 86400000 * 3, updatedAt: Date.now() - 86400000 * 2, createdBy: "Planner Agent", sprintId: "sp-14",
-    subtasks: [{ label: "Request builder", done: false }, { label: "Response viewer", done: false }, { label: "Collections", done: false }, { label: "API key vault", done: false }],
-  },
-  {
-    id: "task-4", title: "Implement Tauri filesystem integration", description: "Replace mock filesystem with real file I/O via Tauri commands. Affects Code Editor, Terminal, and File Manager.", column: "todo", priority: "high", assignee: "Coder Agent", tags: ["tg-feat", "tg-infra"],
-    links: [{ type: "branch", label: "feat/tauri-fs", id: "br-tfs" }, { type: "workflow", label: "FS Integration", id: "wf-fs" }], complexity: 5, timeSpent: 30, fuelCost: 45, createdAt: Date.now() - 86400000 * 6, updatedAt: Date.now() - 86400000 * 1, createdBy: "You", sprintId: "sp-14",
-    subtasks: [{ label: "File read/write commands", done: true }, { label: "Directory listing", done: false }, { label: "File watcher", done: false }],
-  },
-  {
-    id: "task-5", title: "Research: local SLM performance benchmarks", description: "Benchmark Phi-3, Gemma, Llama-3 on local hardware. Compare latency, throughput, and fuel cost for agent routing decisions.", column: "in-progress", priority: "medium", assignee: "Research Agent", tags: ["tg-agent", "tg-perf"],
-    links: [{ type: "note", label: "SLM Benchmarks", id: "n-slm" }], complexity: 3, timeSpent: 120, fuelCost: 340, createdAt: Date.now() - 86400000 * 3, updatedAt: Date.now() - 3600000, createdBy: "Research Agent", sprintId: "sp-14",
-    subtasks: [{ label: "Set up benchmark suite", done: true }, { label: "Run Phi-3 benchmarks", done: true }, { label: "Run Gemma benchmarks", done: false }, { label: "Write comparison report", done: false }],
-  },
-  {
-    id: "task-6", title: "Fix fuel accounting race condition", description: "Concurrent agent operations can double-deduct fuel when FuelLedger lock contention occurs. Add atomic compare-and-swap.", column: "in-progress", priority: "critical", assignee: "Coder Agent", tags: ["tg-bug"],
-    links: [{ type: "commit", label: "fix: atomic fuel ops", id: "abc123" }, { type: "pr", label: "PR #47", id: "pr-47" }], complexity: 3, timeSpent: 90, fuelCost: 210, createdAt: Date.now() - 86400000 * 2, updatedAt: Date.now() - 7200000, createdBy: "Self-Improve Agent", sprintId: "sp-14",
-    subtasks: [{ label: "Reproduce race condition", done: true }, { label: "Add atomic CAS to FuelLedger", done: true }, { label: "Write regression test", done: false }],
-  },
-  {
-    id: "task-7", title: "Add xterm.js for real terminal emulation", description: "Replace mock terminal with xterm.js backed by Tauri PTY. Support true ANSI codes, scrollback, and resize.", column: "review", priority: "high", assignee: "Coder Agent", tags: ["tg-feat", "tg-infra"],
-    links: [{ type: "commit", label: "feat: xterm integration", id: "def456" }, { type: "pr", label: "PR #45", id: "pr-45" }], complexity: 5, timeSpent: 240, fuelCost: 520, createdAt: Date.now() - 86400000 * 7, updatedAt: Date.now() - 86400000, createdBy: "You", sprintId: "sp-14",
-    subtasks: [{ label: "Install xterm.js", done: true }, { label: "PTY bridge in Tauri", done: true }, { label: "Resize handling", done: true }, { label: "ANSI color support", done: true }, { label: "Governance hooks", done: false }],
-  },
-  {
-    id: "task-8", title: "Optimize agent response caching", description: "Implement LRU cache for identical agent prompts. Estimated 40% fuel reduction for Research Agent.", column: "review", priority: "medium", assignee: "Self-Improve Agent", tags: ["tg-perf", "tg-agent"],
-    links: [{ type: "commit", label: "perf: agent cache", id: "ghi789" }], complexity: 3, timeSpent: 180, fuelCost: 280, createdAt: Date.now() - 86400000 * 4, updatedAt: Date.now() - 86400000 * 1, createdBy: "Self-Improve Agent", sprintId: "sp-14",
-    subtasks: [{ label: "LRU cache implementation", done: true }, { label: "Cache key generation", done: true }, { label: "Cache hit metrics", done: true }],
-  },
-  {
-    id: "task-9", title: "System Monitor shipped", description: "Phase 7.11 complete — 6-tab monitoring dashboard with recharts, live-updating metrics, alerts system.", column: "done", priority: "high", assignee: "Coder Agent", tags: ["tg-feat"],
-    links: [{ type: "commit", label: "feat: system monitor", id: "jkl012" }], complexity: 5, timeSpent: 300, fuelCost: 680, createdAt: Date.now() - 86400000 * 5, updatedAt: Date.now() - 86400000 * 1, createdBy: "You", sprintId: "sp-14",
-    subtasks: [{ label: "Overview tab", done: true }, { label: "Agents tab", done: true }, { label: "Processes tab", done: true }, { label: "Network tab", done: true }, { label: "Fuel tab", done: true }, { label: "Alerts tab", done: true }],
-  },
-  {
-    id: "task-10", title: "Notes App with markdown editor", description: "Phase 7.7 complete — rich text editor with live preview, folders, tags, templates, agent auto-creation, export.", column: "done", priority: "high", assignee: "Coder Agent", tags: ["tg-feat"],
-    links: [{ type: "commit", label: "feat: notes app", id: "mno345" }], complexity: 5, timeSpent: 280, fuelCost: 620, createdAt: Date.now() - 86400000 * 3, updatedAt: Date.now(), createdBy: "You", sprintId: "sp-14",
-    subtasks: [{ label: "Markdown editor", done: true }, { label: "Folders & tags", done: true }, { label: "Templates", done: true }, { label: "Export", done: true }],
-  },
-  {
-    id: "task-11", title: "Update governance docs for Phase 7", description: "Document new app-level governance patterns: file permissions, terminal blocking, vault encryption.", column: "done", priority: "low", assignee: "Content Agent", tags: ["tg-docs"],
-    links: [{ type: "note", label: "Phase 7 Governance", id: "n-gov7" }], complexity: 2, timeSpent: 60, fuelCost: 90, createdAt: Date.now() - 86400000 * 6, updatedAt: Date.now() - 86400000 * 2, createdBy: "Content Agent", sprintId: "sp-14",
-    subtasks: [{ label: "Terminal governance docs", done: true }, { label: "File Manager governance docs", done: true }],
-  },
-];
-
-const INITIAL_AUTOMATIONS: Automation[] = [
-  { id: "auto-1", trigger: "Task moved to In Progress", action: "Notify Coder Agent, create branch", enabled: true, agent: "Coder Agent", lastRun: Date.now() - 3600000 },
-  { id: "auto-2", trigger: "Task moved to Review", action: "Run tests, request code review", enabled: true, agent: "Self-Improve Agent", lastRun: Date.now() - 7200000 },
-  { id: "auto-3", trigger: "Task moved to Done", action: "Update audit trail, close PR", enabled: true, agent: "Planner Agent", lastRun: Date.now() - 86400000 },
+const DEFAULT_AUTOMATIONS: Automation[] = [
+  { id: "auto-1", trigger: "Task moved to In Progress", action: "Notify Coder Agent, create branch", enabled: true, agent: "Coder Agent" },
+  { id: "auto-2", trigger: "Task moved to Review", action: "Run tests, request code review", enabled: true, agent: "Self-Improve Agent" },
+  { id: "auto-3", trigger: "Task moved to Done", action: "Update audit trail, close PR", enabled: true, agent: "Planner Agent" },
   { id: "auto-4", trigger: "Critical bug created", action: "Alert team, escalate priority", enabled: true, agent: "Planner Agent" },
   { id: "auto-5", trigger: "Sprint ends", action: "Generate velocity report, archive sprint", enabled: false, agent: "Content Agent" },
 ];
 
-/* ─── burndown data ─── */
-function generateBurndownData(sprint: Sprint): { day: string; ideal: number; actual: number }[] {
-  const days = Math.ceil((sprint.endDate - sprint.startDate) / 86400000);
-  const data: { day: string; ideal: number; actual: number }[] = [];
-  const elapsed = Math.min(days, Math.ceil((Date.now() - sprint.startDate) / 86400000));
-  for (let i = 0; i <= days; i++) {
-    const ideal = Math.max(0, sprint.totalPoints - (sprint.totalPoints / days) * i);
-    const remaining = i <= elapsed
-      ? Math.max(0, sprint.totalPoints - sprint.completedPoints * (i / elapsed) + (Math.random() * 4 - 2))
-      : 0;
-    data.push({
-      day: `D${i}`,
-      ideal: Math.round(ideal * 10) / 10,
-      actual: i <= elapsed ? Math.round(Math.max(0, remaining) * 10) / 10 : 0,
-    });
+/* ─── persistence ─── */
+async function loadProject(): Promise<ProjectData | null> {
+  if (!hasDesktopRuntime()) return null;
+  try {
+    const raw = await projectList();
+    const projects = JSON.parse(raw) as ProjectData[];
+    return projects.length > 0 ? projects[0] : null;
+  } catch {
+    return null;
   }
-  return data;
 }
 
-function generateVelocityData(): { sprint: string; points: number; fuel: number }[] {
-  return [
-    { sprint: "S9", points: 28, fuel: 4200 },
-    { sprint: "S10", points: 30, fuel: 4800 },
-    { sprint: "S11", points: 26, fuel: 3900 },
-    { sprint: "S12", points: 32, fuel: 5100 },
-    { sprint: "S13", points: 38, fuel: 5800 },
-    { sprint: "S14", points: 28, fuel: 4500 },
-  ];
+async function saveProject(data: ProjectData): Promise<void> {
+  if (!hasDesktopRuntime()) return;
+  try {
+    await projectSave(PROJECT_ID, JSON.stringify({ ...data, savedAt: Date.now() }));
+  } catch (e) {
+    console.error("Failed to save project:", e);
+  }
 }
 
 /* ─── component ─── */
 export default function ProjectManager() {
-  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
-  const [sprints] = useState<Sprint[]>(INITIAL_SPRINTS);
-  const [automations, setAutomations] = useState<Automation[]>(INITIAL_AUTOMATIONS);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [sprints, setSprints] = useState<Sprint[]>(DEFAULT_SPRINTS);
+  const [automations, setAutomations] = useState<Automation[]>(DEFAULT_AUTOMATIONS);
+  const [loaded, setLoaded] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [filterAssignee, setFilterAssignee] = useState<string>("All");
@@ -205,16 +146,43 @@ export default function ProjectManager() {
   const [showNewTask, setShowNewTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskColumn, setNewTaskColumn] = useState<ColumnId>("todo");
-  const [fuelUsed, setFuelUsed] = useState(2785);
-  const [auditLog, setAuditLog] = useState<string[]>([
-    "Task moved: Notes App → Done",
-    "Coder Agent created task: Design Studio",
-    "Sprint 14 started",
-  ]);
+  const [auditLog, setAuditLog] = useState<string[]>([]);
+
+  // Ref to persist on changes (debounced)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
+  const sprintsRef = useRef(sprints);
+  sprintsRef.current = sprints;
+  const automationsRef = useRef(automations);
+  automationsRef.current = automations;
+
+  const scheduleSave = useCallback(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveProject({
+        tasks: tasksRef.current,
+        sprints: sprintsRef.current,
+        automations: automationsRef.current,
+        savedAt: Date.now(),
+      });
+    }, 500);
+  }, []);
 
   const activeSprint = useMemo(() => sprints.find(s => s.active) ?? sprints[0], [sprints]);
-  const burndownData = useMemo(() => generateBurndownData(activeSprint), [activeSprint]);
-  const velocityData = useMemo(() => generateVelocityData(), []);
+
+  /* ─── load on mount ─── */
+  useEffect(() => {
+    loadProject().then(data => {
+      if (data) {
+        if (data.tasks) setTasks(data.tasks);
+        if (data.sprints?.length) setSprints(data.sprints);
+        if (data.automations?.length) setAutomations(data.automations);
+        logAudit(`Loaded project from disk (${data.tasks?.length ?? 0} tasks)`);
+      }
+      setLoaded(true);
+    });
+  }, []);
 
   /* ─── filtering ─── */
   const filteredTasks = useMemo(() => {
@@ -231,34 +199,19 @@ export default function ProjectManager() {
 
   const getColumnTasks = useCallback((colId: ColumnId) => filteredTasks.filter(t => t.column === colId), [filteredTasks]);
 
-  /* ─── agent simulation ─── */
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const msgs = [
-        "Planner Agent estimated complexity: 5 points",
-        "Coder Agent pushed commit to feat/tauri-fs",
-        "Self-Improve Agent reviewing PR #47...",
-        "Research Agent updated benchmark results",
-        "Content Agent auto-generated task summary",
-      ];
-      setAuditLog(prev => [msgs[Math.floor(Math.random() * msgs.length)], ...prev].slice(0, 20));
-      setFuelUsed(f => f + Math.floor(Math.random() * 8));
-    }, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
   /* ─── handlers ─── */
   const moveTask = useCallback((taskId: string, toColumn: ColumnId) => {
-    setTasks(prev => prev.map(t => {
-      if (t.id !== taskId) return t;
-      const updated = { ...t, column: toColumn, updatedAt: Date.now() };
-      // trigger automations
-      const col = COLUMNS.find(c => c.id === toColumn);
-      setAuditLog(a => [`Task moved: ${t.title} → ${col?.label}`, ...a].slice(0, 20));
-      setFuelUsed(f => f + 3);
-      return updated;
-    }));
-  }, []);
+    setTasks(prev => {
+      const next = prev.map(t => {
+        if (t.id !== taskId) return t;
+        const col = COLUMNS.find(c => c.id === toColumn);
+        setAuditLog(a => [`Task moved: ${t.title} → ${col?.label}`, ...a].slice(0, 20));
+        return { ...t, column: toColumn, updatedAt: Date.now() };
+      });
+      return next;
+    });
+    scheduleSave();
+  }, [scheduleSave]);
 
   const createTask = useCallback(() => {
     if (!newTaskTitle.trim()) return;
@@ -272,19 +225,21 @@ export default function ProjectManager() {
     setNewTaskTitle("");
     setShowNewTask(false);
     setAuditLog(a => [`Task created: ${task.title}`, ...a].slice(0, 20));
-    setFuelUsed(f => f + 2);
-  }, [newTaskTitle, newTaskColumn, activeSprint.id]);
+    scheduleSave();
+  }, [newTaskTitle, newTaskColumn, activeSprint.id, scheduleSave]);
 
   const deleteTask = useCallback((id: string) => {
     const task = tasks.find(t => t.id === id);
     setTasks(prev => prev.filter(t => t.id !== id));
     if (selectedTask?.id === id) setSelectedTask(null);
     if (task) setAuditLog(a => [`Task deleted: ${task.title}`, ...a].slice(0, 20));
-  }, [tasks, selectedTask]);
+    scheduleSave();
+  }, [tasks, selectedTask, scheduleSave]);
 
   const updateTask = useCallback((id: string, updates: Partial<Task>) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t));
-  }, []);
+    scheduleSave();
+  }, [scheduleSave]);
 
   const toggleSubtask = useCallback((taskId: string, idx: number) => {
     setTasks(prev => prev.map(t => {
@@ -293,11 +248,13 @@ export default function ProjectManager() {
       subs[idx] = { ...subs[idx], done: !subs[idx].done };
       return { ...t, subtasks: subs, updatedAt: Date.now() };
     }));
-  }, []);
+    scheduleSave();
+  }, [scheduleSave]);
 
   const toggleAutomation = useCallback((id: string) => {
     setAutomations(prev => prev.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a));
-  }, []);
+    scheduleSave();
+  }, [scheduleSave]);
 
   /* ─── drag & drop ─── */
   const handleDragStart = (taskId: string) => setDragTaskId(taskId);
@@ -326,7 +283,7 @@ export default function ProjectManager() {
 
   const formatDate = (ts: number) => new Date(ts).toLocaleDateString();
 
-  const TOOLTIP_STYLE = { background: "#0f172a", border: "1px solid rgba(56,189,248,0.2)", borderRadius: 6, fontSize: 12 };
+  const logAudit = (msg: string) => setAuditLog(prev => [msg, ...prev].slice(0, 20));
 
   /* ─── render ─── */
   return (
@@ -373,8 +330,8 @@ export default function ProjectManager() {
         <div className="pm-stats-strip">
           <span className="pm-stat">{stats.total} tasks</span>
           <span className="pm-stat">{stats.donePoints}/{stats.totalPoints} pts</span>
-          <span className="pm-stat">⚡ {fuelUsed} fuel</span>
           <span className="pm-stat">⏱ {formatTime(stats.totalTime)}</span>
+          {!loaded && <span className="pm-stat">Loading...</span>}
         </div>
       </div>
 
@@ -518,9 +475,9 @@ export default function ProjectManager() {
             <h3>{activeSprint.name}: {formatDate(activeSprint.startDate)} — {formatDate(activeSprint.endDate)}</h3>
             <div className="pm-timeline-progress">
               <div className="pm-timeline-bar">
-                <div className="pm-timeline-fill" style={{ width: `${(stats.donePoints / stats.totalPoints) * 100}%` }} />
+                <div className="pm-timeline-fill" style={{ width: `${stats.totalPoints > 0 ? (stats.donePoints / stats.totalPoints) * 100 : 0}%` }} />
               </div>
-              <span>{Math.round((stats.donePoints / stats.totalPoints) * 100)}% complete</span>
+              <span>{stats.totalPoints > 0 ? Math.round((stats.donePoints / stats.totalPoints) * 100) : 0}% complete</span>
             </div>
           </div>
           <div className="pm-timeline-grid">
@@ -596,61 +553,19 @@ export default function ProjectManager() {
             </div>
           </div>
 
-          {/* charts */}
+          {/* Coming Soon placeholder for charts */}
           <div className="pm-charts-row">
             <div className="pm-chart-card">
-              <div className="pm-chart-header">Burndown Chart — {activeSprint.name}</div>
-              <ResponsiveContainer width="100%" height={240}>
-                <AreaChart data={burndownData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(56,189,248,0.08)" />
-                  <XAxis dataKey="day" tick={{ fill: "#64748b", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#64748b", fontSize: 10 }} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} />
-                  <Area type="monotone" dataKey="ideal" stroke="#38bdf8" fill="rgba(56,189,248,0.08)" strokeDasharray="5 5" name="Ideal" />
-                  <Area type="monotone" dataKey="actual" stroke="#22d3ee" fill="rgba(34,211,238,0.15)" name="Actual" />
-                </AreaChart>
-              </ResponsiveContainer>
+              <div className="pm-chart-header">Burndown Chart</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, opacity: 0.5 }}>
+                Coming Soon — charts require historical data
+              </div>
             </div>
             <div className="pm-chart-card">
               <div className="pm-chart-header">Velocity History</div>
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={velocityData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(56,189,248,0.08)" />
-                  <XAxis dataKey="sprint" tick={{ fill: "#64748b", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#64748b", fontSize: 10 }} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} />
-                  <Bar dataKey="points" fill="#a78bfa" radius={[4, 4, 0, 0]} name="Story Points" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="pm-charts-row">
-            <div className="pm-chart-card">
-              <div className="pm-chart-header">Fuel Cost per Sprint</div>
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={velocityData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(56,189,248,0.08)" />
-                  <XAxis dataKey="sprint" tick={{ fill: "#64748b", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#64748b", fontSize: 10 }} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} />
-                  <Line type="monotone" dataKey="fuel" stroke="#fbbf24" strokeWidth={2} dot={{ r: 3, fill: "#fbbf24" }} name="Fuel Used" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="pm-chart-card">
-              <div className="pm-chart-header">Points vs Fuel Efficiency</div>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={velocityData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(56,189,248,0.08)" />
-                  <XAxis dataKey="sprint" tick={{ fill: "#64748b", fontSize: 10 }} />
-                  <YAxis yAxisId="left" tick={{ fill: "#64748b", fontSize: 10 }} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fill: "#64748b", fontSize: 10 }} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} />
-                  <Bar yAxisId="left" dataKey="points" fill="#34d399" radius={[4, 4, 0, 0]} name="Points" />
-                  <Bar yAxisId="right" dataKey="fuel" fill="rgba(251,191,36,0.4)" radius={[4, 4, 0, 0]} name="Fuel" />
-                </BarChart>
-              </ResponsiveContainer>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, opacity: 0.5 }}>
+                Coming Soon — need 3+ sprints of data
+              </div>
             </div>
           </div>
 
@@ -664,7 +579,7 @@ export default function ProjectManager() {
                   <div className="pm-sprint-dates">{formatDate(sp.startDate)} — {formatDate(sp.endDate)}</div>
                   <div className="pm-sprint-bar-wrap">
                     <div className="pm-sprint-bar">
-                      <div className="pm-sprint-fill" style={{ width: `${(sp.completedPoints / sp.totalPoints) * 100}%` }} />
+                      <div className="pm-sprint-fill" style={{ width: `${sp.totalPoints > 0 ? (sp.completedPoints / sp.totalPoints) * 100 : 0}%` }} />
                     </div>
                     <span>{sp.completedPoints}/{sp.totalPoints} pts</span>
                   </div>
@@ -757,10 +672,9 @@ export default function ProjectManager() {
         <span className="pm-status-item">{activeSprint.name}</span>
         <span className="pm-status-item">{stats.done}/{stats.total} tasks done</span>
         <span className="pm-status-item">{stats.donePoints}/{stats.totalPoints} points</span>
-        <span className="pm-status-item">⚡ {fuelUsed} fuel</span>
         <span className="pm-status-item">⏱ {formatTime(stats.totalTime)}</span>
         <span className="pm-status-item pm-status-right">{stats.daysLeft} days remaining</span>
-        <span className="pm-status-item">{auditLog[0]}</span>
+        <span className="pm-status-item">{auditLog[0] ?? "Ready"}</span>
       </div>
     </div>
   );

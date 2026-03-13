@@ -35,6 +35,11 @@ pub enum ContextSideEffect {
     ApprovalRequest { description: String },
     /// Audit event emitted.
     AuditEvent { payload: serde_json::Value },
+    /// Tool execution attempted.
+    ToolExec {
+        tool_name: String,
+        input_json: String,
+    },
 }
 
 #[derive(Debug, Clone)]

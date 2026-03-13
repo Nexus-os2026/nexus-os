@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useRef } from "react";
 import "./media-studio.css";
 
 /* ─── types ─── */
-type View = "library" | "editor" | "generate" | "compare" | "ocr";
+type View = "library" | "editor" | "generate" | "compare";
 type MediaType = "image" | "video" | "svg" | "gif";
 type Filter = "none" | "grayscale" | "sepia" | "blur" | "brightness" | "contrast" | "saturate" | "invert" | "hue-rotate";
 
@@ -54,18 +54,18 @@ const FILTERS: { id: Filter; label: string; css: string }[] = [
 
 const FOLDERS = ["All", "Screenshots", "Generated", "Uploads", "Agent Output", "Exports"];
 
-const EXPORT_FORMATS = ["PNG", "JPEG", "WebP", "SVG", "PDF", "AVIF"];
+const EXPORT_FORMATS = ["PNG", "JPEG", "WebP"];
 
 const INITIAL_ASSETS: MediaAsset[] = [
-  { id: "ms-1", name: "nexus-dashboard-screenshot.png", type: "image", size: 284000, width: 1920, height: 1080, folder: "Screenshots", tags: ["ui", "dashboard"], createdAt: Date.now() - 86400000, modifiedAt: Date.now() - 86400000, thumbnail: "linear-gradient(135deg, #0b1120 0%, #1e293b 50%, #22d3ee 100%)" },
+  { id: "ms-1", name: "nexus-dashboard-screenshot.png", type: "image", size: 284000, width: 1920, height: 1080, folder: "Screenshots", tags: ["ui", "dashboard"], createdAt: Date.now() - 86400000, modifiedAt: Date.now() - 86400000, thumbnail: "linear-gradient(135deg, #0b1120 0%, #1e293b 50%, var(--nexus-accent) 100%)" },
   { id: "ms-2", name: "agent-architecture-diagram.svg", type: "svg", size: 42000, width: 1200, height: 800, folder: "Uploads", tags: ["architecture", "diagram"], createdAt: Date.now() - 172800000, modifiedAt: Date.now() - 172800000, thumbnail: "linear-gradient(135deg, #1e293b 0%, #334155 50%, #818cf8 100%)" },
-  { id: "ms-3", name: "landing-hero-generated.png", type: "image", size: 520000, width: 2048, height: 1024, folder: "Generated", tags: ["ai", "hero", "landing"], createdAt: Date.now() - 3600000, modifiedAt: Date.now() - 3600000, thumbnail: "linear-gradient(135deg, #0f172a 0%, #6d28d9 50%, #22d3ee 100%)", agent: "Designer Agent" },
+  { id: "ms-3", name: "landing-hero-generated.png", type: "image", size: 520000, width: 2048, height: 1024, folder: "Generated", tags: ["ai", "hero", "landing"], createdAt: Date.now() - 3600000, modifiedAt: Date.now() - 3600000, thumbnail: "linear-gradient(135deg, #0f172a 0%, #6d28d9 50%, var(--nexus-accent) 100%)", agent: "Designer Agent" },
   { id: "ms-4", name: "code-editor-preview.png", type: "image", size: 196000, width: 1440, height: 900, folder: "Screenshots", tags: ["ui", "code-editor"], createdAt: Date.now() - 43200000, modifiedAt: Date.now() - 43200000, thumbnail: "linear-gradient(135deg, #0b1120 0%, #1a1a2e 50%, #0f9b8e 100%)" },
   { id: "ms-5", name: "governance-flow.svg", type: "svg", size: 38000, width: 1000, height: 600, folder: "Uploads", tags: ["governance", "flow"], createdAt: Date.now() - 259200000, modifiedAt: Date.now() - 259200000, thumbnail: "linear-gradient(135deg, #1e293b 0%, #475569 50%, #f59e0b 100%)" },
   { id: "ms-6", name: "social-post-banner.png", type: "image", size: 310000, width: 1200, height: 630, folder: "Generated", tags: ["social", "banner"], createdAt: Date.now() - 7200000, modifiedAt: Date.now() - 7200000, thumbnail: "linear-gradient(135deg, #0f172a 0%, #ec4899 40%, #f59e0b 100%)", agent: "Screen Poster" },
   { id: "ms-7", name: "terminal-dark-theme.gif", type: "gif", size: 890000, width: 800, height: 500, folder: "Screenshots", tags: ["terminal", "animation"], createdAt: Date.now() - 604800000, modifiedAt: Date.now() - 604800000, thumbnail: "linear-gradient(135deg, #000 0%, #0f172a 50%, #22c55e 100%)" },
-  { id: "ms-8", name: "nexus-logo-variations.png", type: "image", size: 156000, width: 2000, height: 500, folder: "Uploads", tags: ["logo", "branding"], createdAt: Date.now() - 1209600000, modifiedAt: Date.now() - 864000000, thumbnail: "linear-gradient(135deg, #0b1120 0%, #22d3ee 50%, #06b6d4 100%)" },
-  { id: "ms-9", name: "ai-workflow-concept.png", type: "image", size: 440000, width: 1600, height: 900, folder: "Generated", tags: ["ai", "concept", "workflow"], createdAt: Date.now() - 14400000, modifiedAt: Date.now() - 14400000, thumbnail: "linear-gradient(135deg, #1e1b4b 0%, #4f46e5 50%, #22d3ee 100%)", agent: "Designer Agent" },
+  { id: "ms-8", name: "nexus-logo-variations.png", type: "image", size: 156000, width: 2000, height: 500, folder: "Uploads", tags: ["logo", "branding"], createdAt: Date.now() - 1209600000, modifiedAt: Date.now() - 864000000, thumbnail: "linear-gradient(135deg, #0b1120 0%, var(--nexus-accent) 50%, #06b6d4 100%)" },
+  { id: "ms-9", name: "ai-workflow-concept.png", type: "image", size: 440000, width: 1600, height: 900, folder: "Generated", tags: ["ai", "concept", "workflow"], createdAt: Date.now() - 14400000, modifiedAt: Date.now() - 14400000, thumbnail: "linear-gradient(135deg, #1e1b4b 0%, #4f46e5 50%, var(--nexus-accent) 100%)", agent: "Designer Agent" },
   { id: "ms-10", name: "permission-matrix-export.png", type: "image", size: 210000, width: 1400, height: 700, folder: "Exports", tags: ["permissions", "export"], createdAt: Date.now() - 28800000, modifiedAt: Date.now() - 28800000, thumbnail: "linear-gradient(135deg, #0f172a 0%, #334155 50%, #ef4444 100%)" },
   { id: "ms-11", name: "fuel-usage-chart.png", type: "image", size: 175000, width: 1200, height: 600, folder: "Agent Output", tags: ["fuel", "chart", "analytics"], createdAt: Date.now() - 57600000, modifiedAt: Date.now() - 57600000, thumbnail: "linear-gradient(135deg, #0b1120 0%, #1e293b 50%, #fbbf24 100%)", agent: "Self-Improve Agent" },
   { id: "ms-12", name: "audit-timeline-capture.png", type: "image", size: 230000, width: 1920, height: 1080, folder: "Agent Output", tags: ["audit", "timeline"], createdAt: Date.now() - 115200000, modifiedAt: Date.now() - 115200000, thumbnail: "linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #a78bfa 100%)", agent: "Planner Agent" },
@@ -101,7 +101,7 @@ export default function MediaStudio() {
   const [showCrop, setShowCrop] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [annotTool, setAnnotTool] = useState<Annotation["type"] | null>(null);
-  const [annotColor, setAnnotColor] = useState("#22d3ee");
+  const [annotColor, setAnnotColor] = useState("var(--nexus-accent)");
 
   // generate state
   const [genPrompt, setGenPrompt] = useState("");
@@ -114,11 +114,12 @@ export default function MediaStudio() {
   const [compareB, setCompareB] = useState<string | null>(null);
   const [sliderPos, setSliderPos] = useState(50);
   const sliderRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Store real uploaded image data URLs keyed by asset id
+  const [imageDataUrls, setImageDataUrls] = useState<Record<string, string>>({});
 
-  // ocr state
-  const [ocrAssetId, setOcrAssetId] = useState<string | null>(null);
-  const [ocrText, setOcrText] = useState("");
-  const [ocrProcessing, setOcrProcessing] = useState(false);
+  // canvas ref for real export
+  const exportCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const selectedAsset = useMemo(() => assets.find(a => a.id === selectedId) ?? null, [assets, selectedId]);
 
@@ -190,9 +191,56 @@ export default function MediaStudio() {
 
   const handleExport = useCallback((format: string) => {
     if (!selectedAsset) return;
-    setFuelUsed(f => f + 2);
-    logAudit(`Exported ${selectedAsset.name} as ${format}`);
-  }, [selectedAsset, logAudit]);
+    // Real export: render the filtered image to a canvas and trigger download
+    const canvas = document.createElement("canvas");
+    canvas.width = selectedAsset.width;
+    canvas.height = selectedAsset.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    // Apply CSS filter to canvas context
+    const filterStr = getFilterCSS();
+    ctx.filter = filterStr === "none" ? "none" : filterStr;
+    // Draw the real image if we have one, otherwise a gradient placeholder
+    const dataUrl = imageDataUrls[selectedAsset.id];
+    if (dataUrl) {
+      const img = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        doDownload();
+      };
+      img.src = dataUrl;
+    } else {
+      // Gradient placeholder
+      ctx.filter = "none";
+      const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      grad.addColorStop(0, "#0f172a");
+      grad.addColorStop(0.5, "var(--nexus-accent)");
+      grad.addColorStop(1, "#06b6d4");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      doDownload();
+    }
+
+    function doDownload() {
+      const mimeMap: Record<string, string> = {
+        PNG: "image/png", JPEG: "image/jpeg", WebP: "image/webp",
+      };
+      const mime = mimeMap[format] ?? "image/png";
+      const ext = format.toLowerCase();
+      try {
+        const exportUrl = canvas.toDataURL(mime, 0.92);
+        const link = document.createElement("a");
+        link.download = `${selectedAsset!.name.replace(/\.[^.]+$/, "")}-export.${ext}`;
+        link.href = exportUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        logAudit(`Exported ${selectedAsset!.name} as ${format}`);
+      } catch {
+        logAudit(`Export failed for ${format} — try PNG`);
+      }
+    }
+  }, [selectedAsset, imageDataUrls, logAudit]);
 
   const handleGenerate = useCallback(() => {
     if (!genPrompt.trim()) return;
@@ -211,7 +259,7 @@ export default function MediaStudio() {
         tags: ["ai", "generated", genStyle.toLowerCase()],
         createdAt: Date.now(),
         modifiedAt: Date.now(),
-        thumbnail: `linear-gradient(${Math.floor(Math.random() * 360)}deg, #0f172a 0%, #${Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0")} 50%, #22d3ee 100%)`,
+        thumbnail: `linear-gradient(${Math.floor(Math.random() * 360)}deg, #0f172a 0%, #${Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0")} 50%, var(--nexus-accent) 100%)`,
         agent: "Designer Agent",
       };
       setAssets(prev => [asset, ...prev]);
@@ -219,25 +267,6 @@ export default function MediaStudio() {
       logAudit(`Generated: ${asset.name}`);
     }, 2500);
   }, [genPrompt, genStyle, genSize, logAudit]);
-
-  const handleOCR = useCallback((id: string) => {
-    setOcrAssetId(id);
-    setOcrProcessing(true);
-    setOcrText("");
-    setView("ocr");
-    setFuelUsed(f => f + 5);
-    logAudit(`OCR processing: ${assets.find(a => a.id === id)?.name}`);
-    setTimeout(() => {
-      const mockTexts: Record<string, string> = {
-        "ms-1": "Nexus OS v5.0.0 — Dashboard\nActive Agents: 6 | Fuel Remaining: 38,200\nCPU: 42% | RAM: 6.2/16 GB\n\n[Chat] [Agents] [Audit] [Workflows]\n\nRecent Activity:\n• Coder Agent: refactored auth middleware\n• Designer Agent: generated landing page mockup\n• Screen Poster: awaiting HITL approval",
-        "ms-4": "// src/pages/CodeEditor.tsx\nimport { useState, useCallback } from 'react';\nimport './code-editor.css';\n\nexport default function CodeEditor() {\n  const [files, setFiles] = useState([]);\n  const [activeTab, setActiveTab] = useState(0);\n  // Monaco editor integration\n}",
-        "ms-10": "Permission Matrix — Agent Capabilities\n\nAgent          | fs.read | fs.write | llm.query | net.http\n──────────────┼─────────┼──────────┼───────────┼─────────\nCoder          | ✓       | ✓        | ✓         | ✗\nDesigner       | ✓       | ✗        | ✓         | ✗\nScreen Poster  | ✓       | ✗        | ✓         | ✓\nWeb Builder    | ✓       | ✓        | ✓         | ✓",
-      };
-      setOcrText(mockTexts[id] || "Lorem ipsum dolor sit amet, consectetur adipiscing elit.\nNexus OS governed runtime — all agent actions audited.\n\nDetected text blocks: 3\nConfidence: 94.2%\nLanguage: English");
-      setOcrProcessing(false);
-      logAudit("OCR complete");
-    }, 1800);
-  }, [assets, logAudit]);
 
   const addAnnotation = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!annotTool) return;
@@ -264,6 +293,38 @@ export default function MediaStudio() {
     setSliderPos(Math.max(0, Math.min(100, pos)));
   }, []);
 
+  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const img = new Image();
+      img.onload = () => {
+        const asset: MediaAsset = {
+          id: `ms-${Date.now()}`,
+          name: file.name,
+          type: file.type.includes("svg") ? "svg" : file.type.includes("gif") ? "gif" : "image",
+          size: file.size,
+          width: img.naturalWidth || 800,
+          height: img.naturalHeight || 600,
+          folder: "Uploads",
+          tags: ["uploaded"],
+          createdAt: Date.now(),
+          modifiedAt: Date.now(),
+          thumbnail: `linear-gradient(135deg, #0f172a 0%, #334155 50%, var(--nexus-accent) 100%)`,
+        };
+        setAssets(prev => [asset, ...prev]);
+        setImageDataUrls(prev => ({ ...prev, [asset.id]: dataUrl }));
+        logAudit(`Uploaded: ${file.name}`);
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+    // Reset input
+    e.target.value = "";
+  }, [logAudit]);
+
   const deleteAsset = useCallback((id: string) => {
     const a = assets.find(a => a.id === id);
     setAssets(prev => prev.filter(a => a.id !== id));
@@ -282,11 +343,14 @@ export default function MediaStudio() {
 
         {/* views */}
         <div className="ms-views">
-          {([["library", "📁", "Library"], ["editor", "🖌", "Editor"], ["generate", "✦", "AI Generate"], ["compare", "⇔", "Compare"], ["ocr", "📖", "OCR"]] as const).map(([id, icon, label]) => (
-            <button key={id} className={`ms-view-btn ${view === id ? "active" : ""}`} onClick={() => setView(id)}>
+          {([["library", "📁", "Library"], ["editor", "🖌", "Editor"], ["generate", "✦", "AI Generate"], ["compare", "⇔", "Compare"]] as const).map(([id, icon, label]) => (
+            <button key={id} className={`ms-view-btn ${view === id ? "active" : ""}`} onClick={() => setView(id as View)}>
               <span className="ms-view-icon">{icon}</span>{label}
             </button>
           ))}
+          <button className="ms-view-btn" disabled style={{ opacity: 0.4, cursor: "default" }}>
+            <span className="ms-view-icon">📖</span>OCR — Coming Soon
+          </button>
         </div>
 
         {/* folders (library view) */}
@@ -316,7 +380,6 @@ export default function MediaStudio() {
             </div>
             <div className="ms-detail-actions">
               <button className="ms-sm-btn" onClick={() => openEditor(selectedAsset.id)}>Edit</button>
-              <button className="ms-sm-btn" onClick={() => handleOCR(selectedAsset.id)}>OCR</button>
               <button className="ms-sm-btn ms-btn-danger" onClick={() => deleteAsset(selectedAsset.id)}>Delete</button>
             </div>
           </div>
@@ -338,6 +401,8 @@ export default function MediaStudio() {
           <div className="ms-library">
             <div className="ms-lib-toolbar">
               <input className="ms-search" placeholder="Search assets..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+              <button className="ms-sm-btn" onClick={() => fileInputRef.current?.click()}>Upload Image</button>
+              <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileUpload} />
               <select className="ms-select" value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}>
                 <option value="date">Date</option>
                 <option value="name">Name</option>
@@ -402,10 +467,13 @@ export default function MediaStudio() {
                   {/* canvas */}
                   <div className="ms-canvas-wrap">
                     <div className="ms-canvas" onClick={addAnnotation} style={{
-                      background: selectedAsset.thumbnail,
+                      background: imageDataUrls[selectedAsset.id] ? "transparent" : selectedAsset.thumbnail,
                       filter: getFilterCSS(),
                       transform: getTransformCSS(),
                     }}>
+                      {imageDataUrls[selectedAsset.id] && (
+                        <img src={imageDataUrls[selectedAsset.id]} alt={selectedAsset.name} style={{ width: "100%", height: "100%", objectFit: "contain", position: "absolute", top: 0, left: 0 }} />
+                      )}
                       <div className="ms-canvas-label">{selectedAsset.width} × {selectedAsset.height}</div>
                       {/* crop overlay */}
                       {showCrop && crop && (
@@ -478,7 +546,7 @@ export default function MediaStudio() {
                     )}
 
                     {/* export */}
-                    <div className="ms-section-header">Export</div>
+                    <div className="ms-section-header">Export (real download)</div>
                     <div className="ms-export-btns">
                       {EXPORT_FORMATS.map(f => (
                         <button key={f} className="ms-export-btn" onClick={() => handleExport(f)}>{f}</button>
@@ -594,55 +662,6 @@ export default function MediaStudio() {
           </div>
         )}
 
-        {/* ═══ OCR VIEW ═══ */}
-        {view === "ocr" && (
-          <div className="ms-ocr">
-            <div className="ms-ocr-header">
-              <h3 className="ms-ocr-title">📖 OCR Text Extraction</h3>
-              <span className="ms-gen-fuel">⚡ 5 fuel per extraction</span>
-            </div>
-            {!ocrAssetId ? (
-              <div className="ms-ocr-select">
-                <div className="ms-ocr-label">Select an image to extract text from:</div>
-                <div className="ms-ocr-grid">
-                  {assets.filter(a => a.type === "image" || a.type === "svg").map(a => (
-                    <div key={a.id} className="ms-ocr-card" onClick={() => handleOCR(a.id)}>
-                      <div className="ms-ocr-thumb" style={{ background: a.thumbnail }} />
-                      <div className="ms-ocr-name">{a.name}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="ms-ocr-result">
-                <div className="ms-ocr-source">
-                  <div className="ms-ocr-source-thumb" style={{ background: assets.find(a => a.id === ocrAssetId)?.thumbnail }} />
-                  <div className="ms-ocr-source-info">
-                    <div className="ms-ocr-source-name">{assets.find(a => a.id === ocrAssetId)?.name}</div>
-                    <button className="ms-sm-btn" onClick={() => { setOcrAssetId(null); setOcrText(""); }}>Choose Another</button>
-                  </div>
-                </div>
-                <div className="ms-ocr-output">
-                  <div className="ms-section-header">Extracted Text</div>
-                  {ocrProcessing ? (
-                    <div className="ms-ocr-processing">
-                      <div className="ms-spinner" />
-                      <span>Processing image with OCR engine...</span>
-                    </div>
-                  ) : (
-                    <>
-                      <pre className="ms-ocr-text">{ocrText}</pre>
-                      <div className="ms-ocr-actions">
-                        <button className="ms-sm-btn" onClick={() => { navigator.clipboard?.writeText(ocrText); logAudit("OCR text copied"); }}>Copy Text</button>
-                        <button className="ms-sm-btn" onClick={() => { handleOCR(ocrAssetId); }}>Re-run OCR</button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* ─── Status Bar ─── */}

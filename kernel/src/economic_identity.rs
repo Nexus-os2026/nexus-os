@@ -486,6 +486,14 @@ impl EconomicEngine {
             return Err(format!("agent wallet not found: {agent_id}"));
         }
 
+        // Escrow: deduct reward_amount from client wallet on contract creation.
+        let client_wallet = self
+            .wallets
+            .get_mut(client_id)
+            .ok_or_else(|| format!("client wallet not found: {client_id}"))?;
+        client_wallet.balance -= reward_amount;
+        client_wallet.total_spent += reward_amount;
+
         let contract = OutcomeContract {
             id: Uuid::new_v4().to_string(),
             agent_id: agent_id.to_string(),
@@ -495,13 +503,32 @@ impl EconomicEngine {
             reward_amount,
             penalty_amount,
             deadline,
-            status: ContractStatus::Active,
+            status: ContractStatus::Proposed,
             created_at: now_secs(),
             completed_at: None,
             evidence: None,
         };
         self.contracts.push(contract.clone());
         Ok(contract)
+    }
+
+    /// Activate a proposed contract, transitioning from Proposed to Active.
+    pub fn activate_contract(&mut self, contract_id: &str) -> Result<(), String> {
+        let contract = self
+            .contracts
+            .iter_mut()
+            .find(|c| c.id == contract_id)
+            .ok_or_else(|| format!("contract not found: {contract_id}"))?;
+        match &contract.status {
+            ContractStatus::Proposed => {
+                contract.status = ContractStatus::Active;
+                Ok(())
+            }
+            other => Err(format!(
+                "cannot activate contract in status {:?}, must be Proposed",
+                other
+            )),
+        }
     }
 
     /// Complete a contract. On success: transfer reward from client to agent.
@@ -550,20 +577,7 @@ impl EconomicEngine {
         let now = now_secs();
 
         if success {
-            // Transfer reward from client to agent.
-            let client_wallet = self
-                .wallets
-                .get_mut(&client_id)
-                .ok_or("client wallet missing")?;
-            if client_wallet.balance < reward {
-                return Err(format!(
-                    "client has insufficient balance: have {}, need {reward}",
-                    client_wallet.balance
-                ));
-            }
-            client_wallet.balance -= reward;
-            client_wallet.total_spent += reward;
-
+            // Escrowed funds go to the agent (already deducted from client at creation).
             let agent_wallet = self
                 .wallets
                 .get_mut(&agent_id)
@@ -576,7 +590,7 @@ impl EconomicEngine {
                 wallet_id: agent_id,
                 amount: reward,
                 transaction_type: TransactionType::Reward,
-                description: format!("outcome contract {contract_id} — success"),
+                description: format!("outcome contract {contract_id} — success (escrow released)"),
                 timestamp: now,
                 approved: true,
                 counterparty: Some(client_id),
@@ -588,45 +602,56 @@ impl EconomicEngine {
                 .push(tx.clone());
             Ok(tx)
         } else if penalty > 0.0 {
-            // Deduct penalty from agent.
-            let agent_wallet = self
+            // Failure with penalty: return escrowed amount minus penalty to client.
+            let refund = reward - penalty.min(reward);
+            let client_wallet = self
                 .wallets
-                .get_mut(&agent_id)
-                .ok_or("agent wallet missing")?;
-            let actual_penalty = penalty.min(agent_wallet.balance);
-            agent_wallet.balance -= actual_penalty;
-            agent_wallet.total_spent += actual_penalty;
+                .get_mut(&client_id)
+                .ok_or("client wallet missing")?;
+            client_wallet.balance += refund;
+            if refund > 0.0 {
+                client_wallet.total_earned += refund;
+            }
 
             let tx = Transaction {
                 id: Uuid::new_v4().to_string(),
-                wallet_id: agent_id,
-                amount: actual_penalty,
+                wallet_id: client_id.clone(),
+                amount: penalty.min(reward),
                 transaction_type: TransactionType::ServicePurchase,
-                description: format!("outcome contract {contract_id} — failure penalty"),
+                description: format!(
+                    "outcome contract {contract_id} — failure penalty (escrow partial refund)"
+                ),
                 timestamp: now,
                 approved: true,
-                counterparty: Some(client_id),
+                counterparty: Some(agent_id),
             };
             self.wallets
-                .get_mut(&tx.wallet_id)
+                .get_mut(&client_id)
                 .unwrap()
                 .transaction_history
                 .push(tx.clone());
             Ok(tx)
         } else {
-            // Failure with no penalty — record a zero-amount transaction.
+            // Failure with no penalty — return full escrow to client.
+            let client_wallet = self
+                .wallets
+                .get_mut(&client_id)
+                .ok_or("client wallet missing")?;
+            client_wallet.balance += reward;
+            client_wallet.total_earned += reward;
+
             let tx = Transaction {
                 id: Uuid::new_v4().to_string(),
-                wallet_id: agent_id.clone(),
+                wallet_id: client_id.clone(),
                 amount: 0.0,
-                transaction_type: TransactionType::ServicePurchase,
-                description: format!("outcome contract {contract_id} — failure (no penalty)"),
+                transaction_type: TransactionType::Refund,
+                description: format!("outcome contract {contract_id} — failure (escrow returned)"),
                 timestamp: now,
                 approved: true,
-                counterparty: Some(client_id),
+                counterparty: Some(agent_id),
             };
             self.wallets
-                .get_mut(&agent_id)
+                .get_mut(&client_id)
                 .unwrap()
                 .transaction_history
                 .push(tx.clone());
@@ -634,15 +659,25 @@ impl EconomicEngine {
         }
     }
 
-    /// Mark a contract as disputed.
+    /// Mark a contract as disputed and return escrowed funds to client.
     pub fn dispute_contract(&mut self, contract_id: &str, reason: &str) -> Result<(), String> {
         let contract = self
             .contracts
             .iter_mut()
             .find(|c| c.id == contract_id)
             .ok_or_else(|| format!("contract not found: {contract_id}"))?;
+        let client_id = contract.client_id.clone();
+        let reward = contract.reward_amount;
         contract.status = ContractStatus::Disputed;
         contract.evidence = Some(format!("DISPUTE: {reason}"));
+
+        // Return escrowed funds to client on dispute.
+        let client_wallet = self
+            .wallets
+            .get_mut(&client_id)
+            .ok_or("client wallet missing")?;
+        client_wallet.balance += reward;
+        client_wallet.total_earned += reward;
         Ok(())
     }
 
@@ -662,19 +697,30 @@ impl EconomicEngine {
     /// Expire all contracts past their deadline. Returns count of newly expired.
     pub fn expire_overdue_contracts(&mut self) -> usize {
         let now = now_secs();
-        let mut count = 0;
+        let mut expired_info: Vec<(String, f64)> = Vec::new();
         for contract in &mut self.contracts {
-            if let ContractStatus::Active = contract.status {
+            let is_active_or_proposed = matches!(
+                contract.status,
+                ContractStatus::Active | ContractStatus::Proposed
+            );
+            if is_active_or_proposed {
                 if let Some(deadline) = contract.deadline {
                     if now > deadline {
+                        expired_info.push((contract.client_id.clone(), contract.reward_amount));
                         contract.status = ContractStatus::Expired;
                         contract.completed_at = Some(now);
-                        count += 1;
                     }
                 }
             }
         }
-        count
+        // Return escrowed funds to clients for expired contracts.
+        for (client_id, reward) in &expired_info {
+            if let Some(wallet) = self.wallets.get_mut(client_id) {
+                wallet.balance += reward;
+                wallet.total_earned += reward;
+            }
+        }
+        expired_info.len()
     }
 
     /// Success rate for an agent across all completed contracts.
@@ -986,7 +1032,9 @@ mod tests {
         assert_eq!(contract.agent_id, "agent-1");
         assert_eq!(contract.client_id, "client-1");
         assert_eq!(contract.reward_amount, 50.0);
-        assert!(matches!(contract.status, ContractStatus::Active));
+        assert!(matches!(contract.status, ContractStatus::Proposed));
+        // Escrow: client balance reduced at creation
+        assert_eq!(engine.get_wallet("client-1").unwrap().balance, 950.0);
         assert!(engine.get_contract(&contract.id).is_some());
     }
 
@@ -1005,13 +1053,18 @@ mod tests {
             )
             .unwrap();
 
+        // Client escrowed 100 at creation.
+        assert_eq!(engine.get_wallet("client-1").unwrap().balance, 900.0);
+
+        engine.activate_contract(&contract.id).unwrap();
+
         let tx = engine
             .complete_contract(&contract.id, true, Some("all tests pass".to_string()))
             .unwrap();
         assert_eq!(tx.amount, 100.0);
         assert_eq!(tx.transaction_type, TransactionType::Reward);
 
-        // Agent earned 100, client paid 100.
+        // Agent earned 100 (escrowed funds released to agent), client stays at 900.
         assert_eq!(engine.get_wallet("agent-1").unwrap().balance, 1100.0);
         assert_eq!(engine.get_wallet("client-1").unwrap().balance, 900.0);
     }
@@ -1031,13 +1084,18 @@ mod tests {
             )
             .unwrap();
 
+        // Client escrowed 100 at creation.
+        assert_eq!(engine.get_wallet("client-1").unwrap().balance, 900.0);
+
+        engine.activate_contract(&contract.id).unwrap();
+
         let tx = engine
             .complete_contract(&contract.id, false, Some("deployment failed".to_string()))
             .unwrap();
         assert_eq!(tx.amount, 25.0);
-        // Agent lost 25, client unchanged.
-        assert_eq!(engine.get_wallet("agent-1").unwrap().balance, 975.0);
-        assert_eq!(engine.get_wallet("client-1").unwrap().balance, 1000.0);
+        // Client gets back escrow minus penalty (100 - 25 = 75), agent unchanged.
+        assert_eq!(engine.get_wallet("agent-1").unwrap().balance, 1000.0);
+        assert_eq!(engine.get_wallet("client-1").unwrap().balance, 975.0);
     }
 
     #[test]
@@ -1055,9 +1113,14 @@ mod tests {
             )
             .unwrap();
 
+        // Client escrowed 50 at creation.
+        assert_eq!(engine.get_wallet("client-1").unwrap().balance, 950.0);
+
+        engine.activate_contract(&contract.id).unwrap();
+
         let tx = engine.complete_contract(&contract.id, false, None).unwrap();
         assert_eq!(tx.amount, 0.0);
-        // No balance changes.
+        // Full escrow returned to client, agent unchanged.
         assert_eq!(engine.get_wallet("agent-1").unwrap().balance, 1000.0);
         assert_eq!(engine.get_wallet("client-1").unwrap().balance, 1000.0);
     }
@@ -1128,6 +1191,7 @@ mod tests {
                     None,
                 )
                 .unwrap();
+            engine.activate_contract(&c.id).unwrap();
             engine.complete_contract(&c.id, i < 2, None).unwrap();
         }
 
@@ -1150,6 +1214,7 @@ mod tests {
                     None,
                 )
                 .unwrap();
+            engine.activate_contract(&c.id).unwrap();
             engine.complete_contract(&c.id, i < 3, None).unwrap();
         }
 

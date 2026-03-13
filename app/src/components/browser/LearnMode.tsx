@@ -328,8 +328,8 @@ export function LearnMode({ onActivity }: LearnModeProps): JSX.Element {
   }, []);
 
   const feedTypeColor: Record<string, string> = {
-    navigating: "#00ffd5",
-    extracting: "#22d3ee",
+    navigating: "var(--nexus-accent)",
+    extracting: "var(--nexus-accent)",
     deciding: "#a78bfa",
     merging: "#f472b6",
     info: "#94a3b8",

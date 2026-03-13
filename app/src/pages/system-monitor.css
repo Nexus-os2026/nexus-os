@@ -65,7 +65,7 @@
   letter-spacing: 0.04em; transition: color 0.15s; white-space: nowrap;
 }
 .sm-tab:hover { color: #a5f3fc; }
-.sm-tab-active { color: #22d3ee; border-bottom-color: #22d3ee; }
+.sm-tab-active { color: var(--nexus-accent); border-bottom-color: var(--nexus-accent); }
 
 /* ================================================================== */
 /*  Content                                                            */
@@ -124,7 +124,7 @@
   font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.04em;
   padding: 0.1rem 0.35rem; border-radius: 0.2rem; font-weight: 600;
 }
-.sm-status-running { color: #22d3ee; background: rgba(34, 211, 238, 0.1); }
+.sm-status-running { color: var(--nexus-accent); background: rgba(0, 255, 157, 0.1); }
 .sm-status-idle { color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
 .sm-status-stopped { color: #6b7280; background: rgba(107, 114, 128, 0.1); }
 .sm-status-error { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
@@ -166,11 +166,11 @@
   transition: background 0.1s;
 }
 .sm-proc-row:hover { background: rgba(56, 189, 248, 0.04); }
-.sm-proc-agent-row { background: rgba(34, 211, 238, 0.02); }
+.sm-proc-agent-row { background: rgba(0, 255, 157, 0.02); }
 
 .sm-proc-pid { width: 50px; }
 .sm-proc-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sm-proc-agent { width: 100px; color: #22d3ee; }
+.sm-proc-agent { width: 100px; color: var(--nexus-accent); }
 .sm-proc-cpu { width: 60px; text-align: right; }
 .sm-proc-ram { width: 70px; text-align: right; }
 .sm-proc-status { width: 70px; text-align: center; }
@@ -207,7 +207,7 @@
 .sm-net-row:hover { background: rgba(56, 189, 248, 0.04); }
 .sm-net-st-blocked { background: rgba(239, 68, 68, 0.04); }
 
-.sm-net-agent { width: 90px; color: #22d3ee; }
+.sm-net-agent { width: 90px; color: var(--nexus-accent); }
 .sm-net-target { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sm-net-proto { width: 60px; }
 .sm-net-in { width: 80px; text-align: right; }
@@ -274,7 +274,7 @@
 .sm-alert-body { flex: 1; min-width: 0; }
 .sm-alert-msg { font-size: 0.72rem; color: #e2e8f0; margin-bottom: 0.2rem; }
 .sm-alert-meta { display: flex; gap: 0.6rem; font-size: 0.6rem; }
-.sm-alert-agent { color: #22d3ee; }
+.sm-alert-agent { color: var(--nexus-accent); }
 .sm-alert-time { color: rgba(165, 243, 252, 0.3); }
 
 .sm-alert-dismiss {

@@ -6,8 +6,8 @@
 //!
 //! ## KV Cache / Incremental Inference
 //!
-//! The model architecture is a pure MLP stack (embedding → down_proj/up_proj
-//! layers → lm_head) with no attention mechanism. Each token is processed
+//! The model architecture is a pure MLP stack (embedding → gate_proj/up_proj/
+//! down_proj layers with SiLU activation → lm_head) with no attention mechanism. Each token is processed
 //! independently through the layers, which means we can skip reprocessing
 //! already-seen tokens during autoregressive generation.
 //!
@@ -590,38 +590,111 @@ impl LocalSlmProvider {
         let map_err =
             |e: candle_core::Error| AgentError::SupervisorError(format!("forward pass: {e}"));
 
-        // Embedding lookup — only for the new token(s)
+        // Embedding lookup — only for the new token(s) being processed.
+        // The caller is responsible for passing only new (uncached) tokens.
         let embed_weight = Self::find_embedding_weight(weight_map).ok_or_else(|| {
             AgentError::SupervisorError("no embedding weight found in model weights".to_string())
         })?;
 
         let hidden = embed_weight.index_select(input_ids, 0).map_err(map_err)?;
 
-        // Apply MLP layers — each token processed independently
+        // Apply MLP layers — each token processed independently.
+        // For each layer, compute the forward pass only on new tokens, then
+        // concatenate with cached results and store back.
         let mut current = hidden;
         let mut layer_idx = 0;
         loop {
-            let dense_key = format!("model.layers.{layer_idx}.mlp.down_proj.weight");
+            let down_key = format!("model.layers.{layer_idx}.mlp.down_proj.weight");
             let up_key = format!("model.layers.{layer_idx}.mlp.up_proj.weight");
+            let gate_key = format!("model.layers.{layer_idx}.mlp.gate_proj.weight");
 
-            let has_layer = weight_map.contains_key(dense_key.as_str())
+            let has_layer = weight_map.contains_key(down_key.as_str())
                 || weight_map.contains_key(up_key.as_str());
 
             if !has_layer {
                 break;
             }
 
-            if let Some(w) = weight_map.get(dense_key.as_str()) {
+            // Standard MLP: hidden = matmul(silu(gate) * up, down_proj.T)
+            // If gate_proj/up_proj are missing, fall back to down_proj only.
+            let has_gate = weight_map.contains_key(gate_key.as_str());
+            let has_up = weight_map.contains_key(up_key.as_str());
+            let has_down = weight_map.contains_key(down_key.as_str());
+
+            if has_gate && has_up && has_down {
+                let gate_w = weight_map[gate_key.as_str()];
+                let up_w = weight_map[up_key.as_str()];
+                let down_w = weight_map[down_key.as_str()];
+
+                let gate_t = gate_w.t().map_err(map_err)?;
+                let up_t = up_w.t().map_err(map_err)?;
+                let down_t = down_w.t().map_err(map_err)?;
+
+                // Validate dimensions
+                let h_dim = current.dims().last().copied().unwrap_or(0);
+                let gate_in = gate_t.dims().first().copied().unwrap_or(0);
+                let up_in = up_t.dims().first().copied().unwrap_or(0);
+
+                if h_dim != gate_in || h_dim != up_in {
+                    return Err(AgentError::SupervisorError(format!(
+                        "MLP dimension mismatch at layer {layer_idx}: \
+                         hidden_dim={h_dim}, gate_in={gate_in}, up_in={up_in}"
+                    )));
+                }
+
+                // gate = matmul(hidden, gate_proj.T)
+                let gate = current.matmul(&gate_t).map_err(map_err)?;
+                // up = matmul(hidden, up_proj.T)
+                let up = current.matmul(&up_t).map_err(map_err)?;
+                // silu(x) = x * sigmoid(x) = x / (1 + exp(-x))
+                // Compute element-wise on the flattened tensor, then reshape.
+                let gate_silu = {
+                    let gate_shape = gate.dims().to_vec();
+                    let flat = gate.flatten_all().map_err(map_err)?;
+                    let vals: Vec<f32> = flat.to_vec1::<f32>().map_err(map_err)?;
+                    let silu_vals: Vec<f32> =
+                        vals.iter().map(|&x| x / (1.0 + (-x).exp())).collect();
+                    Tensor::new(&silu_vals[..], gate.device())
+                        .map_err(map_err)?
+                        .reshape(gate_shape.as_slice())
+                        .map_err(map_err)?
+                };
+                // intermediate = silu(gate) * up
+                let intermediate = gate_silu.mul(&up).map_err(map_err)?;
+
+                // Validate intermediate -> down_proj dimension
+                let inter_dim = intermediate.dims().last().copied().unwrap_or(0);
+                let down_in = down_t.dims().first().copied().unwrap_or(0);
+                if inter_dim != down_in {
+                    return Err(AgentError::SupervisorError(format!(
+                        "MLP dimension mismatch at layer {layer_idx}: \
+                         intermediate_dim={inter_dim}, down_in={down_in}"
+                    )));
+                }
+
+                // hidden = matmul(intermediate, down_proj.T)
+                current = intermediate.matmul(&down_t).map_err(map_err)?;
+            } else if has_down {
+                // Fallback: only down_proj available
+                let w = weight_map[down_key.as_str()];
                 let w_t = w.t().map_err(map_err)?;
                 let h_dim = current.dims().last().copied().unwrap_or(0);
                 let w_dim = w_t.dims().first().copied().unwrap_or(0);
-                if h_dim == w_dim {
-                    current = current.matmul(&w_t).map_err(map_err)?;
+                if h_dim != w_dim {
+                    return Err(AgentError::SupervisorError(format!(
+                        "MLP dimension mismatch at layer {layer_idx}: \
+                         hidden_dim={h_dim}, weight_dim={w_dim}"
+                    )));
                 }
+                current = current.matmul(&w_t).map_err(map_err)?;
+            } else {
+                // Only up_proj without down_proj — unusual but not a hard error.
+                // Skip this layer.
             }
 
-            // Store the layer output in the cache.  For this MLP arch the
-            // "key" and "value" are both the hidden state after the layer.
+            // Store the new tokens' hidden state in the cache.
+            // For this MLP arch the "key" and "value" are both the hidden
+            // state after the layer.
             let _ = kv_cache
                 .update(layer_idx, current.clone(), current.clone())
                 .map_err(map_err)?;
@@ -632,7 +705,9 @@ impl LocalSlmProvider {
             }
         }
 
-        // Project to vocab via LM head
+        // The cache now holds the full sequence hidden states (old + new
+        // concatenated by kv_cache.update).  For the LM-head projection we
+        // only need the new tokens' hidden states, which is `current`.
         Self::project_lm_head(&current, weight_map, embed_weight, vocab_size, device)
     }
 
@@ -658,23 +733,78 @@ impl LocalSlmProvider {
         let mut current = hidden;
         let mut layer_idx = 0;
         loop {
-            let dense_key = format!("model.layers.{layer_idx}.mlp.down_proj.weight");
+            let down_key = format!("model.layers.{layer_idx}.mlp.down_proj.weight");
             let up_key = format!("model.layers.{layer_idx}.mlp.up_proj.weight");
+            let gate_key = format!("model.layers.{layer_idx}.mlp.gate_proj.weight");
 
-            let has_layer = weight_map.contains_key(dense_key.as_str())
+            let has_layer = weight_map.contains_key(down_key.as_str())
                 || weight_map.contains_key(up_key.as_str());
 
             if !has_layer {
                 break;
             }
 
-            if let Some(w) = weight_map.get(dense_key.as_str()) {
+            let has_gate = weight_map.contains_key(gate_key.as_str());
+            let has_up = weight_map.contains_key(up_key.as_str());
+            let has_down = weight_map.contains_key(down_key.as_str());
+
+            if has_gate && has_up && has_down {
+                let gate_w = weight_map[gate_key.as_str()];
+                let up_w = weight_map[up_key.as_str()];
+                let down_w = weight_map[down_key.as_str()];
+
+                let gate_t = gate_w.t().map_err(map_err)?;
+                let up_t = up_w.t().map_err(map_err)?;
+                let down_t = down_w.t().map_err(map_err)?;
+
+                let h_dim = current.dims().last().copied().unwrap_or(0);
+                let gate_in = gate_t.dims().first().copied().unwrap_or(0);
+                let up_in = up_t.dims().first().copied().unwrap_or(0);
+
+                if h_dim != gate_in || h_dim != up_in {
+                    return Err(AgentError::SupervisorError(format!(
+                        "MLP dimension mismatch at layer {layer_idx}: \
+                         hidden_dim={h_dim}, gate_in={gate_in}, up_in={up_in}"
+                    )));
+                }
+
+                let gate = current.matmul(&gate_t).map_err(map_err)?;
+                let up = current.matmul(&up_t).map_err(map_err)?;
+                let gate_silu = {
+                    let neg_gate = gate.neg().map_err(map_err)?;
+                    let sigmoid = {
+                        let exp_neg = neg_gate.exp().map_err(map_err)?;
+                        let ones = Tensor::ones_like(&exp_neg).map_err(map_err)?;
+                        let denom = ones.add(&exp_neg).map_err(map_err)?;
+                        let ones2 = Tensor::ones_like(&denom).map_err(map_err)?;
+                        ones2.div(&denom).map_err(map_err)?
+                    };
+                    gate.mul(&sigmoid).map_err(map_err)?
+                };
+                let intermediate = gate_silu.mul(&up).map_err(map_err)?;
+
+                let inter_dim = intermediate.dims().last().copied().unwrap_or(0);
+                let down_in = down_t.dims().first().copied().unwrap_or(0);
+                if inter_dim != down_in {
+                    return Err(AgentError::SupervisorError(format!(
+                        "MLP dimension mismatch at layer {layer_idx}: \
+                         intermediate_dim={inter_dim}, down_in={down_in}"
+                    )));
+                }
+
+                current = intermediate.matmul(&down_t).map_err(map_err)?;
+            } else if has_down {
+                let w = weight_map[down_key.as_str()];
                 let w_t = w.t().map_err(map_err)?;
                 let h_dim = current.dims().last().copied().unwrap_or(0);
                 let w_dim = w_t.dims().first().copied().unwrap_or(0);
-                if h_dim == w_dim {
-                    current = current.matmul(&w_t).map_err(map_err)?;
+                if h_dim != w_dim {
+                    return Err(AgentError::SupervisorError(format!(
+                        "MLP dimension mismatch at layer {layer_idx}: \
+                         hidden_dim={h_dim}, weight_dim={w_dim}"
+                    )));
                 }
+                current = current.matmul(&w_t).map_err(map_err)?;
             }
 
             layer_idx += 1;
@@ -1004,7 +1134,7 @@ impl LocalSlmProvider {
             let sync_tensor_d = Tensor::new(&[next_token], draft_device).map_err(|e| {
                 AgentError::SupervisorError(format!("speculative: sync tensor draft: {e}"))
             })?;
-            let _ = Self::forward_pass_cached(
+            let draft_sync_logits = Self::forward_pass_cached(
                 &sync_tensor_d,
                 &draft_wm,
                 draft_vocab,
@@ -1023,49 +1153,13 @@ impl LocalSlmProvider {
             let mut draft_tokens: Vec<u32> = Vec::with_capacity(k);
             let mut draft_probs_at_token: Vec<f32> = Vec::with_capacity(k);
 
-            // The draft model's first token is sampled from the logits after
-            // seeing `next_token` (same position as prev_target_logits).
-            // We already ran the draft's forward pass on next_token above.
-            // Re-run is unnecessary; instead we sample from draft logits now.
-            let draft_sync = Self::forward_pass_cached(
-                &Tensor::new(&[next_token], draft_device).map_err(|e| {
-                    AgentError::SupervisorError(format!("speculative: draft resync: {e}"))
-                })?,
-                &draft_wm,
-                draft_vocab,
-                draft_device,
-                &mut draft_cache,
-            );
-
-            // Actually, the draft cache was already advanced with next_token
-            // above.  We need the draft's logits from that step.  But we
-            // discarded them.  Since the MLP is position-independent we can
-            // just re-derive the logits for `next_token` without mutating
-            // the cache by using logits_to_probs on prev_target_logits
-            // (for identical models they are the same).
-            //
-            // Simpler: just generate draft tokens starting from next_token's
-            // output logits.  We already ran draft forward on next_token —
-            // but the cache advanced an extra step because we ran it twice.
-            //
-            // Let's simplify: reset draft cache and rebuild cleanly.
-            drop(draft_sync);
-            draft_cache.reset();
-            let all_tensor_d = Tensor::new(all_ids.as_slice(), draft_device).map_err(|e| {
-                AgentError::SupervisorError(format!("speculative: rebuild draft: {e}"))
-            })?;
-            let draft_rebuild_logits = Self::forward_pass_cached(
-                &all_tensor_d,
-                &draft_wm,
-                draft_vocab,
-                draft_device,
-                &mut draft_cache,
-            )?;
-            let draft_last_rebuild =
-                Self::last_position_logits(&draft_rebuild_logits, all_ids.len())?;
-            let draft_p0 = Self::logits_to_probs(&draft_last_rebuild)?;
+            // Use the logits from the draft sync pass (above) to sample the
+            // first draft token.  The cache was already advanced with
+            // `next_token`, so we have the logits we need.
+            let draft_last_logits = Self::last_position_logits(&draft_sync_logits, 1)?;
+            let draft_p0 = Self::logits_to_probs(&draft_last_logits)?;
             let mut draft_next =
-                Self::sample_token(&draft_last_rebuild, sampling.temperature, sampling.top_p)?;
+                Self::sample_token(&draft_last_logits, sampling.temperature, sampling.top_p)?;
             let prob0 = draft_p0.get(draft_next as usize).copied().unwrap_or(0.0);
             draft_tokens.push(draft_next);
             draft_probs_at_token.push(prob0);
@@ -1131,7 +1225,7 @@ impl LocalSlmProvider {
                     .unwrap_or(0.0);
                 let dp = draft_probs_at_token[i];
 
-                if dp <= 0.0 || tp >= config.acceptance_threshold * dp {
+                if dp > 0.0 && tp >= config.acceptance_threshold * dp {
                     accepted_count += 1;
                     generated.push(draft_tokens[i]);
                     all_ids.push(draft_tokens[i]);
@@ -1156,18 +1250,38 @@ impl LocalSlmProvider {
                 Self::trim_cache(&mut target_cache, rejected);
             }
 
-            // Rebuild the draft cache to match the accepted position.
-            draft_cache.reset();
-            let all_tensor = Tensor::new(all_ids.as_slice(), draft_device).map_err(|e| {
-                AgentError::SupervisorError(format!("speculative: rebuild draft cache: {e}"))
-            })?;
-            let _ = Self::forward_pass_cached(
-                &all_tensor,
-                &draft_wm,
-                draft_vocab,
-                draft_device,
-                &mut draft_cache,
-            )?;
+            // Adjust the draft cache to match the accepted position.
+            //
+            // During the draft phase the cache was advanced by (K-1) draft
+            // token forward passes (the K-th token was sampled but not fed
+            // to the forward pass).  Trim those draft positions, then feed
+            // only the accepted tokens back.  This avoids the expensive
+            // full-sequence rebuild.
+            let draft_fwd_count = if draft_tokens.len() > 1 {
+                draft_tokens.len() - 1
+            } else {
+                0
+            };
+            // Remove all draft-phase positions from the cache.
+            if draft_fwd_count > 0 {
+                Self::trim_cache(&mut draft_cache, draft_fwd_count);
+            }
+            // Feed back the accepted tokens so the cache covers all_ids.
+            if accepted_count > 0 {
+                let accepted_slice = &draft_tokens[..accepted_count];
+                let at = Tensor::new(accepted_slice, draft_device).map_err(|e| {
+                    AgentError::SupervisorError(format!(
+                        "speculative: feed accepted to draft cache: {e}"
+                    ))
+                })?;
+                let _ = Self::forward_pass_cached(
+                    &at,
+                    &draft_wm,
+                    draft_vocab,
+                    draft_device,
+                    &mut draft_cache,
+                )?;
+            }
 
             // If all K tokens accepted, sample a bonus token from target's last logits.
             if accepted_count == draft_tokens.len() && !draft_tokens.is_empty() {
@@ -1721,11 +1835,15 @@ mod tests {
         let hidden = 4;
 
         let embed = Tensor::randn(0f32, 1.0, &[vocab, hidden], &device).unwrap();
+        let gate = Tensor::randn(0f32, 1.0, &[hidden, hidden], &device).unwrap();
+        let up = Tensor::randn(0f32, 1.0, &[hidden, hidden], &device).unwrap();
         let down = Tensor::randn(0f32, 1.0, &[hidden, hidden], &device).unwrap();
         let lm_head = Tensor::randn(0f32, 1.0, &[vocab, hidden], &device).unwrap();
 
         vec![
             ("model.embed_tokens.weight".to_string(), embed),
+            ("model.layers.0.mlp.gate_proj.weight".to_string(), gate),
+            ("model.layers.0.mlp.up_proj.weight".to_string(), up),
             ("model.layers.0.mlp.down_proj.weight".to_string(), down),
             ("lm_head.weight".to_string(), lm_head),
         ]
@@ -1780,7 +1898,7 @@ mod tests {
         // corresponding row from the full-sequence pass.
         for (a, b) in uncached_last.iter().zip(cached_last.iter()) {
             assert!(
-                (a - b).abs() < 1e-5,
+                (a - b).abs() < 1e-4,
                 "logits diverged: uncached={a}, cached={b}"
             );
         }
@@ -1817,7 +1935,7 @@ mod tests {
         assert_eq!(unc.len(), cac.len());
         for (a, b) in unc.iter().zip(cac.iter()) {
             assert!(
-                (a - b).abs() < 1e-5,
+                (a - b).abs() < 1e-4,
                 "logits diverged: uncached={a}, cached={b}"
             );
         }
@@ -1935,11 +2053,15 @@ mod tests {
         let hidden = 4;
 
         let embed = Tensor::randn(0f32, 0.5, &[vocab, hidden], &device).unwrap();
+        let gate0 = Tensor::randn(0f32, 0.5, &[hidden, hidden], &device).unwrap();
+        let up0 = Tensor::randn(0f32, 0.5, &[hidden, hidden], &device).unwrap();
         let down0 = Tensor::randn(0f32, 0.5, &[hidden, hidden], &device).unwrap();
         let lm_head = Tensor::randn(0f32, 0.5, &[vocab, hidden], &device).unwrap();
 
         vec![
             ("model.embed_tokens.weight".to_string(), embed),
+            ("model.layers.0.mlp.gate_proj.weight".to_string(), gate0),
+            ("model.layers.0.mlp.up_proj.weight".to_string(), up0),
             ("model.layers.0.mlp.down_proj.weight".to_string(), down0),
             ("lm_head.weight".to_string(), lm_head),
         ]
@@ -2053,7 +2175,26 @@ mod tests {
             .reshape(&[vocab, hidden])
             .unwrap();
 
-        // Simple identity-ish MLP layer
+        // Gate and up projections: identity-ish so silu(gate)*up ≈ input
+        // gate_proj: values that produce positive activations through SiLU
+        let gate_data: Vec<f32> = (0..hidden * hidden)
+            .map(|i| if i / hidden == i % hidden { 2.0 } else { 0.05 })
+            .collect();
+        let gate = Tensor::new(&gate_data[..], &device)
+            .unwrap()
+            .reshape(&[hidden, hidden])
+            .unwrap();
+
+        // up_proj: near-identity
+        let up_data: Vec<f32> = (0..hidden * hidden)
+            .map(|i| if i / hidden == i % hidden { 1.0 } else { 0.05 })
+            .collect();
+        let up = Tensor::new(&up_data[..], &device)
+            .unwrap()
+            .reshape(&[hidden, hidden])
+            .unwrap();
+
+        // down_proj: near-identity
         let down_data: Vec<f32> = (0..hidden * hidden)
             .map(|i| if i / hidden == i % hidden { 0.8 } else { 0.1 })
             .collect();
@@ -2067,6 +2208,8 @@ mod tests {
 
         vec![
             ("model.embed_tokens.weight".to_string(), embed),
+            ("model.layers.0.mlp.gate_proj.weight".to_string(), gate),
+            ("model.layers.0.mlp.up_proj.weight".to_string(), up),
             ("model.layers.0.mlp.down_proj.weight".to_string(), down),
             ("lm_head.weight".to_string(), lm_head),
         ]

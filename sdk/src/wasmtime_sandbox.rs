@@ -15,7 +15,7 @@ use serde_json::json;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use wasmtime::{Engine, Linker, Module, Store, StoreLimits, StoreLimitsBuilder};
 
 /// Per-agent state held inside the wasmtime Store.
@@ -129,6 +129,7 @@ impl WasmtimeSandbox {
     pub fn with_defaults(config: SandboxConfig) -> Result<Self, SandboxError> {
         let mut wasm_config = wasmtime::Config::new();
         wasm_config.consume_fuel(true);
+        wasm_config.epoch_interruption(true);
         wasm_config.max_wasm_stack(512 * 1024); // 512 KB stack per agent
 
         let engine = Engine::new(&wasm_config)
@@ -270,6 +271,23 @@ impl SandboxRuntime for WasmtimeSandbox {
             };
         }
 
+        // BUG 2 FIX: Pre-execution memory limit check.
+        // Reject before execution if the module's minimum memory would exceed the limit.
+        // Wasm memory pages are 64KB each.
+        if self.config.memory_limit_bytes < 65536 {
+            return SandboxResult {
+                completed: false,
+                outputs: vec![format!(
+                    "memory limit too low: {} bytes (minimum 1 wasm page = 65536)",
+                    self.config.memory_limit_bytes
+                )],
+                fuel_used: 0,
+                host_calls_made: 0,
+                killed: false,
+                kill_reason: None,
+            };
+        }
+
         // Verify Ed25519 signature before compilation
         let (sig_result, wasm_bytes) = wasm_signature::verify_wasm_signature(
             agent_code,
@@ -279,17 +297,24 @@ impl SandboxRuntime for WasmtimeSandbox {
 
         // Log verification result to audit trail
         let agent_id = ctx.agent_id();
-        ctx.audit_trail_mut()
-            .append_event(
-                agent_id,
-                EventType::ToolCall,
-                json!({
-                    "action": "wasm_signature_check",
-                    "result": format!("{:?}", sig_result),
-                    "accepted": sig_result.is_accepted(),
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = ctx.audit_trail_mut().append_event(
+            agent_id,
+            EventType::ToolCall,
+            json!({
+                "action": "wasm_signature_check",
+                "result": format!("{:?}", sig_result),
+                "accepted": sig_result.is_accepted(),
+            }),
+        ) {
+            return SandboxResult {
+                completed: false,
+                outputs: vec![format!("audit trail error (fail-closed): {e}")],
+                fuel_used: 0,
+                host_calls_made: 0,
+                killed: false,
+                kill_reason: None,
+            };
+        }
 
         if !sig_result.is_accepted() {
             let reason = match &sig_result {
@@ -357,7 +382,10 @@ impl SandboxRuntime for WasmtimeSandbox {
             Ok(s) => s,
             Err(e) => {
                 // Restore ctx before returning
-                let _ = std::mem::replace(ctx, Rc::try_unwrap(ctx_ref).ok().unwrap().into_inner());
+                let restored = Rc::try_unwrap(ctx_ref)
+                    .map(|cell| cell.into_inner())
+                    .unwrap_or_else(|rc| rc.borrow().clone());
+                let _ = std::mem::replace(ctx, restored);
                 return SandboxResult {
                     completed: false,
                     outputs: vec![format!("store init error: {e}")],
@@ -369,7 +397,24 @@ impl SandboxRuntime for WasmtimeSandbox {
             }
         };
 
+        // Set epoch deadline for wall-clock timeout enforcement.
+        // The epoch is incremented by a background thread; when the deadline
+        // ticks are reached, wasmtime traps the execution.
+        store.set_epoch_deadline(self.config.execution_timeout_secs.max(1));
+
         let fuel_before = store.get_fuel().unwrap_or(0);
+
+        // Start a background thread to bump the epoch once per second.
+        // When the store's epoch deadline is reached, wasmtime traps execution.
+        let engine_for_timer = Arc::clone(&self.engine);
+        let timeout_secs = self.config.execution_timeout_secs.max(1);
+        let timer_handle = std::thread::spawn(move || {
+            let start = Instant::now();
+            while start.elapsed() < Duration::from_secs(timeout_secs) {
+                std::thread::sleep(Duration::from_secs(1));
+                engine_for_timer.increment_epoch();
+            }
+        });
 
         // Link host functions — delegates to wasmtime_host_functions module
         let mut linker = Linker::new(&self.engine);
@@ -377,7 +422,11 @@ impl SandboxRuntime for WasmtimeSandbox {
             // Drop store first to release Rc reference, then restore ctx
             store.data_mut().agent_context = None;
             drop(store);
-            let _ = std::mem::replace(ctx, Rc::try_unwrap(ctx_ref).ok().unwrap().into_inner());
+            let _ = timer_handle.join();
+            let restored = Rc::try_unwrap(ctx_ref)
+                .map(|cell| cell.into_inner())
+                .unwrap_or_else(|rc| rc.borrow().clone());
+            let _ = std::mem::replace(ctx, restored);
             return SandboxResult {
                 completed: false,
                 outputs: vec![format!("linker error: {e}")],
@@ -394,7 +443,11 @@ impl SandboxRuntime for WasmtimeSandbox {
             Err(e) => {
                 store.data_mut().agent_context = None;
                 drop(store);
-                let _ = std::mem::replace(ctx, Rc::try_unwrap(ctx_ref).ok().unwrap().into_inner());
+                let _ = timer_handle.join();
+                let restored = Rc::try_unwrap(ctx_ref)
+                    .map(|cell| cell.into_inner())
+                    .unwrap_or_else(|rc| rc.borrow().clone());
+                let _ = std::mem::replace(ctx, restored);
                 return SandboxResult {
                     completed: false,
                     outputs: vec![format!("wasm instantiate error: {e}")],
@@ -413,10 +466,24 @@ impl SandboxRuntime for WasmtimeSandbox {
 
         let completed = match func {
             Ok(entry) => match entry.call(&mut store, ()) {
-                Ok(()) => true,
+                Ok(()) => {
+                    // Check wall-clock timeout even on successful completion
+                    if let Some(started) = self.started_at {
+                        if started.elapsed().as_secs() >= self.config.execution_timeout_secs {
+                            self.killed = true;
+                            self.kill_reason = Some("execution_timeout".to_string());
+                        }
+                    }
+                    !self.killed
+                }
                 Err(trap) => {
                     let fuel_after = store.get_fuel().unwrap_or(0);
-                    if fuel_after == 0 {
+                    // Check for epoch interruption (timeout) first
+                    let trap_msg = trap.to_string();
+                    if trap_msg.contains("epoch") || trap_msg.contains("interrupt") {
+                        self.killed = true;
+                        self.kill_reason = Some("execution_timeout".to_string());
+                    } else if fuel_after == 0 {
                         self.killed = true;
                         self.kill_reason = Some("fuel_exhausted".to_string());
                     } else {
@@ -453,7 +520,11 @@ impl SandboxRuntime for WasmtimeSandbox {
         // Release the Rc inside the Store, then restore AgentContext
         store.data_mut().agent_context = None;
         drop(store);
-        let _ = std::mem::replace(ctx, Rc::try_unwrap(ctx_ref).ok().unwrap().into_inner());
+        let _ = timer_handle.join();
+        let restored = Rc::try_unwrap(ctx_ref)
+            .map(|cell| cell.into_inner())
+            .unwrap_or_else(|rc| rc.borrow().clone());
+        let _ = std::mem::replace(ctx, restored);
 
         // Report wasm-level fuel consumption back to AgentContext so the
         // kernel's AgentFuelLedger stays in sync. Host function costs

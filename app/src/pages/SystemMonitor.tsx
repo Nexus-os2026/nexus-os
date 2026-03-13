@@ -4,63 +4,48 @@ import {
   Legend, Line, LineChart, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
+import { getLiveSystemMetrics } from "../api/backend";
 import "./system-monitor.css";
 
 /* ================================================================== */
 /*  Types                                                              */
 /* ================================================================== */
 
-interface SystemMetrics {
+interface LiveMetrics {
+  cpu_name: string;
+  cpu_cores: number;
+  cpu_avg: number;
+  per_core_usage: number[];
+  total_ram: number;
+  used_ram: number;
+  available_ram: number;
+  uptime_secs: number;
+  process_count: number;
+  nexus_disk_bytes: number;
+  disk_total: number;
+  disk_available: number;
+  agents: AgentFuel[];
+}
+
+interface AgentFuel {
+  id: string;
+  name: string;
+  state: string;
+  fuel_budget: number;
+  fuel_used: number;
+  remaining_fuel: number;
+}
+
+interface MetricsSnapshot {
   ts: number;
   cpu: number;
   ram: number;
-  gpu: number;
   disk: number;
-  netIn: number;
-  netOut: number;
-}
-
-interface AgentResource {
-  id: string;
-  name: string;
-  status: "running" | "idle" | "stopped" | "error";
-  cpu: number;
-  ram: number;
-  fuelUsed: number;
-  fuelBudget: number;
-  netRequests: number;
-  uptime: number;
-  lastAction: string;
-}
-
-interface ProcessEntry {
-  pid: number;
-  name: string;
-  agent: string | null;
-  cpu: number;
-  ram: number;
-  status: "running" | "sleeping" | "zombie";
-  started: number;
-}
-
-interface NetworkConn {
-  id: string;
-  agent: string;
-  target: string;
-  protocol: string;
-  bytesIn: number;
-  bytesOut: number;
-  status: "active" | "idle" | "blocked";
-  latency: number;
 }
 
 interface FuelHistoryPoint {
   ts: string;
-  coder: number;
-  designer: number;
-  researcher: number;
-  selfImprove: number;
-  total: number;
+  [agentName: string]: string | number;
 }
 
 interface AlertEntry {
@@ -78,15 +63,17 @@ interface AuditEntry {
   detail: string;
 }
 
-type TabView = "overview" | "agents" | "processes" | "network" | "fuel" | "alerts";
+type TabView = "overview" | "agents" | "fuel" | "alerts";
 
 /* ================================================================== */
 /*  Helpers                                                            */
 /* ================================================================== */
 
 function formatUptime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
@@ -101,107 +88,15 @@ function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 }
 
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
-
-/* ================================================================== */
-/*  Mock data generators                                               */
-/* ================================================================== */
-
-function generateMetricsHistory(count: number): SystemMetrics[] {
-  const data: SystemMetrics[] = [];
-  const now = Date.now();
-  let cpu = 35, ram = 42, gpu = 18, disk = 22, netIn = 150, netOut = 80;
-  for (let i = count - 1; i >= 0; i--) {
-    cpu = clamp(cpu + (Math.random() - 0.45) * 8, 5, 95);
-    ram = clamp(ram + (Math.random() - 0.48) * 3, 20, 85);
-    gpu = clamp(gpu + (Math.random() - 0.5) * 6, 0, 80);
-    disk = clamp(disk + (Math.random() - 0.5) * 2, 10, 60);
-    netIn = clamp(netIn + (Math.random() - 0.5) * 40, 10, 500);
-    netOut = clamp(netOut + (Math.random() - 0.5) * 25, 5, 300);
-    data.push({
-      ts: now - i * 2000,
-      cpu: Math.round(cpu * 10) / 10,
-      ram: Math.round(ram * 10) / 10,
-      gpu: Math.round(gpu * 10) / 10,
-      disk: Math.round(disk * 10) / 10,
-      netIn: Math.round(netIn),
-      netOut: Math.round(netOut),
-    });
-  }
-  return data;
-}
-
-const INITIAL_AGENTS: AgentResource[] = [
-  { id: "a1", name: "Coder", status: "running", cpu: 12.3, ram: 245, fuelUsed: 2800, fuelBudget: 10000, netRequests: 47, uptime: 14520, lastAction: "Refactoring boot sequence" },
-  { id: "a2", name: "Designer", status: "idle", cpu: 0.8, ram: 128, fuelUsed: 900, fuelBudget: 10000, netRequests: 12, uptime: 14520, lastAction: "Waiting for input" },
-  { id: "a3", name: "Researcher", status: "running", cpu: 8.7, ram: 312, fuelUsed: 3500, fuelBudget: 10000, netRequests: 156, uptime: 12340, lastAction: "Web search: Rust async patterns" },
-  { id: "a4", name: "Self-Improve", status: "running", cpu: 5.2, ram: 189, fuelUsed: 4200, fuelBudget: 10000, netRequests: 83, uptime: 14520, lastAction: "Optimizing prompt templates" },
-  { id: "a5", name: "Reviewer", status: "stopped", cpu: 0, ram: 0, fuelUsed: 0, fuelBudget: 10000, netRequests: 0, uptime: 0, lastAction: "—" },
-];
-
-const INITIAL_PROCESSES: ProcessEntry[] = [
-  { pid: 1, name: "nexus-kernel", agent: null, cpu: 2.1, ram: 156, status: "running", started: Date.now() - 14520000 },
-  { pid: 42, name: "nexus-supervisor", agent: null, cpu: 3.4, ram: 234, status: "running", started: Date.now() - 14520000 },
-  { pid: 101, name: "agent:coder", agent: "Coder", cpu: 12.3, ram: 245, status: "running", started: Date.now() - 14520000 },
-  { pid: 102, name: "agent:designer", agent: "Designer", cpu: 0.8, ram: 128, status: "sleeping", started: Date.now() - 14520000 },
-  { pid: 103, name: "agent:researcher", agent: "Researcher", cpu: 8.7, ram: 312, status: "running", started: Date.now() - 12340000 },
-  { pid: 104, name: "agent:self-improve", agent: "Self-Improve", cpu: 5.2, ram: 189, status: "running", started: Date.now() - 14520000 },
-  { pid: 201, name: "nexus-api-server", agent: null, cpu: 1.5, ram: 98, status: "running", started: Date.now() - 14520000 },
-  { pid: 202, name: "nexus-audit-writer", agent: null, cpu: 0.3, ram: 45, status: "running", started: Date.now() - 14520000 },
-  { pid: 301, name: "ollama-server", agent: null, cpu: 15.6, ram: 2048, status: "running", started: Date.now() - 14520000 },
-  { pid: 302, name: "nexus-slm-runner", agent: null, cpu: 4.8, ram: 512, status: "running", started: Date.now() - 10000000 },
-];
-
-const INITIAL_CONNECTIONS: NetworkConn[] = [
-  { id: "n1", agent: "Researcher", target: "api.duckduckgo.com", protocol: "HTTPS", bytesIn: 245780, bytesOut: 12340, status: "active", latency: 42 },
-  { id: "n2", agent: "Coder", target: "crates.io", protocol: "HTTPS", bytesIn: 89450, bytesOut: 3200, status: "idle", latency: 38 },
-  { id: "n3", agent: "Self-Improve", target: "localhost:11434", protocol: "HTTP", bytesIn: 1245000, bytesOut: 45600, status: "active", latency: 2 },
-  { id: "n4", agent: "Researcher", target: "docs.rs", protocol: "HTTPS", bytesIn: 567800, bytesOut: 8900, status: "active", latency: 55 },
-  { id: "n5", agent: "Designer", target: "fonts.google.com", protocol: "HTTPS", bytesIn: 34500, bytesOut: 1200, status: "idle", latency: 67 },
-  { id: "n6", agent: "Coder", target: "malware.bad.com", protocol: "HTTPS", bytesIn: 0, bytesOut: 0, status: "blocked", latency: 0 },
-];
-
-function generateFuelHistory(): FuelHistoryPoint[] {
-  const data: FuelHistoryPoint[] = [];
-  let c = 0, d = 0, r = 0, s = 0;
-  for (let i = 0; i < 24; i++) {
-    c += Math.floor(Math.random() * 180);
-    d += Math.floor(Math.random() * 60);
-    r += Math.floor(Math.random() * 200);
-    s += Math.floor(Math.random() * 250);
-    data.push({
-      ts: `${String(i).padStart(2, "0")}:00`,
-      coder: c, designer: d, researcher: r, selfImprove: s,
-      total: c + d + r + s,
-    });
-  }
-  return data;
-}
-
-const INITIAL_ALERTS: AlertEntry[] = [
-  { id: "al1", ts: Date.now() - 300000, severity: "warning", agent: "Self-Improve", message: "Fuel consumption rate exceeds 80% of budget in 4h window", dismissed: false },
-  { id: "al2", ts: Date.now() - 900000, severity: "critical", agent: "Coder", message: "Blocked network request to malware.bad.com", dismissed: false },
-  { id: "al3", ts: Date.now() - 1800000, severity: "info", agent: "Researcher", message: "156 network requests in last hour (threshold: 200)", dismissed: false },
-  { id: "al4", ts: Date.now() - 3600000, severity: "warning", agent: "Researcher", message: "RAM usage spike: 312MB (threshold: 256MB)", dismissed: true },
-  { id: "al5", ts: Date.now() - 7200000, severity: "info", agent: "System", message: "Audit trail checkpoint: 1,247 events, chain verified", dismissed: true },
-];
-
 const CHART_COLORS = {
-  cpu: "#22d3ee",
+  cpu: "var(--nexus-accent)",
   ram: "#c084fc",
-  gpu: "#f59e0b",
   disk: "#34d399",
-  netIn: "#60a5fa",
-  netOut: "#fb923c",
-  coder: "#22d3ee",
-  designer: "#c084fc",
-  researcher: "#34d399",
-  selfImprove: "#f59e0b",
 };
 
-const PIE_COLORS = ["#22d3ee", "#c084fc", "#34d399", "#f59e0b", "#60a5fa"];
+const PIE_COLORS = ["var(--nexus-accent)", "#c084fc", "#34d399", "#f59e0b", "#60a5fa", "#fb923c", "#a78bfa", "#f472b6"];
+
+const MAX_DATA_POINTS = 60;
 
 /* ================================================================== */
 /*  Component                                                          */
@@ -209,76 +104,99 @@ const PIE_COLORS = ["#22d3ee", "#c084fc", "#34d399", "#f59e0b", "#60a5fa"];
 
 export default function SystemMonitor(): JSX.Element {
   const [tab, setTab] = useState<TabView>("overview");
-  const [metrics, setMetrics] = useState<SystemMetrics[]>(() => generateMetricsHistory(60));
-  const [agents, setAgents] = useState<AgentResource[]>(INITIAL_AGENTS);
-  const [processes] = useState<ProcessEntry[]>(INITIAL_PROCESSES);
-  const [connections, setConnections] = useState<NetworkConn[]>(INITIAL_CONNECTIONS);
-  const [fuelHistory] = useState<FuelHistoryPoint[]>(() => generateFuelHistory());
-  const [alerts, setAlerts] = useState<AlertEntry[]>(INITIAL_ALERTS);
+  const [history, setHistory] = useState<MetricsSnapshot[]>([]);
+  const [latest, setLatest] = useState<LiveMetrics | null>(null);
+  const [fuelHistory, setFuelHistory] = useState<FuelHistoryPoint[]>([]);
+  const [alerts, setAlerts] = useState<AlertEntry[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const appendAudit = useCallback((event: string, detail: string) => {
     setAuditLog((prev) => [{ ts: Date.now(), event, detail }, ...prev].slice(0, 100));
   }, []);
 
-  /* ---- Live metric simulation ---- */
+  /* ---- Poll real metrics every 2 seconds ---- */
   useEffect(() => {
-    const interval = setInterval(() => {
-      setMetrics((prev) => {
-        const last = prev[prev.length - 1];
-        const next: SystemMetrics = {
-          ts: Date.now(),
-          cpu: clamp(last.cpu + (Math.random() - 0.45) * 8, 5, 95),
-          ram: clamp(last.ram + (Math.random() - 0.48) * 3, 20, 85),
-          gpu: clamp(last.gpu + (Math.random() - 0.5) * 6, 0, 80),
-          disk: clamp(last.disk + (Math.random() - 0.5) * 2, 10, 60),
-          netIn: Math.round(clamp(last.netIn + (Math.random() - 0.5) * 40, 10, 500)),
-          netOut: Math.round(clamp(last.netOut + (Math.random() - 0.5) * 25, 5, 300)),
-        };
-        return [...prev.slice(-59), next];
-      });
+    let mounted = true;
 
-      // Jitter agent metrics
-      setAgents((prev) =>
-        prev.map((a) => {
-          if (a.status !== "running") return a;
-          return {
-            ...a,
-            cpu: Math.round(clamp(a.cpu + (Math.random() - 0.5) * 3, 0.1, 30) * 10) / 10,
-            ram: Math.round(clamp(a.ram + (Math.random() - 0.5) * 20, 50, 500)),
-            fuelUsed: Math.min(a.fuelUsed + Math.floor(Math.random() * 8), a.fuelBudget),
-            netRequests: a.netRequests + (Math.random() > 0.7 ? 1 : 0),
-          };
-        })
-      );
+    async function poll() {
+      try {
+        const raw = await getLiveSystemMetrics();
+        if (!mounted) return;
+        const data: LiveMetrics = JSON.parse(raw);
+        setLatest(data);
+        setError(null);
 
-      // Jitter network latency
-      setConnections((prev) =>
-        prev.map((c) => c.status === "active" ? {
-          ...c,
-          latency: Math.round(clamp(c.latency + (Math.random() - 0.5) * 10, 1, 200)),
-          bytesIn: c.bytesIn + Math.floor(Math.random() * 5000),
-          bytesOut: c.bytesOut + Math.floor(Math.random() * 1000),
-        } : c)
-      );
-    }, 2000);
-    return () => clearInterval(interval);
+        const now = Date.now();
+        const ramPct = data.total_ram > 0 ? (data.used_ram / data.total_ram) * 100 : 0;
+        const diskPct = data.disk_total > 0 ? ((data.disk_total - data.disk_available) / data.disk_total) * 100 : 0;
+
+        setHistory((prev) => [
+          ...prev.slice(-(MAX_DATA_POINTS - 1)),
+          { ts: now, cpu: data.cpu_avg, ram: Math.round(ramPct * 10) / 10, disk: Math.round(diskPct * 10) / 10 },
+        ]);
+
+        // Build fuel history point from agent data
+        if (data.agents.length > 0) {
+          const timeLabel = new Date(now).toLocaleTimeString("en-US", { minute: "2-digit", second: "2-digit" });
+          const point: FuelHistoryPoint = { ts: timeLabel };
+          let total = 0;
+          for (const agent of data.agents) {
+            point[agent.name] = agent.fuel_used;
+            total += agent.fuel_used;
+          }
+          point["total"] = total;
+          setFuelHistory((prev) => [...prev.slice(-(MAX_DATA_POINTS - 1)), point]);
+        }
+
+        // Generate alerts from real data
+        if (data.cpu_avg > 90) {
+          setAlerts((prev) => {
+            if (prev.some((a) => !a.dismissed && a.message.startsWith("CPU usage critical"))) return prev;
+            const entry: AlertEntry = { id: `cpu-${now}`, ts: now, severity: "critical", agent: "System", message: `CPU usage critical: ${data.cpu_avg.toFixed(1)}%`, dismissed: false };
+            return [entry, ...prev].slice(0, 50);
+          });
+        }
+        if (ramPct > 85) {
+          setAlerts((prev) => {
+            if (prev.some((a) => !a.dismissed && a.message.startsWith("RAM usage high"))) return prev;
+            const entry: AlertEntry = { id: `ram-${now}`, ts: now, severity: "warning", agent: "System", message: `RAM usage high: ${ramPct.toFixed(1)}%`, dismissed: false };
+            return [entry, ...prev].slice(0, 50);
+          });
+        }
+        // Check for agents exceeding 80% fuel budget
+        for (const agent of data.agents) {
+          if (agent.fuel_budget > 0 && agent.fuel_used / agent.fuel_budget > 0.8) {
+            setAlerts((prev) => {
+              if (prev.some((a) => !a.dismissed && a.message.includes(agent.name) && a.message.includes("fuel"))) return prev;
+              const entry: AlertEntry = { id: `fuel-${agent.id}-${now}`, ts: now, severity: "warning", agent: agent.name, message: `${agent.name} fuel consumption at ${Math.round((agent.fuel_used / agent.fuel_budget) * 100)}% of budget`, dismissed: false };
+              return [entry, ...prev].slice(0, 50);
+            });
+          }
+        }
+      } catch (err) {
+        if (!mounted) return;
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    }
+
+    // Initial poll
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
-  const latest = metrics[metrics.length - 1];
   const activeAlerts = alerts.filter((a) => !a.dismissed);
-  const totalFuel = agents.reduce((a, b) => a + b.fuelUsed, 0);
-  const totalBudget = agents.reduce((a, b) => a + b.fuelBudget, 0);
-
-  const agentPieData = agents.filter((a) => a.fuelUsed > 0).map((a) => ({ name: a.name, value: a.fuelUsed }));
-  const ramPieData = agents.filter((a) => a.ram > 0).map((a) => ({ name: a.name, value: a.ram }));
 
   const chartMetrics = useMemo(() =>
-    metrics.map((m) => ({
+    history.map((m) => ({
       ...m,
       time: new Date(m.ts).toLocaleTimeString("en-US", { minute: "2-digit", second: "2-digit" }),
     })),
-  [metrics]);
+  [history]);
 
   function dismissAlert(id: string): void {
     setAlerts((prev) => prev.map((a) => a.id === id ? { ...a, dismissed: true } : a));
@@ -288,11 +206,18 @@ export default function SystemMonitor(): JSX.Element {
   const TABS: { id: TabView; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "agents", label: "Agents" },
-    { id: "processes", label: "Processes" },
-    { id: "network", label: "Network" },
     { id: "fuel", label: "Fuel" },
     { id: "alerts", label: `Alerts (${activeAlerts.length})` },
   ];
+
+  // Derived values
+  const totalFuel = latest?.agents.reduce((a, b) => a + b.fuel_used, 0) ?? 0;
+  const totalBudget = latest?.agents.reduce((a, b) => a + b.fuel_budget, 0) ?? 1;
+  const ramPct = latest && latest.total_ram > 0 ? (latest.used_ram / latest.total_ram) * 100 : 0;
+  const diskPct = latest && latest.disk_total > 0 ? ((latest.disk_total - latest.disk_available) / latest.disk_total) * 100 : 0;
+
+  const agentPieData = latest?.agents.filter((a) => a.fuel_used > 0).map((a) => ({ name: a.name, value: a.fuel_used })) ?? [];
+  const agentNames = latest?.agents.map((a) => a.name) ?? [];
 
   /* ================================================================ */
   /*  RENDER                                                           */
@@ -303,25 +228,26 @@ export default function SystemMonitor(): JSX.Element {
       <header className="sm-header">
         <div className="sm-header-left">
           <h2 className="sm-title">SYSTEM MONITOR</h2>
-          <span className="sm-subtitle">real-time governed metrics</span>
+          <span className="sm-subtitle">real-time system metrics{latest ? ` | ${latest.cpu_name}` : ""}</span>
         </div>
         <div className="sm-header-right">
+          {error && <span style={{ color: "#ef4444", fontSize: 11, marginRight: 12 }}>Backend: {error}</span>}
           <div className="sm-live-stats">
             <div className="sm-live-stat">
               <span className="sm-live-label">CPU</span>
-              <span className="sm-live-value" style={{ color: latest.cpu > 80 ? "#ef4444" : latest.cpu > 60 ? "#f59e0b" : "#22d3ee" }}>{latest.cpu.toFixed(1)}%</span>
+              <span className="sm-live-value" style={{ color: (latest?.cpu_avg ?? 0) > 80 ? "#ef4444" : (latest?.cpu_avg ?? 0) > 60 ? "#f59e0b" : "var(--nexus-accent)" }}>{latest?.cpu_avg.toFixed(1) ?? "—"}%</span>
             </div>
             <div className="sm-live-stat">
               <span className="sm-live-label">RAM</span>
-              <span className="sm-live-value" style={{ color: latest.ram > 80 ? "#ef4444" : latest.ram > 60 ? "#f59e0b" : "#c084fc" }}>{latest.ram.toFixed(1)}%</span>
+              <span className="sm-live-value" style={{ color: ramPct > 80 ? "#ef4444" : ramPct > 60 ? "#f59e0b" : "#c084fc" }}>{ramPct.toFixed(1)}%</span>
             </div>
             <div className="sm-live-stat">
-              <span className="sm-live-label">GPU</span>
-              <span className="sm-live-value" style={{ color: "#f59e0b" }}>{latest.gpu.toFixed(1)}%</span>
+              <span className="sm-live-label">DISK</span>
+              <span className="sm-live-value" style={{ color: "#34d399" }}>{diskPct.toFixed(1)}%</span>
             </div>
             <div className="sm-live-stat">
               <span className="sm-live-label">FUEL</span>
-              <span className="sm-live-value" style={{ color: totalFuel / totalBudget > 0.8 ? "#ef4444" : "#22d3ee" }}>{Math.round((1 - totalFuel / totalBudget) * 100)}%</span>
+              <span className="sm-live-value" style={{ color: totalFuel / totalBudget > 0.8 ? "#ef4444" : "var(--nexus-accent)" }}>{totalBudget > 0 ? Math.round((1 - totalFuel / totalBudget) * 100) : 100}%</span>
             </div>
           </div>
           {activeAlerts.length > 0 && (
@@ -348,7 +274,7 @@ export default function SystemMonitor(): JSX.Element {
         {/* ======== OVERVIEW ======== */}
         {tab === "overview" && (
           <div className="sm-overview">
-            {/* CPU + RAM chart */}
+            {/* CPU & RAM chart */}
             <div className="sm-chart-card sm-chart-wide">
               <div className="sm-chart-header"><span>CPU & RAM USAGE</span><span className="sm-chart-live">LIVE</span></div>
               <ResponsiveContainer width="100%" height={180}>
@@ -363,53 +289,53 @@ export default function SystemMonitor(): JSX.Element {
               </ResponsiveContainer>
             </div>
 
-            {/* GPU + Disk chart */}
+            {/* Disk chart */}
             <div className="sm-chart-card sm-chart-wide">
-              <div className="sm-chart-header"><span>GPU & DISK</span></div>
+              <div className="sm-chart-header"><span>DISK USAGE</span></div>
               <ResponsiveContainer width="100%" height={140}>
                 <LineChart data={chartMetrics}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(56,189,248,0.08)" />
                   <XAxis dataKey="time" tick={{ fill: "rgba(165,243,252,0.3)", fontSize: 10 }} tickLine={false} />
                   <YAxis domain={[0, 100]} tick={{ fill: "rgba(165,243,252,0.3)", fontSize: 10 }} tickLine={false} unit="%" />
                   <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid rgba(56,189,248,0.2)", borderRadius: 6, fontSize: 12 }} />
-                  <Line type="monotone" dataKey="gpu" stroke={CHART_COLORS.gpu} strokeWidth={2} dot={false} name="GPU" />
                   <Line type="monotone" dataKey="disk" stroke={CHART_COLORS.disk} strokeWidth={2} dot={false} name="Disk" />
                 </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Network chart */}
-            <div className="sm-chart-card sm-chart-wide">
-              <div className="sm-chart-header"><span>NETWORK I/O (KB/s)</span></div>
-              <ResponsiveContainer width="100%" height={140}>
-                <AreaChart data={chartMetrics}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(56,189,248,0.08)" />
-                  <XAxis dataKey="time" tick={{ fill: "rgba(165,243,252,0.3)", fontSize: 10 }} tickLine={false} />
-                  <YAxis tick={{ fill: "rgba(165,243,252,0.3)", fontSize: 10 }} tickLine={false} />
-                  <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid rgba(56,189,248,0.2)", borderRadius: 6, fontSize: 12 }} />
-                  <Area type="monotone" dataKey="netIn" stroke={CHART_COLORS.netIn} fill={CHART_COLORS.netIn} fillOpacity={0.12} strokeWidth={2} name="In" />
-                  <Area type="monotone" dataKey="netOut" stroke={CHART_COLORS.netOut} fill={CHART_COLORS.netOut} fillOpacity={0.1} strokeWidth={2} name="Out" />
-                </AreaChart>
               </ResponsiveContainer>
             </div>
 
             {/* Summary cards */}
             <div className="sm-summary-row">
               <div className="sm-summary-card">
+                <span className="sm-summary-label">CPU Cores</span>
+                <span className="sm-summary-value">{latest?.cpu_cores ?? "—"}</span>
+              </div>
+              <div className="sm-summary-card">
+                <span className="sm-summary-label">RAM</span>
+                <span className="sm-summary-value">{latest ? `${formatBytes(latest.used_ram)} / ${formatBytes(latest.total_ram)}` : "—"}</span>
+              </div>
+              <div className="sm-summary-card">
+                <span className="sm-summary-label">Uptime</span>
+                <span className="sm-summary-value">{latest ? formatUptime(latest.uptime_secs) : "—"}</span>
+              </div>
+              <div className="sm-summary-card">
+                <span className="sm-summary-label">Processes</span>
+                <span className="sm-summary-value">{latest?.process_count ?? "—"}</span>
+              </div>
+              <div className="sm-summary-card">
+                <span className="sm-summary-label">Nexus Data</span>
+                <span className="sm-summary-value">{latest ? formatBytes(latest.nexus_disk_bytes) : "—"}</span>
+              </div>
+              <div className="sm-summary-card">
                 <span className="sm-summary-label">Agents Active</span>
-                <span className="sm-summary-value">{agents.filter((a) => a.status === "running").length} / {agents.length}</span>
+                <span className="sm-summary-value">{latest ? `${latest.agents.filter((a) => a.state === "Running").length} / ${latest.agents.length}` : "—"}</span>
               </div>
               <div className="sm-summary-card">
                 <span className="sm-summary-label">Total Fuel Used</span>
                 <span className="sm-summary-value">{totalFuel.toLocaleString()} / {totalBudget.toLocaleString()}</span>
               </div>
               <div className="sm-summary-card">
-                <span className="sm-summary-label">Network Connections</span>
-                <span className="sm-summary-value">{connections.filter((c) => c.status === "active").length} active</span>
-              </div>
-              <div className="sm-summary-card">
                 <span className="sm-summary-label">Alerts</span>
-                <span className="sm-summary-value" style={{ color: activeAlerts.some((a) => a.severity === "critical") ? "#ef4444" : "#22d3ee" }}>{activeAlerts.length} active</span>
+                <span className="sm-summary-value" style={{ color: activeAlerts.some((a) => a.severity === "critical") ? "#ef4444" : "var(--nexus-accent)" }}>{activeAlerts.length} active</span>
               </div>
             </div>
           </div>
@@ -419,136 +345,56 @@ export default function SystemMonitor(): JSX.Element {
         {tab === "agents" && (
           <div className="sm-agents">
             <div className="sm-agents-grid">
-              {agents.map((a) => {
-                const fuelPct = Math.round((a.fuelUsed / a.fuelBudget) * 100);
+              {(latest?.agents ?? []).map((a) => {
+                const fuelPct = a.fuel_budget > 0 ? Math.round((a.fuel_used / a.fuel_budget) * 100) : 0;
                 return (
-                  <div key={a.id} className={`sm-agent-card sm-agent-${a.status}`}>
+                  <div key={a.id} className={`sm-agent-card sm-agent-${a.state === "Running" ? "running" : a.state === "Idle" ? "idle" : "stopped"}`}>
                     <div className="sm-agent-top">
                       <span className="sm-agent-name">{a.name}</span>
-                      <span className={`sm-agent-status sm-status-${a.status}`}>{a.status}</span>
+                      <span className={`sm-agent-status sm-status-${a.state === "Running" ? "running" : a.state === "Idle" ? "idle" : "stopped"}`}>{a.state}</span>
                     </div>
                     <div className="sm-agent-metrics">
                       <div className="sm-agent-metric">
-                        <span className="sm-ametric-label">CPU</span>
-                        <span className="sm-ametric-value">{a.cpu.toFixed(1)}%</span>
-                        <div className="sm-ametric-bar"><div className="sm-ametric-fill" style={{ width: `${Math.min(a.cpu * 3, 100)}%`, background: CHART_COLORS.cpu }} /></div>
-                      </div>
-                      <div className="sm-agent-metric">
-                        <span className="sm-ametric-label">RAM</span>
-                        <span className="sm-ametric-value">{a.ram} MB</span>
-                        <div className="sm-ametric-bar"><div className="sm-ametric-fill" style={{ width: `${Math.min(a.ram / 5, 100)}%`, background: CHART_COLORS.ram }} /></div>
-                      </div>
-                      <div className="sm-agent-metric">
-                        <span className="sm-ametric-label">Fuel</span>
-                        <span className="sm-ametric-value">{fuelPct}%</span>
+                        <span className="sm-ametric-label">Fuel Used</span>
+                        <span className="sm-ametric-value">{a.fuel_used.toLocaleString()}</span>
                         <div className="sm-ametric-bar"><div className="sm-ametric-fill" style={{ width: `${fuelPct}%`, background: fuelPct > 80 ? "#ef4444" : fuelPct > 50 ? "#f59e0b" : "#34d399" }} /></div>
+                      </div>
+                      <div className="sm-agent-metric">
+                        <span className="sm-ametric-label">Budget</span>
+                        <span className="sm-ametric-value">{a.fuel_budget.toLocaleString()}</span>
+                      </div>
+                      <div className="sm-agent-metric">
+                        <span className="sm-ametric-label">Remaining</span>
+                        <span className="sm-ametric-value">{a.remaining_fuel.toLocaleString()}</span>
                       </div>
                     </div>
                     <div className="sm-agent-details">
-                      <span className="sm-agent-detail">Net: {a.netRequests} reqs</span>
-                      <span className="sm-agent-detail">Up: {formatUptime(a.uptime)}</span>
+                      <span className="sm-agent-detail">Fuel: {fuelPct}%</span>
                     </div>
-                    <div className="sm-agent-action">{a.lastAction}</div>
                   </div>
                 );
               })}
+              {(latest?.agents ?? []).length === 0 && (
+                <div style={{ color: "rgba(165,243,252,0.5)", padding: 24 }}>No agents registered</div>
+              )}
             </div>
 
             {/* Agent resource pies */}
-            <div className="sm-pie-row">
-              <div className="sm-chart-card">
-                <div className="sm-chart-header"><span>FUEL DISTRIBUTION</span></div>
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart>
-                    <Pie data={agentPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false} fontSize={10}>
-                      {agentPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid rgba(56,189,248,0.2)", borderRadius: 6, fontSize: 12 }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="sm-chart-card">
-                <div className="sm-chart-header"><span>RAM DISTRIBUTION</span></div>
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart>
-                    <Pie data={ramPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, value }) => `${name} ${value}MB`} labelLine={false} fontSize={10}>
-                      {ramPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid rgba(56,189,248,0.2)", borderRadius: 6, fontSize: 12 }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ======== PROCESSES ======== */}
-        {tab === "processes" && (
-          <div className="sm-processes">
-            <div className="sm-proc-header">
-              <span className="sm-proc-col sm-proc-pid">PID</span>
-              <span className="sm-proc-col sm-proc-name">Process</span>
-              <span className="sm-proc-col sm-proc-agent">Agent</span>
-              <span className="sm-proc-col sm-proc-cpu">CPU %</span>
-              <span className="sm-proc-col sm-proc-ram">RAM MB</span>
-              <span className="sm-proc-col sm-proc-status">Status</span>
-            </div>
-            <div className="sm-proc-list">
-              {[...processes].sort((a, b) => b.cpu - a.cpu).map((p) => (
-                <div key={p.pid} className={`sm-proc-row ${p.agent ? "sm-proc-agent-row" : ""}`}>
-                  <span className="sm-proc-col sm-proc-pid">{p.pid}</span>
-                  <span className="sm-proc-col sm-proc-name">{p.name}</span>
-                  <span className="sm-proc-col sm-proc-agent">{p.agent ?? "—"}</span>
-                  <span className="sm-proc-col sm-proc-cpu" style={{ color: p.cpu > 10 ? "#f59e0b" : p.cpu > 5 ? "#22d3ee" : "inherit" }}>
-                    {p.cpu.toFixed(1)}
-                  </span>
-                  <span className="sm-proc-col sm-proc-ram">{p.ram}</span>
-                  <span className={`sm-proc-col sm-proc-status sm-proc-st-${p.status}`}>{p.status}</span>
+            {agentPieData.length > 0 && (
+              <div className="sm-pie-row">
+                <div className="sm-chart-card">
+                  <div className="sm-chart-header"><span>FUEL DISTRIBUTION</span></div>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie data={agentPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false} fontSize={10}>
+                        {agentPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid rgba(56,189,248,0.2)", borderRadius: 6, fontSize: 12 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
-              ))}
-            </div>
-            <div className="sm-proc-summary">
-              <span>{processes.length} processes</span>
-              <span>Total CPU: {processes.reduce((a, b) => a + b.cpu, 0).toFixed(1)}%</span>
-              <span>Total RAM: {processes.reduce((a, b) => a + b.ram, 0).toLocaleString()} MB</span>
-              <span>Agent processes: {processes.filter((p) => p.agent).length}</span>
-            </div>
-          </div>
-        )}
-
-        {/* ======== NETWORK ======== */}
-        {tab === "network" && (
-          <div className="sm-network">
-            <div className="sm-net-header">
-              <span className="sm-net-col sm-net-agent">Agent</span>
-              <span className="sm-net-col sm-net-target">Target</span>
-              <span className="sm-net-col sm-net-proto">Protocol</span>
-              <span className="sm-net-col sm-net-in">In</span>
-              <span className="sm-net-col sm-net-out">Out</span>
-              <span className="sm-net-col sm-net-latency">Latency</span>
-              <span className="sm-net-col sm-net-status">Status</span>
-            </div>
-            <div className="sm-net-list">
-              {connections.map((c) => (
-                <div key={c.id} className={`sm-net-row sm-net-st-${c.status}`}>
-                  <span className="sm-net-col sm-net-agent">{c.agent}</span>
-                  <span className="sm-net-col sm-net-target">{c.target}</span>
-                  <span className="sm-net-col sm-net-proto">{c.protocol}</span>
-                  <span className="sm-net-col sm-net-in">{formatBytes(c.bytesIn)}</span>
-                  <span className="sm-net-col sm-net-out">{formatBytes(c.bytesOut)}</span>
-                  <span className="sm-net-col sm-net-latency" style={{ color: c.latency > 100 ? "#ef4444" : c.latency > 50 ? "#f59e0b" : "#34d399" }}>
-                    {c.status === "blocked" ? "—" : `${c.latency}ms`}
-                  </span>
-                  <span className={`sm-net-col sm-net-status sm-conn-${c.status}`}>{c.status}</span>
-                </div>
-              ))}
-            </div>
-            <div className="sm-net-summary">
-              <span>{connections.filter((c) => c.status === "active").length} active</span>
-              <span>{connections.filter((c) => c.status === "blocked").length} blocked</span>
-              <span>Total In: {formatBytes(connections.reduce((a, b) => a + b.bytesIn, 0))}</span>
-              <span>Total Out: {formatBytes(connections.reduce((a, b) => a + b.bytesOut, 0))}</span>
-            </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -556,7 +402,7 @@ export default function SystemMonitor(): JSX.Element {
         {tab === "fuel" && (
           <div className="sm-fuel">
             <div className="sm-chart-card sm-chart-wide">
-              <div className="sm-chart-header"><span>FUEL CONSUMPTION OVER TIME</span></div>
+              <div className="sm-chart-header"><span>FUEL CONSUMPTION OVER TIME</span><span className="sm-chart-live">LIVE</span></div>
               <ResponsiveContainer width="100%" height={220}>
                 <AreaChart data={fuelHistory}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(56,189,248,0.08)" />
@@ -564,10 +410,9 @@ export default function SystemMonitor(): JSX.Element {
                   <YAxis tick={{ fill: "rgba(165,243,252,0.3)", fontSize: 10 }} tickLine={false} />
                   <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid rgba(56,189,248,0.2)", borderRadius: 6, fontSize: 12 }} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Area type="monotone" dataKey="coder" stackId="1" stroke={CHART_COLORS.coder} fill={CHART_COLORS.coder} fillOpacity={0.3} name="Coder" />
-                  <Area type="monotone" dataKey="designer" stackId="1" stroke={CHART_COLORS.designer} fill={CHART_COLORS.designer} fillOpacity={0.3} name="Designer" />
-                  <Area type="monotone" dataKey="researcher" stackId="1" stroke={CHART_COLORS.researcher} fill={CHART_COLORS.researcher} fillOpacity={0.3} name="Researcher" />
-                  <Area type="monotone" dataKey="selfImprove" stackId="1" stroke={CHART_COLORS.selfImprove} fill={CHART_COLORS.selfImprove} fillOpacity={0.3} name="Self-Improve" />
+                  {agentNames.map((name, i) => (
+                    <Area key={name} type="monotone" dataKey={name} stackId="1" stroke={PIE_COLORS[i % PIE_COLORS.length]} fill={PIE_COLORS[i % PIE_COLORS.length]} fillOpacity={0.3} name={name} />
+                  ))}
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -575,13 +420,13 @@ export default function SystemMonitor(): JSX.Element {
             <div className="sm-chart-card sm-chart-wide">
               <div className="sm-chart-header"><span>FUEL BUDGET USAGE PER AGENT</span></div>
               <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={agents.filter((a) => a.fuelUsed > 0)} layout="vertical">
+                <BarChart data={(latest?.agents ?? []).filter((a) => a.fuel_used > 0)} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(56,189,248,0.08)" />
-                  <XAxis type="number" domain={[0, 10000]} tick={{ fill: "rgba(165,243,252,0.3)", fontSize: 10 }} tickLine={false} />
+                  <XAxis type="number" tick={{ fill: "rgba(165,243,252,0.3)", fontSize: 10 }} tickLine={false} />
                   <YAxis type="category" dataKey="name" tick={{ fill: "rgba(165,243,252,0.5)", fontSize: 11 }} tickLine={false} width={90} />
                   <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid rgba(56,189,248,0.2)", borderRadius: 6, fontSize: 12 }} />
-                  <Bar dataKey="fuelUsed" name="Used" radius={[0, 4, 4, 0]}>
-                    {agents.filter((a) => a.fuelUsed > 0).map((a, i) => (
+                  <Bar dataKey="fuel_used" name="Used" radius={[0, 4, 4, 0]}>
+                    {(latest?.agents ?? []).filter((a) => a.fuel_used > 0).map((a, i) => (
                       <Cell key={a.id} fill={PIE_COLORS[i % PIE_COLORS.length]} fillOpacity={0.7} />
                     ))}
                   </Bar>
@@ -590,16 +435,16 @@ export default function SystemMonitor(): JSX.Element {
             </div>
 
             <div className="sm-fuel-totals">
-              {agents.map((a) => {
-                const pct = Math.round((a.fuelUsed / a.fuelBudget) * 100);
+              {(latest?.agents ?? []).map((a, i) => {
+                const pct = a.fuel_budget > 0 ? Math.round((a.fuel_used / a.fuel_budget) * 100) : 0;
                 return (
                   <div key={a.id} className="sm-fuel-agent">
                     <div className="sm-fuel-agent-top">
                       <span className="sm-fuel-agent-name">{a.name}</span>
                       <span className="sm-fuel-agent-pct" style={{ color: pct > 80 ? "#ef4444" : pct > 50 ? "#f59e0b" : "#34d399" }}>{pct}%</span>
                     </div>
-                    <div className="sm-fuel-agent-bar"><div className="sm-fuel-agent-fill" style={{ width: `${pct}%`, background: pct > 80 ? "#ef4444" : pct > 50 ? "#f59e0b" : "#22d3ee" }} /></div>
-                    <span className="sm-fuel-agent-detail">{a.fuelUsed.toLocaleString()} / {a.fuelBudget.toLocaleString()}</span>
+                    <div className="sm-fuel-agent-bar"><div className="sm-fuel-agent-fill" style={{ width: `${pct}%`, background: pct > 80 ? "#ef4444" : pct > 50 ? "#f59e0b" : "var(--nexus-accent)" }} /></div>
+                    <span className="sm-fuel-agent-detail">{a.fuel_used.toLocaleString()} / {a.fuel_budget.toLocaleString()}</span>
                   </div>
                 );
               })}
@@ -615,6 +460,9 @@ export default function SystemMonitor(): JSX.Element {
               <span className="sm-alerts-count">{activeAlerts.length} active / {alerts.length} total</span>
             </div>
             <div className="sm-alerts-list">
+              {alerts.length === 0 && (
+                <div style={{ color: "rgba(165,243,252,0.5)", padding: 24 }}>No alerts — system nominal</div>
+              )}
               {alerts.map((a) => (
                 <div key={a.id} className={`sm-alert-item sm-alert-${a.severity} ${a.dismissed ? "sm-alert-dismissed" : ""}`}>
                   <div className="sm-alert-left">

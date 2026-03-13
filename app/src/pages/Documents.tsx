@@ -64,7 +64,7 @@ function fileName(path: string): string {
 
 const FORMAT_COLORS: Record<string, string> = {
   PlainText: "#fbbf24",
-  Markdown: "#22d3ee",
+  Markdown: "var(--nexus-accent)",
   Code: "#a78bfa",
 };
 
@@ -76,7 +76,7 @@ const SUPPORTED_EXTENSIONS = [
 ];
 
 const DOC_PALETTE = [
-  "#00ff9d", "#22d3ee", "#a78bfa", "#fbbf24", "#f472b6",
+  "#00ff9d", "var(--nexus-accent)", "#a78bfa", "#fbbf24", "#f472b6",
   "#fb923c", "#34d399", "#60a5fa", "#c084fc", "#f87171",
 ];
 

@@ -40,7 +40,7 @@
 }
 
 .holo-panel:hover {
-  border-color: rgba(34, 211, 238, 0.45);
+  border-color: rgba(0, 255, 157, 0.45);
 }
 
 .holo-panel__refraction {
@@ -261,7 +261,7 @@
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, rgba(34, 211, 238, 0), rgba(34, 211, 238, 0.5), rgba(34, 211, 238, 0));
+  background: linear-gradient(90deg, rgba(0, 255, 157, 0), rgba(0, 255, 157, 0.5), rgba(0, 255, 157, 0));
 }
 
 .viz-timeline__scroller {
@@ -286,7 +286,7 @@
 }
 
 .viz-timeline__node.info {
-  background: #22d3ee;
+  background: var(--nexus-accent);
 }
 
 .viz-timeline__node.warn {
@@ -458,13 +458,13 @@
 }
 
 /* Micro-interactions */
-.nexus-btn {
+.nexus-btn-fx {
   position: relative;
   clip-path: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
   overflow: hidden;
 }
 
-.nexus-btn::after {
+.nexus-btn-fx::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -473,12 +473,12 @@
   opacity: 0;
 }
 
-.nexus-btn:hover::after {
+.nexus-btn-fx:hover::after {
   opacity: 1;
   animation: button-scan 1s linear infinite;
 }
 
-.nexus-btn:active {
+.nexus-btn-fx:active {
   transform: translateY(1px) scale(0.99);
 }
 
@@ -506,7 +506,7 @@
 }
 
 .jarvis-input {
-  border-bottom: 1px solid rgba(34, 211, 238, 0.28);
+  border-bottom: 1px solid rgba(0, 255, 157, 0.28);
 }
 
 .jarvis-input:focus {
@@ -580,7 +580,7 @@
 }
 
 .holo-toggle-input {
-  accent-color: #22d3ee;
+  accent-color: var(--nexus-accent);
 }
 
 .nexus-notification {
@@ -588,7 +588,7 @@
   border: 1px solid rgba(103, 232, 249, 0.35);
   background: rgba(3, 14, 28, 0.75);
   padding: 0.45rem 0.65rem;
-  box-shadow: 0 10px 20px -16px rgba(34, 211, 238, 0.6);
+  box-shadow: 0 10px 20px -16px rgba(0, 255, 157, 0.6);
   animation: notification-slide 320ms ease;
 }
 

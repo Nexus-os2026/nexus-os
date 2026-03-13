@@ -6,10 +6,10 @@ export const theme = {
     elevated: "#132744"
   },
   accent: {
-    cyan: "#00ffd5",
-    cyanDim: "#00ffd580",
+    green: "#00ff9d",
+    greenDim: "#00ff9d80",
     blue: "#3b82f6",
-    green: "#10b981",
+    emerald: "#10b981",
     amber: "#f59e0b",
     red: "#ef4444",
     purple: "#8b5cf6"

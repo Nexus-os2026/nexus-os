@@ -29,7 +29,7 @@
 .as-sidebar-title {
   font-size: 16px;
   font-weight: 700;
-  color: #22d3ee;
+  color: var(--nexus-accent);
   margin: 0;
 }
 
@@ -55,7 +55,7 @@
 }
 
 .as-view-btn:hover { background: #1e293b; color: #e2e8f0; }
-.as-view-btn.active { background: #22d3ee15; color: #22d3ee; }
+.as-view-btn.active { background: var(--nexus-accent)15; color: var(--nexus-accent); }
 .as-view-icon { font-size: 14px; }
 
 .as-update-badge {
@@ -102,7 +102,7 @@
 }
 
 .as-cat-btn:hover { background: #1e293b; }
-.as-cat-btn.active { color: #22d3ee; background: #22d3ee10; }
+.as-cat-btn.active { color: var(--nexus-accent); background: var(--nexus-accent)10; }
 
 /* stats */
 .as-stats {
@@ -157,7 +157,7 @@
   outline: none;
 }
 
-.as-search:focus { border-color: #22d3ee; }
+.as-search:focus { border-color: var(--nexus-accent); }
 
 .as-select {
   background: #1e293b;
@@ -310,7 +310,7 @@
 }
 
 .as-app-card-rating { color: #fbbf24; }
-.as-app-card-fuel { color: #22d3ee; }
+.as-app-card-fuel { color: var(--nexus-accent); }
 
 .as-installed-badge {
   background: #22c55e22;
@@ -348,7 +348,7 @@
 .as-back-btn {
   background: none;
   border: none;
-  color: #22d3ee;
+  color: var(--nexus-accent);
   font-family: inherit;
   font-size: 12px;
   cursor: pointer;
@@ -392,7 +392,7 @@
 
 .as-verified {
   margin-left: 6px;
-  color: #22d3ee;
+  color: var(--nexus-accent);
   font-size: 11px;
 }
 
@@ -413,7 +413,7 @@
 }
 
 .as-install-btn {
-  background: #22d3ee;
+  background: var(--nexus-accent);
   color: #0b1120;
   border: none;
   padding: 8px 24px;
@@ -532,7 +532,7 @@
 }
 
 .as-changelog-label {
-  color: #22d3ee;
+  color: var(--nexus-accent);
   font-weight: 600;
 }
 
@@ -626,7 +626,7 @@
 }
 
 .as-sm-btn:hover { background: #334155; }
-.as-btn-primary { background: #22d3ee; color: #0b1120; border-color: #22d3ee; }
+.as-btn-primary { background: var(--nexus-accent); color: #0b1120; border-color: var(--nexus-accent); }
 .as-btn-primary:hover { background: #06b6d4; }
 .as-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -668,7 +668,7 @@
   box-sizing: border-box;
 }
 
-.as-review-input:focus { border-color: #22d3ee; }
+.as-review-input:focus { border-color: var(--nexus-accent); }
 
 .as-review-form-actions {
   display: flex;
@@ -766,7 +766,7 @@
 }
 
 .as-pub-field input:focus,
-.as-pub-field textarea:focus { border-color: #22d3ee; }
+.as-pub-field textarea:focus { border-color: var(--nexus-accent); }
 
 .as-pub-row {
   display: grid;
@@ -779,15 +779,15 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: #22d3ee0d;
-  border: 1px solid #22d3ee33;
+  background: var(--nexus-accent)0d;
+  border: 1px solid var(--nexus-accent)33;
   border-radius: 6px;
   font-size: 11px;
   color: #94a3b8;
 }
 
 .as-pub-btn {
-  background: #22d3ee;
+  background: var(--nexus-accent);
   color: #0b1120;
   border: none;
   padding: 10px;
@@ -816,4 +816,4 @@
 }
 
 .as-status-item { white-space: nowrap; }
-.as-status-right { margin-left: auto; color: #22d3ee; }
+.as-status-right { margin-left: auto; color: var(--nexus-accent); }

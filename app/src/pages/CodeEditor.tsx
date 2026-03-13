@@ -3,6 +3,20 @@ import Editor, { type OnMount } from "@monaco-editor/react";
 import "./code-editor.css";
 
 /* ================================================================== */
+/*  Tauri invoke                                                       */
+/* ================================================================== */
+
+const HAS_DESKTOP = typeof window !== "undefined" && "__TAURI__" in window;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const invoke: (cmd: string, args?: Record<string, unknown>) => Promise<any> =
+  HAS_DESKTOP
+    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__TAURI__.invoke
+    : async (_cmd: string, _args?: Record<string, unknown>) =>
+        JSON.stringify([]);
+
+/* ================================================================== */
 /*  Types                                                              */
 /* ================================================================== */
 
@@ -15,12 +29,19 @@ interface VirtualFile {
   dirty: boolean;
 }
 
+interface FsEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+  modified: number;
+}
+
 interface FileTreeNode {
   name: string;
   path: string;
   type: "file" | "dir";
   children?: FileTreeNode[];
-  fileId?: string;
 }
 
 interface AgentAction {
@@ -102,306 +123,43 @@ function langIcon(lang: string): string {
 }
 
 /* ================================================================== */
-/*  Mock data                                                          */
+/*  Helpers                                                            */
 /* ================================================================== */
 
-const INITIAL_FILES: VirtualFile[] = [
-  {
-    id: "f1", name: "main.rs", path: "src/main.rs", language: "rust", dirty: false,
-    content: `use nexus_kernel::Supervisor;
-use nexus_sdk::prelude::*;
-use std::sync::Arc;
-
-/// Entry point for the Nexus OS kernel.
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize tracing
-    tracing_subscriber::init();
-
-    // Boot the governance supervisor
-    let supervisor = Arc::new(Supervisor::new());
-    tracing::info!("Nexus OS v7.0 — Don't trust. Verify.");
-
-    // Register built-in agents
-    supervisor.register_agent("coder", include_str!("../agents/coder.toml"))?;
-    supervisor.register_agent("designer", include_str!("../agents/designer.toml"))?;
-    supervisor.register_agent("researcher", include_str!("../agents/researcher.toml"))?;
-
-    // Start the runtime
-    let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(supervisor.run())?;
-
-    Ok(())
-}
-`,
-  },
-  {
-    id: "f2", name: "agent.toml", path: "agents/coder.toml", language: "toml", dirty: false,
-    content: `[agent]
-name = "coder"
-version = "1.0.0"
-author = "nexus"
-autonomy_level = 3
-
-[capabilities]
-file_read = true
-file_write = true
-net_access = false
-shell_exec = false
-code_execute = true
-
-[fuel]
-budget = 10000
-refill_interval = "1h"
-warn_threshold = 0.2
-
-[governance]
-hitl_tier = 1
-audit_all_actions = true
-`,
-  },
-  {
-    id: "f3", name: "App.tsx", path: "src/App.tsx", language: "typescript", dirty: false,
-    content: `import { useState, useEffect } from "react";
-import { Sidebar } from "./components/layout/Sidebar";
-import { Dashboard } from "./pages/Dashboard";
-import { CodeEditor } from "./pages/CodeEditor";
-import { Chat } from "./pages/Chat";
-import type { Page, NexusConfig } from "./types";
-
-export default function App() {
-  const [page, setPage] = useState<Page>("chat");
-  const [config, setConfig] = useState<NexusConfig | null>(null);
-
-  useEffect(() => {
-    // Load config from Tauri backend
-    loadConfig().then(setConfig);
-  }, []);
-
-  return (
-    <div className="nexus-root">
-      <Sidebar activePage={page} onNavigate={setPage} />
-      <main className="nexus-main">
-        {page === "chat" && <Chat />}
-        {page === "code-editor" && <CodeEditor />}
-        {page === "dashboard" && <Dashboard />}
-      </main>
-    </div>
-  );
+function pathBasename(p: string): string {
+  const idx = p.lastIndexOf("/");
+  return idx >= 0 ? p.slice(idx + 1) : p;
 }
 
-async function loadConfig(): Promise<NexusConfig> {
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke("get_config");
-}
-`,
-  },
-  {
-    id: "f4", name: "styles.css", path: "src/styles.css", language: "css", dirty: false,
-    content: `:root {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #0b1120;
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #475569;
-  --accent: #22d3ee;
-  --accent-hover: #06b6d4;
-  --danger: #ef4444;
-  --warning: #f59e0b;
-  --success: #34d399;
-  --border: rgba(56, 189, 248, 0.15);
+function pathJoin(base: string, name: string): string {
+  if (base.endsWith("/")) return base + name;
+  return base + "/" + name;
 }
 
-body {
-  margin: 0;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-family: "JetBrains Mono", "Fira Code", monospace;
-  -webkit-font-smoothing: antialiased;
-}
-
-*, *::before, *::after {
-  box-sizing: border-box;
-}
-`,
-  },
-  {
-    id: "f5", name: "README.md", path: "README.md", language: "markdown", dirty: false,
-    content: `# Nexus OS
-
-> Don't trust. Verify.
-
-A governed AI operating system with capability-checked agents,
-fuel budgets, and append-only audit trails.
-
-## Architecture
-
-- **Kernel**: Governance hub with Supervisor, fuel ledger, audit trail
-- **SDK**: Agent-facing API wrapping kernel
-- **Agents**: 9 governed agents (coder, designer, researcher, etc.)
-- **Desktop App**: React + Tauri with 15 built-in applications
-
-## Quick Start
-
-\`\`\`bash
-# Build the kernel
-cargo build --release
-
-# Start the desktop app
-cd app && npm run tauri dev
-\`\`\`
-
-## Phase 7: Complete OS
-
-15 built-in apps: Code Editor, Design Studio, Terminal, File Manager,
-Database Manager, API Client, Notes, Email, Project Manager, Media Studio,
-System Monitor, Marketplace, Chat Hub, Deploy Pipeline, Learning Center.
-`,
-  },
-  {
-    id: "f6", name: "lib.rs", path: "src/lib.rs", language: "rust", dirty: false,
-    content: `//! Nexus OS Kernel Library
-//!
-//! The kernel provides the core governance primitives:
-//! - Capability checking for all agent actions
-//! - Fuel budget management and tracking
-//! - Append-only audit trail with hash-chain integrity
-//! - HITL (Human-in-the-Loop) approval for sensitive operations
-
-pub mod audit;
-pub mod capabilities;
-pub mod fuel;
-pub mod governance;
-pub mod permissions;
-pub mod speculative;
-pub mod supervisor;
-
-pub use supervisor::Supervisor;
-
-/// Kernel version
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-`,
-  },
-];
-
-const FILE_TREE: FileTreeNode[] = [
-  {
-    name: "src", path: "src", type: "dir",
-    children: [
-      { name: "main.rs", path: "src/main.rs", type: "file", fileId: "f1" },
-      { name: "lib.rs", path: "src/lib.rs", type: "file", fileId: "f6" },
-      { name: "App.tsx", path: "src/App.tsx", type: "file", fileId: "f3" },
-      { name: "styles.css", path: "src/styles.css", type: "file", fileId: "f4" },
-    ],
-  },
-  {
-    name: "agents", path: "agents", type: "dir",
-    children: [
-      { name: "coder.toml", path: "agents/coder.toml", type: "file", fileId: "f2" },
-    ],
-  },
-  { name: "README.md", path: "README.md", type: "file", fileId: "f5" },
-];
+/* ================================================================== */
+/*  Agent actions (demo — simulated AI responses)                      */
+/* ================================================================== */
 
 const AGENT_ACTIONS: AgentAction[] = [
-  { id: "explain", label: "Explain", description: "Explain selected code", icon: "?" },
-  { id: "refactor", label: "Refactor", description: "Suggest improvements", icon: "↻" },
-  { id: "fix", label: "Fix Bugs", description: "Find and fix issues", icon: "⚕" },
-  { id: "test", label: "Gen Tests", description: "Generate unit tests", icon: "⊘" },
-  { id: "document", label: "Document", description: "Add documentation", icon: "≡" },
-  { id: "optimize", label: "Optimize", description: "Performance improvements", icon: "⚡" },
-  { id: "complete", label: "Complete", description: "Auto-complete code block", icon: "→" },
-  { id: "review", label: "Review", description: "Security & quality review", icon: "⛨" },
+  { id: "explain", label: "Explain (Demo)", description: "Explain selected code — simulated", icon: "?" },
+  { id: "refactor", label: "Refactor (Demo)", description: "Suggest improvements — simulated", icon: "↻" },
+  { id: "fix", label: "Fix Bugs (Demo)", description: "Find and fix issues — simulated", icon: "⚕" },
+  { id: "test", label: "Gen Tests (Demo)", description: "Generate unit tests — simulated", icon: "⊘" },
+  { id: "document", label: "Document (Demo)", description: "Add documentation — simulated", icon: "≡" },
+  { id: "optimize", label: "Optimize (Demo)", description: "Performance improvements — simulated", icon: "⚡" },
+  { id: "complete", label: "Complete (Demo)", description: "Auto-complete code block — simulated", icon: "→" },
+  { id: "review", label: "Review (Demo)", description: "Security & quality review — simulated", icon: "⛨" },
 ];
 
-const MOCK_RESPONSES: Record<string, string> = {
-  explain: "This code initializes the Nexus OS kernel supervisor and boots the system. The `Supervisor::new()` creates a new governance hub that manages agent fuel budgets, capability checks, and the append-only audit trail. The `Arc` wrapper enables shared ownership across async tasks in the tokio runtime.",
-  refactor: `// Suggestion: Extract boot into a separate function with proper error handling
-
-async fn boot(supervisor: Arc<Supervisor>) -> Result<(), KernelError> {
-    // Initialize subsystems in parallel
-    let (audit, fuel, caps) = tokio::try_join!(
-        supervisor.init_audit_trail(),
-        supervisor.init_fuel_ledger(),
-        supervisor.init_capabilities(),
-    )?;
-
-    tracing::info!(
-        audit_entries = audit.len(),
-        fuel_agents = fuel.len(),
-        capabilities = caps.len(),
-        "All subsystems initialized"
-    );
-
-    supervisor.run().await
-}`,
-  fix: "No critical bugs found. Recommendations:\n\n1. Add graceful shutdown handler:\n   `ctrlc::set_handler(|| supervisor.shutdown())`\n\n2. The `include_str!` calls will panic if files are missing — use `try_include!` or runtime loading.\n\n3. Consider adding a health check endpoint for the supervisor.",
-  test: `#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn supervisor_boots_successfully() {
-        let supervisor = Supervisor::new();
-        assert!(supervisor.boot().is_ok());
-    }
-
-    #[test]
-    fn supervisor_has_empty_fuel_ledger() {
-        let supervisor = Supervisor::new();
-        assert_eq!(supervisor.fuel_ledger().len(), 0);
-    }
-
-    #[tokio::test]
-    async fn agent_registration_requires_valid_toml() {
-        let supervisor = Supervisor::new();
-        let result = supervisor.register_agent("bad", "not valid toml");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn audit_trail_starts_empty() {
-        let supervisor = Supervisor::new();
-        assert_eq!(supervisor.audit_trail().len(), 0);
-    }
-}`,
-  document: `/// Nexus OS Kernel Entry Point
-///
-/// Initializes the governance supervisor and boots all subsystems:
-/// - Fuel ledger initialization with per-agent budgets
-/// - Audit trail hash-chain setup (append-only, tamper-evident)
-/// - Agent manifest loading from TOML declarations
-/// - Capability registry population from manifests
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - Tracing subscriber initialization fails
-/// - Agent TOML manifests are malformed
-/// - Tokio runtime creation fails
-/// - Supervisor encounters a fatal governance violation`,
-  optimize: "Performance analysis:\n\n1. Agent registration: Currently sequential. Use `tokio::spawn` for parallel manifest parsing — saves ~15ms per agent.\n\n2. Arc overhead: Negligible. The single Arc allocation is shared via clone, not deep-copied.\n\n3. Runtime: Consider `multi_thread` flavor with `worker_threads = num_cpus::get()` for production.\n\n4. Startup: Lazy-init the speculative engine (saves ~3ms). Pre-allocate audit trail buffer with `Vec::with_capacity(1024)`.",
-  complete: `    // Start REST API server
-    let api_handle = tokio::spawn({
-        let supervisor = Arc::clone(&supervisor);
-        async move {
-            let app = axum::Router::new()
-                .route("/api/agents", get(list_agents))
-                .route("/api/agents/:id/fuel", get(agent_fuel))
-                .route("/api/audit", get(audit_log))
-                .with_state(supervisor);
-
-            let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await?;
-            axum::serve(listener, app).await
-        }
-    });
-
-    // Wait for all tasks
-    tokio::select! {
-        _ = api_handle => tracing::info!("API server stopped"),
-        _ = supervisor.run() => tracing::info!("Supervisor stopped"),
-    }`,
-  review: "Security Review:\n\n✓ No unsafe code blocks\n✓ Agent capabilities are declared, not assumed\n✓ Fuel budget checked before execution\n\n⚠ Potential issues:\n1. `include_str!` embeds TOML at compile time — ensure no secrets in agent manifests\n2. No TLS configured for the runtime listener\n3. Consider adding rate limiting to agent action dispatch\n4. Audit trail should be flushed to persistent storage periodically",
+const DEMO_RESPONSES: Record<string, string> = {
+  explain: "This is a demo response. In production, the agent would analyze the selected code using a local SLM or external LLM via the governed gateway.",
+  refactor: "// Demo: Agent would suggest refactored code here.\n// Connect a real LLM provider in Settings > AI to enable.",
+  fix: "Demo: No analysis performed. Connect an AI provider for real bug detection.",
+  test: "// Demo: Agent would generate test cases here.\n// Connect a real LLM provider to enable.",
+  document: "/// Demo: Agent would generate documentation here.\n/// Connect a real LLM provider to enable.",
+  optimize: "Demo: Performance analysis requires a connected AI provider.",
+  complete: "// Demo: Code completion requires a connected AI provider.",
+  review: "Demo: Security review requires a connected AI provider.",
 };
 
 const MOCK_GIT_CHANGES: GitChange[] = [
@@ -427,15 +185,24 @@ const MOCK_AGENT_WORKERS: AgentWorker[] = [
 
 const DANGEROUS_COMMANDS = ["rm -rf", "sudo rm", "mkfs", "dd if=", ":(){:|:&};:", "chmod 777", "FORMAT", "shutdown", "reboot", "kill -9 1"];
 
+/** File extensions safe to open in the editor (text-based) */
+const EDITABLE_EXTS = new Set([
+  "rs", "ts", "tsx", "js", "jsx", "py", "json", "css", "html", "md", "toml",
+  "yaml", "yml", "sh", "bash", "sql", "go", "c", "cpp", "h", "hpp", "java",
+  "rb", "php", "swift", "kt", "dart", "vue", "svelte", "scss", "less", "xml",
+  "svg", "graphql", "gql", "dockerfile", "makefile", "tf", "proto", "r",
+  "lua", "zig", "txt", "csv", "lock", "cfg", "conf", "log", "env", "gitignore",
+]);
+
 /* ================================================================== */
 /*  Component                                                          */
 /* ================================================================== */
 
 export default function CodeEditor(): JSX.Element {
   /* ---- State ---- */
-  const [files, setFiles] = useState<VirtualFile[]>(INITIAL_FILES);
-  const [openTabs, setOpenTabs] = useState<string[]>(["f1"]);
-  const [activeTab, setActiveTab] = useState("f1");
+  const [files, setFiles] = useState<VirtualFile[]>([]);
+  const [openTabs, setOpenTabs] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState("");
   const [showExplorer, setShowExplorer] = useState(true);
   const [showAgent, setShowAgent] = useState(true);
   const [agentMode, setAgentMode] = useState<AgentPanelMode>("idle");
@@ -443,7 +210,7 @@ export default function CodeEditor(): JSX.Element {
   const [agentAction, setAgentAction] = useState("");
   const [fuelUsed, setFuelUsed] = useState(700);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set(["src", "agents"]));
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [newFileName, setNewFileName] = useState("");
   const [showNewFile, setShowNewFile] = useState(false);
   const [splitView, setSplitView] = useState<SplitView>("off");
@@ -461,6 +228,13 @@ export default function CodeEditor(): JSX.Element {
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
 
+  /* ---- Filesystem state ---- */
+  const [rootPath, setRootPath] = useState<string>("");
+  const [fileTree, setFileTree] = useState<FileTreeNode[]>([]);
+  const [fsLoading, setFsLoading] = useState(false);
+  const [fsError, setFsError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const termRef = useRef<HTMLDivElement>(null);
   const termLineId = useRef(2);
@@ -475,6 +249,130 @@ export default function CodeEditor(): JSX.Element {
     setAuditLog((prev) => [{ ts: Date.now(), event, detail }, ...prev].slice(0, 100));
   }, []);
 
+  /* ================================================================ */
+  /*  Filesystem integration                                           */
+  /* ================================================================ */
+
+  /** Load a directory listing from the Tauri backend and build tree nodes */
+  const loadDirEntries = useCallback(async (dirPath: string): Promise<FileTreeNode[]> => {
+    if (!HAS_DESKTOP) return [];
+    try {
+      const raw: string = await invoke("file_manager_list", { path: dirPath });
+      const entries: FsEntry[] = JSON.parse(raw);
+      // Sort: dirs first, then alphabetical
+      entries.sort((a, b) => {
+        if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      return entries
+        .filter((e) => !e.name.startsWith(".")) // hide dotfiles by default
+        .map((e) => ({
+          name: e.name,
+          path: e.path,
+          type: e.is_dir ? "dir" as const : "file" as const,
+        }));
+    } catch {
+      return [];
+    }
+  }, []);
+
+  /** Initialize: determine root path and load top-level tree */
+  useEffect(() => {
+    if (!HAS_DESKTOP) {
+      setFsError("Running in browser mode — files are not persisted.");
+      return;
+    }
+    (async () => {
+      setFsLoading(true);
+      try {
+        const home: string = await invoke("file_manager_home");
+        setRootPath(home);
+        const nodes = await loadDirEntries(home);
+        setFileTree(nodes);
+        appendAudit("EditorInit", `Loaded ${home}`);
+      } catch {
+        setFsError("Could not load filesystem. Tauri backend unavailable.");
+      } finally {
+        setFsLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Expand a directory in the tree — lazily load its children */
+  const expandDir = useCallback(async (dirPath: string) => {
+    const children = await loadDirEntries(dirPath);
+    setFileTree((prev) => {
+      // Recursively find the node and attach children
+      function attach(nodes: FileTreeNode[]): FileTreeNode[] {
+        return nodes.map((n) => {
+          if (n.path === dirPath) return { ...n, children };
+          if (n.children) return { ...n, children: attach(n.children) };
+          return n;
+        });
+      }
+      return attach(prev);
+    });
+  }, [loadDirEntries]);
+
+  /** Open a real file from the filesystem */
+  const openRealFile = useCallback(async (filePath: string) => {
+    // Check if already loaded
+    const existing = files.find((f) => f.path === filePath);
+    if (existing) {
+      if (!openTabs.includes(existing.id)) setOpenTabs((prev) => [...prev, existing.id]);
+      setActiveTab(existing.id);
+      appendAudit("FileOpen", existing.name);
+      return;
+    }
+
+    const name = pathBasename(filePath);
+    const ext = name.split(".").pop()?.toLowerCase() ?? "";
+    if (!EDITABLE_EXTS.has(ext) && ext !== "") {
+      setFsError(`Cannot open binary file: ${name}`);
+      return;
+    }
+
+    try {
+      let content: string;
+      if (HAS_DESKTOP) {
+        content = await invoke("file_manager_read", { path: filePath });
+      } else {
+        content = "";
+      }
+      const id = `fs_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const lang = detectLanguage(name);
+      const newFile: VirtualFile = { id, name, path: filePath, language: lang, content, dirty: false };
+      setFiles((prev) => [...prev, newFile]);
+      setOpenTabs((prev) => [...prev, id]);
+      setActiveTab(id);
+      appendAudit("FileOpen", filePath);
+    } catch (e) {
+      setFsError(`Failed to read ${filePath}: ${e}`);
+    }
+  }, [files, openTabs, appendAudit]);
+
+  /** Save current file to disk */
+  const saveFile = useCallback(async () => {
+    if (!activeFile) return;
+    if (!HAS_DESKTOP) {
+      // Browser mode — just mark clean
+      setFiles((prev) => prev.map((f) => (f.id === activeTab ? { ...f, dirty: false } : f)));
+      appendAudit("FileSave", `${activeFile.name} (in-memory only)`);
+      return;
+    }
+    setSaving(true);
+    try {
+      await invoke("file_manager_write", { path: activeFile.path, content: activeFile.content });
+      setFiles((prev) => prev.map((f) => (f.id === activeTab ? { ...f, dirty: false } : f)));
+      appendAudit("FileSave", activeFile.path);
+    } catch (e) {
+      setFsError(`Failed to save ${activeFile.path}: ${e}`);
+    } finally {
+      setSaving(false);
+    }
+  }, [activeFile, activeTab, appendAudit]);
+
   /* ---- File operations ---- */
   function openFile(fileId: string): void {
     if (!openTabs.includes(fileId)) setOpenTabs((prev) => [...prev, fileId]);
@@ -486,6 +384,7 @@ export default function CodeEditor(): JSX.Element {
     setOpenTabs((prev) => {
       const next = prev.filter((id) => id !== fileId);
       if (activeTab === fileId && next.length > 0) setActiveTab(next[next.length - 1]);
+      if (next.length === 0) setActiveTab("");
       return next;
     });
   }
@@ -495,23 +394,19 @@ export default function CodeEditor(): JSX.Element {
     setFiles((prev) => prev.map((f) => (f.id === activeTab ? { ...f, content: value, dirty: true } : f)));
   }
 
-  function handleSave(): void {
-    if (!activeFile) return;
-    setFiles((prev) => prev.map((f) => (f.id === activeTab ? { ...f, dirty: false } : f)));
-    appendAudit("FileSave", activeFile.name);
-  }
-
   function handleCreateFile(): void {
     if (!newFileName.trim()) return;
+    const name = newFileName.trim();
+    const filePath = rootPath ? pathJoin(rootPath, name) : name;
     const id = `f${Date.now()}`;
-    const lang = detectLanguage(newFileName);
-    const newFile: VirtualFile = { id, name: newFileName.trim(), path: newFileName.trim(), language: lang, content: "", dirty: false };
+    const lang = detectLanguage(name);
+    const newFile: VirtualFile = { id, name, path: filePath, language: lang, content: "", dirty: true };
     setFiles((prev) => [...prev, newFile]);
     setOpenTabs((prev) => [...prev, id]);
     setActiveTab(id);
     setNewFileName("");
     setShowNewFile(false);
-    appendAudit("FileCreate", newFileName.trim());
+    appendAudit("FileCreate", name);
   }
 
   function handleDeleteFile(fileId: string): void {
@@ -613,7 +508,7 @@ export default function CodeEditor(): JSX.Element {
 
     setTimeout(() => {
       setFuelUsed((prev) => prev + cost);
-      setAgentResult(MOCK_RESPONSES[action.id] ?? "Analysis complete. No issues found.");
+      setAgentResult(DEMO_RESPONSES[action.id] ?? "Analysis complete. No issues found.");
       setAgentMode("result");
       appendAudit("AgentComplete", `${action.label} — ${cost} fuel consumed`);
     }, 600 + Math.random() * 800);
@@ -650,7 +545,7 @@ export default function CodeEditor(): JSX.Element {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
       const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.key === "s") { e.preventDefault(); handleSave(); }
+      if (mod && e.key === "s") { e.preventDefault(); void saveFile(); }
       if (mod && e.key === "b") { e.preventDefault(); setShowExplorer((p) => !p); }
       if (mod && e.key === "j") { e.preventDefault(); setShowAgent((p) => !p); }
       if (mod && e.key === "n") { e.preventDefault(); setShowNewFile(true); }
@@ -672,7 +567,13 @@ export default function CodeEditor(): JSX.Element {
   function toggleDir(path: string): void {
     setExpandedDirs((prev) => {
       const next = new Set(prev);
-      if (next.has(path)) next.delete(path); else next.add(path);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+        // Lazily load directory contents on expand
+        void expandDir(path);
+      }
       return next;
     });
   }
@@ -708,9 +609,9 @@ export default function CodeEditor(): JSX.Element {
           </div>
         );
       }
-      const isActive = node.fileId === activeTab;
+      const isActive = files.some((f) => f.path === node.path && f.id === activeTab);
       return (
-        <button key={node.fileId ?? node.path} type="button" className={`ce-tree-item ce-tree-file ${isActive ? "ce-tree-active" : ""}`} style={{ paddingLeft: `${depth * 14 + 8}px` }} onClick={() => node.fileId && openFile(node.fileId)}>
+        <button key={node.path} type="button" className={`ce-tree-item ce-tree-file ${isActive ? "ce-tree-active" : ""}`} style={{ paddingLeft: `${depth * 14 + 8}px` }} onClick={() => void openRealFile(node.path)}>
           <span className="ce-tree-lang">{langIcon(detectLanguage(node.name))}</span>
           <span className="ce-tree-name">{node.name}</span>
         </button>
@@ -744,11 +645,12 @@ export default function CodeEditor(): JSX.Element {
           <div className="ce-fuel-badge">
             <span className="ce-fuel-label">FUEL</span>
             <div className="ce-fuel-bar-mini">
-              <div className="ce-fuel-bar-fill" style={{ width: `${fuelPct}%`, background: fuelPct > 50 ? "#22d3ee" : fuelPct > 20 ? "#f59e0b" : "#ef4444" }} />
+              <div className="ce-fuel-bar-fill" style={{ width: `${fuelPct}%`, background: fuelPct > 50 ? "var(--nexus-accent)" : fuelPct > 20 ? "#f59e0b" : "#ef4444" }} />
             </div>
             <span className="ce-fuel-value">{fuelRemaining.toLocaleString()}</span>
           </div>
           <div className="ce-toolbar-btns">
+            <button type="button" className="ce-tool-btn" onClick={() => void saveFile()} disabled={!activeFile?.dirty || saving} title="Save (Ctrl+S)">{saving ? "..." : "Save"}</button>
             <button type="button" className={`ce-tool-btn ${showSearch ? "ce-tool-active" : ""}`} onClick={() => setShowSearch((p) => !p)} title="Search (Ctrl+F)">⌕</button>
             <button type="button" className={`ce-tool-btn ${showExplorer ? "ce-tool-active" : ""}`} onClick={() => setShowExplorer((p) => !p)} title="Explorer (Ctrl+B)">☰</button>
             <button type="button" className={`ce-tool-btn ${splitView !== "off" ? "ce-tool-active" : ""}`} onClick={() => setSplitView((p) => p === "off" ? "suggestion" : "off")} title="Split View (Ctrl+\)">⊞</button>
@@ -759,6 +661,14 @@ export default function CodeEditor(): JSX.Element {
           </div>
         </div>
       </header>
+
+      {/* ---- Browser mode / error notice ---- */}
+      {fsError && (
+        <div className="ce-notice-bar">
+          <span>{fsError}</span>
+          <button type="button" className="ce-notice-close" onClick={() => setFsError(null)}>×</button>
+        </div>
+      )}
 
       {/* ---- Search bar ---- */}
       {showSearch && (
@@ -802,8 +712,13 @@ export default function CodeEditor(): JSX.Element {
               </div>
             )}
             <div className="ce-tree">
-              {renderTree(FILE_TREE)}
-              {files.filter((f) => !INITIAL_FILES.some((i) => i.id === f.id)).map((f) => (
+              {fsLoading && <div className="ce-tree-loading">Loading...</div>}
+              {!fsLoading && fileTree.length > 0 && renderTree(fileTree)}
+              {!fsLoading && !HAS_DESKTOP && (
+                <div className="ce-tree-notice">Browser mode — no filesystem</div>
+              )}
+              {/* User-created files not yet on disk */}
+              {files.filter((f) => f.id.startsWith("f")).map((f) => (
                 <div key={f.id} className="ce-tree-item-row">
                   <button type="button" className={`ce-tree-item ce-tree-file ${f.id === activeTab ? "ce-tree-active" : ""}`} onClick={() => openFile(f.id)}>
                     <span className="ce-tree-lang">{langIcon(f.language)}</span>
@@ -868,14 +783,14 @@ export default function CodeEditor(): JSX.Element {
                           "editor.foreground": "#e2e8f0",
                           "editor.lineHighlightBackground": "#1e293b",
                           "editor.selectionBackground": "#334155",
-                          "editorCursor.foreground": "#22d3ee",
+                          "editorCursor.foreground": "var(--nexus-accent)",
                           "editorLineNumber.foreground": "#475569",
                           "editorLineNumber.activeForeground": "#94a3b8",
                           "editor.selectionHighlightBackground": "#334155aa",
                           "editorIndentGuide.background": "#1e293b",
                           "editorIndentGuide.activeBackground": "#334155",
-                          "editorBracketMatch.background": "#22d3ee22",
-                          "editorBracketMatch.border": "#22d3ee44",
+                          "editorBracketMatch.background": "var(--nexus-accent)22",
+                          "editorBracketMatch.border": "var(--nexus-accent)44",
                         },
                       });
                     }}
@@ -1030,7 +945,7 @@ export default function CodeEditor(): JSX.Element {
                         </div>
                         <div className="ce-worker-progress-row">
                           <div className="ce-worker-bar">
-                            <div className="ce-worker-bar-fill" style={{ width: `${w.progress}%`, background: w.status === "done" ? "#34d399" : w.status === "error" ? "#ef4444" : "#22d3ee" }} />
+                            <div className="ce-worker-bar-fill" style={{ width: `${w.progress}%`, background: w.status === "done" ? "#34d399" : w.status === "error" ? "#ef4444" : "var(--nexus-accent)" }} />
                           </div>
                           <span className="ce-worker-pct">{w.progress}%</span>
                           <span className="ce-worker-fuel">{w.fuelUsed} fuel</span>
@@ -1048,7 +963,7 @@ export default function CodeEditor(): JSX.Element {
         {showAgent && (
           <aside className="ce-agent">
             <div className="ce-agent-header">
-              <span className="ce-agent-title">AGENT ASSIST</span>
+              <span className="ce-agent-title">AGENT ASSIST <span style={{ fontSize: "0.7em", opacity: 0.6 }}>(Demo)</span></span>
               <span className={`ce-agent-status ce-agent-status-${agentMode}`}>
                 {agentMode === "thinking" ? "thinking..." : agentMode === "result" ? "ready" : "idle"}
               </span>

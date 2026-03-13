@@ -341,6 +341,58 @@ export interface WsEvent {
   timestamp: number;
 }
 
+// ── RAG types ────────────────────────────────────────────────────────────────
+
+export interface DocumentInfo {
+  path: string;
+  format: string;
+  chunk_count: number;
+  indexed_at: string;
+}
+
+export interface SearchResult {
+  chunk_id: string;
+  doc_path: string;
+  content: string;
+  score: number;
+}
+
+export interface ChatResponse {
+  answer: string;
+  sources: SearchResult[];
+}
+
+export interface DocumentGovernance {
+  document_id: string;
+  access_log: AuditEvent[];
+  retention_policy: string;
+}
+
+// ── Time Machine types ──────────────────────────────────────────────────────
+
+export interface Checkpoint {
+  id: string;
+  label: string;
+  timestamp: number;
+  agent_id: string | null;
+  change_count: number;
+  undone: boolean;
+}
+
+export interface UndoResult {
+  checkpoint_id: string;
+  label: string;
+  actions_applied: number;
+  files_restored: string[];
+}
+
+export interface RedoResult {
+  checkpoint_id: string;
+  label: string;
+  actions_applied: number;
+  files_restored: string[];
+}
+
 // ── Client options ───────────────────────────────────────────────────────────
 
 export interface NexusClientOptions {

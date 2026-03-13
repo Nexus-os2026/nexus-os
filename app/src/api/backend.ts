@@ -3,12 +3,15 @@ import type {
   ActivityMessage,
   AgentCardSummary,
   AgentSummary,
+  AuditChainStatusRow,
   AuditEventRow,
   AvailableModel,
   BrowserHistoryEntry,
   BrowserNavigateResult,
   CapabilityRequest,
   ChatResponse,
+  ComplianceAgentRow,
+  ComplianceStatusRow,
   FirewallPatterns,
   FirewallStatus,
   HardwareInfo,
@@ -295,6 +298,22 @@ export function getFirewallStatus(): Promise<FirewallStatus> {
 
 export function getFirewallPatterns(): Promise<FirewallPatterns> {
   return invokeDesktop<FirewallPatterns>("get_firewall_patterns");
+}
+
+// ── Compliance Dashboard API ──
+
+export function getComplianceStatus(): Promise<ComplianceStatusRow> {
+  return invokeDesktop<ComplianceStatusRow>("get_compliance_status");
+}
+
+export function getComplianceAgents(): Promise<ComplianceAgentRow[]> {
+  return invokeDesktop<ComplianceAgentRow[]>("get_compliance_agents");
+}
+
+// ── Audit Chain API ──
+
+export function getAuditChainStatus(): Promise<AuditChainStatusRow> {
+  return invokeDesktop<AuditChainStatusRow>("get_audit_chain_status");
 }
 
 // ── Marketplace API ──
@@ -625,6 +644,10 @@ export function getSystemSpecs(): Promise<string> {
   return invokeDesktop<string>("get_system_specs");
 }
 
+export function getLiveSystemMetrics(): Promise<string> {
+  return invokeDesktop<string>("get_live_system_metrics");
+}
+
 // ── Time Machine API ──
 
 export function timeMachineListCheckpoints(): Promise<string> {
@@ -673,5 +696,83 @@ export function voiceTranscribe(audioBase64: string): Promise<string> {
   return invokeDesktop<string>("voice_transcribe", {
     audioBase64,
     audio_base64: audioBase64,
+  });
+}
+
+// ── Email Client API ──
+
+export function emailList(): Promise<string> {
+  return invokeDesktop<string>("email_list");
+}
+
+export function emailSave(id: string, dataJson: string): Promise<string> {
+  return invokeDesktop<string>("email_save", { id, data_json: dataJson });
+}
+
+export function emailDelete(id: string): Promise<string> {
+  return invokeDesktop<string>("email_delete", { id });
+}
+
+// ── Project Manager API ──
+
+export function projectList(): Promise<string> {
+  return invokeDesktop<string>("project_list");
+}
+
+export function projectGet(id: string): Promise<string> {
+  return invokeDesktop<string>("project_get", { id });
+}
+
+export function projectSave(id: string, dataJson: string): Promise<string> {
+  return invokeDesktop<string>("project_save", { id, data_json: dataJson });
+}
+
+export function projectDelete(id: string): Promise<string> {
+  return invokeDesktop<string>("project_delete", { id });
+}
+
+// ── Factory Pipeline API ──
+
+export function factoryCreateProject(
+  name: string,
+  language: string,
+  sourceDir: string,
+): Promise<string> {
+  return invokeDesktop<string>("factory_create_project", {
+    name,
+    language,
+    source_dir: sourceDir,
+  });
+}
+
+export function factoryBuildProject(projectId: string): Promise<string> {
+  return invokeDesktop<string>("factory_build_project", {
+    projectId,
+    project_id: projectId,
+  });
+}
+
+export function factoryTestProject(projectId: string): Promise<string> {
+  return invokeDesktop<string>("factory_test_project", {
+    projectId,
+    project_id: projectId,
+  });
+}
+
+export function factoryRunPipeline(projectId: string): Promise<string> {
+  return invokeDesktop<string>("factory_run_pipeline", {
+    projectId,
+    project_id: projectId,
+  });
+}
+
+export function factoryListProjects(): Promise<string> {
+  return invokeDesktop<string>("factory_list_projects");
+}
+
+export function factoryGetBuildHistory(projectId: string): Promise<string> {
+  return invokeDesktop<string>("factory_get_build_history", {
+    projectId,
+    project_id: projectId,
   });
 }

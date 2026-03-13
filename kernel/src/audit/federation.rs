@@ -90,7 +90,7 @@ impl FederatedAuditTrail {
             .events()
             .iter()
             .find(|e| e.event_id == event_id)
-            .expect("just appended")
+            .ok_or(super::AuditError::SerializationFailed)?
             .clone();
 
         let cross_references: Vec<CrossRef> = self
@@ -218,8 +218,14 @@ fn recompute_event_hash(event: &AuditEvent) -> String {
         payload: &event.payload,
     };
 
-    let serialized = serde_json::to_vec(&canonical)
-        .expect("audit event serialization must not fail for integrity");
+    let serialized = match serde_json::to_vec(&canonical) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            // Return a deterministic fallback hash that will never match a valid event,
+            // causing integrity verification to fail (fail-closed).
+            return "0000000000000000000000000000000000000000000000000000000000000001".to_string();
+        }
+    };
 
     let mut hasher = Sha256::new();
     hasher.update(event.previous_hash.as_bytes());

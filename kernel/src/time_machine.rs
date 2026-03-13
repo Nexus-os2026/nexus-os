@@ -255,10 +255,11 @@ impl TimeMachine {
         CheckpointBuilder::new(label, agent_id, self.config.max_file_size_bytes)
     }
 
+    /// Commit a checkpoint. Returns `(id, evicted_count)`.
     pub fn commit_checkpoint(
         &mut self,
         checkpoint: Checkpoint,
-    ) -> Result<String, TimeMachineError> {
+    ) -> Result<(String, usize), TimeMachineError> {
         let id = checkpoint.id.clone();
         self.checkpoints.push(checkpoint);
 
@@ -266,11 +267,13 @@ impl TimeMachine {
         self.redo_stack.clear();
 
         // Evict oldest if over capacity.
+        let mut evicted = 0;
         while self.checkpoints.len() > self.config.max_checkpoints {
             self.checkpoints.remove(0);
+            evicted += 1;
         }
 
-        Ok(id)
+        Ok((id, evicted))
     }
 
     pub fn undo(&mut self) -> Result<(Checkpoint, Vec<UndoAction>), TimeMachineError> {
@@ -285,7 +288,7 @@ impl TimeMachine {
         let cp = self.checkpoints[idx].clone();
 
         let actions = reverse_changes(&cp.changes);
-        apply_file_actions(&actions);
+        apply_file_actions(&actions)?;
 
         let non_file = actions.into_iter().filter(|a| !is_file_action(a)).collect();
 
@@ -302,7 +305,7 @@ impl TimeMachine {
         cp.undone = false;
 
         let actions = forward_changes(&cp.changes);
-        apply_file_actions(&actions);
+        apply_file_actions(&actions)?;
 
         let non_file = actions.into_iter().filter(|a| !is_file_action(a)).collect();
 
@@ -331,7 +334,7 @@ impl TimeMachine {
         let cp = self.checkpoints[idx].clone();
 
         let actions = reverse_changes(&cp.changes);
-        apply_file_actions(&actions);
+        apply_file_actions(&actions)?;
 
         let non_file = actions.into_iter().filter(|a| !is_file_action(a)).collect();
 
@@ -432,7 +435,8 @@ fn is_file_action(action: &UndoAction) -> bool {
     )
 }
 
-fn apply_file_actions(actions: &[UndoAction]) {
+fn apply_file_actions(actions: &[UndoAction]) -> Result<(), TimeMachineError> {
+    let mut errors = Vec::new();
     for action in actions {
         match action {
             UndoAction::RestoreFile {
@@ -440,16 +444,28 @@ fn apply_file_actions(actions: &[UndoAction]) {
                 content: Some(bytes),
             } => {
                 if let Some(parent) = std::path::Path::new(path).parent() {
-                    let _ = std::fs::create_dir_all(parent);
+                    if let Err(e) = std::fs::create_dir_all(parent) {
+                        errors.push(format!("create_dir_all {}: {e}", parent.display()));
+                        continue;
+                    }
                 }
-                let _ = std::fs::write(path, bytes);
+                if let Err(e) = std::fs::write(path, bytes) {
+                    errors.push(format!("write {path}: {e}"));
+                }
             }
             UndoAction::RestoreFile { content: None, .. } => {}
             UndoAction::DeleteFile { path } => {
-                let _ = std::fs::remove_file(path);
+                if let Err(e) = std::fs::remove_file(path) {
+                    errors.push(format!("remove {path}: {e}"));
+                }
             }
             _ => {}
         }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(TimeMachineError::Io(errors.join("; ")))
     }
 }
 
@@ -488,7 +504,8 @@ mod tests {
         assert_eq!(cp.changes.len(), 2);
         assert!(!cp.undone);
 
-        let id = tm.commit_checkpoint(cp).unwrap();
+        let (id, evicted) = tm.commit_checkpoint(cp).unwrap();
+        assert_eq!(evicted, 0);
         assert_eq!(tm.checkpoint_count(), 1);
         assert!(tm.get_checkpoint(&id).is_some());
     }
@@ -585,7 +602,7 @@ mod tests {
             b"after".to_vec(),
         );
         let cp = builder.build();
-        let id = tm.commit_checkpoint(cp).unwrap();
+        let (id, _) = tm.commit_checkpoint(cp).unwrap();
 
         // Simulate the write.
         std::fs::write(&file_path, b"after").unwrap();
@@ -621,7 +638,7 @@ mod tests {
                     json!(90 - i * 10),
                 );
                 let cp = builder.build();
-                tm.commit_checkpoint(cp).unwrap()
+                tm.commit_checkpoint(cp).unwrap().0
             })
             .collect();
 
@@ -651,7 +668,8 @@ mod tests {
         for i in 0..5 {
             let builder = tm.begin_checkpoint(&format!("cp{i}"), None);
             let cp = builder.build();
-            ids.push(tm.commit_checkpoint(cp).unwrap());
+            let (id, _) = tm.commit_checkpoint(cp).unwrap();
+            ids.push(id);
         }
 
         assert_eq!(tm.checkpoint_count(), 3);
@@ -821,7 +839,7 @@ mod tests {
         let mut tm = TimeMachine::new(small_config());
         let builder = tm.begin_checkpoint("cp", None);
         let cp = builder.build();
-        let id = tm.commit_checkpoint(cp).unwrap();
+        let (id, _) = tm.commit_checkpoint(cp).unwrap();
 
         tm.undo_checkpoint(&id).unwrap();
         let result = tm.undo_checkpoint(&id);

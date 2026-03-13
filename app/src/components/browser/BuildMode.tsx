@@ -24,8 +24,8 @@ function delay(ms: number): Promise<void> {
 }
 
 const ROLE_COLORS: Record<string, string> = {
-  supervisor: "#00ffd5",
-  coder: "#22d3ee",
+  supervisor: "var(--nexus-accent)",
+  coder: "var(--nexus-accent)",
   designer: "#f472b6",
 };
 
@@ -107,7 +107,7 @@ function generateMockCode(description: string): string[] {
       "    .hero h1 {\n      font-size: 3.5rem;\n      font-weight: 800;\n      margin-bottom: 1rem;\n",
     );
     chunks.push(
-      "      background: linear-gradient(to right, #00ffd5, #3b82f6);\n      -webkit-background-clip: text;\n      -webkit-text-fill-color: transparent;\n    }\n",
+      "      background: linear-gradient(to right, var(--nexus-accent), #3b82f6);\n      -webkit-background-clip: text;\n      -webkit-text-fill-color: transparent;\n    }\n",
     );
     chunks.push(
       "    .hero p {\n      font-size: 1.25rem;\n      opacity: 0.85;\n      max-width: 600px;\n      margin-bottom: 2rem;\n    }\n",
@@ -119,10 +119,10 @@ function generateMockCode(description: string): string[] {
     "    .btn {\n      padding: 0.75rem 2rem;\n      border: none;\n      border-radius: 8px;\n      font-size: 1rem;\n      font-weight: 600;\n      cursor: pointer;\n",
   );
   chunks.push(
-    "      background: #00ffd5;\n      color: #0f0c29;\n      transition: transform 0.2s, box-shadow 0.2s;\n    }\n",
+    "      background: var(--nexus-accent);\n      color: #0f0c29;\n      transition: transform 0.2s, box-shadow 0.2s;\n    }\n",
   );
   chunks.push(
-    "    .btn:hover {\n      transform: translateY(-2px);\n      box-shadow: 0 8px 25px rgba(0, 255, 213, 0.3);\n    }\n",
+    "    .btn:hover {\n      transform: translateY(-2px);\n      box-shadow: 0 8px 25px rgba(0, 255, 157, 0.3);\n    }\n",
   );
 
   // Features section

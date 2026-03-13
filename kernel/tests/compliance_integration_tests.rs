@@ -437,7 +437,7 @@ fn retention_policy_purges_expired_data() {
     populate_trail(held_agent, &mut trail, 2);
 
     // Age all events to make them expired
-    for event in trail.events_mut() {
+    for event in trail.events_mut_for_testing() {
         event.timestamp = 0; // very old
     }
 
@@ -700,7 +700,7 @@ fn compliance_monitor_detects_broken_audit_chain() {
         .expect("audit: fail-closed");
 
     // Tamper with the chain
-    trail.events_mut()[0].payload = json!({"tampered": true});
+    trail.events_mut_for_testing()[0].payload = json!({"tampered": true});
 
     let mut id_mgr = IdentityManager::in_memory();
     id_mgr.get_or_create(agent.agent_id).unwrap();

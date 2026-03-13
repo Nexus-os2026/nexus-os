@@ -2,6 +2,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./terminal.css";
 
 /* ================================================================== */
+/*  Tauri invoke                                                       */
+/* ================================================================== */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const invoke: (cmd: string, args?: Record<string, unknown>) => Promise<any> =
+  typeof window !== "undefined" && "__TAURI__" in window
+    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__TAURI__.invoke
+    : async (_cmd: string, _args?: Record<string, unknown>) =>
+        JSON.stringify({
+          stdout: "Tauri backend not available — running in browser mode.\n",
+          stderr: "",
+          exit_code: 0,
+          duration_ms: 0,
+          tool: "fallback",
+          needs_approval: false,
+          fuel_cost: 0,
+        });
+
+/* ================================================================== */
 /*  Types                                                              */
 /* ================================================================== */
 
@@ -38,10 +58,20 @@ interface AgentSuggestion {
   reason: string;
 }
 
+interface TerminalResult {
+  stdout: string;
+  stderr: string;
+  exit_code: number;
+  duration_ms: number;
+  tool: string;
+  needs_approval: boolean;
+  fuel_cost: number;
+}
+
 type ApprovalState = { cmd: string; reason: string } | null;
 
 /* ================================================================== */
-/*  Constants                                                          */
+/*  Constants — Defense-in-depth frontend checks                       */
 /* ================================================================== */
 
 const BLOCKED_PATTERNS = [
@@ -77,380 +107,46 @@ const WARN_PATTERNS = [
   { pattern: /pip\s+install\b(?!.*--user)/i, reason: "Global package install" },
 ];
 
-/* Mock filesystem */
-const MOCK_FS: Record<string, string[]> = {
-  "/home/nexus/NEXUS/nexus-os": ["src/", "agents/", "app/", "crates/", "Cargo.toml", "Cargo.lock", "CLAUDE.md", "README.md", "deny.toml"],
-  "/home/nexus/NEXUS/nexus-os/src": ["main.rs", "lib.rs"],
-  "/home/nexus/NEXUS/nexus-os/agents": ["coder/", "designer/", "researcher/", "reviewer/"],
-  "/home/nexus/NEXUS/nexus-os/app": ["src/", "public/", "package.json", "tsconfig.json", "vite.config.ts"],
-  "/home/nexus/NEXUS/nexus-os/app/src": ["App.tsx", "main.tsx", "pages/", "components/", "api/"],
-  "/home/nexus/NEXUS/nexus-os/crates": ["nexus-kernel/", "nexus-sdk/", "nexus-audit/", "nexus-fuel/"],
-};
-
-const MOCK_PROCESSES = `  PID TTY      STAT   TIME COMMAND
-    1 ?        Ss     0:03 nexus-kernel
-   42 ?        Sl     0:12 nexus-supervisor
-  101 ?        S      0:05 agent:coder [L3]
-  102 ?        S      0:03 agent:designer [L2]
-  103 ?        S      0:01 agent:researcher [L3]
-  201 ?        Sl     0:08 nexus-api-server :3001
-  301 pts/0    Ss     0:00 nexus-shell`;
-
-const ENV_VARS: Record<string, string> = {
-  NEXUS_VERSION: "7.0.0",
-  NEXUS_HOME: "/home/nexus/NEXUS/nexus-os",
-  SHELL: "/bin/nexus-sh",
-  USER: "nexus",
-  HOME: "/home/nexus",
-  CARGO_HOME: "/home/nexus/.cargo",
-  RUSTUP_HOME: "/home/nexus/.rustup",
-  NODE_VERSION: "20.11.0",
-  RUST_EDITION: "2021",
-  GOVERNANCE_LEVEL: "L3",
-  FUEL_BUDGET: "10000",
-  AUDIT_MODE: "append-only",
-};
-
-/* ================================================================== */
-/*  Mock command executor                                              */
-/* ================================================================== */
-
-function executeCommand(cmd: string, cwd: string): { lines: string[]; type: TermLine["type"] } {
-  const parts = cmd.trim().split(/\s+/);
-  const base = parts[0];
-
-  switch (base) {
-    case "ls": {
-      const target = parts.includes("-la") || parts.includes("-l") || parts.includes("-al") ? "long" : "short";
-      const dir = parts.find((p) => p !== "ls" && !p.startsWith("-")) ?? cwd;
-      const fullPath = dir.startsWith("/") ? dir : `${cwd}/${dir}`.replace(/\/+/g, "/");
-      const contents = MOCK_FS[fullPath] ?? MOCK_FS[cwd];
-      if (!contents) return { lines: [`ls: cannot access '${dir}': No such file or directory`], type: "error" };
-      if (target === "long") {
-        const longLines = contents.map((f) => {
-          const isDir = f.endsWith("/");
-          const perms = isDir ? "drwxr-xr-x" : "-rw-r--r--";
-          const size = isDir ? "4096" : `${Math.floor(Math.random() * 50000) + 500}`;
-          return `${perms}  nexus nexus ${size.padStart(6)} Mar 10 14:${String(Math.floor(Math.random() * 60)).padStart(2, "0")} ${f}`;
-        });
-        return { lines: [`total ${contents.length * 4}`, ...longLines], type: "output" };
-      }
-      return { lines: [contents.join("  ")], type: "output" };
-    }
-    case "cd": {
-      const target = parts[1] ?? "~";
-      if (target === "~" || target === "$HOME") return { lines: [], type: "output" };
-      return { lines: [], type: "output" };
-    }
-    case "pwd":
-      return { lines: [cwd], type: "output" };
-    case "whoami":
-      return { lines: ["nexus (governed, L3, fuel: 10000)"], type: "output" };
-    case "echo":
-      return { lines: [parts.slice(1).join(" ").replace(/['"]/g, "")], type: "output" };
-    case "cat": {
-      const file = parts[1];
-      if (!file) return { lines: ["cat: missing operand"], type: "error" };
-      if (file === "CLAUDE.md") return { lines: ["# CLAUDE.md - Nexus OS Development Guide", "", "> Read automatically by Claude Code.", "", "## Project Identity", "- Name: Nexus OS", "- Version: 7.0.0", "- Tagline: Don't trust. Verify."], type: "output" };
-      if (file === "Cargo.toml") return { lines: ['[workspace]', 'resolver = "2"', 'members = [', '  "crates/*",', '  "agents/*",', ']', "", "[workspace.package]", 'version = "7.0.0"', 'edition = "2021"'], type: "output" };
-      return { lines: [`cat: ${file}: simulated content`], type: "output" };
-    }
-    case "clear":
-      return { lines: ["__CLEAR__"], type: "system" };
-    case "date":
-      return { lines: [new Date().toString()], type: "output" };
-    case "uptime":
-      return { lines: [" 14:32:01 up 47 days, 3:21,  1 user,  load average: 0.42, 0.38, 0.35"], type: "output" };
-    case "uname":
-      return { lines: ["NexusOS 7.0.0 x86_64 governed-kernel"], type: "output" };
-    case "df":
-      return { lines: [
-        "Filesystem     1K-blocks      Used Available Use% Mounted on",
-        "nexus-root     512000000  89234567 422765433  18% /",
-        "nexus-agents    10240000   3456789   6783211  34% /agents",
-        "nexus-audit      2048000    987654   1060346  49% /audit",
-      ], type: "output" };
-    case "free":
-      return { lines: [
-        "              total        used        free      shared  buff/cache   available",
-        "Mem:       32768000    12345678     8901234      512345    11521088    19876543",
-        "Swap:       8192000           0     8192000",
-      ], type: "output" };
-    case "ps":
-      return { lines: MOCK_PROCESSES.split("\n"), type: "output" };
-    case "top":
-      return { lines: [
-        "NexusOS 7.0 — governed process monitor",
-        "",
-        "Tasks:   7 total,   4 running,   3 sleeping",
-        "Agents:  3 active,  fuel avg: 78%",
-        "%Cpu(s):  12.3 us,   2.1 sy,   0.0 ni,  85.1 id",
-        "MiB Mem:  32000.0 total,  12345.6 used,  8901.2 free",
-        "",
-        "  PID  AGENT         CPU%  MEM%  FUEL%  STATUS",
-        "  101  coder         8.2   3.4   72%    working",
-        "  102  designer      2.1   1.8   91%    idle",
-        "  103  researcher    5.7   2.9   65%    working",
-      ], type: "output" };
-    case "env":
-    case "printenv": {
-      const key = parts[1];
-      if (key) return { lines: [ENV_VARS[key] ?? `${key}: not set`], type: "output" };
-      return { lines: Object.entries(ENV_VARS).map(([k, v]) => `${k}=${v}`), type: "output" };
-    }
-    case "history":
-      return { lines: ["(see COMMAND HISTORY panel on the right →)"], type: "system" };
-    case "help":
-      return { lines: [
-        "Nexus OS Terminal — Governed Shell v7.0",
-        "",
-        "Built-in commands:",
-        "  ls [-la] [dir]    List directory contents",
-        "  cd [dir]          Change directory",
-        "  pwd               Print working directory",
-        "  cat [file]        Display file contents",
-        "  echo [text]       Print text",
-        "  env / printenv    Environment variables",
-        "  ps / top          Process list / monitor",
-        "  df / free         Disk / memory usage",
-        "  date / uptime     System time / uptime",
-        "  whoami / uname    User / system info",
-        "  clear             Clear terminal",
-        "  history           Command history",
-        "  help              Show this help",
-        "",
-        "Build commands:",
-        "  cargo build       Build Rust workspace",
-        "  cargo test        Run test suite (804 tests)",
-        "  cargo clippy      Run linter",
-        "  npm run build     Build frontend",
-        "  npm run dev       Start dev server",
-        "",
-        "Git commands:",
-        "  git status        Show working tree status",
-        "  git log           Show commit history",
-        "  git diff          Show changes",
-        "  git add / commit  Stage and commit",
-        "",
-        "Governance:",
-        "  Dangerous commands are BLOCKED (Tier2+ approval required)",
-        "  Warned commands show a caution notice",
-        "  All commands are logged to the audit trail",
-      ], type: "output" };
-    case "cargo": {
-      const sub = parts[1];
-      if (sub === "build" || sub === "b") {
-        return { lines: [
-          "   Compiling nexus-kernel v7.0.0",
-          "   Compiling nexus-sdk v7.0.0",
-          "   Compiling nexus-audit v7.0.0",
-          "   Compiling nexus-fuel v7.0.0",
-          "   Compiling nexus-agents v7.0.0",
-          "    Finished `release` profile [optimized] target(s) in 12.4s",
-        ], type: "output" };
-      }
-      if (sub === "test" || sub === "t") {
-        return { lines: [
-          "running 804 tests",
-          "test kernel::supervisor::tests::boot ... ok",
-          "test kernel::fuel::tests::budget_check ... ok",
-          "test kernel::audit::tests::hash_chain ... ok",
-          "test sdk::prelude::tests::re_exports ... ok",
-          "...",
-          "",
-          "test result: ok. 804 passed; 0 failed; 0 ignored; 0 filtered out; finished in 8.2s",
-        ], type: "output" };
-      }
-      if (sub === "clippy") {
-        return { lines: [
-          "    Checking nexus-kernel v7.0.0",
-          "    Checking nexus-sdk v7.0.0",
-          "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.1s",
-        ], type: "output" };
-      }
-      if (sub === "fmt") {
-        return { lines: ["All files formatted correctly."], type: "output" };
-      }
-      return { lines: [`cargo: simulated '${sub ?? ""}' complete`], type: "output" };
-    }
-    case "npm": {
-      const sub = parts[1];
-      if (sub === "run" && parts[2] === "build") {
-        return { lines: [
-          "> nexus-desktop@7.0.0 build",
-          "> tsc && vite build",
-          "",
-          "vite v5.4.21 building for production...",
-          "✓ 1833 modules transformed.",
-          "dist/index.html            0.74 kB │ gzip:  0.41 kB",
-          "dist/assets/index.css    192.51 kB │ gzip: 32.18 kB",
-          "dist/assets/index.js     451.40 kB │ gzip: 130.81 kB",
-          "✓ built in 2.33s",
-        ], type: "output" };
-      }
-      if (sub === "run" && parts[2] === "dev") {
-        return { lines: [
-          "> nexus-desktop@7.0.0 dev",
-          "> vite",
-          "",
-          "  VITE v5.4.21  ready in 342ms",
-          "",
-          "  ➜  Local:   http://localhost:5173/",
-          "  ➜  Network: http://192.168.1.42:5173/",
-        ], type: "output" };
-      }
-      if (sub === "install" || sub === "i" || sub === "ci") {
-        return { lines: ["added 347 packages in 4.2s", "", "82 packages are looking for funding", "  run `npm fund` for details"], type: "output" };
-      }
-      return { lines: [`npm: simulated '${sub ?? ""}' complete`], type: "output" };
-    }
-    case "git": {
-      const sub = parts[1];
-      if (sub === "status") {
-        return { lines: [
-          "On branch main",
-          "Your branch is up to date with 'origin/main'.",
-          "",
-          "Changes not staged for commit:",
-          "  (use \"git add <file>...\" to update what will be committed)",
-          "",
-          "        modified:   src/main.rs",
-          "        modified:   agents/coder/manifest.toml",
-          "",
-          "Untracked files:",
-          "        app/src/pages/Terminal.tsx",
-          "",
-          "no changes added to commit",
-        ], type: "output" };
-      }
-      if (sub === "log") {
-        return { lines: [
-          "a1b2c3d feat: add Code Editor with Monaco integration",
-          "e4f5g6h fix: capability check before agent file write",
-          "i7j8k9l refactor: extract Supervisor boot sequence",
-          "m0n1o2p feat: fuel budget warning at 20% threshold",
-          "q3r4s5t docs: update architecture invariants",
-        ], type: "output" };
-      }
-      if (sub === "diff") {
-        return { lines: [
-          "diff --git a/src/main.rs b/src/main.rs",
-          "--- a/src/main.rs",
-          "+++ b/src/main.rs",
-          "@@ -5,6 +5,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {",
-          "     let supervisor = Arc::new(Supervisor::new());",
-          "+    // Initialize terminal governance",
-          "+    supervisor.register_terminal_handler()?;",
-          "     tracing::info!(\"Nexus OS v7.0\");",
-        ], type: "output" };
-      }
-      if (sub === "branch") {
-        return { lines: ["* main", "  feature/phase-7", "  feature/terminal", "  fix/audit-chain"], type: "output" };
-      }
-      return { lines: [`git: simulated '${sub ?? ""}' complete`], type: "output" };
-    }
-    case "nexus": {
-      const sub = parts[1];
-      if (sub === "agents") {
-        return { lines: [
-          "AGENT          STATUS    AUTONOMY  FUEL      LAST ACTION",
-          "coder          running   L3        7200/10k  ToolExec: refactor_boot",
-          "designer       idle      L2        9100/10k  —",
-          "researcher     running   L3        6500/10k  WebSearch: rust async patterns",
-          "reviewer       stopped   L1        10k/10k   —",
-          "self-improve   running   L4        5800/10k  ToolExec: optimize_prompt",
-        ], type: "output" };
-      }
-      if (sub === "fuel") {
-        return { lines: [
-          "FUEL LEDGER — Nexus OS v7.0",
-          "─────────────────────────────",
-          "Total budget:     50,000",
-          "Total consumed:   18,600 (37.2%)",
-          "Total remaining:  31,400",
-          "",
-          "  coder:        2,800 consumed  (28.0%)",
-          "  designer:       900 consumed  ( 9.0%)",
-          "  researcher:   3,500 consumed  (35.0%)",
-          "  self-improve:  4,200 consumed  (42.0%)",
-        ], type: "output" };
-      }
-      if (sub === "audit") {
-        return { lines: [
-          "AUDIT TRAIL — last 5 entries (hash-chain verified ✓)",
-          "─────────────────────────────────────────────────────",
-          "[14:31:42] AgentAction   coder → ToolExec: refactor_boot",
-          "[14:31:38] CapCheck      coder → file_write: PASS",
-          "[14:31:35] FuelDebit     coder → 180 units (7200 remaining)",
-          "[14:31:22] TermExec      nexus-shell → cargo test",
-          "[14:31:01] AgentAction   researcher → WebSearch: rust async",
-        ], type: "output" };
-      }
-      return { lines: [
-        "nexus: Nexus OS CLI v7.0",
-        "  nexus agents    List running agents",
-        "  nexus fuel      Fuel ledger status",
-        "  nexus audit     Recent audit trail",
-      ], type: "output" };
-    }
-    case "tree":
-      return { lines: [
-        ".",
-        "├── src/",
-        "│   ├── main.rs",
-        "│   └── lib.rs",
-        "├── agents/",
-        "│   ├── coder/",
-        "│   ├── designer/",
-        "│   ├── researcher/",
-        "│   └── reviewer/",
-        "├── app/",
-        "│   ├── src/",
-        "│   └── package.json",
-        "├── crates/",
-        "│   ├── nexus-kernel/",
-        "│   ├── nexus-sdk/",
-        "│   ├── nexus-audit/",
-        "│   └── nexus-fuel/",
-        "├── Cargo.toml",
-        "├── CLAUDE.md",
-        "└── README.md",
-        "",
-        "12 directories, 5 files",
-      ], type: "output" };
-    case "which":
-      return { lines: [parts[1] ? `/usr/bin/${parts[1]}` : "which: missing argument"], type: "output" };
-    case "grep": {
-      if (parts.length < 3) return { lines: ["grep: missing arguments. Usage: grep <pattern> <file>"], type: "error" };
-      return { lines: [`${parts[parts.length - 1]}:3:  match: ${parts[1]}`], type: "output" };
-    }
-    case "wc":
-      return { lines: ["  847  3201  28934 (simulated)"], type: "output" };
-    case "head":
-    case "tail":
-      return { lines: [`(${base}: simulated output for ${parts[1] ?? "stdin"})`], type: "output" };
-    case "mkdir":
-      return { lines: [], type: "output" };
-    case "touch":
-      return { lines: [], type: "output" };
-    case "cp":
-    case "mv":
-      return { lines: [], type: "output" };
-    case "find":
-      return { lines: [
-        "./src/main.rs",
-        "./src/lib.rs",
-        "./Cargo.toml",
-        "./CLAUDE.md",
-      ], type: "output" };
-    case "man":
-      return { lines: [`Governed terminal: '${parts[1] ?? ""}' — use 'help' for Nexus OS commands`], type: "system" };
-    case "exit":
-      return { lines: ["nexus-sh: governed terminal cannot be exited. Close the tab instead."], type: "warn" };
-    default:
-      return { lines: [`nexus-sh: command not found: ${base}`, "Type 'help' for available commands."], type: "error" };
-  }
-}
+const HELP_TEXT = [
+  "Nexus OS Terminal — Governed Shell v7.0",
+  "",
+  "All commands execute via TypedTools (no raw shell).",
+  "Built-in (client-side):",
+  "  cd [dir]          Change directory",
+  "  clear             Clear terminal",
+  "  history           Command history",
+  "  help              Show this help",
+  "",
+  "Executed via backend:",
+  "  ls [-la] [dir]    List directory contents",
+  "  cat [file]        Display file contents",
+  "  pwd               Print working directory",
+  "  echo [text]       Print text",
+  "  env / printenv    Environment variables",
+  "  ps                Process list",
+  "  df [path]         Disk usage",
+  "  free              Memory usage",
+  "  date / uptime     System time / uptime",
+  "  whoami / uname    User / system info",
+  "",
+  "Build commands:",
+  "  cargo build       Build Rust workspace",
+  "  cargo test        Run test suite",
+  "  cargo clippy      Run linter",
+  "  npm run build     Build frontend",
+  "  npm run dev       Start dev server",
+  "",
+  "Git commands:",
+  "  git status        Show working tree status",
+  "  git log           Show commit history",
+  "  git diff          Show changes",
+  "  git commit        Commit staged changes",
+  "",
+  "Governance:",
+  "  Dangerous commands are BLOCKED (Tier2+ HITL approval required)",
+  "  Warned commands show a caution notice",
+  "  All commands are audit-logged on the backend",
+];
 
 /* ================================================================== */
 /*  Agent suggestion engine                                            */
@@ -476,15 +172,10 @@ function getSuggestions(cmd: string, history: CommandHistoryEntry[]): AgentSugge
   } else if (cmd.startsWith("npm")) {
     suggestions.push({ cmd: "npm run build", reason: "Build frontend" });
     suggestions.push({ cmd: "npm run dev", reason: "Start dev server" });
-  } else if (cmd.startsWith("nexus")) {
-    suggestions.push({ cmd: "nexus agents", reason: "List running agents" });
-    suggestions.push({ cmd: "nexus fuel", reason: "Check fuel budgets" });
-    suggestions.push({ cmd: "nexus audit", reason: "View audit trail" });
   } else if (cmd.startsWith("ls")) {
     suggestions.push({ cmd: "ls -la", reason: "Detailed listing" });
     suggestions.push({ cmd: "tree", reason: "Visual directory tree" });
   } else if (!cmd && recent.length > 0) {
-    // Contextual suggestions based on history
     if (recent.some((c) => c.includes("git add"))) {
       suggestions.push({ cmd: "git commit -m \"\"", reason: "Commit after staging" });
     }
@@ -528,6 +219,7 @@ export default function Terminal(): JSX.Element {
   const [suggestions, setSuggestions] = useState<AgentSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestion, setSelectedSuggestion] = useState(0);
+  const [isExecuting, setIsExecuting] = useState(false);
 
   const lineId = useRef(6);
   const termRef = useRef<HTMLDivElement>(null);
@@ -549,8 +241,33 @@ export default function Terminal(): JSX.Element {
     setLines((prev) => [...prev, { id, type, text, ts: Date.now(), pane: pane ?? activePane }]);
   }, [activePane]);
 
+  const addLines = useCallback((type: TermLine["type"], text: string, pane?: number) => {
+    const outputLines = text.split("\n");
+    // Remove trailing empty line from split
+    if (outputLines.length > 0 && outputLines[outputLines.length - 1] === "") {
+      outputLines.pop();
+    }
+    for (const line of outputLines) {
+      const id = lineId.current++;
+      setLines((prev) => [...prev, { id, type, text: line, ts: Date.now(), pane: pane ?? activePane }]);
+    }
+  }, [activePane]);
+
   const scrollToBottom = useCallback(() => {
     setTimeout(() => termRef.current?.scrollTo(0, termRef.current.scrollHeight), 30);
+  }, []);
+
+  /* ---- Handle cd locally ---- */
+  const handleCd = useCallback((target: string, cwd: string): string => {
+    if (!target || target === "~" || target === "$HOME") return "/home/nexus";
+    if (target === "-") return cwd; // no OLDPWD tracking, stay put
+    if (target === "..") {
+      const parts = cwd.split("/");
+      parts.pop();
+      return parts.join("/") || "/";
+    }
+    if (target.startsWith("/")) return target;
+    return `${cwd}/${target}`.replace(/\/+/g, "/");
   }, []);
 
   /* ---- Update suggestions on input change ---- */
@@ -560,6 +277,50 @@ export default function Terminal(): JSX.Element {
     setShowSuggestions(s.length > 0 && input.length > 0);
     setSelectedSuggestion(0);
   }, [input, commandHistory]);
+
+  /* ---- Execute command via Tauri backend ---- */
+  async function executeViaBackend(cmd: string, cwd: string): Promise<void> {
+    setIsExecuting(true);
+    try {
+      const raw: string = await invoke("terminal_execute", { command: cmd, cwd });
+      const result: TerminalResult = JSON.parse(raw);
+
+      // Backend says this command needs HITL approval
+      if (result.needs_approval) {
+        addLine("warn", `[HITL REQUIRED] Command requires approval: ${cmd}`);
+        addLine("system", `  Tool: ${result.tool} — Use the approval dialog to confirm.`);
+        appendAudit("TermHITL", `${cmd} — needs approval (${result.tool})`);
+        setPendingApproval({ cmd, reason: `Backend: ${result.tool} requires HITL approval` });
+        scrollToBottom();
+        return;
+      }
+
+      // Fuel accounting
+      setFuelUsed((prev) => prev + result.fuel_cost);
+
+      // Display stdout
+      if (result.stdout) {
+        addLines("output", result.stdout);
+      }
+
+      // Display stderr in red
+      if (result.stderr) {
+        addLines("error", result.stderr);
+      }
+
+      // Show exit code if non-zero
+      if (result.exit_code !== 0) {
+        addLine("error", `[exit code ${result.exit_code}] (${result.duration_ms}ms)`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      addLine("error", `Error: ${message}`);
+      appendAudit("TermError", `${cmd} — ${message}`);
+    } finally {
+      setIsExecuting(false);
+      scrollToBottom();
+    }
+  }
 
   /* ---- Execute command ---- */
   function handleSubmit(): void {
@@ -574,7 +335,7 @@ export default function Terminal(): JSX.Element {
     // Log to command history
     const histEntry: CommandHistoryEntry = { cmd, ts: Date.now(), pane: activePane, blocked: false };
 
-    // Check blocked patterns
+    // Defense-in-depth: Check blocked patterns on frontend
     const blocked = BLOCKED_PATTERNS.find((p) => p.pattern.test(cmd));
     if (blocked) {
       addLine("error", `[BLOCKED] Command requires Tier2+ HITL approval`);
@@ -599,40 +360,44 @@ export default function Terminal(): JSX.Element {
     setCommandHistory((prev) => [...prev, histEntry]);
     appendAudit("TermExec", cmd);
 
-    // Fuel cost
-    const cost = 5 + Math.floor(Math.random() * 10);
-    setFuelUsed((prev) => prev + cost);
+    const cwd = currentPane?.cwd ?? "/home/nexus/NEXUS/nexus-os";
+    const parts = cmd.trim().split(/\s+/);
+    const base = parts[0];
 
-    // Execute
-    setTimeout(() => {
-      const result = executeCommand(cmd, currentPane?.cwd ?? "/home/nexus/NEXUS/nexus-os");
-
-      if (result.lines[0] === "__CLEAR__") {
-        setLines((prev) => prev.filter((l) => l.pane !== activePane));
-        addLine("system", "Terminal cleared.");
-      } else {
-        // Handle cd
-        if (cmd.startsWith("cd ")) {
-          const target = cmd.slice(3).trim();
-          setPanes((prev) =>
-            prev.map((p) => {
-              if (p.id !== activePane) return p;
-              if (target === "~" || target === "$HOME") return { ...p, cwd: "/home/nexus" };
-              if (target === "..") {
-                const parts = p.cwd.split("/");
-                parts.pop();
-                return { ...p, cwd: parts.join("/") || "/" };
-              }
-              if (target.startsWith("/")) return { ...p, cwd: target };
-              return { ...p, cwd: `${p.cwd}/${target}`.replace(/\/+/g, "/") };
-            })
-          );
-        }
-
-        result.lines.forEach((line) => addLine(result.type, line));
-      }
+    // Client-side builtins (no backend call needed)
+    if (base === "clear") {
+      setLines((prev) => prev.filter((l) => l.pane !== activePane));
+      addLine("system", "Terminal cleared.");
       scrollToBottom();
-    }, 80 + Math.random() * 120);
+      return;
+    }
+    if (base === "help") {
+      HELP_TEXT.forEach((line) => addLine("output", line));
+      scrollToBottom();
+      return;
+    }
+    if (base === "history") {
+      addLine("system", "(see COMMAND HISTORY panel on the right)");
+      scrollToBottom();
+      return;
+    }
+    if (base === "exit") {
+      addLine("warn", "nexus-sh: governed terminal cannot be exited. Close the tab instead.");
+      scrollToBottom();
+      return;
+    }
+    if (base === "cd") {
+      const target = parts[1] ?? "~";
+      const newCwd = handleCd(target, cwd);
+      setPanes((prev) =>
+        prev.map((p) => (p.id === activePane ? { ...p, cwd: newCwd } : p))
+      );
+      scrollToBottom();
+      return;
+    }
+
+    // All other commands → execute via Tauri backend
+    void executeViaBackend(cmd, cwd);
   }
 
   /* ---- History navigation ---- */
@@ -709,14 +474,40 @@ export default function Terminal(): JSX.Element {
     appendAudit("PaneClose", `Terminal ${id}`);
   }
 
-  /* ---- Approval dialog ---- */
-  function handleApprove(): void {
+  /* ---- Approval dialog — real execution after HITL confirm ---- */
+  async function handleApprove(): Promise<void> {
     if (!pendingApproval) return;
-    appendAudit("TermApproved", `HITL approved: ${pendingApproval.cmd}`);
-    addLine("system", `[APPROVED] Command executed with Tier2 approval: ${pendingApproval.cmd}`);
-    addLine("output", "(simulated output — real execution requires Tauri backend)");
+    const cmd = pendingApproval.cmd;
+    const cwd = currentPane?.cwd ?? "/home/nexus/NEXUS/nexus-os";
+
+    appendAudit("TermApproved", `HITL approved: ${cmd}`);
+    addLine("system", `[APPROVED] Executing with Tier2 approval: ${cmd}`);
     setPendingApproval(null);
-    scrollToBottom();
+
+    setIsExecuting(true);
+    try {
+      const raw: string = await invoke("terminal_execute_approved", { command: cmd, cwd });
+      const result: TerminalResult = JSON.parse(raw);
+
+      setFuelUsed((prev) => prev + result.fuel_cost);
+
+      if (result.stdout) {
+        addLines("output", result.stdout);
+      }
+      if (result.stderr) {
+        addLines("error", result.stderr);
+      }
+      if (result.exit_code !== 0) {
+        addLine("error", `[exit code ${result.exit_code}] (${result.duration_ms}ms)`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      addLine("error", `Error: ${message}`);
+      appendAudit("TermError", `approved exec failed: ${cmd} — ${message}`);
+    } finally {
+      setIsExecuting(false);
+      scrollToBottom();
+    }
   }
 
   function handleDeny(): void {
@@ -775,7 +566,7 @@ export default function Terminal(): JSX.Element {
           <div className="tm-fuel-badge">
             <span className="tm-fuel-label">FUEL</span>
             <div className="tm-fuel-bar">
-              <div className="tm-fuel-fill" style={{ width: `${fuelPct}%`, background: fuelPct > 50 ? "#22d3ee" : fuelPct > 20 ? "#f59e0b" : "#ef4444" }} />
+              <div className="tm-fuel-fill" style={{ width: `${fuelPct}%`, background: fuelPct > 50 ? "var(--nexus-accent)" : fuelPct > 20 ? "#f59e0b" : "#ef4444" }} />
             </div>
             <span className="tm-fuel-value">{fuelRemaining.toLocaleString()}</span>
           </div>
@@ -813,6 +604,11 @@ export default function Terminal(): JSX.Element {
               </div>
             ))}
 
+            {/* Executing indicator */}
+            {isExecuting && (
+              <div className="tm-line tm-line-system">Running...</div>
+            )}
+
             {/* Approval dialog */}
             {pendingApproval && (
               <div className="tm-approval">
@@ -826,7 +622,7 @@ export default function Terminal(): JSX.Element {
                   <span className="tm-approval-reason">{pendingApproval.reason}</span>
                 </div>
                 <div className="tm-approval-actions">
-                  <button type="button" className="tm-approval-btn tm-approval-approve" onClick={handleApprove}>Approve & Execute</button>
+                  <button type="button" className="tm-approval-btn tm-approval-approve" onClick={() => void handleApprove()}>Approve & Execute</button>
                   <button type="button" className="tm-approval-btn tm-approval-deny" onClick={handleDeny}>Deny</button>
                 </div>
               </div>
@@ -869,6 +665,7 @@ export default function Terminal(): JSX.Element {
               placeholder="Type a command..."
               spellCheck={false}
               autoFocus
+              disabled={isExecuting}
             />
           </div>
         </div>

@@ -16,8 +16,8 @@ function timeAgo(ts: number): string {
 }
 
 function relevanceColor(score: number): string {
-  if (score >= 0.8) return "#00ffd5";
-  if (score >= 0.5) return "#22d3ee";
+  if (score >= 0.8) return "var(--nexus-accent)";
+  if (score >= 0.5) return "var(--nexus-accent)";
   return "#64748b";
 }
 

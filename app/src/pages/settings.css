@@ -4,7 +4,7 @@
   grid-template-rows: auto auto 1fr auto;
   gap: 0.75rem;
   height: calc(100vh - 10rem);
-  border: 1px solid rgba(0, 255, 213, 0.2);
+  border: 1px solid rgba(0, 255, 157, 0.2);
   background: linear-gradient(155deg, rgba(5, 10, 18, 0.95), rgba(10, 22, 40, 0.86));
   backdrop-filter: blur(12px);
   overflow-y: auto;
@@ -13,8 +13,8 @@
 
 .st-header {
   padding: 0.85rem 1rem;
-  border-bottom: 1px solid rgba(0, 255, 213, 0.2);
-  background: linear-gradient(90deg, rgba(0, 255, 213, 0.08), rgba(0, 255, 213, 0.01));
+  border-bottom: 1px solid rgba(0, 255, 157, 0.2);
+  background: linear-gradient(90deg, rgba(0, 255, 157, 0.08), rgba(0, 255, 157, 0.01));
 }
 
 .st-title {
@@ -41,7 +41,7 @@
 }
 
 .st-nav-btn {
-  border: 1px solid rgba(0, 255, 213, 0.2);
+  border: 1px solid rgba(0, 255, 157, 0.2);
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-mono);
@@ -55,12 +55,12 @@
 
 .st-nav-btn.active {
   color: var(--text-accent);
-  border-color: rgba(0, 255, 213, 0.5);
-  background: rgba(0, 255, 213, 0.08);
+  border-color: rgba(0, 255, 157, 0.5);
+  background: rgba(0, 255, 157, 0.08);
 }
 
 .st-nav-btn:hover:not(.active) {
-  border-color: rgba(0, 255, 213, 0.35);
+  border-color: rgba(0, 255, 157, 0.35);
   color: var(--text-primary);
 }
 
@@ -84,7 +84,7 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 0.55rem 0;
-  border-bottom: 1px solid rgba(0, 255, 213, 0.06);
+  border-bottom: 1px solid rgba(0, 255, 157, 0.06);
 }
 
 .st-row:last-child {
@@ -125,15 +125,15 @@
   position: relative;
   width: 40px;
   height: 22px;
-  border: 1px solid rgba(0, 255, 213, 0.3);
+  border: 1px solid rgba(0, 255, 157, 0.3);
   background: rgba(5, 10, 18, 0.8);
   border-radius: 11px;
   transition: all 200ms ease;
 }
 
 .st-toggle input:checked + .st-toggle-track {
-  border-color: rgba(0, 255, 213, 0.6);
-  background: rgba(0, 255, 213, 0.15);
+  border-color: rgba(0, 255, 157, 0.6);
+  background: rgba(0, 255, 157, 0.15);
 }
 
 .st-toggle-thumb {
@@ -150,7 +150,7 @@
 .st-toggle input:checked + .st-toggle-track .st-toggle-thumb {
   left: 20px;
   background: var(--cyan);
-  box-shadow: 0 0 8px rgba(0, 255, 213, 0.5);
+  box-shadow: 0 0 8px rgba(0, 255, 157, 0.5);
 }
 
 .st-toggle-text {
@@ -160,7 +160,7 @@
 }
 
 .st-select {
-  border: 1px solid rgba(0, 255, 213, 0.25);
+  border: 1px solid rgba(0, 255, 157, 0.25);
   background: rgba(5, 10, 18, 0.85);
   color: var(--text-accent);
   font-family: var(--font-mono);
@@ -177,7 +177,7 @@
 }
 
 .st-input {
-  border: 1px solid rgba(0, 255, 213, 0.25);
+  border: 1px solid rgba(0, 255, 157, 0.25);
   background: rgba(5, 10, 18, 0.85);
   color: var(--text-primary);
   font-family: var(--font-body);
@@ -188,7 +188,7 @@
 }
 
 .st-input:focus {
-  border-color: rgba(0, 255, 213, 0.6);
+  border-color: rgba(0, 255, 157, 0.6);
 }
 
 .st-slider {
@@ -222,7 +222,7 @@
 }
 
 .st-show-keys-btn {
-  border: 1px solid rgba(0, 255, 213, 0.3);
+  border: 1px solid rgba(0, 255, 157, 0.3);
   background: transparent;
   color: var(--text-accent);
   font-family: var(--font-mono);
@@ -235,7 +235,7 @@
   display: grid;
   gap: 0.4rem;
   padding: 0.55rem 0;
-  border-bottom: 1px solid rgba(0, 255, 213, 0.06);
+  border-bottom: 1px solid rgba(0, 255, 157, 0.06);
 }
 
 .st-api-label-wrap {
@@ -289,7 +289,7 @@
 
 .st-api-input {
   flex: 1;
-  border: 1px solid rgba(0, 255, 213, 0.2);
+  border: 1px solid rgba(0, 255, 157, 0.2);
   background: rgba(5, 10, 18, 0.85);
   color: var(--text-primary);
   font-family: var(--font-mono);
@@ -299,12 +299,12 @@
 }
 
 .st-api-input:focus {
-  border-color: rgba(0, 255, 213, 0.5);
+  border-color: rgba(0, 255, 157, 0.5);
 }
 
 .st-api-save-btn,
 .st-api-test-btn {
-  border: 1px solid rgba(0, 255, 213, 0.3);
+  border: 1px solid rgba(0, 255, 157, 0.3);
   background: transparent;
   color: var(--text-accent);
   font-family: var(--font-mono);
@@ -317,7 +317,7 @@
 
 .st-api-save-btn:hover,
 .st-api-test-btn:hover {
-  border-color: rgba(0, 255, 213, 0.6);
+  border-color: rgba(0, 255, 157, 0.6);
 }
 
 .st-api-save-btn:disabled {
@@ -422,13 +422,13 @@
   height: 56px;
   border-radius: 50%;
   border: 2px solid var(--cyan);
-  background: linear-gradient(135deg, rgba(0, 255, 213, 0.15), rgba(5, 10, 18, 0.9));
+  background: linear-gradient(135deg, rgba(0, 255, 157, 0.15), rgba(5, 10, 18, 0.9));
   display: grid;
   place-items: center;
   font-family: var(--font-display);
   font-size: 1.4rem;
   color: var(--text-accent);
-  box-shadow: 0 0 20px rgba(0, 255, 213, 0.2);
+  box-shadow: 0 0 20px rgba(0, 255, 157, 0.2);
 }
 
 .st-about-name {
@@ -473,14 +473,14 @@
 
 .st-footer {
   padding: 0.7rem 1rem;
-  border-top: 1px solid rgba(0, 255, 213, 0.15);
+  border-top: 1px solid rgba(0, 255, 157, 0.15);
   display: flex;
   justify-content: flex-end;
 }
 
 .st-save-btn {
-  border: 1px solid rgba(0, 255, 213, 0.5);
-  background: linear-gradient(135deg, rgba(0, 255, 213, 0.15), rgba(5, 10, 18, 0.8));
+  border: 1px solid rgba(0, 255, 157, 0.5);
+  background: linear-gradient(135deg, rgba(0, 255, 157, 0.15), rgba(5, 10, 18, 0.8));
   color: var(--text-accent);
   font-family: var(--font-display);
   font-size: 0.74rem;
@@ -491,7 +491,7 @@
 }
 
 .st-save-btn:hover:not(:disabled) {
-  box-shadow: 0 0 16px rgba(0, 255, 213, 0.25);
+  box-shadow: 0 0 16px rgba(0, 255, 157, 0.25);
 }
 
 .st-save-btn:disabled {
@@ -510,7 +510,7 @@
 
 .st-models-hw-item {
   padding: 0.5rem 0.7rem;
-  border: 1px solid rgba(0, 255, 213, 0.12);
+  border: 1px solid rgba(0, 255, 157, 0.12);
   background: rgba(5, 10, 18, 0.5);
 }
 
@@ -537,7 +537,7 @@
   display: flex;
   justify-content: space-between;
   padding: 0.4rem 0.5rem;
-  border-bottom: 1px solid rgba(0, 255, 213, 0.06);
+  border-bottom: 1px solid rgba(0, 255, 157, 0.06);
 }
 
 .st-models-row-label {
@@ -561,7 +561,7 @@
   align-items: center;
   gap: 1rem;
   padding: 0.35rem 0.5rem;
-  border-bottom: 1px solid rgba(0, 255, 213, 0.06);
+  border-bottom: 1px solid rgba(0, 255, 157, 0.06);
   font-size: 0.72rem;
 }
 
@@ -620,7 +620,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.4rem 0.6rem;
-  border-bottom: 1px solid rgba(0, 255, 213, 0.06);
+  border-bottom: 1px solid rgba(0, 255, 157, 0.06);
   font-size: 0.78rem;
 }
 
