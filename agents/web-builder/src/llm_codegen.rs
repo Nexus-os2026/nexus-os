@@ -24,11 +24,7 @@ pub fn generate_site_with_llm<P: LlmProvider>(
     std::fs::create_dir_all(output_dir)
         .map_err(|e| AgentError::ManifestError(format!("failed to create output dir: {e}")))?;
 
-    let files = [
-        ("index.html", html),
-        ("styles.css", css),
-        ("script.js", js),
-    ];
+    let files = [("index.html", html), ("styles.css", css), ("script.js", js)];
 
     let mut created = Vec::new();
     for (name, content) in &files {
@@ -58,9 +54,16 @@ fn build_prompt(description: &str) -> String {
     );
 
     let lower = description.to_lowercase();
-    let needs_3d = ["3d", "three.js", "animated hero", "particles", "webgl", "globe"]
-        .iter()
-        .any(|kw| lower.contains(kw));
+    let needs_3d = [
+        "3d",
+        "three.js",
+        "animated hero",
+        "particles",
+        "webgl",
+        "globe",
+    ]
+    .iter()
+    .any(|kw| lower.contains(kw));
 
     if needs_3d {
         format!(
@@ -80,17 +83,16 @@ fn build_prompt(description: &str) -> String {
 /// Looks for blocks fenced with ```html, ```css, and ```javascript or ```js.
 /// If no fences are found at all, the entire response is treated as HTML.
 pub fn parse_code_blocks(response: &str) -> (String, String, String) {
-    let html = extract_block(response, &["html"])
-        .unwrap_or_else(|| {
-            // Fallback: if no fences found at all, treat entire response as HTML
-            if extract_block(response, &["css"]).is_none()
-                && extract_block(response, &["javascript", "js"]).is_none()
-            {
-                response.trim().to_string()
-            } else {
-                String::new()
-            }
-        });
+    let html = extract_block(response, &["html"]).unwrap_or_else(|| {
+        // Fallback: if no fences found at all, treat entire response as HTML
+        if extract_block(response, &["css"]).is_none()
+            && extract_block(response, &["javascript", "js"]).is_none()
+        {
+            response.trim().to_string()
+        } else {
+            String::new()
+        }
+    });
     let css = extract_block(response, &["css"]).unwrap_or_default();
     let js = extract_block(response, &["javascript", "js"]).unwrap_or_default();
 

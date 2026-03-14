@@ -40,9 +40,8 @@ pub fn generate_code_with_llm<P: LlmProvider>(
                 AgentError::ManifestError(format!("failed to create dir for {filename}: {e}"))
             })?;
         }
-        std::fs::write(&path, content).map_err(|e| {
-            AgentError::ManifestError(format!("failed to write {filename}: {e}"))
-        })?;
+        std::fs::write(&path, content)
+            .map_err(|e| AgentError::ManifestError(format!("failed to write {filename}: {e}")))?;
         created.push(path);
     }
 

@@ -60,22 +60,14 @@ impl AgentRole {
                 "fs.write".into(),
                 "process.exec".into(),
             ],
-            AgentRole::Designer => vec![
-                "llm.query".into(),
-                "fs.read".into(),
-                "fs.write".into(),
-            ],
+            AgentRole::Designer => vec!["llm.query".into(), "fs.read".into(), "fs.write".into()],
             AgentRole::Fixer => vec![
                 "llm.query".into(),
                 "fs.read".into(),
                 "fs.write".into(),
                 "process.exec".into(),
             ],
-            AgentRole::General => vec![
-                "llm.query".into(),
-                "fs.read".into(),
-                "fs.write".into(),
-            ],
+            AgentRole::General => vec!["llm.query".into(), "fs.read".into(), "fs.write".into()],
         }
     }
 

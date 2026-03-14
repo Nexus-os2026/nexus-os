@@ -922,11 +922,7 @@ pub fn execute_conduct_command(
     let duration = start.elapsed().as_secs_f64();
 
     for (i, task) in plan.tasks.iter().enumerate() {
-        let files_count = if i == 0 {
-            result.output_files.len()
-        } else {
-            0
-        };
+        let files_count = if i == 0 { result.output_files.len() } else { 0 };
         let fuel_per = result.total_fuel_used / plan.tasks.len().max(1) as u64;
         out.push_str(&format!(
             "  [{}] {} ✓ ({} files, {} fuel)\n",

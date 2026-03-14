@@ -28,7 +28,10 @@ impl Dispatcher {
                 continue;
             }
 
-            let deps_met = task.depends_on.iter().all(|d| completed_indices.contains(d));
+            let deps_met = task
+                .depends_on
+                .iter()
+                .all(|d| completed_indices.contains(d));
             if !deps_met {
                 continue;
             }
@@ -37,13 +40,11 @@ impl Dispatcher {
             let buffered_fuel = ((task.estimated_fuel as f64) * 1.5) as u64;
 
             let manifest_result = {
-                let mut builder = ManifestBuilder::new(&format!(
-                    "conductor-{}",
-                    task.role.agent_crate_name()
-                ))
-                .version("0.1.0")
-                .fuel_budget(buffered_fuel)
-                .autonomy_level(2);
+                let mut builder =
+                    ManifestBuilder::new(&format!("conductor-{}", task.role.agent_crate_name()))
+                        .version("0.1.0")
+                        .fuel_budget(buffered_fuel)
+                        .autonomy_level(2);
 
                 for cap in &task.capabilities_needed {
                     builder = builder.capability(cap);

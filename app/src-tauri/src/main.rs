@@ -5282,9 +5282,7 @@ pub fn conduct_build(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    let out_dir = output_dir.unwrap_or_else(|| {
-        format!("{home}/.nexus/builds/{timestamp}")
-    });
+    let out_dir = output_dir.unwrap_or_else(|| format!("{home}/.nexus/builds/{timestamp}"));
 
     // Ensure output directory exists
     std::fs::create_dir_all(&out_dir).map_err(|e| format!("failed to create output dir: {e}"))?;
@@ -9012,9 +9010,7 @@ mod runtime {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs();
-            let out_dir = output_dir.unwrap_or_else(|| {
-                format!("{home}/.nexus/builds/{timestamp}")
-            });
+            let out_dir = output_dir.unwrap_or_else(|| format!("{home}/.nexus/builds/{timestamp}"));
 
             if let Err(e) = std::fs::create_dir_all(&out_dir) {
                 let _ = tx.send(Err(format!("failed to create output dir: {e}")));
@@ -9052,10 +9048,13 @@ mod runtime {
                     res.duration_secs = start.elapsed().as_secs_f64();
 
                     // Emit per-agent completion events
-                    let _ = window.emit("conductor:agent_completed", &serde_json::json!({
-                        "agents_used": res.agents_used,
-                        "output_files": &res.output_files,
-                    }));
+                    let _ = window.emit(
+                        "conductor:agent_completed",
+                        &serde_json::json!({
+                            "agents_used": res.agents_used,
+                            "output_files": &res.output_files,
+                        }),
+                    );
 
                     // Emit finished
                     let _ = window.emit("conductor:finished", &res);

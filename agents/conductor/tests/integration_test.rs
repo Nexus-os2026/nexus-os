@@ -62,9 +62,7 @@ fn conductor_plans_without_llm() {
         .iter()
         .filter(|t| t.role == AgentRole::Coder)
         .collect();
-    let has_dependency_on_web = coder_tasks
-        .iter()
-        .any(|t| t.depends_on.contains(&0));
+    let has_dependency_on_web = coder_tasks.iter().any(|t| t.depends_on.contains(&0));
     assert!(
         has_dependency_on_web,
         "at least one Coder task must depend on the WebBuilder task"
@@ -114,10 +112,7 @@ fn conductor_builds_website_e2e() {
     // 3. Run "build a portfolio site with dark mode"
     // 4. Assert index.html exists and contains <html
     // 5. Print output dir for manual inspection
-    println!(
-        "E2E test output dir: {}",
-        output_dir.display()
-    );
+    println!("E2E test output dir: {}", output_dir.display());
 
     // Cleanup
     let _ = std::fs::remove_dir_all(&output_dir);

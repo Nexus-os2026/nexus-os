@@ -403,8 +403,7 @@ mod tests {
 
     #[test]
     fn test_clone_site_intent() {
-        let parsed =
-            super::parse_with_rules("clone https://example.com and make it modern");
+        let parsed = super::parse_with_rules("clone https://example.com and make it modern");
         assert_eq!(parsed.task_type, TaskType::CloneSite);
     }
 

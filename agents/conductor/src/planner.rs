@@ -69,9 +69,7 @@ Respond with ONLY a valid JSON array. Request: {}"#,
                         let role = parse_role(s.role.as_deref().unwrap_or("general"));
                         let capabilities_needed = role.default_capabilities();
                         PlannedTask {
-                            description: s
-                                .description
-                                .unwrap_or_else(|| "subtask".to_string()),
+                            description: s.description.unwrap_or_else(|| "subtask".to_string()),
                             role,
                             capabilities_needed,
                             estimated_fuel: s.estimated_fuel.unwrap_or(2000),
@@ -130,9 +128,7 @@ fn plan_with_rules(request: &UserRequest) -> ConductorPlan {
         || lower.contains("branding");
 
     // Detect fix
-    let is_fix = lower.contains("fix")
-        || lower.contains("debug")
-        || lower.contains("bug");
+    let is_fix = lower.contains("fix") || lower.contains("debug") || lower.contains("bug");
 
     // Detect clone
     let has_url = lower.contains("http://") || lower.contains("https://") || lower.contains(".com");
@@ -277,7 +273,10 @@ mod tests {
 
     #[test]
     fn test_rule_based_saas_with_auth() {
-        let req = UserRequest::new("build a SaaS with auth and a landing page website", "/tmp/out");
+        let req = UserRequest::new(
+            "build a SaaS with auth and a landing page website",
+            "/tmp/out",
+        );
         let planner = Planner::new("mock");
         let plan = planner.plan_with_rules(&req);
         assert!(plan.tasks.len() >= 2);

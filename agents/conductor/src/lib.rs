@@ -54,10 +54,7 @@ impl<P: LlmProvider> Conductor<P> {
     }
 
     /// Preview the plan without executing.
-    pub fn preview_plan(
-        &mut self,
-        request: &UserRequest,
-    ) -> Result<ConductorPlan, AgentError> {
+    pub fn preview_plan(&mut self, request: &UserRequest) -> Result<ConductorPlan, AgentError> {
         self.planner.plan(request, &mut self.gateway)
     }
 
@@ -76,7 +73,9 @@ impl<P: LlmProvider> Conductor<P> {
 
             let mut runtime = AgentRuntimeContext {
                 agent_id,
-                capabilities: ["llm.query".to_string()].into_iter().collect::<HashSet<_>>(),
+                capabilities: ["llm.query".to_string()]
+                    .into_iter()
+                    .collect::<HashSet<_>>(),
                 fuel_remaining: 5_000,
             };
 
@@ -158,7 +157,9 @@ impl<P: LlmProvider> Conductor<P> {
 
             let mut runtime = AgentRuntimeContext {
                 agent_id,
-                capabilities: ["llm.query".to_string()].into_iter().collect::<HashSet<_>>(),
+                capabilities: ["llm.query".to_string()]
+                    .into_iter()
+                    .collect::<HashSet<_>>(),
                 fuel_remaining: 5_000,
             };
 
@@ -183,23 +184,24 @@ impl<P: LlmProvider> Conductor<P> {
         }
 
         // Fall back to rule-based coder agent path
-        let project_map = if output_dir.exists() && output_dir.read_dir().is_ok_and(|mut d| d.next().is_some()) {
-            scan_project(output_dir)?
-        } else {
-            std::fs::create_dir_all(output_dir).map_err(|e| {
-                AgentError::ManifestError(format!("failed to create output dir: {e}"))
-            })?;
-            ProjectMap {
-                root_path: output_dir.to_string_lossy().to_string(),
-                file_tree: Vec::new(),
-                languages: std::collections::HashMap::new(),
-                entry_points: Vec::new(),
-                config_files: Vec::new(),
-                test_files: Vec::new(),
-                total_lines: 0,
-                git_info: None,
-            }
-        };
+        let project_map =
+            if output_dir.exists() && output_dir.read_dir().is_ok_and(|mut d| d.next().is_some()) {
+                scan_project(output_dir)?
+            } else {
+                std::fs::create_dir_all(output_dir).map_err(|e| {
+                    AgentError::ManifestError(format!("failed to create output dir: {e}"))
+                })?;
+                ProjectMap {
+                    root_path: output_dir.to_string_lossy().to_string(),
+                    file_tree: Vec::new(),
+                    languages: std::collections::HashMap::new(),
+                    entry_points: Vec::new(),
+                    config_files: Vec::new(),
+                    test_files: Vec::new(),
+                    total_lines: 0,
+                    git_info: None,
+                }
+            };
 
         let context = build_context(&project_map, &task.description)?;
         let file_changes = write_code(&context, &task.description)?;
@@ -207,7 +209,8 @@ impl<P: LlmProvider> Conductor<P> {
         let mut created_paths = Vec::new();
         for change in &file_changes {
             match change {
-                CoderFileChange::Create(path, content) | CoderFileChange::Modify(path, _, content) => {
+                CoderFileChange::Create(path, content)
+                | CoderFileChange::Modify(path, _, content) => {
                     let full_path = output_dir.join(path);
                     if let Some(parent) = full_path.parent() {
                         std::fs::create_dir_all(parent).map_err(|e| {
@@ -275,7 +278,11 @@ impl<P: LlmProvider> Conductor<P> {
 
         let modified_paths = Vec::new();
         match &fix_result {
-            FixResult::Success { iterations, applied_changes, .. } => {
+            FixResult::Success {
+                iterations,
+                applied_changes,
+                ..
+            } => {
                 let _ = audit.append_event(
                     agent_id,
                     EventType::ToolCall,
@@ -286,7 +293,11 @@ impl<P: LlmProvider> Conductor<P> {
                     }),
                 );
             }
-            FixResult::MaxIterationsReached { iterations, remaining_errors, .. } => {
+            FixResult::MaxIterationsReached {
+                iterations,
+                remaining_errors,
+                ..
+            } => {
                 let _ = audit.append_event(
                     agent_id,
                     EventType::ToolCall,
@@ -320,7 +331,9 @@ impl<P: LlmProvider> Conductor<P> {
 
         let mut runtime = AgentRuntimeContext {
             agent_id,
-            capabilities: ["llm.query".to_string()].into_iter().collect::<HashSet<_>>(),
+            capabilities: ["llm.query".to_string()]
+                .into_iter()
+                .collect::<HashSet<_>>(),
             fuel_remaining: 5_000,
         };
 
@@ -392,12 +405,10 @@ impl<P: LlmProvider> Conductor<P> {
         );
 
         // Create time machine checkpoint — records ALL file changes across all agents
-        let mut tm_builder = supervisor
-            .time_machine_mut()
-            .begin_checkpoint(
-                &format!("conductor: {}", request.prompt),
-                Some(conductor_id.to_string()),
-            );
+        let mut tm_builder = supervisor.time_machine_mut().begin_checkpoint(
+            &format!("conductor: {}", request.prompt),
+            Some(conductor_id.to_string()),
+        );
 
         // Dispatch → Monitor loop
         let dispatcher = Dispatcher::new();
@@ -441,7 +452,7 @@ impl<P: LlmProvider> Conductor<P> {
                 }
             }
 
-                for (id, mut assignment) in new_assignments {
+            for (id, mut assignment) in new_assignments {
                 if assignment.status == TaskStatus::Running {
                     // Find the corresponding planned task for this assignment
                     if let Some(&task_idx) = assignment_to_task.get(&id) {
@@ -459,9 +470,7 @@ impl<P: LlmProvider> Conductor<P> {
                                 Ok(created_files) => {
                                     assignment.output_files = created_files
                                         .iter()
-                                        .filter_map(|p| {
-                                            p.to_str().map(|s| s.to_string())
-                                        })
+                                        .filter_map(|p| p.to_str().map(|s| s.to_string()))
                                         .collect();
                                     // Record created files in time machine checkpoint
                                     for path in &created_files {
@@ -477,8 +486,7 @@ impl<P: LlmProvider> Conductor<P> {
                                 }
                                 Err(e) => {
                                     assignment.status = TaskStatus::Failed;
-                                    assignment.error =
-                                        Some(format!("web build failed: {e}"));
+                                    assignment.error = Some(format!("web build failed: {e}"));
                                 }
                             }
                         } else if task.role == AgentRole::Coder {
@@ -509,8 +517,7 @@ impl<P: LlmProvider> Conductor<P> {
                                 }
                                 Err(e) => {
                                     assignment.status = TaskStatus::Failed;
-                                    assignment.error =
-                                        Some(format!("code gen failed: {e}"));
+                                    assignment.error = Some(format!("code gen failed: {e}"));
                                 }
                             }
                         } else if task.role == AgentRole::Fixer {
@@ -541,8 +548,7 @@ impl<P: LlmProvider> Conductor<P> {
                                 }
                                 Err(e) => {
                                     assignment.status = TaskStatus::Failed;
-                                    assignment.error =
-                                        Some(format!("fix project failed: {e}"));
+                                    assignment.error = Some(format!("fix project failed: {e}"));
                                 }
                             }
                         } else {

@@ -397,10 +397,7 @@ fn link_nexus_fs_read(linker: &mut Linker<WasmAgentState>) -> Result<(), Sandbox
                 // Early capability check — prevents blocking in speculation/threat paths
                 // when the agent context lacks the required capability
                 if let Some(ctx) = state.agent_context.as_ref() {
-                    let has_cap = ctx
-                        .borrow()
-                        .capabilities()
-                        .contains(&"fs.read".to_string());
+                    let has_cap = ctx.borrow().capabilities().contains(&"fs.read".to_string());
                     if !has_cap {
                         state.host_calls_made += 1;
                         if ctx.borrow().is_recording() {
@@ -642,10 +639,11 @@ fn link_nexus_request_approval(linker: &mut Linker<WasmAgentState>) -> Result<()
                     if !has_cap {
                         state.host_calls_made += 1;
                         if ctx.borrow().is_recording() {
-                            ctx.borrow_mut()
-                                .record_side_effect(ContextSideEffect::ApprovalRequest {
+                            ctx.borrow_mut().record_side_effect(
+                                ContextSideEffect::ApprovalRequest {
                                     description: desc.clone(),
-                                });
+                                },
+                            );
                         }
                         return -1;
                     }
