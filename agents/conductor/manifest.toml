@@ -1,0 +1,10 @@
+[agent]
+name = "conductor"
+version = "0.1.0"
+
+[capabilities]
+allowed = ["llm.query", "fs.read"]
+
+[governance]
+autonomy_level = 3
+fuel_budget = 50000

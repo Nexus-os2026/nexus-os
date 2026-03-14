@@ -76,6 +76,34 @@ fn blocks_for_intent(intent: &ParsedIntent) -> Vec<ComposableBlock> {
             ComposableBlock::AnalyzeStep,
             ComposableBlock::AdaptStep,
         ],
+        TaskType::WebBuild => vec![
+            ComposableBlock::ResearchStep,
+            ComposableBlock::GenerateContentStep,
+            ComposableBlock::AnalyzeStep,
+            ComposableBlock::AdaptStep,
+        ],
+        TaskType::CodeGen => vec![
+            ComposableBlock::ResearchStep,
+            ComposableBlock::GenerateContentStep,
+            ComposableBlock::AnalyzeStep,
+            ComposableBlock::AdaptStep,
+        ],
+        TaskType::DesignGen => vec![
+            ComposableBlock::ResearchStep,
+            ComposableBlock::GenerateContentStep,
+            ComposableBlock::AnalyzeStep,
+        ],
+        TaskType::FixProject => vec![
+            ComposableBlock::ResearchStep,
+            ComposableBlock::AnalyzeStep,
+            ComposableBlock::AdaptStep,
+        ],
+        TaskType::CloneSite => vec![
+            ComposableBlock::ResearchStep,
+            ComposableBlock::GenerateContentStep,
+            ComposableBlock::AnalyzeStep,
+            ComposableBlock::AdaptStep,
+        ],
         TaskType::Unknown => vec![ComposableBlock::ResearchStep],
     }
 }

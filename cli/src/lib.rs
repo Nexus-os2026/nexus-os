@@ -94,6 +94,20 @@ pub enum TopLevelCommand {
         #[command(subcommand)]
         command: MarketplaceCommand,
     },
+    /// Orchestrate multi-agent builds from a natural language prompt
+    Conduct {
+        /// What to build (e.g., "build a portfolio site with 3D hero and auth")
+        prompt: String,
+        /// Output directory (default: ./nexus-output/<timestamp>/)
+        #[arg(short, long)]
+        output_dir: Option<String>,
+        /// LLM model to use (default: llama3.2)
+        #[arg(short, long)]
+        model: Option<String>,
+        /// Preview the plan without executing
+        #[arg(long)]
+        preview: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -283,6 +297,12 @@ pub fn execute_command(cli: Cli) -> Result<String, String> {
         TopLevelCommand::Policy { command } => execute_policy_command(command),
         TopLevelCommand::Protocols { command } => execute_protocols_command(command),
         TopLevelCommand::Marketplace { command } => execute_marketplace_command(command),
+        TopLevelCommand::Conduct {
+            prompt,
+            output_dir,
+            model,
+            preview,
+        } => execute_conduct_command(&prompt, output_dir.as_deref(), model.as_deref(), preview),
     }
 }
 
@@ -811,6 +831,122 @@ pub fn execute_marketplace_command(command: MarketplaceCommand) -> Result<String
     } else {
         Err(output.message)
     }
+}
+
+pub fn execute_conduct_command(
+    prompt: &str,
+    output_dir: Option<&str>,
+    model: Option<&str>,
+    preview: bool,
+) -> Result<String, String> {
+    use chrono::Local;
+    use nexus_conductor::types::UserRequest;
+    use nexus_conductor::Conductor;
+    use nexus_connectors_llm::providers::ollama::OllamaProvider;
+    use nexus_kernel::supervisor::Supervisor;
+    use std::time::Instant;
+
+    let model_name = model.unwrap_or("llama3.2");
+
+    let dir = match output_dir {
+        Some(d) => d.to_string(),
+        None => {
+            let ts = Local::now().format("%Y%m%d-%H%M%S");
+            format!("./nexus-output/{ts}")
+        }
+    };
+
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create output directory '{}': {e}", dir))?;
+
+    let request = UserRequest::new(prompt, &dir);
+    let provider = OllamaProvider::new("http://localhost:11434");
+    let mut conductor = Conductor::new(provider, model_name);
+
+    if preview {
+        let plan = conductor
+            .preview_plan(&request)
+            .map_err(|e| format!("Planning failed: {e}"))?;
+
+        let mut out = format!("Planning... {} tasks identified\n\n", plan.tasks.len());
+        out.push_str(&format!(
+            "{:<5} {:<14} {:<50} {:<10}\n",
+            "#", "ROLE", "DESCRIPTION", "EST. FUEL"
+        ));
+        out.push_str(&format!("{}\n", "-".repeat(79)));
+        for (i, task) in plan.tasks.iter().enumerate() {
+            out.push_str(&format!(
+                "[{:<3}] {:<14} {:<50} {:<10}\n",
+                i + 1,
+                task.role.agent_crate_name(),
+                if task.description.len() > 48 {
+                    format!("{}...", &task.description[..45])
+                } else {
+                    task.description.clone()
+                },
+                task.estimated_fuel,
+            ));
+        }
+        out.push_str(&format!("\nOutput would be written to: {dir}"));
+        return Ok(out);
+    }
+
+    // Full execution
+    let start = Instant::now();
+    let mut supervisor = Supervisor::new();
+
+    // Show planning phase
+    let plan = conductor
+        .preview_plan(&request)
+        .map_err(|e| format!("Planning failed: {e}"))?;
+
+    let mut out = format!("Planning... {} tasks identified\n", plan.tasks.len());
+    for (i, task) in plan.tasks.iter().enumerate() {
+        out.push_str(&format!(
+            "  [{}] {}: {} (est. {} fuel)\n",
+            i + 1,
+            task.role.agent_crate_name(),
+            task.description,
+            task.estimated_fuel,
+        ));
+    }
+
+    out.push_str("\nExecuting...\n");
+
+    // Re-create request (the old one was consumed conceptually; IDs are unique)
+    let request = UserRequest::new(prompt, &dir);
+    let result = conductor
+        .run(request, &mut supervisor)
+        .map_err(|e| format!("Execution failed: {e}"))?;
+
+    let duration = start.elapsed().as_secs_f64();
+
+    for (i, task) in plan.tasks.iter().enumerate() {
+        let files_count = if i == 0 {
+            result.output_files.len()
+        } else {
+            0
+        };
+        let fuel_per = result.total_fuel_used / plan.tasks.len().max(1) as u64;
+        out.push_str(&format!(
+            "  [{}] {} ✓ ({} files, {} fuel)\n",
+            i + 1,
+            task.role.agent_crate_name(),
+            files_count,
+            fuel_per,
+        ));
+    }
+
+    out.push_str(&format!(
+        "\nDone! {} agents, {} files, {} fuel, {:.1}s\nOutput: {}",
+        result.agents_used,
+        result.output_files.len(),
+        result.total_fuel_used,
+        duration,
+        dir,
+    ));
+
+    Ok(out)
 }
 
 pub fn execute_voice_command(command: VoiceCommand) -> Result<String, String> {

@@ -3688,10 +3688,12 @@ dependencies = [
 name = "nexus-cli"
 version = "7.0.0"
 dependencies = [
+ "chrono",
  "clap",
  "coding-agent",
  "ed25519-dalek",
  "hex",
+ "nexus-conductor",
  "nexus-connectors-core",
  "nexus-connectors-llm",
  "nexus-kernel",
@@ -3723,6 +3725,23 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
+]
+
+[[package]]
+name = "nexus-conductor"
+version = "0.1.0"
+dependencies = [
+ "coder-agent",
+ "nexus-collaboration",
+ "nexus-connectors-llm",
+ "nexus-factory",
+ "nexus-kernel",
+ "nexus-sdk",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+ "web-builder-agent",
 ]
 
 [[package]]
@@ -3834,6 +3853,7 @@ version = "7.0.0"
 dependencies = [
  "nexus-adaptation",
  "nexus-airgap",
+ "nexus-conductor",
  "nexus-connectors-core",
  "nexus-connectors-llm",
  "nexus-connectors-messaging",

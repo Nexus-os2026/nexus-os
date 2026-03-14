@@ -3,6 +3,7 @@
 pub mod codegen;
 pub mod deploy;
 pub mod interpreter;
+pub mod llm_codegen;
 pub mod preview;
 pub mod styles;
 pub mod templates;

@@ -275,6 +275,27 @@ fn link_nexus_llm_query(linker: &mut Linker<WasmAgentState>) -> Result<(), Sandb
                     return -1; // CapabilityDenied
                 }
 
+                // Early capability check — prevents blocking in speculation/threat paths
+                // when the agent context lacks the required capability
+                if let Some(ctx) = state.agent_context.as_ref() {
+                    let has_cap = ctx
+                        .borrow()
+                        .capabilities()
+                        .contains(&"llm.query".to_string());
+                    if !has_cap {
+                        state.host_calls_made += 1;
+                        if ctx.borrow().is_recording() {
+                            ctx.borrow_mut()
+                                .record_side_effect(ContextSideEffect::LlmQuery {
+                                    prompt: prompt.clone(),
+                                    max_tokens: max_tokens as u32,
+                                    fuel_cost: 10,
+                                });
+                        }
+                        return -1;
+                    }
+                }
+
                 // Speculative policy gate — before real execution
                 let mut decision = check_speculation(state, "llm_query");
 
@@ -373,6 +394,26 @@ fn link_nexus_fs_read(linker: &mut Linker<WasmAgentState>) -> Result<(), Sandbox
                     return -1;
                 }
 
+                // Early capability check — prevents blocking in speculation/threat paths
+                // when the agent context lacks the required capability
+                if let Some(ctx) = state.agent_context.as_ref() {
+                    let has_cap = ctx
+                        .borrow()
+                        .capabilities()
+                        .contains(&"fs.read".to_string());
+                    if !has_cap {
+                        state.host_calls_made += 1;
+                        if ctx.borrow().is_recording() {
+                            ctx.borrow_mut()
+                                .record_side_effect(ContextSideEffect::FileRead {
+                                    path: path.clone(),
+                                    fuel_cost: 2,
+                                });
+                        }
+                        return -1;
+                    }
+                }
+
                 // Speculative policy gate
                 let mut decision = check_speculation(state, "fs_read");
 
@@ -466,6 +507,27 @@ fn link_nexus_fs_write(linker: &mut Linker<WasmAgentState>) -> Result<(), Sandbo
                 {
                     state.host_calls_made += 1;
                     return -1;
+                }
+
+                // Early capability check — prevents blocking in speculation/threat paths
+                // when the agent context lacks the required capability
+                if let Some(ctx) = state.agent_context.as_ref() {
+                    let has_cap = ctx
+                        .borrow()
+                        .capabilities()
+                        .contains(&"fs.write".to_string());
+                    if !has_cap {
+                        state.host_calls_made += 1;
+                        if ctx.borrow().is_recording() {
+                            ctx.borrow_mut()
+                                .record_side_effect(ContextSideEffect::FileWrite {
+                                    path: path.clone(),
+                                    content_size: content.len(),
+                                    fuel_cost: 8,
+                                });
+                        }
+                        return -1;
+                    }
                 }
 
                 // Speculative policy gate
@@ -568,6 +630,25 @@ fn link_nexus_request_approval(linker: &mut Linker<WasmAgentState>) -> Result<()
                 {
                     state.host_calls_made += 1;
                     return -1;
+                }
+
+                // Early capability check — prevents blocking in speculation/threat paths
+                // when the agent context lacks the required capability
+                if let Some(ctx) = state.agent_context.as_ref() {
+                    let has_cap = ctx
+                        .borrow()
+                        .capabilities()
+                        .contains(&"request_approval".to_string());
+                    if !has_cap {
+                        state.host_calls_made += 1;
+                        if ctx.borrow().is_recording() {
+                            ctx.borrow_mut()
+                                .record_side_effect(ContextSideEffect::ApprovalRequest {
+                                    description: desc.clone(),
+                                });
+                        }
+                        return -1;
+                    }
                 }
 
                 // Speculative policy gate

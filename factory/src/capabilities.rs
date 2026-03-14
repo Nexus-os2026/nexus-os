@@ -65,6 +65,48 @@ pub fn map_intent_to_capabilities(intent: &ParsedIntent) -> CapabilityPlan {
             ],
             optional: vec!["web.search".to_string()],
         },
+        TaskType::WebBuild => CapabilityPlan {
+            required: vec![
+                "llm.query".to_string(),
+                "fs.read".to_string(),
+                "fs.write".to_string(),
+                "web.search".to_string(),
+            ],
+            optional: vec!["audit.read".to_string()],
+        },
+        TaskType::CodeGen => CapabilityPlan {
+            required: vec![
+                "llm.query".to_string(),
+                "fs.read".to_string(),
+                "fs.write".to_string(),
+            ],
+            optional: vec!["web.search".to_string(), "audit.read".to_string()],
+        },
+        TaskType::DesignGen => CapabilityPlan {
+            required: vec![
+                "llm.query".to_string(),
+                "fs.read".to_string(),
+                "fs.write".to_string(),
+            ],
+            optional: vec!["web.search".to_string(), "audit.read".to_string()],
+        },
+        TaskType::FixProject => CapabilityPlan {
+            required: vec![
+                "llm.query".to_string(),
+                "fs.read".to_string(),
+                "fs.write".to_string(),
+            ],
+            optional: vec!["audit.read".to_string()],
+        },
+        TaskType::CloneSite => CapabilityPlan {
+            required: vec![
+                "llm.query".to_string(),
+                "web.search".to_string(),
+                "fs.read".to_string(),
+                "fs.write".to_string(),
+            ],
+            optional: vec!["audit.read".to_string()],
+        },
         TaskType::Unknown => CapabilityPlan {
             required: vec!["llm.query".to_string()],
             optional: vec!["web.search".to_string()],

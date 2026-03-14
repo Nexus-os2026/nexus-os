@@ -12,6 +12,11 @@ pub enum TaskType {
     Research,
     Monitoring,
     SelfImprove,
+    WebBuild,
+    CodeGen,
+    DesignGen,
+    FixProject,
+    CloneSite,
     Unknown,
 }
 
@@ -58,7 +63,26 @@ impl<P: LlmProvider> IntentParser<P> {
 
     pub fn parse(&mut self, request: &str) -> Result<ParsedIntent, AgentError> {
         let prompt = format!(
-            "Parse user intent into JSON keys task_type, platforms, schedule, content_topic. Request: {request}"
+            r#"Parse the user request into JSON with keys: task_type, platforms, schedule, content_topic.
+
+task_type must be one of:
+- "content_posting" for social media posts, publishing content
+- "file_backup" for backing up or archiving files
+- "research" for research tasks
+- "monitoring" for monitoring or watching services
+- "self_improve" for self-improvement, prompt optimization
+- "web_build" for requests about websites, landing pages, portfolios, 3D scenes, HTML/CSS
+- "code_gen" for requests about apps, APIs, auth, backends, databases, Stripe
+- "design_gen" for requests about design systems, component libraries, themes, branding
+- "fix_project" for requests about fixing bugs, making tests pass, debugging
+- "clone_site" for requests that include a URL and words like "clone", "copy", "recreate"
+- "unknown" if none of the above match
+
+platforms is an array of relevant platforms/technologies (e.g. ["twitter"], ["html", "react", "threejs"]).
+schedule is a cron or human-readable schedule, or "unspecified".
+content_topic is the subject matter.
+
+Respond with ONLY valid JSON. Request: {request}"#
         );
 
         let response = self.gateway.query(
@@ -92,6 +116,11 @@ fn intent_from_llm_output(request: &str, output: LlmIntentOutput) -> ParsedInten
         "research" => TaskType::Research,
         "monitoring" => TaskType::Monitoring,
         "selfimprove" | "self_improve" | "self-improve" => TaskType::SelfImprove,
+        "webbuild" | "web_build" | "web-build" => TaskType::WebBuild,
+        "codegen" | "code_gen" | "code-gen" => TaskType::CodeGen,
+        "designgen" | "design_gen" | "design-gen" => TaskType::DesignGen,
+        "fixproject" | "fix_project" | "fix-project" => TaskType::FixProject,
+        "clonesite" | "clone_site" | "clone-site" => TaskType::CloneSite,
         _ => infer_task_type(request),
     };
 
@@ -130,6 +159,23 @@ fn parse_with_rules(request: &str) -> ParsedIntent {
 fn infer_task_type(request: &str) -> TaskType {
     let lower = request.to_lowercase();
 
+    // Clone site: URL-like pattern + clone/copy/recreate keywords (check first — most specific)
+    let has_url = lower.contains("http://") || lower.contains("https://") || lower.contains(".com");
+    let has_clone_word =
+        lower.contains("clone") || lower.contains("copy") || lower.contains("recreate");
+    if has_url && has_clone_word {
+        return TaskType::CloneSite;
+    }
+
+    // Fix project: debugging, fixing bugs, making tests pass
+    if lower.contains("fix")
+        || lower.contains("debug")
+        || lower.contains("make tests pass")
+        || lower.contains("bug")
+    {
+        return TaskType::FixProject;
+    }
+
     if lower.contains("back up")
         || lower.contains("backup")
         || (lower.contains("archive") && lower.contains("file"))
@@ -147,6 +193,29 @@ fn infer_task_type(request: &str) -> TaskType {
         || lower.contains("learn from outcomes")
     {
         TaskType::SelfImprove
+    } else if lower.contains("website")
+        || lower.contains("landing page")
+        || lower.contains("portfolio")
+        || lower.contains("3d scene")
+        || lower.contains("html")
+        || lower.contains("css")
+    {
+        TaskType::WebBuild
+    } else if lower.contains("app")
+        || lower.contains("api")
+        || lower.contains("auth")
+        || lower.contains("backend")
+        || lower.contains("database")
+        || lower.contains("stripe")
+    {
+        TaskType::CodeGen
+    } else if lower.contains("design system")
+        || lower.contains("component librar")
+        || lower.contains("theme")
+        || lower.contains("branding")
+        || lower.contains("design token")
+    {
+        TaskType::DesignGen
     } else {
         TaskType::Unknown
     }
@@ -156,6 +225,7 @@ fn infer_platforms(request: &str) -> Vec<String> {
     let lower = request.to_lowercase();
     let mut platforms = Vec::new();
 
+    // Social platforms
     if lower.contains("twitter") || lower.contains("x ") || lower.ends_with(" x") {
         platforms.push("twitter".to_string());
     }
@@ -164,6 +234,26 @@ fn infer_platforms(request: &str) -> Vec<String> {
     }
     if lower.contains("facebook") {
         platforms.push("facebook".to_string());
+    }
+
+    // Web/code technologies
+    if lower.contains("html") {
+        platforms.push("html".to_string());
+    }
+    if lower.contains("react") {
+        platforms.push("react".to_string());
+    }
+    if lower.contains("threejs") || lower.contains("three.js") || lower.contains("3d") {
+        platforms.push("threejs".to_string());
+    }
+    if lower.contains("css") || lower.contains("tailwind") {
+        platforms.push("css".to_string());
+    }
+    if lower.contains("stripe") {
+        platforms.push("stripe".to_string());
+    }
+    if lower.contains("next.js") || lower.contains("nextjs") {
+        platforms.push("nextjs".to_string());
     }
 
     if platforms.is_empty() {
@@ -285,6 +375,37 @@ mod tests {
         fn cost_per_token(&self) -> f64 {
             0.0
         }
+    }
+
+    #[test]
+    fn test_web_build_intent() {
+        let parsed = super::parse_with_rules("build me a portfolio website");
+        assert_eq!(parsed.task_type, TaskType::WebBuild);
+    }
+
+    #[test]
+    fn test_code_gen_intent() {
+        let parsed = super::parse_with_rules("add authentication to my app");
+        assert_eq!(parsed.task_type, TaskType::CodeGen);
+    }
+
+    #[test]
+    fn test_design_gen_intent() {
+        let parsed = super::parse_with_rules("create a design system with dark mode");
+        assert_eq!(parsed.task_type, TaskType::DesignGen);
+    }
+
+    #[test]
+    fn test_fix_project_intent() {
+        let parsed = super::parse_with_rules("fix the bugs in ./my-project");
+        assert_eq!(parsed.task_type, TaskType::FixProject);
+    }
+
+    #[test]
+    fn test_clone_site_intent() {
+        let parsed =
+            super::parse_with_rules("clone https://example.com and make it modern");
+        assert_eq!(parsed.task_type, TaskType::CloneSite);
     }
 
     #[test]

@@ -1,4 +1,6 @@
 use nexus_adaptation::evolution::{EvolutionConfig, EvolutionEngine, MutationType, Strategy};
+use nexus_conductor::types::UserRequest;
+use nexus_conductor::Conductor;
 use nexus_connectors_llm::chunking::SupportedFormat;
 use nexus_connectors_llm::gateway::{
     select_provider, AgentRuntimeContext, GovernedLlmGateway, ProviderSelectionConfig,
@@ -5267,6 +5269,78 @@ pub fn factory_get_build_history(state: &AppState, project_id: String) -> Result
     serde_json::to_string(&history).map_err(|e| e.to_string())
 }
 
+// ── Conductor Build ─────────────────────────────────────────────────
+
+pub fn conduct_build(
+    state: &AppState,
+    prompt: String,
+    output_dir: Option<String>,
+    model: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let out_dir = output_dir.unwrap_or_else(|| {
+        format!("{home}/.nexus/builds/{timestamp}")
+    });
+
+    // Ensure output directory exists
+    std::fs::create_dir_all(&out_dir).map_err(|e| format!("failed to create output dir: {e}"))?;
+
+    let model_name = model.unwrap_or_else(|| "mistral".to_string());
+
+    // Create the provider
+    let provider = OllamaProvider::from_env();
+
+    // Create conductor
+    let mut conductor = Conductor::new(provider, &model_name);
+
+    // Create user request
+    let request = UserRequest::new(&prompt, &out_dir);
+    let request_id = request.id;
+
+    // Get supervisor
+    let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+
+    // Preview plan first (for event emission by caller)
+    let plan = conductor
+        .preview_plan(&UserRequest::new(&prompt, &out_dir))
+        .map_err(|e| format!("planning failed: {e}"))?;
+    let plan_json = serde_json::to_value(&plan).unwrap_or_default();
+
+    // Run full orchestration
+    let start = std::time::Instant::now();
+    let mut result = conductor
+        .run(request, &mut supervisor)
+        .map_err(|e| format!("conductor failed: {e}"))?;
+    result.duration_secs = start.elapsed().as_secs_f64();
+
+    drop(supervisor);
+
+    // Log audit event
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "conductor",
+            "action": "conduct_build",
+            "request_id": request_id.to_string(),
+            "status": format!("{:?}", result.status),
+            "agents_used": result.agents_used,
+            "total_fuel_used": result.total_fuel_used,
+            "duration_secs": result.duration_secs,
+        }),
+    );
+
+    let result_json = serde_json::to_value(&result).unwrap_or_default();
+    Ok(json!({
+        "plan": plan_json,
+        "result": result_json,
+    }))
+}
+
 // ── Typed Tools ─────────────────────────────────────────────────────
 
 pub fn execute_tool(state: &AppState, tool_json: String) -> Result<String, String> {
@@ -8919,6 +8993,104 @@ mod runtime {
         super::factory_get_build_history(state.inner(), project_id)
     }
 
+    /// Run the Conductor orchestration pipeline with progress events.
+    #[tauri::command]
+    async fn conduct_build(
+        window: tauri::Window,
+        state: tauri::State<'_, AppState>,
+        prompt: String,
+        output_dir: Option<String>,
+        model: Option<String>,
+    ) -> Result<serde_json::Value, String> {
+        let app_state = state.inner().clone();
+        let (tx, rx) = std::sync::mpsc::channel::<Result<serde_json::Value, String>>();
+
+        std::thread::spawn(move || {
+            // Compute output dir
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let out_dir = output_dir.unwrap_or_else(|| {
+                format!("{home}/.nexus/builds/{timestamp}")
+            });
+
+            if let Err(e) = std::fs::create_dir_all(&out_dir) {
+                let _ = tx.send(Err(format!("failed to create output dir: {e}")));
+                return;
+            }
+
+            let model_name = model.unwrap_or_else(|| "mistral".to_string());
+            let provider = super::OllamaProvider::from_env();
+            let mut conductor = super::Conductor::new(provider, &model_name);
+
+            // Preview plan and emit
+            let request_for_plan = super::UserRequest::new(&prompt, &out_dir);
+            let plan = match conductor.preview_plan(&request_for_plan) {
+                Ok(p) => p,
+                Err(e) => {
+                    let _ = tx.send(Err(format!("planning failed: {e}")));
+                    return;
+                }
+            };
+            let _ = window.emit("conductor:plan", &plan);
+
+            // Run full orchestration
+            let request = super::UserRequest::new(&prompt, &out_dir);
+            let mut supervisor = app_state
+                .supervisor
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+
+            let start = std::time::Instant::now();
+            let result = conductor.run(request, &mut supervisor);
+            drop(supervisor);
+
+            match result {
+                Ok(mut res) => {
+                    res.duration_secs = start.elapsed().as_secs_f64();
+
+                    // Emit per-agent completion events
+                    let _ = window.emit("conductor:agent_completed", &serde_json::json!({
+                        "agents_used": res.agents_used,
+                        "output_files": &res.output_files,
+                    }));
+
+                    // Emit finished
+                    let _ = window.emit("conductor:finished", &res);
+
+                    // Audit log
+                    app_state.log_event(
+                        uuid::Uuid::nil(),
+                        super::EventType::StateChange,
+                        serde_json::json!({
+                            "source": "conductor",
+                            "action": "conduct_build",
+                            "status": format!("{:?}", res.status),
+                            "agents_used": res.agents_used,
+                            "total_fuel_used": res.total_fuel_used,
+                            "duration_secs": res.duration_secs,
+                        }),
+                    );
+
+                    let plan_json = serde_json::to_value(&plan).unwrap_or_default();
+                    let result_json = serde_json::to_value(&res).unwrap_or_default();
+                    let _ = tx.send(Ok(serde_json::json!({
+                        "plan": plan_json,
+                        "result": result_json,
+                    })));
+                }
+                Err(e) => {
+                    let _ = tx.send(Err(format!("conductor failed: {e}")));
+                }
+            }
+        });
+
+        rx.recv()
+            .unwrap_or(Err("Conductor thread terminated unexpectedly".to_string()))
+    }
+
     #[tauri::command]
     fn execute_tool(
         state: tauri::State<'_, AppState>,
@@ -9870,6 +10042,7 @@ mod runtime {
                 factory_run_pipeline,
                 factory_list_projects,
                 factory_get_build_history,
+                conduct_build,
                 execute_tool,
                 list_tools,
                 terminal_execute,

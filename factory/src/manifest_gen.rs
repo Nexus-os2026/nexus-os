@@ -90,6 +90,11 @@ fn primary_task_label(task: TaskType) -> &'static str {
         TaskType::Research => "research",
         TaskType::Monitoring => "monitor",
         TaskType::SelfImprove => "self-improve",
+        TaskType::WebBuild => "web-build",
+        TaskType::CodeGen => "code-gen",
+        TaskType::DesignGen => "design-gen",
+        TaskType::FixProject => "fix-project",
+        TaskType::CloneSite => "clone-site",
         TaskType::Unknown => "agent",
     }
 }

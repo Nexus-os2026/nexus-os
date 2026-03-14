@@ -10,4 +10,5 @@ pub mod scanner;
 pub mod terminal;
 pub mod test_runner;
 pub mod watcher;
+pub mod llm_codegen;
 pub mod writer;
