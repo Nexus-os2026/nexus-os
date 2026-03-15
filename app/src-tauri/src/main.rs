@@ -485,6 +485,7 @@ impl AppState {
         if let Ok(saved_agents) = state.db.list_agents() {
             for row in saved_agents {
                 if let Ok(manifest) = serde_json::from_str::<AgentManifest>(&row.manifest_json) {
+                    let manifest_name = manifest.name.clone();
                     let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
                     match supervisor.start_agent(manifest) {
                         Ok(agent_id) => {
@@ -494,7 +495,7 @@ impl AppState {
                             meta.insert(
                                 agent_id,
                                 AgentMeta {
-                                    name: row.id.clone(),
+                                    name: manifest_name,
                                     last_action: "restored (stopped)".to_string(),
                                 },
                             );
@@ -1071,11 +1072,36 @@ pub fn resume_agent(state: &AppState, agent_id: String) -> Result<(), String> {
 }
 
 pub fn list_agents(state: &AppState) -> Result<Vec<AgentRow>, String> {
+    #[derive(Debug, Clone)]
+    struct RuntimeAgentSnapshot {
+        name: String,
+        status: String,
+        fuel_remaining: u64,
+        fuel_budget: u64,
+        capabilities: Vec<String>,
+    }
+
     let supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
-    let statuses = supervisor.health_check();
+    let mut runtime_by_id = HashMap::new();
+    for status in supervisor.health_check() {
+        if let Some(handle) = supervisor.get_agent(status.id) {
+            runtime_by_id.insert(
+                status.id.to_string(),
+                RuntimeAgentSnapshot {
+                    name: handle.manifest.name.clone(),
+                    status: status.state.to_string(),
+                    fuel_remaining: status.remaining_fuel,
+                    fuel_budget: handle.manifest.fuel_budget,
+                    capabilities: handle.manifest.capabilities.clone(),
+                },
+            );
+        }
+    }
+    drop(supervisor);
+
     let meta_guard = match state.meta.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
@@ -1084,38 +1110,104 @@ pub fn list_agents(state: &AppState) -> Result<Vec<AgentRow>, String> {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
+    let persisted_rows = state
+        .db
+        .list_agents()
+        .map_err(|e| format!("Failed to list agents: {e}"))?;
 
-    let mut rows = statuses
-        .into_iter()
-        .map(|status| {
-            let meta = meta_guard.get(&status.id).cloned().unwrap_or(AgentMeta {
-                name: "unknown".to_string(),
-                last_action: "none".to_string(),
+    let mut rows = Vec::new();
+    let mut seen_ids = HashSet::new();
+
+    for row in persisted_rows {
+        let manifest = serde_json::from_str::<JsonAgentManifest>(&row.manifest_json).ok();
+        let parsed_id = parse_agent_id(&row.id).ok();
+        let runtime = runtime_by_id.get(&row.id);
+        let meta = parsed_id
+            .as_ref()
+            .and_then(|agent_id| meta_guard.get(agent_id))
+            .cloned();
+        let did = parsed_id
+            .as_ref()
+            .and_then(|agent_id| id_mgr.get(agent_id))
+            .map(|identity| identity.did.clone());
+
+        let capabilities = runtime
+            .map(|snapshot| snapshot.capabilities.clone())
+            .or_else(|| {
+                manifest
+                    .as_ref()
+                    .map(|json| json.manifest.capabilities.clone())
+            })
+            .unwrap_or_default();
+        let fuel_budget = runtime
+            .map(|snapshot| snapshot.fuel_budget)
+            .or_else(|| manifest.as_ref().map(|json| json.manifest.fuel_budget))
+            .unwrap_or_default();
+        let name = meta
+            .as_ref()
+            .map(|meta| meta.name.clone())
+            .or_else(|| runtime.map(|snapshot| snapshot.name.clone()))
+            .or_else(|| manifest.as_ref().map(|json| json.manifest.name.clone()))
+            .unwrap_or_else(|| row.id.clone());
+        let last_action = meta
+            .map(|meta| meta.last_action)
+            .unwrap_or_else(|| "persisted".to_string());
+
+        rows.push(AgentRow {
+            id: row.id.clone(),
+            name,
+            status: runtime
+                .map(|snapshot| snapshot.status.clone())
+                .unwrap_or_else(|| display_agent_state(&row.state)),
+            fuel_remaining: runtime
+                .map(|snapshot| snapshot.fuel_remaining)
+                .unwrap_or(fuel_budget),
+            fuel_budget,
+            last_action,
+            capabilities,
+            sandbox_runtime: "in-process".to_string(),
+            did,
+        });
+        seen_ids.insert(row.id);
+    }
+
+    for (agent_id, runtime) in runtime_by_id {
+        if seen_ids.contains(&agent_id) {
+            continue;
+        }
+
+        let parsed_id = parse_agent_id(&agent_id).ok();
+        let meta = parsed_id
+            .as_ref()
+            .and_then(|id| meta_guard.get(id))
+            .cloned()
+            .unwrap_or(AgentMeta {
+                name: runtime.name.clone(),
+                last_action: "runtime".to_string(),
             });
+        let did = parsed_id
+            .as_ref()
+            .and_then(|id| id_mgr.get(id))
+            .map(|identity| identity.did.clone());
 
-            // Pull real capabilities and fuel_budget from the agent handle
-            let (capabilities, fuel_budget) = supervisor
-                .get_agent(status.id)
-                .map(|h| (h.manifest.capabilities.clone(), h.manifest.fuel_budget))
-                .unwrap_or_default();
+        rows.push(AgentRow {
+            id: agent_id,
+            name: meta.name,
+            status: runtime.status,
+            fuel_remaining: runtime.fuel_remaining,
+            fuel_budget: runtime.fuel_budget,
+            last_action: meta.last_action,
+            capabilities: runtime.capabilities,
+            sandbox_runtime: "in-process".to_string(),
+            did,
+        });
+    }
 
-            // Look up DID if identity exists
-            let did = id_mgr.get(&status.id).map(|id| id.did.clone());
-
-            AgentRow {
-                id: status.id.to_string(),
-                name: meta.name,
-                status: status.state.to_string(),
-                fuel_remaining: status.remaining_fuel,
-                fuel_budget,
-                last_action: meta.last_action,
-                capabilities,
-                sandbox_runtime: "in-process".to_string(),
-                did,
-            }
-        })
-        .collect::<Vec<_>>();
-    rows.sort_by(|left, right| left.id.cmp(&right.id));
+    rows.sort_by(|left, right| {
+        left.name
+            .cmp(&right.name)
+            .then_with(|| left.id.cmp(&right.id))
+    });
     Ok(rows)
 }
 
@@ -1355,6 +1447,26 @@ fn parse_agent_id(value: &str) -> Result<AgentId, String> {
     uuid::Uuid::parse_str(value).map_err(|error| format!("invalid agent_id: {error}"))
 }
 
+fn display_agent_state(state: &str) -> String {
+    match state.trim().to_ascii_lowercase().as_str() {
+        "created" => "Created".to_string(),
+        "starting" => "Starting".to_string(),
+        "running" => "Running".to_string(),
+        "paused" => "Paused".to_string(),
+        "stopping" => "Stopping".to_string(),
+        "stopped" => "Stopped".to_string(),
+        "destroyed" => "Destroyed".to_string(),
+        "" => "Stopped".to_string(),
+        other => {
+            let mut chars = other.chars();
+            match chars.next() {
+                Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
+                None => "Stopped".to_string(),
+            }
+        }
+    }
+}
+
 fn agent_error(error: AgentError) -> String {
     error.to_string()
 }
@@ -1362,6 +1474,9 @@ fn agent_error(error: AgentError) -> String {
 impl AppState {
     #[allow(dead_code)]
     fn load_prebuilt_agents(&self) {
+        eprintln!("Loading prebuilt agents...");
+        let manifest_paths = list_prebuilt_manifest_paths();
+        eprintln!("prebuilt: discovered {} manifest(s)", manifest_paths.len());
         let marketplace_registry = match open_marketplace_registry() {
             Ok(registry) => Some(registry),
             Err(error) => {
@@ -1381,7 +1496,7 @@ impl AppState {
             }
         };
 
-        for path in list_prebuilt_manifest_paths() {
+        for path in manifest_paths {
             let manifest_json = match std::fs::read_to_string(&path) {
                 Ok(contents) => contents,
                 Err(error) => {
@@ -1449,6 +1564,11 @@ impl AppState {
             }
 
             existing_names.insert(manifest.name);
+        }
+
+        match self.db.list_agents() {
+            Ok(rows) => eprintln!("prebuilt: database now tracks {} agent(s)", rows.len()),
+            Err(error) => eprintln!("prebuilt: failed to query DB after load: {error}"),
         }
     }
 }
@@ -1535,15 +1655,9 @@ fn publish_prebuilt_manifest_to_marketplace(
 
 #[allow(dead_code)]
 fn list_prebuilt_manifest_paths() -> Vec<PathBuf> {
-    let candidate_dirs = [
-        PathBuf::from("agents/prebuilt"),
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../agents/prebuilt"),
-    ];
-
-    let prebuilt_dir = candidate_dirs
-        .into_iter()
-        .find(|path| path.is_dir())
-        .unwrap_or_else(|| PathBuf::from("agents/prebuilt"));
+    let Some(prebuilt_dir) = resolve_prebuilt_manifest_dir() else {
+        return Vec::new();
+    };
 
     let Ok(entries) = std::fs::read_dir(&prebuilt_dir) else {
         return Vec::new();
@@ -1556,6 +1670,50 @@ fn list_prebuilt_manifest_paths() -> Vec<PathBuf> {
         .collect::<Vec<_>>();
     paths.sort();
     paths
+}
+
+fn resolve_prebuilt_manifest_dir() -> Option<PathBuf> {
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut candidate_dirs = vec![workspace_root.join("agents/prebuilt")];
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        candidate_dirs.push(current_dir.join("agents/prebuilt"));
+        if let Some(parent) = current_dir.parent() {
+            candidate_dirs.push(parent.join("agents/prebuilt"));
+        }
+    }
+
+    if let Ok(current_exe) = std::env::current_exe() {
+        for ancestor in current_exe.ancestors() {
+            candidate_dirs.push(ancestor.join("agents/prebuilt"));
+        }
+    }
+
+    let mut seen = HashSet::new();
+    for candidate in candidate_dirs {
+        let normalized = candidate
+            .canonicalize()
+            .unwrap_or_else(|_| candidate.clone());
+        if !seen.insert(normalized.clone()) {
+            continue;
+        }
+        if normalized.is_dir() {
+            eprintln!(
+                "prebuilt: using manifest directory {}",
+                normalized.display()
+            );
+            return Some(normalized);
+        }
+    }
+
+    eprintln!(
+        "prebuilt: failed to locate agents/prebuilt from current_dir={} manifest_dir={}",
+        std::env::current_dir()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|_| "<unknown>".to_string()),
+        env!("CARGO_MANIFEST_DIR"),
+    );
+    None
 }
 
 #[derive(serde::Serialize)]
@@ -3622,6 +3780,7 @@ fn marketplace_manifest_profile(
         .and_then(|bundle| parse_manifest(&bundle.manifest_toml).ok())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn marketplace_agent_row(
     registry: &nexus_marketplace::sqlite_registry::SqliteRegistry,
     package_id: String,
@@ -3683,7 +3842,8 @@ pub fn get_preinstalled_agents(state: &AppState) -> Result<Vec<PreinstalledAgent
 
     let mut preinstalled = Vec::new();
     for row in rows {
-        let Ok(json_manifest) = serde_json::from_str::<JsonAgentManifest>(&row.manifest_json) else {
+        let Ok(json_manifest) = serde_json::from_str::<JsonAgentManifest>(&row.manifest_json)
+        else {
             continue;
         };
         if !prebuilt_names.contains(&json_manifest.manifest.name) {
@@ -3693,14 +3853,14 @@ pub fn get_preinstalled_agents(state: &AppState) -> Result<Vec<PreinstalledAgent
         let (agent_id, status) = runtime_by_name
             .get(&json_manifest.manifest.name)
             .cloned()
-            .unwrap_or_else(|| (String::new(), "Stopped".to_string()));
+            .unwrap_or_else(|| (row.id.clone(), display_agent_state(&row.state)));
 
         preinstalled.push(PreinstalledAgentRow {
             agent_id,
             name: json_manifest.manifest.name,
-            description: json_manifest
-                .description
-                .unwrap_or_else(|| extract_manifest_description(&row.manifest_json).unwrap_or_default()),
+            description: json_manifest.description.unwrap_or_else(|| {
+                extract_manifest_description(&row.manifest_json).unwrap_or_default()
+            }),
             autonomy_level: json_manifest.manifest.autonomy_level.unwrap_or(0),
             fuel_budget: json_manifest.manifest.fuel_budget,
             schedule: json_manifest.manifest.schedule,
@@ -13192,7 +13352,7 @@ mod tests {
 
     #[test]
     fn test_tauri_list_agents() {
-        let state = AppState::new();
+        let state = AppState::new_in_memory();
         let baseline = list_agents(&state).map(|a| a.len()).unwrap_or(0);
 
         let a = create_agent(&state, build_manifest("a-agent"));
@@ -13268,7 +13428,7 @@ mod tests {
             parse_agent_manifest_json(&raw).unwrap_or_else(|e| {
                 panic!("manifest {file} failed to parse: {e}");
             });
-            let description = crate::parse_manifest_description(&raw);
+            let description = super::parse_manifest_description(&raw);
             let word_count = description.split_whitespace().count();
             assert!(
                 word_count >= 500,
@@ -13289,6 +13449,33 @@ mod tests {
         state.load_prebuilt_agents();
         let agents = state.db.list_agents().unwrap();
         assert_eq!(agents.len(), list_prebuilt_manifest_paths().len());
+    }
+
+    #[test]
+    fn test_list_agents_includes_stopped_prebuilt_agents_from_persistence() {
+        let state = AppState::new_in_memory();
+        state.load_prebuilt_agents();
+
+        let agents = list_agents(&state).expect("list_agents should succeed");
+        let manifest_count = list_prebuilt_manifest_paths().len();
+
+        assert_eq!(agents.len(), manifest_count);
+        assert!(agents.iter().all(|agent| !agent.id.trim().is_empty()));
+        assert!(agents.iter().any(|agent| agent.name == "nexus-oracle"));
+    }
+
+    #[test]
+    fn test_get_preinstalled_agents_keeps_persisted_agent_ids() {
+        let state = AppState::new_in_memory();
+        state.load_prebuilt_agents();
+
+        let agents = super::get_preinstalled_agents(&state)
+            .expect("preinstalled agent query should succeed");
+        let manifest_count = list_prebuilt_manifest_paths().len();
+
+        assert_eq!(agents.len(), manifest_count);
+        assert!(agents.iter().all(|agent| !agent.agent_id.trim().is_empty()));
+        assert!(agents.iter().any(|agent| agent.name == "nexus-oracle"));
     }
 
     #[test]
