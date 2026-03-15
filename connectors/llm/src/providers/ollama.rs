@@ -1,5 +1,6 @@
 use super::{
-    curl_get_status, curl_post_json, EmbeddingResponse, LlmProvider, LlmResponse, ProviderRequest,
+    curl_get_status, curl_post_json, curl_post_json_with_timeout, EmbeddingResponse, LlmProvider,
+    LlmResponse, ProviderRequest,
 };
 use nexus_kernel::errors::AgentError;
 use serde::{Deserialize, Serialize};
@@ -320,8 +321,12 @@ impl LlmProvider for OllamaProvider {
         }
 
         let request = self.build_request(prompt, max_tokens, model);
-        let (status, payload) =
-            curl_post_json(request.endpoint.as_str(), &request.headers, &request.body)?;
+        let (status, payload) = curl_post_json_with_timeout(
+            request.endpoint.as_str(),
+            &request.headers,
+            &request.body,
+            self.request_timeout_secs,
+        )?;
         if !(200..300).contains(&status) {
             return Err(AgentError::SupervisorError(format!(
                 "ollama request failed with status {status}"

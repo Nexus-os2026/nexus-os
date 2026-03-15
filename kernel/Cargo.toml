@@ -26,7 +26,13 @@ sha2 = "0.10"
 thiserror = "2"
 toml = "0.8"
 bs58 = "0.5"
+base64 = "0.22"
 uuid = { version = "1.10", features = ["v4", "serde"] }
+cron = "0.15"
+chrono = { version = "0.4", features = ["serde"] }
+tokio = { version = "1", features = ["rt", "time", "sync"] }
+rand = "0.8"
+nexus-persistence = { path = "../persistence" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"

@@ -1,9 +1,12 @@
 //! Core runtime primitives and governance enforcement surfaces for NEXUS OS.
 
+pub mod actuators;
 pub mod adaptive_policy;
 pub mod audit;
 pub mod autonomy;
 pub mod behavioral_profile;
+pub mod capabilities;
+pub mod cognitive;
 pub mod compliance;
 pub mod compliance_crosswalk;
 pub mod computer_control;

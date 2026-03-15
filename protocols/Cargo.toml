@@ -11,6 +11,10 @@ path = "src/lib.rs"
 name = "nexus-server"
 path = "src/bin/nexus-server.rs"
 
+[[bin]]
+name = "nexus-os"
+path = "src/bin/nexus-os.rs"
+
 [dependencies]
 nexus-kernel = { path = "../kernel" }
 axum = { version = "0.8", features = ["ws"] }
@@ -26,6 +30,8 @@ nexus-sdk = { path = "../sdk" }
 nexus-connectors-llm = { path = "../connectors/llm" }
 metrics = "0.24"
 metrics-exporter-prometheus = "0.18"
+include_dir = "0.7"
+mime_guess = "2.0"
 
 [dev-dependencies]
 tokio-tungstenite = "0.28"

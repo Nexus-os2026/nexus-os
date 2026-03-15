@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { getComplianceStatus, getComplianceAgents, getAuditLog, hasDesktopRuntime } from "../api/backend";
-import type { ComplianceStatusRow, ComplianceAgentRow, AuditEventRow } from "../types";
+import type { ComplianceStatusRow, ComplianceAgentRow, AuditEventRow, Soc2ControlRow } from "../types";
 import "./compliance-dashboard.css";
 
 // ---------------------------------------------------------------------------
 // Types (UI-only)
 // ---------------------------------------------------------------------------
 
-type Tab = "overview" | "agents" | "reports" | "erasure" | "provenance" | "retention";
+type Tab = "overview" | "agents" | "soc2" | "reports" | "erasure" | "provenance" | "retention";
 
 interface RetentionRule {
   dataClass: string;
@@ -109,6 +109,10 @@ export default function ComplianceDashboard(): JSX.Element {
       `Capabilities: ${agent.capabilities.join(", ")}`,
       `Status: ${agent.status}`,
       "",
+      `Justification: ${agent.justification || "N/A"}`,
+      `Applicable Articles: ${agent.applicable_articles.length > 0 ? agent.applicable_articles.join(", ") : "None"}`,
+      `Required Controls: ${agent.required_controls.length > 0 ? agent.required_controls.join(", ") : "None"}`,
+      "",
       "This report is generated per EU AI Act Article 13 transparency requirements.",
     ];
     const blob = new Blob([lines.join("\n")], { type: "text/plain" });
@@ -142,6 +146,7 @@ export default function ComplianceDashboard(): JSX.Element {
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "agents", label: "Risk Cards" },
+    { id: "soc2", label: "SOC 2" },
     { id: "reports", label: "Reports" },
     { id: "erasure", label: "Erasure" },
     { id: "provenance", label: "Provenance" },
@@ -281,6 +286,31 @@ export default function ComplianceDashboard(): JSX.Element {
                     <span className="cd-meta-item">Autonomy: {agent.autonomy_level}</span>
                     <span className="cd-meta-item">Status: {agent.status}</span>
                   </div>
+                  {agent.justification && (
+                    <div className="cd-justification">
+                      <span className="cd-field-label">Justification:</span> {agent.justification}
+                    </div>
+                  )}
+                  {agent.applicable_articles.length > 0 && (
+                    <div className="cd-articles">
+                      <span className="cd-field-label">Applicable Articles:</span>
+                      <div className="cd-cap-list">
+                        {agent.applicable_articles.map((art) => (
+                          <span key={art} className="cd-article-tag">{art}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {agent.required_controls.length > 0 && (
+                    <div className="cd-controls">
+                      <span className="cd-field-label">Required Controls:</span>
+                      <div className="cd-cap-list">
+                        {agent.required_controls.map((ctrl) => (
+                          <span key={ctrl} className="cd-control-tag">{ctrl}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="cd-cap-list">
                     {agent.capabilities.map((cap) => (
                       <span key={cap} className="cd-cap-tag">{cap}</span>
@@ -291,6 +321,59 @@ export default function ComplianceDashboard(): JSX.Element {
                   </div>
                 </article>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* SOC 2 TAB */}
+      {/* ================================================================= */}
+      {tab === "soc2" && (
+        <div className="cd-section">
+          <h3 className="cd-section-title">SOC 2 Type II Compliance Controls</h3>
+          <p className="cd-desc">Real-time SOC 2 control status from Nexus OS governance primitives.</p>
+
+          {(complianceStatus?.soc2_controls ?? []).length === 0 ? (
+            <p className="cd-desc">No SOC 2 controls evaluated — ensure agents are registered.</p>
+          ) : (
+            <div className="cd-grid">
+              {(complianceStatus?.soc2_controls ?? []).map((ctrl: Soc2ControlRow) => {
+                const isSatisfied = ctrl.status === "satisfied";
+                const isPartial = ctrl.status.startsWith("partially_met");
+                const statusColor = isSatisfied ? "#22c55e" : isPartial ? "#eab308" : "#ef4444";
+                const statusBg = isSatisfied
+                  ? "rgba(34, 197, 94, 0.12)"
+                  : isPartial
+                    ? "rgba(234, 179, 8, 0.12)"
+                    : "rgba(239, 68, 68, 0.12)";
+                const statusText = isSatisfied ? "Satisfied" : isPartial ? "Partially Met" : "Not Met";
+                const detail = !isSatisfied ? ctrl.status.replace(/^[^:]+:\s*/, "") : "";
+                return (
+                  <article
+                    key={ctrl.control_id}
+                    className="cd-card"
+                    style={{ borderLeftColor: statusColor }}
+                  >
+                    <div className="cd-card-top">
+                      <span className="cd-control-id">{ctrl.control_id}</span>
+                      <span
+                        className="cd-status-badge"
+                        style={{ color: statusColor, background: statusBg }}
+                      >
+                        {statusText}
+                      </span>
+                    </div>
+                    <div className="cd-soc2-desc">{ctrl.description}</div>
+                    <div className="cd-card-meta">
+                      <span className="cd-meta-item">Evidence: {ctrl.evidence_count} events</span>
+                    </div>
+                    {detail && (
+                      <div className="cd-soc2-detail">{detail}</div>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           )}
         </div>

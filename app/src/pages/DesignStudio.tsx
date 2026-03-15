@@ -64,7 +64,7 @@ const COMPONENT_LIBRARY: LibraryComponent[] = [
   { type: "form", label: "Form", icon: "📋", category: "input", defaultW: 320, defaultH: 240, defaultProps: { fields: "Name,Email,Message", submitText: "Submit" }, governed: true },
   // display
   { type: "heading", label: "Heading", icon: "H", category: "display", defaultW: 300, defaultH: 36, defaultProps: { text: "Heading Text", level: "2" }, governed: false },
-  { type: "text", label: "Paragraph", icon: "¶", category: "display", defaultW: 300, defaultH: 60, defaultProps: { text: "Lorem ipsum dolor sit amet, consectetur adipiscing elit." }, governed: false },
+  { type: "text", label: "Paragraph", icon: "¶", category: "display", defaultW: 300, defaultH: 60, defaultProps: { text: "Enter your text here." }, governed: false },
   { type: "badge", label: "Badge", icon: "◈", category: "display", defaultW: 80, defaultH: 28, defaultProps: { text: "Active", color: "#34d399" }, governed: false },
   { type: "avatar", label: "Avatar", icon: "◉", category: "display", defaultW: 48, defaultH: 48, defaultProps: { initials: "NA", bg: "#a78bfa" }, governed: false },
   { type: "divider", label: "Divider", icon: "—", category: "display", defaultW: 300, defaultH: 2, defaultProps: { color: "rgba(56,189,248,0.12)" }, governed: false },

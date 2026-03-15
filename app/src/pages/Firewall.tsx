@@ -8,13 +8,9 @@ export function Firewall() {
   const [tab, setTab] = useState<"overview" | "patterns">("overview");
 
   useEffect(() => {
-    if (!hasDesktopRuntime()) {
-      setStatus(mockStatus());
-      setPatterns(mockPatterns());
-      return;
-    }
-    getFirewallStatus().then(setStatus).catch(() => setStatus(mockStatus()));
-    getFirewallPatterns().then(setPatterns).catch(() => setPatterns(mockPatterns()));
+    if (!hasDesktopRuntime()) return;
+    getFirewallStatus().then(setStatus).catch(() => {});
+    getFirewallPatterns().then(setPatterns).catch(() => {});
   }, []);
 
   return (
@@ -48,6 +44,11 @@ export function Firewall() {
         ))}
       </div>
 
+      {!status && !patterns && (
+        <p style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.85rem", padding: "1rem 0" }}>
+          Connect to desktop runtime to view firewall status.
+        </p>
+      )}
       {tab === "overview" && status && <OverviewPanel status={status} />}
       {tab === "patterns" && patterns && <PatternsPanel patterns={patterns} />}
     </div>
@@ -223,42 +224,6 @@ function Check({ label, enabled }: { label: string; enabled: boolean }) {
       <span style={{ color: "var(--text-primary, #e2e8f0)", fontSize: "0.8rem" }}>{label}</span>
     </div>
   );
-}
-
-function mockStatus(): FirewallStatus {
-  return {
-    status: "active",
-    mode: "fail-closed",
-    injection_pattern_count: 20,
-    pii_pattern_count: 6,
-    exfil_pattern_count: 7,
-    sensitive_path_count: 3,
-    ssn_detection: true,
-    passport_detection: true,
-    internal_ip_detection: true,
-    context_overflow_threshold_bytes: 100000,
-    egress_default_deny: true,
-    egress_rate_limit_per_min: 60,
-  };
-}
-
-function mockPatterns(): FirewallPatterns {
-  return {
-    injection_patterns: [
-      "ignore previous instructions", "ignore all previous", "disregard previous",
-      "forget your instructions", "forget everything", "you are now",
-      "new role:", "new instructions:", "system prompt:", "system:",
-      "act as", "pretend you are", "jailbreak", "do anything now",
-      "developer mode", "base64_decode", "aW1wb3J0IG", "\\u0430",
-      "](javascript:", "<system>",
-    ],
-    pii_patterns: ["social security", "credit card", "password:", "secret:", "api_key:", "private_key:"],
-    exfil_patterns: ["10.", "172.16.", "192.168.", "/etc/", "/proc/", "/sys/", "uname"],
-    sensitive_paths: ["/etc/", "/sys/", "/proc/"],
-    ssn_regex: "\\b\\d{3}-\\d{2}-\\d{4}\\b",
-    passport_regex: "(?i)\\b[A-Z]{1,2}\\d{6,9}\\b",
-    internal_ip_regex: "\\b(10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|172\\.(1[6-9]|2\\d|3[01])\\.\\d{1,3}\\.\\d{1,3}|192\\.168\\.\\d{1,3}\\.\\d{1,3})\\b",
-  };
 }
 
 export default Firewall;

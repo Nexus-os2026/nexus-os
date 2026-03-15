@@ -6,6 +6,7 @@ export interface SidebarItem {
   label: string;
   icon: string;
   shortcut: string;
+  badge?: number;
 }
 
 interface SidebarProps {
@@ -50,6 +51,27 @@ export function Sidebar({ items, activeId, onSelect, version }: SidebarProps): J
             <span className="nexus-sidebar-icon-wrap">
               <span className="nexus-sidebar-icon">{item.icon}</span>
             </span>
+            {item.badge && item.badge > 0 ? (
+              <span
+                style={{
+                  position: "absolute",
+                  top: 4,
+                  right: expanded ? 8 : 2,
+                  background: "#f87171",
+                  color: "#fff",
+                  borderRadius: 10,
+                  padding: "0 5px",
+                  fontSize: "0.65rem",
+                  fontWeight: 700,
+                  lineHeight: "16px",
+                  minWidth: 16,
+                  textAlign: "center",
+                  zIndex: 2,
+                }}
+              >
+                {item.badge}
+              </span>
+            ) : null}
             {expanded ? (
               <span className="nexus-sidebar-item-text">
                 <span className="nexus-sidebar-label">{item.label}</span>

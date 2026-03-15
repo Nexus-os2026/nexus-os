@@ -3,13 +3,6 @@ import { hasDesktopRuntime, marketplaceSearch, marketplaceInstall, marketplaceIn
 import type { MarketplaceAgent, MarketplaceDetail } from "../types";
 import "./marketplace-browser.css";
 
-const MOCK_LISTINGS: MarketplaceAgent[] = [
-  { package_id: "ml-1", name: "Code Review Bot", description: "Automated pull request reviews with security scanning and style enforcement", author: "NexusOS Core", tags: ["coding", "security"], version: "2.1.0", capabilities: ["llm.query", "fs.read"], price_cents: 0, downloads: 3420, rating: 4.7, review_count: 18 },
-  { package_id: "ml-2", name: "Data Pipeline Agent", description: "ETL workflows with schema validation, retry logic, and audit logging", author: "Community", tags: ["data", "automation"], version: "1.4.2", capabilities: ["fs.read", "fs.write"], price_cents: 0, downloads: 1850, rating: 4.5, review_count: 9 },
-  { package_id: "ml-3", name: "Compliance Monitor", description: "Continuous SOC2/HIPAA compliance checking with evidence collection", author: "NexusOS Core", tags: ["compliance", "security"], version: "3.0.0", capabilities: ["audit.read", "llm.query"], price_cents: 500, downloads: 920, rating: 4.9, review_count: 24 },
-  { package_id: "ml-4", name: "Social Scheduler", description: "Multi-platform social media scheduling with approval gates and analytics", author: "Community", tags: ["social", "content"], version: "1.0.8", capabilities: ["social.post", "llm.query"], price_cents: 0, downloads: 2100, rating: 4.3, review_count: 6 },
-  { package_id: "ml-5", name: "Incident Responder", description: "Automated incident triage, escalation, and post-mortem generation", author: "NexusOS Core", tags: ["ops", "automation"], version: "1.2.0", capabilities: ["llm.query", "messaging.send"], price_cents: 1200, downloads: 640, rating: 4.6, review_count: 12 },
-];
 
 function formatDownloads(count: number): string {
   if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
@@ -32,7 +25,7 @@ function riskBadge(cap: string): string {
 
 export default function MarketplaceBrowser(): JSX.Element {
   const [query, setQuery] = useState("");
-  const [agents, setAgents] = useState<MarketplaceAgent[]>(MOCK_LISTINGS);
+  const [agents, setAgents] = useState<MarketplaceAgent[]>([]);
   const [installedSet, setInstalledSet] = useState<Set<string>>(new Set());
   const [selectedAgent, setSelectedAgent] = useState<MarketplaceDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -43,15 +36,9 @@ export default function MarketplaceBrowser(): JSX.Element {
     setLoading(true);
     try {
       const results = await marketplaceSearch(q);
-      if (results.length > 0) {
-        setAgents(results);
-      } else if (q.length === 0) {
-        setAgents(MOCK_LISTINGS);
-      } else {
-        setAgents([]);
-      }
+      setAgents(results);
     } catch {
-      // Fall back to mock data on error
+      setAgents([]);
     } finally {
       setLoading(false);
     }
@@ -229,7 +216,7 @@ export default function MarketplaceBrowser(): JSX.Element {
             </article>
           );
         })}
-        {filtered.length === 0 && <p className="mb-empty">No agents match your search.</p>}
+        {filtered.length === 0 && !loading && <p className="mb-empty">{query ? "No agents match your search." : "No agents published yet. Use `nexus package` and `nexus marketplace publish` to add agents."}</p>}
       </div>
     </section>
   );

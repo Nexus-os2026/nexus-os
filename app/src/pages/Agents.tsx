@@ -19,6 +19,7 @@ interface AgentsProps {
   onStop: (id: string) => void;
   onCreate: (manifestJson: string) => void;
   onDelete: (id: string) => void;
+  onClearAll?: () => void;
   onPermissions?: (id: string) => void;
 }
 
@@ -38,6 +39,7 @@ export function Agents({
   onStop,
   onCreate,
   onDelete,
+  onClearAll,
   onPermissions
 }: AgentsProps): JSX.Element {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(agents[0]?.id ?? null);
@@ -164,6 +166,20 @@ export function Agents({
           <button type="button" className="create-btn" onClick={() => setShowCreate(true)}>
             + CREATE AGENT
           </button>
+          {onClearAll && (
+            <button
+              type="button"
+              className="create-btn"
+              style={{ background: "#dc2626", borderColor: "#991b1b" }}
+              onClick={() => {
+                if (window.confirm(`Delete all ${agents.length} agents? This cannot be undone.`)) {
+                  onClearAll();
+                }
+              }}
+            >
+              CLEAR ALL
+            </button>
+          )}
         </div>
       </header>
 
@@ -266,6 +282,10 @@ export function Agents({
         activeTab={detailTab}
         onTabChange={setDetailTab}
         onClose={() => setDetailOpen(false)}
+        onStart={onStart}
+        onStop={onStop}
+        onPause={onPause}
+        onResume={onStart}
       />
 
       <CreateAgent

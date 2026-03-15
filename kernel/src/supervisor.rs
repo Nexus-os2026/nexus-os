@@ -123,9 +123,58 @@ impl Supervisor {
         &mut self.time_machine
     }
 
+    /// Find the currently active L5 (Sovereign) agent, if any.
+    fn active_sovereign(&self) -> Option<(&AgentId, &AgentHandle)> {
+        self.agents.iter().find(|(_, handle)| {
+            handle.autonomy_level == 5
+                && matches!(
+                    handle.state,
+                    AgentState::Running | AgentState::Starting | AgentState::Paused
+                )
+        })
+    }
+
+    fn active_transcendent_agents(&self) -> Vec<(&AgentId, &AgentHandle)> {
+        self.agents
+            .iter()
+            .filter(|(_, handle)| {
+                handle.autonomy_level == 6
+                    && matches!(
+                        handle.state,
+                        AgentState::Running | AgentState::Starting | AgentState::Paused
+                    )
+            })
+            .collect()
+    }
+
     pub fn start_agent(&mut self, manifest: AgentManifest) -> Result<AgentId, AgentError> {
         let id = Uuid::new_v4();
         let autonomy_level = AutonomyLevel::from_manifest(manifest.autonomy_level);
+
+        // L5 singleton enforcement: only one Sovereign agent may be active at a time.
+        if autonomy_level == AutonomyLevel::L5 {
+            if let Some((_, existing_handle)) = self.active_sovereign() {
+                return Err(AgentError::SupervisorError(format!(
+                    "Only one Sovereign agent allowed. Currently active: {}. Stop it first.",
+                    existing_handle.manifest.name
+                )));
+            }
+        }
+
+        if autonomy_level == AutonomyLevel::L6 {
+            let active_l6 = self.active_transcendent_agents();
+            if active_l6.len() >= 2 {
+                let mut names = active_l6
+                    .iter()
+                    .map(|(_, handle)| handle.manifest.name.clone())
+                    .collect::<Vec<_>>();
+                names.sort();
+                return Err(AgentError::SupervisorError(format!(
+                    "Maximum two Transcendent (L6) agents allowed. Currently active: {}. Stop one first.",
+                    names.join(", ")
+                )));
+            }
+        }
         let mut consent_runtime = ConsentRuntime::from_manifest(
             manifest.consent_policy_path.as_deref(),
             manifest.requester_id.as_deref(),
@@ -392,6 +441,17 @@ impl Supervisor {
 
     pub fn get_agent(&self, id: AgentId) -> Option<&AgentHandle> {
         self.agents.get(&id)
+    }
+
+    /// Mutable access to an agent handle (for runtime adjustments like autonomy level).
+    pub fn get_agent_mut(&mut self, id: AgentId) -> Option<&mut AgentHandle> {
+        self.agents.get_mut(&id)
+    }
+
+    /// Remove all agents and their fuel ledgers from in-memory state.
+    pub fn clear_all_agents(&mut self) {
+        self.agents.clear();
+        self.fuel_ledgers.clear();
     }
 
     pub fn audit_trail(&self) -> &AuditTrail {
@@ -1042,6 +1102,7 @@ fn autonomy_level_numeric(level: AutonomyLevel) -> u8 {
         AutonomyLevel::L3 => 3,
         AutonomyLevel::L4 => 4,
         AutonomyLevel::L5 => 5,
+        AutonomyLevel::L6 => 6,
     }
 }
 
@@ -1061,6 +1122,7 @@ mod tests {
             consent_policy_path: None,
             requester_id: None,
             schedule: None,
+            default_goal: None,
             llm_model: None,
             fuel_period_id: None,
             monthly_fuel_cap: None,
@@ -1093,6 +1155,20 @@ mod tests {
             );
         }
         (sup, id)
+    }
+
+    fn l5_manifest(name: &str) -> AgentManifest {
+        let mut manifest = test_manifest();
+        manifest.name = name.to_string();
+        manifest.autonomy_level = Some(5);
+        manifest
+    }
+
+    fn l6_manifest(name: &str) -> AgentManifest {
+        let mut manifest = test_manifest();
+        manifest.name = name.to_string();
+        manifest.autonomy_level = Some(6);
+        manifest
     }
 
     #[test]
@@ -1382,5 +1458,50 @@ priority = 50
         let count = sup.reload_policies().unwrap();
         assert_eq!(count, 1);
         assert_eq!(sup.policy_engine().policies()[0].policy_id, "runtime-added");
+    }
+
+    #[test]
+    fn only_one_l5_agent_can_be_active() {
+        let mut sup = Supervisor::new();
+        let first = sup.start_agent(l5_manifest("nexus-sovereign"));
+        assert!(first.is_ok());
+
+        let second = sup.start_agent(l5_manifest("nexus-infinity"));
+        let err = second.unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "supervisor error: Only one Sovereign agent allowed. Currently active: nexus-sovereign. Stop it first."
+        );
+    }
+
+    #[test]
+    fn l5_slot_reopens_after_stop() {
+        let mut sup = Supervisor::new();
+        let first = sup.start_agent(l5_manifest("nexus-sovereign")).unwrap();
+        sup.stop_agent(first).unwrap();
+
+        let second = sup.start_agent(l5_manifest("nexus-infinity"));
+        assert!(second.is_ok());
+    }
+
+    #[test]
+    fn maximum_two_l6_agents_can_be_active() {
+        let mut sup = Supervisor::new();
+        assert!(sup.start_agent(l6_manifest("ascendant")).is_ok());
+        assert!(sup.start_agent(l6_manifest("architect-prime")).is_ok());
+
+        let err = sup.start_agent(l6_manifest("oracle-supreme")).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "supervisor error: Maximum two Transcendent (L6) agents allowed. Currently active: architect-prime, ascendant. Stop one first."
+        );
+    }
+
+    #[test]
+    fn l5_and_l6_limits_do_not_interfere() {
+        let mut sup = Supervisor::new();
+        assert!(sup.start_agent(l5_manifest("nexus-sovereign")).is_ok());
+        assert!(sup.start_agent(l6_manifest("ascendant")).is_ok());
+        assert!(sup.start_agent(l6_manifest("architect-prime")).is_ok());
     }
 }

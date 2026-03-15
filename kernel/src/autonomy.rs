@@ -3,6 +3,7 @@ use crate::errors::AgentError;
 use crate::policy_engine::{EvaluationContext, PolicyDecision, PolicyEngine};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::str::FromStr;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -15,6 +16,7 @@ pub enum AutonomyLevel {
     L3,
     L4,
     L5,
+    L6,
 }
 
 impl AutonomyLevel {
@@ -26,6 +28,7 @@ impl AutonomyLevel {
             AutonomyLevel::L3 => "L3",
             AutonomyLevel::L4 => "L4",
             AutonomyLevel::L5 => "L5",
+            AutonomyLevel::L6 => "L6",
         }
     }
 
@@ -37,6 +40,7 @@ impl AutonomyLevel {
             3 => Some(AutonomyLevel::L3),
             4 => Some(AutonomyLevel::L4),
             5 => Some(AutonomyLevel::L5),
+            6 => Some(AutonomyLevel::L6),
             _ => None,
         }
     }
@@ -56,6 +60,32 @@ impl AutonomyLevel {
             AutonomyLevel::L3 => AutonomyLevel::L2,
             AutonomyLevel::L4 => AutonomyLevel::L3,
             AutonomyLevel::L5 => AutonomyLevel::L4,
+            AutonomyLevel::L6 => AutonomyLevel::L5,
+        }
+    }
+}
+
+impl std::fmt::Display for AutonomyLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for AutonomyLevel {
+    type Err = AgentError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim().to_ascii_uppercase().as_str() {
+            "L0" | "0" => Ok(AutonomyLevel::L0),
+            "L1" | "1" => Ok(AutonomyLevel::L1),
+            "L2" | "2" => Ok(AutonomyLevel::L2),
+            "L3" | "3" => Ok(AutonomyLevel::L3),
+            "L4" | "4" => Ok(AutonomyLevel::L4),
+            "L5" | "5" => Ok(AutonomyLevel::L5),
+            "L6" | "6" => Ok(AutonomyLevel::L6),
+            other => Err(AgentError::ManifestError(format!(
+                "unknown autonomy level '{other}'"
+            ))),
         }
     }
 }
@@ -171,6 +201,100 @@ impl AutonomyGuard {
         )
     }
 
+    /// Require L4+ for self-evolution actions (modify own description/strategy,
+    /// run evolution tournaments).
+    pub fn require_self_evolution(
+        &mut self,
+        actor_id: Uuid,
+        audit_trail: &mut AuditTrail,
+    ) -> Result<(), AutonomyError> {
+        self.require_level(actor_id, audit_trail, AutonomyLevel::L4, "self_evolution")
+    }
+
+    /// Require L4+ for agent creation/destruction by another agent.
+    pub fn require_agent_creation(
+        &mut self,
+        actor_id: Uuid,
+        audit_trail: &mut AuditTrail,
+    ) -> Result<(), AutonomyError> {
+        self.require_level(actor_id, audit_trail, AutonomyLevel::L4, "agent_creation")
+    }
+
+    /// Require L5 for modifying system-wide governance policies.
+    pub fn require_governance_modification(
+        &mut self,
+        actor_id: Uuid,
+        audit_trail: &mut AuditTrail,
+    ) -> Result<(), AutonomyError> {
+        self.require_level(
+            actor_id,
+            audit_trail,
+            AutonomyLevel::L5,
+            "governance_modification",
+        )
+    }
+
+    /// Require L5 for sovereign-only actions (ecosystem fuel allocation,
+    /// agent lifecycle management across the system).
+    pub fn require_sovereign_action(
+        &mut self,
+        actor_id: Uuid,
+        audit_trail: &mut AuditTrail,
+    ) -> Result<(), AutonomyError> {
+        self.require_level(actor_id, audit_trail, AutonomyLevel::L5, "sovereign_action")
+    }
+
+    /// Require L6 for changing the agent's cognitive loop parameters.
+    pub fn require_cognitive_modification(
+        &mut self,
+        actor_id: Uuid,
+        audit_trail: &mut AuditTrail,
+    ) -> Result<(), AutonomyError> {
+        self.require_level(
+            actor_id,
+            audit_trail,
+            AutonomyLevel::L6,
+            "cognitive_modification",
+        )
+    }
+
+    /// Require L6 for phase-specific multi-model orchestration.
+    pub fn require_multi_model_orchestration(
+        &mut self,
+        actor_id: Uuid,
+        audit_trail: &mut AuditTrail,
+    ) -> Result<(), AutonomyError> {
+        self.require_level(
+            actor_id,
+            audit_trail,
+            AutonomyLevel::L6,
+            "multi_model_orchestration",
+        )
+    }
+
+    /// Require L6 for dynamic algorithm selection.
+    pub fn require_algorithm_selection(
+        &mut self,
+        actor_id: Uuid,
+        audit_trail: &mut AuditTrail,
+    ) -> Result<(), AutonomyError> {
+        self.require_level(
+            actor_id,
+            audit_trail,
+            AutonomyLevel::L6,
+            "algorithm_selection",
+        )
+    }
+
+    /// Require L6 for designing and deploying agent ecosystems.
+    pub fn require_ecosystem_design(
+        &mut self,
+        actor_id: Uuid,
+        audit_trail: &mut AuditTrail,
+    ) -> Result<(), AutonomyError> {
+        self.require_level(actor_id, audit_trail, AutonomyLevel::L6, "ecosystem_design")
+    }
+
     pub fn downgrade(
         &mut self,
         actor_id: Uuid,
@@ -239,7 +363,8 @@ impl AutonomyGuard {
                             AutonomyLevel::L1 => AutonomyLevel::L2,
                             AutonomyLevel::L2 => AutonomyLevel::L3,
                             AutonomyLevel::L3 => AutonomyLevel::L4,
-                            AutonomyLevel::L4 | AutonomyLevel::L5 => AutonomyLevel::L5,
+                            AutonomyLevel::L4 => AutonomyLevel::L5,
+                            AutonomyLevel::L5 | AutonomyLevel::L6 => AutonomyLevel::L6,
                         };
                     }
                 }
@@ -288,7 +413,16 @@ impl AutonomyGuard {
 mod tests {
     use super::{AutonomyError, AutonomyGuard, AutonomyLevel};
     use crate::audit::AuditTrail;
+    use std::str::FromStr;
     use uuid::Uuid;
+
+    #[test]
+    fn l6_orders_above_l5() {
+        assert!(AutonomyLevel::L6 > AutonomyLevel::L5);
+        assert_eq!(AutonomyLevel::from_numeric(6), Some(AutonomyLevel::L6));
+        assert_eq!(AutonomyLevel::L6.previous(), AutonomyLevel::L5);
+        assert_eq!(AutonomyLevel::from_str("L6").unwrap(), AutonomyLevel::L6);
+    }
 
     #[test]
     fn denied_tool_call_at_l0() {
@@ -356,5 +490,94 @@ mod tests {
             .get("reason")
             .and_then(|value| value.as_str())
             .is_some_and(|reason| reason.contains("requires L4")));
+    }
+
+    #[test]
+    fn self_evolution_requires_l4() {
+        let mut guard = AutonomyGuard::new(AutonomyLevel::L3);
+        let mut audit = AuditTrail::new();
+        let result = guard.require_self_evolution(Uuid::new_v4(), &mut audit);
+        assert!(matches!(result, Err(AutonomyError::Denied { .. })));
+    }
+
+    #[test]
+    fn governance_modification_requires_l5() {
+        let mut guard = AutonomyGuard::new(AutonomyLevel::L4);
+        let mut audit = AuditTrail::new();
+        let result = guard.require_governance_modification(Uuid::new_v4(), &mut audit);
+        assert!(matches!(result, Err(AutonomyError::Denied { .. })));
+    }
+
+    #[test]
+    fn sovereign_action_allowed_at_l5() {
+        let mut guard = AutonomyGuard::new(AutonomyLevel::L5);
+        let mut audit = AuditTrail::new();
+        assert!(guard
+            .require_sovereign_action(Uuid::new_v4(), &mut audit)
+            .is_ok());
+    }
+
+    #[test]
+    fn cognitive_modification_requires_l6() {
+        let mut l5 = AutonomyGuard::new(AutonomyLevel::L5);
+        let mut audit = AuditTrail::new();
+        assert!(matches!(
+            l5.require_cognitive_modification(Uuid::new_v4(), &mut audit),
+            Err(AutonomyError::Denied { .. })
+        ));
+
+        let mut l6 = AutonomyGuard::new(AutonomyLevel::L6);
+        let mut audit = AuditTrail::new();
+        assert!(l6
+            .require_cognitive_modification(Uuid::new_v4(), &mut audit)
+            .is_ok());
+    }
+
+    #[test]
+    fn multi_model_orchestration_requires_l6() {
+        let mut l5 = AutonomyGuard::new(AutonomyLevel::L5);
+        let mut audit = AuditTrail::new();
+        assert!(matches!(
+            l5.require_multi_model_orchestration(Uuid::new_v4(), &mut audit),
+            Err(AutonomyError::Denied { .. })
+        ));
+
+        let mut l6 = AutonomyGuard::new(AutonomyLevel::L6);
+        let mut audit = AuditTrail::new();
+        assert!(l6
+            .require_multi_model_orchestration(Uuid::new_v4(), &mut audit)
+            .is_ok());
+    }
+
+    #[test]
+    fn algorithm_selection_requires_l6() {
+        let mut l5 = AutonomyGuard::new(AutonomyLevel::L5);
+        let mut audit = AuditTrail::new();
+        assert!(matches!(
+            l5.require_algorithm_selection(Uuid::new_v4(), &mut audit),
+            Err(AutonomyError::Denied { .. })
+        ));
+
+        let mut l6 = AutonomyGuard::new(AutonomyLevel::L6);
+        let mut audit = AuditTrail::new();
+        assert!(l6
+            .require_algorithm_selection(Uuid::new_v4(), &mut audit)
+            .is_ok());
+    }
+
+    #[test]
+    fn ecosystem_design_requires_l6() {
+        let mut l5 = AutonomyGuard::new(AutonomyLevel::L5);
+        let mut audit = AuditTrail::new();
+        assert!(matches!(
+            l5.require_ecosystem_design(Uuid::new_v4(), &mut audit),
+            Err(AutonomyError::Denied { .. })
+        ));
+
+        let mut l6 = AutonomyGuard::new(AutonomyLevel::L6);
+        let mut audit = AuditTrail::new();
+        assert!(l6
+            .require_ecosystem_design(Uuid::new_v4(), &mut audit)
+            .is_ok());
     }
 }

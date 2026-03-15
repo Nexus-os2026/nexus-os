@@ -16,6 +16,13 @@ export interface AgentSummary {
   did?: string;
 }
 
+export interface ScheduledAgent {
+  agent_id: string;
+  cron_expression: string;
+  default_goal: string;
+  next_run_epoch: number;
+}
+
 /** Event emitted by backend on agent lifecycle changes. */
 export interface AgentStatusEvent {
   agent_id: string;
@@ -128,6 +135,72 @@ export interface ChatMessage {
   timestamp: number;
   model?: string;
   streaming?: boolean;
+  variant?: "approval" | "resumed" | "error";
+}
+
+export interface ConductorPlannedTask {
+  description: string;
+  role: string;
+  capabilities_needed: string[];
+  estimated_fuel: number;
+  depends_on: number[];
+  expected_outputs: string[];
+}
+
+export interface ConductorPlanEvent {
+  id: string;
+  tasks: ConductorPlannedTask[];
+}
+
+export interface ConductorAgentCompletedEvent {
+  agents_used: number;
+  output_files: string[];
+}
+
+export interface ConductorFinishedEvent {
+  request_id: string;
+  plan_id: string;
+  status: string;
+  output_dir: string;
+  output_files: string[];
+  agents_used: number;
+  total_fuel_used: number;
+  duration_secs: number;
+  summary: string;
+}
+
+export interface ConductorBuildResponse {
+  plan: {
+    id: string;
+    tasks: ConductorPlannedTask[];
+  };
+  result: {
+    request_id: string;
+    plan_id: string;
+    status: string;
+    output_dir: string;
+    output_files: string[];
+    agents_used: number;
+    total_fuel_used: number;
+    duration_secs: number;
+    summary: string;
+  };
+}
+
+export interface TrustOverviewAgent {
+  id: string;
+  name: string;
+  did: string | null;
+  autonomy_level: number;
+  trust_score: number;
+  total_tasks: number;
+  success_rate: number;
+  violations: number;
+  fuel_remaining: number;
+  fuel_budget: number;
+  status: string;
+  badges: string[];
+  last_updated: number;
 }
 
 export type ConnectionStatus = "connected" | "mock";
@@ -253,6 +326,24 @@ export interface AvailableModel {
   tag: string;
   installed: boolean;
   description: string;
+}
+
+export interface ProviderModel {
+  id: string;
+  name: string;
+  provider: string;
+  local: boolean;
+  requires_key: boolean;
+  size_gb: number | null;
+  installed: boolean;
+}
+
+export interface ProviderStatus {
+  ollama: boolean;
+  anthropic: boolean;
+  openai: boolean;
+  deepseek: boolean;
+  gemini: boolean;
 }
 
 export interface ChatTokenEvent {
@@ -416,6 +507,22 @@ export interface ApprovalDisplay {
   agent_provided?: boolean;
 }
 
+// ── Consent / HITL Approval Types ──
+
+export interface ConsentNotification {
+  consent_id: string;
+  agent_id: string;
+  agent_name: string;
+  operation_type: string;
+  operation_summary: string;
+  risk_level: string;
+  side_effects_preview: string[];
+  fuel_cost_estimate: number;
+  requested_at: string;
+  auto_deny_at: string;
+  min_review_seconds?: number | null;
+}
+
 // ── Protocols Dashboard Types ──
 
 export interface ProtocolsStatus {
@@ -506,12 +613,20 @@ export interface ComplianceAlertRow {
   agent_id: string | null;
 }
 
+export interface Soc2ControlRow {
+  control_id: string;
+  description: string;
+  status: string;
+  evidence_count: number;
+}
+
 export interface ComplianceStatusRow {
   status: string;
   checks_passed: number;
   checks_failed: number;
   agents_checked: number;
   alerts: ComplianceAlertRow[];
+  soc2_controls: Soc2ControlRow[];
 }
 
 export interface ComplianceAgentRow {
@@ -521,6 +636,9 @@ export interface ComplianceAgentRow {
   autonomy_level: string;
   capabilities: string[];
   status: string;
+  justification: string;
+  applicable_articles: string[];
+  required_controls: string[];
 }
 
 // ── Audit Chain Types ──

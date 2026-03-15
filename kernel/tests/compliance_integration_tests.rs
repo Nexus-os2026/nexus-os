@@ -36,6 +36,7 @@ fn base_manifest(name: &str, caps: Vec<&str>) -> AgentManifest {
         consent_policy_path: None,
         requester_id: None,
         schedule: None,
+        default_goal: None,
         llm_model: Some("claude-sonnet-4-5".to_string()),
         fuel_period_id: None,
         monthly_fuel_cap: None,

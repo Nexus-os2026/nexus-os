@@ -137,51 +137,31 @@ function pathJoin(base: string, name: string): string {
 }
 
 /* ================================================================== */
-/*  Agent actions (demo — simulated AI responses)                      */
+/*  Agent actions (requires LLM provider)                              */
 /* ================================================================== */
 
 const AGENT_ACTIONS: AgentAction[] = [
-  { id: "explain", label: "Explain (Demo)", description: "Explain selected code — simulated", icon: "?" },
-  { id: "refactor", label: "Refactor (Demo)", description: "Suggest improvements — simulated", icon: "↻" },
-  { id: "fix", label: "Fix Bugs (Demo)", description: "Find and fix issues — simulated", icon: "⚕" },
-  { id: "test", label: "Gen Tests (Demo)", description: "Generate unit tests — simulated", icon: "⊘" },
-  { id: "document", label: "Document (Demo)", description: "Add documentation — simulated", icon: "≡" },
-  { id: "optimize", label: "Optimize (Demo)", description: "Performance improvements — simulated", icon: "⚡" },
-  { id: "complete", label: "Complete (Demo)", description: "Auto-complete code block — simulated", icon: "→" },
-  { id: "review", label: "Review (Demo)", description: "Security & quality review — simulated", icon: "⛨" },
+  { id: "explain", label: "Explain", description: "Explain selected code", icon: "?" },
+  { id: "refactor", label: "Refactor", description: "Suggest improvements", icon: "↻" },
+  { id: "fix", label: "Fix Bugs", description: "Find and fix issues", icon: "⚕" },
+  { id: "test", label: "Gen Tests", description: "Generate unit tests", icon: "⊘" },
+  { id: "document", label: "Document", description: "Add documentation", icon: "≡" },
+  { id: "optimize", label: "Optimize", description: "Performance improvements", icon: "⚡" },
+  { id: "complete", label: "Complete", description: "Auto-complete code block", icon: "→" },
+  { id: "review", label: "Review", description: "Security & quality review", icon: "⛨" },
 ];
 
-const DEMO_RESPONSES: Record<string, string> = {
-  explain: "This is a demo response. In production, the agent would analyze the selected code using a local SLM or external LLM via the governed gateway.",
-  refactor: "// Demo: Agent would suggest refactored code here.\n// Connect a real LLM provider in Settings > AI to enable.",
-  fix: "Demo: No analysis performed. Connect an AI provider for real bug detection.",
-  test: "// Demo: Agent would generate test cases here.\n// Connect a real LLM provider to enable.",
-  document: "/// Demo: Agent would generate documentation here.\n/// Connect a real LLM provider to enable.",
-  optimize: "Demo: Performance analysis requires a connected AI provider.",
-  complete: "// Demo: Code completion requires a connected AI provider.",
-  review: "Demo: Security review requires a connected AI provider.",
+const AGENT_RESPONSES: Record<string, string> = {
+  explain: "Connect an LLM provider in Settings to enable code explanation.",
+  refactor: "Connect an LLM provider in Settings to enable refactoring suggestions.",
+  fix: "Connect an LLM provider in Settings to enable bug detection.",
+  test: "Connect an LLM provider in Settings to enable test generation.",
+  document: "Connect an LLM provider in Settings to enable documentation generation.",
+  optimize: "Connect an LLM provider in Settings to enable performance analysis.",
+  complete: "Connect an LLM provider in Settings to enable code completion.",
+  review: "Connect an LLM provider in Settings to enable security review.",
 };
 
-const MOCK_GIT_CHANGES: GitChange[] = [
-  { file: "src/main.rs", status: "modified" },
-  { file: "agents/coder.toml", status: "modified" },
-  { file: "src/api.rs", status: "added" },
-  { file: "old_config.toml", status: "deleted" },
-];
-
-const MOCK_GIT_LOG: GitCommit[] = [
-  { hash: "a1b2c3d", message: "feat: add Code Editor with Monaco integration", author: "Suresh", ts: Date.now() - 3600000 },
-  { hash: "e4f5g6h", message: "fix: capability check before agent file write", author: "Claude", ts: Date.now() - 7200000 },
-  { hash: "i7j8k9l", message: "refactor: extract Supervisor boot sequence", author: "Suresh", ts: Date.now() - 14400000 },
-  { hash: "m0n1o2p", message: "feat: fuel budget warning at 20% threshold", author: "Claude", ts: Date.now() - 28800000 },
-  { hash: "q3r4s5t", message: "docs: update architecture invariants", author: "Suresh", ts: Date.now() - 43200000 },
-];
-
-const MOCK_AGENT_WORKERS: AgentWorker[] = [
-  { id: "w1", name: "Coder Agent", file: "src/main.rs", action: "Refactoring boot sequence", progress: 72, status: "working", fuelUsed: 340 },
-  { id: "w2", name: "Test Agent", file: "src/lib.rs", action: "Generating integration tests", progress: 45, status: "working", fuelUsed: 210 },
-  { id: "w3", name: "Docs Agent", file: "README.md", action: "Updating API documentation", progress: 100, status: "done", fuelUsed: 150 },
-];
 
 const DANGEROUS_COMMANDS = ["rm -rf", "sudo rm", "mkfs", "dd if=", ":(){:|:&};:", "chmod 777", "FORMAT", "shutdown", "reboot", "kill -9 1"];
 
@@ -221,10 +201,10 @@ export default function CodeEditor(): JSX.Element {
   ]);
   const [terminalInput, setTerminalInput] = useState("");
   const [gitBranch, setGitBranch] = useState("main");
-  const [gitChanges] = useState<GitChange[]>(MOCK_GIT_CHANGES);
-  const [gitLog] = useState<GitCommit[]>(MOCK_GIT_LOG);
+  const [gitChanges] = useState<GitChange[]>([]);
+  const [gitLog] = useState<GitCommit[]>([]);
   const [commitMsg, setCommitMsg] = useState("");
-  const [agentWorkers, setAgentWorkers] = useState<AgentWorker[]>(MOCK_AGENT_WORKERS);
+  const [agentWorkers, setAgentWorkers] = useState<AgentWorker[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
 
@@ -508,7 +488,7 @@ export default function CodeEditor(): JSX.Element {
 
     setTimeout(() => {
       setFuelUsed((prev) => prev + cost);
-      setAgentResult(DEMO_RESPONSES[action.id] ?? "Analysis complete. No issues found.");
+      setAgentResult(AGENT_RESPONSES[action.id] ?? "Connect an LLM provider in Settings to use agent actions.");
       setAgentMode("result");
       appendAudit("AgentComplete", `${action.label} — ${cost} fuel consumed`);
     }, 600 + Math.random() * 800);

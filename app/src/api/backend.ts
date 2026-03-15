@@ -6,6 +6,8 @@ import type {
   AuditChainStatusRow,
   AuditEventRow,
   AvailableModel,
+  ProviderModel,
+  ProviderStatus,
   BrowserHistoryEntry,
   BrowserNavigateResult,
   CapabilityRequest,
@@ -30,17 +32,21 @@ import type {
   PermissionCategory,
   PermissionHistoryEntry,
   PermissionUpdate,
+  ScheduledAgent,
   PolicyConflict,
   PolicyEntry,
   PolicyTestResult,
   ProtocolRequest,
   ProtocolsStatus,
   BuildSessionState,
+  ConductorBuildResponse,
   ProviderUsageStats,
   ResearchSessionState,
   SetupResult,
   SystemInfo,
   TestConnectionResult,
+  ConsentNotification,
+  TrustOverviewAgent,
   VoiceRuntimeState
 } from "../types";
 
@@ -79,6 +85,10 @@ export function listAgents(): Promise<AgentSummary[]> {
   return invokeDesktop<AgentSummary[]>("list_agents");
 }
 
+export function clearAllAgents(): Promise<number> {
+  return invokeDesktop<number>("clear_all_agents");
+}
+
 export function createAgent(manifestJson: string): Promise<string> {
   return invokeDesktop<string>("create_agent", { manifestJson, manifest_json: manifestJson });
 }
@@ -107,8 +117,12 @@ export function resumeAgent(agentId: string): Promise<void> {
   return invokeDesktop<void>("resume_agent", agentArgs(agentId));
 }
 
-export function sendChat(message: string): Promise<ChatResponse> {
-  return invokeDesktop<ChatResponse>("send_chat", { message });
+export function sendChat(message: string, modelId?: string): Promise<ChatResponse> {
+  return invokeDesktop<ChatResponse>("send_chat", {
+    message,
+    modelId,
+    model_id: modelId,
+  });
 }
 
 export function getConfig(): Promise<NexusConfig> {
@@ -196,6 +210,22 @@ export function listAvailableModels(): Promise<AvailableModel[]> {
   return invokeDesktop<AvailableModel[]>("list_available_models");
 }
 
+export function listProviderModels(): Promise<ProviderModel[]> {
+  return invokeDesktop<ProviderModel[]>("list_provider_models");
+}
+
+export function getProviderStatus(): Promise<ProviderStatus> {
+  return invokeDesktop<ProviderStatus>("get_provider_status");
+}
+
+export function saveApiKey(provider: string, apiKey: string): Promise<void> {
+  return invokeDesktop<void>("save_api_key", {
+    provider,
+    apiKey,
+    api_key: apiKey,
+  });
+}
+
 export function chatWithOllama(
   messages: Array<{ role: string; content: string }>,
   model: string,
@@ -211,6 +241,23 @@ export function chatWithOllama(
 
 export function setAgentModel(agent: string, model: string): Promise<void> {
   return invokeDesktop<void>("set_agent_model", { agent, model });
+}
+
+export function conductBuild(
+  prompt: string,
+  outputDir?: string,
+  model?: string
+): Promise<ConductorBuildResponse> {
+  return invokeDesktop<ConductorBuildResponse>("conduct_build", {
+    prompt,
+    outputDir,
+    output_dir: outputDir,
+    model,
+  });
+}
+
+export function getTrustOverview(): Promise<TrustOverviewAgent[]> {
+  return invokeDesktop<TrustOverviewAgent[]>("get_trust_overview");
 }
 
 export function checkLlmStatus(): Promise<LlmStatus> {
@@ -278,6 +325,10 @@ export function getMcpTools(): Promise<McpTool[]> {
 
 export function getAgentCards(): Promise<AgentCardSummary[]> {
   return invokeDesktop<AgentCardSummary[]>("get_agent_cards");
+}
+
+export function getScheduledAgents(): Promise<ScheduledAgent[]> {
+  return invokeDesktop<ScheduledAgent[]>("get_scheduled_agents");
 }
 
 // ── Identity API ──
@@ -775,4 +826,252 @@ export function factoryGetBuildHistory(projectId: string): Promise<string> {
     projectId,
     project_id: projectId,
   });
+}
+
+// ── Cognitive Runtime API ──
+
+export function assignAgentGoal(
+  agentId: string,
+  goalDescription: string,
+  priority: number,
+): Promise<string> {
+  return invokeDesktop<string>("assign_agent_goal", {
+    agentId,
+    agent_id: agentId,
+    goalDescription,
+    goal_description: goalDescription,
+    priority,
+  });
+}
+
+/** Execute an agent goal end-to-end: assigns the goal and runs the cognitive
+ *  loop in the background. Listen to `agent-cognitive-cycle` and
+ *  `agent-goal-completed` Tauri events for progress updates. */
+export function executeAgentGoal(
+  agentId: string,
+  goalDescription: string,
+  priority: number,
+): Promise<string> {
+  return invokeDesktop<string>("execute_agent_goal", {
+    agentId,
+    agent_id: agentId,
+    goalDescription,
+    goal_description: goalDescription,
+    priority,
+  });
+}
+
+export function stopAgentGoal(agentId: string): Promise<void> {
+  return invokeDesktop<void>("stop_agent_goal", {
+    agentId,
+    agent_id: agentId,
+  });
+}
+
+export function getAgentCognitiveStatus(
+  agentId: string,
+): Promise<Record<string, unknown>> {
+  return invokeDesktop<Record<string, unknown>>("get_agent_cognitive_status", {
+    agentId,
+    agent_id: agentId,
+  });
+}
+
+export function getAgentTaskHistory(
+  agentId: string,
+  limit = 50,
+): Promise<Record<string, unknown>[]> {
+  return invokeDesktop<Record<string, unknown>[]>("get_agent_task_history", {
+    agentId,
+    agent_id: agentId,
+    limit,
+  });
+}
+
+export function getAgentMemories(
+  agentId: string,
+  memoryType: string | null = null,
+  limit = 50,
+): Promise<Record<string, unknown>[]> {
+  return invokeDesktop<Record<string, unknown>[]>("get_agent_memories", {
+    agentId,
+    agent_id: agentId,
+    memoryType,
+    memory_type: memoryType,
+    limit,
+  });
+}
+
+// ── Agent Memory API ──
+
+export function agentMemoryRemember(
+  agentId: string,
+  content: string,
+  memoryType: string,
+  importance: number,
+  tags: string[],
+): Promise<string> {
+  return invokeDesktop<string>("agent_memory_remember", {
+    agentId,
+    agent_id: agentId,
+    content,
+    memoryType,
+    memory_type: memoryType,
+    importance,
+    tags,
+  });
+}
+
+export function agentMemoryRecall(
+  agentId: string,
+  query: string,
+  maxResults?: number,
+): Promise<string> {
+  return invokeDesktop<string>("agent_memory_recall", {
+    agentId,
+    agent_id: agentId,
+    query,
+    maxResults: maxResults ?? null,
+    max_results: maxResults ?? null,
+  });
+}
+
+export function agentMemoryRecallByType(
+  agentId: string,
+  memoryType: string,
+  maxResults?: number,
+): Promise<string> {
+  return invokeDesktop<string>("agent_memory_recall_by_type", {
+    agentId,
+    agent_id: agentId,
+    memoryType,
+    memory_type: memoryType,
+    maxResults: maxResults ?? null,
+    max_results: maxResults ?? null,
+  });
+}
+
+export function agentMemoryForget(agentId: string, memoryId: string): Promise<string> {
+  return invokeDesktop<string>("agent_memory_forget", {
+    agentId,
+    agent_id: agentId,
+    memoryId,
+    memory_id: memoryId,
+  });
+}
+
+export function agentMemoryGetStats(agentId: string): Promise<string> {
+  return invokeDesktop<string>("agent_memory_get_stats", agentArgs(agentId));
+}
+
+export function agentMemorySave(agentId: string): Promise<string> {
+  return invokeDesktop<string>("agent_memory_save", agentArgs(agentId));
+}
+
+export function agentMemoryClear(agentId: string): Promise<string> {
+  return invokeDesktop<string>("agent_memory_clear", agentArgs(agentId));
+}
+
+// ── Messaging Gateway API ──
+
+export function getMessagingStatus(): Promise<string> {
+  return invokeDesktop<string>("get_messaging_status");
+}
+
+export function setDefaultAgent(userId: string, agentId: string): Promise<void> {
+  return invokeDesktop<void>("set_default_agent", {
+    userId,
+    user_id: userId,
+    agentId,
+    agent_id: agentId,
+  });
+}
+
+// ── Self-Evolution API ──
+
+export function getSelfEvolutionMetrics(
+  agentId: string,
+): Promise<Record<string, unknown>> {
+  return invokeDesktop<Record<string, unknown>>("get_self_evolution_metrics", {
+    agentId,
+    agent_id: agentId,
+  });
+}
+
+export function getSelfEvolutionStrategies(
+  agentId: string,
+): Promise<Record<string, unknown>[]> {
+  return invokeDesktop<Record<string, unknown>[]>("get_self_evolution_strategies", {
+    agentId,
+    agent_id: agentId,
+  });
+}
+
+export function triggerCrossAgentLearning(): Promise<number> {
+  return invokeDesktop<number>("trigger_cross_agent_learning");
+}
+
+// ── Hivemind Orchestration API ──
+
+export function startHivemind(
+  goal: string,
+  agentIds: string[],
+): Promise<Record<string, unknown>> {
+  return invokeDesktop<Record<string, unknown>>("start_hivemind", {
+    goal,
+    agentIds,
+    agent_ids: agentIds,
+  });
+}
+
+export function getHivemindStatus(
+  sessionId: string,
+): Promise<Record<string, unknown>> {
+  return invokeDesktop<Record<string, unknown>>("get_hivemind_status", {
+    sessionId,
+    session_id: sessionId,
+  });
+}
+
+export function cancelHivemind(sessionId: string): Promise<void> {
+  return invokeDesktop<void>("cancel_hivemind", {
+    sessionId,
+    session_id: sessionId,
+  });
+}
+
+// ── Consent / HITL Approval API ──
+
+export function approveConsentRequest(
+  consentId: string,
+  approvedBy: string,
+): Promise<void> {
+  return invokeDesktop<void>("approve_consent_request", {
+    consentId,
+    consent_id: consentId,
+    approvedBy,
+    approved_by: approvedBy,
+  });
+}
+
+export function denyConsentRequest(
+  consentId: string,
+  deniedBy: string,
+  reason?: string,
+): Promise<void> {
+  return invokeDesktop<void>("deny_consent_request", {
+    consentId,
+    consent_id: consentId,
+    deniedBy,
+    denied_by: deniedBy,
+    reason: reason ?? null,
+  });
+}
+
+export function listPendingConsents(): Promise<ConsentNotification[]> {
+  return invokeDesktop<ConsentNotification[]>("list_pending_consents");
+}
+
+export function getConsentHistory(limit = 20): Promise<ConsentNotification[]> {
+  return invokeDesktop<ConsentNotification[]>("get_consent_history", { limit });
 }

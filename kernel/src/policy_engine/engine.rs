@@ -110,7 +110,7 @@ fn pattern_matches(pattern: &str, value: &str) -> bool {
 }
 
 fn autonomy_level_from_u8(v: u8) -> AutonomyLevel {
-    AutonomyLevel::from_numeric(v).unwrap_or(AutonomyLevel::L5)
+    AutonomyLevel::from_numeric(v).unwrap_or(AutonomyLevel::L6)
 }
 
 // ---------------------------------------------------------------------------

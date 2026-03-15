@@ -860,7 +860,9 @@ pub fn execute_conduct_command(
         .map_err(|e| format!("Failed to create output directory '{}': {e}", dir))?;
 
     let request = UserRequest::new(prompt, &dir);
-    let provider = OllamaProvider::new("http://localhost:11434");
+    let provider = OllamaProvider::new("http://localhost:11434")
+        .with_request_timeout(180)
+        .with_streaming_timeout(180);
     let mut conductor = Conductor::new(provider, model_name);
 
     if preview {

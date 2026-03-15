@@ -8,9 +8,11 @@
 //! All protocol endpoints route through kernel governance (capability checks,
 //! fuel accounting, audit trail) before executing agent operations.
 
+pub mod frontend;
 pub mod http_gateway;
 pub mod mcp_client;
 pub mod metrics;
+pub mod server_runtime;
 
 // Re-export core types from kernel for convenience.
 pub use nexus_kernel::protocols::a2a;

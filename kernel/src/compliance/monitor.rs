@@ -373,6 +373,7 @@ mod tests {
             consent_policy_path: None,
             requester_id: None,
             schedule: None,
+            default_goal: None,
             llm_model: None,
             fuel_period_id: None,
             monthly_fuel_cap: None,

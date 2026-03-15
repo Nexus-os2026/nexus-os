@@ -6,22 +6,37 @@ use std::env;
 use std::process::Command;
 
 pub mod claude;
+pub mod cohere;
 pub mod deepseek;
+pub mod fireworks;
 pub mod gemini;
+pub mod groq;
 #[cfg(feature = "local-slm")]
 pub mod local_slm;
+pub mod mistral;
 pub mod mock;
 pub mod ollama;
 pub mod openai;
+pub mod openai_compatible;
+pub mod openrouter;
+pub mod perplexity;
+pub mod together;
 
 pub use claude::ClaudeProvider;
+pub use cohere::CohereProvider;
 pub use deepseek::DeepSeekProvider;
+pub use fireworks::FireworksProvider;
 pub use gemini::GeminiProvider;
+pub use groq::GroqProvider;
 #[cfg(feature = "local-slm")]
 pub use local_slm::LocalSlmProvider;
+pub use mistral::MistralProvider;
 pub use mock::MockProvider;
 pub use ollama::OllamaProvider;
 pub use openai::OpenAiProvider;
+pub use openrouter::OpenRouterProvider;
+pub use perplexity::PerplexityProvider;
+pub use together::TogetherProvider;
 
 const REAL_API_DISABLED_ERROR: &str =
     "Real API disabled. Set ENABLE_REAL_API=1 to allow external calls.";
@@ -163,13 +178,23 @@ pub(crate) fn curl_post_json(
     headers: &BTreeMap<String, String>,
     body: &Value,
 ) -> Result<(u16, Value), AgentError> {
+    curl_post_json_with_timeout(endpoint, headers, body, 20)
+}
+
+pub(crate) fn curl_post_json_with_timeout(
+    endpoint: &str,
+    headers: &BTreeMap<String, String>,
+    body: &Value,
+    timeout_secs: u32,
+) -> Result<(u16, Value), AgentError> {
     let marker = "__NEXUS_STATUS__:";
     let encoded_body = serde_json::to_string(body).map_err(|error| {
         AgentError::SupervisorError(format!("failed to encode request body: {error}"))
     })?;
 
+    let timeout_str = timeout_secs.to_string();
     let mut command = Command::new("curl");
-    command.args(["-sS", "-L", "-m", "20"]);
+    command.args(["-sS", "-L", "-m", &timeout_str]);
     for (header_name, header_value) in headers {
         command
             .arg("-H")
@@ -213,8 +238,9 @@ pub(crate) fn curl_post_json(
 #[cfg(test)]
 mod tests {
     use super::{
-        require_real_api_with, ClaudeProvider, DeepSeekProvider, GeminiProvider, LlmProvider,
-        OllamaProvider, OpenAiProvider,
+        require_real_api_with, ClaudeProvider, CohereProvider, DeepSeekProvider, FireworksProvider,
+        GeminiProvider, GroqProvider, LlmProvider, MistralProvider, OllamaProvider, OpenAiProvider,
+        OpenRouterProvider, PerplexityProvider, TogetherProvider,
     };
     use serde_json::json;
 
@@ -383,6 +409,137 @@ mod tests {
             request.endpoint,
             "http://my-proxy.local/v1/chat/completions"
         );
+    }
+
+    #[test]
+    fn test_groq_request_format() {
+        let provider = GroqProvider::new(Some("groq-key".to_string()));
+        let request = provider.build_request("Fast response", 32, "llama-3.3-70b-versatile");
+
+        assert_eq!(
+            request.endpoint,
+            "https://api.groq.com/openai/v1/chat/completions"
+        );
+        assert_eq!(
+            request.headers.get("authorization").map(String::as_str),
+            Some("Bearer groq-key")
+        );
+        assert_eq!(
+            request.body,
+            json!({
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": "Fast response"}],
+                "max_tokens": 32
+            })
+        );
+    }
+
+    #[test]
+    fn test_mistral_request_format() {
+        let provider = MistralProvider::new(Some("mistral-key".to_string()));
+        let request = provider.build_request("Reason carefully", 128, "mistral-large-latest");
+
+        assert_eq!(
+            request.endpoint,
+            "https://api.mistral.ai/v1/chat/completions"
+        );
+        assert_eq!(
+            request.headers.get("authorization").map(String::as_str),
+            Some("Bearer mistral-key")
+        );
+        assert_eq!(request.body["model"], "mistral-large-latest");
+    }
+
+    #[test]
+    fn test_together_request_format() {
+        let provider = TogetherProvider::new(Some("together-key".to_string()));
+        let request = provider.build_request(
+            "Open weights",
+            48,
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        );
+
+        assert_eq!(
+            request.endpoint,
+            "https://api.together.xyz/v1/chat/completions"
+        );
+        assert_eq!(
+            request.headers.get("authorization").map(String::as_str),
+            Some("Bearer together-key")
+        );
+        assert_eq!(request.body["max_tokens"], 48);
+    }
+
+    #[test]
+    fn test_fireworks_request_format() {
+        let provider = FireworksProvider::new(Some("fireworks-key".to_string()));
+        let request = provider.build_request(
+            "Serve fast",
+            72,
+            "accounts/fireworks/models/llama-v3p1-70b-instruct",
+        );
+
+        assert_eq!(
+            request.endpoint,
+            "https://api.fireworks.ai/inference/v1/chat/completions"
+        );
+        assert_eq!(
+            request.headers.get("authorization").map(String::as_str),
+            Some("Bearer fireworks-key")
+        );
+        assert_eq!(request.body["max_tokens"], 72);
+    }
+
+    #[test]
+    fn test_perplexity_request_format() {
+        let provider = PerplexityProvider::new(Some("pplx-key".to_string()));
+        let request = provider.build_request("Search the web", 60, "sonar-pro");
+
+        assert_eq!(
+            request.endpoint,
+            "https://api.perplexity.ai/chat/completions"
+        );
+        assert_eq!(
+            request.headers.get("authorization").map(String::as_str),
+            Some("Bearer pplx-key")
+        );
+        assert_eq!(request.body["model"], "sonar-pro");
+    }
+
+    #[test]
+    fn test_cohere_request_format() {
+        let provider = CohereProvider::new(Some("cohere-key".to_string()));
+        let request = provider.build_request("Narrate this", 80, "command-r-plus");
+
+        assert_eq!(request.endpoint, "https://api.cohere.ai/v2/chat");
+        assert_eq!(
+            request.headers.get("authorization").map(String::as_str),
+            Some("Bearer cohere-key")
+        );
+        assert_eq!(
+            request.body,
+            json!({
+                "model": "command-r-plus",
+                "message": "Narrate this",
+                "max_tokens": 80
+            })
+        );
+    }
+
+    #[test]
+    fn test_openrouter_request_format() {
+        let provider = OpenRouterProvider::new(Some("openrouter-key".to_string()));
+        let request = provider.build_request("Route this", 40, "openai/gpt-4o-mini");
+
+        assert_eq!(
+            request.endpoint,
+            "https://openrouter.ai/api/v1/chat/completions"
+        );
+        assert_eq!(
+            request.headers.get("authorization").map(String::as_str),
+            Some("Bearer openrouter-key")
+        );
+        assert_eq!(request.body["model"], "openai/gpt-4o-mini");
     }
 
     #[test]

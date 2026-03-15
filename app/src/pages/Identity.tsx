@@ -10,21 +10,16 @@ export function Identity({ agents }: { agents: { id: string; name: string }[] })
   useEffect(() => {
     if (!hasDesktopRuntime()) {
       setLoading(false);
-      setIdentities(mockIdentities());
       return;
     }
     listIdentities()
       .then(setIdentities)
-      .catch(() => setIdentities(mockIdentities()))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
   function handleSelect(agentId: string) {
-    if (!hasDesktopRuntime()) {
-      const mock = mockIdentities().find((i) => i.agent_id === agentId) ?? mockIdentities()[0];
-      setSelected(mock);
-      return;
-    }
+    if (!hasDesktopRuntime()) return;
     getAgentIdentity(agentId)
       .then(setSelected)
       .catch(() => {});
@@ -104,17 +99,6 @@ function Field({ label, value }: { label: string; value: string }) {
       <span style={{ color: "var(--text-primary, #e2e8f0)", fontFamily: "monospace", fontSize: "0.8rem", wordBreak: "break-all" }}>{value}</span>
     </div>
   );
-}
-
-function mockIdentities(): IdentityInfo[] {
-  return [
-    {
-      agent_id: "00000000-0000-0000-0000-000000000001",
-      did: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
-      created_at: Math.floor(Date.now() / 1000) - 3600,
-      public_key_hex: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-    },
-  ];
 }
 
 export default Identity;

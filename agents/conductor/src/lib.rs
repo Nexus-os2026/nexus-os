@@ -37,6 +37,7 @@ pub struct Conductor<P: LlmProvider> {
     planner: Planner,
     gateway: GovernedLlmGateway<P>,
     monitor_config: MonitorConfig,
+    model_name: String,
 }
 
 impl<P: LlmProvider> Conductor<P> {
@@ -45,6 +46,7 @@ impl<P: LlmProvider> Conductor<P> {
             planner: Planner::new(model_name),
             gateway: GovernedLlmGateway::new(provider),
             monitor_config: MonitorConfig::default(),
+            model_name: model_name.to_string(),
         }
     }
 
@@ -79,14 +81,14 @@ impl<P: LlmProvider> Conductor<P> {
                 fuel_remaining: 5_000,
             };
 
-            if let Ok(paths) = generate_site_with_llm(
+            match generate_site_with_llm(
                 &task.description,
                 output_dir,
                 &mut self.gateway,
                 &mut runtime,
-                "default",
+                &self.model_name,
             ) {
-                if !paths.is_empty() {
+                Ok(paths) if !paths.is_empty() => {
                     for path in &paths {
                         let _ = audit.append_event(
                             agent_id,
@@ -95,6 +97,12 @@ impl<P: LlmProvider> Conductor<P> {
                         );
                     }
                     return Ok(paths);
+                }
+                Ok(_) => {
+                    eprintln!("[conductor] LLM codegen returned empty, falling back");
+                }
+                Err(e) => {
+                    eprintln!("[conductor] LLM codegen failed: {e}, falling back");
                 }
             }
         }
@@ -114,8 +122,13 @@ impl<P: LlmProvider> Conductor<P> {
             file_changes
         } else {
             // LLM-enhanced fallback: ask the gateway to generate HTML/CSS/JS directly
-            self.llm_generate_website_files(&task.description, audit, agent_id)
-                .unwrap_or(file_changes)
+            match self.llm_generate_website_files(&task.description, audit, agent_id) {
+                Ok(changes) => changes,
+                Err(e) => {
+                    eprintln!("[conductor] LLM website fallback failed: {e}, using template");
+                    file_changes
+                }
+            }
         };
 
         for change in &final_changes {
@@ -163,14 +176,14 @@ impl<P: LlmProvider> Conductor<P> {
                 fuel_remaining: 5_000,
             };
 
-            if let Ok(paths) = generate_code_with_llm(
+            match generate_code_with_llm(
                 &task.description,
                 output_dir,
                 &mut self.gateway,
                 &mut runtime,
-                "default",
+                &self.model_name,
             ) {
-                if !paths.is_empty() {
+                Ok(paths) if !paths.is_empty() => {
                     for path in &paths {
                         let _ = audit.append_event(
                             agent_id,
@@ -179,6 +192,12 @@ impl<P: LlmProvider> Conductor<P> {
                         );
                     }
                     return Ok(paths);
+                }
+                Ok(_) => {
+                    eprintln!("[conductor] LLM code-gen returned empty, falling back");
+                }
+                Err(e) => {
+                    eprintln!("[conductor] LLM code-gen failed: {e}, falling back");
                 }
             }
         }
@@ -337,7 +356,9 @@ impl<P: LlmProvider> Conductor<P> {
             fuel_remaining: 5_000,
         };
 
-        let response = self.gateway.query(&mut runtime, &prompt, 4000, "default")?;
+        let response = self
+            .gateway
+            .query(&mut runtime, &prompt, 4000, &self.model_name)?;
         let text = &response.output_text;
 
         let _ = audit.append_event(
@@ -758,55 +779,73 @@ mod tests {
         }
     }
 
+    fn test_output_dir(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "nexus-conductor-test-{}-{}",
+            name,
+            uuid::Uuid::new_v4()
+        ))
+    }
+
     #[test]
     fn test_conductor_run_website() {
+        let out = test_output_dir("website");
         let mut conductor = Conductor::new(MockConductorProvider, "mock");
         let mut supervisor = Supervisor::new();
-        let request = UserRequest::new("build a portfolio website", "/tmp/out");
+        let request = UserRequest::new("build a portfolio website", out.to_str().unwrap());
 
         let result = conductor.run(request, &mut supervisor).unwrap();
         assert_eq!(result.status, ConductorStatus::Success);
         assert!(result.agents_used > 0);
         assert!(result.total_fuel_used > 0);
+        let _ = std::fs::remove_dir_all(&out);
     }
 
     #[test]
     fn test_conductor_run_code() {
+        let out = test_output_dir("code");
         let mut conductor = Conductor::new(MockConductorProvider, "mock");
         let mut supervisor = Supervisor::new();
-        let request = UserRequest::new("build an API with auth", "/tmp/out");
+        let request = UserRequest::new("build an API with auth", out.to_str().unwrap());
 
         let result = conductor.run(request, &mut supervisor).unwrap();
         assert_eq!(result.status, ConductorStatus::Success);
         assert!(result.agents_used >= 2);
+        let _ = std::fs::remove_dir_all(&out);
     }
 
     #[test]
     fn test_conductor_preview_plan() {
+        let out = test_output_dir("plan");
         let mut conductor = Conductor::new(MockConductorProvider, "mock");
-        let request = UserRequest::new("create a design system", "/tmp/out");
+        let request = UserRequest::new("create a design system", out.to_str().unwrap());
 
         let plan = conductor.preview_plan(&request).unwrap();
         assert!(!plan.tasks.is_empty());
+        let _ = std::fs::remove_dir_all(&out);
     }
 
     #[test]
     fn test_conductor_audit_trail() {
+        let out = test_output_dir("audit");
         let mut conductor = Conductor::new(MockConductorProvider, "mock");
         let mut supervisor = Supervisor::new();
-        let request = UserRequest::new("build a website", "/tmp/out");
+        let request = UserRequest::new("build a website", out.to_str().unwrap());
 
         let result = conductor.run(request, &mut supervisor).unwrap();
         assert!(!result.summary.is_empty());
+        let _ = std::fs::remove_dir_all(&out);
     }
 
     #[test]
     fn test_conductor_fallback_request() {
+        let out = test_output_dir("fallback");
         let mut conductor = Conductor::new(MockConductorProvider, "mock");
         let mut supervisor = Supervisor::new();
-        let request = UserRequest::new("do something random", "/tmp/out");
+        let request = UserRequest::new("do something random", out.to_str().unwrap());
 
         let result = conductor.run(request, &mut supervisor).unwrap();
         assert_eq!(result.status, ConductorStatus::Success);
+        let _ = std::fs::remove_dir_all(&out);
     }
 }

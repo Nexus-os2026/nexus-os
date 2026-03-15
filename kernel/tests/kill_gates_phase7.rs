@@ -15,6 +15,7 @@ fn sample_manifest(fuel_budget: u64) -> AgentManifest {
         consent_policy_path: None,
         requester_id: None,
         schedule: None,
+        default_goal: None,
         llm_model: Some("mock-1".to_string()),
         fuel_period_id: None,
         monthly_fuel_cap: None,

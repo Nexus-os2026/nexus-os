@@ -211,22 +211,24 @@
 .agent-card-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.42rem;
+  gap: 0.32rem;
   width: 100%;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .agent-action-btn {
   border: 1px solid rgba(0, 255, 157, 0.35);
   background: rgba(13, 17, 23, 0.75);
   color: #d5efff;
-  padding: 0.35rem 0.2rem;
+  padding: 0.28rem 0.15rem;
   font-family: var(--font-mono);
-  font-size: 0.63rem;
-  letter-spacing: 0.04em;
+  font-size: 0.58rem;
+  letter-spacing: 0.03em;
   cursor: pointer;
-  flex: 1 1 0;
-  min-width: 3.2rem;
+  flex: 0 1 auto;
+  min-width: 2.6rem;
+  border-radius: 3px;
+  white-space: nowrap;
 }
 
 .agent-action-btn:hover {

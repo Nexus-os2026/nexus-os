@@ -3,43 +3,18 @@ import { getAgentCards, getMcpTools, getProtocolsRequests, getProtocolsStatus, h
 import type { AgentCardSummary, McpTool, ProtocolRequest, ProtocolsStatus } from "../types";
 import "./protocols.css";
 
-// ── Mock data for non-desktop mode ──
-
-const MOCK_STATUS: ProtocolsStatus = {
+const EMPTY_STATUS: ProtocolsStatus = {
   a2a_status: "stopped",
   a2a_version: "0.2.1",
   a2a_peers: 0,
   a2a_tasks_processed: 0,
   mcp_status: "stopped",
-  mcp_registered_tools: 8,
+  mcp_registered_tools: 0,
   mcp_invocations: 0,
   gateway_port: null,
   governance_bridge_active: false,
   audit_integrity: true,
 };
-
-const MOCK_TOOLS: McpTool[] = [
-  { name: "web_search", description: "Search the web and return relevant results", agent: "Coder", fuel_cost: 50, requires_hitl: false, invocations: 12 },
-  { name: "llm_query", description: "Query a language model with governed fuel accounting", agent: "Coder", fuel_cost: 500, requires_hitl: false, invocations: 45 },
-  { name: "fs_read", description: "Read a file from the governed filesystem sandbox", agent: "Coder", fuel_cost: 10, requires_hitl: false, invocations: 89 },
-  { name: "fs_write", description: "Write a file to the governed filesystem sandbox", agent: "Designer", fuel_cost: 20, requires_hitl: true, invocations: 7 },
-  { name: "social_x_post", description: "Publish a post to X (Twitter)", agent: "Screen Poster", fuel_cost: 30, requires_hitl: true, invocations: 3 },
-  { name: "process_exec", description: "Execute a sandboxed process with governance controls", agent: "Coder", fuel_cost: 100, requires_hitl: true, invocations: 0 },
-  { name: "audit_read", description: "Read audit trail events with hash-chain verification", agent: "Self Improve", fuel_cost: 10, requires_hitl: false, invocations: 22 },
-  { name: "messaging_send", description: "Send messages through governed messaging channels", agent: "Workflow Studio", fuel_cost: 20, requires_hitl: true, invocations: 1 },
-];
-
-const MOCK_CARDS: AgentCardSummary[] = [
-  { agent_name: "Coder", url: "http://localhost:3000/a2a/Coder", skills_count: 4, auth_scheme: "bearer", rate_limit_rpm: 100, card_json: { name: "Coder", version: "0.2.1", skills: [{ id: "web-search", name: "Web Search" }, { id: "llm-query", name: "LLM Query" }, { id: "fs-read", name: "File Read" }, { id: "process-exec", name: "Process Execute" }] } },
-  { agent_name: "Designer", url: "http://localhost:3000/a2a/Designer", skills_count: 2, auth_scheme: "bearer", rate_limit_rpm: 50, card_json: { name: "Designer", version: "0.2.1", skills: [{ id: "fs-read", name: "File Read" }, { id: "fs-write", name: "File Write" }] } },
-  { agent_name: "Screen Poster", url: "http://localhost:3000/a2a/Screen Poster", skills_count: 3, auth_scheme: "bearer, mtls", rate_limit_rpm: 30, card_json: { name: "Screen Poster", version: "0.2.1", skills: [{ id: "social-x-post", name: "X Post" }, { id: "social-post", name: "Social Post" }, { id: "social-x-read", name: "X Read" }] } },
-];
-
-const MOCK_REQUESTS: ProtocolRequest[] = [
-  { id: "req-001", timestamp: Date.now() - 120_000, protocol: "MCP", method: "tools/invoke", sender: "external-client", agent: "Coder", status: "completed", fuel_consumed: 50, governance_decision: "allowed" },
-  { id: "req-002", timestamp: Date.now() - 60_000, protocol: "A2A", method: "tasks/send", sender: "partner-agent", agent: "Screen Poster", status: "completed", fuel_consumed: 30, governance_decision: "allowed" },
-  { id: "req-003", timestamp: Date.now() - 30_000, protocol: "MCP", method: "tools/invoke", sender: "untrusted-bot", agent: "Coder", status: "rejected", fuel_consumed: 0, governance_decision: "denied" },
-];
 
 function formatTime(ts: number): string {
   const secs = Math.round((Date.now() - ts) / 1000);
@@ -49,14 +24,18 @@ function formatTime(ts: number): string {
 }
 
 export default function Protocols(): JSX.Element {
-  const [status, setStatus] = useState<ProtocolsStatus>(MOCK_STATUS);
-  const [tools, setTools] = useState<McpTool[]>(MOCK_TOOLS);
-  const [cards, setCards] = useState<AgentCardSummary[]>(MOCK_CARDS);
-  const [requests, setRequests] = useState<ProtocolRequest[]>(MOCK_REQUESTS);
+  const [status, setStatus] = useState<ProtocolsStatus>(EMPTY_STATUS);
+  const [tools, setTools] = useState<McpTool[]>([]);
+  const [cards, setCards] = useState<AgentCardSummary[]>([]);
+  const [requests, setRequests] = useState<ProtocolRequest[]>([]);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
-    if (!hasDesktopRuntime()) return;
+    if (!hasDesktopRuntime()) {
+      setLoading(false);
+      return;
+    }
     try {
       const [s, t, c, r] = await Promise.all([
         getProtocolsStatus(),
@@ -65,18 +44,30 @@ export default function Protocols(): JSX.Element {
         getProtocolsRequests(),
       ]);
       setStatus(s);
-      if (t.length > 0) setTools(t);
-      if (c.length > 0) setCards(c);
-      setRequests(r.length > 0 ? r : MOCK_REQUESTS);
+      setTools(t);
+      setCards(c);
+      setRequests(r);
     } catch {
-      // Fall back to mock data
+      // keep empty defaults
     }
+    setLoading(false);
   }, []);
 
   useEffect(() => { void loadData(); }, [loadData]);
 
   const totalFuelConsumed = requests.reduce((sum, r) => sum + r.fuel_consumed, 0);
   const selectedCardData = cards.find((c) => c.agent_name === selectedCard);
+
+  if (loading) {
+    return (
+      <section className="proto-hub">
+        <header className="proto-header">
+          <h2 className="proto-title">PROTOCOLS // A2A + MCP GATEWAY</h2>
+          <p className="proto-subtitle">Loading protocol status...</p>
+        </header>
+      </section>
+    );
+  }
 
   return (
     <section className="proto-hub">
@@ -191,7 +182,7 @@ export default function Protocols(): JSX.Element {
       {/* MCP Tool Registry */}
       <h3 className="proto-section-title">MCP Tool Registry</h3>
       {tools.length === 0 ? (
-        <div className="proto-empty">No tools registered — start an agent to populate the registry.</div>
+        <div className="proto-empty">No tools registered — start the gateway and register agents to populate the registry.</div>
       ) : (
         <table className="proto-table">
           <thead>
@@ -226,7 +217,7 @@ export default function Protocols(): JSX.Element {
       {/* Agent Card Preview */}
       <h3 className="proto-section-title">Agent Cards (A2A Discovery)</h3>
       {cards.length === 0 ? (
-        <div className="proto-empty">No agent cards available — register agents to generate cards.</div>
+        <div className="proto-empty">No agent cards available — register agents to generate A2A discovery cards.</div>
       ) : (
         <>
           <div className="proto-card-grid">
@@ -267,7 +258,7 @@ export default function Protocols(): JSX.Element {
       {/* Recent Protocol Requests */}
       <h3 className="proto-section-title">Recent Protocol Requests</h3>
       {requests.length === 0 ? (
-        <div className="proto-empty">No protocol requests yet — start the gateway to begin receiving requests.</div>
+        <div className="proto-empty">No protocol requests yet — start the gateway to begin receiving A2A/MCP requests.</div>
       ) : (
         <table className="proto-table proto-requests-table">
           <thead>

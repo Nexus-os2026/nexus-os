@@ -115,7 +115,7 @@ pub fn path_matches_pattern(path: &str, pattern: &str) -> bool {
 const MIN_NAME_LEN: usize = 3;
 const MAX_NAME_LEN: usize = 64;
 const MAX_FUEL_BUDGET: u64 = 1_000_000;
-const CAPABILITY_REGISTRY: [&str; 15] = [
+const CAPABILITY_REGISTRY: [&str; 17] = [
     "web.search",
     "web.read",
     "llm.query",
@@ -131,6 +131,8 @@ const CAPABILITY_REGISTRY: [&str; 15] = [
     "rag.query",
     "mcp.call",
     "computer.control",
+    "self.modify",
+    "cognitive_modify",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,6 +145,9 @@ pub struct AgentManifest {
     pub consent_policy_path: Option<String>,
     pub requester_id: Option<String>,
     pub schedule: Option<String>,
+    /// Default goal text assigned on each scheduled cron tick.
+    #[serde(default)]
+    pub default_goal: Option<String>,
     pub llm_model: Option<String>,
     pub fuel_period_id: Option<String>,
     pub monthly_fuel_cap: Option<u64>,
@@ -238,6 +243,7 @@ struct RawManifest {
     consent_policy_path: Option<String>,
     requester_id: Option<String>,
     schedule: Option<String>,
+    default_goal: Option<String>,
     llm_model: Option<String>,
     fuel_period_id: Option<String>,
     monthly_fuel_cap: Option<u64>,
@@ -290,6 +296,7 @@ pub fn parse_manifest(input: &str) -> Result<AgentManifest, AgentError> {
         consent_policy_path,
         requester_id,
         schedule: raw.schedule,
+        default_goal: raw.default_goal,
         llm_model: raw.llm_model,
         fuel_period_id: raw.fuel_period_id,
         monthly_fuel_cap: raw.monthly_fuel_cap,
@@ -358,7 +365,7 @@ fn parse_autonomy_level(value: Option<u8>) -> Result<Option<u8>, AgentError> {
     };
 
     let _ = AutonomyLevel::from_numeric(value).ok_or_else(|| {
-        AgentError::ManifestError("autonomy_level must be one of 0, 1, 2, 3, 4, 5".to_string())
+        AgentError::ManifestError("autonomy_level must be one of 0, 1, 2, 3, 4, 5, 6".to_string())
     })?;
     Ok(Some(value))
 }
@@ -425,6 +432,7 @@ llm_model = "claude-sonnet-4-5"
             consent_policy_path: None,
             requester_id: None,
             schedule: Some("*/10 * * * *".to_string()),
+            default_goal: None,
             llm_model: Some("claude-sonnet-4-5".to_string()),
             fuel_period_id: None,
             monthly_fuel_cap: None,
@@ -571,6 +579,7 @@ autonomy_level = 9
             consent_policy_path: None,
             requester_id: None,
             schedule: None,
+            default_goal: None,
             llm_model: None,
             fuel_period_id: None,
             monthly_fuel_cap: None,
@@ -590,6 +599,7 @@ autonomy_level = 9
             consent_policy_path: None,
             requester_id: None,
             schedule: None,
+            default_goal: None,
             llm_model: None,
             fuel_period_id: None,
             monthly_fuel_cap: None,

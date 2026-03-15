@@ -90,6 +90,9 @@ export function CreateAgent({ open, onClose, onDeploy }: CreateAgentProps): JSX.
   const [name, setName] = useState("new-agent");
   const [fuelBudget, setFuelBudget] = useState(10_000);
   const [model, setModel] = useState("claude-sonnet-4-5");
+  const [autonomyLevel, setAutonomyLevel] = useState<number>(2);
+  const [schedule, setSchedule] = useState("");
+  const [defaultGoal, setDefaultGoal] = useState("");
   const [selectedCapabilities, setSelectedCapabilities] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
     for (const cap of CAPABILITIES) {
@@ -136,7 +139,9 @@ export function CreateAgent({ open, onClose, onDeploy }: CreateAgentProps): JSX.
       version: "2.0.0",
       capabilities: chosenCapabilities,
       fuel_budget: fuelBudget,
-      schedule: null,
+      autonomy_level: autonomyLevel,
+      schedule: schedule.trim() || null,
+      default_goal: defaultGoal.trim() || null,
       llm_model: model.trim() || null,
       description: description.trim()
     };
@@ -211,6 +216,42 @@ export function CreateAgent({ open, onClose, onDeploy }: CreateAgentProps): JSX.
                 </div>
               ))}
             </div>
+            <label className="create-model-label" style={{ marginTop: "1rem" }}>Autonomy Level</label>
+            <select
+              className="create-input"
+              value={autonomyLevel}
+              onChange={(event) => setAutonomyLevel(Number(event.target.value))}
+            >
+              <option value={0}>L0 — Human Approves All</option>
+              <option value={1}>L1 — Read-Only Autonomous</option>
+              <option value={2}>L2 — Standard Autonomous</option>
+              <option value={3}>L3 — Full Autonomous</option>
+              <option value={4}>L4 — Self-Evolving</option>
+              <option value={5}>L5 — Sovereign (limit 1)</option>
+              <option value={6}>L6: Transcendent (maximum power — limit 2 active)</option>
+            </select>
+            {autonomyLevel === 4 && (
+              <p className="create-autodetect-note" style={{ color: "#f5a623" }}>
+                Warning: L4 agents can rewrite their own description and planning strategy,
+                create or destroy sub-agents, and run controlled evolution tournaments. Every
+                self-modification is simulated first and checkpointed for rollback.
+              </p>
+            )}
+            {autonomyLevel === 5 && (
+              <p className="create-autodetect-note" style={{ color: "#e74c3c" }}>
+                Warning: Only one L5 agent can run at a time. L5 promotion always requires HITL
+                approval and can never be overridden. Sovereign agents can manage other agents and
+                system-wide governance, but cannot disable the audit chain, bypass fuel metering,
+                override other users&apos; HITL, or modify kernel code.
+              </p>
+            )}
+            {autonomyLevel === 6 && (
+              <p className="create-autodetect-note" style={{ color: "#ff6b6b" }}>
+                Warning: Transcendent agents have maximum autonomy including cognitive self-modification,
+                multi-model orchestration, algorithm selection, and ecosystem design. Maximum 2 active.
+                Activation requires 60-second mandatory review.
+              </p>
+            )}
           </article>
         ) : null}
 
@@ -244,6 +285,20 @@ export function CreateAgent({ open, onClose, onDeploy }: CreateAgentProps): JSX.
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
+            <label className="create-model-label" style={{ marginTop: "1rem" }}>Run Schedule (cron)</label>
+            <input
+              className="create-input"
+              value={schedule}
+              onChange={(event) => setSchedule(event.target.value)}
+              placeholder="*/10 * * * *"
+            />
+            <label className="create-model-label" style={{ marginTop: "0.5rem" }}>What should this agent do on each scheduled run?</label>
+            <input
+              className="create-input"
+              value={defaultGoal}
+              onChange={(event) => setDefaultGoal(event.target.value)}
+              placeholder="What should this agent do on each scheduled run?"
+            />
           </article>
         ) : null}
 
@@ -252,8 +307,11 @@ export function CreateAgent({ open, onClose, onDeploy }: CreateAgentProps): JSX.
             <h4 className="create-step-title">Confirm & Deploy</h4>
             <p className="agent-card-last">Name: {inferName(name)}</p>
             <p className="agent-card-last">Capabilities: {chosenCapabilities.join(", ") || "none selected"}</p>
+            <p className="agent-card-last">Autonomy Level: L{autonomyLevel}</p>
             <p className="agent-card-last">Fuel Budget: {fuelBudget}</p>
             <p className="agent-card-last">Model: {model}</p>
+            {schedule.trim() && <p className="agent-card-last">Schedule: {schedule.trim()}</p>}
+            {defaultGoal.trim() && <p className="agent-card-last">Default Goal: {defaultGoal.trim()}</p>}
           </article>
         ) : null}
 

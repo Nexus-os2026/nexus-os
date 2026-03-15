@@ -55,6 +55,18 @@ pub enum GovernedOperation {
     MultiAgentOrchestrate,
     DistributedEnable,
     TimeMachineUndo,
+    /// L4+: Agent modifying its own description or strategy.
+    SelfEvolution,
+    /// L4+: Agent creating or destroying sub-agents.
+    AgentLifecycleManage,
+    /// L5 only: Modifying system-wide governance policies.
+    GovernancePolicyModify,
+    /// L5 only: Allocating fuel across the agent ecosystem.
+    EcosystemFuelAllocate,
+    /// L5 promotion — hardcoded Tier3, cannot be overridden.
+    SovereignPromotion,
+    /// L6 creation — hardcoded Tier3 with mandatory review delay.
+    TranscendentCreation,
 }
 
 impl GovernedOperation {
@@ -67,6 +79,12 @@ impl GovernedOperation {
             GovernedOperation::MultiAgentOrchestrate => "multi_agent_orchestrate",
             GovernedOperation::DistributedEnable => "distributed_enable",
             GovernedOperation::TimeMachineUndo => "time_machine_undo",
+            GovernedOperation::SelfEvolution => "self_evolution",
+            GovernedOperation::AgentLifecycleManage => "agent_lifecycle_manage",
+            GovernedOperation::GovernancePolicyModify => "governance_policy_modify",
+            GovernedOperation::EcosystemFuelAllocate => "ecosystem_fuel_allocate",
+            GovernedOperation::SovereignPromotion => "sovereign_promotion",
+            GovernedOperation::TranscendentCreation => "transcendent_creation",
         }
     }
 
@@ -80,6 +98,12 @@ impl GovernedOperation {
             GovernedOperation::MultiAgentOrchestrate => "Multi-agent orchestration",
             GovernedOperation::DistributedEnable => "Distributed enable",
             GovernedOperation::TimeMachineUndo => "Time Machine undo",
+            GovernedOperation::SelfEvolution => "Self-evolution",
+            GovernedOperation::AgentLifecycleManage => "Agent lifecycle management",
+            GovernedOperation::GovernancePolicyModify => "Governance policy modification",
+            GovernedOperation::EcosystemFuelAllocate => "Ecosystem fuel allocation",
+            GovernedOperation::SovereignPromotion => "Sovereign promotion (L5)",
+            GovernedOperation::TranscendentCreation => "Transcendent creation (L6)",
         }
     }
 
@@ -92,6 +116,12 @@ impl GovernedOperation {
             "multi_agent_orchestrate" => Some(GovernedOperation::MultiAgentOrchestrate),
             "distributed_enable" => Some(GovernedOperation::DistributedEnable),
             "time_machine_undo" => Some(GovernedOperation::TimeMachineUndo),
+            "self_evolution" => Some(GovernedOperation::SelfEvolution),
+            "agent_lifecycle_manage" => Some(GovernedOperation::AgentLifecycleManage),
+            "governance_policy_modify" => Some(GovernedOperation::GovernancePolicyModify),
+            "ecosystem_fuel_allocate" => Some(GovernedOperation::EcosystemFuelAllocate),
+            "sovereign_promotion" => Some(GovernedOperation::SovereignPromotion),
+            "transcendent_creation" => Some(GovernedOperation::TranscendentCreation),
             _ => None,
         }
     }
@@ -166,6 +196,49 @@ impl Default for ConsentPolicyEngine {
             GovernedOperation::TimeMachineUndo,
             OperationConsentPolicy {
                 required_tier: HitlTier::Tier1,
+                allowed_approvers: Vec::new(),
+            },
+        );
+        policies.insert(
+            GovernedOperation::SelfEvolution,
+            OperationConsentPolicy {
+                required_tier: HitlTier::Tier2,
+                allowed_approvers: Vec::new(),
+            },
+        );
+        policies.insert(
+            GovernedOperation::AgentLifecycleManage,
+            OperationConsentPolicy {
+                required_tier: HitlTier::Tier2,
+                allowed_approvers: Vec::new(),
+            },
+        );
+        policies.insert(
+            GovernedOperation::GovernancePolicyModify,
+            OperationConsentPolicy {
+                required_tier: HitlTier::Tier3,
+                allowed_approvers: Vec::new(),
+            },
+        );
+        policies.insert(
+            GovernedOperation::EcosystemFuelAllocate,
+            OperationConsentPolicy {
+                required_tier: HitlTier::Tier2,
+                allowed_approvers: Vec::new(),
+            },
+        );
+        // SovereignPromotion is ALWAYS Tier3 — hardcoded, cannot be overridden.
+        policies.insert(
+            GovernedOperation::SovereignPromotion,
+            OperationConsentPolicy {
+                required_tier: HitlTier::Tier3,
+                allowed_approvers: Vec::new(),
+            },
+        );
+        policies.insert(
+            GovernedOperation::TranscendentCreation,
+            OperationConsentPolicy {
+                required_tier: HitlTier::Tier3,
                 allowed_approvers: Vec::new(),
             },
         );
@@ -307,6 +380,8 @@ pub struct ApprovalRequest {
     pub risk_level: RiskLevel,
     /// Complete unformatted raw representation for advanced users (plain text only).
     pub raw_view: String,
+    /// Minimum human review delay before approval can be submitted.
+    pub min_review_seconds: Option<u64>,
 }
 
 impl ApprovalRequest {
@@ -338,6 +413,10 @@ impl ApprovalRequest {
         ];
 
         let risk_level = RiskLevel::from_operation_tier(operation, required_tier);
+        let min_review_seconds = match operation {
+            GovernedOperation::TranscendentCreation => Some(60),
+            _ => None,
+        };
 
         let raw_view = format!(
             "operation={:?} agent_id={} requested_by={} tier={} payload_hash={}",
@@ -360,6 +439,7 @@ impl ApprovalRequest {
             display_args,
             risk_level,
             raw_view,
+            min_review_seconds,
         }
     }
 }
@@ -818,6 +898,16 @@ impl ConsentRuntime {
         payload: &[u8],
         audit: &mut AuditTrail,
     ) -> Result<(), ConsentError> {
+        // HARDCODED: SovereignPromotion (L5) and TranscendentCreation (L6)
+        // ALWAYS require Tier3 HITL. No Cedar policy, no override, no
+        // exception.
+        if matches!(
+            operation,
+            GovernedOperation::SovereignPromotion | GovernedOperation::TranscendentCreation
+        ) {
+            return self.enforce_with_tier(operation, agent_id, payload, HitlTier::Tier3, audit);
+        }
+
         // Cedar-style policy engine pre-check: if an explicit policy matches,
         // use its decision instead of the hardcoded consent tiers.
         if let Some(cedar) = &self.cedar_engine {
@@ -1427,5 +1517,31 @@ mod tests {
 
         let serialized = requested.payload.to_string();
         assert!(!serialized.contains("top-secret-token"));
+    }
+
+    #[test]
+    fn transcendent_creation_has_mandatory_review_delay() {
+        let mut runtime = ConsentRuntime::default();
+        let mut audit = AuditTrail::new();
+        let actor = Uuid::new_v4();
+
+        let result = runtime.enforce_operation(
+            GovernedOperation::TranscendentCreation,
+            actor,
+            br#"{"autonomy_level":6}"#,
+            &mut audit,
+        );
+
+        let request_id = match result {
+            Err(ConsentError::ApprovalRequired { request_id, .. }) => request_id,
+            other => panic!("expected approval required, got: {other:?}"),
+        };
+        let request = runtime
+            .pending_requests()
+            .into_iter()
+            .find(|r| r.id == request_id)
+            .expect("transcendent request should be present");
+        assert_eq!(request.required_tier, HitlTier::Tier3);
+        assert_eq!(request.min_review_seconds, Some(60));
     }
 }

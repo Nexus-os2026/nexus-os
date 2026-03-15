@@ -14,6 +14,8 @@ Nexus OS is a 130k+ line Rust operating system for AI agents where every action 
 
 - **Governed by Design** — Every agent action is audited, capability-checked, and fuel-metered. No action executes without governance approval.
 - **Local-First AI** — Run LLMs locally via Ollama — your data never leaves your device. No cloud API keys required.
+- **L0-L5 Autonomy Model** — Includes L4 self-evolving agents and L5 sovereign agents with hardcoded HITL promotion for L5 and singleton enforcement for active Sovereign-class agents.
+- **35 Prebuilt Agents** — The current tree ships 35 governed agents, including L4/L5 self-evolving specialists and 10 new L6 transcendent agents under `agents/prebuilt/`.
 - **15 Built-In Apps** — Code Editor, Terminal, File Manager, AI Chat, Database Manager, API Client, and more.
 - **Deterministic Execution** — WASM sandboxing ensures reproducible agent behavior across runs.
 - **Enterprise-Ready Security** — EU AI Act compliance, PII redaction at LLM boundaries, SOC 2 Type II reporting, supply chain signing.
@@ -78,7 +80,7 @@ cargo tauri dev
 | # | Category | Feature | Status |
 |---|----------|---------|--------|
 | 1 | Governance | Capability-based access control | Done |
-| 2 | Governance | 6-level autonomy system (L0-L5) | Done |
+| 2 | Governance | 6-level autonomy system (L0-L5) with L4 self-evolution and L5 sovereign singleton | Done |
 | 3 | Governance | Fuel metering with anomaly detection | Done |
 | 4 | Governance | Human-in-the-loop approval gates | Done |
 | 5 | Governance | Adaptive trust scoring + auto-promotion/demotion | Done |

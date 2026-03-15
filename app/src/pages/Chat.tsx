@@ -2,17 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { History } from "../components/chat/History";
 import { Suggestions } from "../components/chat/Suggestions";
 import { VoiceVisualizer, type VoiceVisualizerState } from "../components/chat/VoiceVisualizer";
+import { listProviderModels } from "../api/backend";
 import "./chat.css";
-import type { AgentSummary, ChatMessage } from "../types";
+import type { AgentSummary, ChatMessage, ProviderModel } from "../types";
 
-const MODEL_OPTIONS = [
-  { value: "mock", label: "Mock (Testing)" },
-  { value: "qwen3.5:9b", label: "qwen3.5:9b (Local)" },
-  { value: "ollama", label: "ollama (Local)" },
-  { value: "claude-sonnet", label: "Claude Sonnet (Cloud)" },
-  { value: "claude-haiku", label: "Claude Haiku (Cloud)" },
-  { value: "gpt-4", label: "GPT-4 (Cloud)" }
-];
+interface ModelOption {
+  value: string;
+  label: string;
+  group: string;
+}
 
 interface ChatProps {
   messages: ChatMessage[];
@@ -28,6 +26,7 @@ interface ChatProps {
   onSend: () => void;
   onToggleMic: () => void;
   onClearMessages: () => void;
+  onNavigate?: (page: string) => void;
 }
 
 interface HistoryEntry {
@@ -36,9 +35,18 @@ interface HistoryEntry {
   preview: string;
 }
 
-function bubbleClass(role: ChatMessage["role"]): string {
+function bubbleClass(role: ChatMessage["role"], variant?: ChatMessage["variant"]): string {
   if (role === "user") {
     return "jarvis-message jarvis-message-user";
+  }
+  if (variant === "approval") {
+    return "jarvis-message jarvis-message-approval";
+  }
+  if (variant === "resumed") {
+    return "jarvis-message jarvis-message-resumed";
+  }
+  if (variant === "error") {
+    return "jarvis-message jarvis-message-error";
   }
   return "jarvis-message jarvis-message-assistant";
 }
@@ -104,11 +112,38 @@ export function Chat({
   onDraftChange,
   onSend,
   onToggleMic,
-  onClearMessages
+  onClearMessages,
+  onNavigate
 }: ChatProps): JSX.Element {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0.14);
   const streamRef = useRef<HTMLDivElement>(null);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const provModels = await listProviderModels();
+        if (cancelled) return;
+        const opts: ModelOption[] = provModels.map((m: ProviderModel) => ({
+          value: m.id,
+          label: `${m.name} (${m.local ? "Local" : m.provider})`,
+          group: m.local ? "LOCAL" : "CLOUD",
+        }));
+        setModelOptions(opts);
+        // Auto-select first model if current selection is empty or not in list
+        if (!selectedModel || !opts.some(o => o.value === selectedModel)) {
+          if (opts.length > 0) onModelChange(opts[0].value);
+        }
+      } catch {
+        // Fallback if backend unavailable
+        setModelOptions([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const assistantStreaming = useMemo(
     () => messages.some((message) => message.role === "assistant" && message.streaming),
@@ -149,11 +184,26 @@ export function Chat({
             value={selectedModel}
             onChange={(event) => onModelChange(event.target.value)}
           >
-            {MODEL_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
+            {modelOptions.length > 0 ? (
+              <>
+                {modelOptions.some(o => o.group === "LOCAL") && (
+                  <optgroup label="Local Models">
+                    {modelOptions.filter(o => o.group === "LOCAL").map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {modelOptions.some(o => o.group === "CLOUD") && (
+                  <optgroup label="Cloud Models">
+                    {modelOptions.filter(o => o.group === "CLOUD").map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </>
+            ) : (
+              <option value="">Loading models...</option>
+            )}
           </select>
           <select
             className="jarvis-agent-select"
@@ -205,12 +255,20 @@ export function Chat({
               key={message.id}
               className={`jarvis-message-wrap ${message.role === "user" ? "right" : "left"} fade-slide-up`}
             >
-              <div className={bubbleClass(message.role)}>
+              <div className={bubbleClass(message.role, message.variant)}>
                 {message.role === "assistant" && (
                   <div className="jarvis-msg-agent-header">
-                    <span className="jarvis-msg-agent-icon">N</span>
+                    <span className="jarvis-msg-agent-icon">
+                      {message.variant === "approval" ? "!" : message.variant === "error" ? "✕" : "N"}
+                    </span>
                     <span className="jarvis-msg-agent-name">
-                      {message.model === "system" ? "System" : "NexusOS"}
+                      {message.variant === "approval"
+                        ? "Approval Required"
+                        : message.variant === "resumed"
+                          ? "Approved"
+                          : message.model === "system"
+                            ? "System"
+                            : "NexusOS"}
                     </span>
                   </div>
                 )}
@@ -221,19 +279,30 @@ export function Chat({
                     <span />
                   </div>
                 ) : (
-                  <p
-                    className={
-                      message.role === "assistant" && !message.streaming
-                        ? "nexus-msg-typewriter"
-                        : undefined
-                    }
-                  >
-                    {message.content || (message.streaming ? "..." : "")}
-                  </p>
+                  <>
+                    <p
+                      className={
+                        message.role === "assistant" && !message.streaming
+                          ? "nexus-msg-typewriter"
+                          : undefined
+                      }
+                    >
+                      {message.content || (message.streaming ? "..." : "")}
+                    </p>
+                    {message.variant === "approval" && onNavigate && (
+                      <button
+                        type="button"
+                        className="jarvis-approval-link"
+                        onClick={() => onNavigate("approvals")}
+                      >
+                        Open Approval Center
+                      </button>
+                    )}
+                  </>
                 )}
                 <span className="jarvis-message-time">
                   {formatMilitaryTime(message.timestamp)}
-                  {message.model ? ` // ${message.model}` : ""}
+                  {message.model ? ` // via ${message.model.includes("/") ? message.model.split("/")[0] : message.model}` : ""}
                 </span>
               </div>
             </article>

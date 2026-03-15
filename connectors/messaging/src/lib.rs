@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod bridge;
 pub mod discord;
+pub mod gateway;
 pub mod messaging;
 pub mod slack;
 pub mod telegram;

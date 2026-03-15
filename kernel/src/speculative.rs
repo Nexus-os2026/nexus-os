@@ -30,7 +30,9 @@ impl RiskLevel {
     pub fn from_governance(tier: HitlTier, autonomy: AutonomyLevel) -> Self {
         match (tier, autonomy) {
             (HitlTier::Tier3, _) => RiskLevel::Critical,
-            (HitlTier::Tier2, AutonomyLevel::L4 | AutonomyLevel::L5) => RiskLevel::High,
+            (HitlTier::Tier2, AutonomyLevel::L4 | AutonomyLevel::L5 | AutonomyLevel::L6) => {
+                RiskLevel::High
+            }
             (HitlTier::Tier2, _) => RiskLevel::Medium,
             (HitlTier::Tier1, _) => RiskLevel::Low,
             (HitlTier::Tier0, _) => RiskLevel::Low,
@@ -419,6 +421,50 @@ impl SpeculativeEngine {
                 impact.fuel_cost += 5;
                 impact.file_operations += 1;
             }
+            GovernedOperation::SelfEvolution => {
+                changes.push(ActionPreview::DataModification(DataModification {
+                    resource: "agent_description".to_string(),
+                    description: "Self-evolution: modify agent description or strategy".to_string(),
+                }));
+                impact.fuel_cost += 15;
+            }
+            GovernedOperation::AgentLifecycleManage => {
+                changes.push(ActionPreview::DataModification(DataModification {
+                    resource: "agent_lifecycle".to_string(),
+                    description: "Create or destroy sub-agent".to_string(),
+                }));
+                impact.fuel_cost += 20;
+            }
+            GovernedOperation::GovernancePolicyModify => {
+                changes.push(ActionPreview::DataModification(DataModification {
+                    resource: "governance_policy".to_string(),
+                    description: "Modify system-wide governance policy (L5 only)".to_string(),
+                }));
+                impact.fuel_cost += 10;
+            }
+            GovernedOperation::EcosystemFuelAllocate => {
+                changes.push(ActionPreview::DataModification(DataModification {
+                    resource: "fuel_ledger".to_string(),
+                    description: "Allocate fuel across agent ecosystem (L5 only)".to_string(),
+                }));
+                impact.fuel_cost += 5;
+            }
+            GovernedOperation::SovereignPromotion => {
+                changes.push(ActionPreview::DataModification(DataModification {
+                    resource: "autonomy_level".to_string(),
+                    description: "Promote agent to L5 Sovereign (requires 2-person HITL)"
+                        .to_string(),
+                }));
+                impact.fuel_cost += 50;
+            }
+            GovernedOperation::TranscendentCreation => {
+                changes.push(ActionPreview::DataModification(DataModification {
+                    resource: "agent_ecosystem".to_string(),
+                    description: "Create or activate a Transcendent L6 agent (mandatory review)"
+                        .to_string(),
+                }));
+                impact.fuel_cost += 60;
+            }
         }
 
         // Check if fuel is sufficient
@@ -448,6 +494,12 @@ impl SpeculativeEngine {
             GovernedOperation::MultiAgentOrchestrate => "multi-agent orchestration",
             GovernedOperation::DistributedEnable => "distributed operation enablement",
             GovernedOperation::TimeMachineUndo => "time machine undo",
+            GovernedOperation::SelfEvolution => "agent self-evolution",
+            GovernedOperation::AgentLifecycleManage => "agent lifecycle management",
+            GovernedOperation::GovernancePolicyModify => "governance policy modification",
+            GovernedOperation::EcosystemFuelAllocate => "ecosystem fuel allocation",
+            GovernedOperation::SovereignPromotion => "sovereign promotion (L5)",
+            GovernedOperation::TranscendentCreation => "transcendent creation (L6)",
         };
         format!(
             "Simulated {op_desc}: {risk} risk, estimated {fuel} fuel, {files} file ops, {net} network calls, {llm} LLM calls",

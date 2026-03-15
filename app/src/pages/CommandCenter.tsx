@@ -1,78 +1,117 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { listAgents, startAgent, stopAgent, pauseAgent, resumeAgent, hasDesktopRuntime, getAuditLog } from "../api/backend";
+import type { AgentSummary, AuditEventRow } from "../types";
 import "./command-center.css";
 
-interface CommandAgent {
-  id: string;
-  name: string;
-  status: "running" | "stopped" | "error" | "paused";
-  autonomy: number;
-  fuelRemaining: number;
-  fuelBudget: number;
-  lastAuditEvent: string;
-  lastAuditTimestamp: number;
-}
-
-const MOCK_AGENTS: CommandAgent[] = [
-  { id: "a0000000-0000-4000-8000-000000000001", name: "Coder", status: "running", autonomy: 3, fuelRemaining: 9200, fuelBudget: 10000, lastAuditEvent: "ToolExec: fix_bug", lastAuditTimestamp: 1700100470 },
-  { id: "a0000000-0000-4000-8000-000000000003", name: "Screen Poster", status: "paused", autonomy: 2, fuelRemaining: 4100, fuelBudget: 10000, lastAuditEvent: "ApprovalRequired: social.post", lastAuditTimestamp: 1700100410 },
-  { id: "a0000000-0000-4000-8000-000000000004", name: "Web Builder", status: "running", autonomy: 3, fuelRemaining: 7800, fuelBudget: 10000, lastAuditEvent: "ToolExec: deploy staging", lastAuditTimestamp: 1700100430 },
-  { id: "a0000000-0000-4000-8000-000000000005", name: "Workflow Studio", status: "stopped", autonomy: 1, fuelRemaining: 2300, fuelBudget: 10000, lastAuditEvent: "StateChange: Stopped", lastAuditTimestamp: 1700100460 },
-  { id: "a0000000-0000-4000-8000-000000000006", name: "Self-Improve", status: "running", autonomy: 4, fuelRemaining: 8400, fuelBudget: 10000, lastAuditEvent: "ToolExec: optimize_prompt", lastAuditTimestamp: 1700100455 },
-  { id: "a0000000-0000-4000-8000-000000000002", name: "Designer", status: "running", autonomy: 2, fuelRemaining: 6500, fuelBudget: 10000, lastAuditEvent: "ToolExec: image_gen", lastAuditTimestamp: 1700100380 },
-];
-
 const STATUS_COLORS: Record<string, string> = {
-  running: "var(--nexus-accent)",
-  stopped: "#6b7280",
-  error: "#ef4444",
-  paused: "#f59e0b",
+  Running: "var(--nexus-accent)",
+  Stopped: "#6b7280",
+  Failed: "#ef4444",
+  Paused: "#f59e0b",
+  Starting: "#60a5fa",
+  Idle: "#6b7280",
 };
 
 const AUTONOMY_LABELS = ["L0 Inert", "L1 Suggest", "L2 Act+Approve", "L3 Act+Report", "L4 Autonomous", "L5 Full"];
 
 function formatTime(ts: number): string {
+  if (ts === 0) return "—";
   const d = new Date(ts * 1000);
   return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 }
 
 export default function CommandCenter(): JSX.Element {
-  const [agents, setAgents] = useState<CommandAgent[]>(MOCK_AGENTS);
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [lastEvents, setLastEvents] = useState<Record<string, AuditEventRow>>({});
+  const [loading, setLoading] = useState(true);
 
-  function setStatus(id: string, status: CommandAgent["status"]): void {
-    setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
+  const loadData = useCallback(async () => {
+    if (!hasDesktopRuntime()) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const [agentList, auditEvents] = await Promise.all([listAgents(), getAuditLog(undefined, 500)]);
+      setAgents(agentList);
+      // Find last audit event per agent
+      const eventMap: Record<string, AuditEventRow> = {};
+      for (const event of auditEvents) {
+        if (!eventMap[event.agent_id] || event.timestamp > eventMap[event.agent_id].timestamp) {
+          eventMap[event.agent_id] = event;
+        }
+      }
+      setLastEvents(eventMap);
+    } catch {
+      // ignore
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void loadData();
+    if (!hasDesktopRuntime()) return;
+    const timer = setInterval(() => void loadData(), 5000);
+    return () => clearInterval(timer);
+  }, [loadData]);
+
+  async function handleAction(id: string, action: "start" | "stop" | "pause" | "resume"): Promise<void> {
+    if (!hasDesktopRuntime()) return;
+    try {
+      if (action === "start") await startAgent(id);
+      else if (action === "stop") await stopAgent(id);
+      else if (action === "pause") await pauseAgent(id);
+      else if (action === "resume") await resumeAgent(id);
+      await loadData();
+    } catch {
+      // ignore
+    }
   }
+
+  const runningCount = agents.filter((a) => a.status === "Running").length;
 
   return (
     <section className="cc-hub">
       <header className="cc-header">
         <h2 className="cc-title">COMMAND CENTER // LIVE AGENT GRID</h2>
         <p className="cc-subtitle">
-          {agents.filter((a) => a.status === "running").length} running / {agents.length} total
+          {agents.length > 0 ? `${runningCount} running / ${agents.length} total` : "No agents registered"}
         </p>
       </header>
 
+      {loading && <div style={{ padding: "2rem", textAlign: "center", opacity: 0.5 }}>Loading agents...</div>}
+
+      {!loading && agents.length === 0 && (
+        <div style={{ padding: "3rem", textAlign: "center", opacity: 0.5 }}>
+          No agents registered. Create an agent to get started.
+        </div>
+      )}
+
       <div className="cc-grid">
         {agents.map((agent) => {
-          const fuelPct = Math.round((agent.fuelRemaining / agent.fuelBudget) * 100);
+          const fuelPct = agent.fuel_budget && agent.fuel_budget > 0
+            ? Math.round((agent.fuel_remaining / agent.fuel_budget) * 100)
+            : 0;
+          const lastEvent = lastEvents[agent.id];
+          const status = agent.status;
           return (
             <article key={agent.id} className="cc-card">
               <div className="cc-card-top">
                 <div className="cc-card-name-row">
-                  <span className="cc-status-dot" style={{ background: STATUS_COLORS[agent.status] }} />
+                  <span className="cc-status-dot" style={{ background: STATUS_COLORS[status] ?? "#6b7280" }} />
                   <h3 className="cc-card-name">{agent.name}</h3>
                 </div>
-                <span className="cc-card-status">{agent.status}</span>
+                <span className="cc-card-status">{status}</span>
               </div>
 
               <div className="cc-card-autonomy">
                 <span className="cc-label">Autonomy</span>
-                <span className="cc-value">{AUTONOMY_LABELS[agent.autonomy] ?? `L${agent.autonomy}`}</span>
+                <span className="cc-value">{AUTONOMY_LABELS[0]}</span>
               </div>
 
               <div className="cc-card-fuel">
                 <div className="cc-fuel-header">
                   <span className="cc-label">Fuel</span>
-                  <span className="cc-value">{agent.fuelRemaining.toLocaleString()} / {agent.fuelBudget.toLocaleString()}</span>
+                  <span className="cc-value">{agent.fuel_remaining.toLocaleString()} / {(agent.fuel_budget ?? 0).toLocaleString()}</span>
                 </div>
                 <div className="cc-fuel-track">
                   <div
@@ -87,42 +126,34 @@ export default function CommandCenter(): JSX.Element {
 
               <div className="cc-card-audit">
                 <span className="cc-label">Last Event</span>
-                <span className="cc-audit-text">{agent.lastAuditEvent}</span>
-                <span className="cc-audit-time">{formatTime(agent.lastAuditTimestamp)}</span>
+                <span className="cc-audit-text">{lastEvent ? `${lastEvent.event_type}: ${JSON.stringify(lastEvent.payload).slice(0, 40)}` : agent.last_action || "—"}</span>
+                <span className="cc-audit-time">{lastEvent ? formatTime(lastEvent.timestamp) : "—"}</span>
               </div>
 
               <div className="cc-card-actions">
                 <button
                   type="button"
                   className="cc-btn cc-btn-start"
-                  disabled={agent.status === "running"}
-                  onClick={() => setStatus(agent.id, "running")}
+                  disabled={status === "Running"}
+                  onClick={() => void handleAction(agent.id, status === "Paused" ? "resume" : "start")}
                 >
-                  {agent.status === "paused" ? "Resume" : "Start"}
+                  {status === "Paused" ? "Resume" : "Start"}
                 </button>
                 <button
                   type="button"
                   className="cc-btn cc-btn-stop"
-                  disabled={agent.status === "paused" || agent.status === "stopped"}
-                  onClick={() => setStatus(agent.id, "paused")}
+                  disabled={status === "Paused" || status === "Stopped"}
+                  onClick={() => void handleAction(agent.id, "pause")}
                 >
                   Pause
                 </button>
                 <button
                   type="button"
                   className="cc-btn cc-btn-stop"
-                  disabled={agent.status === "stopped"}
-                  onClick={() => setStatus(agent.id, "stopped")}
+                  disabled={status === "Stopped"}
+                  onClick={() => void handleAction(agent.id, "stop")}
                 >
                   Stop
-                </button>
-                <button
-                  type="button"
-                  className="cc-btn cc-btn-kill"
-                  disabled={agent.status === "stopped"}
-                  onClick={() => setStatus(agent.id, "stopped")}
-                >
-                  Kill
                 </button>
               </div>
             </article>

@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
-import { sendChat, chatWithOllama, listAvailableModels } from "../api/backend";
-import type { ChatTokenEvent } from "../types";
+import { sendChat, chatWithOllama, conductBuild, listAgents, hasDesktopRuntime, listProviderModels, getProviderStatus, saveApiKey } from "../api/backend";
+import type { ChatTokenEvent, ConductorPlanEvent, ConductorAgentCompletedEvent, ConductorFinishedEvent, ConductorBuildResponse, ProviderModel, ProviderStatus } from "../types";
 import "./ai-chat-hub.css";
 
 /* ─── types ─── */
@@ -15,6 +15,13 @@ interface Model {
   speed: "fast" | "medium" | "slow";
   capability: "basic" | "advanced" | "expert";
   fuelCost: number;
+  local: boolean;
+  locked: boolean;
+}
+
+interface BuildResultData {
+  plan: ConductorBuildResponse["plan"];
+  result: ConductorBuildResponse["result"];
 }
 
 interface ChatMsg {
@@ -27,6 +34,7 @@ interface ChatMsg {
   imageUrl?: string;
   codeBlock?: { lang: string; code: string; output?: string };
   streaming?: boolean;
+  buildResult?: BuildResultData;
 }
 
 interface Conversation {
@@ -41,30 +49,62 @@ interface Conversation {
 }
 
 /* ─── constants ─── */
-const FALLBACK_MODELS: Model[] = [
-  { id: "mock-1", name: "Mock (no provider)", provider: "Local", icon: "◈", color: "#888", speed: "fast", capability: "basic", fuelCost: 0 },
+
+const PROVIDER_META: Record<string, { icon: string; color: string; label: string; fuelCost: number }> = {
+  ollama: { icon: "◆", color: "#22c55e", label: "Ollama", fuelCost: 5 },
+  anthropic: { icon: "◈", color: "#d4a574", label: "Anthropic", fuelCost: 15 },
+  openai: { icon: "◈", color: "#74b9ff", label: "OpenAI", fuelCost: 12 },
+  deepseek: { icon: "◈", color: "#a78bfa", label: "DeepSeek", fuelCost: 3 },
+  google: { icon: "◈", color: "#ffd700", label: "Google", fuelCost: 10 },
+};
+
+// Cloud models to show as locked when no API key is configured
+const LOCKED_CLOUD_MODELS: Array<{ id: string; name: string; provider: string }> = [
+  { id: "anthropic/claude-sonnet-4-20250514", name: "Claude Sonnet 4", provider: "anthropic" },
+  { id: "anthropic/claude-opus-4-6", name: "Claude Opus 4.6", provider: "anthropic" },
+  { id: "openai/gpt-4o", name: "GPT-4o", provider: "openai" },
+  { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "openai" },
+  { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", provider: "deepseek" },
+  { id: "deepseek/deepseek-coder", name: "DeepSeek Coder", provider: "deepseek" },
+  { id: "google/gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "google" },
+  { id: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "google" },
 ];
 
-const AGENTS = [
-  { id: "coder", name: "Coder Agent", icon: "⬢", color: "var(--nexus-accent)" },
-  { id: "designer", name: "Designer Agent", icon: "⬢", color: "#a78bfa" },
-  { id: "research", name: "Research Agent", icon: "⬢", color: "#22c55e" },
-  { id: "self-improve", name: "Self-Improve", icon: "⬢", color: "#f59e0b" },
-];
+interface AgentEntry {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+}
 
-function modelFromAvailable(m: { id: string; name: string; installed: boolean }): Model {
-  const name = m.name || m.id;
-  const isLocal = !m.id.startsWith("claude") && !m.id.startsWith("gpt");
+const BUILD_ACTION_KEYWORDS = ["build", "create", "generate", "make me", "design", "fix", "clone"];
+const BUILD_TARGET_KEYWORDS = ["website", "site", "app", "page", "project", "component", "landing", "portfolio", "dashboard", "frontend"];
+
+function isBuildRequest(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return BUILD_ACTION_KEYWORDS.some(kw => lower.includes(kw))
+    && BUILD_TARGET_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+function providerModelToModel(m: ProviderModel, locked: boolean): Model {
+  const meta = PROVIDER_META[m.provider] ?? { icon: "◈", color: "#888", label: m.provider, fuelCost: 5 };
   return {
     id: m.id,
-    name,
-    provider: isLocal ? "Local" : "Cloud",
-    icon: isLocal ? "◆" : "◈",
-    color: isLocal ? "#22c55e" : "#d4a574",
-    speed: "medium",
-    capability: "advanced",
-    fuelCost: isLocal ? 5 : 15,
+    name: m.name,
+    provider: meta.label,
+    icon: meta.icon,
+    color: meta.color,
+    speed: m.local ? "fast" : "medium",
+    capability: m.local ? "advanced" : "expert",
+    fuelCost: meta.fuelCost,
+    local: m.local,
+    locked,
   };
+}
+
+function providerDisplayName(id: string): string {
+  const prefix = id.split("/")[0];
+  return PROVIDER_META[prefix]?.label ?? prefix;
 }
 
 function classifyError(err: string): string {
@@ -82,6 +122,85 @@ function classifyError(err: string): string {
     return "No LLM provider configured. Go to Settings → LLM Provider to set up Ollama or an API key.";
   }
   return err;
+}
+
+/* ─── Build Result Card ─── */
+function BuildResultCard({ data }: { data: BuildResultData }) {
+  const { plan, result } = data;
+  const openPreview = () => {
+    const indexPath = result.output_files.find(f => f.endsWith("index.html"));
+    if (!indexPath) return;
+    window.open(`file://${indexPath}`, "_blank");
+  };
+
+  const openFileManager = () => {
+    // Navigate to File Manager page with output_dir context via custom event
+    window.dispatchEvent(new CustomEvent("nexus:navigate", { detail: { page: "file-manager", path: result.output_dir } }));
+  };
+
+  const hasIndex = result.output_files.some(f => f.endsWith("index.html"));
+
+  return (
+    <div className="ch-build-card">
+      <div className="ch-build-header">
+        <span className="ch-build-icon">⬢</span>
+        <span className="ch-build-title">Conductor Build Complete</span>
+        <span className={`ch-build-status ch-build-status-${result.status.toLowerCase()}`}>
+          {result.status}
+        </span>
+      </div>
+
+      {/* Plan summary */}
+      <div className="ch-build-section">
+        <div className="ch-build-section-title">Plan ({plan.tasks.length} tasks)</div>
+        <div className="ch-build-tasks">
+          {plan.tasks.map((task, i) => (
+            <div key={i} className="ch-build-task">
+              <span className="ch-build-task-check">✓</span>
+              <span className="ch-build-task-desc">{task.description}</span>
+              <span className="ch-build-task-role">{task.role}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Files generated */}
+      {result.output_files.length > 0 && (
+        <div className="ch-build-section">
+          <div className="ch-build-section-title">Files Generated ({result.output_files.length})</div>
+          <div className="ch-build-files">
+            {result.output_files.map((f, i) => (
+              <div key={i} className="ch-build-file">{f.split("/").pop()}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Stats */}
+      <div className="ch-build-stats">
+        <span className="ch-build-stat">⬢ {result.agents_used} agents</span>
+        <span className="ch-build-stat">⚡ {result.total_fuel_used} fuel</span>
+        <span className="ch-build-stat">⏱ {result.duration_secs.toFixed(1)}s</span>
+      </div>
+
+      {/* Summary */}
+      {result.summary && (
+        <div className="ch-build-summary">{result.summary}</div>
+      )}
+
+      {/* Actions */}
+      <div className="ch-build-actions">
+        {hasIndex && (
+          <button className="ch-build-btn ch-build-btn-primary" onClick={openPreview}>
+            ▶ Preview
+          </button>
+        )}
+        <button className="ch-build-btn" onClick={openFileManager}>
+          📁 View Files
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /* ─── component ─── */
@@ -104,8 +223,11 @@ export default function AiChatHub() {
     } catch { /* ignore */ }
     return "";
   });
-  const [models, setModels] = useState<Model[]>(FALLBACK_MODELS);
-  const [selectedModel, setSelectedModel] = useState("mock-1");
+  const [models, setModels] = useState<Model[]>([]);
+  const [selectedModel, setSelectedModel] = useState(() =>
+    localStorage.getItem("nexus-selected-model") || ""
+  );
+  const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -114,8 +236,13 @@ export default function AiChatHub() {
   const [voiceActive, setVoiceActive] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showAgentPanel, setShowAgentPanel] = useState(false);
+  const [showApiKeyModal, setShowApiKeyModal] = useState<string | null>(null);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [apiKeySaving, setApiKeySaving] = useState(false);
+  const [agentEntries, setAgentEntries] = useState<AgentEntry[]>([]);
   const [joinedAgents, setJoinedAgents] = useState<string[]>([]);
   const [auditLog, setAuditLog] = useState<string[]>(["Chat hub ready"]);
+  const [conductorProgress, setConductorProgress] = useState<string[]>([]);
 
   // compare state
   const [compareModels, setCompareModels] = useState<[string, string]>(["", ""]);
@@ -143,33 +270,120 @@ export default function AiChatHub() {
     } catch { /* quota exceeded or unavailable */ }
   }, [conversations]);
 
-  /* ─── load models from backend ─── */
+  /* ─── load models from all providers ─── */
+  const loadModels = useCallback(async () => {
+    try {
+      const [provModels, status] = await Promise.all([
+        listProviderModels(),
+        getProviderStatus(),
+      ]);
+      setProviderStatus(status);
+
+      // Map provider models
+      const mapped: Model[] = provModels.map(m => providerModelToModel(m, false));
+
+      // Add locked cloud models that aren't already present (no API key)
+      const existingIds = new Set(mapped.map(m => m.id));
+      for (const locked of LOCKED_CLOUD_MODELS) {
+        if (!existingIds.has(locked.id)) {
+          const meta = PROVIDER_META[locked.provider] ?? { icon: "◈", color: "#888", label: locked.provider, fuelCost: 5 };
+          mapped.push({
+            id: locked.id,
+            name: locked.name,
+            provider: meta.label,
+            icon: "🔒",
+            color: "#666",
+            speed: "medium",
+            capability: "expert",
+            fuelCost: meta.fuelCost,
+            local: false,
+            locked: true,
+          });
+        }
+      }
+
+      setModels(mapped);
+
+      // Auto-select: prefer saved model, then first available unlocked model
+      const saved = localStorage.getItem("nexus-selected-model");
+      const savedValid = saved && mapped.some(m => m.id === saved && !m.locked);
+      if (!savedValid) {
+        const firstUnlocked = mapped.find(m => !m.locked);
+        if (firstUnlocked) {
+          setSelectedModel(firstUnlocked.id);
+          localStorage.setItem("nexus-selected-model", firstUnlocked.id);
+        }
+      }
+
+      if (!compareModels[0] && mapped.length >= 2) {
+        const unlocked = mapped.filter(m => !m.locked);
+        if (unlocked.length >= 2) setCompareModels([unlocked[0].id, unlocked[1].id]);
+        else if (unlocked.length >= 1) setCompareModels([unlocked[0].id, unlocked[0].id]);
+      }
+
+      logAudit(`Loaded ${mapped.filter(m => !m.locked).length} model(s) from ${new Set(provModels.map(m => m.provider)).size} provider(s)`);
+    } catch {
+      logAudit("Backend unavailable — no models loaded");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
-    let cancelled = false;
+    loadModels();
+  }, [loadModels]);
+
+  /* ─── load agents from backend ─── */
+  useEffect(() => {
+    if (!hasDesktopRuntime()) return;
+    const AGENT_COLORS = ["var(--nexus-accent)", "#a78bfa", "#22c55e", "#f59e0b", "#60a5fa", "#fb923c"];
+    listAgents().then((agents) => {
+      setAgentEntries(agents.map((a, i) => ({
+        id: a.id,
+        name: a.name,
+        icon: "\u2B22",
+        color: AGENT_COLORS[i % AGENT_COLORS.length],
+      })));
+    }).catch(() => {});
+  }, []);
+
+  /* ─── listen for conductor events ─── */
+  useEffect(() => {
+    let unlistenPlan: (() => void) | undefined;
+    let unlistenAgent: (() => void) | undefined;
+    let unlistenFinished: (() => void) | undefined;
+
     (async () => {
       try {
-        const available = await listAvailableModels();
-        if (cancelled) return;
-        const installed = available.filter(m => m.installed);
-        if (installed.length > 0) {
-          const mapped = installed.map(modelFromAvailable);
-          setModels(mapped);
-          setSelectedModel(mapped[0].id);
-          if (!compareModels[0] && mapped.length >= 2) {
-            setCompareModels([mapped[0].id, mapped[1].id]);
-          } else if (!compareModels[0] && mapped.length >= 1) {
-            setCompareModels([mapped[0].id, mapped[0].id]);
-          }
-          logAudit(`Loaded ${mapped.length} model(s)`);
-        } else {
-          logAudit("No models installed — using fallback");
-        }
+        const eventMod = await import("@tauri-apps/api/event");
+
+        unlistenPlan = await eventMod.listen<ConductorPlanEvent>("conductor:plan", (event) => {
+          const plan = event.payload;
+          const taskList = plan.tasks.map(t => t.description).join(", ");
+          setConductorProgress(prev => [...prev, `Plan: ${taskList}`]);
+          logAudit(`Conductor plan: ${plan.tasks.length} tasks`);
+        });
+
+        unlistenAgent = await eventMod.listen<ConductorAgentCompletedEvent>("conductor:agent_completed", (event) => {
+          const { agents_used, output_files } = event.payload;
+          setConductorProgress(prev => [...prev, `Agents completed: ${agents_used}, files: ${output_files.length}`]);
+          logAudit(`Conductor: ${agents_used} agents done`);
+        });
+
+        unlistenFinished = await eventMod.listen<ConductorFinishedEvent>("conductor:finished", (event) => {
+          const res = event.payload;
+          setConductorProgress(prev => [...prev, `Finished: ${res.status} in ${res.duration_secs.toFixed(1)}s`]);
+          logAudit(`Conductor finished: ${res.status}`);
+        });
       } catch {
-        // Backend unavailable (web mode) — keep fallback
-        logAudit("Backend unavailable — mock mode");
+        // Not in Tauri runtime
       }
     })();
-    return () => { cancelled = true; };
+
+    return () => {
+      unlistenPlan?.();
+      unlistenAgent?.();
+      unlistenFinished?.();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -232,13 +446,55 @@ export default function AiChatHub() {
     } : c));
   }, []);
 
-  /* ─── send message (real backend) ─── */
+  const appendBuildResult = useCallback((convId: string, msgId: string, buildResult: BuildResultData) => {
+    setConversations(prev => prev.map(c => c.id === convId ? {
+      ...c,
+      messages: c.messages.map(m => m.id === msgId ? {
+        ...m,
+        content: `Build complete: ${buildResult.result.summary || buildResult.result.status}`,
+        streaming: false,
+        buildResult,
+      } : m),
+      updatedAt: Date.now(),
+    } : c));
+  }, []);
+
+  /* ─── send to Conductor ─── */
+  const sendBuildRequest = useCallback(async (currentInput: string, currentConvId: string, assistantMsgId: string) => {
+    logAudit("Routing to Conductor...");
+    setConductorProgress([]);
+    updateStreamingMsg(currentConvId, assistantMsgId, "⬢ Conductor orchestrating build...", false);
+
+    try {
+      const response = await conductBuild(currentInput, undefined, selectedModel);
+
+      const buildData: BuildResultData = {
+        plan: response.plan,
+        result: response.result,
+      };
+
+      appendBuildResult(currentConvId, assistantMsgId, buildData);
+      setFuelUsed(f => f + response.result.total_fuel_used);
+      logAudit(`Build complete: ${response.result.output_files.length} files, ${response.result.total_fuel_used} fuel`);
+    } catch (err) {
+      updateStreamingMsg(currentConvId, assistantMsgId, `Build failed: ${classifyError(String(err))}`, true);
+      logAudit(`Build failed: ${String(err).slice(0, 60)}`);
+    }
+  }, [selectedModel, logAudit, updateStreamingMsg, appendBuildResult]);
+
+  /* ─── send message (real backend, multi-provider) ─── */
   const sendMessage = useCallback(async () => {
     if (!input.trim() || sending) return;
     const model = models.find(m => m.id === selectedModel);
+    if (model?.locked) {
+      setShowApiKeyModal(selectedModel.split("/")[0]);
+      return;
+    }
     const userMsg: ChatMsg = { id: `m-${Date.now()}`, role: "user", content: input, timestamp: Date.now() };
     const currentInput = input;
     const currentConvId = activeConvId;
+    const isOllamaModel = selectedModel.startsWith("ollama/");
+    const ollamaModelName = isOllamaModel ? selectedModel.slice("ollama/".length) : selectedModel;
 
     setConversations(prev => prev.map(c => c.id === currentConvId ? {
       ...c, messages: [...c.messages, userMsg], updatedAt: Date.now(),
@@ -248,7 +504,7 @@ export default function AiChatHub() {
     setInput("");
     setSending(true);
     setFuelUsed(f => f + (model?.fuelCost ?? 5));
-    logAudit(`Sent to ${model?.name ?? selectedModel}`);
+    logAudit(`Sent to ${model?.name ?? selectedModel} via ${providerDisplayName(selectedModel)}`);
 
     // Create placeholder assistant message for streaming
     const assistantMsgId = `m-${Date.now() + 1}`;
@@ -262,47 +518,59 @@ export default function AiChatHub() {
     streamingMsgIdRef.current = assistantMsgId;
 
     try {
-      // Try streaming via Ollama first
-      let unlisten: (() => void) | undefined;
-      try {
-        const eventMod = await import("@tauri-apps/api/event");
-        unlisten = await eventMod.listen<ChatTokenEvent>("chat-token", (event) => {
-          const { full, done } = event.payload;
-          if (event.payload.error) {
-            updateStreamingMsg(currentConvId, assistantMsgId, classifyError(event.payload.error), true);
-            return;
-          }
-          updateStreamingMsg(currentConvId, assistantMsgId, full, done);
-        });
+      // Check if this is a build request — route to Conductor
+      if (isBuildRequest(currentInput)) {
+        await sendBuildRequest(currentInput, currentConvId, assistantMsgId);
+        return;
+      }
 
-        const messages = [{ role: "user" as const, content: currentInput }];
-        await chatWithOllama(messages, selectedModel);
-      } catch (streamErr) {
-        // Streaming failed — fall back to non-streaming send_chat
-        const errMsg = String(streamErr);
-        // If it's a real connection error, try the governed gateway fallback
-        if (errMsg.includes("not running") || errMsg.includes("connection refused")) {
-          try {
-            const response = await sendChat(currentInput);
-            updateStreamingMsg(currentConvId, assistantMsgId, response.text, true);
-            logAudit(`Response from ${response.model}`);
-          } catch (fallbackErr) {
-            updateStreamingMsg(currentConvId, assistantMsgId, classifyError(String(fallbackErr)), true);
+      // For Ollama models: use streaming path
+      if (isOllamaModel) {
+        let unlisten: (() => void) | undefined;
+        try {
+          const eventMod = await import("@tauri-apps/api/event");
+          unlisten = await eventMod.listen<ChatTokenEvent>("chat-token", (event) => {
+            const { full, done } = event.payload;
+            if (event.payload.error) {
+              updateStreamingMsg(currentConvId, assistantMsgId, classifyError(event.payload.error), true);
+              return;
+            }
+            updateStreamingMsg(currentConvId, assistantMsgId, full, done);
+          });
+
+          const messages = [{ role: "user" as const, content: currentInput }];
+          await chatWithOllama(messages, ollamaModelName);
+        } catch (streamErr) {
+          const errMsg = String(streamErr);
+          if (errMsg.includes("__TAURI__") || errMsg.includes("invoke")) {
+            // Not in Tauri runtime — fallback to send_chat
+            try {
+              const response = await sendChat(currentInput, selectedModel);
+              updateStreamingMsg(currentConvId, assistantMsgId, response.text, true);
+              logAudit(`Response from ${response.model} via ${providerDisplayName(selectedModel)}`);
+            } catch (fallbackErr) {
+              updateStreamingMsg(currentConvId, assistantMsgId, classifyError(String(fallbackErr)), true);
+            }
+          } else {
+            updateStreamingMsg(currentConvId, assistantMsgId, classifyError(errMsg), true);
           }
-        } else if (errMsg.includes("__TAURI__") || errMsg.includes("invoke")) {
-          // Not in Tauri runtime (web dev mode) — use sendChat
-          try {
-            const response = await sendChat(currentInput);
-            updateStreamingMsg(currentConvId, assistantMsgId, response.text, true);
-            logAudit(`Response from ${response.model}`);
-          } catch (fallbackErr) {
-            updateStreamingMsg(currentConvId, assistantMsgId, classifyError(String(fallbackErr)), true);
-          }
-        } else {
-          updateStreamingMsg(currentConvId, assistantMsgId, classifyError(errMsg), true);
+        } finally {
+          if (unlisten) unlisten();
         }
-      } finally {
-        if (unlisten) unlisten();
+      } else {
+        // For cloud models: use governed send_chat with provider-prefixed model
+        try {
+          const response = await sendChat(currentInput, selectedModel);
+          updateStreamingMsg(currentConvId, assistantMsgId, response.text, true);
+          logAudit(`Response from ${response.model} via ${providerDisplayName(selectedModel)}`);
+        } catch (err) {
+          const errMsg = classifyError(String(err));
+          if (errMsg.includes("API key") || errMsg.includes("unauthorized")) {
+            updateStreamingMsg(currentConvId, assistantMsgId, `${errMsg}\n\nClick the model selector to add your API key.`, true);
+          } else {
+            updateStreamingMsg(currentConvId, assistantMsgId, errMsg, true);
+          }
+        }
       }
     } catch (err) {
       updateStreamingMsg(currentConvId, assistantMsgId, classifyError(String(err)), true);
@@ -310,7 +578,7 @@ export default function AiChatHub() {
       setSending(false);
       streamingMsgIdRef.current = null;
     }
-  }, [input, sending, selectedModel, activeConvId, models, logAudit, updateStreamingMsg]);
+  }, [input, sending, selectedModel, activeConvId, models, logAudit, updateStreamingMsg, sendBuildRequest]);
 
   const newConversation = useCallback(() => {
     const conv: Conversation = {
@@ -351,7 +619,7 @@ export default function AiChatHub() {
     setFuelUsed(f => f + (m0?.fuelCost ?? 5) + (m1?.fuelCost ?? 5));
     logAudit(`Comparing ${compareModels[0]} vs ${compareModels[1]}`);
 
-    const fetchResponse = async (modelId: string): Promise<string> => {
+    const fetchResponse = async (_modelId: string): Promise<string> => {
       try {
         const response = await sendChat(comparePrompt);
         return response.text;
@@ -382,6 +650,23 @@ export default function AiChatHub() {
     logAudit("Image generation attempted");
   }, [input, selectedModel, activeConvId, logAudit]);
 
+  const handleSaveApiKey = useCallback(async () => {
+    if (!showApiKeyModal || !apiKeyInput.trim()) return;
+    setApiKeySaving(true);
+    try {
+      await saveApiKey(showApiKeyModal, apiKeyInput.trim());
+      logAudit(`API key saved for ${showApiKeyModal}`);
+      setShowApiKeyModal(null);
+      setApiKeyInput("");
+      // Refresh models and provider status
+      await loadModels();
+    } catch (err) {
+      logAudit(`Failed to save API key: ${String(err).slice(0, 60)}`);
+    } finally {
+      setApiKeySaving(false);
+    }
+  }, [showApiKeyModal, apiKeyInput, logAudit, loadModels]);
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -408,28 +693,72 @@ export default function AiChatHub() {
           ))}
         </div>
 
-        {/* model picker */}
+        {/* model picker (grouped by provider) */}
         <div className="ch-model-section">
           <div className="ch-section-header">Active Model</div>
           <button className="ch-model-active" onClick={() => setShowModelPicker(!showModelPicker)}>
             <span className="ch-model-icon" style={{ color: activeModel?.color }}>{activeModel?.icon}</span>
             <div className="ch-model-info">
-              <span className="ch-model-name">{activeModel?.name ?? "No model"}</span>
+              <span className="ch-model-name">{activeModel?.name ?? "Select a model"}</span>
               <span className="ch-model-provider">{activeModel?.provider ?? "—"} · ⚡{activeModel?.fuelCost ?? 0}</span>
             </div>
             <span className="ch-model-arrow">{showModelPicker ? "▲" : "▼"}</span>
           </button>
           {showModelPicker && (
             <div className="ch-model-list">
-              {models.map(m => (
-                <button key={m.id} className={`ch-model-option ${selectedModel === m.id ? "active" : ""}`} onClick={() => { setSelectedModel(m.id); setShowModelPicker(false); logAudit(`Switched to ${m.name}`); }}>
-                  <span className="ch-model-icon" style={{ color: m.color }}>{m.icon}</span>
-                  <div className="ch-model-info">
-                    <span className="ch-model-name">{m.name}</span>
-                    <span className="ch-model-provider">{m.provider} · {m.speed} · ⚡{m.fuelCost}</span>
-                  </div>
-                </button>
-              ))}
+              {/* Local Models */}
+              {models.some(m => m.local) && (
+                <>
+                  <div className="ch-model-group-header">LOCAL MODELS (Ollama)</div>
+                  {models.filter(m => m.local).map(m => (
+                    <button key={m.id} className={`ch-model-option ${selectedModel === m.id ? "active" : ""}`} onClick={() => {
+                      setSelectedModel(m.id);
+                      localStorage.setItem("nexus-selected-model", m.id);
+                      setShowModelPicker(false);
+                      logAudit(`Switched to ${m.name}`);
+                    }}>
+                      <span className="ch-model-icon" style={{ color: m.color }}>{m.icon}</span>
+                      <div className="ch-model-info">
+                        <span className="ch-model-name">{m.name}</span>
+                        <span className="ch-model-provider">{m.provider} · ⚡{m.fuelCost}</span>
+                      </div>
+                    </button>
+                  ))}
+                </>
+              )}
+              {/* Cloud Models */}
+              {models.some(m => !m.local) && (
+                <>
+                  <div className="ch-model-group-header">CLOUD MODELS</div>
+                  {models.filter(m => !m.local).map(m => (
+                    <button key={m.id} className={`ch-model-option ${selectedModel === m.id ? "active" : ""} ${m.locked ? "locked" : ""}`} onClick={() => {
+                      if (m.locked) {
+                        setShowApiKeyModal(m.id.split("/")[0]);
+                        setShowModelPicker(false);
+                      } else {
+                        setSelectedModel(m.id);
+                        localStorage.setItem("nexus-selected-model", m.id);
+                        setShowModelPicker(false);
+                        logAudit(`Switched to ${m.name}`);
+                      }
+                    }}>
+                      <span className="ch-model-icon" style={{ color: m.color }}>{m.locked ? "🔒" : m.icon}</span>
+                      <div className="ch-model-info">
+                        <span className="ch-model-name">{m.name}</span>
+                        <span className="ch-model-provider">{m.provider} · ⚡{m.fuelCost}{m.locked ? " · Add API key" : ""}</span>
+                      </div>
+                    </button>
+                  ))}
+                </>
+              )}
+              {/* Add API Key button */}
+              <button className="ch-model-option ch-add-key-btn" onClick={() => { setShowApiKeyModal(""); setShowModelPicker(false); }}>
+                <span className="ch-model-icon" style={{ color: "var(--nexus-accent)" }}>+</span>
+                <div className="ch-model-info">
+                  <span className="ch-model-name">Add API Key</span>
+                  <span className="ch-model-provider">Configure cloud providers</span>
+                </div>
+              </button>
             </div>
           )}
         </div>
@@ -460,7 +789,8 @@ export default function AiChatHub() {
           </button>
           {showAgentPanel && (
             <div className="ch-agent-list">
-              {AGENTS.map(a => (
+              {agentEntries.length === 0 && <div style={{ padding: "0.5rem", opacity: 0.5, fontSize: "0.8rem" }}>No agents registered</div>}
+              {agentEntries.map(a => (
                 <button key={a.id} className={`ch-agent-btn ${joinedAgents.includes(a.id) ? "active" : ""}`} onClick={() => {
                   setJoinedAgents(prev => prev.includes(a.id) ? prev.filter(x => x !== a.id) : [...prev, a.id]);
                   logAudit(`${joinedAgents.includes(a.id) ? "Removed" : "Added"} ${a.name}`);
@@ -520,6 +850,16 @@ export default function AiChatHub() {
               </div>
             )}
 
+            {/* conductor progress banner */}
+            {conductorProgress.length > 0 && sending && (
+              <div className="ch-conductor-progress">
+                <div className="ch-conductor-label">⬢ Conductor Progress</div>
+                {conductorProgress.map((p, i) => (
+                  <div key={i} className="ch-conductor-step">{p}</div>
+                ))}
+              </div>
+            )}
+
             {/* messages */}
             <div className="ch-messages">
               {activeConv.messages.length === 0 && (
@@ -528,7 +868,7 @@ export default function AiChatHub() {
                   <div className="ch-empty-model">{activeModel?.name}</div>
                   <div className="ch-empty-hint">Start a conversation. Type a message or use voice.</div>
                   <div className="ch-quick-prompts">
-                    {["Explain Nexus OS governance", "Write a Rust function", "Compare WASM runtimes", "Design a landing page"].map(p => (
+                    {["Explain Nexus OS governance", "Write a Rust function", "Compare WASM runtimes", "Build a portfolio site with dark mode"].map(p => (
                       <button key={p} className="ch-quick-btn" onClick={() => setInput(p)}>{p}</button>
                     ))}
                   </div>
@@ -546,14 +886,23 @@ export default function AiChatHub() {
                       <span className="ch-msg-name">
                         {msg.role === "user" ? "You" :
                          msg.role === "agent" ? msg.agent :
+                         msg.buildResult ? "Conductor" :
                          models.find(m => m.id === msg.model)?.name ?? msg.model}
                       </span>
+                      {msg.role === "assistant" && msg.model && (
+                        <span className="ch-msg-provider-badge" style={{ color: PROVIDER_META[msg.model.split("/")[0]]?.color ?? "#888" }}>
+                          via {providerDisplayName(msg.model)}
+                        </span>
+                      )}
                       <span className="ch-msg-time">{formatTime(msg.timestamp)}</span>
                     </div>
                     {msg.imageUrl && (
                       <div className="ch-msg-image" style={{ background: msg.imageUrl }} />
                     )}
-                    {msg.streaming && !msg.content ? (
+                    {/* Build result card */}
+                    {msg.buildResult ? (
+                      <BuildResultCard data={msg.buildResult} />
+                    ) : msg.streaming && !msg.content ? (
                       <div className="ch-typing"><span /><span /><span /></div>
                     ) : (
                       <div className="ch-msg-content" dangerouslySetInnerHTML={{ __html: renderContent(msg.content) }} />
@@ -585,6 +934,7 @@ export default function AiChatHub() {
               <div className="ch-input-meta">
                 <span className="ch-input-model" style={{ color: activeModel?.color }}>{activeModel?.icon} {activeModel?.name}</span>
                 <span>⚡ {activeModel?.fuelCost} fuel/msg</span>
+                {isBuildRequest(input) && <span className="ch-input-conductor">⬢ Conductor mode</span>}
                 {joinedAgents.length > 0 && <span>⬢ {joinedAgents.length} agent{joinedAgents.length > 1 ? "s" : ""} joined</span>}
               </div>
             </div>
@@ -685,13 +1035,74 @@ export default function AiChatHub() {
       {/* ─── Status Bar ─── */}
       <div className="ch-status-bar">
         <span className="ch-status-item">{activeModel?.name ?? "No model"}</span>
+        <span className="ch-status-item">{activeModel ? `via ${activeModel.provider}` : ""}</span>
         <span className="ch-status-item">{conversations.length} conversations</span>
         <span className="ch-status-item">{activeConv?.messages.length ?? 0} messages</span>
         {voiceActive && <span className="ch-status-item ch-status-voice">🎙 Jarvis Active</span>}
         {joinedAgents.length > 0 && <span className="ch-status-item">⬢ {joinedAgents.length} agents</span>}
         <span className="ch-status-item ch-status-right">⚡ {fuelUsed} fuel</span>
-        <span className="ch-status-item">{models.length} models</span>
+        <span className="ch-status-item">{models.filter(m => !m.locked).length} models</span>
       </div>
+
+      {/* ─── API Key Modal ─── */}
+      {showApiKeyModal !== null && (
+        <div className="ch-modal-overlay" onClick={() => { setShowApiKeyModal(null); setApiKeyInput(""); }}>
+          <div className="ch-modal" onClick={e => e.stopPropagation()}>
+            <div className="ch-modal-header">
+              <h3>Configure API Key</h3>
+              <button className="ch-modal-close" onClick={() => { setShowApiKeyModal(null); setApiKeyInput(""); }}>×</button>
+            </div>
+            <div className="ch-modal-body">
+              {(showApiKeyModal === "" ? ["anthropic", "openai", "deepseek", "google"] : [showApiKeyModal]).map(provider => {
+                const meta = PROVIDER_META[provider];
+                const statusKey = provider === "google" ? "gemini" : provider;
+                const hasKey = providerStatus ? providerStatus[statusKey as keyof ProviderStatus] : false;
+                return (
+                  <div key={provider} className="ch-api-key-row">
+                    <div className="ch-api-key-provider">
+                      <span className="ch-api-key-icon" style={{ color: meta?.color }}>{meta?.icon ?? "◈"}</span>
+                      <span className="ch-api-key-name">{meta?.label ?? provider}</span>
+                      <span className={`ch-api-key-status ${hasKey ? "connected" : ""}`}>
+                        {hasKey ? "Connected" : "Not configured"}
+                      </span>
+                    </div>
+                    {(!hasKey || showApiKeyModal === provider) && (
+                      <div className="ch-api-key-input-row">
+                        <input
+                          type="password"
+                          className="ch-api-key-input"
+                          placeholder={`Enter ${meta?.label ?? provider} API key...`}
+                          value={showApiKeyModal === provider ? apiKeyInput : ""}
+                          onChange={e => { setApiKeyInput(e.target.value); setShowApiKeyModal(provider); }}
+                          onFocus={() => setShowApiKeyModal(provider)}
+                        />
+                        <button
+                          className="ch-api-key-save"
+                          disabled={apiKeySaving || !apiKeyInput.trim() || showApiKeyModal !== provider}
+                          onClick={handleSaveApiKey}
+                        >
+                          {apiKeySaving ? "..." : "Save"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {/* Ollama status */}
+              <div className="ch-api-key-row">
+                <div className="ch-api-key-provider">
+                  <span className="ch-api-key-icon" style={{ color: PROVIDER_META.ollama.color }}>{PROVIDER_META.ollama.icon}</span>
+                  <span className="ch-api-key-name">Ollama (Local)</span>
+                  <span className={`ch-api-key-status ${providerStatus?.ollama ? "connected" : ""}`}>
+                    {providerStatus?.ollama ? "Running" : "Not detected"}
+                  </span>
+                </div>
+                <div className="ch-api-key-hint">localhost:11434 — no API key needed</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

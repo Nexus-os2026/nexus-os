@@ -13,19 +13,6 @@ interface AgentWithCategory extends MarketplaceAgent {
   category?: string;
 }
 
-/* ─── fallback templates (shown when backend unavailable) ─── */
-const FALLBACK_TEMPLATES: AgentWithCategory[] = [
-  { package_id: "t1", name: "SEO Blog Writer", author: "NexusOS Core", description: "AI-powered blog posts optimized for search rankings", rating: 4.8, downloads: 2400, review_count: 42, category: "Content", tags: ["content", "seo"], version: "1.0.0", capabilities: ["llm.query", "web.search"], price_cents: 0 },
-  { package_id: "t2", name: "GitHub Issue Triager", author: "Community", description: "Auto-label, prioritize, and assign GitHub issues", rating: 4.6, downloads: 1800, review_count: 28, category: "Coding", tags: ["github", "automation"], version: "1.2.0", capabilities: ["llm.query", "web.search"], price_cents: 0 },
-  { package_id: "t3", name: "Email Outreach Agent", author: "Community", description: "Personalized cold email campaigns with follow-up sequences", rating: 4.3, downloads: 3100, review_count: 55, category: "Productivity", tags: ["email", "outreach"], version: "2.0.0", capabilities: ["llm.query", "messaging.send"], price_cents: 0 },
-  { package_id: "t4", name: "Data Scraper Pro", author: "NexusOS Core", description: "Extract structured data from any website with anti-detection", rating: 4.7, downloads: 5200, review_count: 67, category: "Research", tags: ["scraping", "data"], version: "1.5.0", capabilities: ["web.search", "fs.write"], price_cents: 0 },
-  { package_id: "t5", name: "Meeting Summarizer", author: "NexusOS Core", description: "Record, transcribe, and extract action items from meetings", rating: 4.9, downloads: 4700, review_count: 89, category: "Productivity", tags: ["meetings", "transcription"], version: "3.0.0", capabilities: ["llm.query", "fs.write"], price_cents: 0 },
-  { package_id: "t6", name: "Competitor Monitor", author: "Community", description: "Track competitor pricing, features, and announcements daily", rating: 4.5, downloads: 1200, review_count: 15, category: "Analytics", tags: ["monitoring", "competitors"], version: "1.0.0", capabilities: ["web.search", "llm.query"], price_cents: 0 },
-  { package_id: "t7", name: "Bug Fixer", author: "NexusOS Core", description: "Scan codebases for bugs, generate fixes, open PRs automatically", rating: 4.4, downloads: 2900, review_count: 38, category: "Coding", tags: ["bugs", "automation"], version: "2.1.0", capabilities: ["llm.query", "fs.read", "fs.write", "shell.exec"], price_cents: 0 },
-  { package_id: "t8", name: "Social Analytics", author: "Community", description: "Cross-platform engagement tracking with weekly insight reports", rating: 4.6, downloads: 1500, review_count: 22, category: "Social", tags: ["analytics", "social"], version: "1.3.0", capabilities: ["web.search", "llm.query"], price_cents: 0 },
-  { package_id: "t9", name: "PR Draft Writer", author: "Community", description: "Generate release notes and PR descriptions from git diffs", rating: 4.2, downloads: 890, review_count: 12, category: "Coding", tags: ["git", "docs"], version: "1.0.0", capabilities: ["llm.query", "fs.read", "shell.exec"], price_cents: 0 },
-  { package_id: "t10", name: "Slack Digest Bot", author: "NexusOS Core", description: "Summarize busy Slack channels into daily/weekly digests", rating: 4.7, downloads: 2100, review_count: 31, category: "Productivity", tags: ["slack", "digest"], version: "2.0.0", capabilities: ["llm.query", "messaging.send"], price_cents: 0 },
-];
 
 const CATEGORIES = ["All", "Coding", "Content", "Social", "Analytics", "Productivity", "Research"];
 
@@ -67,25 +54,22 @@ export function Marketplace(): JSX.Element {
   /* ─── Load agents from backend ─── */
   const loadAgents = useCallback(async (searchQuery: string) => {
     if (!isDesktop) {
-      setAgents(FALLBACK_TEMPLATES.map(a => ({ ...a })));
+      setAgents([]);
       return;
     }
     setLoading(true);
     setError(null);
     try {
       const results = await marketplaceSearch(searchQuery || "");
-      if (results.length > 0) {
-        setBackendAvailable(true);
-        setAgents(results.map(a => ({ ...a, category: inferCategory(a) })));
-      } else {
-        // Backend returned empty — use fallbacks merged
-        setAgents(FALLBACK_TEMPLATES.map(a => ({ ...a })));
-      }
+      setBackendAvailable(true);
+      setAgents(results.map(a => ({ ...a, category: inferCategory(a) })));
     } catch (e) {
-      // Backend unavailable — use fallback templates
-      setAgents(FALLBACK_TEMPLATES.map(a => ({ ...a })));
-      if (searchQuery) {
-        setError(`Search failed: ${e}`);
+      // Backend unavailable — use fallback templates only in non-desktop mode
+      if (!isDesktop) {
+        setAgents([]);
+      } else {
+        setAgents([]);
+        setError(`Marketplace unavailable: ${e}`);
       }
     }
     setLoading(false);
@@ -108,8 +92,8 @@ export function Marketplace(): JSX.Element {
   const handleInstall = useCallback(async (packageId: string) => {
     if (installed.has(packageId)) return;
 
-    if (!isDesktop || !backendAvailable) {
-      // State-only install for non-desktop or when backend is empty
+    if (!isDesktop) {
+      // State-only install for non-desktop
       setInstalled(prev => new Set(prev).add(packageId));
       return;
     }
@@ -130,14 +114,14 @@ export function Marketplace(): JSX.Element {
 
   /* ─── View agent details ─── */
   const viewDetails = useCallback(async (packageId: string) => {
-    if (!isDesktop || !backendAvailable) return;
+    if (!isDesktop) return;
     try {
       const detail = await marketplaceInfo(packageId);
       setSelectedAgent(detail);
     } catch {
-      // silently fail — detail view not available for fallback agents
+      // silently fail — detail not available
     }
-  }, [isDesktop, backendAvailable]);
+  }, [isDesktop]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
@@ -158,8 +142,10 @@ export function Marketplace(): JSX.Element {
           </h2>
           <p className="mp-subtitle">
             {backendAvailable
-              ? "Browsing marketplace SQLite registry — Ed25519 verified agents"
-              : "Curated agent templates — connect to desktop runtime for live marketplace"}
+              ? "Browsing marketplace SQLite registry \u2014 Ed25519 verified agents"
+              : isDesktop
+                ? "Marketplace registry connected \u2014 publish agents with `nexus package`"
+                : "Connect to desktop runtime for live marketplace"}
           </p>
         </div>
       </header>
@@ -267,7 +253,9 @@ export function Marketplace(): JSX.Element {
         {loading ? (
           <p className="mp-empty">Loading marketplace...</p>
         ) : filtered.length === 0 ? (
-          <p className="mp-empty">No agents match your search.</p>
+          <p className="mp-empty">
+            {query ? "No agents match your search." : "No agents published yet. Use `nexus package` + `nexus marketplace publish` to add agents."}
+          </p>
         ) : (
           filtered.map((t) => {
             const isInstalled = installed.has(t.package_id);
@@ -321,7 +309,7 @@ export function Marketplace(): JSX.Element {
         justifyContent: "space-between", fontSize: "0.75rem", color: "#64748b",
       }}>
         <span>{filtered.length} agents shown · {installed.size} installed</span>
-        <span>{backendAvailable ? "SQLite registry connected" : "Fallback mode — desktop runtime needed"}</span>
+        <span>{isDesktop ? "SQLite registry connected" : "Fallback mode \u2014 desktop runtime needed"}</span>
       </div>
     </section>
   );

@@ -861,7 +861,10 @@ mod tests {
     #[test]
     fn file_store_save_and_reload() {
         let dir = std::env::temp_dir()
-            .join("nexus_immutable_audit_tests")
+            .join(format!(
+                "nexus_immutable_audit_tests_{}",
+                std::process::id()
+            ))
             .join("save_reload");
         let _ = fs::remove_dir_all(&dir);
 
@@ -905,7 +908,10 @@ mod tests {
     #[test]
     fn file_store_multiple_blocks() {
         let dir = std::env::temp_dir()
-            .join("nexus_immutable_audit_tests")
+            .join(format!(
+                "nexus_immutable_audit_tests_{}",
+                std::process::id()
+            ))
             .join("multi_blocks");
         let _ = fs::remove_dir_all(&dir);
 
@@ -955,7 +961,10 @@ mod tests {
     #[test]
     fn file_store_rejects_duplicate() {
         let dir = std::env::temp_dir()
-            .join("nexus_immutable_audit_tests")
+            .join(format!(
+                "nexus_immutable_audit_tests_{}",
+                std::process::id()
+            ))
             .join("dup");
         let _ = fs::remove_dir_all(&dir);
 
@@ -985,7 +994,10 @@ mod tests {
     #[test]
     fn file_store_empty_dir() {
         let dir = std::env::temp_dir()
-            .join("nexus_immutable_audit_tests")
+            .join(format!(
+                "nexus_immutable_audit_tests_{}",
+                std::process::id()
+            ))
             .join("empty");
         let _ = fs::remove_dir_all(&dir);
 

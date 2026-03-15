@@ -993,3 +993,355 @@
 .ch-status-right {
   margin-left: auto;
 }
+
+/* ─── Conductor Progress Banner ─── */
+.ch-conductor-progress {
+  background: #0c1a2e;
+  border: 1px solid #1e40af;
+  border-radius: 8px;
+  margin: 0 16px 8px;
+  padding: 10px 14px;
+}
+
+.ch-conductor-label {
+  color: #60a5fa;
+  font-weight: 600;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.ch-conductor-step {
+  color: #94a3b8;
+  font-size: 11px;
+  padding: 2px 0;
+  border-left: 2px solid #1e40af;
+  padding-left: 8px;
+  margin-left: 4px;
+}
+
+/* ─── Build Result Card ─── */
+.ch-build-card {
+  background: #0f1729;
+  border: 1px solid #1e3a5f;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.ch-build-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  background: #0c1a2e;
+  border-bottom: 1px solid #1e3a5f;
+}
+
+.ch-build-icon {
+  color: #60a5fa;
+  font-size: 16px;
+}
+
+.ch-build-title {
+  font-weight: 600;
+  color: #e2e8f0;
+  flex: 1;
+}
+
+.ch-build-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.ch-build-status-completed,
+.ch-build-status-success {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.ch-build-status-failed {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.ch-build-status-partial {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.ch-build-section {
+  padding: 10px 14px;
+  border-bottom: 1px solid #1e293b;
+}
+
+.ch-build-section-title {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.ch-build-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ch-build-task {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.ch-build-task-check {
+  color: #22c55e;
+  font-size: 11px;
+}
+
+.ch-build-task-desc {
+  color: #cbd5e1;
+  flex: 1;
+}
+
+.ch-build-task-role {
+  color: #64748b;
+  font-size: 10px;
+  padding: 1px 6px;
+  background: #1e293b;
+  border-radius: 3px;
+}
+
+.ch-build-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ch-build-file {
+  font-size: 11px;
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.1);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.ch-build-stats {
+  display: flex;
+  gap: 16px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #1e293b;
+}
+
+.ch-build-stat {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.ch-build-summary {
+  padding: 10px 14px;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.5;
+  border-bottom: 1px solid #1e293b;
+}
+
+.ch-build-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.ch-build-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #e2e8f0;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.ch-build-btn:hover {
+  background: #334155;
+  border-color: #475569;
+}
+
+.ch-build-btn-primary {
+  background: #1e40af;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.ch-build-btn-primary:hover {
+  background: #2563eb;
+}
+
+/* ─── Conductor mode indicator ─── */
+.ch-input-conductor {
+  color: #60a5fa;
+  font-weight: 600;
+  animation: ch-pulse 2s infinite;
+}
+
+/* ─── Grouped Model Picker ─── */
+.ch-model-group-header {
+  padding: 8px 12px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  text-transform: uppercase;
+  border-top: 1px solid #1e293b;
+}
+.ch-model-group-header:first-child {
+  border-top: none;
+}
+.ch-model-option.locked {
+  opacity: 0.5;
+}
+.ch-model-option.locked:hover {
+  opacity: 0.7;
+}
+.ch-add-key-btn {
+  border-top: 1px solid #1e293b;
+  margin-top: 4px;
+}
+
+/* ─── Provider Badge on Messages ─── */
+.ch-msg-provider-badge {
+  font-size: 10px;
+  opacity: 0.7;
+  margin-left: 6px;
+  font-weight: 500;
+}
+
+/* ─── API Key Modal ─── */
+.ch-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+.ch-modal {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  width: 480px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+.ch-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #334155;
+}
+.ch-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+.ch-modal-close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.ch-modal-close:hover {
+  background: #334155;
+  color: #e2e8f0;
+}
+.ch-modal-body {
+  padding: 16px 20px;
+}
+.ch-api-key-row {
+  padding: 12px 0;
+  border-bottom: 1px solid #1e293b44;
+}
+.ch-api-key-row:last-child {
+  border-bottom: none;
+}
+.ch-api-key-provider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.ch-api-key-icon {
+  font-size: 16px;
+}
+.ch-api-key-name {
+  font-weight: 600;
+  color: #e2e8f0;
+  flex: 1;
+}
+.ch-api-key-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #334155;
+  color: #94a3b8;
+}
+.ch-api-key-status.connected {
+  background: #166534;
+  color: #22c55e;
+}
+.ch-api-key-input-row {
+  display: flex;
+  gap: 8px;
+}
+.ch-api-key-input {
+  flex: 1;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #e2e8f0;
+  font-family: inherit;
+  font-size: 12px;
+}
+.ch-api-key-input:focus {
+  outline: none;
+  border-color: var(--nexus-accent, #d4a574);
+}
+.ch-api-key-save {
+  background: var(--nexus-accent, #d4a574);
+  color: #0b1120;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 12px;
+}
+.ch-api-key-save:hover:not(:disabled) {
+  opacity: 0.9;
+}
+.ch-api-key-save:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.ch-api-key-hint {
+  font-size: 11px;
+  color: #64748b;
+  padding-left: 24px;
+}

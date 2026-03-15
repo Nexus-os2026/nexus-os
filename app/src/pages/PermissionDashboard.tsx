@@ -86,64 +86,6 @@ const ACTION_STYLES: Record<string, { label: string; className: string }> = {
   unlocked_by_admin: { label: "Unlocked", className: "action-unlocked" },
 };
 
-// ── Mock data for non-desktop mode ──
-
-function mockCategories(): PermissionCategory[] {
-  return [
-    {
-      id: "filesystem", display_name: "Filesystem", icon: "folder",
-      permissions: [
-        { capability_key: "fs.read", display_name: "Read files", description: "Allows the agent to read files from the filesystem", risk_level: "medium", enabled: true, granted_by: "manifest", granted_at: Date.now() / 1000, can_user_toggle: true, filesystem_scopes: [{ path_pattern: "/src/**", permission: "ReadOnly" as const }, { path_pattern: "*.rs", permission: "ReadOnly" as const }] },
-        { capability_key: "fs.write", display_name: "Write files", description: "Allows the agent to create or modify files on the filesystem. Changes can be destructive.", risk_level: "high", enabled: false, granted_by: "", granted_at: 0, can_user_toggle: true, filesystem_scopes: [{ path_pattern: "/output/", permission: "ReadWrite" as const }, { path_pattern: "/src/secret.rs", permission: "Deny" as const }] },
-      ],
-    },
-    {
-      id: "network", display_name: "Network", icon: "globe",
-      permissions: [
-        { capability_key: "web.search", display_name: "Web search", description: "Allows the agent to search the web for information", risk_level: "medium", enabled: true, granted_by: "manifest", granted_at: Date.now() / 1000, can_user_toggle: true },
-        { capability_key: "web.read", display_name: "Read web pages", description: "Allows the agent to fetch and read web page content", risk_level: "medium", enabled: false, granted_by: "", granted_at: 0, can_user_toggle: true },
-      ],
-    },
-    {
-      id: "ai", display_name: "AI / LLM", icon: "brain",
-      permissions: [
-        { capability_key: "llm.query", display_name: "Query AI model", description: "Allows the agent to send prompts to an AI language model. May incur costs and expose data.", risk_level: "medium", enabled: true, granted_by: "manifest", granted_at: Date.now() / 1000, can_user_toggle: true },
-      ],
-    },
-    {
-      id: "system", display_name: "System", icon: "shield",
-      permissions: [
-        { capability_key: "process.exec", display_name: "Execute processes", description: "Allows the agent to run system commands and processes. This is a powerful capability.", risk_level: "critical", enabled: false, granted_by: "", granted_at: 0, can_user_toggle: true },
-        { capability_key: "audit.read", display_name: "Read audit logs", description: "Allows the agent to read the audit trail and event history", risk_level: "low", enabled: true, granted_by: "manifest", granted_at: Date.now() / 1000, can_user_toggle: true },
-      ],
-    },
-    {
-      id: "social", display_name: "Social Media", icon: "share",
-      permissions: [
-        { capability_key: "social.post", display_name: "Post to social media", description: "Allows the agent to publish posts on social media platforms", risk_level: "high", enabled: false, granted_by: "", granted_at: 0, can_user_toggle: true },
-        { capability_key: "social.x.post", display_name: "Post to X (Twitter)", description: "Allows the agent to publish posts on X (formerly Twitter)", risk_level: "high", enabled: false, granted_by: "", granted_at: 0, can_user_toggle: true },
-        { capability_key: "social.x.read", display_name: "Read X (Twitter)", description: "Allows the agent to read posts and timelines on X", risk_level: "low", enabled: false, granted_by: "", granted_at: 0, can_user_toggle: true },
-      ],
-    },
-    {
-      id: "messaging", display_name: "Messaging", icon: "chat",
-      permissions: [
-        { capability_key: "messaging.send", display_name: "Send messages", description: "Allows the agent to send messages via Telegram, WhatsApp, Discord, or Slack", risk_level: "high", enabled: false, granted_by: "", granted_at: 0, can_user_toggle: true },
-      ],
-    },
-  ];
-}
-
-function mockHistory(): PermissionHistoryEntry[] {
-  const now = Date.now() / 1000;
-  return [
-    { capability_key: "fs.read", action: "granted", changed_by: "manifest", timestamp: now - 86400 * 2, reason: null },
-    { capability_key: "llm.query", action: "granted", changed_by: "manifest", timestamp: now - 86400 * 2, reason: null },
-    { capability_key: "web.search", action: "granted", changed_by: "user", timestamp: now - 86400, reason: "Needed for research" },
-    { capability_key: "fs.write", action: "revoked", changed_by: "adaptive-governance", timestamp: now - 3600, reason: "Risk assessment triggered automatic revocation" },
-  ];
-}
-
 // ── Props ──
 
 interface PermissionDashboardProps {
@@ -180,21 +122,20 @@ export function PermissionDashboard({
   const isDesktop = hasDesktopRuntime();
 
   const loadData = useCallback(async () => {
+    if (!isDesktop) {
+      setError("Desktop runtime required for live permissions");
+      setLoading(false);
+      return;
+    }
     try {
-      if (isDesktop) {
-        const [cats, hist, reqs] = await Promise.all([
-          getAgentPermissions(agentId),
-          getPermissionHistory(agentId),
-          getCapabilityRequest(agentId),
-        ]);
-        setCategories(cats);
-        setHistory(hist);
-        setRequests(reqs);
-      } else {
-        setCategories(mockCategories());
-        setHistory(mockHistory());
-        setRequests([]);
-      }
+      const [cats, hist, reqs] = await Promise.all([
+        getAgentPermissions(agentId),
+        getPermissionHistory(agentId),
+        getCapabilityRequest(agentId),
+      ]);
+      setCategories(cats);
+      setHistory(hist);
+      setRequests(reqs);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -221,19 +162,10 @@ export function PermissionDashboard({
     );
 
     try {
-      if (isDesktop) {
-        await updateAgentPermission(agentId, capKey, newValue);
-      }
+      await updateAgentPermission(agentId, capKey, newValue);
       // Refresh history
-      if (isDesktop) {
-        const hist = await getPermissionHistory(agentId);
-        setHistory(hist);
-      } else {
-        setHistory((prev) => [
-          { capability_key: capKey, action: newValue ? "granted" : "revoked", changed_by: "user", timestamp: Date.now() / 1000, reason: null },
-          ...prev,
-        ]);
-      }
+      const hist = await getPermissionHistory(agentId);
+      setHistory(hist);
     } catch (err) {
       // Revert optimistic update
       setCategories((prev) =>
@@ -259,9 +191,7 @@ export function PermissionDashboard({
   const executeBulkAction = async (updates: PermissionUpdate[], reason: string) => {
     setConfirmAction(null);
     try {
-      if (isDesktop) {
-        await bulkUpdatePermissions(agentId, updates, reason);
-      }
+      await bulkUpdatePermissions(agentId, updates, reason);
       // Optimistic update
       const updateMap = new Map(updates.map((u) => [u.capability_key, u.enabled]));
       setCategories((prev) =>
@@ -272,10 +202,8 @@ export function PermissionDashboard({
           ),
         }))
       );
-      if (isDesktop) {
-        const hist = await getPermissionHistory(agentId);
-        setHistory(hist);
-      }
+      const hist = await getPermissionHistory(agentId);
+      setHistory(hist);
     } catch (err) {
       setError(String(err));
       loadData();
@@ -568,9 +496,7 @@ export function PermissionDashboard({
                   value={agentLlmProvider}
                   onChange={(e) => {
                     setAgentLlmProvider(e.target.value);
-                    if (isDesktop) {
-                      void setAgentLlmProviderApi(agentId, e.target.value, agentLocalOnly, 0, 0);
-                    }
+                    void setAgentLlmProviderApi(agentId, e.target.value, agentLocalOnly, 0, 0);
                   }}
                 >
                   <option value="">Auto (global routing strategy)</option>
@@ -588,9 +514,7 @@ export function PermissionDashboard({
                     checked={agentLocalOnly}
                     onChange={(e) => {
                       setAgentLocalOnly(e.target.checked);
-                      if (isDesktop) {
-                        void setAgentLlmProviderApi(agentId, agentLlmProvider, e.target.checked, 0, 0);
-                      }
+                      void setAgentLlmProviderApi(agentId, agentLlmProvider, e.target.checked, 0, 0);
                     }}
                   />
                   Local only (no cloud)

@@ -373,7 +373,9 @@ mod tests {
     use std::path::PathBuf;
 
     fn test_dir(name: &str) -> PathBuf {
-        std::env::temp_dir().join("nexus_gossip_tests").join(name)
+        std::env::temp_dir()
+            .join(format!("nexus_gossip_tests_{}", std::process::id()))
+            .join(name)
     }
 
     fn clean_dir(dir: &PathBuf) {

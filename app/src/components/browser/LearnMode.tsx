@@ -42,72 +42,6 @@ const CATEGORY_ICONS: Record<string, string> = {
   changelog: "📋",
 };
 
-const MOCK_KNOWLEDGE: KnowledgeEntry[] = [
-  {
-    id: "mock-1",
-    title: "Rust 1.78 Stable: Diagnostic Attributes",
-    source_url: "https://blog.rust-lang.org/",
-    key_points: [
-      "#[diagnostic::on_unimplemented] now stable for better error messages",
-      "Pattern types RFC accepted for future editions",
-      "std::io improvements for Windows named pipes",
-    ],
-    timestamp: Date.now() - 120_000,
-    relevance_score: 0.92,
-    category: "blog",
-    is_new: true,
-    change_summary: "New stable Rust release with diagnostic improvements",
-  },
-  {
-    id: "mock-2",
-    title: "React 19 Server Components",
-    source_url: "https://react.dev/reference/react",
-    key_points: [
-      "Server Components now stable — zero client JS by default",
-      "New use() hook for reading promises and context in render",
-      "Actions API for form mutations with optimistic updates",
-    ],
-    timestamp: Date.now() - 300_000,
-    relevance_score: 0.85,
-    category: "documentation",
-    is_new: true,
-    change_summary: "Major React paradigm shift — server-first rendering",
-  },
-  {
-    id: "mock-3",
-    title: "Tauri 2.0 Mobile Support",
-    source_url: "https://tauri.app/blog",
-    key_points: [
-      "iOS and Android builds now supported via tauri-mobile",
-      "Unified plugin system across desktop and mobile",
-      "New permission model for mobile-specific capabilities",
-    ],
-    timestamp: Date.now() - 600_000,
-    relevance_score: 0.78,
-    category: "blog",
-    is_new: false,
-    change_summary: null,
-  },
-];
-
-const MOCK_SUGGESTIONS: LearningSuggestion[] = [
-  {
-    id: "sug-1",
-    title: "Migrate to diagnostic attributes",
-    description: "Nexus OS error types could use #[diagnostic::on_unimplemented] for better developer experience",
-    source_url: "https://blog.rust-lang.org/",
-    relevance: "high",
-    timestamp: Date.now() - 60_000,
-  },
-  {
-    id: "sug-2",
-    title: "Evaluate Tauri 2.0 mobile plugins",
-    description: "Mobile deployment could leverage the new Tauri mobile plugin system for Android/iOS agent control",
-    source_url: "https://tauri.app/blog",
-    relevance: "medium",
-    timestamp: Date.now() - 180_000,
-  },
-];
 
 interface LearnModeProps {
   onActivity: (
@@ -157,7 +91,7 @@ export function LearnMode({ onActivity }: LearnModeProps): JSX.Element {
     setFuelUsed(0);
     setPagesVisited(0);
 
-    const mockSessionId = makeId();
+    const sessionId = makeId();
     addFeed("info", "Learning session started — scanning sources...");
     onActivity("info", "Learning session started", "LearnAgent");
 
@@ -188,29 +122,15 @@ export function LearnMode({ onActivity }: LearnModeProps): JSX.Element {
 
       if (!runningRef.current) break;
 
-      // Step 4: Add knowledge entry if we have mock data for this index
-      if (i < MOCK_KNOWLEDGE.length) {
-        const entry = { ...MOCK_KNOWLEDGE[i], id: makeId(), timestamp: Date.now() };
-        setKnowledge((prev) => [...prev, entry]);
-        addFeed("info", `Knowledge updated: ${entry.title}`);
-        onActivity("info", `Learned: ${entry.title}`, "LearnAgent");
-
-        if (entry.change_summary) {
-          addFeed("merging", `Change detected: ${entry.change_summary}`);
-        }
-
-        entry.key_points.forEach((pt) => {
-          addFeed("extracting", `  • ${pt}`);
-        });
-      } else {
-        // Generate a generic entry for remaining sources
+      // Step 4: Add knowledge entry from scanned source
+      {
         const entry: KnowledgeEntry = {
           id: makeId(),
           title: `${src.label} — Latest Updates`,
           source_url: src.url,
           key_points: [
             `Reviewed ${src.label} for recent changes`,
-            "No significant updates since last check",
+            "Connect a web search provider for real content extraction",
           ],
           timestamp: Date.now(),
           relevance_score: 0.3 + Math.random() * 0.3,
@@ -219,7 +139,8 @@ export function LearnMode({ onActivity }: LearnModeProps): JSX.Element {
           change_summary: null,
         };
         setKnowledge((prev) => [...prev, entry]);
-        addFeed("info", `Checked: ${src.label} — no major changes`);
+        addFeed("info", `Checked: ${src.label}`);
+        onActivity("info", `Scanned: ${src.label}`, "LearnAgent");
       }
 
       setFuelUsed((f) => f + 50);
@@ -228,8 +149,7 @@ export function LearnMode({ onActivity }: LearnModeProps): JSX.Element {
 
     if (runningRef.current) {
       // Add suggestions at the end
-      setSuggestions(MOCK_SUGGESTIONS.map((s) => ({ ...s, id: makeId(), timestamp: Date.now() })));
-      addFeed("info", `Learning complete — ${sources.length} sources scanned, ${MOCK_SUGGESTIONS.length} improvement suggestions`);
+      addFeed("info", `Learning complete — ${sources.length} sources scanned. Connect a web search provider for deeper analysis.`);
       onActivity("info", "Learning session complete", "LearnAgent");
     }
 

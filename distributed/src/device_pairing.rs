@@ -334,7 +334,7 @@ mod tests {
 
     fn test_dir(name: &str) -> PathBuf {
         std::env::temp_dir()
-            .join("nexus_device_pairing_tests")
+            .join(format!("nexus_device_pairing_tests_{}", std::process::id()))
             .join(name)
     }
 

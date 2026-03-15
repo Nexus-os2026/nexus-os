@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AgentSummary, AuditEventRow } from "../../types";
+import { getSelfEvolutionMetrics, getSelfEvolutionStrategies, triggerCrossAgentLearning } from "../../api/backend";
 
-export type AgentDetailTab = "overview" | "logs" | "audit" | "config";
+export type AgentDetailTab = "overview" | "logs" | "audit" | "config" | "evolution";
 
 interface AgentDetailProps {
   open: boolean;
@@ -10,6 +11,10 @@ interface AgentDetailProps {
   activeTab: AgentDetailTab;
   onTabChange: (tab: AgentDetailTab) => void;
   onClose: () => void;
+  onStart?: (id: string) => void;
+  onStop?: (id: string) => void;
+  onPause?: (id: string) => void;
+  onResume?: (id: string) => void;
 }
 
 function fuelPercentage(fuelRemaining: number): number {
@@ -71,7 +76,11 @@ export function AgentDetail({
   auditEvents,
   activeTab,
   onTabChange,
-  onClose
+  onClose,
+  onStart,
+  onStop,
+  onPause,
+  onResume
 }: AgentDetailProps): JSX.Element {
   const agentEvents = useMemo(() => {
     if (!agent) {
@@ -96,6 +105,34 @@ export function AgentDetail({
 
   const [manifestText, setManifestText] = useState("");
 
+  // Evolution state
+  const [evoMetrics, setEvoMetrics] = useState<Record<string, unknown> | null>(null);
+  const [evoStrategies, setEvoStrategies] = useState<Record<string, unknown>[]>([]);
+  const [evoLoading, setEvoLoading] = useState(false);
+
+  const loadEvolution = useCallback(async (agentId: string) => {
+    setEvoLoading(true);
+    try {
+      const [metrics, strategies] = await Promise.all([
+        getSelfEvolutionMetrics(agentId),
+        getSelfEvolutionStrategies(agentId),
+      ]);
+      setEvoMetrics(metrics);
+      setEvoStrategies(strategies);
+    } catch {
+      setEvoMetrics(null);
+      setEvoStrategies([]);
+    } finally {
+      setEvoLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (agent && activeTab === "evolution") {
+      loadEvolution(agent.id);
+    }
+  }, [agent, activeTab, loadEvolution]);
+
   useEffect(() => {
     if (!agent) {
       setManifestText("");
@@ -103,11 +140,12 @@ export function AgentDetail({
     }
     const inferred = {
       name: agent.name,
-      version: "2.0.0",
-      fuel_budget: 10_000,
       status: agent.status,
-      llm_model: "claude-sonnet-4-5",
-      capabilities: ["web.search", "llm.query", "fs.read"]
+      fuel_budget: agent.fuel_budget ?? 0,
+      fuel_remaining: agent.fuel_remaining,
+      sandbox_runtime: agent.sandbox_runtime ?? "in-process",
+      capabilities: agent.capabilities ?? [],
+      ...(agent.did ? { did: agent.did } : {})
     };
     setManifestText(JSON.stringify(inferred, null, 2));
   }, [agent]);
@@ -159,6 +197,13 @@ export function AgentDetail({
           >
             Config
           </button>
+          <button
+            type="button"
+            className={`agent-detail-tab ${activeTab === "evolution" ? "active" : ""}`}
+            onClick={() => onTabChange("evolution")}
+          >
+            Evolution
+          </button>
         </nav>
 
         <section className="agent-detail-body">
@@ -204,6 +249,29 @@ export function AgentDetail({
                   <p className="agent-overview-stat-label">Current Status</p>
                   <p className="agent-overview-stat-value">{agent.status}</p>
                 </article>
+              </div>
+
+              <div className="agent-card-actions" style={{ marginTop: "1rem" }}>
+                {(agent.status === "Stopped" || agent.status === "Created" || agent.status === "Destroyed") && onStart && (
+                  <button type="button" className="agent-action-btn" onClick={() => onStart(agent.id)}>
+                    Start
+                  </button>
+                )}
+                {(agent.status === "Running" || agent.status === "Starting") && onPause && (
+                  <button type="button" className="agent-action-btn" onClick={() => onPause(agent.id)}>
+                    Pause
+                  </button>
+                )}
+                {agent.status === "Paused" && onResume && (
+                  <button type="button" className="agent-action-btn" onClick={() => onResume(agent.id)}>
+                    Resume
+                  </button>
+                )}
+                {(agent.status === "Running" || agent.status === "Starting" || agent.status === "Paused") && onStop && (
+                  <button type="button" className="agent-action-btn danger" onClick={() => onStop(agent.id)}>
+                    Stop
+                  </button>
+                )}
               </div>
             </>
           ) : null}
@@ -259,6 +327,112 @@ export function AgentDetail({
               onChange={(event) => setManifestText(event.target.value)}
               spellCheck={false}
             />
+          ) : null}
+
+          {agent && activeTab === "evolution" ? (
+            <div className="agent-evolution-panel">
+              {evoLoading ? (
+                <p className="agent-card-last">Loading evolution data...</p>
+              ) : !evoMetrics ? (
+                <p className="agent-card-last">No evolution data available for this agent.</p>
+              ) : (
+                <>
+                  <div className="agent-overview-grid">
+                    <article className="agent-overview-stat">
+                      <p className="agent-overview-stat-label">Tasks Completed</p>
+                      <p className="agent-overview-stat-value">
+                        {(evoMetrics.total_tasks_completed as number) ?? 0}
+                      </p>
+                    </article>
+                    <article className="agent-overview-stat">
+                      <p className="agent-overview-stat-label">Success Rate</p>
+                      <p className="agent-overview-stat-value">
+                        {((evoMetrics.overall_success_rate as number) * 100).toFixed(1)}%
+                      </p>
+                    </article>
+                    <article className="agent-overview-stat">
+                      <p className="agent-overview-stat-label">Improvement</p>
+                      <p className="agent-overview-stat-value">
+                        {(evoMetrics.improvement_percentage as number) > 0 ? "+" : ""}
+                        {(evoMetrics.improvement_percentage as number).toFixed(1)}%
+                        {(evoMetrics.improvement_percentage as number) > 0 ? " \u2191" : (evoMetrics.improvement_percentage as number) < 0 ? " \u2193" : ""}
+                      </p>
+                    </article>
+                    <article className="agent-overview-stat">
+                      <p className="agent-overview-stat-label">Cross-Agent Learnings</p>
+                      <p className="agent-overview-stat-value">
+                        {(evoMetrics.cross_agent_learnings_received as number) ?? 0}
+                      </p>
+                    </article>
+                  </div>
+
+                  <h4 style={{ margin: "1rem 0 0.5rem", color: "var(--nexus-accent)" }}>
+                    Top Strategies
+                  </h4>
+                  {evoStrategies.length === 0 ? (
+                    <p className="agent-card-last">No strategies recorded yet.</p>
+                  ) : (
+                    <div className="agent-audit-timeline">
+                      {evoStrategies.slice(0, 5).map((s, i) => (
+                        <article key={i} className="agent-audit-item">
+                          <div className="agent-audit-item-head">
+                            <span className="agent-audit-item-label">
+                              {(s.strategy_hash as string).slice(0, 12)}...
+                            </span>
+                            <span className="agent-audit-item-time">
+                              Score: {(s.composite_score as number).toFixed(3)}
+                            </span>
+                          </div>
+                          <p className="agent-audit-item-payload">
+                            Type: {s.goal_type as string} | Uses: {s.uses as number} |
+                            Success: {((s.success_rate as number) * 100).toFixed(0)}%
+                          </p>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+
+                  <h4 style={{ margin: "1rem 0 0.5rem", color: "var(--nexus-accent)" }}>
+                    Success Rate Trend
+                  </h4>
+                  {(evoMetrics.success_rate_trend as [string, number][])?.length > 0 ? (
+                    <div style={{ display: "flex", gap: "2px", alignItems: "flex-end", height: "60px" }}>
+                      {(evoMetrics.success_rate_trend as [string, number][]).map(([label, rate], i) => (
+                        <div
+                          key={i}
+                          title={`${label}: ${(rate * 100).toFixed(0)}%`}
+                          style={{
+                            flex: 1,
+                            height: `${Math.max(4, rate * 100)}%`,
+                            background: rate > 0.7 ? "var(--nexus-accent)" : rate > 0.4 ? "#ffaa00" : "#ff0040",
+                            borderRadius: "2px 2px 0 0",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="agent-card-last">No trend data yet.</p>
+                  )}
+
+                  <button
+                    type="button"
+                    className="agent-detail-tab"
+                    style={{ marginTop: "1rem", width: "100%" }}
+                    onClick={async () => {
+                      try {
+                        const count = await triggerCrossAgentLearning();
+                        alert(`Shared ${count} strategies across agents.`);
+                        if (agent) loadEvolution(agent.id);
+                      } catch (e) {
+                        alert(`Error: ${e}`);
+                      }
+                    }}
+                  >
+                    Trigger Cross-Agent Learning
+                  </button>
+                </>
+              )}
+            </div>
           ) : null}
         </section>
       </aside>

@@ -707,7 +707,7 @@ dependencies = [
 
 [[package]]
 name = "coder-agent"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-sdk",
@@ -719,7 +719,7 @@ dependencies = [
 
 [[package]]
 name = "coding-agent"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-sdk",
  "serde",
@@ -1021,6 +1021,17 @@ checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
 dependencies = [
  "cast",
  "itertools 0.10.5",
+]
+
+[[package]]
+name = "cron"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5877d3fbf742507b66bc2a1945106bd30dd8504019d596901ddd012a4dd01740"
+dependencies = [
+ "chrono",
+ "once_cell",
+ "winnow 0.6.26",
 ]
 
 [[package]]
@@ -1377,7 +1388,7 @@ dependencies = [
 
 [[package]]
 name = "designer-agent"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-sdk",
@@ -2953,6 +2964,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "include_dir"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "923d117408f1e49d914f1a379a309cffe4f18c05cf4e3d12e613a15fc81bd0dd"
+dependencies = [
+ "include_dir_macros",
+]
+
+[[package]]
+name = "include_dir_macros"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cab85a7ed0bd5f0e76d93846e0147172bed2e2d3f859bcc33a8d9699cad1a75"
+dependencies = [
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3511,6 +3541,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
+name = "mime_guess"
+version = "2.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
+dependencies = [
+ "mime",
+ "unicase",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3635,7 +3675,7 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "nexus-adaptation"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-analytics",
  "nexus-connectors-llm",
@@ -3649,7 +3689,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-airgap"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3659,7 +3699,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-analytics"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-connectors-social",
  "nexus-connectors-web",
@@ -3671,7 +3711,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-benchmarks"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "criterion",
  "nexus-connectors-llm",
@@ -3686,7 +3726,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-cli"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "chrono",
  "clap",
@@ -3709,7 +3749,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-cloud"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3719,7 +3759,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-collaboration"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-sdk",
  "serde",
@@ -3746,7 +3786,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-connectors-core"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "aes-gcm",
  "nexus-kernel",
@@ -3758,7 +3798,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-connectors-llm"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "aes-gcm",
  "candle-core",
@@ -3779,7 +3819,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-connectors-messaging"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-kernel",
@@ -3793,7 +3833,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-connectors-social"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-kernel",
@@ -3804,7 +3844,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-connectors-web"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "base64 0.22.1",
  "hmac",
@@ -3824,7 +3864,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-content"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-kernel",
@@ -3836,7 +3876,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-control"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-connectors-llm",
@@ -3849,8 +3889,10 @@ dependencies = [
 
 [[package]]
 name = "nexus-desktop-backend"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
+ "chrono",
+ "ed25519-dalek",
  "nexus-adaptation",
  "nexus-airgap",
  "nexus-conductor",
@@ -3860,24 +3902,28 @@ dependencies = [
  "nexus-connectors-social",
  "nexus-connectors-web",
  "nexus-distributed",
+ "nexus-enterprise",
  "nexus-factory",
  "nexus-kernel",
  "nexus-marketplace",
+ "nexus-persistence",
  "nexus-protocols",
  "nexus-sdk",
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
  "sysinfo",
  "tauri",
  "tauri-build",
+ "tokio",
  "toml 0.8.23",
  "uuid",
 ]
 
 [[package]]
 name = "nexus-distributed"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "aes-gcm",
  "ed25519-dalek",
@@ -3890,7 +3936,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-enterprise"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-kernel",
  "serde",
@@ -3900,7 +3946,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-factory"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-connectors-llm",
@@ -3916,16 +3962,22 @@ dependencies = [
 
 [[package]]
 name = "nexus-integration"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
+ "chrono",
  "coder-agent",
  "coding-agent",
  "ed25519-dalek",
  "nexus-adaptation",
+ "nexus-airgap",
  "nexus-analytics",
  "nexus-cloud",
  "nexus-collaboration",
+ "nexus-conductor",
+ "nexus-connectors-core",
  "nexus-connectors-llm",
+ "nexus-connectors-messaging",
+ "nexus-connectors-social",
  "nexus-connectors-web",
  "nexus-content",
  "nexus-distributed",
@@ -3933,14 +3985,23 @@ dependencies = [
  "nexus-factory",
  "nexus-kernel",
  "nexus-marketplace",
+ "nexus-persistence",
+ "nexus-protocols",
  "nexus-research",
  "nexus-sdk",
  "nexus-workflows",
+ "rusqlite",
  "screen-poster-agent",
  "self-improve-agent",
+ "serde",
  "serde_json",
+ "sha2",
  "social-poster-agent",
+ "sysinfo",
+ "tauri",
  "tempfile",
+ "tokio",
+ "toml 0.8.23",
  "uuid",
  "web-builder-agent",
  "workflow-studio-agent",
@@ -3948,28 +4009,34 @@ dependencies = [
 
 [[package]]
 name = "nexus-kernel"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "aes-gcm",
+ "base64 0.22.1",
  "bs58",
+ "chrono",
+ "cron",
  "ed25519-dalek",
  "getrandom 0.2.17",
  "hkdf",
  "libc",
  "nexus-kernel",
+ "nexus-persistence",
+ "rand 0.8.5",
  "regex",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "toml 0.8.23",
  "uuid",
 ]
 
 [[package]]
 name = "nexus-marketplace"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "ed25519-dalek",
  "hex",
@@ -3994,13 +4061,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-persistence"
+version = "8.0.0"
+dependencies = [
+ "chrono",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "nexus-protocols"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "axum",
  "futures-util",
+ "include_dir",
  "metrics",
  "metrics-exporter-prometheus",
+ "mime_guess",
  "nexus-connectors-llm",
  "nexus-kernel",
  "nexus-marketplace",
@@ -4019,7 +4100,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-research"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-connectors-web",
@@ -4031,7 +4112,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-sdk"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "ed25519-dalek",
  "nexus-kernel",
@@ -4045,7 +4126,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-self-update"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "ed25519-dalek",
  "nexus-connectors-core",
@@ -4060,7 +4141,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-workflows"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-connectors-social",
@@ -5767,7 +5848,7 @@ dependencies = [
 
 [[package]]
 name = "screen-poster-agent"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-sdk",
@@ -5840,7 +5921,7 @@ dependencies = [
 
 [[package]]
 name = "self-improve-agent"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-sdk",
@@ -6175,7 +6256,7 @@ dependencies = [
 
 [[package]]
 name = "social-poster-agent"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-connectors-web",
@@ -7225,6 +7306,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "unicase"
+version = "2.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbc4bc3a9f746d862c45cb89d705aa10f187bb96c76001afab07a0d35ce60142"
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7883,7 +7970,7 @@ dependencies = [
 
 [[package]]
 name = "web-builder-agent"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-sdk",
@@ -8605,6 +8692,15 @@ dependencies = [
 
 [[package]]
 name = "winnow"
+version = "0.6.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e90edd2ac1aa278a5c4599b1d89cf03074b610800f866d4026dc199d7929a28"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "winnow"
 version = "0.7.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a5364e9d77fcdeeaa6062ced926ee3381faa2ee02d3eb83a5c27a8825540829"
@@ -8712,7 +8808,7 @@ dependencies = [
 
 [[package]]
 name = "workflow-studio-agent"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "nexus-sdk",
  "serde",

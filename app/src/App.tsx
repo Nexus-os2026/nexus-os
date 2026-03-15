@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   chatWithOllama,
   checkOllama,
+  clearAllAgents,
   createAgent,
   deleteModel,
   detectHardware,
   ensureOllama,
+  executeAgentGoal,
   getAuditLog,
   getConfig,
   hasDesktopRuntime,
@@ -34,7 +36,7 @@ import { PageTransition } from "./components/fx/PageTransition";
 import { Sidebar, type SidebarItem } from "./components/layout/Sidebar";
 import { VoiceOverlay, type VoiceOverlayState } from "./components/VoiceOverlay";
 import { PulseRing } from "./components/viz/PulseRing";
-import type { SystemInfo } from "./types";
+import type { ConsentNotification, SystemInfo } from "./types";
 import { Agents } from "./pages/Agents";
 import { Audit } from "./pages/Audit";
 import { Chat } from "./pages/Chat";
@@ -70,6 +72,7 @@ import AppStore from "./pages/AppStore";
 import AiChatHub from "./pages/AiChatHub";
 import DeployPipeline from "./pages/DeployPipeline";
 import LearningCenter from "./pages/LearningCenter";
+import ApprovalCenter from "./pages/ApprovalCenter";
 import PolicyManagement from "./pages/PolicyManagement";
 import Documents from "./pages/Documents";
 import ModelHub from "./pages/ModelHub";
@@ -90,7 +93,7 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant";
+type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -110,6 +113,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "distributed-audit", label: "Chain", icon: "⛓", shortcut: "" },
   { id: "protocols", label: "Protocols", icon: "⌬", shortcut: "Alt+6" },
   { id: "permissions", label: "Permissions", icon: "⛊", shortcut: "Alt+7" },
+  { id: "approvals", label: "Approvals", icon: "☑", shortcut: "" },
   { id: "policy-management", label: "Policies", icon: "⚖", shortcut: "" },
   { id: "identity", label: "Identity", icon: "⚿", shortcut: "" },
   { id: "design-studio", label: "Design", icon: "◇", shortcut: "" },
@@ -175,8 +179,8 @@ function defaultConfig(): NexusConfig {
   };
 }
 
-// Stable mock agent IDs — deterministic UUIDs so all pages reference the same agents
-const MOCK_AGENT_IDS = {
+// Browser-mode agent IDs — deterministic UUIDs for offline chat when no desktop runtime
+const BROWSER_AGENT_IDS = {
   coder: "a0000000-0000-4000-8000-000000000001",
   designer: "a0000000-0000-4000-8000-000000000002",
   screenPoster: "a0000000-0000-4000-8000-000000000003",
@@ -185,12 +189,12 @@ const MOCK_AGENT_IDS = {
   selfImprove: "a0000000-0000-4000-8000-000000000006",
 };
 
-const CORE_AGENT_IDS = new Set(Object.values(MOCK_AGENT_IDS));
+const BROWSER_AGENT_ID_SET = new Set(Object.values(BROWSER_AGENT_IDS));
 
 function coreAgents(): AgentSummary[] {
   return [
     {
-      id: MOCK_AGENT_IDS.coder,
+      id: BROWSER_AGENT_IDS.coder,
       name: "Coder",
       status: "Running",
       fuel_remaining: 9200,
@@ -202,7 +206,7 @@ function coreAgents(): AgentSummary[] {
       capabilities: ["llm.query", "fs.read", "fs.write"]
     },
     {
-      id: MOCK_AGENT_IDS.designer,
+      id: BROWSER_AGENT_IDS.designer,
       name: "Designer",
       status: "Running",
       fuel_remaining: 6500,
@@ -214,7 +218,7 @@ function coreAgents(): AgentSummary[] {
       capabilities: ["llm.query", "fs.read"]
     },
     {
-      id: MOCK_AGENT_IDS.screenPoster,
+      id: BROWSER_AGENT_IDS.screenPoster,
       name: "Screen Poster",
       status: "Paused",
       fuel_remaining: 4100,
@@ -226,7 +230,7 @@ function coreAgents(): AgentSummary[] {
       capabilities: ["llm.query", "fs.read", "request_approval"]
     },
     {
-      id: MOCK_AGENT_IDS.webBuilder,
+      id: BROWSER_AGENT_IDS.webBuilder,
       name: "Web Builder",
       status: "Running",
       fuel_remaining: 7800,
@@ -238,7 +242,7 @@ function coreAgents(): AgentSummary[] {
       capabilities: ["llm.query", "fs.read", "fs.write"]
     },
     {
-      id: MOCK_AGENT_IDS.workflowStudio,
+      id: BROWSER_AGENT_IDS.workflowStudio,
       name: "Workflow Studio",
       status: "Stopped",
       fuel_remaining: 2300,
@@ -250,7 +254,7 @@ function coreAgents(): AgentSummary[] {
       capabilities: ["llm.query", "fs.read"]
     },
     {
-      id: MOCK_AGENT_IDS.selfImprove,
+      id: BROWSER_AGENT_IDS.selfImprove,
       name: "Self-Improve",
       status: "Running",
       fuel_remaining: 8400,
@@ -264,64 +268,16 @@ function coreAgents(): AgentSummary[] {
   ];
 }
 
-function mockAgents(): AgentSummary[] {
+function browserAgents(): AgentSummary[] {
   return coreAgents();
 }
 
-/** Merge core agents with loaded agents, ensuring core agents are always present */
-function ensureCoreAgents(loaded: AgentSummary[]): AgentSummary[] {
-  const loadedIds = new Set(loaded.map((a) => a.id));
-  const missing = coreAgents().filter((a) => !loadedIds.has(a.id));
-  // Mark loaded agents that match core IDs as system agents
-  const tagged = loaded.map((a) => CORE_AGENT_IDS.has(a.id) ? { ...a, isSystem: true } : a);
-  return [...missing, ...tagged];
+
+function emptyAudit(): AuditEventRow[] {
+  return [];
 }
 
-function mockAudit(): AuditEventRow[] {
-  const base = 1_700_100_000;
-  const agents = [MOCK_AGENT_IDS.coder, MOCK_AGENT_IDS.designer, MOCK_AGENT_IDS.screenPoster, MOCK_AGENT_IDS.webBuilder, MOCK_AGENT_IDS.workflowStudio, MOCK_AGENT_IDS.selfImprove];
-  const events: AuditEventRow[] = [
-    { event_id: "evt-01", timestamp: base + 1, agent_id: agents[0], event_type: "StateChange", payload: { state: "Running", trigger: "startup" }, previous_hash: "genesis", hash: "a1b2c3" },
-    { event_id: "evt-02", timestamp: base + 12, agent_id: agents[0], event_type: "LlmCall", payload: { model: "claude-sonnet-4-5", tokens: 1840, cost: 0.012 }, previous_hash: "a1b2c3", hash: "d4e5f6" },
-    { event_id: "evt-03", timestamp: base + 25, agent_id: agents[1], event_type: "StateChange", payload: { state: "Running", trigger: "scheduler" }, previous_hash: "d4e5f6", hash: "g7h8i9" },
-    { event_id: "evt-04", timestamp: base + 38, agent_id: agents[2], event_type: "StateChange", payload: { state: "Running", trigger: "manual" }, previous_hash: "g7h8i9", hash: "j0k1l2" },
-    { event_id: "evt-05", timestamp: base + 51, agent_id: agents[1], event_type: "LlmCall", payload: { model: "claude-sonnet-4-5", tokens: 3200, cost: 0.021 }, previous_hash: "j0k1l2", hash: "m3n4o5" },
-    { event_id: "evt-06", timestamp: base + 64, agent_id: agents[2], event_type: "ApprovalRequired", payload: { action: "social.post", channel: "x", content: "Product launch teaser" }, previous_hash: "m3n4o5", hash: "p6q7r8" },
-    { event_id: "evt-07", timestamp: base + 80, agent_id: agents[3], event_type: "StateChange", payload: { state: "Running", trigger: "webhook" }, previous_hash: "p6q7r8", hash: "s9t0u1" },
-    { event_id: "evt-08", timestamp: base + 95, agent_id: agents[0], event_type: "ToolExec", payload: { tool: "file_write", path: "src/auth.rs", bytes: 2480 }, previous_hash: "s9t0u1", hash: "v2w3x4" },
-    { event_id: "evt-09", timestamp: base + 110, agent_id: agents[3], event_type: "LlmCall", payload: { model: "claude-sonnet-4-5", tokens: 980, cost: 0.006 }, previous_hash: "v2w3x4", hash: "y5z6a7" },
-    { event_id: "evt-10", timestamp: base + 125, agent_id: agents[4], event_type: "StateChange", payload: { state: "Running", trigger: "cron" }, previous_hash: "y5z6a7", hash: "b8c9d0" },
-    { event_id: "evt-11", timestamp: base + 140, agent_id: agents[5], event_type: "StateChange", payload: { state: "Running", trigger: "self-schedule" }, previous_hash: "b8c9d0", hash: "e1f2g3" },
-    { event_id: "evt-12", timestamp: base + 155, agent_id: agents[4], event_type: "ToolExec", payload: { tool: "sql_query", table: "analytics", rows: 1450 }, previous_hash: "e1f2g3", hash: "h4i5j6" },
-    { event_id: "evt-13", timestamp: base + 170, agent_id: agents[5], event_type: "LlmCall", payload: { model: "claude-sonnet-4-5", tokens: 4100, cost: 0.028 }, previous_hash: "h4i5j6", hash: "k7l8m9" },
-    { event_id: "evt-14", timestamp: base + 185, agent_id: agents[2], event_type: "ApprovalGranted", payload: { approver: "user", action: "social.post" }, previous_hash: "k7l8m9", hash: "n0o1p2" },
-    { event_id: "evt-15", timestamp: base + 200, agent_id: agents[2], event_type: "ToolExec", payload: { tool: "social.publish", platform: "x", post_id: "1823456789" }, previous_hash: "n0o1p2", hash: "q3r4s5" },
-    { event_id: "evt-16", timestamp: base + 215, agent_id: agents[0], event_type: "FuelBurn", payload: { consumed: 1200, remaining: 8000 }, previous_hash: "q3r4s5", hash: "t6u7v8" },
-    { event_id: "evt-17", timestamp: base + 230, agent_id: agents[3], event_type: "ToolExec", payload: { tool: "deploy", target: "staging", version: "2.4.1" }, previous_hash: "t6u7v8", hash: "w9x0y1" },
-    { event_id: "evt-18", timestamp: base + 245, agent_id: agents[5], event_type: "ToolExec", payload: { tool: "benchmark", metric: "p95_latency_ms", before: 320, after: 185 }, previous_hash: "w9x0y1", hash: "z2a3b4" },
-    { event_id: "evt-19", timestamp: base + 260, agent_id: agents[4], event_type: "StateChange", payload: { state: "Stopped", trigger: "task-complete" }, previous_hash: "z2a3b4", hash: "c5d6e7" },
-    { event_id: "evt-20", timestamp: base + 275, agent_id: agents[1], event_type: "ToolExec", payload: { tool: "image_gen", prompt: "landing hero", format: "webp" }, previous_hash: "c5d6e7", hash: "f8g9h0" },
-    { event_id: "evt-21", timestamp: base + 290, agent_id: agents[2], event_type: "StateChange", payload: { state: "Paused", trigger: "rate-limit" }, previous_hash: "f8g9h0", hash: "i1j2k3" },
-    { event_id: "evt-22", timestamp: base + 305, agent_id: agents[0], event_type: "LlmCall", payload: { model: "claude-sonnet-4-5", tokens: 2600, cost: 0.017 }, previous_hash: "i1j2k3", hash: "l4m5n6" },
-    { event_id: "evt-23", timestamp: base + 320, agent_id: agents[3], event_type: "FuelBurn", payload: { consumed: 800, remaining: 7000 }, previous_hash: "l4m5n6", hash: "o7p8q9" },
-    { event_id: "evt-24", timestamp: base + 335, agent_id: agents[5], event_type: "StateChange", payload: { state: "Running", trigger: "optimization-cycle" }, previous_hash: "o7p8q9", hash: "r0s1t2" },
-    { event_id: "evt-25", timestamp: base + 350, agent_id: agents[0], event_type: "ToolExec", payload: { tool: "run_tests", suite: "auth", passed: 12, failed: 0 }, previous_hash: "r0s1t2", hash: "u3v4w5" },
-    { event_id: "evt-26", timestamp: base + 365, agent_id: agents[0], event_type: "ToolExec", payload: { tool: "fix_bug", file: "src/middleware.rs", line: 88, description: "null check" }, previous_hash: "u3v4w5", hash: "x6y7z8" },
-    { event_id: "evt-27", timestamp: base + 380, agent_id: agents[1], event_type: "ToolExec", payload: { tool: "create_tokens", theme: "dark-cyber", tokens: 42 }, previous_hash: "x6y7z8", hash: "a9b0c1" },
-    { event_id: "evt-28", timestamp: base + 395, agent_id: agents[2], event_type: "ToolExec", payload: { tool: "track_engagement", post_id: "1823456789", likes: 847, reposts: 123 }, previous_hash: "a9b0c1", hash: "d2e3f4" },
-    { event_id: "evt-29", timestamp: base + 410, agent_id: agents[4], event_type: "ToolExec", payload: { tool: "execute_dag", workflow: "daily-analytics", nodes: 6 }, previous_hash: "d2e3f4", hash: "g5h6i7" },
-    { event_id: "evt-30", timestamp: base + 425, agent_id: agents[5], event_type: "ToolExec", payload: { tool: "evaluate_performance", metric: "response_quality", score: 0.94 }, previous_hash: "g5h6i7", hash: "j8k9l0" },
-    { event_id: "evt-31", timestamp: base + 440, agent_id: agents[5], event_type: "ToolExec", payload: { tool: "optimize_prompt", agent: "coder", improvement: "+12% accuracy" }, previous_hash: "j8k9l0", hash: "m1n2o3" },
-    { event_id: "evt-32", timestamp: base + 455, agent_id: agents[3], event_type: "ToolExec", payload: { tool: "generate_site", pages: 4, framework: "astro", status: "complete" }, previous_hash: "m1n2o3", hash: "p4q5r6" },
-    { event_id: "evt-33", timestamp: base + 470, agent_id: agents[0], event_type: "ToolExec", payload: { tool: "analyze_architecture", crate: "kernel", modules: 12, issues: 0 }, previous_hash: "p4q5r6", hash: "s7t8u9" },
-    { event_id: "evt-34", timestamp: base + 485, agent_id: agents[2], event_type: "ToolExec", payload: { tool: "read_comments", post_id: "1823456789", comments: 34, sentiment: "positive" }, previous_hash: "s7t8u9", hash: "v0w1x2" },
-    { event_id: "evt-35", timestamp: base + 500, agent_id: agents[1], event_type: "ToolExec", payload: { tool: "screenshot_analysis", url: "https://staging.nexus-os.dev", issues: ["contrast", "alignment"] }, previous_hash: "v0w1x2", hash: "y3z4a5" },
-    { event_id: "evt-36", timestamp: base + 515, agent_id: agents[5], event_type: "ToolExec", payload: { tool: "learn_strategy", context: "code_review", strategy: "chain-of-thought", result: "adopted" }, previous_hash: "y3z4a5", hash: "b6c7d8" }
-  ];
-  return events;
-}
-
-function mockChatReply(message: string): ChatResponse {
+function browserChatReply(message: string): ChatResponse {
   const lowered = message.toLowerCase();
   let text: string;
   if (lowered.includes("status")) {
@@ -386,6 +342,8 @@ export default function App(): JSX.Element {
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [factoryTrigger, setFactoryTrigger] = useState(0);
   const [activityPulse, setActivityPulse] = useState(0);
+  const [backendRestarting, setBackendRestarting] = useState(false);
+  const reconnectTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const [appReady, setAppReady] = useState(false);
   const [splashVisible, setSplashVisible] = useState(true);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
@@ -398,6 +356,7 @@ export default function App(): JSX.Element {
     responseText: ""
   });
   const [permissionAgentId, setPermissionAgentId] = useState<string>("");
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
   const pushToTalk = useRef<PushToTalk | null>(null);
   const previousPageRef = useRef<Page>(page);
   const { enabled: uiSoundEnabled, volume: uiSoundVolume, setEnabled: setUiSoundEnabled, setVolume: setUiSoundVolume, play } =
@@ -414,8 +373,8 @@ export default function App(): JSX.Element {
   useEffect(() => {
     if (!hasDesktopRuntime()) {
       setRuntimeMode("mock");
-      setAgents(mockAgents());
-      setAuditEvents(mockAudit());
+      setAgents(browserAgents());
+      setAuditEvents(emptyAudit());
       setConfig(defaultConfig());
       setMessages([
         makeMessage("user", "Review the auth middleware in src/auth.rs for security issues"),
@@ -457,8 +416,8 @@ export default function App(): JSX.Element {
         }
         setRuntimeMode("desktop");
         setRuntimeError(null);
-        setAgents(ensureCoreAgents(loadedAgents));
-        setAuditEvents(loadedAudit.length > 0 ? loadedAudit : mockAudit());
+        setAgents(loadedAgents);
+        setAuditEvents(loadedAudit);
         setConfig(loadedConfig);
         applyVoiceState(voice);
 
@@ -491,8 +450,8 @@ export default function App(): JSX.Element {
         }
         setRuntimeMode("mock");
         setRuntimeError(`Desktop backend unavailable: ${formatError(error)}`);
-        setAgents(mockAgents());
-        setAuditEvents(mockAudit());
+        setAgents(browserAgents());
+        setAuditEvents(emptyAudit());
         setConfig(defaultConfig());
         setMessages([
           makeMessage("assistant", "Backend connection failed; running in mock mode.")
@@ -506,6 +465,10 @@ export default function App(): JSX.Element {
 
     return () => {
       cancelled = true;
+      if (reconnectTimer.current) {
+        clearInterval(reconnectTimer.current);
+        reconnectTimer.current = null;
+      }
     };
   }, []);
 
@@ -527,6 +490,42 @@ export default function App(): JSX.Element {
     });
     return () => { unlisten?.(); };
   }, []);
+
+  // Global listener for consent-request-pending — fires on ALL pages
+  useEffect(() => {
+    if (!hasDesktopRuntime()) return;
+    const cleanups: (() => void)[] = [];
+
+    // Request browser notification permission eagerly
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+
+    import("@tauri-apps/api/event").then((mod) => {
+      mod
+        .listen<ConsentNotification>("consent-request-pending", (event) => {
+          setPendingApprovalCount((prev) => prev + 1);
+          play("notification");
+
+          // Desktop notification via browser Notification API (works in Tauri webview)
+          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+            new Notification("Nexus OS — Agent Approval Required", {
+              body: `${event.payload.agent_name} wants to: ${event.payload.operation_summary}`,
+              tag: `consent-${event.payload.consent_id}`,
+            });
+          }
+        })
+        .then((fn) => cleanups.push(fn));
+
+      mod
+        .listen<{ consent_id: string; status: string }>("consent-resolved", () => {
+          setPendingApprovalCount((prev) => Math.max(0, prev - 1));
+        })
+        .then((fn) => cleanups.push(fn));
+    });
+
+    return () => { for (const fn of cleanups) fn(); };
+  }, [play]);
 
   useEffect(() => {
     if (previousPageRef.current !== page) {
@@ -591,9 +590,28 @@ export default function App(): JSX.Element {
     if (runtimeMode !== "desktop") {
       return;
     }
-    const [loadedAgents, loadedAudit] = await Promise.all([listAgents(), getAuditLog(undefined, 500)]);
-    setAgents(ensureCoreAgents(loadedAgents));
-    setAuditEvents(loadedAudit.length > 0 ? loadedAudit : mockAudit());
+    try {
+      const [loadedAgents, loadedAudit] = await Promise.all([listAgents(), getAuditLog(undefined, 500)]);
+      setAgents(loadedAgents);
+      setAuditEvents(loadedAudit);
+      if (backendRestarting) {
+        setBackendRestarting(false);
+        setRuntimeError(null);
+        if (reconnectTimer.current) {
+          clearInterval(reconnectTimer.current);
+          reconnectTimer.current = null;
+        }
+      }
+    } catch {
+      if (!backendRestarting) {
+        setBackendRestarting(true);
+        if (!reconnectTimer.current) {
+          reconnectTimer.current = setInterval(() => {
+            void refreshDesktopData();
+          }, 2000);
+        }
+      }
+    }
   }
 
   function updateMockAgentStatus(id: string, status: AgentSummary["status"]): void {
@@ -711,24 +729,54 @@ export default function App(): JSX.Element {
     }
   }
 
-  function handleDeleteAgent(id: string): void {
-    // Never allow deleting core system agents
-    if (CORE_AGENT_IDS.has(id)) {
+  async function handleDeleteAgent(id: string): Promise<void> {
+    if (runtimeMode !== "desktop") {
+      // In mock mode, prevent deleting core mock agents
+      if (BROWSER_AGENT_ID_SET.has(id)) {
+        return;
+      }
+      setAgents((prev) => prev.filter((a) => a.id !== id));
+      play("click");
+      bumpActivity();
       return;
     }
-    setAgents((prev) => prev.filter((a) => a.id !== id));
-    play("click");
-    bumpActivity();
+    try {
+      await stopAgent(id);
+      await refreshDesktopData();
+      play("click");
+      bumpActivity();
+    } catch (error) {
+      setRuntimeError(`Unable to delete agent: ${formatError(error)}`);
+      play("error");
+    }
+  }
+
+  async function handleClearAllAgents(): Promise<void> {
+    if (runtimeMode !== "desktop") {
+      setAgents([]);
+      play("click");
+      bumpActivity();
+      return;
+    }
+    try {
+      await clearAllAgents();
+      setAgents([]);
+      play("click");
+      bumpActivity();
+    } catch (error) {
+      setRuntimeError(`Unable to clear agents: ${formatError(error)}`);
+      play("error");
+    }
   }
 
   const AGENT_PROMPTS: Record<string, string> = {
     "": "You are NexusOS, a governed AI operating system. You help users with coding, design, automation, and content. Be concise and helpful.",
-    [MOCK_AGENT_IDS.coder]: "You are the NexusOS Coder Agent. You write clean code in Rust, TypeScript, and Python. You analyze architecture, review code, fix bugs, and run tests. Show code in fenced blocks.",
-    [MOCK_AGENT_IDS.designer]: "You are the NexusOS Designer Agent. You create UI components, design systems, and design tokens. Output React/TypeScript.",
-    [MOCK_AGENT_IDS.screenPoster]: "You are the NexusOS Screen Poster Agent. You draft social media posts for X, Instagram, Facebook, Reddit. Optimize for engagement.",
-    [MOCK_AGENT_IDS.webBuilder]: "You are the NexusOS Web Builder Agent. You generate websites from descriptions using React and modern web tech.",
-    [MOCK_AGENT_IDS.workflowStudio]: "You are the NexusOS Workflow Studio Agent. You design automation pipelines with DAG nodes, retries, and checkpoints.",
-    [MOCK_AGENT_IDS.selfImprove]: "You are the NexusOS Self-Improve Agent. You analyze performance metrics and optimize prompts.",
+    [BROWSER_AGENT_IDS.coder]: "You are the NexusOS Coder Agent. You write clean code in Rust, TypeScript, and Python. You analyze architecture, review code, fix bugs, and run tests. Show code in fenced blocks.",
+    [BROWSER_AGENT_IDS.designer]: "You are the NexusOS Designer Agent. You create UI components, design systems, and design tokens. Output React/TypeScript.",
+    [BROWSER_AGENT_IDS.screenPoster]: "You are the NexusOS Screen Poster Agent. You draft social media posts for X, Instagram, Facebook, Reddit. Optimize for engagement.",
+    [BROWSER_AGENT_IDS.webBuilder]: "You are the NexusOS Web Builder Agent. You generate websites from descriptions using React and modern web tech.",
+    [BROWSER_AGENT_IDS.workflowStudio]: "You are the NexusOS Workflow Studio Agent. You design automation pipelines with DAG nodes, retries, and checkpoints.",
+    [BROWSER_AGENT_IDS.selfImprove]: "You are the NexusOS Self-Improve Agent. You analyze performance metrics and optimize prompts.",
   };
 
   function getModelForAgent(agentId: string): string {
@@ -767,6 +815,8 @@ export default function App(): JSX.Element {
     setIsSending(true);
     const assistantId = makeId();
     const model = selectedModel === "mock" ? getModelForAgent(selectedAgent) : selectedModel;
+    const isOllamaModel = model.startsWith("ollama/") || (!model.includes("/") && model !== "mock");
+    const ollamaModelName = model.startsWith("ollama/") ? model.slice("ollama/".length) : model;
     setMessages((prev) => [
       ...prev,
       {
@@ -780,7 +830,140 @@ export default function App(): JSX.Element {
     ]);
 
     if (runtimeMode === "desktop") {
-      // REAL Ollama streaming chat
+      // If a real agent is selected (UUID but NOT a browser-mode stub), ALWAYS route through cognitive loop
+      const isRealAgent = selectedAgent.length > 0
+        && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(selectedAgent)
+        && !BROWSER_AGENT_ID_SET.has(selectedAgent);
+      if (isRealAgent) {
+        try {
+          const eventMod = await import("@tauri-apps/api/event");
+          let stepMessages: string[] = [];
+
+          // Listen for cognitive cycle events (skip blocked — handled by agent-blocked)
+          const unlistenCycle = await eventMod.listen<{
+            agent_id: string; goal_id: string; phase: string;
+            steps_executed: number; fuel_consumed: number;
+            should_continue: boolean; blocked_reason: string | null;
+          }>("agent-cognitive-cycle", (event) => {
+            const p = event.payload;
+            if (p.agent_id !== selectedAgent) return;
+            if (p.phase === "Blocked") return; // handled by agent-blocked event
+            const phaseMsg = `Phase: ${p.phase}${p.steps_executed > 0 ? ` (${p.steps_executed} step, ${p.fuel_consumed.toFixed(1)} fuel)` : ""}`;
+            stepMessages.push(phaseMsg);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? { ...m, content: stepMessages.join("\n"), streaming: true }
+                  : m
+              )
+            );
+          });
+
+          // Listen for HITL approval-needed events (amber info style, not error)
+          const unlistenBlocked = await eventMod.listen<{
+            agent_id: string; goal_id: string; message: string;
+            action: string; agent_name: string;
+          }>("agent-blocked", (event) => {
+            const p = event.payload;
+            if (p.agent_id !== selectedAgent) return;
+            const approvalMsgId = makeId();
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: approvalMsgId,
+                role: "assistant" as const,
+                content: p.message,
+                timestamp: Date.now(),
+                model: "system",
+                variant: "approval" as const,
+              }
+            ]);
+          });
+
+          // Listen for agent-resumed after approval granted
+          const unlistenResumed = await eventMod.listen<{
+            agent_id: string; goal_id: string; message: string;
+          }>("agent-resumed", (event) => {
+            const p = event.payload;
+            if (p.agent_id !== selectedAgent) return;
+            const resumedMsgId = makeId();
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: resumedMsgId,
+                role: "assistant" as const,
+                content: p.message,
+                timestamp: Date.now(),
+                model: "system",
+                variant: "resumed" as const,
+              }
+            ]);
+          });
+
+          // Listen for goal completion
+          const goalDone = new Promise<{ success: boolean; reason?: string; result_summary?: string }>((resolve) => {
+            eventMod.listen<{
+              agent_id: string; goal_id: string; success: boolean; reason?: string; result_summary?: string;
+            }>("agent-goal-completed", (event) => {
+              if (event.payload.agent_id === selectedAgent) {
+                resolve(event.payload);
+              }
+            });
+          });
+
+          const goalId = await executeAgentGoal(selectedAgent, input, 5);
+          stepMessages.push(`Goal assigned: ${goalId}`);
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? { ...m, content: stepMessages.join("\n") }
+                : m
+            )
+          );
+
+          // Wait for completion (with 10-minute timeout)
+          const result = await Promise.race([
+            goalDone,
+            new Promise<{ success: boolean; reason?: string; result_summary?: string }>((resolve) =>
+              setTimeout(() => resolve({ success: false, reason: "Timed out after 10 minutes waiting for the agent to finish." }), 600_000)
+            ),
+          ]);
+
+          const summary = result.success
+            ? (result.result_summary || "Goal completed successfully.")
+            : (result.result_summary || result.reason || "Goal failed — unknown error. Check the audit log for details.");
+          stepMessages.push(summary);
+          const finalVariant = result.success ? undefined : ("error" as const);
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? { ...m, content: stepMessages.join("\n"), streaming: false, variant: finalVariant }
+                : m
+            )
+          );
+          unlistenCycle();
+          unlistenBlocked();
+          unlistenResumed();
+          setRuntimeError(null);
+          play(result.success ? "notification" : "error");
+          bumpActivity();
+        } catch (error) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? { ...m, content: `Error: ${formatError(error)}`, model: "system", streaming: false }
+                : m
+            )
+          );
+          setRuntimeError(`Agent goal failed: ${formatError(error)}`);
+          play("error");
+        } finally {
+          setIsSending(false);
+          setOverlay((prev) => ({ ...prev, phase: prev.listening ? "listening" : "idle", amplitude: 0.18 }));
+        }
+        return;
+      }
+
       const systemPrompt = AGENT_PROMPTS[selectedAgent] || AGENT_PROMPTS[""];
       const apiMessages = [
         { role: "system", content: systemPrompt },
@@ -791,61 +974,93 @@ export default function App(): JSX.Element {
         { role: "user", content: input }
       ];
 
-      // Listen for streaming tokens
-      let unlisten: (() => void) | undefined;
-      let fullText = "";
-      try {
-        const eventMod = await import("@tauri-apps/api/event");
-        unlisten = await eventMod.listen<ChatTokenEvent>("chat-token", (event) => {
-          const { full, done } = event.payload;
-          fullText = full;
+      if (isOllamaModel) {
+        // Stream via Ollama
+        let unlisten: (() => void) | undefined;
+        let fullText = "";
+        try {
+          const eventMod = await import("@tauri-apps/api/event");
+          unlisten = await eventMod.listen<ChatTokenEvent>("chat-token", (event) => {
+            const { full, done } = event.payload;
+            fullText = full;
 
-          if (done) {
-            // Final setState ONCE when streaming is complete
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId ? { ...m, content: fullText, streaming: false } : m
-              )
-            );
-          } else {
-            // Update content via setState — throttled at 50ms on backend side
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId ? { ...m, content: full } : m
-              )
-            );
-          }
-        });
+            if (done) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId ? { ...m, content: fullText, streaming: false } : m
+                )
+              );
+            } else {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId ? { ...m, content: full } : m
+                )
+              );
+            }
+          });
 
-        await chatWithOllama(apiMessages, model);
-        setRuntimeError(null);
-        setOverlay((prev) => ({ ...prev, phase: "speaking", amplitude: 0.5 }));
-        play("notification");
-        bumpActivity();
-      } catch (error) {
-        setMessages((prev) =>
-          prev.map((message) =>
-            message.id === assistantId
-              ? {
-                  ...message,
-                  content: `Error: Could not reach ${model}. ${formatError(error)}`,
-                  model: "system",
-                  streaming: false
-                }
-              : message
-          )
-        );
-        setRuntimeError(`Chat request failed: ${formatError(error)}`);
-        play("error");
-      } finally {
-        unlisten?.();
-        setIsSending(false);
-        setOverlay((prev) => ({ ...prev, phase: prev.listening ? "listening" : "idle", amplitude: 0.18 }));
+          await chatWithOllama(apiMessages, ollamaModelName);
+          setRuntimeError(null);
+          setOverlay((prev) => ({ ...prev, phase: "speaking", amplitude: 0.5 }));
+          play("notification");
+          bumpActivity();
+        } catch (error) {
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    content: `Error: Could not reach ${model}. ${formatError(error)}`,
+                    model: "system",
+                    streaming: false
+                  }
+                : message
+            )
+          );
+          setRuntimeError(`Chat request failed: ${formatError(error)}`);
+          play("error");
+        } finally {
+          unlisten?.();
+          setIsSending(false);
+          setOverlay((prev) => ({ ...prev, phase: prev.listening ? "listening" : "idle", amplitude: 0.18 }));
+        }
+      } else {
+        // Cloud model — use governed send_chat with provider-prefixed model
+        try {
+          const response = await sendChat(input, model);
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, content: response.text, model, streaming: false } : m
+            )
+          );
+          setRuntimeError(null);
+          setOverlay((prev) => ({ ...prev, phase: "speaking", amplitude: 0.5 }));
+          play("notification");
+          bumpActivity();
+        } catch (error) {
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    content: `Error: ${formatError(error)}`,
+                    model: "system",
+                    streaming: false
+                  }
+                : message
+            )
+          );
+          setRuntimeError(`Chat request failed: ${formatError(error)}`);
+          play("error");
+        } finally {
+          setIsSending(false);
+          setOverlay((prev) => ({ ...prev, phase: prev.listening ? "listening" : "idle", amplitude: 0.18 }));
+        }
       }
     } else {
       // Mock mode fallback
       try {
-        const response = mockChatReply(input);
+        const response = browserChatReply(input);
         // Simulate streaming word-by-word
         const chunks = response.text.split(" ");
         let current = "";
@@ -975,8 +1190,8 @@ export default function App(): JSX.Element {
 
   async function handleRefresh(): Promise<void> {
     if (runtimeMode !== "desktop") {
-      setAgents(mockAgents());
-      setAuditEvents(mockAudit());
+      setAgents(browserAgents());
+      setAuditEvents(emptyAudit());
       setRuntimeError(null);
       bumpActivity();
       return;
@@ -1068,6 +1283,7 @@ export default function App(): JSX.Element {
             setMessages([]);
             setDraft("");
           }}
+          onNavigate={(p) => setPage(p as Page)}
         />
       );
     }
@@ -1090,6 +1306,7 @@ export default function App(): JSX.Element {
             void handleCreateAgent(manifestJson);
           }}
           onDelete={handleDeleteAgent}
+          onClearAll={() => { void handleClearAllAgents(); }}
           onPermissions={(id) => {
             setPermissionAgentId(id);
             setPage("permissions");
@@ -1148,7 +1365,7 @@ export default function App(): JSX.Element {
       );
     }
     if (page === "audit") {
-      return <Audit events={auditEvents} />;
+      return <Audit events={auditEvents} onRefresh={() => void refreshDesktopData()} />;
     }
     if (page === "workflows") {
       return <Workflows />;
@@ -1160,7 +1377,7 @@ export default function App(): JSX.Element {
       return <CommandCenter />;
     }
     if (page === "audit-timeline") {
-      return <AuditTimeline />;
+      return <AuditTimeline events={auditEvents} />;
     }
     if (page === "marketplace-browser") {
       return <MarketplaceBrowser />;
@@ -1243,6 +1460,9 @@ export default function App(): JSX.Element {
     if (page === "learning-center") {
       return <LearningCenter />;
     }
+    if (page === "approvals") {
+      return <ApprovalCenter />;
+    }
     if (page === "browser") {
       return <AgentBrowser />;
     }
@@ -1285,13 +1505,17 @@ export default function App(): JSX.Element {
       />
       <div className="nexus-shell text-slate-100">
         <Sidebar
-          items={NAV_ITEMS}
+          items={NAV_ITEMS.map((item) =>
+            item.id === "approvals" && pendingApprovalCount > 0
+              ? { ...item, badge: pendingApprovalCount }
+              : item
+          )}
           activeId={page}
           onSelect={(id) => {
             setPage(id as Page);
             play("click");
           }}
-          version="v5.0.0"
+          version="v8.0.0"
         />
 
         <div className="flex min-h-screen flex-1 flex-col">
@@ -1354,7 +1578,12 @@ export default function App(): JSX.Element {
                   Runtime: <span className="text-cyan-100">{connectionStatus}</span>
                 </span>
               </div>
-              {runtimeError ? (
+              {backendRestarting ? (
+                <div className="nexus-notification mt-3" style={{ background: "rgba(250,204,21,0.15)", borderColor: "#facc15", color: "#facc15", padding: "0.4rem 0.8rem", borderRadius: 6, border: "1px solid", fontSize: "0.8rem" }}>
+                  <p className="text-xs">Backend restarting... Reconnecting every 2s.</p>
+                </div>
+              ) : null}
+              {runtimeError && !backendRestarting ? (
                 <div className="nexus-notification nexus-notification-error mt-3">
                   <p className="text-xs text-rose-100">{runtimeError}</p>
                 </div>

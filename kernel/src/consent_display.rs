@@ -56,6 +56,40 @@ pub fn render_approval(request: &ApprovalRequest) -> ApprovalDisplay {
         GovernedOperation::ToolCall
         | GovernedOperation::MultiAgentOrchestrate
         | GovernedOperation::TimeMachineUndo => {}
+        GovernedOperation::SelfEvolution => {
+            warnings.push(
+                "This operation will modify the agent's own description or strategy".to_string(),
+            );
+        }
+        GovernedOperation::AgentLifecycleManage => {
+            warnings.push("This operation will create or destroy sub-agents".to_string());
+        }
+        GovernedOperation::GovernancePolicyModify => {
+            warnings.push(
+                "This operation will modify system-wide governance policies (L5 only)".to_string(),
+            );
+        }
+        GovernedOperation::EcosystemFuelAllocate => {
+            warnings
+                .push("This operation will allocate fuel across the agent ecosystem".to_string());
+        }
+        GovernedOperation::SovereignPromotion => {
+            warnings.push(
+                "This operation will promote an agent to L5 Sovereign — requires 2-person approval"
+                    .to_string(),
+            );
+        }
+        GovernedOperation::TranscendentCreation => {
+            warnings.push(
+                "This operation will create or activate an L6 Transcendent agent — mandatory 60-second review applies"
+                    .to_string(),
+            );
+        }
+    }
+    if let Some(min_review) = request.min_review_seconds {
+        warnings.push(format!(
+            "Mandatory review delay: wait at least {min_review} seconds before approving"
+        ));
     }
     if request.risk_level == RiskLevel::Critical {
         warnings.push("This is a critical operation requiring careful review".to_string());

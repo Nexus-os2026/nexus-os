@@ -140,6 +140,32 @@
 .cd-card-footer { margin-top: auto; }
 .cd-evidence-count { font-size: 0.7rem; color: rgba(165, 243, 252, 0.5); font-family: monospace; }
 
+/* Risk card details */
+.cd-justification { font-size: 0.75rem; color: #cbd5e1; line-height: 1.4; }
+.cd-articles, .cd-controls { display: flex; flex-direction: column; gap: 0.3rem; }
+.cd-article-tag {
+  font-size: 0.6rem;
+  padding: 0.15rem 0.4rem;
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.2);
+  border-radius: 0.2rem;
+  color: #eab308;
+  font-family: monospace;
+}
+.cd-control-tag {
+  font-size: 0.6rem;
+  padding: 0.15rem 0.4rem;
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  border-radius: 0.2rem;
+  color: #60a5fa;
+  font-family: monospace;
+}
+
+/* SOC 2 section */
+.cd-soc2-desc { font-size: 0.78rem; color: #cbd5e1; line-height: 1.4; }
+.cd-soc2-detail { font-size: 0.7rem; color: #94a3b8; font-style: italic; padding: 0.4rem 0.6rem; background: rgba(15, 23, 42, 0.5); border-radius: 0.3rem; }
+
 /* Generate button */
 .cd-generate-btn {
   padding: 0.4rem 1rem;

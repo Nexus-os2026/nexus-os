@@ -81,8 +81,65 @@ impl TelegramAdapter {
     pub fn build_send_message_payload(&self, chat_id: &str, text: &str) -> Value {
         json!({
             "chat_id": chat_id,
-            "text": text
+            "text": text,
+            "parse_mode": "Markdown"
         })
+    }
+
+    /// Send a typing indicator to the given chat.
+    pub fn send_typing_indicator(&self, chat_id: &str) -> Result<(), AgentError> {
+        if self.bot_token.is_none() {
+            return Ok(());
+        }
+        let payload = json!({
+            "chat_id": chat_id,
+            "action": "typing"
+        });
+        let _ = self.send_payload("sendChatAction", &payload)?;
+        Ok(())
+    }
+
+    /// Send a message, splitting into chunks if it exceeds 4096 characters.
+    pub fn send_long_message(
+        &mut self,
+        chat_id: &str,
+        text: &str,
+    ) -> Result<MessageId, AgentError> {
+        if text.len() <= 4096 {
+            return self.send_message_impl(chat_id, text);
+        }
+        let chunks = crate::gateway::split_message(text, 4096);
+        let mut last_id = String::new();
+        for chunk in chunks {
+            last_id = self.send_message_impl(chat_id, chunk)?;
+        }
+        Ok(last_id)
+    }
+
+    fn send_message_impl(&mut self, chat_id: &str, text: &str) -> Result<MessageId, AgentError> {
+        self.check_rate_limit()?;
+        if chat_id.is_empty() || text.is_empty() {
+            return Err(AgentError::SupervisorError(
+                "telegram message requires non-empty chat_id and text".to_string(),
+            ));
+        }
+        if self.bot_token.is_none() {
+            return Ok(format!("tg-mock-{}", Uuid::new_v4()));
+        }
+        let payload = self.build_send_message_payload(chat_id, text);
+        let result = self.send_payload("sendMessage", &payload)?;
+        if !result.ok {
+            return Err(AgentError::SupervisorError(
+                "telegram sendMessage returned ok=false".to_string(),
+            ));
+        }
+        let message_id = result
+            .result
+            .and_then(|json| json.get("message_id").cloned())
+            .and_then(|value| value.as_i64())
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| format!("tg-{}", Uuid::new_v4()));
+        Ok(message_id)
     }
 
     pub fn build_inline_keyboard_payload(
@@ -287,31 +344,7 @@ impl Default for TelegramAdapter {
 
 impl MessagingPlatform for TelegramAdapter {
     fn send_message(&mut self, chat_id: &str, text: &str) -> Result<MessageId, AgentError> {
-        self.check_rate_limit()?;
-        if chat_id.is_empty() || text.is_empty() {
-            return Err(AgentError::SupervisorError(
-                "telegram message requires non-empty chat_id and text".to_string(),
-            ));
-        }
-
-        if self.bot_token.is_none() {
-            return Ok(format!("tg-mock-{}", Uuid::new_v4()));
-        }
-
-        let payload = self.build_send_message_payload(chat_id, text);
-        let result = self.send_payload("sendMessage", &payload)?;
-        if !result.ok {
-            return Err(AgentError::SupervisorError(
-                "telegram sendMessage returned ok=false".to_string(),
-            ));
-        }
-        let message_id = result
-            .result
-            .and_then(|json| json.get("message_id").cloned())
-            .and_then(|value| value.as_i64())
-            .map(|value| value.to_string())
-            .unwrap_or_else(|| format!("tg-{}", Uuid::new_v4()));
-        Ok(message_id)
+        self.send_long_message(chat_id, text)
     }
 
     fn send_rich_message(
@@ -445,5 +478,52 @@ mod tests {
             Some("12345")
         );
         assert_eq!(payload.get("text").and_then(|v| v.as_str()), Some("status"));
+        assert_eq!(
+            payload.get("parse_mode").and_then(|v| v.as_str()),
+            Some("Markdown")
+        );
+    }
+
+    #[test]
+    fn test_telegram_api_url_construction() {
+        let mut adapter = TelegramAdapter::new();
+        adapter.bot_token = Some("test-token-123".to_string());
+        let url = adapter.api_url("getUpdates").unwrap();
+        assert_eq!(url, "https://api.telegram.org/bottest-token-123/getUpdates");
+    }
+
+    #[test]
+    fn test_telegram_api_url_missing_token() {
+        let adapter = TelegramAdapter::with_clock_and_no_token(None);
+        let result = adapter.api_url("sendMessage");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_telegram_long_polling_offset_tracking() {
+        let adapter = TelegramAdapter::new();
+        assert_eq!(adapter.update_offset, 0);
+    }
+
+    #[test]
+    fn test_telegram_typing_indicator_no_token() {
+        let adapter = TelegramAdapter::with_clock_and_no_token(None);
+        let result = adapter.send_typing_indicator("chat-1");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_telegram_inline_keyboard_payload() {
+        let adapter = TelegramAdapter::new();
+        let payload = adapter.build_inline_keyboard_payload(
+            "chat-1",
+            "Choose an option",
+            &["Option A".to_string(), "Option B".to_string()],
+        );
+        assert!(payload.get("reply_markup").is_some());
+        let keyboard = payload["reply_markup"]["inline_keyboard"]
+            .as_array()
+            .unwrap();
+        assert_eq!(keyboard.len(), 2);
     }
 }

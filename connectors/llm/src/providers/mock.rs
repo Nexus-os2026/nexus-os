@@ -43,7 +43,7 @@ impl LlmProvider for MockProvider {
         model: &str,
     ) -> Result<LlmResponse, AgentError> {
         Ok(LlmResponse {
-            output_text: "Mock provider response".to_string(),
+            output_text: "[Mock Response - No LLM configured] Configure a provider in Settings to get real responses.".to_string(),
             token_count: max_tokens.min(64),
             model_name: model.to_string(),
             tool_calls: Vec::new(),

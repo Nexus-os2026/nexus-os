@@ -454,7 +454,7 @@ mod tests {
 
     fn make_test_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir()
-            .join("nexus_model_registry_tests")
+            .join(format!("nexus_model_registry_tests_{}", std::process::id()))
             .join(name);
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();

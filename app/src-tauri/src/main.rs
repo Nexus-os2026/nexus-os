@@ -8,9 +8,13 @@ use nexus_connectors_llm::gateway::{
 use nexus_connectors_llm::model_hub::{self, DownloadProgress, DownloadStatus};
 use nexus_connectors_llm::model_registry::ModelRegistry;
 use nexus_connectors_llm::nexus_link::NexusLink;
-use nexus_connectors_llm::providers::{LlmProvider, MockProvider, OllamaProvider};
+use nexus_connectors_llm::providers::{
+    ClaudeProvider, DeepSeekProvider, GeminiProvider, LlmProvider, MockProvider, OllamaProvider,
+    OpenAiProvider,
+};
 use nexus_connectors_llm::rag::{RagConfig, RagPipeline};
 use nexus_connectors_llm::whisper::WhisperTranscriber;
+use nexus_connectors_messaging::gateway::{MessageGateway, PlatformStatus};
 use nexus_distributed::ghost_protocol::{GhostConfig, GhostProtocol, SyncPeer as GhostSyncPeer};
 use nexus_factory::pipeline::FactoryPipeline;
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
@@ -22,7 +26,7 @@ use nexus_kernel::config::{
 use nexus_kernel::economic_identity::{EconomicConfig, EconomicEngine, TransactionType};
 use nexus_kernel::errors::AgentError;
 use nexus_kernel::hardware::{recommend_agent_configs, HardwareProfile};
-use nexus_kernel::manifest::AgentManifest;
+use nexus_kernel::manifest::{parse_manifest, AgentManifest};
 use nexus_kernel::neural_bridge::{ContextQuery, ContextSource, NeuralBridge, NeuralBridgeConfig};
 use nexus_kernel::permissions::{
     CapabilityRequest as KernelCapabilityRequest, PermissionCategory as KernelPermissionCategory,
@@ -32,10 +36,12 @@ use nexus_kernel::redaction::RedactionEngine;
 use nexus_kernel::supervisor::{AgentId, Supervisor};
 use nexus_kernel::tracing::{SpanStatus, TracingEngine};
 use nexus_marketplace::payments::{BillingInterval, PaymentEngine, RevenueSplit};
+use nexus_persistence::{NexusDatabase, StateStore};
 use nexus_protocols::mcp_client::{McpAuth, McpHostManager, McpServerConfig, McpTransport};
 use nexus_sdk::memory::{AgentMemory, MemoryConfig, MemoryType};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
+use sha2::Digest;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::process::Command;
@@ -51,7 +57,190 @@ use tauri::Emitter;
 ))]
 #[cfg(not(target_os = "linux"))]
 use tauri::Manager;
+use tokio::sync::Notify;
 use uuid::Uuid;
+
+/// Stub LLM for hivemind — returns an error directing users to configure a real provider.
+struct StubHivemindLlm;
+
+impl nexus_kernel::cognitive::HivemindLlm for StubHivemindLlm {
+    fn decompose(
+        &self,
+        _prompt: &str,
+    ) -> std::result::Result<String, nexus_kernel::errors::AgentError> {
+        Err(nexus_kernel::errors::AgentError::SupervisorError(
+            "No LLM provider configured for hivemind - configure Ollama or set ENABLE_REAL_API=1"
+                .to_string(),
+        ))
+    }
+    fn merge(
+        &self,
+        _prompt: &str,
+    ) -> std::result::Result<String, nexus_kernel::errors::AgentError> {
+        Err(nexus_kernel::errors::AgentError::SupervisorError(
+            "No LLM provider configured for hivemind - configure Ollama or set ENABLE_REAL_API=1"
+                .to_string(),
+        ))
+    }
+}
+
+#[derive(Clone)]
+struct TauriProviderStub {
+    name: String,
+}
+
+impl nexus_kernel::cognitive::LlmProvider for TauriProviderStub {
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+fn build_provider_registry() -> HashMap<String, Arc<dyn nexus_kernel::cognitive::LlmProvider>> {
+    [
+        "anthropic",
+        "cohere",
+        "fireworks",
+        "gemini",
+        "groq",
+        "mistral",
+        "mock",
+        "ollama",
+        "openai",
+        "openrouter",
+        "perplexity",
+        "together",
+    ]
+    .into_iter()
+    .map(|name| {
+        (
+            name.to_string(),
+            Arc::new(TauriProviderStub {
+                name: name.to_string(),
+            }) as Arc<dyn nexus_kernel::cognitive::LlmProvider>,
+        )
+    })
+    .collect()
+}
+
+/// Bridges `NexusDatabase` (persistence) to the kernel `StrategyStore` trait.
+struct DbStrategyStore {
+    db: Arc<NexusDatabase>,
+}
+
+impl nexus_kernel::cognitive::StrategyStore for DbStrategyStore {
+    fn upsert_strategy_score(
+        &self,
+        agent_id: &str,
+        strategy_hash: &str,
+        goal_type: &str,
+        success: bool,
+        fuel: f64,
+        duration: f64,
+    ) -> std::result::Result<(), String> {
+        self.db
+            .upsert_strategy_score(agent_id, strategy_hash, goal_type, success, fuel, duration)
+            .map_err(|e| e.to_string())
+    }
+
+    fn load_top_strategies(
+        &self,
+        agent_id: &str,
+        goal_type: &str,
+        limit: usize,
+    ) -> std::result::Result<Vec<nexus_kernel::cognitive::StrategyScore>, String> {
+        let rows = self
+            .db
+            .load_top_strategies(agent_id, goal_type, limit)
+            .map_err(|e| e.to_string())?;
+        Ok(rows
+            .into_iter()
+            .map(|r| nexus_kernel::cognitive::StrategyScore {
+                agent_id: r.agent_id,
+                strategy_hash: r.strategy_hash,
+                goal_type: r.goal_type,
+                uses: r.uses,
+                successes: r.successes,
+                total_fuel: r.total_fuel,
+                total_duration_secs: r.total_duration_secs,
+                composite_score: r.composite_score,
+            })
+            .collect())
+    }
+
+    fn load_strategy_history(
+        &self,
+        agent_id: &str,
+        limit: usize,
+    ) -> std::result::Result<Vec<nexus_kernel::cognitive::StrategyScore>, String> {
+        let rows = self
+            .db
+            .load_strategy_history(agent_id, limit)
+            .map_err(|e| e.to_string())?;
+        Ok(rows
+            .into_iter()
+            .map(|r| nexus_kernel::cognitive::StrategyScore {
+                agent_id: r.agent_id,
+                strategy_hash: r.strategy_hash,
+                goal_type: r.goal_type,
+                uses: r.uses,
+                successes: r.successes,
+                total_fuel: r.total_fuel,
+                total_duration_secs: r.total_duration_secs,
+                composite_score: r.composite_score,
+            })
+            .collect())
+    }
+}
+
+/// Bridges `NexusDatabase` to the kernel `MemoryStore` trait.
+struct DbMemoryStore {
+    db: Arc<NexusDatabase>,
+}
+
+impl nexus_kernel::cognitive::MemoryStore for DbMemoryStore {
+    fn save_memory(
+        &self,
+        agent_id: &str,
+        memory_type: &str,
+        key: &str,
+        value_json: &str,
+    ) -> std::result::Result<(), String> {
+        StateStore::save_memory(&*self.db, agent_id, memory_type, key, value_json)
+            .map_err(|e| e.to_string())
+    }
+
+    fn load_memories(
+        &self,
+        agent_id: &str,
+        memory_type: Option<&str>,
+        limit: usize,
+    ) -> std::result::Result<Vec<nexus_kernel::cognitive::MemoryEntry>, String> {
+        let rows = StateStore::load_memories(&*self.db, agent_id, memory_type, limit)
+            .map_err(|e| e.to_string())?;
+        Ok(rows
+            .into_iter()
+            .map(|r| nexus_kernel::cognitive::MemoryEntry {
+                id: r.id,
+                agent_id: r.agent_id,
+                memory_type: r.memory_type,
+                key: r.key,
+                value_json: r.value_json,
+                relevance_score: r.relevance_score,
+                access_count: r.access_count,
+                created_at: r.created_at,
+                last_accessed: r.last_accessed,
+            })
+            .collect())
+    }
+
+    fn touch_memory(&self, id: i64) -> std::result::Result<(), String> {
+        StateStore::touch_memory(&*self.db, id).map_err(|e| e.to_string())
+    }
+
+    fn decay_memories(&self, agent_id: &str, decay_factor: f64) -> std::result::Result<(), String> {
+        StateStore::decay_memories(&*self.db, agent_id, decay_factor).map_err(|e| e.to_string())
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentRow {
@@ -121,6 +310,12 @@ struct VoiceProcess {
 }
 
 #[derive(Clone)]
+struct BlockedConsentWait {
+    consent_id: String,
+    notify: Arc<Notify>,
+}
+
+#[derive(Clone)]
 pub struct AppState {
     supervisor: Arc<Mutex<Supervisor>>,
     audit: Arc<Mutex<AuditTrail>>,
@@ -149,6 +344,13 @@ pub struct AppState {
     whisper: Arc<Mutex<WhisperTranscriber>>,
     replay_recorder: Arc<Mutex<nexus_kernel::replay::recorder::ReplayRecorder>>,
     reputation_registry: Arc<Mutex<nexus_kernel::reputation::ReputationRegistry>>,
+    db: Arc<NexusDatabase>,
+    cognitive_runtime: Arc<nexus_kernel::cognitive::CognitiveRuntime>,
+    blocked_consent_waits: Arc<Mutex<HashMap<String, BlockedConsentWait>>>,
+    hivemind: Arc<nexus_kernel::cognitive::HivemindCoordinator>,
+    message_gateway: Arc<Mutex<MessageGateway>>,
+    evolution_tracker: Arc<nexus_kernel::cognitive::EvolutionTracker>,
+    agent_scheduler: Arc<nexus_kernel::cognitive::AgentScheduler>,
 }
 
 impl Default for AppState {
@@ -159,8 +361,171 @@ impl Default for AppState {
 
 impl AppState {
     pub fn new() -> Self {
+        let supervisor = Arc::new(Mutex::new(Supervisor::new()));
+        let db = Arc::new(
+            NexusDatabase::open(&NexusDatabase::default_db_path()).unwrap_or_else(|e| {
+                eprintln!("persistence: falling back to in-memory DB: {e}");
+                NexusDatabase::in_memory().expect("in-memory DB must succeed")
+            }),
+        );
+        let evolution_tracker = Arc::new(nexus_kernel::cognitive::EvolutionTracker::new(Box::new(
+            DbStrategyStore { db: db.clone() },
+        )));
+        let audit = Arc::new(Mutex::new(AuditTrail::new()));
+        let cognitive_runtime = Arc::new(
+            nexus_kernel::cognitive::CognitiveRuntime::with_provider_registry(
+                supervisor.clone(),
+                nexus_kernel::cognitive::LoopConfig::default(),
+                Arc::new(nexus_kernel::cognitive::NoOpEmitter),
+                build_provider_registry(),
+            ),
+        );
+        let agent_scheduler = Arc::new(nexus_kernel::cognitive::AgentScheduler::new(
+            cognitive_runtime.clone(),
+            audit.clone(),
+        ));
+        let state = Self {
+            supervisor: supervisor.clone(),
+            audit,
+            meta: Arc::new(Mutex::new(HashMap::new())),
+            voice: Arc::new(Mutex::new(VoiceRuntimeState {
+                wake_word_enabled: true,
+                push_to_talk_enabled: true,
+                overlay_visible: false,
+            })),
+            identity_mgr: Arc::new(Mutex::new(
+                nexus_kernel::identity::IdentityManager::in_memory(),
+            )),
+            browser: Arc::new(Mutex::new(BrowserManager::new())),
+            research: Arc::new(Mutex::new(ResearchManager::new())),
+            build: Arc::new(Mutex::new(BuildManager::new())),
+            learning: Arc::new(Mutex::new(LearningManager::new())),
+            rag: Arc::new(Mutex::new(RagPipeline::new(RagConfig::default()))),
+            redaction_engine: Arc::new(Mutex::new(RedactionEngine::default())),
+            model_registry: Arc::new(Mutex::new(ModelRegistry::default_dir())),
+            nexus_link: Arc::new(Mutex::new({
+                let hostname = std::env::var("HOSTNAME")
+                    .or_else(|_| std::env::var("COMPUTERNAME"))
+                    .unwrap_or_else(|_| "nexus-device".to_string());
+                let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+                let models_dir = std::path::Path::new(&home).join(".nexus").join("models");
+                NexusLink::new(&hostname, &models_dir.display().to_string())
+            })),
+            evolution: Arc::new(Mutex::new(EvolutionEngine::new(EvolutionConfig::default()))),
+            mcp_host: Arc::new(Mutex::new(McpHostManager::new())),
+            ghost_protocol: Arc::new(Mutex::new(GhostProtocol::new(GhostConfig::default()))),
+            voice_process: Arc::new(Mutex::new(VoiceProcess::default())),
+            factory: Arc::new(Mutex::new(FactoryPipeline::new())),
+            computer_control: Arc::new(Mutex::new(ComputerControlEngine::new())),
+            neural_bridge: Arc::new(Mutex::new(NeuralBridge::new(NeuralBridgeConfig::default()))),
+            economic_engine: Arc::new(Mutex::new(EconomicEngine::new(EconomicConfig::default()))),
+            agent_memory: Arc::new(Mutex::new(AgentMemory::new(MemoryConfig::default()))),
+            tracing_engine: Arc::new(Mutex::new(TracingEngine::new(1000))),
+            payment_engine: Arc::new(Mutex::new(PaymentEngine::new(RevenueSplit::default()))),
+            whisper: Arc::new(Mutex::new(WhisperTranscriber::new())),
+            replay_recorder: Arc::new(Mutex::new(
+                nexus_kernel::replay::recorder::ReplayRecorder::new(500),
+            )),
+            reputation_registry: Arc::new(Mutex::new(
+                nexus_kernel::reputation::ReputationRegistry::new(),
+            )),
+            db,
+            cognitive_runtime: cognitive_runtime.clone(),
+            blocked_consent_waits: Arc::new(Mutex::new(HashMap::new())),
+            hivemind: Arc::new(nexus_kernel::cognitive::HivemindCoordinator::new(
+                Box::new(StubHivemindLlm),
+                Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
+                Arc::new(Mutex::new(AuditTrail::new())),
+            )),
+            message_gateway: Arc::new(Mutex::new({
+                let mut gw = MessageGateway::new();
+                // Register enabled platforms from environment
+                let enabled = std::env::var("NEXUS_MESSAGING_ENABLED").unwrap_or_default();
+                for platform_name in enabled
+                    .split(',')
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                {
+                    match platform_name {
+                        "telegram" => {
+                            gw.register_platform(Box::new(
+                                nexus_connectors_messaging::telegram::TelegramAdapter::new(),
+                            ));
+                        }
+                        "discord" => {
+                            gw.register_platform(Box::new(
+                                nexus_connectors_messaging::discord::DiscordAdapter::new(),
+                            ));
+                        }
+                        "slack" => {
+                            gw.register_platform(Box::new(
+                                nexus_connectors_messaging::slack::SlackAdapter::new(),
+                            ));
+                        }
+                        "whatsapp" => {
+                            gw.register_platform(Box::new(
+                                nexus_connectors_messaging::whatsapp::WhatsAppAdapter::new(
+                                    nexus_connectors_messaging::whatsapp::WhatsAppQualityTier::Medium,
+                                ),
+                            ));
+                        }
+                        other => {
+                            eprintln!("messaging: unknown platform '{other}', skipping");
+                        }
+                    }
+                }
+                gw
+            })),
+            evolution_tracker,
+            agent_scheduler,
+        };
+
+        // Restore persisted agents into supervisor (start then immediately stop —
+        // stale sessions should not auto-run; user must explicitly start agents)
+        if let Ok(saved_agents) = state.db.list_agents() {
+            for row in saved_agents {
+                if let Ok(manifest) = serde_json::from_str::<AgentManifest>(&row.manifest_json) {
+                    let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+                    match supervisor.start_agent(manifest) {
+                        Ok(agent_id) => {
+                            // Immediately stop so restored agents don't auto-run
+                            let _ = supervisor.stop_agent(agent_id);
+                            let mut meta = state.meta.lock().unwrap_or_else(|p| p.into_inner());
+                            meta.insert(
+                                agent_id,
+                                AgentMeta {
+                                    name: row.id.clone(),
+                                    last_action: "restored (stopped)".to_string(),
+                                },
+                            );
+                        }
+                        Err(e) => eprintln!("persistence: failed to restore agent {}: {e}", row.id),
+                    }
+                }
+            }
+        }
+
+        #[cfg(not(test))]
+        {
+            state.load_prebuilt_agents();
+            state.seed_prebuilt_agents_to_marketplace();
+        }
+
+        state
+    }
+
+    /// Create an AppState backed by an in-memory DB (for tests).
+    #[cfg(test)]
+    pub fn new_in_memory() -> Self {
+        let supervisor = Arc::new(Mutex::new(Supervisor::new()));
+        let test_db = Arc::new(NexusDatabase::in_memory().expect("in-memory DB must succeed"));
+        let evolution_tracker = Arc::new(nexus_kernel::cognitive::EvolutionTracker::new(Box::new(
+            DbStrategyStore {
+                db: test_db.clone(),
+            },
+        )));
         Self {
-            supervisor: Arc::new(Mutex::new(Supervisor::new())),
+            supervisor: supervisor.clone(),
             audit: Arc::new(Mutex::new(AuditTrail::new())),
             meta: Arc::new(Mutex::new(HashMap::new())),
             voice: Arc::new(Mutex::new(VoiceRuntimeState {
@@ -204,16 +569,125 @@ impl AppState {
             reputation_registry: Arc::new(Mutex::new(
                 nexus_kernel::reputation::ReputationRegistry::new(),
             )),
+            db: test_db,
+            cognitive_runtime: Arc::new(
+                nexus_kernel::cognitive::CognitiveRuntime::with_provider_registry(
+                    supervisor,
+                    nexus_kernel::cognitive::LoopConfig::default(),
+                    Arc::new(nexus_kernel::cognitive::NoOpEmitter),
+                    build_provider_registry(),
+                ),
+            ),
+            blocked_consent_waits: Arc::new(Mutex::new(HashMap::new())),
+            hivemind: Arc::new(nexus_kernel::cognitive::HivemindCoordinator::new(
+                Box::new(StubHivemindLlm),
+                Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
+                Arc::new(Mutex::new(AuditTrail::new())),
+            )),
+            message_gateway: Arc::new(Mutex::new(MessageGateway::new())),
+            evolution_tracker,
+            agent_scheduler: Arc::new(nexus_kernel::cognitive::AgentScheduler::new(
+                Arc::new(
+                    nexus_kernel::cognitive::CognitiveRuntime::with_provider_registry(
+                        Arc::new(Mutex::new(Supervisor::new())),
+                        nexus_kernel::cognitive::LoopConfig::default(),
+                        Arc::new(nexus_kernel::cognitive::NoOpEmitter),
+                        build_provider_registry(),
+                    ),
+                ),
+                Arc::new(Mutex::new(AuditTrail::new())),
+            )),
         }
     }
 
     fn log_event(&self, agent_id: AgentId, event_type: EventType, payload: serde_json::Value) {
+        let event_type_str = format!("{event_type:?}");
         let mut guard = match self.audit.lock() {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
         };
-        if let Err(e) = guard.append_event(agent_id, event_type, payload) {
+        if let Err(e) = guard.append_event(agent_id, event_type, payload.clone()) {
             eprintln!("audit append failed: {e}");
+        }
+
+        // Persist audit event to database
+        let prev_hash = self
+            .db
+            .get_latest_audit_hash()
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "0".repeat(64));
+        let sequence = self.db.get_audit_count().unwrap_or(0);
+        let detail = serde_json::to_string(&payload).unwrap_or_default();
+        let hash_input = format!("{prev_hash}:{sequence}:{detail}");
+        let current_hash = format!("{:x}", sha2::Sha256::digest(hash_input.as_bytes()));
+        if let Err(e) = self.db.append_audit_event(
+            &agent_id.to_string(),
+            &event_type_str,
+            &detail,
+            &prev_hash,
+            &current_hash,
+            sequence,
+        ) {
+            eprintln!("persistence: audit append failed: {e}");
+        }
+    }
+
+    fn register_blocked_consent_wait(&self, agent_id: &str, consent_id: &str) -> Arc<Notify> {
+        let notify = Arc::new(Notify::new());
+        self.blocked_consent_waits
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(
+                agent_id.to_string(),
+                BlockedConsentWait {
+                    consent_id: consent_id.to_string(),
+                    notify: notify.clone(),
+                },
+            );
+        notify
+    }
+
+    fn clear_blocked_consent_wait(&self, agent_id: &str, consent_id: &str) {
+        let mut waits = self
+            .blocked_consent_waits
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let should_remove = waits
+            .get(agent_id)
+            .is_some_and(|wait| wait.consent_id == consent_id);
+        if should_remove {
+            waits.remove(agent_id);
+        }
+    }
+
+    fn wake_blocked_consent_wait(&self, agent_id: &str, consent_id: &str) -> bool {
+        let notify = self
+            .blocked_consent_waits
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(agent_id)
+            .filter(|wait| wait.consent_id == consent_id)
+            .map(|wait| wait.notify.clone());
+        if let Some(notify) = notify {
+            notify.notify_one();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn wake_and_clear_blocked_consent_wait(&self, agent_id: &str) -> bool {
+        let wait = self
+            .blocked_consent_waits
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(agent_id);
+        if let Some(wait) = wait {
+            wait.notify.notify_one();
+            true
+        } else {
+            false
         }
     }
 }
@@ -282,10 +756,13 @@ pub fn jarvis_status(state: &AppState) -> Result<VoiceRuntimeState, String> {
 }
 
 pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, String> {
-    let manifest: AgentManifest = serde_json::from_str(manifest_json.as_str())
-        .map_err(|error| format!("invalid manifest JSON: {error}"))?;
+    let manifest = parse_agent_manifest_json(manifest_json.as_str())?;
     let agent_name = manifest.name.clone();
     let agent_caps = manifest.capabilities.clone();
+    let manifest_schedule = manifest.schedule.clone();
+    let manifest_default_goal = manifest.default_goal.clone();
+    let manifest_autonomy_level = manifest.autonomy_level.unwrap_or(0);
+    let manifest_description = extract_manifest_description(&manifest_json);
 
     let mut supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
@@ -317,6 +794,25 @@ pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, S
         },
     );
 
+    // Persist agent to database
+    if let Err(e) = state.db.save_agent(
+        &agent_id.to_string(),
+        &manifest_json,
+        "running",
+        manifest_autonomy_level,
+        "native",
+    ) {
+        eprintln!("persistence: save_agent failed: {e}");
+    }
+
+    register_manifest_schedule(
+        state,
+        &agent_id.to_string(),
+        manifest_schedule.as_deref(),
+        manifest_default_goal.as_deref(),
+        manifest_description.as_deref(),
+    );
+
     state.log_event(
         agent_id,
         EventType::UserAction,
@@ -332,11 +828,22 @@ pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, S
 
 pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     let parsed = parse_agent_id(agent_id.as_str())?;
+    let agent_id = parsed.to_string();
     let mut supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
     supervisor.restart_agent(parsed).map_err(agent_error)?;
+    let schedule_manifest = find_manifest(state, &agent_id);
+    if let Some(manifest) = schedule_manifest {
+        register_manifest_schedule(
+            state,
+            &agent_id,
+            manifest.schedule.as_deref(),
+            manifest.default_goal.as_deref(),
+            find_manifest_description(state, &agent_id).as_deref(),
+        );
+    }
     update_last_action(state, parsed, "started");
     state.log_event(
         parsed,
@@ -348,6 +855,8 @@ pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
 
 pub fn stop_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     let parsed = parse_agent_id(agent_id.as_str())?;
+    // Unregister from scheduler before stopping
+    state.agent_scheduler.unregister_agent(&agent_id);
     let mut supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
@@ -360,6 +869,37 @@ pub fn stop_agent(state: &AppState, agent_id: String) -> Result<(), String> {
         json!({"event": "stop_agent", "status": "ok"}),
     );
     Ok(())
+}
+
+pub fn get_scheduled_agents(
+    state: &AppState,
+) -> Result<Vec<nexus_kernel::cognitive::ScheduledAgent>, String> {
+    Ok(state.agent_scheduler.list())
+}
+
+pub fn clear_all_agents(state: &AppState) -> Result<usize, String> {
+    // Clear in-memory supervisor state
+    {
+        let mut supervisor = match state.supervisor.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        supervisor.clear_all_agents();
+    }
+    // Clear in-memory meta
+    {
+        let mut meta = match state.meta.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        meta.clear();
+    }
+    // Clear persistence tables
+    let count = state
+        .db
+        .clear_all_agents()
+        .map_err(|e| format!("persistence error: {e}"))?;
+    Ok(count)
 }
 
 pub fn pause_agent(state: &AppState, agent_id: String) -> Result<(), String> {
@@ -505,6 +1045,13 @@ fn build_provider_config(config: &NexusConfig) -> ProviderSelectionConfig {
         gemini_api_key: std::env::var("GEMINI_API_KEY")
             .ok()
             .or_else(|| non_empty(&config.llm.gemini_api_key)),
+        groq_api_key: std::env::var("GROQ_API_KEY").ok(),
+        mistral_api_key: std::env::var("MISTRAL_API_KEY").ok(),
+        together_api_key: std::env::var("TOGETHER_API_KEY").ok(),
+        fireworks_api_key: std::env::var("FIREWORKS_API_KEY").ok(),
+        perplexity_api_key: std::env::var("PERPLEXITY_API_KEY").ok(),
+        cohere_api_key: std::env::var("COHERE_API_KEY").ok(),
+        openrouter_api_key: std::env::var("OPENROUTER_API_KEY").ok(),
     }
 }
 
@@ -539,10 +1086,27 @@ fn get_default_model() -> String {
         .unwrap_or_else(|_| "mock-1".to_string())
 }
 
-pub fn send_chat(state: &AppState, message: String) -> Result<ChatResponse, String> {
+pub fn send_chat(
+    state: &AppState,
+    message: String,
+    model_id: Option<String>,
+) -> Result<ChatResponse, String> {
     let config = load_config().map_err(agent_error)?;
     let provider_config = build_provider_config(&config);
-    let provider = select_provider(&provider_config);
+
+    // Determine provider and model from prefixed string (e.g. "anthropic/claude-sonnet-4-20250514")
+    let (provider, model_name) = if let Some(ref full_model) = model_id {
+        provider_from_prefixed_model(full_model, &provider_config)?
+    } else {
+        let provider = select_provider(&provider_config);
+        let m = if config.llm.default_model.trim().is_empty() {
+            "mock-1".to_string()
+        } else {
+            config.llm.default_model.clone()
+        };
+        (provider, m)
+    };
+
     let mut gateway = GovernedLlmGateway::new(provider);
 
     let mut capabilities = HashSet::new();
@@ -553,19 +1117,15 @@ pub fn send_chat(state: &AppState, message: String) -> Result<ChatResponse, Stri
         fuel_remaining: 50_000,
     };
 
-    let model = if config.llm.default_model.trim().is_empty() {
-        "mock-1"
-    } else {
-        config.llm.default_model.as_str()
-    };
     let response = gateway
-        .query(&mut context, message.as_str(), 300, model)
+        .query(&mut context, message.as_str(), 2048, &model_name)
         .map_err(agent_error)?;
     let oracle = gateway.oracle_events().last();
 
     let payload = json!({
         "event": "send_chat",
         "model": response.model_name,
+        "provider": model_id.as_deref().and_then(|m| m.split_once('/')).map(|(p, _)| p).unwrap_or("auto"),
         "token_count": response.token_count,
         "cost": oracle.map(|value| value.cost).unwrap_or(0.0),
         "latency_ms": oracle.map(|value| value.latency_ms).unwrap_or(0)
@@ -661,6 +1221,370 @@ fn parse_agent_id(value: &str) -> Result<AgentId, String> {
 
 fn agent_error(error: AgentError) -> String {
     error.to_string()
+}
+
+impl AppState {
+    #[allow(dead_code)]
+    fn load_prebuilt_agents(&self) {
+        let mut existing_names = match self.db.list_agents() {
+            Ok(rows) => rows
+                .into_iter()
+                .filter_map(|row| manifest_name_from_json(&row.manifest_json))
+                .collect::<HashSet<String>>(),
+            Err(error) => {
+                eprintln!("prebuilt: failed to load existing agents from DB: {error}");
+                HashSet::new()
+            }
+        };
+
+        for path in list_prebuilt_manifest_paths() {
+            let manifest_json = match std::fs::read_to_string(&path) {
+                Ok(contents) => contents,
+                Err(error) => {
+                    eprintln!("prebuilt: failed to read {}: {error}", path.display());
+                    continue;
+                }
+            };
+
+            let manifest = match parse_agent_manifest_json(&manifest_json) {
+                Ok(manifest) => manifest,
+                Err(error) => {
+                    eprintln!("prebuilt: failed to parse {}: {error}", path.display());
+                    continue;
+                }
+            };
+
+            if existing_names.contains(&manifest.name) {
+                continue;
+            }
+
+            let mut supervisor = match self.supervisor.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            let agent_id = match supervisor.start_agent(manifest.clone()) {
+                Ok(agent_id) => agent_id,
+                Err(error) => {
+                    eprintln!("prebuilt: failed to register {}: {error}", manifest.name);
+                    continue;
+                }
+            };
+            let _ = supervisor.stop_agent(agent_id);
+            let agent_name = manifest.name.clone();
+
+            if let Err(error) = self.db.save_agent(
+                &agent_id.to_string(),
+                &manifest_json,
+                "stopped",
+                manifest.autonomy_level.unwrap_or(0),
+                "native",
+            ) {
+                eprintln!("prebuilt: failed to persist {}: {error}", agent_id);
+            }
+
+            let mut meta = match self.meta.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            meta.insert(
+                agent_id,
+                AgentMeta {
+                    name: agent_name,
+                    last_action: "prebuilt".to_string(),
+                },
+            );
+
+            existing_names.insert(manifest.name);
+        }
+    }
+
+    #[allow(dead_code)]
+    fn seed_prebuilt_agents_to_marketplace(&self) {
+        let registry = match open_marketplace_registry() {
+            Ok(registry) => registry,
+            Err(error) => {
+                eprintln!("marketplace seed: failed to open registry: {error}");
+                return;
+            }
+        };
+
+        let author_key = ed25519_dalek::SigningKey::from_bytes(&MARKETPLACE_SEED_KEY);
+        for path in list_prebuilt_manifest_paths() {
+            let manifest_json = match std::fs::read_to_string(&path) {
+                Ok(contents) => contents,
+                Err(error) => {
+                    eprintln!(
+                        "marketplace seed: failed to read {}: {error}",
+                        path.display()
+                    );
+                    continue;
+                }
+            };
+
+            let manifest = match parse_agent_manifest_json(&manifest_json) {
+                Ok(manifest) => manifest,
+                Err(error) => {
+                    eprintln!(
+                        "marketplace seed: failed to parse {}: {error}",
+                        path.display()
+                    );
+                    continue;
+                }
+            };
+            let manifest_description = parse_manifest_description(&manifest_json);
+
+            let package_name = sanitize_prebuilt_marketplace_name(&manifest.name);
+            let already_published = match registry.search(&package_name) {
+                Ok(results) => results.iter().any(|agent| agent.name == package_name),
+                Err(_) => false,
+            };
+            if already_published {
+                continue;
+            }
+
+            let manifest_toml = match build_marketplace_manifest_toml(&manifest, &package_name) {
+                Ok(manifest_toml) => manifest_toml,
+                Err(error) => {
+                    eprintln!(
+                        "marketplace seed: failed to format {} manifest: {error}",
+                        manifest.name
+                    );
+                    continue;
+                }
+            };
+
+            let mut tags = vec![
+                "prebuilt".to_string(),
+                "nexus-os".to_string(),
+                "automated-agent".to_string(),
+            ];
+            if manifest.schedule.is_some() {
+                tags.push("scheduled".to_string());
+            }
+
+            let metadata = nexus_marketplace::package::PackageMetadata {
+                name: package_name,
+                version: manifest.version.clone(),
+                description: manifest_description,
+                capabilities: manifest.capabilities.clone(),
+                tags,
+                author_id: "nexus-os".to_string(),
+            };
+
+            let unsigned_bundle = match nexus_marketplace::package::create_unsigned_bundle(
+                &manifest_toml,
+                &format!("// prebuilt agent manifest for {}", manifest.name),
+                metadata,
+                "local://agents/prebuilt",
+                "nexus-desktop-backend",
+            ) {
+                Ok(bundle) => bundle,
+                Err(error) => {
+                    eprintln!(
+                        "marketplace seed: failed to build {} bundle: {error}",
+                        manifest.name
+                    );
+                    continue;
+                }
+            };
+
+            if let Err(error) = nexus_marketplace::verification_pipeline::verified_publish_sqlite(
+                &registry,
+                unsigned_bundle,
+                &author_key,
+            ) {
+                eprintln!(
+                    "marketplace seed: failed to publish {}: {error}",
+                    manifest.name
+                );
+            }
+        }
+    }
+}
+
+#[allow(dead_code)]
+const MARKETPLACE_SEED_KEY: [u8; 32] = [7; 32];
+
+#[allow(dead_code)]
+fn list_prebuilt_manifest_paths() -> Vec<PathBuf> {
+    let candidate_dirs = [
+        PathBuf::from("agents/prebuilt"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../agents/prebuilt"),
+    ];
+
+    let prebuilt_dir = candidate_dirs
+        .into_iter()
+        .find(|path| path.is_dir())
+        .unwrap_or_else(|| PathBuf::from("agents/prebuilt"));
+
+    let Ok(entries) = std::fs::read_dir(&prebuilt_dir) else {
+        return Vec::new();
+    };
+
+    let mut paths = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths
+}
+
+#[derive(serde::Serialize)]
+#[allow(dead_code)]
+struct MarketplaceManifestToml<'a> {
+    name: &'a str,
+    version: &'a str,
+    capabilities: &'a [String],
+    fuel_budget: u64,
+    autonomy_level: Option<u8>,
+    schedule: Option<&'a str>,
+    default_goal: Option<&'a str>,
+    llm_model: Option<&'a str>,
+}
+
+#[allow(dead_code)]
+fn sanitize_prebuilt_marketplace_name(name: &str) -> String {
+    let sanitized = name
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    let sanitized = sanitized.trim_matches('-').to_string();
+    if sanitized.is_empty() {
+        "prebuilt-agent".to_string()
+    } else {
+        sanitized
+    }
+}
+
+#[allow(dead_code)]
+fn build_marketplace_manifest_toml(
+    manifest: &AgentManifest,
+    package_name: &str,
+) -> Result<String, toml::ser::Error> {
+    let toml_manifest = MarketplaceManifestToml {
+        name: package_name,
+        version: &manifest.version,
+        capabilities: &manifest.capabilities,
+        fuel_budget: manifest.fuel_budget,
+        autonomy_level: manifest.autonomy_level,
+        schedule: manifest.schedule.as_deref(),
+        default_goal: manifest.default_goal.as_deref(),
+        llm_model: manifest.llm_model.as_deref(),
+    };
+    toml::to_string(&toml_manifest)
+}
+
+#[allow(dead_code)]
+fn parse_manifest_description(manifest_json: &str) -> String {
+    serde_json::from_str::<Value>(manifest_json)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("description")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "Nexus prebuilt agent".to_string())
+}
+
+#[derive(Debug, Deserialize)]
+struct JsonAgentManifest {
+    #[serde(flatten)]
+    manifest: AgentManifest,
+    #[allow(dead_code)]
+    description: Option<String>,
+}
+
+fn parse_agent_manifest_json(manifest_json: &str) -> Result<AgentManifest, String> {
+    let json_manifest: JsonAgentManifest = serde_json::from_str(manifest_json)
+        .map_err(|error| format!("invalid manifest JSON: {error}"))?;
+    let manifest_toml = toml::to_string(&json_manifest.manifest)
+        .map_err(|error| format!("failed to serialize manifest for validation: {error}"))?;
+    parse_manifest(&manifest_toml).map_err(agent_error)
+}
+
+fn find_manifest(state: &AppState, agent_id: &str) -> Option<AgentManifest> {
+    let rows = match state.db.list_agents() {
+        Ok(rows) => rows,
+        Err(_) => return None,
+    };
+
+    rows.iter()
+        .find(|row| row.id == agent_id)
+        .and_then(|row| serde_json::from_str::<AgentManifest>(&row.manifest_json).ok())
+}
+
+#[allow(dead_code)]
+fn manifest_name_from_json(manifest_json: &str) -> Option<String> {
+    serde_json::from_str::<Value>(manifest_json)
+        .ok()?
+        .get("name")
+        .and_then(|value| value.as_str())
+        .map(std::string::ToString::to_string)
+        .filter(|name| !name.trim().is_empty())
+}
+
+fn extract_manifest_description(manifest_json: &str) -> Option<String> {
+    serde_json::from_str::<Value>(manifest_json)
+        .ok()?
+        .get("description")
+        .and_then(|value| value.as_str())
+        .map(|desc| desc.trim().to_string())
+        .filter(|desc| !desc.is_empty())
+}
+
+fn find_manifest_description(state: &AppState, agent_id: &str) -> Option<String> {
+    let rows = state.db.list_agents().ok()?;
+    rows.iter()
+        .find(|row| row.id == agent_id)
+        .and_then(|row| extract_manifest_description(&row.manifest_json))
+}
+
+fn goal_with_manifest_context(agent_id: &str, goal: &str, description: Option<&str>) -> String {
+    let goal = if goal.trim().is_empty() {
+        "Execute scheduled task"
+    } else {
+        goal
+    };
+
+    match description {
+        Some(description) if !description.trim().is_empty() => {
+            format!("{goal}\n\nAgent Manifest Instructions:\n{description}\nFor Agent: {agent_id}")
+        }
+        _ => goal.to_string(),
+    }
+}
+
+fn register_manifest_schedule(
+    state: &AppState,
+    agent_id: &str,
+    schedule: Option<&str>,
+    default_goal: Option<&str>,
+    manifest_description: Option<&str>,
+) {
+    let Some(cron_expr) = schedule else {
+        return;
+    };
+
+    let goal = goal_with_manifest_context(
+        agent_id,
+        default_goal.unwrap_or("Execute scheduled task"),
+        manifest_description,
+    );
+
+    if let Err(error) = state
+        .agent_scheduler
+        .register_agent(agent_id, cron_expr, &goal)
+    {
+        eprintln!("scheduler: failed to register {agent_id}: {error}");
+    }
 }
 
 // ── Setup Wizard Types ──
@@ -1069,6 +1993,233 @@ pub fn list_available_models() -> Result<Vec<AvailableModel>, String> {
     }
 
     Ok(models)
+}
+
+// ── Multi-Provider Model Listing & API Key Management ───────────────
+
+/// A model entry with provider information for the multi-provider model picker.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderModel {
+    pub id: String,
+    pub name: String,
+    pub provider: String,
+    pub local: bool,
+    pub requires_key: bool,
+    pub size_gb: Option<f64>,
+    pub installed: bool,
+}
+
+/// Provider status entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderStatus {
+    pub ollama: bool,
+    pub anthropic: bool,
+    pub openai: bool,
+    pub deepseek: bool,
+    pub gemini: bool,
+}
+
+/// List models from ALL configured providers (Ollama + cloud).
+pub fn list_provider_models() -> Result<Vec<ProviderModel>, String> {
+    let config = load_config().map_err(agent_error)?;
+    let prov_config = build_provider_config(&config);
+    let mut models = Vec::new();
+
+    // ── Ollama (local) ──
+    let ollama_url = prov_config
+        .ollama_url
+        .clone()
+        .unwrap_or_else(|| "http://localhost:11434".to_string());
+    let ollama = OllamaProvider::new(&ollama_url);
+    if let Ok(ollama_models) = ollama.list_models() {
+        for m in ollama_models {
+            models.push(ProviderModel {
+                id: format!("ollama/{}", m.name),
+                name: m.name.clone(),
+                provider: "ollama".into(),
+                local: true,
+                requires_key: false,
+                size_gb: Some(m.size as f64 / 1_073_741_824.0),
+                installed: true,
+            });
+        }
+    }
+
+    // ── Anthropic (Claude) ──
+    if has_provider_key(&prov_config.anthropic_api_key) {
+        for (id, name) in [
+            ("claude-sonnet-4-20250514", "Claude Sonnet 4"),
+            ("claude-haiku-4-5-20251001", "Claude Haiku 4.5"),
+            ("claude-opus-4-6", "Claude Opus 4.6"),
+        ] {
+            models.push(ProviderModel {
+                id: format!("anthropic/{id}"),
+                name: name.into(),
+                provider: "anthropic".into(),
+                local: false,
+                requires_key: true,
+                size_gb: None,
+                installed: true,
+            });
+        }
+    }
+
+    // ── OpenAI ──
+    if has_provider_key(&prov_config.openai_api_key) {
+        for (id, name) in [
+            ("gpt-4o", "GPT-4o"),
+            ("gpt-4o-mini", "GPT-4o Mini"),
+            ("o3-mini", "o3 Mini"),
+        ] {
+            models.push(ProviderModel {
+                id: format!("openai/{id}"),
+                name: name.into(),
+                provider: "openai".into(),
+                local: false,
+                requires_key: true,
+                size_gb: None,
+                installed: true,
+            });
+        }
+    }
+
+    // ── DeepSeek ──
+    if has_provider_key(&prov_config.deepseek_api_key) {
+        for (id, name) in [
+            ("deepseek-chat", "DeepSeek Chat"),
+            ("deepseek-coder", "DeepSeek Coder"),
+            ("deepseek-reasoner", "DeepSeek Reasoner"),
+        ] {
+            models.push(ProviderModel {
+                id: format!("deepseek/{id}"),
+                name: name.into(),
+                provider: "deepseek".into(),
+                local: false,
+                requires_key: true,
+                size_gb: None,
+                installed: true,
+            });
+        }
+    }
+
+    // ── Gemini ──
+    if has_provider_key(&prov_config.gemini_api_key) {
+        for (id, name) in [
+            ("gemini-2.5-pro", "Gemini 2.5 Pro"),
+            ("gemini-2.5-flash", "Gemini 2.5 Flash"),
+        ] {
+            models.push(ProviderModel {
+                id: format!("google/{id}"),
+                name: name.into(),
+                provider: "google".into(),
+                local: false,
+                requires_key: true,
+                size_gb: None,
+                installed: true,
+            });
+        }
+    }
+
+    Ok(models)
+}
+
+fn has_provider_key(key: &Option<String>) -> bool {
+    key.as_deref()
+        .map(|k| !k.trim().is_empty())
+        .unwrap_or(false)
+}
+
+/// Check which providers have API keys configured.
+pub fn get_provider_status() -> Result<ProviderStatus, String> {
+    let config = load_config().map_err(agent_error)?;
+    let prov_config = build_provider_config(&config);
+
+    // Check Ollama reachability
+    let ollama_url = prov_config
+        .ollama_url
+        .clone()
+        .unwrap_or_else(|| "http://localhost:11434".to_string());
+    let ollama = OllamaProvider::new(&ollama_url);
+    let ollama_ok = ollama.health_check().unwrap_or(false);
+
+    Ok(ProviderStatus {
+        ollama: ollama_ok,
+        anthropic: has_provider_key(&prov_config.anthropic_api_key),
+        openai: has_provider_key(&prov_config.openai_api_key),
+        deepseek: has_provider_key(&prov_config.deepseek_api_key),
+        gemini: has_provider_key(&prov_config.gemini_api_key),
+    })
+}
+
+/// Save an API key for a provider into `~/.nexus/config.toml` and set the
+/// environment variable for the current session.
+pub fn save_provider_api_key(provider: String, api_key: String) -> Result<(), String> {
+    let mut config = load_config().map_err(agent_error)?;
+
+    match provider.to_lowercase().as_str() {
+        "anthropic" | "claude" => {
+            config.llm.anthropic_api_key = api_key.clone();
+            std::env::set_var("ANTHROPIC_API_KEY", &api_key);
+        }
+        "openai" => {
+            config.llm.openai_api_key = api_key.clone();
+            std::env::set_var("OPENAI_API_KEY", &api_key);
+        }
+        "deepseek" => {
+            config.llm.deepseek_api_key = api_key.clone();
+            std::env::set_var("DEEPSEEK_API_KEY", &api_key);
+        }
+        "gemini" | "google" => {
+            config.llm.gemini_api_key = api_key.clone();
+            std::env::set_var("GEMINI_API_KEY", &api_key);
+        }
+        _ => return Err(format!("Unknown provider: {provider}")),
+    }
+
+    // Enable real API calls when a key is saved
+    std::env::set_var("ENABLE_REAL_API", "1");
+
+    save_nexus_config(&config).map_err(agent_error)
+}
+
+/// Create an LLM provider from a "provider/model" string.
+/// Returns `(Box<dyn LlmProvider>, model_name)`.
+fn provider_from_prefixed_model(
+    full_model: &str,
+    prov_config: &ProviderSelectionConfig,
+) -> Result<(Box<dyn LlmProvider>, String), String> {
+    // Enable real API if any cloud key is present
+    if has_provider_key(&prov_config.anthropic_api_key)
+        || has_provider_key(&prov_config.openai_api_key)
+        || has_provider_key(&prov_config.deepseek_api_key)
+        || has_provider_key(&prov_config.gemini_api_key)
+    {
+        std::env::set_var("ENABLE_REAL_API", "1");
+    }
+
+    if let Some((provider_prefix, model_name)) = full_model.split_once('/') {
+        let provider: Box<dyn LlmProvider> = match provider_prefix {
+            "ollama" => {
+                let url = prov_config
+                    .ollama_url
+                    .clone()
+                    .unwrap_or_else(|| "http://localhost:11434".to_string());
+                Box::new(OllamaProvider::new(&url))
+            }
+            "anthropic" => Box::new(ClaudeProvider::new(prov_config.anthropic_api_key.clone())),
+            "openai" => Box::new(OpenAiProvider::new(prov_config.openai_api_key.clone())),
+            "deepseek" => Box::new(DeepSeekProvider::new(prov_config.deepseek_api_key.clone())),
+            "google" | "gemini" => {
+                Box::new(GeminiProvider::new(prov_config.gemini_api_key.clone()))
+            }
+            _ => return Err(format!("Unknown provider prefix: {provider_prefix}")),
+        };
+        Ok((provider, model_name.to_string()))
+    } else {
+        // No prefix — use legacy select_provider behavior
+        let provider = select_provider(prov_config);
+        Ok((provider, full_model.to_string()))
+    }
 }
 
 /// Stream a chat completion through Ollama with governance enforcement.
@@ -1705,6 +2856,22 @@ pub fn update_agent_permission(
     supervisor
         .update_agent_permission(parsed, &capability_key, enabled, "user", None)
         .map_err(agent_error)?;
+
+    // Persist permission change
+    if enabled {
+        if let Err(e) = state
+            .db
+            .grant_permission(&parsed.to_string(), &capability_key, "medium")
+        {
+            eprintln!("persistence: grant_permission failed: {e}");
+        }
+    } else if let Err(e) = state
+        .db
+        .revoke_permission(&parsed.to_string(), &capability_key)
+    {
+        eprintln!("persistence: revoke_permission failed: {e}");
+    }
+
     state.log_event(
         parsed,
         EventType::UserAction,
@@ -1763,6 +2930,20 @@ pub fn bulk_update_permissions(
     supervisor
         .bulk_update_agent_permissions(parsed, &update_pairs, "user", reason.as_deref())
         .map_err(agent_error)?;
+
+    // Persist bulk permission changes
+    for u in &updates {
+        if u.enabled {
+            let _ = state
+                .db
+                .grant_permission(&parsed.to_string(), &u.capability_key, "medium");
+        } else {
+            let _ = state
+                .db
+                .revoke_permission(&parsed.to_string(), &u.capability_key);
+        }
+    }
+
     state.log_event(
         parsed,
         EventType::UserAction,
@@ -5045,9 +6226,8 @@ pub fn voice_get_status(state: &AppState) -> Result<String, String> {
 
 pub fn voice_transcribe(state: &AppState, audio_base64: String) -> Result<String, String> {
     let start = std::time::Instant::now();
-    let decoded_len = audio_base64.len() * 3 / 4;
 
-    // ── Fallback chain: Candle Whisper → Python server → stub ───────
+    // ── Fallback chain: Candle Whisper → Python server → error ──────
 
     // 1. Try Candle Whisper if model is loaded
     let whisper = state.whisper.lock().unwrap_or_else(|p| p.into_inner());
@@ -5088,13 +6268,13 @@ pub fn voice_transcribe(state: &AppState, audio_base64: String) -> Result<String
         drop(vp);
     }
 
-    // 3. Stub fallback
-    let size_kb = decoded_len as f64 / 1024.0;
+    // 3. No transcription engine available
     let elapsed = start.elapsed();
     let result = json!({
-        "text": format!("[transcription stub — {:.1} KB audio received]", size_kb),
-        "engine": "stub",
+        "text": "Voice transcription requires Whisper model - load via Model Hub",
+        "engine": "none",
         "duration_ms": elapsed.as_millis() as u64,
+        "error": true,
     });
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
@@ -5287,10 +6467,12 @@ pub fn conduct_build(
     // Ensure output directory exists
     std::fs::create_dir_all(&out_dir).map_err(|e| format!("failed to create output dir: {e}"))?;
 
-    let model_name = model.unwrap_or_else(|| "mistral".to_string());
+    let full_model = model.unwrap_or_else(|| "mistral".to_string());
 
-    // Create the provider
-    let provider = OllamaProvider::from_env();
+    // Route to the correct provider based on prefix (e.g. "anthropic/claude-sonnet-4-20250514")
+    let config = load_config().map_err(agent_error)?;
+    let prov_config = build_provider_config(&config);
+    let (provider, model_name) = provider_from_prefixed_model(&full_model, &prov_config)?;
 
     // Create conductor
     let mut conductor = Conductor::new(provider, &model_name);
@@ -6014,6 +7196,96 @@ pub fn reputation_import(state: &AppState, json: String) -> Result<String, Strin
     serde_json::to_string(&rep).map_err(|e| e.to_string())
 }
 
+// ── Trust Overview ──────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrustOverviewAgent {
+    pub id: String,
+    pub name: String,
+    pub did: Option<String>,
+    pub autonomy_level: u8,
+    pub trust_score: f64,
+    pub total_tasks: u64,
+    pub success_rate: f64,
+    pub violations: u64,
+    pub fuel_remaining: u64,
+    pub fuel_budget: u64,
+    pub status: String,
+    pub badges: Vec<String>,
+    pub last_updated: u64,
+}
+
+pub fn get_trust_overview(state: &AppState) -> Result<Vec<TrustOverviewAgent>, String> {
+    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    let meta_guard = state.meta.lock().unwrap_or_else(|p| p.into_inner());
+    let id_mgr = state.identity_mgr.lock().unwrap_or_else(|p| p.into_inner());
+    let mut rep_reg = state
+        .reputation_registry
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+
+    let statuses = supervisor.health_check();
+    let mut result = Vec::new();
+
+    for status in &statuses {
+        let meta = meta_guard.get(&status.id).cloned().unwrap_or(AgentMeta {
+            name: "unknown".to_string(),
+            last_action: "none".to_string(),
+        });
+
+        let handle = supervisor.get_agent(status.id);
+        let autonomy_level = handle.map(|h| h.autonomy_level).unwrap_or(0);
+        let fuel_budget = handle.map(|h| h.manifest.fuel_budget).unwrap_or(0);
+
+        // Get or create DID
+        let did = id_mgr.get(&status.id).map(|id| id.did.clone());
+        let did_str = did
+            .clone()
+            .unwrap_or_else(|| format!("did:nexus:{}", status.id));
+
+        // Auto-register in reputation if not already present
+        if rep_reg.get_reputation(&did_str).is_none() {
+            rep_reg.register_agent(&did_str, &meta.name);
+        }
+
+        let (trust_score, total_tasks, success_rate, violations, badges, last_updated) =
+            match rep_reg.get_reputation(&did_str) {
+                Some(rep) => (
+                    rep.reputation_score,
+                    rep.total_tasks_completed + rep.total_tasks_failed,
+                    rep.success_rate,
+                    rep.governance_violations,
+                    rep.badges.iter().map(|b| format!("{b:?}")).collect(),
+                    rep.last_updated,
+                ),
+                None => (0.5, 0, 0.0, 0, Vec::new(), 0),
+            };
+
+        result.push(TrustOverviewAgent {
+            id: status.id.to_string(),
+            name: meta.name,
+            did,
+            autonomy_level,
+            trust_score,
+            total_tasks,
+            success_rate,
+            violations,
+            fuel_remaining: status.remaining_fuel,
+            fuel_budget,
+            status: status.state.to_string(),
+            badges,
+            last_updated,
+        });
+    }
+
+    result.sort_by(|a, b| {
+        b.trust_score
+            .partial_cmp(&a.trust_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    Ok(result)
+}
+
 // ── Computer Control Engine ──────────────────────────────────────────
 
 pub fn computer_control_capture_screen(
@@ -6693,12 +7965,21 @@ pub struct ComplianceAlertRow {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Soc2ControlRow {
+    pub control_id: String,
+    pub description: String,
+    pub status: String,
+    pub evidence_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComplianceStatusRow {
     pub status: String,
     pub checks_passed: usize,
     pub checks_failed: usize,
     pub agents_checked: usize,
     pub alerts: Vec<ComplianceAlertRow>,
+    pub soc2_controls: Vec<Soc2ControlRow>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -6709,6 +7990,9 @@ pub struct ComplianceAgentRow {
     pub autonomy_level: String,
     pub capabilities: Vec<String>,
     pub status: String,
+    pub justification: String,
+    pub applicable_articles: Vec<String>,
+    pub required_controls: Vec<String>,
 }
 
 pub fn get_compliance_status(state: &AppState) -> Result<ComplianceStatusRow, String> {
@@ -6737,6 +8021,42 @@ pub fn get_compliance_status(state: &AppState) -> Result<ComplianceStatusRow, St
     let monitor = ComplianceMonitor::new();
     let result = monitor.check_compliance(&snapshots, &audit, &identity_mgr);
 
+    // Generate SOC 2 report using enterprise crate
+    let soc2_report = nexus_enterprise::compliance::generate_soc2_report(
+        &audit,
+        true, // capabilities are always configured in Nexus OS
+        true, // HITL is always enabled
+        true, // fuel tracking is always enabled
+        "Nexus OS",
+        0,
+        u64::MAX,
+    );
+    let soc2_controls: Vec<Soc2ControlRow> = soc2_report
+        .sections
+        .into_iter()
+        .flat_map(|s| s.controls)
+        .map(|c| {
+            let status_str = match &c.status {
+                nexus_enterprise::compliance::ControlStatus::Satisfied => "satisfied".to_string(),
+                nexus_enterprise::compliance::ControlStatus::PartiallyMet { gaps } => {
+                    format!("partially_met: {}", gaps.join("; "))
+                }
+                nexus_enterprise::compliance::ControlStatus::NotMet { reason } => {
+                    format!("not_met: {reason}")
+                }
+                nexus_enterprise::compliance::ControlStatus::NotApplicable => {
+                    "not_applicable".to_string()
+                }
+            };
+            Soc2ControlRow {
+                control_id: c.control_id,
+                description: c.description,
+                status: status_str,
+                evidence_count: c.evidence_count,
+            }
+        })
+        .collect();
+
     Ok(ComplianceStatusRow {
         status: result.status.as_str().to_string(),
         checks_passed: result.checks_passed,
@@ -6752,6 +8072,7 @@ pub fn get_compliance_status(state: &AppState) -> Result<ComplianceStatusRow, St
                 agent_id: a.agent_id.map(|id| id.to_string()),
             })
             .collect(),
+        soc2_controls,
     })
 }
 
@@ -6774,6 +8095,9 @@ pub fn get_compliance_agents(state: &AppState) -> Result<Vec<ComplianceAgentRow>
                 autonomy_level: autonomy.as_str().to_string(),
                 capabilities: handle.manifest.capabilities.clone(),
                 status: format!("{}", agent_status.state),
+                justification: profile.justification,
+                applicable_articles: profile.applicable_articles,
+                required_controls: profile.required_controls,
             });
         }
     }
@@ -6846,6 +8170,7 @@ pub fn verify_governance_invariants(state: &AppState) -> Result<String, String> 
         consent_policy_path: None,
         requester_id: None,
         schedule: None,
+        default_goal: None,
         llm_model: None,
         fuel_period_id: None,
         monthly_fuel_cap: None,
@@ -6926,6 +8251,7 @@ pub fn verify_specific_invariant(
                 consent_policy_path: None,
                 requester_id: None,
                 schedule: None,
+                default_goal: None,
                 llm_model: None,
                 fuel_period_id: None,
                 monthly_fuel_cap: None,
@@ -6983,6 +8309,7 @@ pub fn export_compliance_report(state: &AppState) -> Result<String, String> {
         consent_policy_path: None,
         requester_id: None,
         schedule: None,
+        default_goal: None,
         llm_model: None,
         fuel_period_id: None,
         monthly_fuel_cap: None,
@@ -7776,6 +9103,921 @@ pub fn project_delete(state: &AppState, id: String) -> Result<String, String> {
     Ok("ok".to_string())
 }
 
+// ── Cognitive Runtime Commands ──────────────────────────────────────────────
+
+fn assign_agent_goal(
+    state: &AppState,
+    agent_id: String,
+    goal_description: String,
+    priority: u8,
+) -> Result<String, String> {
+    let effective_goal_description = goal_with_manifest_context(
+        &agent_id,
+        &goal_description,
+        find_manifest_description(state, &agent_id).as_deref(),
+    );
+    let goal = nexus_kernel::cognitive::AgentGoal::new(effective_goal_description, priority);
+    let goal_id = goal.id.clone();
+    state
+        .cognitive_runtime
+        .assign_goal(&agent_id, goal)
+        .map_err(|e| e.to_string())?;
+    state.log_event(
+        Uuid::parse_str(&agent_id).unwrap_or_default(),
+        EventType::UserAction,
+        json!({"action": "assign_agent_goal", "agent_id": agent_id, "goal_id": goal_id}),
+    );
+    Ok(goal_id)
+}
+
+fn persist_task_start(state: &AppState, agent_id: &str, goal_id: &str) {
+    let goal = state
+        .cognitive_runtime
+        .get_agent_status(agent_id)
+        .and_then(|status| status.active_goal.map(|goal| goal.description))
+        .unwrap_or_else(|| "unknown goal".to_string());
+    let fuel_budget = {
+        let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        agent_id.parse::<Uuid>().ok().and_then(|uuid| {
+            supervisor
+                .get_agent(uuid)
+                .map(|handle| handle.remaining_fuel as f64)
+        })
+    };
+    let task = nexus_persistence::TaskRow {
+        id: goal_id.to_string(),
+        agent_id: agent_id.to_string(),
+        goal,
+        status: "running".to_string(),
+        steps_json: "[]".to_string(),
+        result_json: None,
+        fuel_consumed: 0.0,
+        fuel_budget,
+        estimated_time_secs: None,
+        actual_time_secs: None,
+        quality_score: None,
+        started_at: chrono::Utc::now().to_rfc3339(),
+        completed_at: None,
+        success: false,
+    };
+    if let Err(error) = state.db.save_task(&task) {
+        eprintln!("persistence: save_task start failed: {error}");
+    }
+}
+
+fn persist_task_completion(
+    state: &AppState,
+    agent_id: &str,
+    goal_id: &str,
+    status: &str,
+    result_summary: &str,
+    success: bool,
+    fallback_fuel_consumed: f64,
+) {
+    let fuel_consumed = state
+        .db
+        .load_tasks_by_agent(agent_id, 100)
+        .ok()
+        .and_then(|tasks| {
+            let initial_budget = tasks
+                .into_iter()
+                .find(|task| task.id == goal_id)
+                .and_then(|task| task.fuel_budget)?;
+            let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+            let remaining = agent_id
+                .parse::<Uuid>()
+                .ok()
+                .and_then(|uuid| {
+                    supervisor
+                        .get_agent(uuid)
+                        .map(|handle| handle.remaining_fuel as f64)
+                })
+                .unwrap_or(initial_budget);
+            Some((initial_budget - remaining).max(0.0))
+        })
+        .unwrap_or(fallback_fuel_consumed);
+    let result_json = json!({ "summary": result_summary }).to_string();
+    if let Err(error) =
+        state
+            .db
+            .update_task_status(goal_id, status, Some(&result_json), fuel_consumed, success)
+    {
+        eprintln!("persistence: update_task_status failed: {error}");
+    }
+    state.log_event(
+        Uuid::parse_str(agent_id).unwrap_or_default(),
+        EventType::StateChange,
+        json!({
+            "action": "agent_goal_completed",
+            "goal_id": goal_id,
+            "status": status,
+            "success": success,
+            "result_summary": result_summary,
+        }),
+    );
+}
+
+/// Bridges the configured LLM provider to the cognitive planner's `PlannerLlm` trait.
+struct GatewayPlannerLlm;
+
+impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
+    fn plan_query(&self, prompt: &str) -> Result<String, nexus_kernel::errors::AgentError> {
+        let config = nexus_kernel::config::load_config().unwrap_or_default();
+        let prov_config = build_provider_config(&config);
+        let provider = select_provider(&prov_config);
+        let model = if config.llm.default_model.trim().is_empty() {
+            // If Ollama, try to pick the first available model
+            if provider.name() == "ollama" {
+                let ollama = OllamaProvider::from_env();
+                ollama
+                    .list_models()
+                    .ok()
+                    .and_then(|models| models.into_iter().next().map(|m| m.name))
+                    .unwrap_or_else(|| "llama3.2".to_string())
+            } else {
+                "mock-1".to_string()
+            }
+        } else {
+            config.llm.default_model.clone()
+        };
+        let response = provider.query(prompt, 4096, &model)?;
+        Ok(response.output_text)
+    }
+}
+
+/// Execute an agent goal end-to-end: assign goal, run cognitive cycles in a background
+/// thread, emit Tauri events for each step/phase/completion, and handle HITL consent
+/// by creating consent requests in the database and emitting notifications.
+fn execute_agent_goal(
+    state: &AppState,
+    agent_id: String,
+    goal_description: String,
+    priority: u8,
+) -> Result<String, String> {
+    // Assign the goal to the cognitive runtime
+    let goal_id = assign_agent_goal(state, agent_id.clone(), goal_description, priority)?;
+    persist_task_start(state, &agent_id, &goal_id);
+    // Return the goal_id immediately; the loop is spawned by the Tauri command
+    Ok(goal_id)
+}
+
+/// Background driver for the cognitive loop. Spawned by the Tauri async command.
+#[allow(clippy::too_many_arguments)]
+fn spawn_cognitive_loop(window: tauri::Window, state: AppState, agent_id: String, goal_id: String) {
+    tauri::async_runtime::spawn(async move {
+        let planner = nexus_kernel::cognitive::CognitivePlanner::new(Box::new(GatewayPlannerLlm));
+        let mem_store = DbMemoryStore {
+            db: state.db.clone(),
+        };
+        let memory_mgr = nexus_kernel::cognitive::AgentMemoryManager::new(Box::new(mem_store));
+
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        let workspace_base = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("agents");
+        let executor = nexus_kernel::cognitive::RegistryExecutor::new(
+            workspace_base,
+            state.audit.clone(),
+            state.supervisor.clone(),
+        );
+
+        let max_cycles = 500u32;
+        for _cycle in 0..max_cycles {
+            // Run one cycle
+            let result = {
+                let mut audit_guard = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+                state.cognitive_runtime.run_cycle_with_evolution(
+                    &agent_id,
+                    &planner,
+                    &memory_mgr,
+                    &executor,
+                    &mut audit_guard,
+                    Some(&state.evolution_tracker),
+                )
+            };
+
+            match result {
+                Ok(cycle_result) => {
+                    // Emit phase/step events to the frontend
+                    let _ = window.emit(
+                        "agent-cognitive-cycle",
+                        json!({
+                            "agent_id": &agent_id,
+                            "goal_id": &goal_id,
+                            "phase": format!("{}", cycle_result.phase),
+                            "steps_executed": cycle_result.steps_executed,
+                            "fuel_consumed": cycle_result.fuel_consumed,
+                            "should_continue": cycle_result.should_continue,
+                            "blocked_reason": cycle_result.blocked_reason,
+                        }),
+                    );
+
+                    // If blocked (HITL required), create a consent request
+                    if cycle_result.phase == nexus_kernel::cognitive::CognitivePhase::Blocked {
+                        let action_desc = cycle_result
+                            .blocked_reason
+                            .clone()
+                            .unwrap_or_else(|| "perform a governed action".to_string());
+
+                        // Get agent name for the notification
+                        let agent_name = {
+                            let agent_uuid = Uuid::parse_str(&agent_id).unwrap_or_default();
+                            let m = state.meta.lock().unwrap_or_else(|p| p.into_inner());
+                            m.get(&agent_uuid)
+                                .map(|am| am.name.clone())
+                                .unwrap_or_else(|| agent_id.clone())
+                        };
+
+                        // Emit user-friendly approval message instead of "Blocked"
+                        let approval_msg = format!(
+                            "Awaiting your approval — {} wants to {}. Go to Approval Center to review.",
+                            agent_name, action_desc
+                        );
+                        let _ = window.emit(
+                            "agent-blocked",
+                            json!({
+                                "agent_id": &agent_id,
+                                "goal_id": &goal_id,
+                                "message": &approval_msg,
+                                "action": &action_desc,
+                                "agent_name": &agent_name,
+                            }),
+                        );
+
+                        // Get the pending step details from cognitive status
+                        let status = state.cognitive_runtime.get_agent_status(&agent_id);
+                        let step_info = status
+                            .as_ref()
+                            .map(|s| {
+                                json!({
+                                    "summary": action_desc,
+                                    "goal": s.active_goal.as_ref().map(|g| &g.description),
+                                    "phase": format!("{}", s.phase),
+                                    "fuel_cost": 5.0,
+                                    "side_effects": [action_desc.clone()],
+                                })
+                            })
+                            .unwrap_or_else(|| json!({"summary": action_desc}));
+
+                        let consent_id = Uuid::new_v4().to_string();
+                        let notify = state.register_blocked_consent_wait(&agent_id, &consent_id);
+                        let now = {
+                            use chrono::Utc;
+                            Utc::now().to_rfc3339()
+                        };
+
+                        // Persist consent request
+                        let consent_row = nexus_persistence::ConsentRow {
+                            id: consent_id.clone(),
+                            agent_id: agent_id.clone(),
+                            operation_type: "cognitive.hitl_approval".to_string(),
+                            operation_json: serde_json::to_string(&step_info).unwrap_or_default(),
+                            hitl_tier: "Tier1".to_string(),
+                            status: "pending".to_string(),
+                            created_at: now.clone(),
+                            resolved_at: None,
+                            resolved_by: None,
+                        };
+                        let _ = state.db.enqueue_consent(&consent_row);
+
+                        // Emit consent notification to frontend
+                        let notification = consent_row_to_notification(&consent_row, &agent_name);
+                        let _ = window.emit("consent-request-pending", &notification);
+
+                        // Sleep with zero CPU until approve/deny/stop wakes this agent.
+                        notify.notified().await;
+                        state.clear_blocked_consent_wait(&agent_id, &consent_id);
+
+                        if !state.cognitive_runtime.has_active_loop(&agent_id) {
+                            return;
+                        }
+
+                        let resolution_status = state
+                            .db
+                            .load_consent_by_agent(&agent_id)
+                            .ok()
+                            .and_then(|rows| {
+                                rows.into_iter()
+                                    .find(|row| row.id == consent_id)
+                                    .map(|row| row.status)
+                            })
+                            .unwrap_or_else(|| "unknown".to_string());
+
+                        let _ = window.emit(
+                            "consent-resolved",
+                            json!({"consent_id": consent_id, "status": &resolution_status}),
+                        );
+
+                        if resolution_status == "approved" {
+                            let _ = window.emit(
+                                "agent-resumed",
+                                json!({
+                                    "agent_id": &agent_id,
+                                    "goal_id": &goal_id,
+                                    "message": format!("Approval granted — executing {}...", action_desc),
+                                }),
+                            );
+                        }
+                        continue;
+                    }
+
+                    // If the cognitive loop signals it should stop, we're done
+                    if !cycle_result.should_continue {
+                        let success =
+                            cycle_result.phase == nexus_kernel::cognitive::CognitivePhase::Learn;
+
+                        // Build a result summary from the cognitive status
+                        let result_summary = if success {
+                            let status = state.cognitive_runtime.get_agent_status(&agent_id);
+                            status
+                                .as_ref()
+                                .and_then(|s| s.active_goal.as_ref())
+                                .map(|g| {
+                                    format!(
+                                        "Completed: {} ({} steps, {:.1} fuel used)",
+                                        g.description,
+                                        cycle_result.steps_executed,
+                                        cycle_result.fuel_consumed
+                                    )
+                                })
+                                .unwrap_or_else(|| "Goal completed successfully.".to_string())
+                        } else {
+                            cycle_result
+                                .blocked_reason
+                                .clone()
+                                .map(|r| format!("Goal failed: {}", r))
+                                .unwrap_or_else(|| {
+                                    format!("Goal stopped in {} phase.", cycle_result.phase)
+                                })
+                        };
+
+                        let _ = window.emit(
+                            "agent-goal-completed",
+                            json!({
+                                "agent_id": &agent_id,
+                                "goal_id": &goal_id,
+                                "success": success,
+                                "phase": format!("{}", cycle_result.phase),
+                                "result_summary": result_summary,
+                            }),
+                        );
+                        persist_task_completion(
+                            &state,
+                            &agent_id,
+                            &goal_id,
+                            if success { "completed" } else { "failed" },
+                            &result_summary,
+                            success,
+                            cycle_result.fuel_consumed,
+                        );
+                        return;
+                    }
+
+                    // Brief delay between cycles
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                }
+                Err(e) => {
+                    let _ = window.emit(
+                        "agent-goal-completed",
+                        json!({
+                            "agent_id": &agent_id,
+                            "goal_id": &goal_id,
+                            "success": false,
+                            "reason": format!("cognitive cycle error: {e}"),
+                        }),
+                    );
+                    let result_summary = format!("Goal failed: cognitive cycle error: {e}");
+                    persist_task_completion(
+                        &state,
+                        &agent_id,
+                        &goal_id,
+                        "failed",
+                        &result_summary,
+                        false,
+                        0.0,
+                    );
+                    return;
+                }
+            }
+        }
+
+        // If we exhausted max_cycles
+        let _ = window.emit(
+            "agent-goal-completed",
+            json!({
+                "agent_id": &agent_id,
+                "goal_id": &goal_id,
+                "success": false,
+                "reason": "max cognitive cycles reached",
+            }),
+        );
+        persist_task_completion(
+            &state,
+            &agent_id,
+            &goal_id,
+            "failed",
+            "Goal failed: max cognitive cycles reached",
+            false,
+            0.0,
+        );
+    });
+}
+
+fn stop_agent_goal(state: &AppState, agent_id: String) -> Result<(), String> {
+    state
+        .cognitive_runtime
+        .stop_agent_loop(&agent_id)
+        .map_err(|e| e.to_string())?;
+    state.wake_and_clear_blocked_consent_wait(&agent_id);
+    state.log_event(
+        Uuid::parse_str(&agent_id).unwrap_or_default(),
+        EventType::UserAction,
+        json!({"action": "stop_agent_goal", "agent_id": agent_id}),
+    );
+    Ok(())
+}
+
+fn get_agent_cognitive_status(
+    state: &AppState,
+    agent_id: String,
+) -> Result<serde_json::Value, String> {
+    match state.cognitive_runtime.get_agent_status(&agent_id) {
+        Some(status) => serde_json::to_value(&status).map_err(|e| format!("serialize error: {e}")),
+        None => Ok(json!({
+            "phase": "Idle",
+            "active_goal": null,
+            "steps_completed": 0,
+            "steps_total": 0,
+            "fuel_remaining": 0.0,
+            "cycle_count": 0
+        })),
+    }
+}
+
+fn get_agent_task_history(
+    state: &AppState,
+    agent_id: String,
+    limit: u32,
+) -> Result<Vec<serde_json::Value>, String> {
+    let tasks = state
+        .db
+        .load_tasks_by_agent(&agent_id, limit as usize)
+        .map_err(|e| format!("load tasks error: {e}"))?;
+    tasks
+        .into_iter()
+        .map(|t| serde_json::to_value(&t).map_err(|e| format!("serialize error: {e}")))
+        .collect()
+}
+
+fn get_agent_memories(
+    state: &AppState,
+    agent_id: String,
+    memory_type: Option<String>,
+    limit: u32,
+) -> Result<Vec<serde_json::Value>, String> {
+    let memories = state
+        .db
+        .load_memories(&agent_id, memory_type.as_deref(), limit as usize)
+        .map_err(|e| format!("load memories error: {e}"))?;
+    memories
+        .into_iter()
+        .map(|m| serde_json::to_value(&m).map_err(|e| format!("serialize error: {e}")))
+        .collect()
+}
+
+// ── Self-Evolution Commands ──
+
+fn get_self_evolution_metrics(
+    state: &AppState,
+    agent_id: String,
+) -> Result<serde_json::Value, String> {
+    // Build a temporary memory manager backed by the DB
+    let mem_store = DbMemoryStore {
+        db: state.db.clone(),
+    };
+    let memory_mgr = nexus_kernel::cognitive::AgentMemoryManager::new(Box::new(mem_store));
+    let metrics = state
+        .evolution_tracker
+        .get_evolution_metrics(&agent_id, &memory_mgr)
+        .map_err(|e| e.to_string())?;
+    serde_json::to_value(&metrics).map_err(|e| e.to_string())
+}
+
+fn get_self_evolution_strategies(
+    state: &AppState,
+    agent_id: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    let strategies = state
+        .evolution_tracker
+        .get_agent_strategies(&agent_id)
+        .map_err(|e| e.to_string())?;
+    strategies
+        .into_iter()
+        .map(|s| serde_json::to_value(&s).map_err(|e| e.to_string()))
+        .collect()
+}
+
+fn trigger_cross_agent_learning(state: &AppState) -> Result<u32, String> {
+    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    let agent_ids: Vec<String> = supervisor
+        .health_check()
+        .iter()
+        .map(|s| s.id.to_string())
+        .collect();
+    drop(supervisor);
+
+    let agent_id_refs: Vec<&str> = agent_ids.iter().map(|s: &String| s.as_str()).collect();
+    let shareable = state
+        .evolution_tracker
+        .discover_shareable_strategies(&agent_id_refs, 0.8)
+        .map_err(|e| e.to_string())?;
+
+    let mem_store = DbMemoryStore {
+        db: state.db.clone(),
+    };
+    let memory_mgr = nexus_kernel::cognitive::AgentMemoryManager::new(Box::new(mem_store));
+
+    let mut count: u32 = 0;
+    for (from_agent, strategy, score) in &shareable {
+        for target_id in &agent_ids {
+            if target_id != from_agent {
+                let _ = state.evolution_tracker.share_learning(
+                    from_agent,
+                    target_id,
+                    strategy,
+                    *score,
+                    &memory_mgr,
+                );
+                count += 1;
+            }
+        }
+    }
+
+    Ok(count)
+}
+
+// ── Hivemind Orchestration Commands ──
+
+fn start_hivemind(
+    state: &AppState,
+    goal: String,
+    agent_ids: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    // Build AgentInfo from supervisor state
+    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    let agents: Vec<nexus_kernel::cognitive::AgentInfo> = agent_ids
+        .iter()
+        .filter_map(|id| {
+            let uuid = Uuid::parse_str(id).ok()?;
+            supervisor
+                .get_agent(uuid)
+                .map(|handle| nexus_kernel::cognitive::AgentInfo {
+                    id: id.clone(),
+                    capabilities: handle.manifest.capabilities.clone(),
+                    available_fuel: handle.remaining_fuel as f64,
+                })
+        })
+        .collect();
+    drop(supervisor);
+
+    let session = state
+        .hivemind
+        .execute_hivemind_goal(&goal, agents)
+        .map_err(|e| e.to_string())?;
+
+    // Persist session
+    let row = nexus_persistence::HivemindSessionRow {
+        id: session.id.clone(),
+        goal: session.master_goal.clone(),
+        status: format!("{:?}", session.status),
+        sub_tasks_json: serde_json::to_string(&session.sub_tasks)
+            .unwrap_or_else(|_| "[]".to_string()),
+        assignments_json: serde_json::to_string(&session.assignments)
+            .unwrap_or_else(|_| "{}".to_string()),
+        results_json: serde_json::to_string(&session.results).unwrap_or_else(|_| "{}".to_string()),
+        fuel_consumed: session.total_fuel_consumed,
+        started_at: session.started_at.clone(),
+        completed_at: session.completed_at.clone(),
+    };
+    let _ = state.db.save_hivemind_session(&row);
+
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({"action": "start_hivemind", "session_id": session.id, "goal": goal}),
+    );
+
+    serde_json::to_value(&session).map_err(|e| format!("serialize error: {e}"))
+}
+
+fn get_hivemind_status(state: &AppState, session_id: String) -> Result<serde_json::Value, String> {
+    // Try in-memory first
+    if let Some(session) = state.hivemind.get_session(&session_id) {
+        return serde_json::to_value(&session).map_err(|e| format!("serialize error: {e}"));
+    }
+
+    // Fall back to database
+    match state.db.load_hivemind_session(&session_id) {
+        Ok(Some(row)) => serde_json::to_value(&row).map_err(|e| format!("serialize error: {e}")),
+        Ok(None) => Err(format!("hivemind session {session_id} not found")),
+        Err(e) => Err(format!("load error: {e}")),
+    }
+}
+
+fn cancel_hivemind(state: &AppState, session_id: String) -> Result<(), String> {
+    state
+        .hivemind
+        .cancel_session(&session_id)
+        .map_err(|e| e.to_string())?;
+
+    let _ = state
+        .db
+        .update_hivemind_session_status(&nexus_persistence::HivemindSessionRow {
+            id: session_id.clone(),
+            goal: String::new(),
+            status: "Cancelled".to_string(),
+            sub_tasks_json: "[]".to_string(),
+            assignments_json: "{}".to_string(),
+            results_json: "{}".to_string(),
+            fuel_consumed: 0.0,
+            started_at: String::new(),
+            completed_at: Some(chrono::Utc::now().to_rfc3339()),
+        });
+
+    state.log_event(
+        Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "cancel_hivemind", "session_id": session_id}),
+    );
+
+    Ok(())
+}
+
+// ── Messaging Gateway Commands ──
+
+fn get_messaging_status(state: &AppState) -> Result<Vec<PlatformStatus>, String> {
+    let gw = state
+        .message_gateway
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    Ok(gw.get_status())
+}
+
+fn set_default_agent(state: &AppState, user_id: String, agent_id: String) -> Result<(), String> {
+    let gw = state
+        .message_gateway
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    gw.set_default_agent(&user_id, &agent_id);
+    state.log_event(
+        Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "set_messaging_default_agent", "user_id": user_id, "agent_id": agent_id}),
+    );
+    Ok(())
+}
+
+// ── Consent / HITL Approval Commands ──
+
+/// Notification payload emitted to the frontend when a consent request arrives.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsentNotification {
+    pub consent_id: String,
+    pub agent_id: String,
+    pub agent_name: String,
+    pub operation_type: String,
+    pub operation_summary: String,
+    pub risk_level: String,
+    pub side_effects_preview: Vec<String>,
+    pub fuel_cost_estimate: f64,
+    pub requested_at: String,
+    pub auto_deny_at: String,
+    pub min_review_seconds: Option<u64>,
+}
+
+/// Compute the auto-deny deadline given a risk level and creation timestamp.
+fn compute_auto_deny_at(risk_level: &str, created_at: &str) -> String {
+    use chrono::{DateTime, Duration, Utc};
+    let base = created_at
+        .parse::<DateTime<Utc>>()
+        .unwrap_or_else(|_| Utc::now());
+    // 5-minute timeout for all risk levels — enough time for user to review and respond
+    let timeout = Duration::minutes(5);
+    let _ = risk_level; // all levels use the same timeout
+    (base + timeout).to_rfc3339()
+}
+
+/// Map hitl_tier to a human-readable risk level string.
+fn tier_to_risk_level(tier: &str) -> String {
+    match tier {
+        "Tier3" => "Critical".to_string(),
+        "Tier2" => "High".to_string(),
+        "Tier1" => "Medium".to_string(),
+        _ => "Low".to_string(),
+    }
+}
+
+/// Build a ConsentNotification from a persisted ConsentRow, enriching with agent name.
+fn consent_row_to_notification(
+    row: &nexus_persistence::ConsentRow,
+    agent_name: &str,
+) -> ConsentNotification {
+    let risk_level = tier_to_risk_level(&row.hitl_tier);
+    let auto_deny_at = compute_auto_deny_at(&risk_level, &row.created_at);
+
+    // Parse operation_json for summary and side effects
+    let op_json: serde_json::Value = serde_json::from_str(&row.operation_json).unwrap_or(json!({}));
+    let summary = op_json
+        .get("summary")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&row.operation_type)
+        .to_string();
+    let side_effects = op_json
+        .get("side_effects")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    let fuel_cost = op_json
+        .get("fuel_cost")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let min_review_seconds = op_json
+        .get("min_review_seconds")
+        .and_then(|v| v.as_u64())
+        .or_else(|| {
+            if row.operation_type.contains("l6")
+                || row.operation_type.contains("transcendent")
+                || summary.to_lowercase().contains("l6")
+            {
+                Some(60)
+            } else {
+                None
+            }
+        });
+
+    ConsentNotification {
+        consent_id: row.id.clone(),
+        agent_id: row.agent_id.clone(),
+        agent_name: agent_name.to_string(),
+        operation_type: row.operation_type.clone(),
+        operation_summary: summary,
+        risk_level,
+        side_effects_preview: side_effects,
+        fuel_cost_estimate: fuel_cost,
+        requested_at: row.created_at.clone(),
+        auto_deny_at,
+        min_review_seconds,
+    }
+}
+
+fn approve_consent_request(
+    state: &AppState,
+    consent_id: String,
+    approved_by: String,
+) -> Result<(), String> {
+    // Look up agent_id from pending consents in DB
+    let pending = state
+        .db
+        .load_pending_consent()
+        .map_err(|e| format!("db error: {e}"))?;
+    let consent_row = pending
+        .iter()
+        .find(|r| r.id == consent_id)
+        .ok_or_else(|| format!("consent request '{consent_id}' not found or already resolved"))?;
+    let agent_id_str = consent_row.agent_id.clone();
+
+    // 1. Resolve in database
+    state
+        .db
+        .resolve_consent(&consent_id, "approved", &approved_by)
+        .map_err(|e| format!("db error: {e}"))?;
+
+    // 2. Approve in kernel consent runtime (best-effort — agent may not exist in supervisor)
+    if let Ok(agent_uuid) = Uuid::parse_str(&agent_id_str) {
+        let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = supervisor.approve_consent(agent_uuid, &consent_id, &approved_by);
+    }
+    let _ = state.cognitive_runtime.approve_blocked_step(&agent_id_str);
+    state.wake_blocked_consent_wait(&agent_id_str, &consent_id);
+
+    // 3. Log audit event
+    state.log_event(
+        Uuid::parse_str(&agent_id_str).unwrap_or(Uuid::nil()),
+        EventType::UserAction,
+        json!({
+            "action": "consent_approved",
+            "consent_id": consent_id,
+            "approved_by": approved_by,
+        }),
+    );
+
+    Ok(())
+}
+
+fn deny_consent_request(
+    state: &AppState,
+    consent_id: String,
+    denied_by: String,
+    reason: Option<String>,
+) -> Result<(), String> {
+    // Look up agent_id from pending consents in DB
+    let pending = state
+        .db
+        .load_pending_consent()
+        .map_err(|e| format!("db error: {e}"))?;
+    let consent_row = pending
+        .iter()
+        .find(|r| r.id == consent_id)
+        .ok_or_else(|| format!("consent request '{consent_id}' not found or already resolved"))?;
+    let agent_id_str = consent_row.agent_id.clone();
+
+    // 1. Resolve in database
+    state
+        .db
+        .resolve_consent(&consent_id, "denied", &denied_by)
+        .map_err(|e| format!("db error: {e}"))?;
+
+    // 2. Deny in kernel consent runtime (best-effort)
+    if let Ok(agent_uuid) = Uuid::parse_str(&agent_id_str) {
+        let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = supervisor.deny_consent(agent_uuid, &consent_id, &denied_by);
+    }
+    let deny_reason = reason
+        .clone()
+        .unwrap_or_else(|| "Consent denied by user".to_string());
+    let _ = state
+        .cognitive_runtime
+        .deny_blocked_step(&agent_id_str, Some(&deny_reason));
+    state.wake_blocked_consent_wait(&agent_id_str, &consent_id);
+
+    // 3. Log audit event
+    state.log_event(
+        Uuid::parse_str(&agent_id_str).unwrap_or(Uuid::nil()),
+        EventType::UserAction,
+        json!({
+            "action": "consent_denied",
+            "consent_id": consent_id,
+            "denied_by": denied_by,
+            "reason": reason,
+        }),
+    );
+
+    Ok(())
+}
+
+fn list_pending_consents(state: &AppState) -> Result<Vec<ConsentNotification>, String> {
+    let pending = state
+        .db
+        .load_pending_consent()
+        .map_err(|e| format!("db error: {e}"))?;
+
+    let meta = state.meta.lock().unwrap_or_else(|p| p.into_inner());
+    let notifications: Vec<ConsentNotification> = pending
+        .iter()
+        .map(|row| {
+            let agent_name = row
+                .agent_id
+                .parse::<Uuid>()
+                .ok()
+                .and_then(|uuid| meta.get(&uuid).map(|m| m.name.clone()))
+                .unwrap_or_else(|| row.agent_id.clone());
+            consent_row_to_notification(row, &agent_name)
+        })
+        .collect();
+    Ok(notifications)
+}
+
+fn get_consent_history(state: &AppState, limit: u32) -> Result<Vec<ConsentNotification>, String> {
+    let all = state
+        .db
+        .load_all_consents(limit)
+        .map_err(|e| format!("db error: {e}"))?;
+
+    let meta = state.meta.lock().unwrap_or_else(|p| p.into_inner());
+    let notifications: Vec<ConsentNotification> = all
+        .iter()
+        .map(|row| {
+            let agent_name = row
+                .agent_id
+                .parse::<Uuid>()
+                .ok()
+                .and_then(|uuid| meta.get(&uuid).map(|m| m.name.clone()))
+                .unwrap_or_else(|| row.agent_id.clone());
+            let mut notif = consent_row_to_notification(row, &agent_name);
+            // For resolved items, include the status info in risk_level field
+            if row.status != "pending" {
+                notif.risk_level = format!("{}:{}", tier_to_risk_level(&row.hitl_tier), row.status);
+            }
+            notif
+        })
+        .collect();
+    Ok(notifications)
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -7823,6 +10065,18 @@ mod runtime {
         super::stop_agent(state.inner(), agent_id.clone())?;
         emit_agent_status(&window, state.inner(), &agent_id);
         Ok(())
+    }
+
+    #[tauri::command]
+    fn clear_all_agents(state: tauri::State<'_, AppState>) -> Result<usize, String> {
+        super::clear_all_agents(state.inner())
+    }
+
+    #[tauri::command]
+    fn get_scheduled_agents(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<nexus_kernel::cognitive::ScheduledAgent>, String> {
+        super::get_scheduled_agents(state.inner())
     }
 
     #[tauri::command]
@@ -7886,8 +10140,9 @@ mod runtime {
     fn send_chat(
         state: tauri::State<'_, AppState>,
         message: String,
+        model_id: Option<String>,
     ) -> Result<ChatResponse, String> {
-        super::send_chat(state.inner(), message)
+        super::send_chat(state.inner(), message, model_id)
     }
 
     #[tauri::command]
@@ -7989,6 +10244,21 @@ mod runtime {
     #[tauri::command]
     fn list_available_models() -> Result<Vec<super::AvailableModel>, String> {
         super::list_available_models()
+    }
+
+    #[tauri::command]
+    fn list_provider_models() -> Result<Vec<super::ProviderModel>, String> {
+        super::list_provider_models()
+    }
+
+    #[tauri::command]
+    fn get_provider_status() -> Result<super::ProviderStatus, String> {
+        super::get_provider_status()
+    }
+
+    #[tauri::command]
+    fn save_api_key(provider: String, api_key: String) -> Result<(), String> {
+        super::save_provider_api_key(provider, api_key)
     }
 
     /// Stream chat via Ollama's OpenAI-compatible endpoint.
@@ -9017,8 +11287,23 @@ mod runtime {
                 return;
             }
 
-            let model_name = model.unwrap_or_else(|| "mistral".to_string());
-            let provider = super::OllamaProvider::from_env();
+            let full_model = model.unwrap_or_else(|| "mistral".to_string());
+            let config = match super::load_config() {
+                Ok(c) => c,
+                Err(e) => {
+                    let _ = tx.send(Err(format!("config error: {e}")));
+                    return;
+                }
+            };
+            let prov_config = super::build_provider_config(&config);
+            let (provider, model_name) =
+                match super::provider_from_prefixed_model(&full_model, &prov_config) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        let _ = tx.send(Err(e));
+                        return;
+                    }
+                };
             let mut conductor = super::Conductor::new(provider, &model_name);
 
             // Preview plan and emit
@@ -9254,6 +11539,13 @@ mod runtime {
         json: String,
     ) -> Result<String, String> {
         super::reputation_import(state.inner(), json)
+    }
+
+    #[tauri::command]
+    fn get_trust_overview(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<super::TrustOverviewAgent>, String> {
+        super::get_trust_overview(state.inner())
     }
 
     #[tauri::command]
@@ -9854,6 +12146,183 @@ mod runtime {
         super::notes_delete(state.inner(), id)
     }
 
+    // ── Cognitive Runtime commands ──
+
+    #[tauri::command]
+    fn assign_agent_goal(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        goal_description: String,
+        priority: u8,
+    ) -> Result<String, String> {
+        super::assign_agent_goal(state.inner(), agent_id, goal_description, priority)
+    }
+
+    /// Execute a goal end-to-end: assign, run cognitive cycles in background,
+    /// emit events for steps/phases/completions, handle HITL consent.
+    #[tauri::command]
+    async fn execute_agent_goal(
+        window: tauri::Window,
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        goal_description: String,
+        priority: u8,
+    ) -> Result<String, String> {
+        let goal_id =
+            super::execute_agent_goal(state.inner(), agent_id.clone(), goal_description, priority)?;
+        // Spawn the background cognitive loop driver
+        super::spawn_cognitive_loop(window, state.inner().clone(), agent_id, goal_id.clone());
+        Ok(goal_id)
+    }
+
+    #[tauri::command]
+    fn stop_agent_goal(state: tauri::State<'_, AppState>, agent_id: String) -> Result<(), String> {
+        super::stop_agent_goal(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn get_agent_cognitive_status(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<serde_json::Value, String> {
+        super::get_agent_cognitive_status(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn get_agent_task_history(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        limit: u32,
+    ) -> Result<Vec<serde_json::Value>, String> {
+        super::get_agent_task_history(state.inner(), agent_id, limit)
+    }
+
+    #[tauri::command]
+    fn get_agent_memories(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        memory_type: Option<String>,
+        limit: u32,
+    ) -> Result<Vec<serde_json::Value>, String> {
+        super::get_agent_memories(state.inner(), agent_id, memory_type, limit)
+    }
+
+    // ── Self-Evolution commands ──
+
+    #[tauri::command]
+    fn get_self_evolution_metrics(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<serde_json::Value, String> {
+        super::get_self_evolution_metrics(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn get_self_evolution_strategies(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<Vec<serde_json::Value>, String> {
+        super::get_self_evolution_strategies(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn trigger_cross_agent_learning(state: tauri::State<'_, AppState>) -> Result<u32, String> {
+        super::trigger_cross_agent_learning(state.inner())
+    }
+
+    // ── Consent / HITL Approval commands ──
+
+    #[tauri::command]
+    fn approve_consent_request(
+        window: tauri::Window,
+        state: tauri::State<'_, AppState>,
+        consent_id: String,
+        approved_by: String,
+    ) -> Result<(), String> {
+        super::approve_consent_request(state.inner(), consent_id.clone(), approved_by)?;
+        let _ = window.emit(
+            "consent-resolved",
+            serde_json::json!({"consent_id": consent_id, "status": "approved"}),
+        );
+        Ok(())
+    }
+
+    #[tauri::command]
+    fn deny_consent_request(
+        window: tauri::Window,
+        state: tauri::State<'_, AppState>,
+        consent_id: String,
+        denied_by: String,
+        reason: Option<String>,
+    ) -> Result<(), String> {
+        super::deny_consent_request(state.inner(), consent_id.clone(), denied_by, reason)?;
+        let _ = window.emit(
+            "consent-resolved",
+            serde_json::json!({"consent_id": consent_id, "status": "denied"}),
+        );
+        Ok(())
+    }
+
+    #[tauri::command]
+    fn list_pending_consents(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<super::ConsentNotification>, String> {
+        super::list_pending_consents(state.inner())
+    }
+
+    #[tauri::command]
+    fn get_consent_history(
+        state: tauri::State<'_, AppState>,
+        limit: u32,
+    ) -> Result<Vec<super::ConsentNotification>, String> {
+        super::get_consent_history(state.inner(), limit)
+    }
+
+    // ── Messaging Gateway commands ──
+
+    #[tauri::command]
+    fn get_messaging_status(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<super::PlatformStatus>, String> {
+        super::get_messaging_status(state.inner())
+    }
+
+    #[tauri::command]
+    fn set_default_agent(
+        state: tauri::State<'_, AppState>,
+        user_id: String,
+        agent_id: String,
+    ) -> Result<(), String> {
+        super::set_default_agent(state.inner(), user_id, agent_id)
+    }
+
+    // ── Hivemind commands ──
+
+    #[tauri::command]
+    fn start_hivemind(
+        state: tauri::State<'_, AppState>,
+        goal: String,
+        agent_ids: Vec<String>,
+    ) -> Result<serde_json::Value, String> {
+        super::start_hivemind(state.inner(), goal, agent_ids)
+    }
+
+    #[tauri::command]
+    fn get_hivemind_status(
+        state: tauri::State<'_, AppState>,
+        session_id: String,
+    ) -> Result<serde_json::Value, String> {
+        super::get_hivemind_status(state.inner(), session_id)
+    }
+
+    #[tauri::command]
+    fn cancel_hivemind(
+        state: tauri::State<'_, AppState>,
+        session_id: String,
+    ) -> Result<(), String> {
+        super::cancel_hivemind(state.inner(), session_id)
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
 
@@ -9911,6 +12380,8 @@ mod runtime {
                 create_agent,
                 start_agent,
                 stop_agent,
+                clear_all_agents,
+                get_scheduled_agents,
                 pause_agent,
                 resume_agent,
                 get_audit_log,
@@ -9932,6 +12403,9 @@ mod runtime {
                 is_setup_complete,
                 run_setup_wizard,
                 list_available_models,
+                list_provider_models,
+                get_provider_status,
+                save_api_key,
                 chat_with_ollama,
                 set_agent_model,
                 check_llm_status,
@@ -10062,6 +12536,7 @@ mod runtime {
                 reputation_top,
                 reputation_export,
                 reputation_import,
+                get_trust_overview,
                 computer_control_capture_screen,
                 computer_control_execute_action,
                 computer_control_get_history,
@@ -10133,6 +12608,24 @@ mod runtime {
                 project_get,
                 project_save,
                 project_delete,
+                assign_agent_goal,
+                execute_agent_goal,
+                stop_agent_goal,
+                get_agent_cognitive_status,
+                get_agent_task_history,
+                get_agent_memories,
+                get_self_evolution_metrics,
+                get_self_evolution_strategies,
+                trigger_cross_agent_learning,
+                approve_consent_request,
+                deny_consent_request,
+                list_pending_consents,
+                get_consent_history,
+                start_hivemind,
+                get_hivemind_status,
+                cancel_hivemind,
+                get_messaging_status,
+                set_default_agent,
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
@@ -10166,16 +12659,17 @@ mod tests {
         evolution_get_history, evolution_get_status, evolution_register_strategy,
         evolution_rollback, factory_create_project, factory_get_build_history,
         factory_list_projects, get_active_llm_provider, get_agent_activity, get_browser_history,
-        get_configured_provider, get_knowledge_base, get_live_system_metrics, get_system_specs,
-        ghost_protocol_add_peer, ghost_protocol_remove_peer, ghost_protocol_status,
-        ghost_protocol_toggle, index_document, learning_agent_action, list_agents,
-        list_indexed_documents, list_local_models, mcp_host_add_server, mcp_host_list_servers,
-        mcp_host_list_tools, mcp_host_remove_server, navigate_to, neural_bridge_delete,
-        neural_bridge_ingest, neural_bridge_search, neural_bridge_status, neural_bridge_toggle,
-        pause_agent, payment_create_invoice, payment_create_plan, payment_get_revenue_stats,
-        payment_list_plans, payment_pay_invoice, remove_indexed_document, replay_export_bundle,
-        replay_get_bundle, replay_list_bundles, replay_toggle_recording, replay_verify_bundle,
-        resume_agent, search_documents, start_build, start_learning, start_research,
+        get_configured_provider, get_knowledge_base, get_live_system_metrics, get_messaging_status,
+        get_system_specs, ghost_protocol_add_peer, ghost_protocol_remove_peer,
+        ghost_protocol_status, ghost_protocol_toggle, index_document, learning_agent_action,
+        list_agents, list_indexed_documents, list_local_models, list_prebuilt_manifest_paths,
+        mcp_host_add_server, mcp_host_list_servers, mcp_host_list_tools, mcp_host_remove_server,
+        navigate_to, neural_bridge_delete, neural_bridge_ingest, neural_bridge_search,
+        neural_bridge_status, neural_bridge_toggle, parse_agent_manifest_json, pause_agent,
+        payment_create_invoice, payment_create_plan, payment_get_revenue_stats, payment_list_plans,
+        payment_pay_invoice, remove_indexed_document, replay_export_bundle, replay_get_bundle,
+        replay_list_bundles, replay_toggle_recording, replay_verify_bundle, resume_agent,
+        search_documents, set_default_agent, start_build, start_learning, start_research,
         time_machine_create_checkpoint, time_machine_list_checkpoints, time_machine_redo,
         time_machine_undo, tracing_end_span, tracing_end_trace, tracing_get_trace,
         tracing_list_traces, tracing_start_span, tracing_start_trace, voice_get_status,
@@ -10208,8 +12702,30 @@ mod tests {
     }
 
     #[test]
+    fn test_tauri_create_agent_rejects_manifest_names_outside_kernel_schema() {
+        let state = AppState::new();
+        let invalid_manifest = json!({
+            "name": "NEXUS ORACLE",
+            "version": "1.0.0",
+            "description": "planner prompt",
+            "capabilities": ["web.search", "web.read"],
+            "fuel_budget": 1000,
+            "llm_model": "qwen3.5:9b"
+        })
+        .to_string();
+
+        let created = create_agent(&state, invalid_manifest);
+        assert!(created.is_err());
+        assert!(created
+            .err()
+            .unwrap_or_default()
+            .contains("name must be alphanumeric plus hyphens only"));
+    }
+
+    #[test]
     fn test_tauri_list_agents() {
         let state = AppState::new();
+        let baseline = list_agents(&state).map(|a| a.len()).unwrap_or(0);
 
         let a = create_agent(&state, build_manifest("a-agent"));
         assert!(a.is_ok());
@@ -10222,9 +12738,53 @@ mod tests {
         assert!(listed.is_ok());
 
         if let Ok(agents) = listed {
-            assert_eq!(agents.len(), 3);
-            assert!(agents.iter().all(|agent| agent.status == "Running"));
+            assert_eq!(agents.len(), baseline + 3);
         }
+    }
+
+    #[test]
+    fn test_new_l6_manifests_parse() {
+        let files = [
+            "ascendant.json",
+            "architect_prime.json",
+            "oracle_supreme.json",
+            "warden.json",
+            "genesis_prime.json",
+            "legion.json",
+            "oracle_omega.json",
+            "arbiter.json",
+            "continuum.json",
+            "nexus_prime.json",
+        ];
+        let paths = list_prebuilt_manifest_paths();
+
+        for file in files {
+            let path = paths
+                .iter()
+                .find(|path| path.file_name().and_then(|name| name.to_str()) == Some(file))
+                .unwrap_or_else(|| panic!("manifest should exist: {file}"));
+            let raw = std::fs::read_to_string(path).unwrap_or_else(|e| {
+                panic!("manifest {file} should be readable: {e}");
+            });
+            let manifest = parse_agent_manifest_json(&raw).unwrap_or_else(|e| {
+                panic!("manifest {file} failed to parse: {e}");
+            });
+            assert_eq!(manifest.autonomy_level, Some(6));
+        }
+    }
+
+    #[test]
+    fn test_prebuilt_manifest_count_is_35() {
+        let paths = list_prebuilt_manifest_paths();
+        assert_eq!(paths.len(), 35);
+    }
+
+    #[test]
+    fn test_load_prebuilt_agents_registers_35_manifests() {
+        let state = AppState::new_in_memory();
+        state.load_prebuilt_agents();
+        let agents = state.db.list_agents().unwrap();
+        assert_eq!(agents.len(), 35);
     }
 
     #[test]
@@ -10238,17 +12798,23 @@ mod tests {
             assert!(paused.is_ok());
 
             let paused_rows = list_agents(&state).expect("list should succeed");
-            assert_eq!(paused_rows.len(), 1);
-            assert_eq!(paused_rows[0].status, "Paused");
-            assert_eq!(paused_rows[0].last_action, "paused");
+            let target = paused_rows
+                .iter()
+                .find(|a| a.id == agent_id)
+                .expect("agent should exist");
+            assert_eq!(target.status, "Paused");
+            assert_eq!(target.last_action, "paused");
 
-            let resumed = resume_agent(&state, agent_id);
+            let resumed = resume_agent(&state, agent_id.clone());
             assert!(resumed.is_ok());
 
             let resumed_rows = list_agents(&state).expect("list should succeed");
-            assert_eq!(resumed_rows.len(), 1);
-            assert_eq!(resumed_rows[0].status, "Running");
-            assert_eq!(resumed_rows[0].last_action, "resumed");
+            let target = resumed_rows
+                .iter()
+                .find(|a| a.id == agent_id)
+                .expect("agent should exist");
+            assert_eq!(target.status, "Running");
+            assert_eq!(target.last_action, "resumed");
         }
     }
 
@@ -10667,6 +13233,9 @@ mod tests {
     #[test]
     fn test_time_machine_create_and_list_checkpoints() {
         let state = AppState::new();
+        let baseline: Vec<serde_json::Value> =
+            serde_json::from_str(&time_machine_list_checkpoints(&state).unwrap()).unwrap();
+        let baseline_count = baseline.len();
 
         let created = time_machine_create_checkpoint(&state, "test-checkpoint".to_string());
         assert!(created.is_ok());
@@ -10675,15 +13244,19 @@ mod tests {
 
         let list_result = time_machine_list_checkpoints(&state).unwrap();
         let parsed: Vec<serde_json::Value> = serde_json::from_str(&list_result).unwrap();
-        assert_eq!(parsed.len(), 1);
-        assert_eq!(parsed[0]["label"].as_str().unwrap(), "test-checkpoint");
-        assert_eq!(parsed[0]["id"].as_str().unwrap(), cp_id);
+        assert_eq!(parsed.len(), baseline_count + 1);
+        // Our checkpoint should be the last one
+        let last = parsed.last().unwrap();
+        assert_eq!(last["label"].as_str().unwrap(), "test-checkpoint");
+        assert_eq!(last["id"].as_str().unwrap(), cp_id);
     }
 
     #[test]
     fn test_time_machine_undo_empty() {
-        let state = AppState::new();
-        let result = time_machine_undo(&state);
+        // Use a fresh supervisor directly to avoid checkpoints created
+        // during agent restoration from the persistence DB.
+        let mut sup = nexus_kernel::supervisor::Supervisor::new();
+        let result = sup.time_machine_mut().undo();
         assert!(result.is_err());
     }
 
@@ -10728,13 +13301,17 @@ mod tests {
     fn test_voice_transcribe_fallback_stub() {
         std::env::set_var("LLM_PROVIDER", "mock");
         let state = AppState::new();
-        // With no whisper model loaded and no python server, should fall back to stub
+        // With no whisper model loaded and no python server, should return clear error
         let result = voice_transcribe(&state, "AAAA".to_string());
         assert!(result.is_ok());
         let parsed: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
-        assert!(parsed.get("text").is_some());
-        assert_eq!(parsed["engine"].as_str(), Some("stub"));
+        assert_eq!(
+            parsed["text"].as_str(),
+            Some("Voice transcription requires Whisper model - load via Model Hub")
+        );
+        assert_eq!(parsed["engine"].as_str(), Some("none"));
         assert!(parsed.get("duration_ms").is_some());
+        assert_eq!(parsed["error"].as_bool(), Some(true));
     }
 
     #[test]
@@ -11290,5 +13867,327 @@ mod tests {
         let off = replay_toggle_recording(&state, false).unwrap();
         let o: serde_json::Value = serde_json::from_str(&off).unwrap();
         assert_eq!(o["recording"], false);
+    }
+
+    // ── Consent / HITL Approval Tests ──
+
+    use super::{
+        approve_consent_request, deny_consent_request, get_consent_history, list_pending_consents,
+    };
+    use nexus_persistence::StateStore;
+
+    fn enqueue_test_consent(state: &AppState, id: &str, agent_id: &str, op_type: &str, tier: &str) {
+        let now = chrono::Utc::now().to_rfc3339();
+        let op_json = serde_json::json!({
+            "summary": format!("{op_type}: test-resource"),
+            "side_effects": ["writes to disk", "sends network request"],
+            "fuel_cost": 100.0
+        })
+        .to_string();
+        state
+            .db
+            .enqueue_consent(&nexus_persistence::ConsentRow {
+                id: id.to_string(),
+                agent_id: agent_id.to_string(),
+                operation_type: op_type.to_string(),
+                operation_json: op_json,
+                hitl_tier: tier.to_string(),
+                status: "pending".to_string(),
+                created_at: now,
+                resolved_at: None,
+                resolved_by: None,
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_approve_consent_request() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent(&state, "c-approve-1", "a1", "fs.write", "Tier1");
+        let result = approve_consent_request(&state, "c-approve-1".into(), "admin".into());
+        assert!(result.is_ok());
+        // Verify it's no longer pending
+        let pending = list_pending_consents(&state).unwrap();
+        assert!(pending.iter().all(|p| p.consent_id != "c-approve-1"));
+    }
+
+    #[test]
+    fn test_approve_consent_request_wakes_blocked_wait() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent(&state, "c-approve-wake", "a1", "fs.write", "Tier1");
+        let notify = state.register_blocked_consent_wait("a1", "c-approve-wake");
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+
+        runtime.block_on(async {
+            let waiter = tokio::spawn({
+                let notify = notify.clone();
+                async move {
+                    notify.notified().await;
+                }
+            });
+
+            approve_consent_request(&state, "c-approve-wake".into(), "admin".into()).unwrap();
+
+            tokio::time::timeout(std::time::Duration::from_millis(100), waiter)
+                .await
+                .unwrap()
+                .unwrap();
+        });
+    }
+
+    #[test]
+    fn test_deny_consent_request() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent(&state, "c-deny-1", "a2", "process.exec", "Tier2");
+        let result = deny_consent_request(
+            &state,
+            "c-deny-1".into(),
+            "admin".into(),
+            Some("too risky".into()),
+        );
+        assert!(result.is_ok());
+        let pending = list_pending_consents(&state).unwrap();
+        assert!(pending.iter().all(|p| p.consent_id != "c-deny-1"));
+    }
+
+    #[test]
+    fn test_deny_consent_request_wakes_blocked_wait() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent(&state, "c-deny-wake", "a2", "process.exec", "Tier2");
+        let notify = state.register_blocked_consent_wait("a2", "c-deny-wake");
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+
+        runtime.block_on(async {
+            let waiter = tokio::spawn({
+                let notify = notify.clone();
+                async move {
+                    notify.notified().await;
+                }
+            });
+
+            deny_consent_request(
+                &state,
+                "c-deny-wake".into(),
+                "admin".into(),
+                Some("too risky".into()),
+            )
+            .unwrap();
+
+            tokio::time::timeout(std::time::Duration::from_millis(100), waiter)
+                .await
+                .unwrap()
+                .unwrap();
+        });
+    }
+
+    #[test]
+    fn test_list_pending_consents_returns_only_pending() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent(&state, "c-lp-1", "a1", "fs.read", "Tier0");
+        enqueue_test_consent(&state, "c-lp-2", "a1", "fs.write", "Tier1");
+        enqueue_test_consent(&state, "c-lp-3", "a2", "web.search", "Tier0");
+
+        // Resolve one
+        approve_consent_request(&state, "c-lp-1".into(), "admin".into()).unwrap();
+
+        let pending = list_pending_consents(&state).unwrap();
+        assert_eq!(pending.len(), 2);
+        assert!(pending.iter().any(|p| p.consent_id == "c-lp-2"));
+        assert!(pending.iter().any(|p| p.consent_id == "c-lp-3"));
+    }
+
+    #[test]
+    fn test_get_consent_history_returns_all() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent(&state, "c-hist-1", "a1", "fs.read", "Tier0");
+        enqueue_test_consent(&state, "c-hist-2", "a1", "fs.write", "Tier1");
+        enqueue_test_consent(&state, "c-hist-3", "a2", "web.search", "Tier0");
+        enqueue_test_consent(&state, "c-hist-4", "a2", "process.exec", "Tier2");
+        enqueue_test_consent(&state, "c-hist-5", "a3", "llm.query", "Tier0");
+
+        // Resolve 3 of them
+        approve_consent_request(&state, "c-hist-1".into(), "admin".into()).unwrap();
+        deny_consent_request(&state, "c-hist-2".into(), "admin".into(), None).unwrap();
+        approve_consent_request(&state, "c-hist-3".into(), "user".into()).unwrap();
+
+        let history = get_consent_history(&state, 20).unwrap();
+        assert_eq!(history.len(), 5);
+    }
+
+    #[test]
+    fn test_auto_timeout_risk_level_mapping() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent(&state, "c-risk-1", "a1", "fs.read", "Tier0");
+        enqueue_test_consent(&state, "c-risk-2", "a1", "fs.write", "Tier1");
+        enqueue_test_consent(&state, "c-risk-3", "a1", "process.exec", "Tier2");
+        enqueue_test_consent(&state, "c-risk-4", "a1", "self_mutation", "Tier3");
+
+        let pending = list_pending_consents(&state).unwrap();
+        let risk_levels: Vec<&str> = pending.iter().map(|p| p.risk_level.as_str()).collect();
+        assert!(risk_levels.contains(&"Low"));
+        assert!(risk_levels.contains(&"Medium"));
+        assert!(risk_levels.contains(&"High"));
+        assert!(risk_levels.contains(&"Critical"));
+    }
+
+    #[test]
+    fn test_approve_nonexistent_consent_fails() {
+        let state = AppState::new_in_memory();
+        let result = approve_consent_request(&state, "nonexistent-id".into(), "admin".into());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deny_nonexistent_consent_fails() {
+        let state = AppState::new_in_memory();
+        let result = deny_consent_request(&state, "nonexistent-id".into(), "admin".into(), None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_consent_notification_fields() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent(&state, "c-fields-1", "a1", "fs.write", "Tier2");
+        let pending = list_pending_consents(&state).unwrap();
+        assert_eq!(pending.len(), 1);
+        let notif = &pending[0];
+        assert_eq!(notif.consent_id, "c-fields-1");
+        assert_eq!(notif.agent_id, "a1");
+        assert_eq!(notif.operation_type, "fs.write");
+        assert_eq!(notif.risk_level, "High");
+        assert_eq!(notif.fuel_cost_estimate, 100.0);
+        assert_eq!(notif.side_effects_preview.len(), 2);
+        assert!(!notif.auto_deny_at.is_empty());
+        assert!(!notif.requested_at.is_empty());
+    }
+
+    #[test]
+    fn test_l6_consent_notification_has_review_delay() {
+        let state = AppState::new_in_memory();
+        state
+            .db
+            .enqueue_consent(&nexus_persistence::ConsentRow {
+                id: "c-l6-1".to_string(),
+                agent_id: "a1".to_string(),
+                operation_type: "transcendent_creation".to_string(),
+                operation_json: json!({
+                    "summary": "Create L6 agent",
+                    "min_review_seconds": 60
+                })
+                .to_string(),
+                hitl_tier: "Tier3".to_string(),
+                status: "pending".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                resolved_at: None,
+                resolved_by: None,
+            })
+            .unwrap();
+
+        let pending = list_pending_consents(&state).unwrap();
+        assert_eq!(pending[0].min_review_seconds, Some(60));
+    }
+
+    #[test]
+    fn test_consent_audit_events_on_approve() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent(&state, "c-audit-a", "a1", "fs.write", "Tier1");
+        approve_consent_request(&state, "c-audit-a".into(), "admin".into()).unwrap();
+        // Verify audit event was logged
+        let events = state.db.load_audit_events(None, 100, 0).unwrap();
+        let consent_events: Vec<_> = events
+            .iter()
+            .filter(|e| e.detail_json.contains("consent_approved"))
+            .collect();
+        assert!(!consent_events.is_empty());
+    }
+
+    #[test]
+    fn test_consent_audit_events_on_deny() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent(&state, "c-audit-d", "a1", "process.exec", "Tier2");
+        deny_consent_request(
+            &state,
+            "c-audit-d".into(),
+            "admin".into(),
+            Some("unauthorized".into()),
+        )
+        .unwrap();
+        let events = state.db.load_audit_events(None, 100, 0).unwrap();
+        let consent_events: Vec<_> = events
+            .iter()
+            .filter(|e| e.detail_json.contains("consent_denied"))
+            .collect();
+        assert!(!consent_events.is_empty());
+    }
+
+    #[test]
+    fn test_approve_already_resolved_fails() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent(&state, "c-double", "a1", "fs.write", "Tier1");
+        approve_consent_request(&state, "c-double".into(), "admin".into()).unwrap();
+        // Second approve should fail (no longer pending)
+        let result = approve_consent_request(&state, "c-double".into(), "admin".into());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_consent_history_limit() {
+        let state = AppState::new_in_memory();
+        for i in 0..10 {
+            enqueue_test_consent(&state, &format!("c-limit-{i}"), "a1", "fs.read", "Tier0");
+        }
+        let history = get_consent_history(&state, 5).unwrap();
+        assert_eq!(history.len(), 5);
+    }
+
+    #[test]
+    fn test_deny_with_no_reason() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent(&state, "c-no-reason", "a1", "fs.write", "Tier1");
+        let result = deny_consent_request(&state, "c-no-reason".into(), "admin".into(), None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_empty_pending_list() {
+        let state = AppState::new_in_memory();
+        let pending = list_pending_consents(&state).unwrap();
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn test_consent_resolved_removes_from_pending() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent(&state, "c-resolve-1", "a1", "fs.read", "Tier0");
+        enqueue_test_consent(&state, "c-resolve-2", "a1", "fs.write", "Tier1");
+        assert_eq!(list_pending_consents(&state).unwrap().len(), 2);
+
+        approve_consent_request(&state, "c-resolve-1".into(), "user".into()).unwrap();
+        assert_eq!(list_pending_consents(&state).unwrap().len(), 1);
+
+        deny_consent_request(&state, "c-resolve-2".into(), "user".into(), None).unwrap();
+        assert_eq!(list_pending_consents(&state).unwrap().len(), 0);
+    }
+
+    // ── Messaging Gateway Tests ──
+
+    #[test]
+    fn test_messaging_status_empty_by_default() {
+        let state = AppState::new_in_memory();
+        let status = get_messaging_status(&state).unwrap();
+        assert!(status.is_empty());
+    }
+
+    #[test]
+    fn test_set_default_messaging_agent() {
+        let state = AppState::new_in_memory();
+        let result = set_default_agent(&state, "user-1".into(), "agent-abc".into());
+        assert!(result.is_ok());
     }
 }

@@ -68,6 +68,35 @@
   display: grid;
   gap: 0.35rem;
   padding: 0.55rem 0.4rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  align-content: start;
+}
+
+/* Dark-themed thin scrollbar for sidebar nav */
+.nexus-sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.nexus-sidebar-nav::-webkit-scrollbar-track {
+  background: rgba(5, 10, 18, 0.6);
+}
+
+.nexus-sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(0, 200, 160, 0.35);
+  border-radius: 3px;
+}
+
+.nexus-sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 200, 160, 0.55);
+}
+
+/* Firefox scrollbar */
+.nexus-sidebar-nav {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 200, 160, 0.35) rgba(5, 10, 18, 0.6);
 }
 
 .nexus-sidebar-item {

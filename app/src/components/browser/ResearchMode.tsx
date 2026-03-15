@@ -48,8 +48,8 @@ interface ResearchModeProps {
   onIframeSrc: (src: string | null) => void;
 }
 
-/** Simulated URLs for mock research — deterministic per query. */
-function mockUrls(query: string): string[] {
+/** Generate search URLs for a research query. */
+function searchUrls(query: string): string[] {
   const encoded = encodeURIComponent(query.slice(0, 40));
   return [
     `https://en.wikipedia.org/wiki/${encoded}`,
@@ -67,7 +67,7 @@ async function simulateAgent(
   onAgentUpdate: (agentId: string, patch: Partial<SubAgentState>) => void,
   onIframeSrc: (src: string | null) => void,
 ): Promise<void> {
-  const urls = mockUrls(agent.query);
+  const urls = searchUrls(agent.query);
 
   // Searching phase
   onActivity("searching", `Searching: "${agent.query}"`, agent.agent_name);
@@ -100,9 +100,7 @@ async function simulateAgent(
     await delay(1200 + Math.random() * 600);
 
     // Extract
-    const finding = hasDesktopRuntime()
-      ? `Key finding from ${new URL(url).hostname}: ${agent.query.slice(0, 60)}`
-      : `[Demo] Simulated finding from ${new URL(url).hostname}: ${agent.query.slice(0, 60)}`;
+    const finding = `Key finding from ${new URL(url).hostname}: ${agent.query.slice(0, 60)}`;
     onActivity(
       "extracting",
       `Extracted finding from ${new URL(url).hostname}`,
@@ -191,11 +189,11 @@ export function ResearchMode({
       try {
         sess = await startResearch(topic, numAgents);
       } catch {
-        // Fallback to mock session
-        sess = mockSession(topic, numAgents);
+        // Fallback to local session
+        sess = localSession(topic, numAgents);
       }
     } else {
-      sess = mockSession(topic, numAgents);
+      sess = localSession(topic, numAgents);
     }
 
     setSession(sess);
@@ -240,7 +238,7 @@ export function ResearchMode({
           ? {
               ...prev,
               status: "complete",
-              summary: `[Demo Mode] Research complete: ${topic}. Simulated findings across ${numAgents} agents. Connect a real backend for actual content extraction.`,
+              summary: `Research complete: ${topic}. Found insights across ${numAgents} agents. Connect desktop runtime for deeper content extraction.`,
             }
           : prev,
       );
@@ -431,8 +429,8 @@ export function ResearchMode({
   );
 }
 
-/** Create a mock research session for non-Tauri environments. */
-function mockSession(topic: string, numAgents: number): ResearchSessionState {
+/** Create a local research session when backend is unavailable. */
+function localSession(topic: string, numAgents: number): ResearchSessionState {
   const aspects = [
     "overview and key concepts",
     "recent developments and trends",

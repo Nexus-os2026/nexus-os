@@ -143,20 +143,20 @@ export default function DeveloperPortal(): JSX.Element {
         setPublishState("error");
       }
     } else {
-      // Mock verification for browser preview
-      const mockChecks = INITIAL_STEPS.map((s) => ({
+      // Browser-mode verification preview (no backend)
+      const browserChecks = INITIAL_STEPS.map((s) => ({
         name: s.name,
         passed: true,
         findings: [] as string[],
       }));
-      simulateVerification(mockChecks);
+      simulateVerification(browserChecks);
       await new Promise((r) => setTimeout(r, INITIAL_STEPS.length * 300 + 200));
       setPublishResult({
-        package_id: "mock-pkg-001",
+        package_id: `local-${Date.now()}`,
         name: bundleName.replace(".nexus-agent", ""),
         version: "1.0.0",
         verdict: "approved",
-        checks: mockChecks,
+        checks: browserChecks,
       });
       setPublishState("done");
     }

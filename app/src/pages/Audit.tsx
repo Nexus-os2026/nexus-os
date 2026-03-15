@@ -1,28 +1,33 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import "./audit.css";
-import type { AuditEventRow } from "../types";
+import type { AuditEventRow, AuditChainStatusRow } from "../types";
+import { getAuditLog, getAuditChainStatus, hasDesktopRuntime } from "../api/backend";
 
 interface AuditProps {
   events: AuditEventRow[];
+  onRefresh?: () => void;
 }
 
-const AGENT_NAMES: Record<string, string> = {
-  "a0000000-0000-4000-8000-000000000001": "Coder",
-  "a0000000-0000-4000-8000-000000000002": "Designer",
-  "a0000000-0000-4000-8000-000000000003": "Screen Poster",
-  "a0000000-0000-4000-8000-000000000004": "Web Builder",
-  "a0000000-0000-4000-8000-000000000005": "Workflow Studio",
-  "a0000000-0000-4000-8000-000000000006": "Self-Improve"
+const EVENT_TYPE_COLORS: Record<string, string> = {
+  StateChange: "#3b82f6",
+  ToolCall: "#22c55e",
+  LlmCall: "#a855f7",
+  Error: "#ef4444",
+  UserAction: "#f59e0b",
 };
 
-const AGENT_COLORS: Record<string, string> = {
-  "a0000000-0000-4000-8000-000000000001": "#3b82f6",
-  "a0000000-0000-4000-8000-000000000002": "#8b5cf6",
-  "a0000000-0000-4000-8000-000000000003": "#10b981",
-  "a0000000-0000-4000-8000-000000000004": "#f59e0b",
-  "a0000000-0000-4000-8000-000000000005": "var(--nexus-accent)",
-  "a0000000-0000-4000-8000-000000000006": "#ef4444"
-};
+function agentColor(agentId: string): string {
+  let hash = 0;
+  for (let i = 0; i < agentId.length; i++) {
+    hash = agentId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 70%, 55%)`;
+}
+
+function shortAgent(agentId: string): string {
+  return agentId.length > 12 ? agentId.slice(0, 8) + "..." : agentId;
+}
 
 type StatusType = "Success" | "Failed" | "Pending";
 
@@ -32,11 +37,12 @@ function eventStatus(eventType: string): StatusType {
   return "Success";
 }
 
-function fuelCost(payload: Record<string, unknown>): number {
+function fuelCost(payload: Record<string, unknown>): number | null {
   if (typeof payload.consumed === "number") return payload.consumed;
   if (typeof payload.tokens === "number") return Math.round((payload.tokens as number) * 0.3);
   if (typeof payload.cost === "number") return Math.round((payload.cost as number) * 10000);
-  return Math.floor(Math.random() * 80) + 10;
+  if (typeof payload.fuel === "number") return payload.fuel as number;
+  return null;
 }
 
 function formatDateTime(timestamp: number): string {
@@ -45,32 +51,28 @@ function formatDateTime(timestamp: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-function chainIntegrity(rows: AuditEventRow[]): { valid: boolean; brokenAt: number } {
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i].previous_hash !== rows[i - 1].hash) {
-      return { valid: false, brokenAt: i };
-    }
-  }
-  return { valid: true, brokenAt: -1 };
-}
-
 type SortField = "index" | "timestamp" | "agent" | "action" | "status" | "fuel";
 type SortDir = "asc" | "desc";
 
-export function Audit({ events }: AuditProps): JSX.Element {
+export function Audit({ events, onRefresh }: AuditProps): JSX.Element {
   const [query, setQuery] = useState("");
   const [agentFilter, setAgentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [chainStatus, setChainStatus] = useState<AuditChainStatusRow | null>(null);
   const [verifyState, setVerifyState] = useState<"idle" | "running" | "done">("idle");
-  const [verifyProgress, setVerifyProgress] = useState(0);
-  const [verifyResult, setVerifyResult] = useState<{ valid: boolean; brokenAt: number } | null>(null);
   const [sortField, setSortField] = useState<SortField>("index");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [liveEvents, setLiveEvents] = useState<AuditEventRow[]>(events);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    setLiveEvents(events);
+  }, [events]);
 
   const chronological = useMemo(
-    () => [...events].sort((a, b) => a.timestamp - b.timestamp),
-    [events]
+    () => [...liveEvents].sort((a, b) => a.timestamp - b.timestamp),
+    [liveEvents]
   );
 
   const filtered = useMemo(() => {
@@ -94,7 +96,7 @@ export function Audit({ events }: AuditProps): JSX.Element {
       else if (sortField === "agent") cmp = a.agent_id.localeCompare(b.agent_id);
       else if (sortField === "action") cmp = a.event_type.localeCompare(b.event_type);
       else if (sortField === "status") cmp = eventStatus(a.event_type).localeCompare(eventStatus(b.event_type));
-      else if (sortField === "fuel") cmp = fuelCost(a.payload) - fuelCost(b.payload);
+      else if (sortField === "fuel") cmp = (fuelCost(a.payload) ?? 0) - (fuelCost(b.payload) ?? 0);
       else cmp = chronological.indexOf(a) - chronological.indexOf(b);
       return sortDir === "desc" ? -cmp : cmp;
     });
@@ -102,8 +104,8 @@ export function Audit({ events }: AuditProps): JSX.Element {
   }, [filtered, sortField, sortDir, chronological]);
 
   const agents = useMemo(
-    () => Array.from(new Set(events.map((e) => e.agent_id))),
-    [events]
+    () => Array.from(new Set(liveEvents.map((e) => e.agent_id))),
+    [liveEvents]
   );
 
   const handleSort = useCallback((field: SortField) => {
@@ -117,31 +119,65 @@ export function Audit({ events }: AuditProps): JSX.Element {
     });
   }, []);
 
-  function verifyChain(): void {
+  async function verifyChain(): Promise<void> {
     if (verifyState === "running") return;
     setVerifyState("running");
-    setVerifyProgress(0);
-    setVerifyResult(null);
-    const total = chronological.length;
-    let step = 0;
-    const timer = window.setInterval(() => {
-      step += 1;
-      setVerifyProgress(Math.min(100, Math.round((step / total) * 100)));
-      if (step >= total) {
-        window.clearInterval(timer);
-        const result = chainIntegrity(chronological);
-        setVerifyResult(result);
-        setVerifyState("done");
+    setChainStatus(null);
+    try {
+      if (hasDesktopRuntime()) {
+        const status = await getAuditChainStatus();
+        setChainStatus(status);
+      } else {
+        // Client-side fallback for mock mode
+        let valid = true;
+        for (let i = 1; i < chronological.length; i++) {
+          if (chronological[i].previous_hash !== chronological[i - 1].hash) {
+            valid = false;
+            break;
+          }
+        }
+        setChainStatus({
+          total_events: chronological.length,
+          chain_valid: valid,
+          first_hash: chronological[0]?.hash ?? "",
+          last_hash: chronological[chronological.length - 1]?.hash ?? "",
+        });
       }
-    }, 40);
+    } catch {
+      setChainStatus({ total_events: chronological.length, chain_valid: false, first_hash: "", last_hash: "" });
+    }
+    setVerifyState("done");
+  }
+
+  async function handleRefresh(): Promise<void> {
+    setRefreshing(true);
+    try {
+      if (hasDesktopRuntime()) {
+        const fresh = await getAuditLog(undefined, 500);
+        setLiveEvents(fresh);
+      }
+      onRefresh?.();
+    } catch {
+      // ignore
+    }
+    setRefreshing(false);
   }
 
   useEffect(() => {
     if (verifyState === "done") {
-      const timer = window.setTimeout(() => setVerifyState("idle"), 5000);
+      const timer = window.setTimeout(() => setVerifyState("idle"), 8000);
       return () => window.clearTimeout(timer);
     }
   }, [verifyState]);
+
+  // Auto-refresh every 10 seconds when in desktop mode
+  useEffect(() => {
+    if (!hasDesktopRuntime()) return;
+    const timer = window.setInterval(() => {
+      getAuditLog(undefined, 500).then(setLiveEvents).catch(() => {});
+    }, 10_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   function sortArrow(field: SortField): string {
     if (sortField !== field) return "";
@@ -154,28 +190,32 @@ export function Audit({ events }: AuditProps): JSX.Element {
         <div className="audit-header-left">
           <span className="audit-shield">&#x1F6E1;</span>
           <div>
-            <h2 className="audit-title">AUDIT CHAIN // INTEGRITY VERIFIED</h2>
+            <h2 className="audit-title">AUDIT CHAIN // {chainStatus?.chain_valid === false ? "INTEGRITY BROKEN" : "INTEGRITY VERIFIED"}</h2>
             <p className="audit-subtitle">{chronological.length} events in chain</p>
           </div>
         </div>
         <div className="audit-header-right">
-          {verifyState === "running" && (
-            <div className="audit-verify-progress">
-              <div className="audit-verify-bar" style={{ width: `${verifyProgress}%` }} />
-            </div>
-          )}
-          {verifyState === "done" && verifyResult && (
-            <span className={`audit-verify-result ${verifyResult.valid ? "valid" : "invalid"}`}>
-              {verifyResult.valid
-                ? "CHAIN INTEGRITY: VALID \u2713"
-                : `BROKEN AT EVENT #${verifyResult.brokenAt}`}
+          {verifyState === "done" && chainStatus && (
+            <span className={`audit-verify-result ${chainStatus.chain_valid ? "valid" : "invalid"}`}>
+              {chainStatus.chain_valid
+                ? `CHAIN VALID (${chainStatus.total_events} events)`
+                : "CHAIN BROKEN"}
             </span>
           )}
-          <button type="button" className="audit-verify-btn" onClick={verifyChain} disabled={verifyState === "running"}>
+          <button type="button" className="audit-verify-btn" onClick={() => void verifyChain()} disabled={verifyState === "running"}>
             {verifyState === "running" ? "Verifying..." : "VERIFY CHAIN"}
+          </button>
+          <button type="button" className="audit-verify-btn" onClick={() => void handleRefresh()} disabled={refreshing}>
+            {refreshing ? "Refreshing..." : "REFRESH"}
           </button>
         </div>
       </header>
+
+      {chronological.length === 0 && (
+        <div style={{ textAlign: "center", padding: "3rem 1rem", opacity: 0.6 }}>
+          <p style={{ fontSize: "1.1rem" }}>No audit events yet. Start an agent to generate events.</p>
+        </div>
+      )}
 
       <div className="audit-filters">
         <input
@@ -187,7 +227,7 @@ export function Audit({ events }: AuditProps): JSX.Element {
         <select className="audit-select" value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)}>
           <option value="all">All Agents</option>
           {agents.map((id) => (
-            <option key={id} value={id}>{AGENT_NAMES[id] ?? id}</option>
+            <option key={id} value={id}>{shortAgent(id)}</option>
           ))}
         </select>
         <select className="audit-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -216,8 +256,9 @@ export function Audit({ events }: AuditProps): JSX.Element {
             {sorted.map((event, idx) => {
               const globalIdx = chronological.indexOf(event) + 1;
               const status = eventStatus(event.event_type);
-              const agentColor = AGENT_COLORS[event.agent_id] ?? "var(--cyan)";
+              const color = EVENT_TYPE_COLORS[event.event_type] ?? agentColor(event.agent_id);
               const expanded = expandedId === event.event_id;
+              const fuel = fuelCost(event.payload);
               return (
                 <tr
                   key={event.event_id}
@@ -227,14 +268,14 @@ export function Audit({ events }: AuditProps): JSX.Element {
                   <td className="audit-td audit-td-index">{globalIdx}</td>
                   <td className="audit-td audit-td-time">{formatDateTime(event.timestamp)}</td>
                   <td className="audit-td">
-                    <span className="audit-agent-dot" style={{ background: agentColor }} />
-                    {AGENT_NAMES[event.agent_id] ?? event.agent_id}
+                    <span className="audit-agent-dot" style={{ background: color }} />
+                    {shortAgent(event.agent_id)}
                   </td>
                   <td className="audit-td audit-td-mono">{event.event_type}</td>
                   <td className="audit-td">
                     <span className={`audit-status-badge ${status.toLowerCase()}`}>{status}</span>
                   </td>
-                  <td className="audit-td audit-td-mono">{fuelCost(event.payload)}</td>
+                  <td className="audit-td audit-td-mono">{fuel !== null ? fuel : "-"}</td>
                   <td className="audit-td audit-td-hash">
                     <span className="audit-hash-text">{event.hash.slice(0, 8)}...</span>
                     <button
@@ -279,8 +320,12 @@ export function Audit({ events }: AuditProps): JSX.Element {
                 <span className="audit-detail-value">{event.event_type}</span>
               </div>
               <div className="audit-detail-field">
-                <span className="audit-detail-label">Agent</span>
-                <span className="audit-detail-value">{AGENT_NAMES[event.agent_id] ?? event.agent_id}</span>
+                <span className="audit-detail-label">Agent ID</span>
+                <span className="audit-detail-value mono">{event.agent_id}</span>
+              </div>
+              <div className="audit-detail-field">
+                <span className="audit-detail-label">Timestamp</span>
+                <span className="audit-detail-value">{formatDateTime(event.timestamp)}</span>
               </div>
             </div>
             <div className="audit-detail-payload">
