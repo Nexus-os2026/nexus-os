@@ -24,6 +24,7 @@ import type {
   MarketplaceDetail,
   MarketplacePublishResult,
   IdentityInfo,
+  PreinstalledAgent,
   LlmRecommendations,
   LlmStatus,
   McpTool,
@@ -371,6 +372,10 @@ export function getAuditChainStatus(): Promise<AuditChainStatusRow> {
 
 export function marketplaceSearch(query: string): Promise<MarketplaceAgent[]> {
   return invokeDesktop<MarketplaceAgent[]>("marketplace_search", { query });
+}
+
+export function getPreinstalledAgents(): Promise<PreinstalledAgent[]> {
+  return invokeDesktop<PreinstalledAgent[]>("get_preinstalled_agents");
 }
 
 export function marketplaceInstall(packageId: string): Promise<MarketplaceAgent> {

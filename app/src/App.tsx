@@ -40,13 +40,11 @@ import type { ConsentNotification, SystemInfo } from "./types";
 import { Agents } from "./pages/Agents";
 import { Audit } from "./pages/Audit";
 import { Chat } from "./pages/Chat";
-import { Marketplace } from "./pages/Marketplace";
 import { Settings } from "./pages/Settings";
 import { SetupWizard } from "./pages/SetupWizard";
 import { Workflows } from "./pages/Workflows";
 import CommandCenter from "./pages/CommandCenter";
 import AuditTimeline from "./pages/AuditTimeline";
-import MarketplaceBrowser from "./pages/MarketplaceBrowser";
 import ComplianceDashboard from "./pages/ComplianceDashboard";
 import ClusterStatusPage from "./pages/ClusterStatus";
 import TrustDashboard from "./pages/TrustDashboard";
@@ -104,8 +102,6 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "audit-timeline", label: "Timeline", icon: "⏱", shortcut: "" },
   { id: "time-machine", label: "Time Machine", icon: "⏪", shortcut: "" },
   { id: "workflows", label: "Workflows", icon: "⎇", shortcut: "Alt+4" },
-  { id: "marketplace", label: "Marketplace", icon: "◈", shortcut: "Alt+5" },
-  { id: "marketplace-browser", label: "Registry", icon: "⬡", shortcut: "" },
   { id: "developer-portal", label: "Publish", icon: "⬆", shortcut: "" },
   { id: "compliance", label: "Compliance", icon: "⛨", shortcut: "" },
   { id: "cluster", label: "Cluster", icon: "⬣", shortcut: "" },
@@ -119,7 +115,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "design-studio", label: "Design", icon: "◇", shortcut: "" },
   { id: "email-client", label: "Email", icon: "📧", shortcut: "" },
   { id: "media-studio", label: "Media", icon: "🖼", shortcut: "" },
-  { id: "app-store", label: "App Store", icon: "◈", shortcut: "" },
+  { id: "app-store", label: "Agent Store", icon: "◈", shortcut: "Alt+5" },
   { id: "ai-chat-hub", label: "AI Chat", icon: "✦", shortcut: "" },
   { id: "voice-assistant", label: "Voice", icon: "🎙", shortcut: "" },
   { id: "deploy-pipeline", label: "Deploy", icon: "🚀", shortcut: "" },
@@ -719,7 +715,13 @@ export default function App(): JSX.Element {
       setRuntimeError(null);
       setMessages((prev) => [
         ...prev,
-        makeMessage("assistant", `Agent created: ${agentId}`, { model: "system" })
+        makeMessage(
+          "assistant",
+          agentId.startsWith("approval-requested:")
+            ? `Approval requested for transcendent agent creation: ${agentId.replace("approval-requested:", "")}`
+            : `Agent created: ${agentId}`,
+          { model: "system" }
+        )
       ]);
       play("success");
       bumpActivity();
@@ -1370,17 +1372,11 @@ export default function App(): JSX.Element {
     if (page === "workflows") {
       return <Workflows />;
     }
-    if (page === "marketplace") {
-      return <Marketplace />;
-    }
     if (page === "command-center") {
       return <CommandCenter />;
     }
     if (page === "audit-timeline") {
       return <AuditTimeline events={auditEvents} />;
-    }
-    if (page === "marketplace-browser") {
-      return <MarketplaceBrowser />;
     }
     if (page === "developer-portal") {
       return <DeveloperPortal />;
@@ -1445,7 +1441,7 @@ export default function App(): JSX.Element {
     if (page === "media-studio") {
       return <MediaStudio />;
     }
-    if (page === "app-store") {
+    if (page === "marketplace" || page === "marketplace-browser" || page === "app-store") {
       return <AppStore />;
     }
     if (page === "ai-chat-hub") {

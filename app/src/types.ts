@@ -664,6 +664,9 @@ export interface MarketplaceAgent {
   downloads: number;
   rating: number;
   review_count: number;
+  autonomy_level?: string | null;
+  fuel_budget?: number | null;
+  schedule?: string | null;
 }
 
 export interface MarketplaceReview {
@@ -697,6 +700,17 @@ export interface MarketplacePublishResult {
   version: string;
   verdict: string;
   checks: MarketplaceCheck[];
+}
+
+export interface PreinstalledAgent {
+  agent_id: string;
+  name: string;
+  description: string;
+  autonomy_level: number;
+  fuel_budget: number;
+  schedule: string | null;
+  capabilities: string[];
+  status: string;
 }
 
 // ── Agent Browser Types ──

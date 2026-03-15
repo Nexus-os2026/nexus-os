@@ -76,6 +76,14 @@ interface GitCommit {
   ts: number;
 }
 
+interface GitRepoStatus {
+  detected: boolean;
+  root: string | null;
+  branch: string | null;
+  changes: GitChange[];
+  commits: GitCommit[];
+}
+
 interface AgentWorker {
   id: string;
   name: string;
@@ -200,9 +208,13 @@ export default function CodeEditor(): JSX.Element {
     { id: 1, type: "system", text: "Type commands below. Dangerous operations require approval.", ts: Date.now() },
   ]);
   const [terminalInput, setTerminalInput] = useState("");
-  const [gitBranch, setGitBranch] = useState("main");
-  const [gitChanges] = useState<GitChange[]>([]);
-  const [gitLog] = useState<GitCommit[]>([]);
+  const [gitRepo, setGitRepo] = useState<GitRepoStatus>({
+    detected: false,
+    root: null,
+    branch: null,
+    changes: [],
+    commits: [],
+  });
   const [commitMsg, setCommitMsg] = useState("");
   const [agentWorkers, setAgentWorkers] = useState<AgentWorker[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -223,6 +235,7 @@ export default function CodeEditor(): JSX.Element {
   const fuelBudget = 10000;
   const fuelRemaining = fuelBudget - fuelUsed;
   const fuelPct = Math.round((fuelRemaining / fuelBudget) * 100);
+  const gitBranch = gitRepo.branch ?? "No git repo detected";
 
   /* ---- Audit helper ---- */
   const appendAudit = useCallback((event: string, detail: string) => {
@@ -278,6 +291,35 @@ export default function CodeEditor(): JSX.Element {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const refreshGitStatus = useCallback(async () => {
+    if (!HAS_DESKTOP) {
+      setGitRepo({
+        detected: false,
+        root: null,
+        branch: null,
+        changes: [],
+        commits: [],
+      });
+      return;
+    }
+    try {
+      const repo = await invoke("get_git_repo_status");
+      setGitRepo(repo as GitRepoStatus);
+    } catch {
+      setGitRepo({
+        detected: false,
+        root: null,
+        branch: null,
+        changes: [],
+        commits: [],
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshGitStatus();
+  }, [refreshGitStatus]);
 
   /** Expand a directory in the tree — lazily load its children */
   const expandDir = useCallback(async (dirPath: string) => {
@@ -432,9 +474,24 @@ export default function CodeEditor(): JSX.Element {
         addTermLine("output", "running 804 tests");
         setTimeout(() => addTermLine("output", "test result: ok. 804 passed; 0 failed; 0 ignored"), 500);
       } else if (cmd === "git status") {
-        addTermLine("output", `On branch ${gitBranch}\nChanges not staged:\n  modified: src/main.rs\n  modified: agents/coder.toml\nUntracked:\n  src/api.rs`);
+        if (!gitRepo.detected) {
+          addTermLine("system", "No git repo detected");
+        } else if (gitRepo.changes.length === 0) {
+          addTermLine("output", `On branch ${gitBranch}\nWorking tree clean`);
+        } else {
+          addTermLine("output", `On branch ${gitBranch}`);
+          gitRepo.changes.forEach((change) => {
+            addTermLine("output", `  ${change.status}: ${change.file}`);
+          });
+        }
       } else if (cmd === "git log --oneline") {
-        gitLog.forEach((c) => addTermLine("output", `${c.hash} ${c.message}`));
+        if (!gitRepo.detected) {
+          addTermLine("system", "No git repo detected");
+        } else if (gitRepo.commits.length === 0) {
+          addTermLine("system", "No commits found");
+        } else {
+          gitRepo.commits.forEach((commit) => addTermLine("output", `${commit.hash.slice(0, 7)} ${commit.message}`));
+        }
       } else if (cmd.startsWith("echo ")) {
         addTermLine("output", cmd.slice(5));
       } else if (cmd === "clear") {
@@ -455,18 +512,18 @@ export default function CodeEditor(): JSX.Element {
   function handleGitCommit(): void {
     if (!commitMsg.trim()) return;
     appendAudit("GitCommit", commitMsg.trim());
+    addTermLine("system", gitRepo.detected ? "Git commit is not wired from the editor yet." : "No git repo detected");
     setCommitMsg("");
-    addTermLine("system", `[git] Committed: "${commitMsg.trim()}" on branch ${gitBranch}`);
   }
 
   function handleGitPush(): void {
     appendAudit("GitPush", `push ${gitBranch} → origin`);
-    addTermLine("system", `[git] Pushing ${gitBranch} to origin... (requires Tier1 approval)`);
+    addTermLine("system", gitRepo.detected ? "Git push is not wired from the editor yet." : "No git repo detected");
   }
 
   function handleGitPull(): void {
     appendAudit("GitPull", `pull origin/${gitBranch}`);
-    addTermLine("system", `[git] Pulling from origin/${gitBranch}... Already up to date.`);
+    addTermLine("system", gitRepo.detected ? "Git pull is not wired from the editor yet." : "No git repo detected");
   }
 
   /* ---- Agent actions ---- */
@@ -615,8 +672,8 @@ export default function CodeEditor(): JSX.Element {
           <h2 className="ce-title">CODE EDITOR</h2>
           <span className="ce-subtitle">governed development environment</span>
         </div>
-        <div className="ce-header-center">
-          <div className="ce-branch-badge" onClick={() => setGitBranch((b) => b === "main" ? "feature/phase-7" : "main")}>
+          <div className="ce-header-center">
+          <div className="ce-branch-badge" title={gitRepo.root ?? "No git repo detected"}>
             <span className="ce-branch-icon">⎇</span>
             <span className="ce-branch-name">{gitBranch}</span>
           </div>
@@ -871,35 +928,46 @@ export default function CodeEditor(): JSX.Element {
                 <div className="ce-git">
                   <div className="ce-git-section">
                     <div className="ce-git-section-header">
-                      <span>Changes ({gitChanges.length})</span>
+                      <span>Changes ({gitRepo.changes.length})</span>
                       <div className="ce-git-btns">
                         <button type="button" className="ce-git-btn" onClick={handleGitPull} title="Pull">↓ Pull</button>
                         <button type="button" className="ce-git-btn" onClick={handleGitPush} title="Push">↑ Push</button>
                       </div>
                     </div>
                     <div className="ce-git-changes">
-                      {gitChanges.map((c) => (
+                      {gitRepo.changes.map((c) => (
                         <div key={c.file} className="ce-git-change">
                           <span className="ce-git-status" style={{ color: gitStatusColor(c.status) }}>{gitStatusIcon(c.status)}</span>
                           <span className="ce-git-file">{c.file}</span>
                         </div>
                       ))}
+                      {gitRepo.detected && gitRepo.changes.length === 0 && (
+                        <div className="ce-git-change">
+                          <span className="ce-git-file">Working tree clean</span>
+                        </div>
+                      )}
+                      {!gitRepo.detected && (
+                        <div className="ce-git-change">
+                          <span className="ce-git-file">No git repo detected</span>
+                        </div>
+                      )}
                     </div>
                     <div className="ce-git-commit-row">
                       <input className="ce-git-commit-input" placeholder="Commit message..." value={commitMsg} onChange={(e) => setCommitMsg(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleGitCommit(); }} />
-                      <button type="button" className="ce-git-commit-btn" onClick={handleGitCommit} disabled={!commitMsg.trim()}>Commit</button>
+                      <button type="button" className="ce-git-commit-btn" onClick={handleGitCommit} disabled={!gitRepo.detected || !commitMsg.trim()}>Commit</button>
                     </div>
                   </div>
                   <div className="ce-git-section">
                     <div className="ce-git-section-header"><span>History</span></div>
                     <div className="ce-git-log">
-                      {gitLog.map((c) => (
+                      {gitRepo.commits.map((c) => (
                         <div key={c.hash} className="ce-git-log-entry">
                           <span className="ce-git-hash">{c.hash}</span>
                           <span className="ce-git-msg">{c.message}</span>
                           <span className="ce-git-author">{c.author}</span>
                         </div>
                       ))}
+                      {!gitRepo.detected && <div className="ce-git-log-entry">No git repo detected</div>}
                     </div>
                   </div>
                 </div>

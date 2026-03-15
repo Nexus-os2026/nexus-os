@@ -170,7 +170,7 @@ impl Supervisor {
                     .collect::<Vec<_>>();
                 names.sort();
                 return Err(AgentError::SupervisorError(format!(
-                    "Maximum two Transcendent (L6) agents allowed. Currently active: {}. Stop one first.",
+                    "Maximum two Transcendent agents allowed. Currently active: {}. Stop one first.",
                     names.join(", ")
                 )));
             }
@@ -359,11 +359,48 @@ impl Supervisor {
     }
 
     pub fn restart_agent(&mut self, id: AgentId) -> Result<(), AgentError> {
-        let state = self
+        let (state, autonomy_level) = self
             .agents
             .get(&id)
-            .map(|agent| agent.state)
+            .map(|agent| {
+                (
+                    agent.state,
+                    AutonomyLevel::from_numeric(agent.autonomy_level).unwrap_or_default(),
+                )
+            })
             .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+
+        if autonomy_level == AutonomyLevel::L5 {
+            if let Some((_, existing_handle)) = self
+                .active_sovereign()
+                .filter(|(existing_id, _)| **existing_id != id)
+            {
+                return Err(AgentError::SupervisorError(format!(
+                    "Only one Sovereign agent allowed. Currently active: {}. Stop it first.",
+                    existing_handle.manifest.name
+                )));
+            }
+        }
+
+        if autonomy_level == AutonomyLevel::L6 {
+            let active_l6 = self
+                .active_transcendent_agents()
+                .into_iter()
+                .filter(|(existing_id, _)| **existing_id != id)
+                .collect::<Vec<_>>();
+            if active_l6.len() >= 2 {
+                let mut names = active_l6
+                    .iter()
+                    .map(|(_, handle)| handle.manifest.name.clone())
+                    .collect::<Vec<_>>();
+                names.sort();
+                return Err(AgentError::SupervisorError(format!(
+                    "Maximum two Transcendent agents allowed. Currently active: {}. Stop one first.",
+                    names.join(", ")
+                )));
+            }
+        }
+
         if matches!(state, AgentState::Running | AgentState::Paused) {
             self.stop_agent(id)?;
         }
@@ -1493,7 +1530,7 @@ priority = 50
         let err = sup.start_agent(l6_manifest("oracle-supreme")).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "supervisor error: Maximum two Transcendent (L6) agents allowed. Currently active: architect-prime, ascendant. Stop one first."
+            "supervisor error: Maximum two Transcendent agents allowed. Currently active: architect-prime, ascendant. Stop one first."
         );
     }
 
@@ -1503,5 +1540,53 @@ priority = 50
         assert!(sup.start_agent(l5_manifest("nexus-sovereign")).is_ok());
         assert!(sup.start_agent(l6_manifest("ascendant")).is_ok());
         assert!(sup.start_agent(l6_manifest("architect-prime")).is_ok());
+    }
+
+    #[test]
+    fn restart_agent_enforces_l5_singleton() {
+        let mut sup = Supervisor::new();
+        let first = sup.start_agent(l5_manifest("nexus-sovereign")).unwrap();
+        let second = sup.start_agent(test_manifest()).unwrap();
+        {
+            let handle = sup
+                .agents
+                .get_mut(&second)
+                .expect("second agent should exist");
+            handle.manifest = l5_manifest("nexus-infinity");
+            handle.autonomy_guard = AutonomyGuard::new(AutonomyLevel::L5);
+            handle.autonomy_level = 5;
+            handle.state = AgentState::Stopped;
+        }
+
+        let err = sup.restart_agent(second).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "supervisor error: Only one Sovereign agent allowed. Currently active: nexus-sovereign. Stop it first."
+        );
+        sup.stop_agent(first).unwrap();
+    }
+
+    #[test]
+    fn restart_agent_enforces_l6_limit() {
+        let mut sup = Supervisor::new();
+        assert!(sup.start_agent(l6_manifest("ascendant")).is_ok());
+        assert!(sup.start_agent(l6_manifest("architect-prime")).is_ok());
+        let third = sup.start_agent(test_manifest()).unwrap();
+        {
+            let handle = sup
+                .agents
+                .get_mut(&third)
+                .expect("third agent should exist");
+            handle.manifest = l6_manifest("oracle-supreme");
+            handle.autonomy_guard = AutonomyGuard::new(AutonomyLevel::L6);
+            handle.autonomy_level = 6;
+            handle.state = AgentState::Stopped;
+        }
+
+        let err = sup.restart_agent(third).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "supervisor error: Maximum two Transcendent agents allowed. Currently active: architect-prime, ascendant. Stop one first."
+        );
     }
 }

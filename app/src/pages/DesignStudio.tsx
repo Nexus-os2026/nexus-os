@@ -360,7 +360,7 @@ export default function DesignStudio() {
       {/* ─── Left: Component Library ─── */}
       <aside className="ds-library">
         <div className="ds-lib-header">
-          <h2 className="ds-lib-title">Components</h2>
+          <h2 className="ds-lib-title">Default Templates</h2>
         </div>
         <input className="ds-lib-search" placeholder="Search components..." value={libSearch} onChange={e => setLibSearch(e.target.value)} />
         <div className="ds-lib-cats">

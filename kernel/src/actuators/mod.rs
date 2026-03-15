@@ -22,7 +22,10 @@ pub mod web;
 pub use agent_lifecycle::AgentLifecycleActuator;
 pub use api::GovernedApiClient;
 pub use browser::BrowserActuator;
-pub use cognitive_param::CognitiveParamActuator;
+pub use cognitive_param::{
+    AlgorithmSelectionActuator, CognitiveParamActuator, CounterfactualActuator,
+    EcosystemDesignActuator, ModelOrchestrationActuator, TemporalPlanActuator,
+};
 pub use docker::DockerActuator;
 pub use filesystem::GovernedFilesystem;
 pub use governance_policy::GovernancePolicyActuator;
@@ -85,6 +88,11 @@ impl ActuatorRegistry {
         registry.register(Box::new(AgentLifecycleActuator));
         registry.register(Box::new(GovernancePolicyActuator));
         registry.register(Box::new(CognitiveParamActuator));
+        registry.register(Box::new(ModelOrchestrationActuator));
+        registry.register(Box::new(AlgorithmSelectionActuator));
+        registry.register(Box::new(EcosystemDesignActuator));
+        registry.register(Box::new(CounterfactualActuator));
+        registry.register(Box::new(TemporalPlanActuator));
         registry
     }
 
@@ -181,12 +189,12 @@ impl ActuatorRegistry {
             }
             PlannedAction::ModifyGovernancePolicy { .. }
             | PlannedAction::AllocateEcosystemFuel { .. } => "governance_policy",
-            PlannedAction::ModifyCognitiveParams { .. }
-            | PlannedAction::SelectLlmProvider { .. }
-            | PlannedAction::SelectAlgorithm { .. }
-            | PlannedAction::DesignAgentEcosystem { .. }
-            | PlannedAction::RunCounterfactual { .. }
-            | PlannedAction::TemporalPlan { .. } => "cognitive_param",
+            PlannedAction::ModifyCognitiveParams { .. } => "cognitive_param",
+            PlannedAction::SelectLlmProvider { .. } => "model_orchestration",
+            PlannedAction::SelectAlgorithm { .. } => "algorithm_selection",
+            PlannedAction::DesignAgentEcosystem { .. } => "ecosystem_design",
+            PlannedAction::RunCounterfactual { .. } => "counterfactual",
+            PlannedAction::TemporalPlan { .. } => "temporal_plan",
             _ => return Err(ActuatorError::ActionNotHandled),
         };
 
@@ -291,7 +299,7 @@ mod tests {
     #[test]
     fn registry_with_defaults() {
         let registry = ActuatorRegistry::with_defaults();
-        assert_eq!(registry.actuators.len(), 13);
+        assert_eq!(registry.actuators.len(), 18);
         assert!(registry.actuators.contains_key("governed_filesystem"));
         assert!(registry.actuators.contains_key("governed_shell"));
         assert!(registry.actuators.contains_key("docker_actuator"));
@@ -305,6 +313,11 @@ mod tests {
         assert!(registry.actuators.contains_key("agent_lifecycle"));
         assert!(registry.actuators.contains_key("governance_policy"));
         assert!(registry.actuators.contains_key("cognitive_param"));
+        assert!(registry.actuators.contains_key("model_orchestration"));
+        assert!(registry.actuators.contains_key("algorithm_selection"));
+        assert!(registry.actuators.contains_key("ecosystem_design"));
+        assert!(registry.actuators.contains_key("counterfactual"));
+        assert!(registry.actuators.contains_key("temporal_plan"));
     }
 
     #[test]

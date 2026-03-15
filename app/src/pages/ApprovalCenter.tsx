@@ -86,10 +86,11 @@ function useReviewCountdown(requestedAt: string, minReviewSeconds?: number | nul
       setRemaining(0);
       return;
     }
+    const reviewWindowSeconds = minReviewSeconds;
 
     function update() {
       const created = new Date(requestedAt).getTime();
-      const deadline = created + minReviewSeconds * 1000;
+      const deadline = created + reviewWindowSeconds * 1000;
       const diff = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
       setRemaining(diff);
     }

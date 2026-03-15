@@ -50,12 +50,18 @@ export default function AuditTimeline({ events }: AuditTimelineProps): JSX.Eleme
     setLiveEvents(events);
   }, [events]);
 
-  // Fetch chain status on mount
+  // Load live audit data on mount when the desktop runtime is available.
   useEffect(() => {
-    if (hasDesktopRuntime()) {
-      getAuditChainStatus().then(setChainStatus).catch(() => {});
+    if (!hasDesktopRuntime()) {
+      return;
     }
-  }, [liveEvents]);
+    Promise.all([getAuditLog(undefined, 500), getAuditChainStatus()])
+      .then(([freshEvents, status]) => {
+        setLiveEvents(freshEvents);
+        setChainStatus(status);
+      })
+      .catch(() => {});
+  }, []);
 
   // Auto-refresh every 10 seconds
   useEffect(() => {

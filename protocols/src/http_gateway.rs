@@ -25,7 +25,7 @@
 //!
 //! Every route goes through governance. JWT auth required on mutating endpoints.
 
-use crate::frontend::serve_embedded_frontend;
+use crate::frontend::serve_frontend;
 use crate::metrics::NexusMetrics;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
@@ -690,7 +690,7 @@ pub fn build_router(state: GatewayState) -> Router {
             rate_limit_middleware,
         ))
         .layer(cors)
-        .fallback(serve_embedded_frontend)
+        .fallback(serve_frontend)
         .with_state(state)
 }
 

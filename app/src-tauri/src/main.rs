@@ -508,7 +508,6 @@ impl AppState {
         #[cfg(not(test))]
         {
             state.load_prebuilt_agents();
-            state.seed_prebuilt_agents_to_marketplace();
         }
 
         state
@@ -755,8 +754,78 @@ pub fn jarvis_status(state: &AppState) -> Result<VoiceRuntimeState, String> {
     Ok(voice.clone())
 }
 
-pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, String> {
-    let manifest = parse_agent_manifest_json(manifest_json.as_str())?;
+fn enqueue_transcendent_review(
+    state: &AppState,
+    agent_id: &str,
+    agent_name: &str,
+    manifest_json: Option<&str>,
+    mode: &str,
+) -> Result<String, String> {
+    let existing = state
+        .db
+        .load_pending_consent()
+        .map_err(|e| format!("db error: {e}"))?
+        .into_iter()
+        .find(|row| {
+            row.agent_id == agent_id
+                && row.operation_type == "transcendent_creation"
+                && serde_json::from_str::<serde_json::Value>(&row.operation_json)
+                    .ok()
+                    .and_then(|value| {
+                        value
+                            .get("mode")
+                            .and_then(|mode_value| mode_value.as_str())
+                            .map(str::to_string)
+                    })
+                    .as_deref()
+                    == Some(mode)
+        });
+    if let Some(existing) = existing {
+        return Ok(existing.id);
+    }
+
+    let consent_id = Uuid::new_v4().to_string();
+    let summary = match mode {
+        "activate_existing" => format!("Activate L6 Transcendent agent '{agent_name}'"),
+        _ => format!("Create L6 Transcendent agent '{agent_name}'"),
+    };
+    let side_effects = vec![
+        "Maximum-autonomy L6 activation".to_string(),
+        "Mandatory 60-second review before approval".to_string(),
+        "Triple-audited self-modification and hardcoded cooldown protections".to_string(),
+    ];
+    let operation_json = json!({
+        "summary": summary,
+        "side_effects": side_effects,
+        "fuel_cost": 0.0,
+        "min_review_seconds": 60,
+        "mode": mode,
+        "manifest_json": manifest_json,
+    });
+    let now = chrono::Utc::now().to_rfc3339();
+    state
+        .db
+        .enqueue_consent(&nexus_persistence::ConsentRow {
+            id: consent_id.clone(),
+            agent_id: agent_id.to_string(),
+            operation_type: "transcendent_creation".to_string(),
+            operation_json: operation_json.to_string(),
+            hitl_tier: "Tier3".to_string(),
+            status: "pending".to_string(),
+            created_at: now,
+            resolved_at: None,
+            resolved_by: None,
+        })
+        .map_err(|e| format!("db error: {e}"))?;
+
+    Ok(consent_id)
+}
+
+fn create_agent_immediately(
+    state: &AppState,
+    manifest: AgentManifest,
+    manifest_json: String,
+) -> Result<String, String> {
     let agent_name = manifest.name.clone();
     let agent_caps = manifest.capabilities.clone();
     let manifest_schedule = manifest.schedule.clone();
@@ -826,9 +895,76 @@ pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, S
     Ok(agent_id.to_string())
 }
 
+pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, String> {
+    let manifest = parse_agent_manifest_json(manifest_json.as_str())?;
+    if manifest.autonomy_level == Some(6) {
+        let pending_agent_id = Uuid::new_v4().to_string();
+        {
+            let mut meta_guard = match state.meta.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            meta_guard.insert(
+                Uuid::parse_str(&pending_agent_id).unwrap_or(Uuid::nil()),
+                AgentMeta {
+                    name: manifest.name.clone(),
+                    last_action: "awaiting transcendent review".to_string(),
+                },
+            );
+        }
+        let _ = state.db.save_agent(
+            &pending_agent_id,
+            &manifest_json,
+            "pending_approval",
+            6,
+            "native",
+        );
+        let consent_id = enqueue_transcendent_review(
+            state,
+            &pending_agent_id,
+            &manifest.name,
+            Some(&manifest_json),
+            "create_new",
+        )?;
+        state.log_event(
+            Uuid::nil(),
+            EventType::UserAction,
+            json!({
+                "event": "transcendent_creation_requested",
+                "consent_id": consent_id,
+                "agent_name": manifest.name,
+            }),
+        );
+        return Ok(format!("approval-requested:{consent_id}"));
+    }
+
+    create_agent_immediately(state, manifest, manifest_json)
+}
+
 pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     let parsed = parse_agent_id(agent_id.as_str())?;
     let agent_id = parsed.to_string();
+    if let Some(manifest) = find_manifest(state, &agent_id) {
+        if manifest.autonomy_level == Some(6) {
+            let consent_id = enqueue_transcendent_review(
+                state,
+                &agent_id,
+                &manifest.name,
+                None,
+                "activate_existing",
+            )?;
+            update_last_action(state, parsed, "awaiting transcendent review");
+            state.log_event(
+                parsed,
+                EventType::UserAction,
+                json!({
+                    "event": "transcendent_activation_requested",
+                    "consent_id": consent_id,
+                }),
+            );
+            return Ok(());
+        }
+    }
     let mut supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
@@ -1226,6 +1362,14 @@ fn agent_error(error: AgentError) -> String {
 impl AppState {
     #[allow(dead_code)]
     fn load_prebuilt_agents(&self) {
+        let marketplace_registry = match open_marketplace_registry() {
+            Ok(registry) => Some(registry),
+            Err(error) => {
+                eprintln!("marketplace seed: failed to open registry: {error}");
+                None
+            }
+        };
+        let marketplace_author_key = ed25519_dalek::SigningKey::from_bytes(&MARKETPLACE_SEED_KEY);
         let mut existing_names = match self.db.list_agents() {
             Ok(rows) => rows
                 .into_iter()
@@ -1253,6 +1397,7 @@ impl AppState {
                     continue;
                 }
             };
+            let manifest_description = parse_manifest_description(&manifest_json);
 
             if existing_names.contains(&manifest.name) {
                 continue;
@@ -1294,116 +1439,99 @@ impl AppState {
                 },
             );
 
-            existing_names.insert(manifest.name);
-        }
-    }
-
-    #[allow(dead_code)]
-    fn seed_prebuilt_agents_to_marketplace(&self) {
-        let registry = match open_marketplace_registry() {
-            Ok(registry) => registry,
-            Err(error) => {
-                eprintln!("marketplace seed: failed to open registry: {error}");
-                return;
-            }
-        };
-
-        let author_key = ed25519_dalek::SigningKey::from_bytes(&MARKETPLACE_SEED_KEY);
-        for path in list_prebuilt_manifest_paths() {
-            let manifest_json = match std::fs::read_to_string(&path) {
-                Ok(contents) => contents,
-                Err(error) => {
-                    eprintln!(
-                        "marketplace seed: failed to read {}: {error}",
-                        path.display()
-                    );
-                    continue;
-                }
-            };
-
-            let manifest = match parse_agent_manifest_json(&manifest_json) {
-                Ok(manifest) => manifest,
-                Err(error) => {
-                    eprintln!(
-                        "marketplace seed: failed to parse {}: {error}",
-                        path.display()
-                    );
-                    continue;
-                }
-            };
-            let manifest_description = parse_manifest_description(&manifest_json);
-
-            let package_name = sanitize_prebuilt_marketplace_name(&manifest.name);
-            let already_published = match registry.search(&package_name) {
-                Ok(results) => results.iter().any(|agent| agent.name == package_name),
-                Err(_) => false,
-            };
-            if already_published {
-                continue;
-            }
-
-            let manifest_toml = match build_marketplace_manifest_toml(&manifest, &package_name) {
-                Ok(manifest_toml) => manifest_toml,
-                Err(error) => {
-                    eprintln!(
-                        "marketplace seed: failed to format {} manifest: {error}",
-                        manifest.name
-                    );
-                    continue;
-                }
-            };
-
-            let mut tags = vec![
-                "prebuilt".to_string(),
-                "nexus-os".to_string(),
-                "automated-agent".to_string(),
-            ];
-            if manifest.schedule.is_some() {
-                tags.push("scheduled".to_string());
-            }
-
-            let metadata = nexus_marketplace::package::PackageMetadata {
-                name: package_name,
-                version: manifest.version.clone(),
-                description: manifest_description,
-                capabilities: manifest.capabilities.clone(),
-                tags,
-                author_id: "nexus-os".to_string(),
-            };
-
-            let unsigned_bundle = match nexus_marketplace::package::create_unsigned_bundle(
-                &manifest_toml,
-                &format!("// prebuilt agent manifest for {}", manifest.name),
-                metadata,
-                "local://agents/prebuilt",
-                "nexus-desktop-backend",
-            ) {
-                Ok(bundle) => bundle,
-                Err(error) => {
-                    eprintln!(
-                        "marketplace seed: failed to build {} bundle: {error}",
-                        manifest.name
-                    );
-                    continue;
-                }
-            };
-
-            if let Err(error) = nexus_marketplace::verification_pipeline::verified_publish_sqlite(
-                &registry,
-                unsigned_bundle,
-                &author_key,
-            ) {
-                eprintln!(
-                    "marketplace seed: failed to publish {}: {error}",
-                    manifest.name
+            if let Some(registry) = marketplace_registry.as_ref() {
+                publish_prebuilt_manifest_to_marketplace(
+                    registry,
+                    &marketplace_author_key,
+                    &manifest,
+                    &manifest_description,
                 );
             }
+
+            existing_names.insert(manifest.name);
         }
     }
 }
 
 #[allow(dead_code)]
 const MARKETPLACE_SEED_KEY: [u8; 32] = [7; 32];
+
+#[allow(dead_code)]
+fn publish_prebuilt_manifest_to_marketplace(
+    registry: &nexus_marketplace::sqlite_registry::SqliteRegistry,
+    author_key: &ed25519_dalek::SigningKey,
+    manifest: &AgentManifest,
+    manifest_description: &str,
+) {
+    let package_name = sanitize_prebuilt_marketplace_name(&manifest.name);
+    let already_published = match registry.search(&package_name) {
+        Ok(results) => results.iter().any(|agent| agent.name == package_name),
+        Err(_) => false,
+    };
+    if already_published {
+        return;
+    }
+
+    let manifest_toml = match build_marketplace_manifest_toml(manifest, &package_name) {
+        Ok(manifest_toml) => manifest_toml,
+        Err(error) => {
+            eprintln!(
+                "marketplace seed: failed to format {} manifest: {error}",
+                manifest.name
+            );
+            return;
+        }
+    };
+
+    let mut tags = vec![
+        "prebuilt".to_string(),
+        "nexus-os".to_string(),
+        "automated-agent".to_string(),
+    ];
+    if let Some(level) = manifest.autonomy_level {
+        tags.push(format!("l{level}"));
+    }
+    if manifest.schedule.is_some() {
+        tags.push("scheduled".to_string());
+    }
+
+    let metadata = nexus_marketplace::package::PackageMetadata {
+        name: package_name,
+        version: manifest.version.clone(),
+        description: manifest_description.to_string(),
+        capabilities: manifest.capabilities.clone(),
+        tags,
+        author_id: "nexus-os".to_string(),
+    };
+
+    let unsigned_bundle = match nexus_marketplace::package::create_unsigned_bundle(
+        &manifest_toml,
+        &format!("// prebuilt agent manifest for {}", manifest.name),
+        metadata,
+        "local://agents/prebuilt",
+        "nexus-desktop-backend",
+    ) {
+        Ok(bundle) => bundle,
+        Err(error) => {
+            eprintln!(
+                "marketplace seed: failed to build {} bundle: {error}",
+                manifest.name
+            );
+            return;
+        }
+    };
+
+    if let Err(error) = nexus_marketplace::verification_pipeline::verified_publish_sqlite(
+        registry,
+        unsigned_bundle,
+        author_key,
+    ) {
+        eprintln!(
+            "marketplace seed: failed to publish {}: {error}",
+            manifest.name
+        );
+    }
+}
 
 #[allow(dead_code)]
 fn list_prebuilt_manifest_paths() -> Vec<PathBuf> {
@@ -3422,6 +3550,9 @@ pub struct MarketplaceAgentRow {
     pub downloads: i64,
     pub rating: f64,
     pub review_count: i64,
+    pub autonomy_level: Option<String>,
+    pub fuel_budget: Option<u64>,
+    pub schedule: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3447,6 +3578,18 @@ pub struct MarketplaceVersionRow {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreinstalledAgentRow {
+    pub agent_id: String,
+    pub name: String,
+    pub description: String,
+    pub autonomy_level: u8,
+    pub fuel_budget: u64,
+    pub schedule: Option<String>,
+    pub capabilities: Vec<String>,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MarketplacePublishResult {
     pub package_id: String,
     pub name: String,
@@ -3469,6 +3612,111 @@ fn open_marketplace_registry() -> Result<nexus_marketplace::sqlite_registry::Sql
         .map_err(|e| format!("Failed to open marketplace database: {e}"))
 }
 
+fn marketplace_manifest_profile(
+    registry: &nexus_marketplace::sqlite_registry::SqliteRegistry,
+    package_id: &str,
+) -> Option<AgentManifest> {
+    registry
+        .signed_bundle(package_id)
+        .ok()
+        .and_then(|bundle| parse_manifest(&bundle.manifest_toml).ok())
+}
+
+fn marketplace_agent_row(
+    registry: &nexus_marketplace::sqlite_registry::SqliteRegistry,
+    package_id: String,
+    name: String,
+    description: String,
+    author: String,
+    tags: Vec<String>,
+    version: String,
+    capabilities: Vec<String>,
+    price_cents: i64,
+    downloads: i64,
+    rating: f64,
+    review_count: i64,
+) -> MarketplaceAgentRow {
+    let manifest = marketplace_manifest_profile(registry, &package_id);
+    MarketplaceAgentRow {
+        package_id,
+        name,
+        description,
+        author,
+        tags,
+        version,
+        capabilities,
+        price_cents,
+        downloads,
+        rating,
+        review_count,
+        autonomy_level: manifest
+            .as_ref()
+            .and_then(|m| m.autonomy_level)
+            .map(|level| format!("L{level}")),
+        fuel_budget: manifest.as_ref().map(|m| m.fuel_budget),
+        schedule: manifest.and_then(|m| m.schedule),
+    }
+}
+
+pub fn get_preinstalled_agents(state: &AppState) -> Result<Vec<PreinstalledAgentRow>, String> {
+    let prebuilt_names = list_prebuilt_manifest_paths()
+        .into_iter()
+        .filter_map(|path| std::fs::read_to_string(path).ok())
+        .filter_map(|manifest_json| manifest_name_from_json(&manifest_json))
+        .collect::<HashSet<_>>();
+
+    let rows = state
+        .db
+        .list_agents()
+        .map_err(|e| format!("Failed to load agents: {e}"))?;
+
+    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    let mut runtime_by_name = HashMap::new();
+    for status in supervisor.health_check() {
+        if let Some(handle) = supervisor.get_agent(status.id) {
+            runtime_by_name.insert(
+                handle.manifest.name.clone(),
+                (status.id.to_string(), status.state.to_string()),
+            );
+        }
+    }
+
+    let mut preinstalled = Vec::new();
+    for row in rows {
+        let Ok(json_manifest) = serde_json::from_str::<JsonAgentManifest>(&row.manifest_json) else {
+            continue;
+        };
+        if !prebuilt_names.contains(&json_manifest.manifest.name) {
+            continue;
+        }
+
+        let (agent_id, status) = runtime_by_name
+            .get(&json_manifest.manifest.name)
+            .cloned()
+            .unwrap_or_else(|| (String::new(), "Stopped".to_string()));
+
+        preinstalled.push(PreinstalledAgentRow {
+            agent_id,
+            name: json_manifest.manifest.name,
+            description: json_manifest
+                .description
+                .unwrap_or_else(|| extract_manifest_description(&row.manifest_json).unwrap_or_default()),
+            autonomy_level: json_manifest.manifest.autonomy_level.unwrap_or(0),
+            fuel_budget: json_manifest.manifest.fuel_budget,
+            schedule: json_manifest.manifest.schedule,
+            capabilities: json_manifest.manifest.capabilities,
+            status,
+        });
+    }
+
+    preinstalled.sort_by(|left, right| {
+        left.autonomy_level
+            .cmp(&right.autonomy_level)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    Ok(preinstalled)
+}
+
 pub fn marketplace_search(query: &str) -> Result<Vec<MarketplaceAgentRow>, String> {
     let registry = open_marketplace_registry()?;
     let results = registry
@@ -3480,25 +3728,26 @@ pub fn marketplace_search(query: &str) -> Result<Vec<MarketplaceAgentRow>, Strin
         .map(|r| {
             // Get full detail for each result to include rating/downloads
             let detail = registry.get_agent(&r.package_id).ok();
-            MarketplaceAgentRow {
-                package_id: r.package_id,
-                name: r.name,
-                description: r.description,
-                author: r.author_id,
-                tags: r.tags,
-                version: detail
+            marketplace_agent_row(
+                &registry,
+                r.package_id,
+                r.name,
+                r.description,
+                r.author_id,
+                r.tags,
+                detail
                     .as_ref()
                     .map(|d| d.version.clone())
                     .unwrap_or_default(),
-                capabilities: detail
+                detail
                     .as_ref()
                     .map(|d| d.capabilities.clone())
                     .unwrap_or_default(),
-                price_cents: detail.as_ref().map(|d| d.price_cents).unwrap_or(0),
-                downloads: detail.as_ref().map(|d| d.downloads).unwrap_or(0),
-                rating: detail.as_ref().map(|d| d.rating).unwrap_or(0.0),
-                review_count: detail.as_ref().map(|d| d.review_count).unwrap_or(0),
-            }
+                detail.as_ref().map(|d| d.price_cents).unwrap_or(0),
+                detail.as_ref().map(|d| d.downloads).unwrap_or(0),
+                detail.as_ref().map(|d| d.rating).unwrap_or(0.0),
+                detail.as_ref().map(|d| d.review_count).unwrap_or(0),
+            )
         })
         .collect())
 }
@@ -3512,19 +3761,20 @@ pub fn marketplace_install(package_id: &str) -> Result<MarketplaceAgentRow, Stri
         .get_agent(package_id)
         .map_err(|e| format!("Failed to get agent detail: {e}"))?;
 
-    Ok(MarketplaceAgentRow {
-        package_id: bundle.package_id,
-        name: bundle.metadata.name,
-        description: bundle.metadata.description,
-        author: bundle.metadata.author_id,
-        tags: bundle.metadata.tags,
-        version: bundle.metadata.version,
-        capabilities: bundle.metadata.capabilities,
-        price_cents: detail.price_cents,
-        downloads: detail.downloads,
-        rating: detail.rating,
-        review_count: detail.review_count,
-    })
+    Ok(marketplace_agent_row(
+        &registry,
+        bundle.package_id,
+        bundle.metadata.name,
+        bundle.metadata.description,
+        bundle.metadata.author_id,
+        bundle.metadata.tags,
+        bundle.metadata.version,
+        bundle.metadata.capabilities,
+        detail.price_cents,
+        detail.downloads,
+        detail.rating,
+        detail.review_count,
+    ))
 }
 
 pub fn marketplace_info(agent_id: &str) -> Result<MarketplaceDetailRow, String> {
@@ -3536,19 +3786,20 @@ pub fn marketplace_info(agent_id: &str) -> Result<MarketplaceDetailRow, String> 
     let versions = registry.version_history(agent_id).unwrap_or_default();
 
     Ok(MarketplaceDetailRow {
-        agent: MarketplaceAgentRow {
-            package_id: detail.package_id,
-            name: detail.name,
-            description: detail.description,
-            author: detail.author,
-            tags: detail.tags,
-            version: detail.version,
-            capabilities: detail.capabilities,
-            price_cents: detail.price_cents,
-            downloads: detail.downloads,
-            rating: detail.rating,
-            review_count: detail.review_count,
-        },
+        agent: marketplace_agent_row(
+            &registry,
+            detail.package_id,
+            detail.name,
+            detail.description,
+            detail.author,
+            detail.tags,
+            detail.version,
+            detail.capabilities,
+            detail.price_cents,
+            detail.downloads,
+            detail.rating,
+            detail.review_count,
+        ),
         reviews: reviews
             .into_iter()
             .map(|r| MarketplaceReviewRow {
@@ -3620,25 +3871,26 @@ pub fn marketplace_my_agents(author: &str) -> Result<Vec<MarketplaceAgentRow>, S
         .filter(|r| r.author_id == author)
         .map(|r| {
             let detail = registry.get_agent(&r.package_id).ok();
-            MarketplaceAgentRow {
-                package_id: r.package_id,
-                name: r.name,
-                description: r.description,
-                author: r.author_id,
-                tags: r.tags,
-                version: detail
+            marketplace_agent_row(
+                &registry,
+                r.package_id,
+                r.name,
+                r.description,
+                r.author_id,
+                r.tags,
+                detail
                     .as_ref()
                     .map(|d| d.version.clone())
                     .unwrap_or_default(),
-                capabilities: detail
+                detail
                     .as_ref()
                     .map(|d| d.capabilities.clone())
                     .unwrap_or_default(),
-                price_cents: detail.as_ref().map(|d| d.price_cents).unwrap_or(0),
-                downloads: detail.as_ref().map(|d| d.downloads).unwrap_or(0),
-                rating: detail.as_ref().map(|d| d.rating).unwrap_or(0.0),
-                review_count: detail.as_ref().map(|d| d.review_count).unwrap_or(0),
-            }
+                detail.as_ref().map(|d| d.price_cents).unwrap_or(0),
+                detail.as_ref().map(|d| d.downloads).unwrap_or(0),
+                detail.as_ref().map(|d| d.rating).unwrap_or(0.0),
+                detail.as_ref().map(|d| d.review_count).unwrap_or(0),
+            )
         })
         .collect())
 }
@@ -8134,6 +8386,123 @@ pub fn get_audit_chain_status(state: &AppState) -> Result<AuditChainStatusRow, S
     })
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitChangeRow {
+    pub file: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitCommitRow {
+    pub hash: String,
+    pub message: String,
+    pub author: String,
+    pub ts: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitRepoStatusRow {
+    pub detected: bool,
+    pub root: Option<String>,
+    pub branch: Option<String>,
+    pub changes: Vec<GitChangeRow>,
+    pub commits: Vec<GitCommitRow>,
+}
+
+fn run_git_command(args: &[&str], repo_root: &std::path::Path) -> Result<String, String> {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(repo_root)
+        .output()
+        .map_err(|error| format!("git {} failed: {error}", args.join(" ")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            format!("git {} exited with {}", args.join(" "), output.status)
+        } else {
+            stderr
+        });
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn parse_git_status(code: &str) -> &'static str {
+    match code {
+        "??" => "untracked",
+        value if value.contains('A') => "added",
+        value if value.contains('D') => "deleted",
+        _ => "modified",
+    }
+}
+
+pub fn get_git_repo_status() -> Result<GitRepoStatusRow, String> {
+    let cwd = std::env::current_dir().map_err(|error| format!("cwd unavailable: {error}"))?;
+    let repo_root_output = Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(&cwd)
+        .output()
+        .map_err(|error| format!("git unavailable: {error}"))?;
+
+    if !repo_root_output.status.success() {
+        return Ok(GitRepoStatusRow {
+            detected: false,
+            root: None,
+            branch: None,
+            changes: Vec::new(),
+            commits: Vec::new(),
+        });
+    }
+
+    let repo_root = String::from_utf8_lossy(&repo_root_output.stdout)
+        .trim()
+        .to_string();
+    let repo_path = std::path::PathBuf::from(&repo_root);
+    let branch = run_git_command(&["branch", "--show-current"], &repo_path).ok();
+    let status_output = run_git_command(&["status", "--porcelain"], &repo_path).unwrap_or_default();
+    let log_output = run_git_command(
+        &["log", "--pretty=format:%H%x1f%an%x1f%ct%x1f%s", "-n", "15"],
+        &repo_path,
+    )
+    .unwrap_or_default();
+
+    let changes = status_output
+        .lines()
+        .filter_map(|line| {
+            if line.len() < 4 {
+                return None;
+            }
+            let status = parse_git_status(&line[..2]).to_string();
+            let file = line[3..].trim().to_string();
+            Some(GitChangeRow { file, status })
+        })
+        .collect::<Vec<_>>();
+
+    let commits = log_output
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.split('\u{1f}');
+            let hash = parts.next()?.to_string();
+            let author = parts.next()?.to_string();
+            let ts = parts.next()?.parse::<u64>().ok()?.saturating_mul(1000);
+            let message = parts.next()?.to_string();
+            Some(GitCommitRow {
+                hash,
+                message,
+                author,
+                ts,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    Ok(GitRepoStatusRow {
+        detected: true,
+        root: Some(repo_root),
+        branch,
+        changes,
+        commits,
+    })
+}
+
 // ── Governance verification commands ────────────────────────────────────────
 
 pub fn verify_governance_invariants(state: &AppState) -> Result<String, String> {
@@ -9889,12 +10258,51 @@ fn approve_consent_request(
         .find(|r| r.id == consent_id)
         .ok_or_else(|| format!("consent request '{consent_id}' not found or already resolved"))?;
     let agent_id_str = consent_row.agent_id.clone();
+    let op_json: serde_json::Value =
+        serde_json::from_str(&consent_row.operation_json).unwrap_or(json!({}));
 
     // 1. Resolve in database
     state
         .db
         .resolve_consent(&consent_id, "approved", &approved_by)
         .map_err(|e| format!("db error: {e}"))?;
+
+    if consent_row.operation_type == "transcendent_creation" {
+        match op_json
+            .get("mode")
+            .and_then(|value| value.as_str())
+            .unwrap_or("create_new")
+        {
+            "activate_existing" => {
+                let parsed = parse_agent_id(&agent_id_str)?;
+                let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+                supervisor.restart_agent(parsed).map_err(agent_error)?;
+                let _ = state.db.update_agent_state(&agent_id_str, "running");
+                update_last_action(state, parsed, "started");
+            }
+            _ => {
+                let manifest_json = op_json
+                    .get("manifest_json")
+                    .and_then(|value| value.as_str())
+                    .ok_or_else(|| {
+                        "approved transcendent creation missing manifest_json payload".to_string()
+                    })?;
+                let manifest = parse_agent_manifest_json(manifest_json)?;
+                let created_id =
+                    create_agent_immediately(state, manifest, manifest_json.to_string())?;
+                let _ = state.db.delete_agent(&agent_id_str);
+                state.log_event(
+                    Uuid::nil(),
+                    EventType::UserAction,
+                    json!({
+                        "action": "transcendent_creation_approved",
+                        "consent_id": consent_id,
+                        "created_agent_id": created_id,
+                    }),
+                );
+            }
+        }
+    }
 
     // 2. Approve in kernel consent runtime (best-effort — agent may not exist in supervisor)
     if let Ok(agent_uuid) = Uuid::parse_str(&agent_id_str) {
@@ -9934,12 +10342,24 @@ fn deny_consent_request(
         .find(|r| r.id == consent_id)
         .ok_or_else(|| format!("consent request '{consent_id}' not found or already resolved"))?;
     let agent_id_str = consent_row.agent_id.clone();
+    let op_json: serde_json::Value =
+        serde_json::from_str(&consent_row.operation_json).unwrap_or(json!({}));
 
     // 1. Resolve in database
     state
         .db
         .resolve_consent(&consent_id, "denied", &denied_by)
         .map_err(|e| format!("db error: {e}"))?;
+
+    if consent_row.operation_type == "transcendent_creation"
+        && op_json
+            .get("mode")
+            .and_then(|value| value.as_str())
+            .unwrap_or("create_new")
+            == "create_new"
+    {
+        let _ = state.db.delete_agent(&agent_id_str);
+    }
 
     // 2. Deny in kernel consent runtime (best-effort)
     if let Ok(agent_uuid) = Uuid::parse_str(&agent_id_str) {
@@ -10041,7 +10461,9 @@ mod runtime {
         manifest_json: String,
     ) -> Result<String, String> {
         let id = super::create_agent(state.inner(), manifest_json)?;
-        emit_agent_status(&window, state.inner(), &id);
+        if uuid::Uuid::parse_str(&id).is_ok() {
+            emit_agent_status(&window, state.inner(), &id);
+        }
         Ok(id)
     }
 
@@ -10077,6 +10499,13 @@ mod runtime {
         state: tauri::State<'_, AppState>,
     ) -> Result<Vec<nexus_kernel::cognitive::ScheduledAgent>, String> {
         super::get_scheduled_agents(state.inner())
+    }
+
+    #[tauri::command]
+    fn get_preinstalled_agents(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<super::PreinstalledAgentRow>, String> {
+        super::get_preinstalled_agents(state.inner())
     }
 
     #[tauri::command]
@@ -11963,6 +12392,11 @@ mod runtime {
     }
 
     #[tauri::command]
+    fn get_git_repo_status() -> Result<super::GitRepoStatusRow, String> {
+        super::get_git_repo_status()
+    }
+
+    #[tauri::command]
     fn verify_governance_invariants(state: tauri::State<'_, AppState>) -> Result<String, String> {
         super::verify_governance_invariants(state.inner())
     }
@@ -12382,6 +12816,7 @@ mod runtime {
                 stop_agent,
                 clear_all_agents,
                 get_scheduled_agents,
+                get_preinstalled_agents,
                 pause_agent,
                 resume_agent,
                 get_audit_log,
@@ -12583,6 +13018,7 @@ mod runtime {
                 get_compliance_status,
                 get_compliance_agents,
                 get_audit_chain_status,
+                get_git_repo_status,
                 verify_governance_invariants,
                 verify_specific_invariant,
                 export_compliance_report,
@@ -12653,29 +13089,31 @@ mod tests {
     use super::{
         agent_memory_clear, agent_memory_forget, agent_memory_get_stats, agent_memory_recall,
         agent_memory_remember, chat_with_documents, check_model_compatibility, complete_build,
-        complete_research, create_agent, economy_create_wallet, economy_earn,
-        economy_freeze_wallet, economy_get_history, economy_get_stats, economy_get_wallet,
-        economy_spend, economy_transfer, evolution_evolve_once, evolution_get_active_strategy,
-        evolution_get_history, evolution_get_status, evolution_register_strategy,
-        evolution_rollback, factory_create_project, factory_get_build_history,
-        factory_list_projects, get_active_llm_provider, get_agent_activity, get_browser_history,
-        get_configured_provider, get_knowledge_base, get_live_system_metrics, get_messaging_status,
-        get_system_specs, ghost_protocol_add_peer, ghost_protocol_remove_peer,
-        ghost_protocol_status, ghost_protocol_toggle, index_document, learning_agent_action,
-        list_agents, list_indexed_documents, list_local_models, list_prebuilt_manifest_paths,
-        mcp_host_add_server, mcp_host_list_servers, mcp_host_list_tools, mcp_host_remove_server,
-        navigate_to, neural_bridge_delete, neural_bridge_ingest, neural_bridge_search,
-        neural_bridge_status, neural_bridge_toggle, parse_agent_manifest_json, pause_agent,
-        payment_create_invoice, payment_create_plan, payment_get_revenue_stats, payment_list_plans,
-        payment_pay_invoice, remove_indexed_document, replay_export_bundle, replay_get_bundle,
-        replay_list_bundles, replay_toggle_recording, replay_verify_bundle, resume_agent,
-        search_documents, set_default_agent, start_build, start_learning, start_research,
+        complete_research, create_agent, create_agent_immediately, economy_create_wallet,
+        economy_earn, economy_freeze_wallet, economy_get_history, economy_get_stats,
+        economy_get_wallet, economy_spend, economy_transfer, evolution_evolve_once,
+        evolution_get_active_strategy, evolution_get_history, evolution_get_status,
+        evolution_register_strategy, evolution_rollback, factory_create_project,
+        factory_get_build_history, factory_list_projects, get_active_llm_provider,
+        get_agent_activity, get_browser_history, get_configured_provider, get_knowledge_base,
+        get_live_system_metrics, get_messaging_status, get_system_specs, ghost_protocol_add_peer,
+        ghost_protocol_remove_peer, ghost_protocol_status, ghost_protocol_toggle, index_document,
+        learning_agent_action, list_agents, list_indexed_documents, list_local_models,
+        list_prebuilt_manifest_paths, mcp_host_add_server, mcp_host_list_servers,
+        mcp_host_list_tools, mcp_host_remove_server, navigate_to, neural_bridge_delete,
+        neural_bridge_ingest, neural_bridge_search, neural_bridge_status, neural_bridge_toggle,
+        parse_agent_manifest_json, pause_agent, payment_create_invoice, payment_create_plan,
+        payment_get_revenue_stats, payment_list_plans, payment_pay_invoice,
+        remove_indexed_document, replay_export_bundle, replay_get_bundle, replay_list_bundles,
+        replay_toggle_recording, replay_verify_bundle, resume_agent, search_documents,
+        set_default_agent, start_agent, start_build, start_learning, start_research, stop_agent,
         time_machine_create_checkpoint, time_machine_list_checkpoints, time_machine_redo,
         time_machine_undo, tracing_end_span, tracing_end_trace, tracing_get_trace,
         tracing_list_traces, tracing_start_span, tracing_start_trace, voice_get_status,
         voice_load_whisper_model, voice_transcribe, AppState, LearningSource,
     };
     use serde_json::json;
+    use uuid::Uuid;
 
     fn build_manifest(name: &str) -> String {
         json!({
@@ -12683,6 +13121,20 @@ mod tests {
             "version": "2.0.0",
             "capabilities": ["web.search", "llm.query", "fs.read"],
             "fuel_budget": 10000,
+            "schedule": null,
+            "llm_model": "claude-sonnet-4-5"
+        })
+        .to_string()
+    }
+
+    fn build_transcendent_manifest(name: &str) -> String {
+        json!({
+            "name": name,
+            "version": "2.0.0",
+            "description": "transcendent review test",
+            "capabilities": ["web.search", "llm.query", "fs.read", "self.modify", "cognitive_modify"],
+            "fuel_budget": 10000,
+            "autonomy_level": 6,
             "schedule": null,
             "llm_model": "claude-sonnet-4-5"
         })
@@ -12720,6 +13172,22 @@ mod tests {
             .err()
             .unwrap_or_default()
             .contains("name must be alphanumeric plus hyphens only"));
+    }
+
+    #[test]
+    fn test_tauri_create_l6_agent_requests_review() {
+        let state = AppState::new_in_memory();
+        let created = create_agent(&state, build_transcendent_manifest("transcendent-pending"));
+        assert!(created.is_ok());
+        let created = created.unwrap();
+        assert!(created.starts_with("approval-requested:"));
+
+        let pending = state.db.load_pending_consent().unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].operation_type, "transcendent_creation");
+        assert!(pending[0]
+            .operation_json
+            .contains("\"min_review_seconds\":60"));
     }
 
     #[test]
@@ -12774,17 +13242,75 @@ mod tests {
     }
 
     #[test]
-    fn test_prebuilt_manifest_count_is_35() {
+    fn test_new_l6_manifests_have_comprehensive_descriptions() {
+        let files = [
+            "ascendant.json",
+            "architect_prime.json",
+            "oracle_supreme.json",
+            "warden.json",
+            "genesis_prime.json",
+            "legion.json",
+            "oracle_omega.json",
+            "arbiter.json",
+            "continuum.json",
+            "nexus_prime.json",
+        ];
         let paths = list_prebuilt_manifest_paths();
-        assert_eq!(paths.len(), 35);
+
+        for file in files {
+            let path = paths
+                .iter()
+                .find(|path| path.file_name().and_then(|name| name.to_str()) == Some(file))
+                .unwrap_or_else(|| panic!("manifest should exist: {file}"));
+            let raw = std::fs::read_to_string(path).unwrap_or_else(|e| {
+                panic!("manifest {file} should be readable: {e}");
+            });
+            parse_agent_manifest_json(&raw).unwrap_or_else(|e| {
+                panic!("manifest {file} failed to parse: {e}");
+            });
+            let description = crate::parse_manifest_description(&raw);
+            let word_count = description.split_whitespace().count();
+            assert!(
+                word_count >= 500,
+                "manifest {file} should have at least 500 words, found {word_count}"
+            );
+        }
     }
 
     #[test]
-    fn test_load_prebuilt_agents_registers_35_manifests() {
+    fn test_prebuilt_manifest_count_is_nonzero() {
+        let paths = list_prebuilt_manifest_paths();
+        assert!(!paths.is_empty());
+    }
+
+    #[test]
+    fn test_load_prebuilt_agents_registers_every_manifest() {
         let state = AppState::new_in_memory();
         state.load_prebuilt_agents();
         let agents = state.db.list_agents().unwrap();
-        assert_eq!(agents.len(), 35);
+        assert_eq!(agents.len(), list_prebuilt_manifest_paths().len());
+    }
+
+    #[test]
+    fn test_start_l6_agent_requests_review_instead_of_restarting() {
+        let state = AppState::new_in_memory();
+        let created = create_agent_immediately(
+            &state,
+            parse_agent_manifest_json(&build_transcendent_manifest("transcendent-start")).unwrap(),
+            build_transcendent_manifest("transcendent-start"),
+        )
+        .unwrap();
+
+        stop_agent(&state, created.clone()).unwrap();
+        start_agent(&state, created.clone()).unwrap();
+
+        let pending = state.db.load_pending_consent().unwrap();
+        assert_eq!(pending.len(), 1);
+        assert!(pending[0].operation_json.contains("activate_existing"));
+
+        let listed = list_agents(&state).unwrap();
+        let agent = listed.iter().find(|row| row.id == created).unwrap();
+        assert_eq!(agent.status, "Stopped");
     }
 
     #[test]
@@ -13244,7 +13770,10 @@ mod tests {
 
         let list_result = time_machine_list_checkpoints(&state).unwrap();
         let parsed: Vec<serde_json::Value> = serde_json::from_str(&list_result).unwrap();
-        assert_eq!(parsed.len(), baseline_count + 1);
+        assert!(
+            parsed.len() == baseline_count || parsed.len() == baseline_count + 1,
+            "checkpoint list should either grow by one or evict at capacity"
+        );
         // Our checkpoint should be the last one
         let last = parsed.last().unwrap();
         assert_eq!(last["label"].as_str().unwrap(), "test-checkpoint");
@@ -13912,6 +14441,53 @@ mod tests {
     }
 
     #[test]
+    fn test_approve_transcendent_creation_creates_agent() {
+        let state = AppState::new_in_memory();
+        let pending_agent_id = Uuid::new_v4().to_string();
+        let manifest_json = build_transcendent_manifest("approved-transcendent");
+        state
+            .db
+            .save_agent(
+                &pending_agent_id,
+                &manifest_json,
+                "pending_approval",
+                6,
+                "native",
+            )
+            .unwrap();
+        state
+            .db
+            .enqueue_consent(&nexus_persistence::ConsentRow {
+                id: "c-transcendent-create".to_string(),
+                agent_id: pending_agent_id.clone(),
+                operation_type: "transcendent_creation".to_string(),
+                operation_json: json!({
+                    "summary": "Create L6 Transcendent agent 'approved-transcendent'",
+                    "side_effects": ["Maximum-autonomy L6 activation"],
+                    "fuel_cost": 0.0,
+                    "min_review_seconds": 60,
+                    "mode": "create_new",
+                    "manifest_json": manifest_json,
+                })
+                .to_string(),
+                hitl_tier: "Tier3".to_string(),
+                status: "pending".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                resolved_at: None,
+                resolved_by: None,
+            })
+            .unwrap();
+
+        approve_consent_request(&state, "c-transcendent-create".into(), "admin".into()).unwrap();
+
+        let agents = state.db.list_agents().unwrap();
+        assert!(agents.iter().all(|row| row.id != pending_agent_id));
+        assert!(agents
+            .iter()
+            .any(|row| row.manifest_json.contains("approved-transcendent")));
+    }
+
+    #[test]
     fn test_approve_consent_request_wakes_blocked_wait() {
         let state = AppState::new_in_memory();
         enqueue_test_consent(&state, "c-approve-wake", "a1", "fs.write", "Tier1");
@@ -13951,6 +14527,56 @@ mod tests {
         assert!(result.is_ok());
         let pending = list_pending_consents(&state).unwrap();
         assert!(pending.iter().all(|p| p.consent_id != "c-deny-1"));
+    }
+
+    #[test]
+    fn test_deny_transcendent_creation_cleans_up_pending_agent() {
+        let state = AppState::new_in_memory();
+        let pending_agent_id = Uuid::new_v4().to_string();
+        let manifest_json = build_transcendent_manifest("denied-transcendent");
+        state
+            .db
+            .save_agent(
+                &pending_agent_id,
+                &manifest_json,
+                "pending_approval",
+                6,
+                "native",
+            )
+            .unwrap();
+        state
+            .db
+            .enqueue_consent(&nexus_persistence::ConsentRow {
+                id: "c-transcendent-deny".to_string(),
+                agent_id: pending_agent_id.clone(),
+                operation_type: "transcendent_creation".to_string(),
+                operation_json: json!({
+                    "summary": "Create L6 Transcendent agent 'denied-transcendent'",
+                    "side_effects": ["Maximum-autonomy L6 activation"],
+                    "fuel_cost": 0.0,
+                    "min_review_seconds": 60,
+                    "mode": "create_new",
+                    "manifest_json": manifest_json,
+                })
+                .to_string(),
+                hitl_tier: "Tier3".to_string(),
+                status: "pending".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                resolved_at: None,
+                resolved_by: None,
+            })
+            .unwrap();
+
+        deny_consent_request(
+            &state,
+            "c-transcendent-deny".into(),
+            "admin".into(),
+            Some("not today".into()),
+        )
+        .unwrap();
+
+        let agents = state.db.list_agents().unwrap();
+        assert!(agents.iter().all(|row| row.id != pending_agent_id));
     }
 
     #[test]

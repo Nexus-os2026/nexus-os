@@ -2,13 +2,29 @@ version: "3.9"
 
 services:
   nexus-os:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
-      - "8081:8081"
     volumes:
-      - "${HOME}/.nexus:/data"
+      - "./nexus-data:/data"
     environment:
+      NEXUS_HTTP_ADDR: 0.0.0.0:8080
+      NEXUS_FRONTEND_DIST: /opt/nexus/app/dist
       NEXUS_CONFIG_PATH: /data/config
       JWT_SECRET: ${JWT_SECRET:-changeme}
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
     restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  ollama:

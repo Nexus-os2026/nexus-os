@@ -1,6 +1,6 @@
 # Nexus OS Prebuilt Agents
 
-35 autonomous agents ship under `agents/prebuilt/` in this checkout.
+The prebuilt agent catalog ships under `agents/prebuilt/` in this checkout.
 
 - `nexus-oracle` — NEXUS ORACLE, Autonomous Deep Research Engine. Capabilities: `web.search`, `web.read`, `fs.read`, `fs.write`, `mcp.call`. Recommended first goal: Research a complex topic and save a source-attributed `report.md` with contradictions and gaps called out.
 - `nexus-sentinel` — NEXUS SENTINEL, Autonomous Security & Compliance Guardian. Capabilities: `fs.read`, `process.exec`, `web.read`, `mcp.call`. Recommended first goal: Run a full dependency, audit-chain, and consent-pattern security review.

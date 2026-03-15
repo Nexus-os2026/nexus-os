@@ -420,6 +420,11 @@ impl SqliteRegistry {
             .map_err(|e| SqliteRegistryError::Serialization(e.to_string()))
     }
 
+    /// Get the signed bundle for a package without mutating download counts.
+    pub fn signed_bundle(&self, package_id: &str) -> Result<SignedPackageBundle, SqliteRegistryError> {
+        self.get_bundle(package_id)
+    }
+
     /// Remove an agent from the registry.
     pub fn remove(&self, package_id: &str) -> Result<bool, SqliteRegistryError> {
         // Delete reviews and versions first (foreign key deps)

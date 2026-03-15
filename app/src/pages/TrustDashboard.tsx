@@ -59,7 +59,7 @@ export default function TrustDashboard(): JSX.Element {
       <section className="td-hub">
         <header className="td-header">
           <h2 className="td-title">TRUST DASHBOARD // ADAPTIVE GOVERNANCE</h2>
-          <p className="td-subtitle">Desktop runtime required</p>
+          <p className="td-subtitle">Not configured</p>
         </header>
       </section>
     );
@@ -77,7 +77,7 @@ export default function TrustDashboard(): JSX.Element {
 
       {agents.length === 0 && (
         <div className="td-empty">
-          No agents registered. Create agents to see trust scores here.
+          Not configured
         </div>
       )}
 

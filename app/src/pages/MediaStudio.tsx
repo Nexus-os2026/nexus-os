@@ -56,38 +56,19 @@ const FOLDERS = ["All", "Screenshots", "Generated", "Uploads", "Agent Output", "
 
 const EXPORT_FORMATS = ["PNG", "JPEG", "WebP"];
 
-const INITIAL_ASSETS: MediaAsset[] = [
-  { id: "ms-1", name: "nexus-dashboard-screenshot.png", type: "image", size: 284000, width: 1920, height: 1080, folder: "Screenshots", tags: ["ui", "dashboard"], createdAt: Date.now() - 86400000, modifiedAt: Date.now() - 86400000, thumbnail: "linear-gradient(135deg, #0b1120 0%, #1e293b 50%, var(--nexus-accent) 100%)" },
-  { id: "ms-2", name: "agent-architecture-diagram.svg", type: "svg", size: 42000, width: 1200, height: 800, folder: "Uploads", tags: ["architecture", "diagram"], createdAt: Date.now() - 172800000, modifiedAt: Date.now() - 172800000, thumbnail: "linear-gradient(135deg, #1e293b 0%, #334155 50%, #818cf8 100%)" },
-  { id: "ms-3", name: "landing-hero-generated.png", type: "image", size: 520000, width: 2048, height: 1024, folder: "Generated", tags: ["ai", "hero", "landing"], createdAt: Date.now() - 3600000, modifiedAt: Date.now() - 3600000, thumbnail: "linear-gradient(135deg, #0f172a 0%, #6d28d9 50%, var(--nexus-accent) 100%)", agent: "Designer Agent" },
-  { id: "ms-4", name: "code-editor-preview.png", type: "image", size: 196000, width: 1440, height: 900, folder: "Screenshots", tags: ["ui", "code-editor"], createdAt: Date.now() - 43200000, modifiedAt: Date.now() - 43200000, thumbnail: "linear-gradient(135deg, #0b1120 0%, #1a1a2e 50%, #0f9b8e 100%)" },
-  { id: "ms-5", name: "governance-flow.svg", type: "svg", size: 38000, width: 1000, height: 600, folder: "Uploads", tags: ["governance", "flow"], createdAt: Date.now() - 259200000, modifiedAt: Date.now() - 259200000, thumbnail: "linear-gradient(135deg, #1e293b 0%, #475569 50%, #f59e0b 100%)" },
-  { id: "ms-6", name: "social-post-banner.png", type: "image", size: 310000, width: 1200, height: 630, folder: "Generated", tags: ["social", "banner"], createdAt: Date.now() - 7200000, modifiedAt: Date.now() - 7200000, thumbnail: "linear-gradient(135deg, #0f172a 0%, #ec4899 40%, #f59e0b 100%)", agent: "Screen Poster" },
-  { id: "ms-7", name: "terminal-dark-theme.gif", type: "gif", size: 890000, width: 800, height: 500, folder: "Screenshots", tags: ["terminal", "animation"], createdAt: Date.now() - 604800000, modifiedAt: Date.now() - 604800000, thumbnail: "linear-gradient(135deg, #000 0%, #0f172a 50%, #22c55e 100%)" },
-  { id: "ms-8", name: "nexus-logo-variations.png", type: "image", size: 156000, width: 2000, height: 500, folder: "Uploads", tags: ["logo", "branding"], createdAt: Date.now() - 1209600000, modifiedAt: Date.now() - 864000000, thumbnail: "linear-gradient(135deg, #0b1120 0%, var(--nexus-accent) 50%, #06b6d4 100%)" },
-  { id: "ms-9", name: "ai-workflow-concept.png", type: "image", size: 440000, width: 1600, height: 900, folder: "Generated", tags: ["ai", "concept", "workflow"], createdAt: Date.now() - 14400000, modifiedAt: Date.now() - 14400000, thumbnail: "linear-gradient(135deg, #1e1b4b 0%, #4f46e5 50%, var(--nexus-accent) 100%)", agent: "Designer Agent" },
-  { id: "ms-10", name: "permission-matrix-export.png", type: "image", size: 210000, width: 1400, height: 700, folder: "Exports", tags: ["permissions", "export"], createdAt: Date.now() - 28800000, modifiedAt: Date.now() - 28800000, thumbnail: "linear-gradient(135deg, #0f172a 0%, #334155 50%, #ef4444 100%)" },
-  { id: "ms-11", name: "fuel-usage-chart.png", type: "image", size: 175000, width: 1200, height: 600, folder: "Agent Output", tags: ["fuel", "chart", "analytics"], createdAt: Date.now() - 57600000, modifiedAt: Date.now() - 57600000, thumbnail: "linear-gradient(135deg, #0b1120 0%, #1e293b 50%, #fbbf24 100%)", agent: "Self-Improve Agent" },
-  { id: "ms-12", name: "audit-timeline-capture.png", type: "image", size: 230000, width: 1920, height: 1080, folder: "Agent Output", tags: ["audit", "timeline"], createdAt: Date.now() - 115200000, modifiedAt: Date.now() - 115200000, thumbnail: "linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #a78bfa 100%)", agent: "Planner Agent" },
-];
-
 const AI_STYLES = ["Photorealistic", "Digital Art", "Cyberpunk", "Minimalist", "Watercolor", "3D Render", "Pixel Art", "Sketch"];
 
 /* ─── component ─── */
 export default function MediaStudio() {
   const [view, setView] = useState<View>("library");
-  const [assets, setAssets] = useState<MediaAsset[]>(INITIAL_ASSETS);
+  const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"date" | "name" | "size">("date");
   const [gridSize, setGridSize] = useState<"sm" | "md" | "lg">("md");
-  const [fuelUsed, setFuelUsed] = useState(34);
-  const [auditLog, setAuditLog] = useState<string[]>([
-    "Opened media library",
-    "Designer Agent generated landing-hero",
-    "Screenshot captured: dashboard",
-  ]);
+  const [fuelUsed, setFuelUsed] = useState(0);
+  const [auditLog, setAuditLog] = useState<string[]>([]);
 
   // editor state
   const [activeFilter, setActiveFilter] = useState<Filter>("none");
@@ -432,7 +413,7 @@ export default function MediaStudio() {
               {filteredAssets.length === 0 && (
                 <div className="ms-empty">
                   <div className="ms-empty-icon">🖼</div>
-                  <div>No assets found</div>
+                  <div>No media files</div>
                 </div>
               )}
             </div>

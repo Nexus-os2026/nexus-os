@@ -5,7 +5,7 @@ import "./protocols.css";
 
 const EMPTY_STATUS: ProtocolsStatus = {
   a2a_status: "stopped",
-  a2a_version: "0.2.1",
+  a2a_version: "",
   a2a_peers: 0,
   a2a_tasks_processed: 0,
   mcp_status: "stopped",
@@ -73,7 +73,11 @@ export default function Protocols(): JSX.Element {
     <section className="proto-hub">
       <header className="proto-header">
         <h2 className="proto-title">PROTOCOLS // A2A + MCP GATEWAY</h2>
-        <p className="proto-subtitle">External protocol integration with full governance enforcement</p>
+        <p className="proto-subtitle">
+          {hasDesktopRuntime()
+            ? "External protocol integration with full governance enforcement"
+            : "Not configured"}
+        </p>
       </header>
 
       {/* Summary stats */}
@@ -116,7 +120,7 @@ export default function Protocols(): JSX.Element {
           </div>
           <div className="proto-server-detail">
             <span>Protocol Version</span>
-            <span className="proto-server-detail-value">{status.a2a_version}</span>
+            <span className="proto-server-detail-value">{status.a2a_version || "Not configured"}</span>
           </div>
           <div className="proto-server-detail">
             <span>Connected Peers</span>
@@ -174,7 +178,9 @@ export default function Protocols(): JSX.Element {
           </div>
           <div className="proto-server-detail">
             <span>JWT Auth</span>
-            <span className="proto-server-detail-value">enabled</span>
+            <span className="proto-server-detail-value">
+              {status.governance_bridge_active ? "enabled" : "Not configured"}
+            </span>
           </div>
         </div>
       </div>

@@ -1,24 +1,45 @@
-# Stage 1: Build
-FROM rust:1.82-bookworm AS builder
+FROM rust:stable-bookworm AS backend-builder
 
 WORKDIR /build
 COPY . .
 RUN cargo build --release --package nexus-protocols --bin nexus-server
 
-# Stage 2: Runtime
-FROM debian:bookworm-slim
+FROM node:22-bookworm-slim AS frontend-builder
+
+WORKDIR /build/app
+COPY app/package.json app/package-lock.json ./
+RUN npm ci
+COPY app/ ./
+RUN npm run build
+
+FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libssl3 ca-certificates \
+    ca-certificates \
+    curl \
+    libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd --create-home --shell /bin/bash nexus
+RUN useradd --create-home --shell /bin/bash nexus \
+    && mkdir -p /data /opt/nexus/app/dist \
+    && chown -R nexus:nexus /data /opt/nexus
+
+WORKDIR /opt/nexus
+
+ENV NEXUS_HTTP_ADDR=0.0.0.0:8080 \
+    NEXUS_FRONTEND_DIST=/opt/nexus/app/dist \
+    NEXUS_CONFIG_PATH=/data/config
+
+COPY --from=backend-builder /build/target/release/nexus-server /usr/local/bin/nexus-server
+COPY --from=frontend-builder /build/app/dist ./app/dist
+
+VOLUME ["/data"]
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1
+
 USER nexus
 
-COPY --from=builder /build/target/release/nexus-server /usr/local/bin/nexus-server
-
-RUN mkdir -p /home/nexus/.nexus
-
-EXPOSE 8080 8081
-
-ENTRYPOINT ["nexus-server"]
+ENTRYPOINT ["nexus-server", "start"]

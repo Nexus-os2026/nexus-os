@@ -12,8 +12,6 @@ const STATUS_COLORS: Record<string, string> = {
   Idle: "#6b7280",
 };
 
-const AUTONOMY_LABELS = ["L0 Inert", "L1 Suggest", "L2 Act+Approve", "L3 Act+Report", "L4 Autonomous", "L5 Full"];
-
 function formatTime(ts: number): string {
   if (ts === 0) return "—";
   const d = new Date(ts * 1000);
@@ -105,7 +103,7 @@ export default function CommandCenter(): JSX.Element {
 
               <div className="cc-card-autonomy">
                 <span className="cc-label">Autonomy</span>
-                <span className="cc-value">{AUTONOMY_LABELS[0]}</span>
+                <span className="cc-value">Not configured</span>
               </div>
 
               <div className="cc-card-fuel">

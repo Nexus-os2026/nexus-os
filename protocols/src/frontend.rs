@@ -1,47 +1,56 @@
-use axum::http::{header, StatusCode, Uri};
+use axum::body::Body;
+use axum::http::{Method, Request, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
-use include_dir::{include_dir, Dir};
+use std::path::PathBuf;
+use tower::ServiceExt;
+use tower_http::services::{ServeDir, ServeFile};
 
-static FRONTEND_DIST: Dir<'_> = include_dir!("$NEXUS_FRONTEND_DIST");
 const API_PREFIXES: &[&str] = &[
     "/api", "/a2a", "/mcp", "/auth", "/health", "/metrics", "/ws", "/v1",
 ];
 
-pub async fn serve_embedded_frontend(uri: Uri) -> Response {
-    let path = uri.path();
-    if API_PREFIXES
+fn frontend_dist_dir() -> PathBuf {
+    std::env::var_os("NEXUS_FRONTEND_DIST")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("app/dist"))
+}
+
+fn is_api_path(path: &str) -> bool {
+    API_PREFIXES
         .iter()
         .any(|prefix| path == *prefix || path.starts_with(&format!("{prefix}/")))
-    {
+}
+
+pub async fn serve_frontend(method: Method, uri: Uri) -> Response {
+    if is_api_path(uri.path()) {
         return (StatusCode::NOT_FOUND, "not found").into_response();
     }
 
-    let requested = path.trim_start_matches('/');
-    let asset_path = if requested.is_empty() {
-        "index.html"
-    } else {
-        requested
-    };
-
-    if let Some(file) = FRONTEND_DIST.get_file(asset_path) {
-        return asset_response(asset_path, file.contents());
+    let dist_dir = frontend_dist_dir();
+    let index_path = dist_dir.join("index.html");
+    if !index_path.exists() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            format!("frontend assets not found at {}", dist_dir.display()),
+        )
+            .into_response();
     }
 
-    if !asset_path.contains('.') {
-        if let Some(index) = FRONTEND_DIST.get_file("index.html") {
-            return asset_response("index.html", index.contents());
-        }
+    let service = ServeDir::new(dist_dir)
+        .append_index_html_on_directories(true)
+        .fallback(ServeFile::new(index_path));
+    let request = Request::builder()
+        .method(method)
+        .uri(uri)
+        .body(Body::empty())
+        .expect("frontend request should build");
+
+    match service.oneshot(request).await {
+        Ok(response) => response.into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("failed to serve frontend: {error}"),
+        )
+            .into_response(),
     }
-
-    (StatusCode::NOT_FOUND, "not found").into_response()
-}
-
-fn asset_response(path: &str, contents: &[u8]) -> Response {
-    let mime = mime_guess::from_path(path).first_or_octet_stream();
-    (
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, mime.as_ref())],
-        contents.to_vec(),
-    )
-        .into_response()
 }
