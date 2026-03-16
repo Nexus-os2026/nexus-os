@@ -8,11 +8,14 @@ pub mod agent_lifecycle;
 pub mod api;
 pub mod browser;
 pub mod cognitive_param;
+pub mod computer_use;
 pub mod docker;
 pub mod filesystem;
 pub mod governance_policy;
 pub mod image_gen;
+pub mod input;
 pub mod knowledge_graph;
+pub mod screen;
 pub mod self_evolution;
 pub mod shell;
 pub mod tts;
@@ -26,15 +29,21 @@ pub use cognitive_param::{
     AlgorithmSelectionActuator, CognitiveParamActuator, CounterfactualActuator,
     EcosystemDesignActuator, ModelOrchestrationActuator, TemporalPlanActuator,
 };
+pub use computer_use::ComputerUseActuator;
 pub use docker::DockerActuator;
 pub use filesystem::GovernedFilesystem;
 pub use governance_policy::GovernancePolicyActuator;
 pub use image_gen::ImageGenActuator;
+pub use input::InputControlActuator;
 pub use knowledge_graph::KnowledgeGraphActuator;
+pub use screen::ScreenCaptureActuator;
 pub use self_evolution::SelfEvolutionActuator;
 pub use shell::GovernedShell;
 pub use tts::TtsActuator;
-pub use types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
+pub use types::{
+    ActionResult, ActionReviewDecision, ActionReviewEngine, Actuator, ActuatorContext,
+    ActuatorError, SideEffect,
+};
 pub use web::GovernedWeb;
 
 use crate::audit::{AuditTrail, EventType};
@@ -84,6 +93,9 @@ impl ActuatorRegistry {
         registry.register(Box::new(TtsActuator));
         registry.register(Box::new(KnowledgeGraphActuator::default()));
         registry.register(Box::new(BrowserActuator));
+        registry.register(Box::new(ScreenCaptureActuator));
+        registry.register(Box::new(InputControlActuator));
+        registry.register(Box::new(ComputerUseActuator));
         registry.register(Box::new(SelfEvolutionActuator));
         registry.register(Box::new(AgentLifecycleActuator));
         registry.register(Box::new(GovernancePolicyActuator));
@@ -150,10 +162,67 @@ impl ActuatorRegistry {
             });
         }
 
-        // 3. Execute
+        // 3. Optional governance review for higher-risk actions.
+        if should_apply_governance_review(action) {
+            if let Some(review_engine) = &context.action_review_engine {
+                match review_engine.review(&context.agent_id, &context.agent_name, action) {
+                    Ok(ActionReviewDecision::Allow { reason }) => {
+                        let _ = audit.append_event(
+                            uuid::Uuid::parse_str(&context.agent_id)
+                                .unwrap_or_else(|_| uuid::Uuid::new_v4()),
+                            EventType::StateChange,
+                            json!({
+                                "event_kind": "warden.review",
+                                "decision": "allow",
+                                "action_type": action.action_type(),
+                                "reason": reason,
+                                "agent_id": context.agent_id,
+                                "agent_name": context.agent_name,
+                            }),
+                        );
+                    }
+                    Ok(ActionReviewDecision::Deny { reason }) => {
+                        let _ = audit.append_event(
+                            uuid::Uuid::parse_str(&context.agent_id)
+                                .unwrap_or_else(|_| uuid::Uuid::new_v4()),
+                            EventType::StateChange,
+                            json!({
+                                "event_kind": "warden.review",
+                                "decision": "deny",
+                                "action_type": action.action_type(),
+                                "reason": reason,
+                                "agent_id": context.agent_id,
+                                "agent_name": context.agent_name,
+                            }),
+                        );
+                        return Err(ActuatorError::HumanApprovalRequired(format!(
+                            "Warden blocked action: {reason}"
+                        )));
+                    }
+                    Err(error) => {
+                        let _ = audit.append_event(
+                            uuid::Uuid::parse_str(&context.agent_id)
+                                .unwrap_or_else(|_| uuid::Uuid::new_v4()),
+                            EventType::Error,
+                            json!({
+                                "event_kind": "warden.review",
+                                "decision": "error",
+                                "action_type": action.action_type(),
+                                "reason": error,
+                                "agent_id": context.agent_id,
+                                "agent_name": context.agent_name,
+                            }),
+                        );
+                        return Err(ActuatorError::GovernanceReviewFailed(error));
+                    }
+                }
+            }
+        }
+
+        // 4. Execute
         let result = actuator.execute(action, context)?;
 
-        // 4. Audit
+        // 5. Audit
         let _ = self.audit_action(
             action,
             context,
@@ -181,6 +250,18 @@ impl ActuatorRegistry {
             PlannedAction::KnowledgeGraphUpdate { .. }
             | PlannedAction::KnowledgeGraphQuery { .. } => "knowledge_graph_actuator",
             PlannedAction::BrowserAutomate { .. } => "browser_actuator",
+            PlannedAction::CaptureScreen { .. }
+            | PlannedAction::CaptureWindow { .. }
+            | PlannedAction::AnalyzeScreen { .. } => "screen_capture_actuator",
+            PlannedAction::MouseMove { .. }
+            | PlannedAction::MouseClick { .. }
+            | PlannedAction::MouseDoubleClick { .. }
+            | PlannedAction::MouseDrag { .. }
+            | PlannedAction::KeyboardType { .. }
+            | PlannedAction::KeyboardPress { .. }
+            | PlannedAction::KeyboardShortcut { .. }
+            | PlannedAction::ScrollWheel { .. } => "input_control_actuator",
+            PlannedAction::ComputerAction { .. } => "computer_use_actuator",
             PlannedAction::SelfModifyDescription { .. }
             | PlannedAction::SelfModifyStrategy { .. }
             | PlannedAction::RunEvolutionTournament { .. } => "self_evolution",
@@ -236,6 +317,18 @@ impl ActuatorRegistry {
     }
 }
 
+fn should_apply_governance_review(action: &PlannedAction) -> bool {
+    !matches!(
+        action,
+        PlannedAction::FileRead { .. }
+            | PlannedAction::WebSearch { .. }
+            | PlannedAction::WebFetch { .. }
+            | PlannedAction::MemoryRecall { .. }
+            | PlannedAction::KnowledgeGraphQuery { .. }
+            | PlannedAction::Noop
+    )
+}
+
 /// Estimate the fuel cost of an action before execution.
 fn estimate_action_cost(action: &PlannedAction) -> f64 {
     match action {
@@ -251,6 +344,18 @@ fn estimate_action_cost(action: &PlannedAction) -> f64 {
         PlannedAction::KnowledgeGraphUpdate { .. } => 4.0,
         PlannedAction::KnowledgeGraphQuery { .. } => 2.0,
         PlannedAction::BrowserAutomate { .. } => 10.0,
+        PlannedAction::CaptureScreen { .. } => 4.0,
+        PlannedAction::CaptureWindow { .. } => 6.0,
+        PlannedAction::AnalyzeScreen { .. } => 12.0,
+        PlannedAction::MouseMove { .. } => 3.0,
+        PlannedAction::MouseClick { .. } => 5.0,
+        PlannedAction::MouseDoubleClick { .. } => 6.0,
+        PlannedAction::MouseDrag { .. } => 7.0,
+        PlannedAction::KeyboardType { text } => 5.0 + (text.chars().count() as f64 * 0.1),
+        PlannedAction::KeyboardPress { .. } => 4.0,
+        PlannedAction::KeyboardShortcut { keys } => 4.0 + keys.len() as f64,
+        PlannedAction::ScrollWheel { amount, .. } => 3.0 + *amount as f64 * 0.1,
+        PlannedAction::ComputerAction { max_steps, .. } => 20.0 + *max_steps as f64,
         PlannedAction::LlmQuery { .. } => 10.0,
         PlannedAction::SelfModifyDescription { .. } => 15.0,
         PlannedAction::SelfModifyStrategy { .. } => 10.0,
@@ -286,20 +391,28 @@ mod tests {
         caps.insert("web.search".into());
         caps.insert("web.read".into());
         caps.insert("mcp.call".into());
+        caps.insert("screen.capture".into());
+        caps.insert("screen.analyze".into());
+        caps.insert("input.mouse".into());
+        caps.insert("input.keyboard".into());
+        caps.insert("input.autonomous".into());
+        caps.insert("computer.use".into());
         ActuatorContext {
             agent_id: uuid::Uuid::new_v4().to_string(),
+            agent_name: "registry-test-agent".to_string(),
             working_dir: workspace.to_path_buf(),
             autonomy_level: AutonomyLevel::L2,
             capabilities: caps,
             fuel_remaining: 1000.0,
             egress_allowlist: vec!["https://api.example.com".into()],
+            action_review_engine: None,
         }
     }
 
     #[test]
     fn registry_with_defaults() {
         let registry = ActuatorRegistry::with_defaults();
-        assert_eq!(registry.actuators.len(), 18);
+        assert_eq!(registry.actuators.len(), 21);
         assert!(registry.actuators.contains_key("governed_filesystem"));
         assert!(registry.actuators.contains_key("governed_shell"));
         assert!(registry.actuators.contains_key("docker_actuator"));
@@ -309,6 +422,9 @@ mod tests {
         assert!(registry.actuators.contains_key("tts_actuator"));
         assert!(registry.actuators.contains_key("knowledge_graph_actuator"));
         assert!(registry.actuators.contains_key("browser_actuator"));
+        assert!(registry.actuators.contains_key("screen_capture_actuator"));
+        assert!(registry.actuators.contains_key("input_control_actuator"));
+        assert!(registry.actuators.contains_key("computer_use_actuator"));
         assert!(registry.actuators.contains_key("self_evolution"));
         assert!(registry.actuators.contains_key("agent_lifecycle"));
         assert!(registry.actuators.contains_key("governance_policy"));
@@ -449,5 +565,57 @@ mod tests {
         let r = registry.execute_action(&action, &ctx, &mut audit).unwrap();
         assert!(r.success);
         assert!(r.output.contains("registry_test"));
+    }
+
+    #[test]
+    fn new_planned_action_variants_are_routed() {
+        let registry = ActuatorRegistry::with_defaults();
+        let actions = vec![
+            PlannedAction::CaptureScreen { region: None },
+            PlannedAction::CaptureWindow {
+                window_title: "Firefox".into(),
+            },
+            PlannedAction::AnalyzeScreen {
+                query: "what is visible?".into(),
+            },
+            PlannedAction::MouseMove { x: 1, y: 2 },
+            PlannedAction::MouseClick {
+                x: 1,
+                y: 2,
+                button: "left".into(),
+            },
+            PlannedAction::MouseDoubleClick { x: 1, y: 2 },
+            PlannedAction::MouseDrag {
+                from_x: 1,
+                from_y: 2,
+                to_x: 3,
+                to_y: 4,
+            },
+            PlannedAction::KeyboardType {
+                text: "hello".into(),
+            },
+            PlannedAction::KeyboardPress {
+                key: "Enter".into(),
+            },
+            PlannedAction::KeyboardShortcut {
+                keys: vec!["Ctrl".into(), "L".into()],
+            },
+            PlannedAction::ScrollWheel {
+                direction: "down".into(),
+                amount: 2,
+            },
+            PlannedAction::ComputerAction {
+                description: "click once".into(),
+                max_steps: 2,
+            },
+        ];
+
+        for action in actions {
+            assert!(
+                registry.find_actuator_for(&action).is_ok(),
+                "missing actuator for {}",
+                action.action_type()
+            );
+        }
     }
 }

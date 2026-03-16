@@ -1,7 +1,7 @@
 use crate::providers::{
     ClaudeProvider, CohereProvider, DeepSeekProvider, FireworksProvider, GeminiProvider,
-    GroqProvider, LlmProvider, LlmResponse, MistralProvider, MockProvider, OllamaProvider,
-    OpenAiProvider, OpenRouterProvider, PerplexityProvider, TogetherProvider,
+    GroqProvider, LlmProvider, LlmResponse, MistralProvider, MockProvider, NvidiaProvider,
+    OllamaProvider, OpenAiProvider, OpenRouterProvider, PerplexityProvider, TogetherProvider,
 };
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::errors::AgentError;
@@ -59,6 +59,7 @@ pub struct ProviderSelectionConfig {
     pub perplexity_api_key: Option<String>,
     pub cohere_api_key: Option<String>,
     pub openrouter_api_key: Option<String>,
+    pub nvidia_api_key: Option<String>,
 }
 
 impl ProviderSelectionConfig {
@@ -77,6 +78,7 @@ impl ProviderSelectionConfig {
             perplexity_api_key: env::var("PERPLEXITY_API_KEY").ok(),
             cohere_api_key: env::var("COHERE_API_KEY").ok(),
             openrouter_api_key: env::var("OPENROUTER_API_KEY").ok(),
+            nvidia_api_key: env::var("NVIDIA_NIM_API_KEY").ok(),
         }
     }
 }
@@ -137,6 +139,10 @@ pub fn select_provider(config: &ProviderSelectionConfig) -> Box<dyn LlmProvider>
         return Box::new(OpenRouterProvider::new(config.openrouter_api_key.clone()));
     }
 
+    if has_key(&config.nvidia_api_key) {
+        return Box::new(NvidiaProvider::new(config.nvidia_api_key.clone()));
+    }
+
     if has_key(&config.openai_api_key) {
         return Box::new(OpenAiProvider::new(config.openai_api_key.clone()));
     }
@@ -182,6 +188,9 @@ fn explicit_provider(explicit: &str, config: &ProviderSelectionConfig) -> Box<dy
         "perplexity" => Box::new(PerplexityProvider::new(config.perplexity_api_key.clone())),
         "cohere" => Box::new(CohereProvider::new(config.cohere_api_key.clone())),
         "openrouter" => Box::new(OpenRouterProvider::new(config.openrouter_api_key.clone())),
+        "nvidia" | "nvidia-nim" | "nim" => {
+            Box::new(NvidiaProvider::new(config.nvidia_api_key.clone()))
+        }
         "openai" => Box::new(OpenAiProvider::new(config.openai_api_key.clone())),
         "gemini" | "google" => Box::new(GeminiProvider::new(config.gemini_api_key.clone())),
         "claude" | "anthropic" => Box::new(ClaudeProvider::new(config.anthropic_api_key.clone())),

@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Editor, { type OnMount } from "@monaco-editor/react";
+import {
+  hasDesktopRuntime,
+  sendChat,
+  terminalExecute,
+  terminalExecuteApproved,
+  type TerminalCommandResult,
+} from "../api/backend";
 import "./code-editor.css";
 
 /* ================================================================== */
 /*  Tauri invoke                                                       */
 /* ================================================================== */
 
-const HAS_DESKTOP = typeof window !== "undefined" && "__TAURI__" in window;
+const HAS_DESKTOP = hasDesktopRuntime();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const invoke: (cmd: string, args?: Record<string, unknown>) => Promise<any> =
@@ -97,6 +104,7 @@ interface AgentWorker {
 type AgentPanelMode = "idle" | "thinking" | "result";
 type BottomPanel = "terminal" | "git" | "agents" | "none";
 type SplitView = "off" | "suggestion";
+type ApprovalState = { cmd: string; cwd: string } | null;
 
 /* ================================================================== */
 /*  Language detection                                                  */
@@ -159,18 +167,6 @@ const AGENT_ACTIONS: AgentAction[] = [
   { id: "review", label: "Review", description: "Security & quality review", icon: "⛨" },
 ];
 
-const AGENT_RESPONSES: Record<string, string> = {
-  explain: "Connect an LLM provider in Settings to enable code explanation.",
-  refactor: "Connect an LLM provider in Settings to enable refactoring suggestions.",
-  fix: "Connect an LLM provider in Settings to enable bug detection.",
-  test: "Connect an LLM provider in Settings to enable test generation.",
-  document: "Connect an LLM provider in Settings to enable documentation generation.",
-  optimize: "Connect an LLM provider in Settings to enable performance analysis.",
-  complete: "Connect an LLM provider in Settings to enable code completion.",
-  review: "Connect an LLM provider in Settings to enable security review.",
-};
-
-
 const DANGEROUS_COMMANDS = ["rm -rf", "sudo rm", "mkfs", "dd if=", ":(){:|:&};:", "chmod 777", "FORMAT", "shutdown", "reboot", "kill -9 1"];
 
 /** File extensions safe to open in the editor (text-based) */
@@ -219,6 +215,7 @@ export default function CodeEditor(): JSX.Element {
   const [agentWorkers, setAgentWorkers] = useState<AgentWorker[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
+  const [pendingApproval, setPendingApproval] = useState<ApprovalState>(null);
 
   /* ---- Filesystem state ---- */
   const [rootPath, setRootPath] = useState<string>("");
@@ -236,6 +233,12 @@ export default function CodeEditor(): JSX.Element {
   const fuelRemaining = fuelBudget - fuelUsed;
   const fuelPct = Math.round((fuelRemaining / fuelBudget) * 100);
   const gitBranch = gitRepo.branch ?? "No git repo detected";
+  const terminalCwd = useMemo(() => {
+    if (activeFile?.path.includes("/")) {
+      return activeFile.path.slice(0, activeFile.path.lastIndexOf("/")) || "/";
+    }
+    return gitRepo.root ?? rootPath ?? "/home/nexus/NEXUS/nexus-os";
+  }, [activeFile?.path, gitRepo.root, rootPath]);
 
   /* ---- Audit helper ---- */
   const appendAudit = useCallback((event: string, detail: string) => {
@@ -446,11 +449,68 @@ export default function CodeEditor(): JSX.Element {
     setTimeout(() => termRef.current?.scrollTo(0, termRef.current.scrollHeight), 50);
   }
 
+  function applyTerminalResult(result: TerminalCommandResult): void {
+    setFuelUsed((prev) => prev + result.fuel_cost);
+    if (result.stdout) {
+      result.stdout
+        .trimEnd()
+        .split("\n")
+        .filter((line) => line.length > 0)
+        .forEach((line) => addTermLine("output", line));
+    }
+    if (result.stderr) {
+      result.stderr
+        .trimEnd()
+        .split("\n")
+        .filter((line) => line.length > 0)
+        .forEach((line) => addTermLine("error", line));
+    }
+    if (result.exit_code !== 0) {
+      addTermLine("error", `[exit code ${result.exit_code}] (${result.duration_ms}ms)`);
+    }
+  }
+
+  async function runTerminalCommand(
+    cmd: string,
+    approved: boolean = false,
+    cwdOverride?: string,
+  ): Promise<void> {
+    const cwd = cwdOverride ?? terminalCwd;
+    try {
+      if (approved) {
+        setPendingApproval(null);
+      }
+      const result = approved
+        ? await terminalExecuteApproved(cmd, cwd)
+        : await terminalExecute(cmd, cwd);
+      if (result.needs_approval) {
+        setPendingApproval({ cmd, cwd });
+        addTermLine("error", `[APPROVAL REQUIRED] ${cmd}`);
+        appendAudit("TermHITL", `${cmd} — ${result.tool}`);
+        return;
+      }
+      applyTerminalResult(result);
+    } catch (error) {
+      addTermLine("error", `Command failed: ${error instanceof Error ? error.message : String(error)}`);
+      appendAudit("TermError", `${cmd}`);
+    }
+  }
+
+  function denyPendingCommand(): void {
+    if (!pendingApproval) {
+      return;
+    }
+    appendAudit("TermDenied", pendingApproval.cmd);
+    setPendingApproval(null);
+    addTermLine("system", "Command denied.");
+  }
+
   function handleTerminalSubmit(): void {
     const cmd = terminalInput.trim();
     if (!cmd) return;
     addTermLine("input", `$ ${cmd}`);
     setTerminalInput("");
+    setPendingApproval(null);
 
     // Check for dangerous commands
     const isDangerous = DANGEROUS_COMMANDS.some((d) => cmd.toLowerCase().includes(d.toLowerCase()));
@@ -462,74 +522,62 @@ export default function CodeEditor(): JSX.Element {
 
     appendAudit("TermExec", cmd);
 
-    // Mock responses
-    setTimeout(() => {
-      if (cmd === "ls" || cmd === "ls -la") {
-        addTermLine("output", "src/  agents/  README.md  Cargo.toml  Cargo.lock");
-      } else if (cmd === "cargo build") {
-        addTermLine("output", "   Compiling nexus-kernel v7.0.0");
-        setTimeout(() => addTermLine("output", "   Compiling nexus-sdk v7.0.0"), 300);
-        setTimeout(() => addTermLine("output", "    Finished release [optimized] target(s) in 4.2s"), 600);
-      } else if (cmd === "cargo test") {
-        addTermLine("output", "running 804 tests");
-        setTimeout(() => addTermLine("output", "test result: ok. 804 passed; 0 failed; 0 ignored"), 500);
-      } else if (cmd === "git status") {
-        if (!gitRepo.detected) {
-          addTermLine("system", "No git repo detected");
-        } else if (gitRepo.changes.length === 0) {
-          addTermLine("output", `On branch ${gitBranch}\nWorking tree clean`);
-        } else {
-          addTermLine("output", `On branch ${gitBranch}`);
-          gitRepo.changes.forEach((change) => {
-            addTermLine("output", `  ${change.status}: ${change.file}`);
-          });
-        }
-      } else if (cmd === "git log --oneline") {
-        if (!gitRepo.detected) {
-          addTermLine("system", "No git repo detected");
-        } else if (gitRepo.commits.length === 0) {
-          addTermLine("system", "No commits found");
-        } else {
-          gitRepo.commits.forEach((commit) => addTermLine("output", `${commit.hash.slice(0, 7)} ${commit.message}`));
-        }
-      } else if (cmd.startsWith("echo ")) {
-        addTermLine("output", cmd.slice(5));
-      } else if (cmd === "clear") {
-        setTerminalLines([]);
-      } else if (cmd === "pwd") {
-        addTermLine("output", "/home/nexus/NEXUS/nexus-os");
-      } else if (cmd === "whoami") {
-        addTermLine("output", "nexus-agent (governed, L3)");
-      } else if (cmd === "help") {
-        addTermLine("system", "Available: ls, cargo build, cargo test, git status, git log, echo, pwd, whoami, clear");
-      } else {
-        addTermLine("output", `nexus-sh: command simulated: ${cmd}`);
-      }
-    }, 150);
+    if (cmd === "clear") {
+      setTerminalLines([]);
+      return;
+    }
+
+    if (cmd === "help") {
+      addTermLine(
+        "system",
+        "Editor shell runs through terminal_execute. Try: ls, pwd, git status, cargo test, npm run build.",
+      );
+      return;
+    }
+
+    if (!HAS_DESKTOP) {
+      addTermLine("error", "Desktop runtime unavailable — editor shell cannot execute commands.");
+      return;
+    }
+
+    void runTerminalCommand(cmd);
   }
 
   /* ---- Git operations ---- */
   function handleGitCommit(): void {
-    if (!commitMsg.trim()) return;
+    const message = commitMsg.trim();
+    if (!message) return;
     appendAudit("GitCommit", commitMsg.trim());
-    addTermLine("system", gitRepo.detected ? "Git commit is not wired from the editor yet." : "No git repo detected");
+    if (!HAS_DESKTOP || !gitRepo.detected) {
+      addTermLine("system", "No git repo detected");
+      return;
+    }
+    void runTerminalCommand(`git commit -m "${message.replace(/"/g, '\\"')}"`);
     setCommitMsg("");
   }
 
   function handleGitPush(): void {
     appendAudit("GitPush", `push ${gitBranch} → origin`);
-    addTermLine("system", gitRepo.detected ? "Git push is not wired from the editor yet." : "No git repo detected");
+    if (!HAS_DESKTOP || !gitRepo.detected) {
+      addTermLine("system", "No git repo detected");
+      return;
+    }
+    void runTerminalCommand(`git push origin ${gitBranch === "No git repo detected" ? "main" : gitBranch}`);
   }
 
   function handleGitPull(): void {
     appendAudit("GitPull", `pull origin/${gitBranch}`);
-    addTermLine("system", gitRepo.detected ? "Git pull is not wired from the editor yet." : "No git repo detected");
+    if (!HAS_DESKTOP || !gitRepo.detected) {
+      addTermLine("system", "No git repo detected");
+      return;
+    }
+    void runTerminalCommand(`git pull origin ${gitBranch === "No git repo detected" ? "main" : gitBranch}`);
   }
 
   /* ---- Agent actions ---- */
-  function handleAgentAction(action: AgentAction): void {
-    const cost = 120 + Math.floor(Math.random() * 130);
-    if (fuelUsed + cost > fuelBudget) {
+  async function handleAgentAction(action: AgentAction): Promise<void> {
+    const estimatedCost = 120;
+    if (fuelUsed + estimatedCost > fuelBudget) {
       appendAudit("FuelExhausted", `Cannot run ${action.label} — insufficient fuel`);
       return;
     }
@@ -543,18 +591,54 @@ export default function CodeEditor(): JSX.Element {
       setSplitView("suggestion");
     }
 
-    setTimeout(() => {
-      setFuelUsed((prev) => prev + cost);
-      setAgentResult(AGENT_RESPONSES[action.id] ?? "Connect an LLM provider in Settings to use agent actions.");
+    if (!HAS_DESKTOP) {
+      setAgentResult("Desktop runtime unavailable. Open the desktop app and connect an LLM provider in Settings to use agent assist.");
       setAgentMode("result");
-      appendAudit("AgentComplete", `${action.label} — ${cost} fuel consumed`);
-    }, 600 + Math.random() * 800);
+      appendAudit("AgentComplete", `${action.label} — desktop runtime unavailable`);
+      return;
+    }
+
+    if (!activeFile) {
+      setAgentResult("Open a file first so agent assist can include the current source in the request.");
+      setAgentMode("result");
+      appendAudit("AgentComplete", `${action.label} — no active file`);
+      return;
+    }
+
+    const prompts: Record<string, string> = {
+      explain: "Explain the selected file, highlight risks, and suggest next steps.",
+      refactor: "Refactor this file and return the proposed code changes with concise reasoning.",
+      fix: "Find likely bugs in this file and return the corrected code or patch guidance.",
+      test: "Generate focused tests for this file and explain what they cover.",
+      document: "Document this file with clear usage notes and inline guidance where helpful.",
+      optimize: "Suggest performance and reliability improvements for this file.",
+      complete: "Continue or complete the current implementation in a production-ready way.",
+      review: "Perform a code review focused on bugs, regressions, and missing tests.",
+    };
+
+    try {
+      const response = await sendChat(
+        `${prompts[action.id]}\n\nFile path: ${activeFile.path}\nLanguage: ${activeFile.language}\n\nSource:\n\`\`\`\n${activeFile.content}\n\`\`\``,
+      );
+      const nextFuel = Math.max(estimatedCost, Math.min(480, response.token_count || estimatedCost));
+      setFuelUsed((prev) => prev + nextFuel);
+      setAgentResult(response.text);
+      setAgentMode("result");
+      appendAudit("AgentComplete", `${action.label} — ${nextFuel} fuel consumed`);
+    } catch (error) {
+      setAgentResult(
+        error instanceof Error
+          ? error.message
+          : String(error),
+      );
+      setAgentMode("result");
+      appendAudit("AgentError", `${action.label} failed`);
+    }
   }
 
   function applyAgentSuggestion(): void {
     if (!activeFile || !agentResult) return;
-    // In a real implementation, this would apply a diff/patch
-    appendAudit("AgentApply", `Applied ${agentAction} suggestion to ${activeFile.name}`);
+    appendAudit("AgentApply", `Reviewed ${agentAction} response for ${activeFile.name}`);
     setSplitView("off");
     setAgentMode("idle");
   }
@@ -864,10 +948,10 @@ export default function CodeEditor(): JSX.Element {
               {/* Split: agent suggestion */}
               {splitView === "suggestion" && agentMode === "result" && (
                 <div className="ce-split-panel">
-                  <div className="ce-split-header">
-                    <span className="ce-split-title">AGENT SUGGESTION — {agentAction.toUpperCase()}</span>
-                    <div className="ce-split-actions">
-                      <button type="button" className="ce-split-btn ce-split-apply" onClick={applyAgentSuggestion}>Apply</button>
+                    <div className="ce-split-header">
+                      <span className="ce-split-title">AGENT SUGGESTION — {agentAction.toUpperCase()}</span>
+                      <div className="ce-split-actions">
+                      <button type="button" className="ce-split-btn ce-split-apply" onClick={applyAgentSuggestion}>Mark Reviewed</button>
                       <button type="button" className="ce-split-btn ce-split-dismiss" onClick={() => setSplitView("off")}>Dismiss</button>
                     </div>
                   </div>
@@ -902,16 +986,21 @@ export default function CodeEditor(): JSX.Element {
               {/* Terminal */}
               {bottomPanel === "terminal" && (
                 <div className="ce-terminal">
-                  <div className="ce-term-output" ref={termRef}>
-                    {terminalLines.map((line) => (
-                      <div key={line.id} className={`ce-term-line ce-term-${line.type}`}>
-                        {line.text}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="ce-term-input-row">
-                    <span className="ce-term-prompt">$</span>
-                    <input
+                <div className="ce-term-output" ref={termRef}>
+                  {terminalLines.map((line) => (
+                    <div key={line.id} className={`ce-term-line ce-term-${line.type}`}>
+                      {line.text}
+                    </div>
+                  ))}
+                  {pendingApproval && (
+                    <div className="ce-term-line ce-term-system">
+                      HITL approval required for: {pendingApproval.cmd}
+                    </div>
+                  )}
+                </div>
+                <div className="ce-term-input-row">
+                  <span className="ce-term-prompt">$</span>
+                  <input
                       className="ce-term-input"
                       value={terminalInput}
                       onChange={(e) => setTerminalInput(e.target.value)}
@@ -919,6 +1008,20 @@ export default function CodeEditor(): JSX.Element {
                       placeholder="Type a command..."
                       spellCheck={false}
                     />
+                    {pendingApproval && (
+                      <>
+                        <button
+                          type="button"
+                          className="ce-tool-btn"
+                          onClick={() => void runTerminalCommand(pendingApproval.cmd, true, pendingApproval.cwd)}
+                        >
+                          Approve
+                        </button>
+                        <button type="button" className="ce-tool-btn" onClick={denyPendingCommand}>
+                          Deny
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -1011,7 +1114,9 @@ export default function CodeEditor(): JSX.Element {
         {showAgent && (
           <aside className="ce-agent">
             <div className="ce-agent-header">
-              <span className="ce-agent-title">AGENT ASSIST <span style={{ fontSize: "0.7em", opacity: 0.6 }}>(Demo)</span></span>
+              <span className="ce-agent-title">
+                AGENT ASSIST <span style={{ fontSize: "0.7em", opacity: 0.6 }}>{HAS_DESKTOP ? "(LLM-backed)" : "(desktop required)"}</span>
+              </span>
               <span className={`ce-agent-status ce-agent-status-${agentMode}`}>
                 {agentMode === "thinking" ? "thinking..." : agentMode === "result" ? "ready" : "idle"}
               </span>

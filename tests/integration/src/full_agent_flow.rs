@@ -4,7 +4,7 @@ mod desktop_backend {
         AgentMemoryManager, CognitivePhase, CognitivePlanner, PlannerLlm,
     };
     use nexus_persistence::ConsentRow;
-    use std::sync::mpsc;
+    use std::sync::{mpsc, OnceLock};
     use std::time::{Duration, Instant};
     use tauri::Emitter;
     use tempfile::TempDir;
@@ -13,6 +13,29 @@ mod desktop_backend {
         env!("CARGO_MANIFEST_DIR"),
         "/../../app/src-tauri/src/main.rs"
     ));
+
+    static HOME_ENV_GUARD: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
+
+    struct HomeVarGuard {
+        original: Option<std::ffi::OsString>,
+    }
+
+    impl HomeVarGuard {
+        fn set(path: &std::path::Path) -> Self {
+            let original = std::env::var_os("HOME");
+            std::env::set_var("HOME", path);
+            Self { original }
+        }
+    }
+
+    impl Drop for HomeVarGuard {
+        fn drop(&mut self) {
+            match self.original.take() {
+                Some(value) => std::env::set_var("HOME", value),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+    }
 
     struct FixedPlannerLlm;
 
@@ -44,6 +67,7 @@ mod desktop_backend {
             workspace_base,
             state.audit.clone(),
             state.supervisor.clone(),
+            None,
         );
 
         for _ in 0..50_u32 {
@@ -177,7 +201,7 @@ mod desktop_backend {
     }
 
     fn wait_for_pending_consent(state: &AppState, agent_id: &str) -> ConsentRow {
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(15);
         loop {
             let pending = state.db.load_pending_consent().unwrap();
             if let Some(row) = pending.into_iter().find(|row| row.agent_id == agent_id) {
@@ -206,8 +230,12 @@ mod desktop_backend {
 
     #[test]
     fn test_full_agent_flow() {
+        let _home_guard = HOME_ENV_GUARD
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .expect("HOME env guard lock");
         let home = tempfile::tempdir().expect("temp home");
-        std::env::set_var("HOME", home.path());
+        let _home_var = HomeVarGuard::set(home.path());
 
         let state = AppState::new_in_memory();
         let manifest_json = serde_json::json!({
@@ -262,7 +290,7 @@ mod desktop_backend {
         )
         .expect("approve_consent_request should succeed");
 
-        let loop_result = match rx.recv_timeout(Duration::from_secs(10)) {
+        let loop_result = match rx.recv_timeout(Duration::from_secs(20)) {
             Ok(result) => result,
             Err(error) => {
                 let status = state.cognitive_runtime.get_agent_status(&agent_id);

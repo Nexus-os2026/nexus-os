@@ -7,6 +7,7 @@ import {
   timeMachineUndoCheckpoint,
   timeMachineRedo,
   timeMachineGetDiff,
+  timeMachineWhatIf,
 } from "../api/backend";
 
 /* ── types ── */
@@ -16,6 +17,9 @@ interface CheckpointSummary {
   label: string;
   timestamp: number;
   agent_id: string | null;
+  agent_name?: string | null;
+  action?: string;
+  state_hash?: string;
   change_count: number;
   undone: boolean;
 }
@@ -35,6 +39,11 @@ interface UndoResult {
   actions_applied: number;
   files_restored: string[];
   agents_affected: string[];
+}
+
+interface WhatIfResult {
+  rewind: UndoResult;
+  replayed_checkpoints: number;
 }
 
 /* ── helpers ── */
@@ -75,6 +84,18 @@ function changeIcon(changeType: string): { symbol: string; color: string } {
 
 function isAgentOrConfigPath(path: string): boolean {
   return path.startsWith("agent://") || path.startsWith("config://");
+}
+
+function summarizeUndoActions(entries: DiffEntry[]): string[] {
+  return entries.slice(0, 8).map((entry) => {
+    if (entry.path.startsWith("agent://")) {
+      return `Restore ${entry.path.replace("agent://", "agent ")}`;
+    }
+    if (entry.path.startsWith("config://")) {
+      return `Restore config ${entry.path.replace("config://", "")}`;
+    }
+    return `${entry.change_type} ${entry.path}`;
+  });
 }
 
 /* ── component ── */
@@ -200,17 +221,74 @@ export default function TimeMachine() {
   const handleUndoCheckpoint = useCallback(async (id: string) => {
     setIsUndoing(true);
     try {
+      const diffRaw = await timeMachineGetDiff(id);
+      const diff: DiffEntry[] = JSON.parse(diffRaw);
+      const preview = summarizeUndoActions(diff);
+      const confirmed = window.confirm(
+        preview.length === 0
+          ? "Rewind to this checkpoint?"
+          : `These actions will be undone:\n${preview.map((item) => `- ${item}`).join("\n")}\n\nRewind to this point?`
+      );
+      if (!confirmed) {
+        return;
+      }
       const raw = await timeMachineUndoCheckpoint(id);
       const result: UndoResult = JSON.parse(raw);
-      showToast(`Undone: ${result.label}`, "success");
+      showToast(`Rewound to: ${result.label}`, "success");
       await loadCheckpoints();
-      if (selectedId) await loadDetail(selectedId);
+      setSelectedId(id);
+      await loadDetail(id);
     } catch (e) {
       showToast(String(e), "error");
     } finally {
       setIsUndoing(false);
     }
   }, [showToast, loadCheckpoints, selectedId, loadDetail]);
+
+  const handleWhatIf = useCallback(async (checkpoint: CheckpointSummary) => {
+    try {
+      const suggestedKey =
+        checkpoint.agent_id ? `agent://${checkpoint.agent_id}/fuel_remaining` : "governance.enable_warden_review";
+      const variableKey = window.prompt("Variable to modify after rewind", suggestedKey);
+      if (!variableKey) {
+        return;
+      }
+      const defaultValue =
+        variableKey === "governance.enable_warden_review"
+          ? "true"
+          : variableKey.endsWith("/status")
+            ? "Paused"
+            : "250";
+      const variableValue = window.prompt("New value", defaultValue);
+      if (variableValue === null) {
+        return;
+      }
+
+      const diffRaw = await timeMachineGetDiff(checkpoint.id);
+      const diff: DiffEntry[] = JSON.parse(diffRaw);
+      const preview = summarizeUndoActions(diff);
+      const confirmed = window.confirm(
+        preview.length === 0
+          ? `Run What if? for ${checkpoint.label}?`
+          : `These actions will be undone:\n${preview.map((item) => `- ${item}`).join("\n")}\n\nThen ${variableKey} will be set to ${variableValue}. Continue?`
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      const raw = await timeMachineWhatIf(checkpoint.id, variableKey, variableValue);
+      const result: WhatIfResult = JSON.parse(raw);
+      showToast(
+        `What if replayed ${result.replayed_checkpoints} checkpoint${result.replayed_checkpoints === 1 ? "" : "s"}`,
+        "success"
+      );
+      await loadCheckpoints();
+      setSelectedId(checkpoint.id);
+      await loadDetail(checkpoint.id);
+    } catch (e) {
+      showToast(String(e), "error");
+    }
+  }, [loadCheckpoints, loadDetail, showToast]);
 
   const handleCreate = useCallback(async () => {
     const label = createLabel.trim();
@@ -310,7 +388,17 @@ export default function TimeMachine() {
                           fontWeight: 600,
                         }}
                       >
-                        {cp.agent_id.slice(0, 8)}
+                        {cp.agent_name || cp.agent_id.slice(0, 8)}
+                      </span>
+                    )}
+                    {cp.action && (
+                      <span style={{ fontSize: 11, color: textPrimary }}>
+                        {cp.action}
+                      </span>
+                    )}
+                    {cp.state_hash && (
+                      <span style={{ fontSize: 10, color: textSecondary, fontFamily: "monospace" }}>
+                        {cp.state_hash.slice(0, 12)}
                       </span>
                     )}
                     <span
@@ -361,9 +449,31 @@ export default function TimeMachine() {
                       alignSelf: "center",
                       whiteSpace: "nowrap",
                     }}
-                    title="Undo this checkpoint"
+                    title="Rewind to this checkpoint"
                   >
-                    Undo
+                    Rewind to this point
+                  </button>
+                )}
+                {!cp.undone && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleWhatIf(cp);
+                    }}
+                    style={{
+                      background: "none",
+                      border: `1px solid ${borderColor}`,
+                      color: accent,
+                      cursor: "pointer",
+                      fontSize: 11,
+                      padding: "2px 8px",
+                      borderRadius: 4,
+                      alignSelf: "center",
+                      whiteSpace: "nowrap",
+                    }}
+                    title="Rewind, modify one variable, and replay"
+                  >
+                    What if?
                   </button>
                 )}
               </div>
@@ -418,7 +528,17 @@ export default function TimeMachine() {
                   fontWeight: 600,
                 }}
               >
-                Agent: {cp.agent_id.slice(0, 8)}
+                Agent: {cp.agent_name || cp.agent_id.slice(0, 8)}
+              </span>
+            )}
+            {cp.action && (
+              <span style={{ fontSize: 11, color: textPrimary }}>
+                Action: {cp.action}
+              </span>
+            )}
+            {cp.state_hash && (
+              <span style={{ fontSize: 11, color: textSecondary, fontFamily: "monospace" }}>
+                State hash: {cp.state_hash}
               </span>
             )}
             <span
@@ -448,6 +568,23 @@ export default function TimeMachine() {
         >
           Changes ({diffEntries.length})
         </div>
+
+        {diffEntries.length > 0 && (
+          <div
+            style={{
+              fontSize: 12,
+              color: textSecondary,
+              padding: "10px 12px",
+              background: bgCard,
+              border: `1px solid ${borderColor}`,
+              borderRadius: 6,
+              lineHeight: 1.5,
+            }}
+          >
+            <strong style={{ color: textPrimary }}>These actions will be undone:</strong>{" "}
+            {summarizeUndoActions(diffEntries).join(", ")}
+          </div>
+        )}
 
         {/* Change list */}
         {diffEntries.length === 0 ? (

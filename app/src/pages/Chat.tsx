@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { History } from "../components/chat/History";
 import { Suggestions } from "../components/chat/Suggestions";
 import { VoiceVisualizer, type VoiceVisualizerState } from "../components/chat/VoiceVisualizer";
-import { listProviderModels } from "../api/backend";
+import { hasDesktopRuntime, listProviderModels } from "../api/backend";
 import "./chat.css";
 import type { AgentSummary, ChatMessage, ProviderModel } from "../types";
 
@@ -33,6 +33,53 @@ interface HistoryEntry {
   id: string;
   timestamp: number;
   preview: string;
+}
+
+const HIDDEN_TEST_AGENT_NAMES = new Set([
+  "a-agent",
+  "b-agent",
+  "c-agent",
+  "my-social-poster",
+]);
+
+function agentStatusPriority(status: AgentSummary["status"]): number {
+  switch (status) {
+    case "Running":
+      return 6;
+    case "Starting":
+      return 5;
+    case "Paused":
+      return 4;
+    case "Created":
+      return 3;
+    case "Stopping":
+      return 2;
+    case "Stopped":
+      return 1;
+    case "Destroyed":
+      return 0;
+    default:
+      return -1;
+  }
+}
+
+function dedupeDropdownAgents(agents: AgentSummary[]): AgentSummary[] {
+  const byId = new Map<string, AgentSummary>();
+
+  for (const agent of agents) {
+    if (HIDDEN_TEST_AGENT_NAMES.has(agent.name.trim().toLowerCase())) {
+      continue;
+    }
+
+    const existing = byId.get(agent.id);
+    if (!existing || agentStatusPriority(agent.status) >= agentStatusPriority(existing.status)) {
+      byId.set(agent.id, agent);
+    }
+  }
+
+  return Array.from(byId.values()).sort((left, right) =>
+    left.name.localeCompare(right.name) || left.id.localeCompare(right.id)
+  );
 }
 
 function bubbleClass(role: ChatMessage["role"], variant?: ChatMessage["variant"]): string {
@@ -69,6 +116,20 @@ function deriveHistory(messages: ChatMessage[]): HistoryEntry[] {
       preview: message.content.trim().slice(0, 84) || "(empty)"
     }))
     .reverse();
+}
+
+function currentSelectionOption(selectedModel: string): ModelOption[] {
+  if (!selectedModel) {
+    return [];
+  }
+
+  return [
+    {
+      value: selectedModel,
+      label: selectedModel === "mock" ? "Browser runtime selection" : selectedModel,
+      group: "Current Selection",
+    },
+  ];
 }
 
 function deriveVisualizerState(
@@ -119,36 +180,50 @@ export function Chat({
   const [audioLevel, setAudioLevel] = useState(0.14);
   const streamRef = useRef<HTMLDivElement>(null);
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+  const [modelsReady, setModelsReady] = useState(false);
+  const optionGroups = useMemo(
+    () => Array.from(new Set(modelOptions.map((option) => option.group))),
+    [modelOptions]
+  );
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (!hasDesktopRuntime()) {
+        if (cancelled) return;
+        setModelOptions(currentSelectionOption(selectedModel));
+        setModelsReady(true);
+        return;
+      }
       try {
         const provModels = await listProviderModels();
         if (cancelled) return;
         const opts: ModelOption[] = provModels.map((m: ProviderModel) => ({
           value: m.id,
           label: `${m.name} (${m.local ? "Local" : m.provider})`,
-          group: m.local ? "LOCAL" : "CLOUD",
+          group: m.local ? "Local Models" : "Cloud Models",
         }));
-        setModelOptions(opts);
+        const resolvedOptions = opts.length > 0 ? opts : currentSelectionOption(selectedModel);
+        setModelOptions(resolvedOptions);
+        setModelsReady(true);
         // Auto-select first model if current selection is empty or not in list
-        if (!selectedModel || !opts.some(o => o.value === selectedModel)) {
-          if (opts.length > 0) onModelChange(opts[0].value);
+        if (!selectedModel || !resolvedOptions.some((option) => option.value === selectedModel)) {
+          if (resolvedOptions.length > 0) onModelChange(resolvedOptions[0].value);
         }
       } catch {
-        // Fallback if backend unavailable
-        setModelOptions([]);
+        if (cancelled) return;
+        setModelOptions(currentSelectionOption(selectedModel));
+        setModelsReady(true);
       }
     })();
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [onModelChange, selectedModel]);
 
   const assistantStreaming = useMemo(
     () => messages.some((message) => message.role === "assistant" && message.streaming),
     [messages]
   );
+  const dropdownAgents = useMemo(() => dedupeDropdownAgents(agents), [agents]);
   const visualizerState = deriveVisualizerState(isRecording, isSending, assistantStreaming);
   const historyEntries = useMemo(() => deriveHistory(messages), [messages]);
   const showSuggestions = draft.trim().length === 0 && messages.length <= 1;
@@ -181,28 +256,24 @@ export function Chat({
         <div className="jarvis-chat-header__right">
           <select
             className="jarvis-model-select"
-            value={selectedModel}
+            value={modelOptions.length > 0 ? selectedModel : ""}
+            disabled={modelOptions.length === 0}
             onChange={(event) => onModelChange(event.target.value)}
           >
             {modelOptions.length > 0 ? (
               <>
-                {modelOptions.some(o => o.group === "LOCAL") && (
-                  <optgroup label="Local Models">
-                    {modelOptions.filter(o => o.group === "LOCAL").map((opt) => (
+                {optionGroups.map((group) => (
+                  <optgroup key={group} label={group}>
+                    {modelOptions.filter((option) => option.group === group).map((opt) => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </optgroup>
-                )}
-                {modelOptions.some(o => o.group === "CLOUD") && (
-                  <optgroup label="Cloud Models">
-                    {modelOptions.filter(o => o.group === "CLOUD").map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </optgroup>
-                )}
+                ))}
               </>
             ) : (
-              <option value="">Loading models...</option>
+              <option value="">
+                {modelsReady ? "No live models configured" : "Loading models..."}
+              </option>
             )}
           </select>
           <select
@@ -211,7 +282,7 @@ export function Chat({
             onChange={(event) => onAgentChange(event.target.value)}
           >
             <option value="">All Agents</option>
-            {agents.map((agent) => (
+            {dropdownAgents.map((agent) => (
               <option key={agent.id} value={agent.id}>
                 {agent.name} ({agent.status})
               </option>

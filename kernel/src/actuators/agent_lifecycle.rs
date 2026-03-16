@@ -171,11 +171,13 @@ mod tests {
         caps.insert("self.modify".to_string());
         ActuatorContext {
             agent_id: "parent-agent".to_string(),
+            agent_name: "parent-agent".to_string(),
             working_dir: workspace.to_path_buf(),
             autonomy_level: AutonomyLevel::L4,
             capabilities: caps,
             fuel_remaining: 10_000.0,
             egress_allowlist: vec![],
+            action_review_engine: None,
         }
     }
 

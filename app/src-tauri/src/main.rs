@@ -1,3 +1,5 @@
+use base64::Engine;
+use chrono::TimeZone;
 use nexus_adaptation::evolution::{EvolutionConfig, EvolutionEngine, MutationType, Strategy};
 use nexus_conductor::types::UserRequest;
 use nexus_conductor::Conductor;
@@ -9,8 +11,8 @@ use nexus_connectors_llm::model_hub::{self, DownloadProgress, DownloadStatus};
 use nexus_connectors_llm::model_registry::ModelRegistry;
 use nexus_connectors_llm::nexus_link::NexusLink;
 use nexus_connectors_llm::providers::{
-    ClaudeProvider, DeepSeekProvider, GeminiProvider, LlmProvider, MockProvider, OllamaProvider,
-    OpenAiProvider,
+    nvidia::NVIDIA_MODELS, ClaudeProvider, DeepSeekProvider, GeminiProvider, LlmProvider,
+    MockProvider, NvidiaProvider, OllamaProvider, OpenAiProvider,
 };
 use nexus_connectors_llm::rag::{RagConfig, RagPipeline};
 use nexus_connectors_llm::whisper::WhisperTranscriber;
@@ -18,7 +20,11 @@ use nexus_connectors_messaging::gateway::{MessageGateway, PlatformStatus};
 use nexus_distributed::ghost_protocol::{GhostConfig, GhostProtocol, SyncPeer as GhostSyncPeer};
 use nexus_factory::pipeline::FactoryPipeline;
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
-use nexus_kernel::computer_control::{ComputerControlEngine, InputAction};
+use nexus_kernel::cognitive::PlannedAction;
+use nexus_kernel::computer_control::{
+    activate_emergency_kill_switch, analyze_stored_screenshot, capture_and_analyze_screen,
+    capture_and_store_screen, ComputerControlEngine, InputAction, InputControlStatus, ScreenRegion,
+};
 use nexus_kernel::config::{
     load_config, save_config as save_nexus_config, AgentLlmConfig, HardwareConfig, ModelsConfig,
     NexusConfig, OllamaConfig,
@@ -26,6 +32,7 @@ use nexus_kernel::config::{
 use nexus_kernel::economic_identity::{EconomicConfig, EconomicEngine, TransactionType};
 use nexus_kernel::errors::AgentError;
 use nexus_kernel::hardware::{recommend_agent_configs, HardwareProfile};
+use nexus_kernel::lifecycle::AgentState;
 use nexus_kernel::manifest::{parse_manifest, AgentManifest};
 use nexus_kernel::neural_bridge::{ContextQuery, ContextSource, NeuralBridge, NeuralBridgeConfig};
 use nexus_kernel::permissions::{
@@ -33,19 +40,28 @@ use nexus_kernel::permissions::{
     PermissionHistoryEntry as KernelPermissionHistoryEntry,
 };
 use nexus_kernel::redaction::RedactionEngine;
+use nexus_kernel::simulation::{
+    compare_reports, estimate_simulation_fuel, generate_personas, parse_seed,
+    run_parallel_simulations as kernel_run_parallel_simulations, PersistedSimulationState,
+    PredictionReport, SimulatedWorld, SimulationControl, SimulationObserver, SimulationProgress,
+    SimulationRuntime, SimulationStatus as KernelSimulationStatus, SimulationSummary, WorldStatus,
+};
 use nexus_kernel::supervisor::{AgentId, Supervisor};
 use nexus_kernel::tracing::{SpanStatus, TracingEngine};
 use nexus_marketplace::payments::{BillingInterval, PaymentEngine, RevenueSplit};
-use nexus_persistence::{NexusDatabase, StateStore};
+use nexus_persistence::{CheckpointRow, NexusDatabase, StateStore};
 use nexus_protocols::mcp_client::{McpAuth, McpHostManager, McpServerConfig, McpTransport};
 use nexus_sdk::memory::{AgentMemory, MemoryConfig, MemoryType};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::Digest;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -55,33 +71,143 @@ use tauri::Emitter;
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
 ))]
-#[cfg(not(target_os = "linux"))]
 use tauri::Manager;
+#[cfg(all(
+    feature = "tauri-runtime",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
+use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 use tokio::sync::Notify;
 use uuid::Uuid;
 
-/// Stub LLM for hivemind — returns an error directing users to configure a real provider.
-struct StubHivemindLlm;
+struct GatewayHivemindLlm;
 
-impl nexus_kernel::cognitive::HivemindLlm for StubHivemindLlm {
+impl nexus_kernel::cognitive::HivemindLlm for GatewayHivemindLlm {
     fn decompose(
         &self,
-        _prompt: &str,
+        prompt: &str,
     ) -> std::result::Result<String, nexus_kernel::errors::AgentError> {
-        Err(nexus_kernel::errors::AgentError::SupervisorError(
-            "No LLM provider configured for hivemind - configure Ollama or set ENABLE_REAL_API=1"
-                .to_string(),
-        ))
+        nexus_kernel::cognitive::PlannerLlm::plan_query(&GatewayPlannerLlm, prompt)
     }
-    fn merge(
-        &self,
-        _prompt: &str,
-    ) -> std::result::Result<String, nexus_kernel::errors::AgentError> {
-        Err(nexus_kernel::errors::AgentError::SupervisorError(
-            "No LLM provider configured for hivemind - configure Ollama or set ENABLE_REAL_API=1"
-                .to_string(),
-        ))
+
+    fn merge(&self, prompt: &str) -> std::result::Result<String, nexus_kernel::errors::AgentError> {
+        nexus_kernel::cognitive::PlannerLlm::plan_query(&GatewayPlannerLlm, prompt)
     }
+}
+
+#[derive(Clone, Debug)]
+struct AgentLlmRoute {
+    model: String,
+}
+
+thread_local! {
+    static ACTIVE_AGENT_LLM_ROUTE: RefCell<Option<AgentLlmRoute>> = const { RefCell::new(None) };
+}
+
+fn normalize_agent_config_key(value: &str) -> String {
+    value.trim().to_ascii_lowercase().replace([' ', '-'], "_")
+}
+
+fn agent_lookup_keys(state: &AppState, agent_id: &str) -> Vec<String> {
+    let mut keys = vec![agent_id.to_string()];
+    let maybe_name = {
+        let parsed_id = Uuid::parse_str(agent_id).ok();
+        if let Some(parsed_id) = parsed_id {
+            let meta = state.meta.lock().unwrap_or_else(|p| p.into_inner());
+            meta.get(&parsed_id).map(|entry| entry.name.clone())
+        } else {
+            None
+        }
+    };
+
+    if let Some(name) = maybe_name {
+        let normalized = normalize_agent_config_key(&name);
+        if !keys.iter().any(|candidate| candidate == &name) {
+            keys.push(name.clone());
+        }
+        if !keys.iter().any(|candidate| candidate == &normalized) {
+            keys.push(normalized);
+        }
+    }
+
+    let normalized_id = normalize_agent_config_key(agent_id);
+    if !keys.iter().any(|candidate| candidate == &normalized_id) {
+        keys.push(normalized_id);
+    }
+    keys
+}
+
+fn route_from_model_mapping(value: &Value) -> Option<String> {
+    if let (Some(provider), Some(model)) = (
+        value.get("provider").and_then(|entry| entry.as_str()),
+        value.get("model").and_then(|entry| entry.as_str()),
+    ) {
+        return Some(format!("{provider}/{model}"));
+    }
+
+    for key in [
+        "planning",
+        "plan",
+        "default",
+        "acting",
+        "action",
+        "reflection",
+        "reflect",
+        "observe",
+    ] {
+        if let Some(route) = value.get(key).and_then(route_from_model_mapping) {
+            return Some(route);
+        }
+    }
+
+    value.as_object().and_then(|entries| {
+        entries
+            .values()
+            .find_map(route_from_model_mapping)
+            .filter(|route| !route.trim().is_empty())
+    })
+}
+
+fn resolve_agent_llm_route(state: &AppState, agent_id: &str) -> Option<AgentLlmRoute> {
+    let config = load_config().ok()?;
+    if let Ok(memories) = state.db.load_memories(agent_id, Some("model_mapping"), 10) {
+        for row in memories {
+            if let Ok(parsed) = serde_json::from_str::<Value>(&row.value_json) {
+                if let Some(model) = route_from_model_mapping(&parsed) {
+                    return Some(AgentLlmRoute { model });
+                }
+            }
+        }
+    }
+
+    for key in agent_lookup_keys(state, agent_id) {
+        if let Some(agent_cfg) = config.agents.get(&key) {
+            if !agent_cfg.model.trim().is_empty() {
+                return Some(AgentLlmRoute {
+                    model: agent_cfg.model.clone(),
+                });
+            }
+        }
+        if let Some(assignment) = config.agent_llm_assignments.get(&key) {
+            if !assignment.provider_id.trim().is_empty() {
+                return Some(AgentLlmRoute {
+                    model: assignment.provider_id.clone(),
+                });
+            }
+        }
+    }
+
+    None
+}
+
+fn with_agent_llm_route<T>(state: &AppState, agent_id: &str, op: impl FnOnce() -> T) -> T {
+    let route = resolve_agent_llm_route(state, agent_id);
+    ACTIVE_AGENT_LLM_ROUTE.with(|slot| {
+        let previous = slot.replace(route);
+        let output = op();
+        slot.replace(previous);
+        output
+    })
 }
 
 #[derive(Clone)]
@@ -120,6 +246,42 @@ fn build_provider_registry() -> HashMap<String, Arc<dyn nexus_kernel::cognitive:
         )
     })
     .collect()
+}
+
+fn fuel_ledger_row_from_report(
+    agent_id: &str,
+    report: &nexus_kernel::fuel_hardening::FuelAuditReport,
+) -> nexus_persistence::FuelLedgerRow {
+    let now = chrono::Utc::now().to_rfc3339();
+    nexus_persistence::FuelLedgerRow {
+        agent_id: agent_id.to_string(),
+        budget_total: report.cap_units as f64,
+        budget_consumed: report.spent_units as f64,
+        period_start: report.period.0.clone(),
+        period_end: now.clone(),
+        anomaly_count: report.anomalies.len() as i64,
+        ledger_json: serde_json::to_string(report).unwrap_or_else(|_| "{}".to_string()),
+        updated_at: now,
+    }
+}
+
+fn load_fuel_report_from_row(
+    row: &nexus_persistence::FuelLedgerRow,
+) -> Option<nexus_kernel::fuel_hardening::FuelAuditReport> {
+    serde_json::from_str::<nexus_kernel::fuel_hardening::FuelAuditReport>(&row.ledger_json)
+        .ok()
+        .or_else(|| {
+            let agent_id = Uuid::parse_str(&row.agent_id).ok()?;
+            Some(nexus_kernel::fuel_hardening::FuelAuditReport {
+                agent_id,
+                period: nexus_kernel::fuel_hardening::BudgetPeriodId::new(&row.period_start),
+                cap_units: row.budget_total.max(0.0) as u64,
+                spent_units: row.budget_consumed.max(0.0) as u64,
+                anomalies: Vec::new(),
+                halts: 0,
+                model_breakdown: Vec::new(),
+            })
+        })
 }
 
 /// Bridges `NexusDatabase` (persistence) to the kernel `StrategyStore` trait.
@@ -302,6 +464,13 @@ pub struct VoiceRuntimeState {
     pub overlay_visible: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComputerActionSessionState {
+    pub session_id: String,
+    pub description: String,
+    pub running: bool,
+}
+
 /// Tracks the Python voice server subprocess.
 #[derive(Default)]
 struct VoiceProcess {
@@ -313,6 +482,87 @@ struct VoiceProcess {
 struct BlockedConsentWait {
     consent_id: String,
     notify: Arc<Notify>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SimulationPersonalityView {
+    pub openness: f64,
+    pub conscientiousness: f64,
+    pub extraversion: f64,
+    pub agreeableness: f64,
+    pub neuroticism: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SimulationMemoryView {
+    pub event: String,
+    pub timestamp: u64,
+    pub emotional_impact: f64,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SimulationPersonaView {
+    pub id: String,
+    pub name: String,
+    pub role: String,
+    pub personality: SimulationPersonalityView,
+    pub beliefs: HashMap<String, f64>,
+    pub memories: Vec<SimulationMemoryView>,
+    pub relationships: HashMap<String, f64>,
+    pub influence_score: f64,
+    pub last_action: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SimulationStatusView {
+    pub world_id: String,
+    pub name: String,
+    pub status: String,
+    pub tick_count: u64,
+    pub persona_count: usize,
+    pub max_ticks: u64,
+    pub tick_interval_ms: u64,
+    pub fuel_consumed: f64,
+    pub estimated_fuel: u64,
+    pub report_available: bool,
+    pub variables: BTreeMap<String, String>,
+    pub personas: Vec<SimulationPersonaView>,
+}
+
+#[derive(Debug, Clone)]
+struct SimulationHandle {
+    control: SimulationControl,
+    max_ticks: u64,
+}
+
+#[derive(Default)]
+struct SimulationManager {
+    active: Mutex<HashMap<String, SimulationHandle>>,
+}
+
+impl SimulationManager {
+    fn insert(&self, world_id: String, handle: SimulationHandle) {
+        self.active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(world_id, handle);
+    }
+
+    fn get(&self, world_id: &str) -> Option<SimulationHandle> {
+        self.active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(world_id)
+            .cloned()
+    }
+
+    fn remove(&self, world_id: &str) {
+        self.active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(world_id);
+    }
 }
 
 #[derive(Clone)]
@@ -347,10 +597,17 @@ pub struct AppState {
     db: Arc<NexusDatabase>,
     cognitive_runtime: Arc<nexus_kernel::cognitive::CognitiveRuntime>,
     blocked_consent_waits: Arc<Mutex<HashMap<String, BlockedConsentWait>>>,
+    computer_action_cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
     hivemind: Arc<nexus_kernel::cognitive::HivemindCoordinator>,
     message_gateway: Arc<Mutex<MessageGateway>>,
     evolution_tracker: Arc<nexus_kernel::cognitive::EvolutionTracker>,
     agent_scheduler: Arc<nexus_kernel::cognitive::AgentScheduler>,
+    simulation_manager: Arc<SimulationManager>,
+    #[cfg(all(
+        feature = "tauri-runtime",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    ))]
+    app_handle: Arc<Mutex<Option<tauri::AppHandle<tauri::Wry>>>>,
 }
 
 impl Default for AppState {
@@ -361,6 +618,9 @@ impl Default for AppState {
 
 impl AppState {
     pub fn new() -> Self {
+        #[cfg(not(test))]
+        maybe_cleanup_legacy_agent_db();
+
         let supervisor = Arc::new(Mutex::new(Supervisor::new()));
         let db = Arc::new(
             NexusDatabase::open(&NexusDatabase::default_db_path()).unwrap_or_else(|e| {
@@ -432,8 +692,9 @@ impl AppState {
             db,
             cognitive_runtime: cognitive_runtime.clone(),
             blocked_consent_waits: Arc::new(Mutex::new(HashMap::new())),
+            computer_action_cancellations: Arc::new(Mutex::new(HashMap::new())),
             hivemind: Arc::new(nexus_kernel::cognitive::HivemindCoordinator::new(
-                Box::new(StubHivemindLlm),
+                Box::new(GatewayHivemindLlm),
                 Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
                 Arc::new(Mutex::new(AuditTrail::new())),
             )),
@@ -478,33 +739,15 @@ impl AppState {
             })),
             evolution_tracker,
             agent_scheduler,
+            simulation_manager: Arc::new(SimulationManager::default()),
+            #[cfg(all(
+                feature = "tauri-runtime",
+                any(target_os = "windows", target_os = "macos", target_os = "linux")
+            ))]
+            app_handle: Arc::new(Mutex::new(None)),
         };
 
-        // Restore persisted agents into supervisor (start then immediately stop —
-        // stale sessions should not auto-run; user must explicitly start agents)
-        if let Ok(saved_agents) = state.db.list_agents() {
-            for row in saved_agents {
-                if let Ok(manifest) = serde_json::from_str::<AgentManifest>(&row.manifest_json) {
-                    let manifest_name = manifest.name.clone();
-                    let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-                    match supervisor.start_agent(manifest) {
-                        Ok(agent_id) => {
-                            // Immediately stop so restored agents don't auto-run
-                            let _ = supervisor.stop_agent(agent_id);
-                            let mut meta = state.meta.lock().unwrap_or_else(|p| p.into_inner());
-                            meta.insert(
-                                agent_id,
-                                AgentMeta {
-                                    name: manifest_name,
-                                    last_action: "restored (stopped)".to_string(),
-                                },
-                            );
-                        }
-                        Err(e) => eprintln!("persistence: failed to restore agent {}: {e}", row.id),
-                    }
-                }
-            }
-        }
+        restore_persisted_agents(&state);
 
         #[cfg(not(test))]
         {
@@ -579,8 +822,9 @@ impl AppState {
                 ),
             ),
             blocked_consent_waits: Arc::new(Mutex::new(HashMap::new())),
+            computer_action_cancellations: Arc::new(Mutex::new(HashMap::new())),
             hivemind: Arc::new(nexus_kernel::cognitive::HivemindCoordinator::new(
-                Box::new(StubHivemindLlm),
+                Box::new(GatewayHivemindLlm),
                 Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
                 Arc::new(Mutex::new(AuditTrail::new())),
             )),
@@ -597,6 +841,12 @@ impl AppState {
                 ),
                 Arc::new(Mutex::new(AuditTrail::new())),
             )),
+            simulation_manager: Arc::new(SimulationManager::default()),
+            #[cfg(all(
+                feature = "tauri-runtime",
+                any(target_os = "windows", target_os = "macos", target_os = "linux")
+            ))]
+            app_handle: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -688,6 +938,164 @@ impl AppState {
             true
         } else {
             false
+        }
+    }
+
+    #[cfg(all(
+        feature = "tauri-runtime",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    ))]
+    fn set_app_handle(&self, app_handle: tauri::AppHandle<tauri::Wry>) {
+        let mut guard = self.app_handle.lock().unwrap_or_else(|p| p.into_inner());
+        *guard = Some(app_handle);
+    }
+
+    #[cfg(all(
+        feature = "tauri-runtime",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    ))]
+    fn app_handle(&self) -> Option<tauri::AppHandle<tauri::Wry>> {
+        self.app_handle
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
+    }
+
+    fn initialize_startup_schedules(&self) {
+        let rows = match self.db.list_agents() {
+            Ok(rows) => rows,
+            Err(error) => {
+                eprintln!("scheduler: failed to scan persisted agents: {error}");
+                return;
+            }
+        };
+
+        for row in rows {
+            if !row.was_running {
+                continue;
+            }
+            let Ok(json_manifest) = serde_json::from_str::<JsonAgentManifest>(&row.manifest_json)
+            else {
+                continue;
+            };
+            register_manifest_schedule(
+                self,
+                &row.id,
+                json_manifest.manifest.schedule.as_deref(),
+                json_manifest.manifest.default_goal.as_deref(),
+                json_manifest.description.as_deref(),
+            );
+        }
+    }
+}
+
+fn restore_persisted_agents(state: &AppState) {
+    let saved_agents = match state.db.list_agents() {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("persistence: failed to list persisted agents: {error}");
+            return;
+        }
+    };
+
+    for row in saved_agents {
+        let Ok(manifest) = serde_json::from_str::<AgentManifest>(&row.manifest_json) else {
+            continue;
+        };
+        let Ok(agent_id) = Uuid::parse_str(&row.id) else {
+            eprintln!("persistence: invalid restored agent id {}", row.id);
+            continue;
+        };
+        let manifest_name = manifest.name.clone();
+        let manifest_schedule = manifest.schedule.clone();
+        let manifest_default_goal = manifest.default_goal.clone();
+        let manifest_description = extract_manifest_description(&row.manifest_json);
+        let interrupted_task = state
+            .db
+            .load_tasks_by_agent(&row.id, 5)
+            .ok()
+            .and_then(|tasks| {
+                tasks.into_iter().find(|task| {
+                    task.completed_at.is_none()
+                        && matches!(task.status.as_str(), "running" | "queued" | "pending")
+                })
+            });
+
+        let restored = {
+            let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+            match supervisor.start_agent_with_id(agent_id, manifest) {
+                Ok(restored_id) => {
+                    if !row.was_running {
+                        let _ = supervisor.stop_agent(restored_id);
+                    } else if interrupted_task.is_some() {
+                        let _ = supervisor.pause_agent(restored_id);
+                    }
+
+                    if let Ok(Some(ledger_row)) = state.db.load_fuel_ledger(&row.id) {
+                        if let Some(report) = load_fuel_report_from_row(&ledger_row) {
+                            let remaining_fuel =
+                                report.cap_units.saturating_sub(report.spent_units);
+                            let _ =
+                                supervisor.restore_fuel_report(restored_id, report, remaining_fuel);
+                        }
+                    }
+                    Ok(restored_id)
+                }
+                Err(error) => Err(error),
+            }
+        };
+
+        match restored {
+            Ok(restored_id) => {
+                if row.was_running {
+                    register_manifest_schedule(
+                        state,
+                        &row.id,
+                        manifest_schedule.as_deref(),
+                        manifest_default_goal.as_deref(),
+                        manifest_description.as_deref(),
+                    );
+                }
+
+                let last_action = interrupted_task
+                    .as_ref()
+                    .map(|task| format!("interrupted: {}", task.goal))
+                    .unwrap_or_else(|| {
+                        if row.was_running {
+                            "restored (running)".to_string()
+                        } else {
+                            "restored (stopped)".to_string()
+                        }
+                    });
+
+                let mut meta = state.meta.lock().unwrap_or_else(|p| p.into_inner());
+                meta.insert(
+                    restored_id,
+                    AgentMeta {
+                        name: manifest_name,
+                        last_action,
+                    },
+                );
+            }
+            Err(error) => {
+                eprintln!("persistence: failed to restore agent {}: {error}", row.id);
+            }
+        }
+    }
+}
+
+fn persist_agent_fuel_ledger(state: &AppState, agent_id: &str) {
+    let Ok(agent_uuid) = Uuid::parse_str(agent_id) else {
+        return;
+    };
+    let report = {
+        let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        supervisor.fuel_audit_report(agent_uuid)
+    };
+    if let Some(report) = report {
+        let row = fuel_ledger_row_from_report(agent_id, &report);
+        if let Err(error) = state.db.save_fuel_ledger(agent_id, &row) {
+            eprintln!("persistence: save_fuel_ledger failed for {agent_id}: {error}");
         }
     }
 }
@@ -839,6 +1247,7 @@ fn create_agent_immediately(
         Err(poisoned) => poisoned.into_inner(),
     };
     let agent_id = supervisor.start_agent(manifest).map_err(agent_error)?;
+    drop(supervisor);
 
     // Create cryptographic identity (DID) for this agent
     let did = {
@@ -874,6 +1283,7 @@ fn create_agent_immediately(
     ) {
         eprintln!("persistence: save_agent failed: {e}");
     }
+    persist_agent_fuel_ledger(state, &agent_id.to_string());
 
     register_manifest_schedule(
         state,
@@ -971,6 +1381,9 @@ pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
         Err(poisoned) => poisoned.into_inner(),
     };
     supervisor.restart_agent(parsed).map_err(agent_error)?;
+    drop(supervisor);
+    let _ = state.db.update_agent_state(&agent_id, "running");
+    persist_agent_fuel_ledger(state, &agent_id);
     let schedule_manifest = find_manifest(state, &agent_id);
     if let Some(manifest) = schedule_manifest {
         register_manifest_schedule(
@@ -999,6 +1412,9 @@ pub fn stop_agent(state: &AppState, agent_id: String) -> Result<(), String> {
         Err(poisoned) => poisoned.into_inner(),
     };
     supervisor.stop_agent(parsed).map_err(agent_error)?;
+    drop(supervisor);
+    let _ = state.db.update_agent_state(&agent_id, "stopped");
+    persist_agent_fuel_ledger(state, &agent_id);
     update_last_action(state, parsed, "stopped");
     state.log_event(
         parsed,
@@ -1046,6 +1462,9 @@ pub fn pause_agent(state: &AppState, agent_id: String) -> Result<(), String> {
         Err(poisoned) => poisoned.into_inner(),
     };
     supervisor.pause_agent(parsed).map_err(agent_error)?;
+    drop(supervisor);
+    let _ = state.db.update_agent_state(&agent_id, "paused");
+    persist_agent_fuel_ledger(state, &agent_id);
     update_last_action(state, parsed, "paused");
     state.log_event(
         parsed,
@@ -1062,6 +1481,9 @@ pub fn resume_agent(state: &AppState, agent_id: String) -> Result<(), String> {
         Err(poisoned) => poisoned.into_inner(),
     };
     supervisor.resume_agent(parsed).map_err(agent_error)?;
+    drop(supervisor);
+    let _ = state.db.update_agent_state(&agent_id, "running");
+    persist_agent_fuel_ledger(state, &agent_id);
     update_last_action(state, parsed, "resumed");
     state.log_event(
         parsed,
@@ -1074,6 +1496,7 @@ pub fn resume_agent(state: &AppState, agent_id: String) -> Result<(), String> {
 pub fn list_agents(state: &AppState) -> Result<Vec<AgentRow>, String> {
     #[derive(Debug, Clone)]
     struct RuntimeAgentSnapshot {
+        id: String,
         name: String,
         status: String,
         fuel_remaining: u64,
@@ -1081,23 +1504,45 @@ pub fn list_agents(state: &AppState) -> Result<Vec<AgentRow>, String> {
         capabilities: Vec<String>,
     }
 
+    fn runtime_status_rank(status: &str) -> u8 {
+        match status {
+            "Running" => 6,
+            "Starting" => 5,
+            "Paused" => 4,
+            "Created" => 3,
+            "Stopping" => 2,
+            "Stopped" => 1,
+            "Destroyed" => 0,
+            _ => 0,
+        }
+    }
+
     let supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
     let mut runtime_by_id = HashMap::new();
+    let mut runtime_by_name = HashMap::new();
     for status in supervisor.health_check() {
         if let Some(handle) = supervisor.get_agent(status.id) {
-            runtime_by_id.insert(
-                status.id.to_string(),
-                RuntimeAgentSnapshot {
-                    name: handle.manifest.name.clone(),
-                    status: status.state.to_string(),
-                    fuel_remaining: status.remaining_fuel,
-                    fuel_budget: handle.manifest.fuel_budget,
-                    capabilities: handle.manifest.capabilities.clone(),
-                },
-            );
+            let snapshot = RuntimeAgentSnapshot {
+                id: status.id.to_string(),
+                name: handle.manifest.name.clone(),
+                status: status.state.to_string(),
+                fuel_remaining: status.remaining_fuel,
+                fuel_budget: handle.manifest.fuel_budget,
+                capabilities: handle.manifest.capabilities.clone(),
+            };
+            let should_replace = runtime_by_name
+                .get(&snapshot.name)
+                .map(|existing: &RuntimeAgentSnapshot| {
+                    runtime_status_rank(&snapshot.status) >= runtime_status_rank(&existing.status)
+                })
+                .unwrap_or(true);
+            if should_replace {
+                runtime_by_name.insert(snapshot.name.clone(), snapshot.clone());
+            }
+            runtime_by_id.insert(snapshot.id.clone(), snapshot);
         }
     }
     drop(supervisor);
@@ -1117,11 +1562,16 @@ pub fn list_agents(state: &AppState) -> Result<Vec<AgentRow>, String> {
 
     let mut rows = Vec::new();
     let mut seen_ids = HashSet::new();
+    let mut seen_runtime_ids = HashSet::new();
 
     for row in persisted_rows {
         let manifest = serde_json::from_str::<JsonAgentManifest>(&row.manifest_json).ok();
         let parsed_id = parse_agent_id(&row.id).ok();
-        let runtime = runtime_by_id.get(&row.id);
+        let runtime = runtime_by_id.get(&row.id).or_else(|| {
+            manifest
+                .as_ref()
+                .and_then(|json| runtime_by_name.get(&json.manifest.name))
+        });
         let meta = parsed_id
             .as_ref()
             .and_then(|agent_id| meta_guard.get(agent_id))
@@ -1153,6 +1603,10 @@ pub fn list_agents(state: &AppState) -> Result<Vec<AgentRow>, String> {
             .map(|meta| meta.last_action)
             .unwrap_or_else(|| "persisted".to_string());
 
+        if let Some(runtime) = runtime {
+            seen_runtime_ids.insert(runtime.id.clone());
+        }
+
         rows.push(AgentRow {
             id: row.id.clone(),
             name,
@@ -1172,7 +1626,11 @@ pub fn list_agents(state: &AppState) -> Result<Vec<AgentRow>, String> {
     }
 
     for (agent_id, runtime) in runtime_by_id {
-        if seen_ids.contains(&agent_id) {
+        if seen_ids.contains(&agent_id) || seen_runtime_ids.contains(&agent_id) {
+            continue;
+        }
+
+        if runtime.status.eq_ignore_ascii_case("stopped") {
             continue;
         }
 
@@ -1280,6 +1738,9 @@ fn build_provider_config(config: &NexusConfig) -> ProviderSelectionConfig {
         perplexity_api_key: std::env::var("PERPLEXITY_API_KEY").ok(),
         cohere_api_key: std::env::var("COHERE_API_KEY").ok(),
         openrouter_api_key: std::env::var("OPENROUTER_API_KEY").ok(),
+        nvidia_api_key: std::env::var("NVIDIA_NIM_API_KEY")
+            .ok()
+            .or_else(|| non_empty(&config.llm.nvidia_api_key)),
     }
 }
 
@@ -1476,6 +1937,12 @@ impl AppState {
     fn load_prebuilt_agents(&self) {
         eprintln!("Loading prebuilt agents...");
         let manifest_paths = list_prebuilt_manifest_paths();
+        let prebuilt_names = manifest_paths
+            .iter()
+            .filter_map(|path| std::fs::read_to_string(path).ok())
+            .filter_map(|manifest_json| manifest_name_from_json(&manifest_json))
+            .collect::<HashSet<_>>();
+        self.prune_stale_test_agents(&prebuilt_names);
         eprintln!("prebuilt: discovered {} manifest(s)", manifest_paths.len());
         let marketplace_registry = match open_marketplace_registry() {
             Ok(registry) => Some(registry),
@@ -1514,7 +1981,9 @@ impl AppState {
             };
             let manifest_description = parse_manifest_description(&manifest_json);
 
-            if existing_names.contains(&manifest.name) {
+            if existing_names.contains(&manifest.name)
+                || database_contains_agent_name(self.db.as_ref(), &manifest.name)
+            {
                 continue;
             }
 
@@ -1540,6 +2009,7 @@ impl AppState {
                 "native",
             ) {
                 eprintln!("prebuilt: failed to persist {}: {error}", agent_id);
+                continue;
             }
 
             let mut meta = match self.meta.lock() {
@@ -1569,6 +2039,37 @@ impl AppState {
         match self.db.list_agents() {
             Ok(rows) => eprintln!("prebuilt: database now tracks {} agent(s)", rows.len()),
             Err(error) => eprintln!("prebuilt: failed to query DB after load: {error}"),
+        }
+    }
+
+    fn prune_stale_test_agents(&self, prebuilt_names: &HashSet<String>) {
+        let rows = match self.db.list_agents() {
+            Ok(rows) => rows,
+            Err(error) => {
+                eprintln!("prebuilt: failed to inspect DB for stale test agents: {error}");
+                return;
+            }
+        };
+
+        for row in rows {
+            let Some(name) = manifest_name_from_json(&row.manifest_json) else {
+                continue;
+            };
+
+            if row.parent_agent_id.is_some()
+                || prebuilt_names.contains(&name)
+                || !is_known_test_agent_name(&name)
+            {
+                continue;
+            }
+
+            match self.db.delete_agent(&row.id) {
+                Ok(()) => eprintln!("prebuilt: removed stale test agent '{name}' ({})", row.id),
+                Err(error) => eprintln!(
+                    "prebuilt: failed removing stale test agent '{name}' ({}): {error}",
+                    row.id
+                ),
+            }
         }
     }
 }
@@ -1780,6 +2281,79 @@ fn parse_manifest_description(manifest_json: &str) -> String {
         .unwrap_or_else(|| "Nexus prebuilt agent".to_string())
 }
 
+#[cfg_attr(test, allow(dead_code))]
+const LEGACY_DB_CLEANUP_FLAG: &str = ".db_cleanup_prebuilt_v1";
+
+fn database_contains_agent_name(db: &NexusDatabase, name: &str) -> bool {
+    db.list_agents()
+        .map(|rows| {
+            rows.into_iter().any(|row| {
+                manifest_name_from_json(&row.manifest_json)
+                    .map(|existing| existing == name)
+                    .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false)
+}
+
+#[cfg_attr(test, allow(dead_code))]
+fn legacy_db_cleanup_flag_path(db_path: &std::path::Path) -> PathBuf {
+    db_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join(LEGACY_DB_CLEANUP_FLAG)
+}
+
+fn cleanup_legacy_agent_db_if_needed(db_path: &std::path::Path, flag_path: &std::path::Path) {
+    if flag_path.exists() {
+        return;
+    }
+
+    if let Some(parent) = flag_path.parent() {
+        if let Err(error) = std::fs::create_dir_all(parent) {
+            eprintln!(
+                "startup cleanup: failed to prepare {}: {error}",
+                parent.display()
+            );
+            return;
+        }
+    }
+
+    if db_path.exists() {
+        match std::fs::remove_file(db_path) {
+            Ok(()) => eprintln!(
+                "startup cleanup: removed stale database {}",
+                db_path.display()
+            ),
+            Err(error) => {
+                eprintln!(
+                    "startup cleanup: failed removing {}: {error}",
+                    db_path.display()
+                );
+                return;
+            }
+        }
+    }
+
+    if let Err(error) = std::fs::write(flag_path, "prebuilt-cleanup-complete\n") {
+        eprintln!(
+            "startup cleanup: failed writing {}: {error}",
+            flag_path.display()
+        );
+    }
+}
+
+#[cfg(not(test))]
+fn maybe_cleanup_legacy_agent_db() {
+    if std::env::var("NEXUS_DB_PATH").is_ok() {
+        return;
+    }
+
+    let db_path = NexusDatabase::default_db_path();
+    let flag_path = legacy_db_cleanup_flag_path(&db_path);
+    cleanup_legacy_agent_db_if_needed(&db_path, &flag_path);
+}
+
 #[derive(Debug, Deserialize)]
 struct JsonAgentManifest {
     #[serde(flatten)]
@@ -1817,6 +2391,13 @@ fn manifest_name_from_json(manifest_json: &str) -> Option<String> {
         .filter(|name| !name.trim().is_empty())
 }
 
+fn is_known_test_agent_name(name: &str) -> bool {
+    matches!(
+        name.trim(),
+        "a-agent" | "b-agent" | "c-agent" | "my-social-poster"
+    )
+}
+
 fn extract_manifest_description(manifest_json: &str) -> Option<String> {
     serde_json::from_str::<Value>(manifest_json)
         .ok()?
@@ -1835,9 +2416,18 @@ fn find_manifest_description(state: &AppState, agent_id: &str) -> Option<String>
 
 fn goal_with_manifest_context(agent_id: &str, goal: &str, description: Option<&str>) -> String {
     let goal = if goal.trim().is_empty() {
-        "Execute scheduled task"
+        description
+            .and_then(|value| {
+                let first_sentence = value
+                    .split('.')
+                    .next()
+                    .map(str::trim)
+                    .filter(|text| !text.is_empty())?;
+                Some(format!("Work autonomously on: {first_sentence}"))
+            })
+            .unwrap_or_else(|| "Execute scheduled task".to_string())
     } else {
-        goal
+        goal.to_string()
     };
 
     match description {
@@ -1846,6 +2436,67 @@ fn goal_with_manifest_context(agent_id: &str, goal: &str, description: Option<&s
         }
         _ => goal.to_string(),
     }
+}
+
+fn create_warden_consent_request(
+    state: &AppState,
+    agent_id: &str,
+    agent_name: &str,
+    action: &PlannedAction,
+    reason: &str,
+) -> Result<String, String> {
+    let consent_id = Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+    let summary = format!(
+        "Warden blocked {} for {}",
+        format_hitl_action_summary(action),
+        agent_name
+    );
+    let operation_json = json!({
+        "summary": summary,
+        "fuel_cost": 0.0,
+        "side_effects": [format_hitl_action_summary(action)],
+        "warden_reason": reason,
+        "goal_id": state
+            .cognitive_runtime
+            .get_agent_status(agent_id)
+            .and_then(|status| status.active_goal.map(|goal| goal.id))
+    });
+    let row = nexus_persistence::ConsentRow {
+        id: consent_id.clone(),
+        agent_id: agent_id.to_string(),
+        operation_type: "warden_review".to_string(),
+        operation_json: operation_json.to_string(),
+        hitl_tier: "Tier2".to_string(),
+        status: "pending".to_string(),
+        created_at: now,
+        resolved_at: None,
+        resolved_by: None,
+    };
+    state
+        .db
+        .enqueue_consent(&row)
+        .map_err(|e| format!("db error: {e}"))?;
+    #[cfg(all(
+        feature = "tauri-runtime",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    ))]
+    if let Some(app) = state.app_handle() {
+        let notification = consent_row_to_notification(&row, agent_name);
+        let _ = app.emit("consent-request-pending", notification);
+    }
+    state.log_event(
+        Uuid::parse_str(agent_id).unwrap_or_default(),
+        EventType::StateChange,
+        json!({
+            "action": "warden_decision",
+            "decision": "NO",
+            "agent_name": agent_name,
+            "consent_id": consent_id,
+            "reason": reason,
+        }),
+    );
+    Ok(consent_id)
 }
 
 fn register_manifest_schedule(
@@ -2303,6 +2954,7 @@ pub struct ProviderStatus {
     pub openai: bool,
     pub deepseek: bool,
     pub gemini: bool,
+    pub nvidia: bool,
 }
 
 /// List models from ALL configured providers (Ollama + cloud).
@@ -2406,6 +3058,21 @@ pub fn list_provider_models() -> Result<Vec<ProviderModel>, String> {
         }
     }
 
+    // ── NVIDIA NIM ──
+    if has_provider_key(&prov_config.nvidia_api_key) {
+        for (id, name) in NVIDIA_MODELS.iter().copied() {
+            models.push(ProviderModel {
+                id: format!("nvidia/{id}"),
+                name: name.into(),
+                provider: "nvidia".into(),
+                local: false,
+                requires_key: true,
+                size_gb: None,
+                installed: true,
+            });
+        }
+    }
+
     Ok(models)
 }
 
@@ -2434,6 +3101,7 @@ pub fn get_provider_status() -> Result<ProviderStatus, String> {
         openai: has_provider_key(&prov_config.openai_api_key),
         deepseek: has_provider_key(&prov_config.deepseek_api_key),
         gemini: has_provider_key(&prov_config.gemini_api_key),
+        nvidia: has_provider_key(&prov_config.nvidia_api_key),
     })
 }
 
@@ -2459,6 +3127,10 @@ pub fn save_provider_api_key(provider: String, api_key: String) -> Result<(), St
             config.llm.gemini_api_key = api_key.clone();
             std::env::set_var("GEMINI_API_KEY", &api_key);
         }
+        "nvidia" | "nvidia-nim" | "nim" => {
+            config.llm.nvidia_api_key = api_key.clone();
+            std::env::set_var("NVIDIA_NIM_API_KEY", &api_key);
+        }
         _ => return Err(format!("Unknown provider: {provider}")),
     }
 
@@ -2479,6 +3151,7 @@ fn provider_from_prefixed_model(
         || has_provider_key(&prov_config.openai_api_key)
         || has_provider_key(&prov_config.deepseek_api_key)
         || has_provider_key(&prov_config.gemini_api_key)
+        || has_provider_key(&prov_config.nvidia_api_key)
     {
         std::env::set_var("ENABLE_REAL_API", "1");
     }
@@ -2497,6 +3170,9 @@ fn provider_from_prefixed_model(
             "deepseek" => Box::new(DeepSeekProvider::new(prov_config.deepseek_api_key.clone())),
             "google" | "gemini" => {
                 Box::new(GeminiProvider::new(prov_config.gemini_api_key.clone()))
+            }
+            "nvidia" | "nvidia-nim" | "nim" => {
+                Box::new(NvidiaProvider::new(prov_config.nvidia_api_key.clone()))
             }
             _ => return Err(format!("Unknown provider prefix: {provider_prefix}")),
         };
@@ -2868,6 +3544,13 @@ pub fn check_llm_status() -> Result<LlmStatusResponse, String> {
             models_installed: None,
         });
     }
+
+    // NVIDIA NIM
+    providers.push(cloud_provider_entry(
+        "nvidia",
+        key_present(&prov_config.nvidia_api_key),
+        "free 1000 credits, access frontier models via NIM",
+    ));
 
     // Mock — always available
     providers.push(LlmProviderStatusEntry {
@@ -5862,16 +6545,7 @@ pub fn time_machine_list_checkpoints(state: &AppState) -> Result<String, String>
     let checkpoints = supervisor.time_machine().list_checkpoints();
     let summaries: Vec<serde_json::Value> = checkpoints
         .iter()
-        .map(|cp| {
-            json!({
-                "id": cp.id,
-                "label": cp.label,
-                "timestamp": cp.timestamp,
-                "agent_id": cp.agent_id,
-                "change_count": cp.changes.len(),
-                "undone": cp.undone,
-            })
-        })
+        .map(|cp| checkpoint_summary_json(state, cp))
         .collect();
     serde_json::to_string(&summaries).map_err(|e| e.to_string())
 }
@@ -5885,20 +6559,19 @@ pub fn time_machine_get_checkpoint(state: &AppState, id: String) -> Result<Strin
         .time_machine()
         .get_checkpoint(&id)
         .ok_or_else(|| format!("checkpoint not found: {id}"))?;
-    serde_json::to_string(cp).map_err(|e| e.to_string())
+    serde_json::to_string(&checkpoint_summary_json(state, cp)).map_err(|e| e.to_string())
 }
 
 pub fn time_machine_create_checkpoint(state: &AppState, label: String) -> Result<String, String> {
-    let mut supervisor = match state.supervisor.lock() {
-        Ok(g) => g,
-        Err(p) => p.into_inner(),
+    let builder = {
+        let supervisor = match state.supervisor.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        supervisor.time_machine().begin_checkpoint(&label, None)
     };
-    let builder = supervisor.time_machine().begin_checkpoint(&label, None);
     let cp = builder.build();
-    let (id, _evicted) = supervisor
-        .time_machine_mut()
-        .commit_checkpoint(cp)
-        .map_err(|e| e.to_string())?;
+    let id = commit_time_machine_checkpoint(state, cp)?;
 
     state.log_event(
         uuid::Uuid::nil(),
@@ -5942,6 +6615,7 @@ pub fn time_machine_undo(state: &AppState) -> Result<String, String> {
     let actions_applied = files_restored.len() + non_file_actions.len();
 
     drop(supervisor);
+    apply_non_file_undo_actions(state, &non_file_actions);
 
     state.log_event(
         uuid::Uuid::nil(),
@@ -5965,54 +6639,93 @@ pub fn time_machine_undo(state: &AppState) -> Result<String, String> {
 }
 
 pub fn time_machine_undo_checkpoint(state: &AppState, id: String) -> Result<String, String> {
-    let mut supervisor = match state.supervisor.lock() {
-        Ok(g) => g,
-        Err(p) => p.into_inner(),
+    let mut files_restored = Vec::new();
+    let mut agents_affected = Vec::new();
+    let mut actions_applied = 0usize;
+    let selected_checkpoint = {
+        let supervisor = match state.supervisor.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        supervisor
+            .time_machine()
+            .get_checkpoint(&id)
+            .cloned()
+            .ok_or_else(|| format!("checkpoint not found: {id}"))?
     };
-    let (cp, non_file_actions) = supervisor
-        .time_machine_mut()
-        .undo_checkpoint(&id)
-        .map_err(|e| e.to_string())?;
 
-    let files_restored: Vec<String> = cp
-        .changes
-        .iter()
-        .filter_map(|c| match c {
-            nexus_kernel::time_machine::ChangeEntry::FileWrite { path, .. }
-            | nexus_kernel::time_machine::ChangeEntry::FileCreate { path, .. }
-            | nexus_kernel::time_machine::ChangeEntry::FileDelete { path, .. } => {
-                Some(path.clone())
-            }
-            _ => None,
-        })
-        .collect();
-    let agents_affected: Vec<String> = non_file_actions
-        .iter()
-        .filter_map(|a| match a {
-            nexus_kernel::time_machine::UndoAction::RestoreAgentState { agent_id, .. } => {
-                Some(agent_id.clone())
-            }
-            _ => None,
-        })
-        .collect();
-    let actions_applied = files_restored.len() + non_file_actions.len();
+    loop {
+        let latest_active = {
+            let supervisor = match state.supervisor.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner(),
+            };
+            supervisor
+                .time_machine()
+                .list_checkpoints()
+                .iter()
+                .rev()
+                .find(|cp| !cp.undone)
+                .cloned()
+        };
+        let Some(latest_active) = latest_active else {
+            break;
+        };
+        if latest_active.id == id {
+            break;
+        }
 
-    drop(supervisor);
+        let (cp, non_file_actions) = {
+            let mut supervisor = match state.supervisor.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner(),
+            };
+            supervisor
+                .time_machine_mut()
+                .undo()
+                .map_err(|e| e.to_string())?
+        };
+        let current_files: Vec<String> = cp
+            .changes
+            .iter()
+            .filter_map(|c| match c {
+                nexus_kernel::time_machine::ChangeEntry::FileWrite { path, .. }
+                | nexus_kernel::time_machine::ChangeEntry::FileCreate { path, .. }
+                | nexus_kernel::time_machine::ChangeEntry::FileDelete { path, .. } => {
+                    Some(path.clone())
+                }
+                _ => None,
+            })
+            .collect();
+        let current_agents: Vec<String> = non_file_actions
+            .iter()
+            .filter_map(|a| match a {
+                nexus_kernel::time_machine::UndoAction::RestoreAgentState { agent_id, .. } => {
+                    Some(agent_id.clone())
+                }
+                _ => None,
+            })
+            .collect();
+        actions_applied += current_files.len() + non_file_actions.len();
+        files_restored.extend(current_files);
+        agents_affected.extend(current_agents);
+        apply_non_file_undo_actions(state, &non_file_actions);
+    }
 
     state.log_event(
         uuid::Uuid::nil(),
         nexus_kernel::audit::EventType::StateChange,
         json!({
             "action": "time_machine.undo_checkpoint",
-            "checkpoint_id": cp.id,
-            "label": cp.label,
+            "checkpoint_id": selected_checkpoint.id,
+            "label": selected_checkpoint.label,
             "actions_applied": actions_applied,
         }),
     );
 
     serde_json::to_string(&json!({
-        "checkpoint_id": cp.id,
-        "label": cp.label,
+        "checkpoint_id": selected_checkpoint.id,
+        "label": selected_checkpoint.label,
         "actions_applied": actions_applied,
         "files_restored": files_restored,
         "agents_affected": agents_affected,
@@ -6054,6 +6767,7 @@ pub fn time_machine_redo(state: &AppState) -> Result<String, String> {
     let actions_applied = files_restored.len() + non_file_actions.len();
 
     drop(supervisor);
+    apply_non_file_undo_actions(state, &non_file_actions);
 
     state.log_event(
         uuid::Uuid::nil(),
@@ -6132,6 +6846,116 @@ pub fn time_machine_get_diff(state: &AppState, id: String) -> Result<String, Str
         })
         .collect();
     serde_json::to_string(&diffs).map_err(|e| e.to_string())
+}
+
+pub fn time_machine_what_if(
+    state: &AppState,
+    id: String,
+    variable_key: String,
+    variable_value: String,
+) -> Result<String, String> {
+    let rewind_raw = time_machine_undo_checkpoint(state, id.clone())?;
+    let rewind_result: serde_json::Value =
+        serde_json::from_str(&rewind_raw).map_err(|e| e.to_string())?;
+
+    if let Some(path) = variable_key.strip_prefix("agent://") {
+        if let Some((agent_id, field)) = path.split_once('/') {
+            if let Ok(agent_uuid) = Uuid::parse_str(agent_id) {
+                let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+                if let Some(handle) = supervisor.get_agent_mut(agent_uuid) {
+                    match field {
+                        "fuel_remaining" => {
+                            let fuel = variable_value.parse::<u64>().map_err(|e| e.to_string())?;
+                            handle.remaining_fuel = fuel;
+                        }
+                        "status" => {
+                            handle.state = parse_agent_state(&variable_value)
+                                .ok_or_else(|| format!("invalid agent status: {variable_value}"))?;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    } else if variable_key == "governance.enable_warden_review" {
+        let mut config = load_config().map_err(agent_error)?;
+        config.governance.enable_warden_review =
+            matches!(variable_value.as_str(), "true" | "1" | "yes" | "on");
+        save_nexus_config(&config).map_err(agent_error)?;
+    }
+
+    let mut replayed = 0usize;
+    while time_machine_redo(state).is_ok() {
+        replayed += 1;
+    }
+
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "action": "time_machine.what_if",
+            "checkpoint_id": id,
+            "variable_key": variable_key,
+            "variable_value": variable_value,
+            "replayed_checkpoints": replayed,
+        }),
+    );
+
+    serde_json::to_string(&json!({
+        "rewind": rewind_result,
+        "replayed_checkpoints": replayed,
+    }))
+    .map_err(|e| e.to_string())
+}
+
+fn checkpoint_summary_json(
+    state: &AppState,
+    checkpoint: &nexus_kernel::time_machine::Checkpoint,
+) -> serde_json::Value {
+    let agent_name = checkpoint.agent_id.as_deref().and_then(|agent_id| {
+        let uuid = Uuid::parse_str(agent_id).ok()?;
+        state
+            .meta
+            .lock()
+            .ok()
+            .and_then(|meta| meta.get(&uuid).map(|entry| entry.name.clone()))
+    });
+    let action = checkpoint
+        .changes
+        .iter()
+        .find_map(|change| match change {
+            nexus_kernel::time_machine::ChangeEntry::ConfigChange { key, after, .. }
+                if key == "action" =>
+            {
+                after.as_str().map(str::to_string)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| checkpoint.label.clone());
+    let state_hash = checkpoint
+        .changes
+        .iter()
+        .find_map(|change| match change {
+            nexus_kernel::time_machine::ChangeEntry::ConfigChange { key, after, .. }
+                if key == "state_hash" =>
+            {
+                after.as_str().map(str::to_string)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| format!("{:x}", sha2::Sha256::digest(checkpoint.label.as_bytes())));
+
+    json!({
+        "id": checkpoint.id,
+        "label": checkpoint.label,
+        "timestamp": checkpoint.timestamp,
+        "agent_id": checkpoint.agent_id,
+        "agent_name": agent_name,
+        "action": action,
+        "state_hash": state_hash,
+        "change_count": checkpoint.changes.len(),
+        "undone": checkpoint.undone,
+    })
 }
 
 // ── Nexus Link (peer-to-peer model sharing) ─────────────────────────────
@@ -7700,6 +8524,220 @@ pub fn get_trust_overview(state: &AppState) -> Result<Vec<TrustOverviewAgent>, S
 
 // ── Computer Control Engine ──────────────────────────────────────────
 
+fn desktop_control_workspace() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(home)
+        .join(".nexus")
+        .join("desktop-backend")
+        .join("computer-control")
+}
+
+fn show_desktop_notification(message: &str) {
+    #[cfg(target_os = "linux")]
+    let _ = Command::new("notify-send")
+        .arg("Nexus OS")
+        .arg(message)
+        .output();
+
+    #[cfg(target_os = "macos")]
+    let _ = Command::new("osascript")
+        .arg("-e")
+        .arg(format!(
+            "display notification {:?} with title \"Nexus OS\"",
+            message
+        ))
+        .output();
+
+    #[cfg(target_os = "windows")]
+    let _ = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            &format!(
+                "Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show({:?}, 'Nexus OS')",
+                message
+            ),
+        ])
+        .output();
+}
+
+fn run_backend_computer_action(
+    state: &AppState,
+    session_id: &str,
+    description: &str,
+    max_steps: u32,
+    cancelled: &Arc<AtomicBool>,
+) -> Result<String, String> {
+    let workspace = desktop_control_workspace().join(session_id);
+    std::fs::create_dir_all(&workspace)
+        .map_err(|e| format!("failed to create {}: {e}", workspace.display()))?;
+
+    {
+        let mut engine = state
+            .computer_control
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        if !engine.is_enabled() {
+            engine.enable();
+        }
+    }
+
+    let mut actions_taken = Vec::new();
+    let max_steps = max_steps.max(1);
+    for step in 0..max_steps {
+        if cancelled.load(Ordering::SeqCst) {
+            return Ok(format!(
+                "Computer action '{session_id}' cancelled after {} steps",
+                actions_taken.len()
+            ));
+        }
+
+        let screenshot = capture_and_store_screen(
+            &workspace,
+            None,
+            &format!("session-{session_id}-step-{step}"),
+        )?;
+        let analysis =
+            analyze_stored_screenshot_for_backend(&screenshot, description, actions_taken.last())?;
+        if analysis.action == "done" {
+            return Ok(format!(
+                "Computer action complete. Final screenshot: {}. Actions: {}",
+                screenshot.display(),
+                if actions_taken.is_empty() {
+                    "none".to_string()
+                } else {
+                    actions_taken.join(", ")
+                }
+            ));
+        }
+
+        let action = backend_decision_to_input_action(&analysis)?;
+        let label = action.label();
+        {
+            let mut engine = state
+                .computer_control
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            engine.execute(action)?;
+        }
+        actions_taken.push(label);
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let _ = capture_and_store_screen(
+            &workspace,
+            None,
+            &format!("session-{session_id}-step-{step}-after"),
+        );
+    }
+
+    Ok(format!(
+        "Computer action stopped after reaching max_steps={max_steps}. Actions: {}",
+        actions_taken.join(", ")
+    ))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BackendComputerDecision {
+    action: String,
+    x: Option<u32>,
+    y: Option<u32>,
+    text: Option<String>,
+    key: Option<String>,
+    direction: Option<String>,
+    amount: Option<u32>,
+}
+
+#[cfg_attr(test, allow(unused_variables))]
+fn analyze_stored_screenshot_for_backend(
+    screenshot: &std::path::Path,
+    description: &str,
+    previous_action: Option<&String>,
+) -> Result<BackendComputerDecision, String> {
+    #[cfg(test)]
+    {
+        if previous_action.is_none() && description.contains("click once") {
+            return Ok(BackendComputerDecision {
+                action: "click".to_string(),
+                x: Some(10),
+                y: Some(10),
+                text: None,
+                key: None,
+                direction: None,
+                amount: None,
+            });
+        }
+        return Ok(BackendComputerDecision {
+            action: "done".to_string(),
+            x: None,
+            y: None,
+            text: None,
+            key: None,
+            direction: None,
+            amount: None,
+        });
+    }
+
+    #[allow(unreachable_code)]
+    {
+        let prompt = if let Some(previous_action) = previous_action {
+            format!(
+                "You are controlling a computer. Previous action: {previous_action}. New screen: [screenshot]. Goal: {description}. Is the goal complete? If not, what's the next action? Respond with JSON: {{\"action\":\"click|type|key|scroll|done\",\"x\":number,\"y\":number,\"text\":string,\"key\":string,\"direction\":string,\"amount\":number}}"
+            )
+        } else {
+            format!(
+                "You are controlling a computer. Current screen: [screenshot]. Goal: {description}. What is the next mouse/keyboard action to take? Respond with JSON: {{\"action\":\"click|type|key|scroll|done\",\"x\":number,\"y\":number,\"text\":string,\"key\":string,\"direction\":string,\"amount\":number}}"
+            )
+        };
+        let provider = OllamaProvider::from_env();
+        let bytes = std::fs::read(screenshot)
+            .map_err(|e| format!("failed to read screenshot {}: {e}", screenshot.display()))?;
+        let image_base64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+        let raw = provider
+            .query_with_image(&prompt, &image_base64, "")
+            .map_err(agent_error)?;
+        let candidate = raw
+            .trim()
+            .trim_start_matches("```json")
+            .trim_start_matches("```")
+            .trim_end_matches("```")
+            .trim();
+        serde_json::from_str::<BackendComputerDecision>(candidate)
+            .map_err(|e| format!("failed to parse computer-use decision: {e}"))
+    }
+}
+
+fn backend_decision_to_input_action(
+    decision: &BackendComputerDecision,
+) -> Result<InputAction, String> {
+    match decision.action.as_str() {
+        "click" => Ok(InputAction::Click {
+            x: decision.x.ok_or_else(|| "decision missing x".to_string())?,
+            y: decision.y.ok_or_else(|| "decision missing y".to_string())?,
+            button: nexus_kernel::computer_control::MouseButton::Left,
+        }),
+        "type" => Ok(InputAction::Type {
+            text: decision
+                .text
+                .clone()
+                .ok_or_else(|| "decision missing text".to_string())?,
+        }),
+        "key" => Ok(InputAction::KeyPress {
+            key: decision
+                .key
+                .clone()
+                .ok_or_else(|| "decision missing key".to_string())?,
+            modifiers: vec![],
+        }),
+        "scroll" => Ok(InputAction::Scroll {
+            direction: decision
+                .direction
+                .clone()
+                .unwrap_or_else(|| "down".to_string()),
+            amount: decision.amount.unwrap_or(1),
+        }),
+        other => Err(format!("unsupported computer-use action '{other}'")),
+    }
+}
+
 pub fn computer_control_capture_screen(
     state: &AppState,
     region: Option<String>,
@@ -7778,16 +8816,165 @@ pub fn computer_control_toggle(state: &AppState, enabled: bool) -> Result<String
 }
 
 pub fn computer_control_status(state: &AppState) -> Result<String, String> {
-    let engine = state
+    let mut engine = state
         .computer_control
         .lock()
         .unwrap_or_else(|p| p.into_inner());
-    Ok(json!({
-        "enabled": engine.is_enabled(),
-        "max_actions_per_minute": engine.max_actions_per_minute(),
-        "total_actions": engine.total_actions(),
-    })
-    .to_string())
+    serde_json::to_string(&engine.status()).map_err(|e| e.to_string())
+}
+
+pub fn capture_screen(state: &AppState, region: Option<ScreenRegion>) -> Result<String, String> {
+    let mut engine = state
+        .computer_control
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    if !engine.is_enabled() {
+        engine.enable();
+    }
+    let workspace = desktop_control_workspace();
+    let path = capture_and_store_screen(&workspace, region.as_ref(), "tauri-capture-screen")?;
+    state.log_event(
+        Uuid::nil(),
+        EventType::ToolCall,
+        json!({
+            "source": "computer-control",
+            "action": "capture_screen",
+            "path": path,
+        }),
+    );
+    Ok(path.display().to_string())
+}
+
+pub fn analyze_screen(state: &AppState, query: String) -> Result<String, String> {
+    let mut engine = state
+        .computer_control
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    if !engine.is_enabled() {
+        engine.enable();
+    }
+    let workspace = desktop_control_workspace();
+    let analysis = capture_and_analyze_screen(&workspace, &query, None)?;
+    state.log_event(
+        Uuid::nil(),
+        EventType::LlmCall,
+        json!({
+            "source": "computer-control",
+            "action": "analyze_screen",
+            "path": analysis.screenshot_path,
+            "model": analysis.model,
+        }),
+    );
+    Ok(analysis.output)
+}
+
+pub fn analyze_media_file(state: &AppState, path: String, query: String) -> Result<String, String> {
+    let canonical = file_manager_validate_path(&path)?;
+    let analysis = analyze_stored_screenshot(&canonical, &query, None)?;
+    state.log_event(
+        Uuid::nil(),
+        EventType::LlmCall,
+        json!({
+            "source": "media-studio",
+            "action": "analyze_media_file",
+            "path": canonical,
+            "query": query,
+        }),
+    );
+    Ok(analysis)
+}
+
+pub fn start_computer_action(
+    state: &AppState,
+    description: String,
+    max_steps: u32,
+) -> Result<String, String> {
+    let session_id = Uuid::new_v4().to_string();
+    let cancelled = Arc::new(AtomicBool::new(false));
+    state
+        .computer_action_cancellations
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .insert(session_id.clone(), cancelled.clone());
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "computer-control",
+            "action": "start_computer_action",
+            "session_id": session_id,
+            "description": description,
+            "max_steps": max_steps,
+        }),
+    );
+
+    let state_clone = state.clone();
+    let session_clone = session_id.clone();
+    let description_clone = description.clone();
+    std::thread::spawn(move || {
+        let result = run_backend_computer_action(
+            &state_clone,
+            &session_clone,
+            &description_clone,
+            max_steps,
+            &cancelled,
+        );
+        state_clone
+            .computer_action_cancellations
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(&session_clone);
+        state_clone.log_event(
+            Uuid::nil(),
+            EventType::StateChange,
+            json!({
+                "source": "computer-control",
+                "action": "computer_action_complete",
+                "session_id": session_clone,
+                "success": result.is_ok(),
+                "result": result.ok(),
+            }),
+        );
+    });
+
+    Ok(session_id)
+}
+
+pub fn stop_computer_action(state: &AppState, agent_id: String) -> Result<(), String> {
+    if let Some(cancelled) = state
+        .computer_action_cancellations
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(&agent_id)
+        .cloned()
+    {
+        cancelled.store(true, Ordering::SeqCst);
+    }
+    {
+        let mut engine = state
+            .computer_control
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        engine.disable();
+    }
+    state.log_event(
+        Uuid::nil(),
+        EventType::StateChange,
+        json!({
+            "source": "computer-control",
+            "action": "stop_computer_action",
+            "session_id": agent_id,
+        }),
+    );
+    Ok(())
+}
+
+pub fn get_input_control_status(state: &AppState) -> Result<InputControlStatus, String> {
+    let mut engine = state
+        .computer_control
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    Ok(engine.status())
 }
 
 // ---------------------------------------------------------------------------
@@ -9746,6 +10933,376 @@ fn persist_task_completion(
     );
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AgentCheckpointSnapshot {
+    status: String,
+    fuel_remaining: u64,
+    memories: Vec<nexus_persistence::MemoryRow>,
+}
+
+fn capture_agent_snapshot(state: &AppState, agent_id: &str) -> Option<AgentCheckpointSnapshot> {
+    let status = {
+        let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        let uuid = Uuid::parse_str(agent_id).ok()?;
+        let handle = supervisor.get_agent(uuid)?;
+        handle.state.to_string()
+    };
+    let fuel_remaining = {
+        let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        let uuid = Uuid::parse_str(agent_id).ok()?;
+        supervisor
+            .get_agent(uuid)
+            .map(|handle| handle.remaining_fuel)?
+    };
+    let memories = state.db.load_memories(agent_id, None, 250).ok()?;
+    Some(AgentCheckpointSnapshot {
+        status,
+        fuel_remaining,
+        memories,
+    })
+}
+
+fn snapshot_state_hash(snapshot: &AgentCheckpointSnapshot) -> String {
+    let serialized = serde_json::to_vec(snapshot).unwrap_or_default();
+    format!("{:x}", sha2::Sha256::digest(serialized))
+}
+
+fn save_checkpoint_to_db(state: &AppState, checkpoint: &nexus_kernel::time_machine::Checkpoint) {
+    let serialized = match serde_json::to_string(checkpoint) {
+        Ok(serialized) => serialized,
+        Err(error) => {
+            eprintln!(
+                "time-machine: failed to serialize checkpoint {}: {error}",
+                checkpoint.id
+            );
+            return;
+        }
+    };
+    let row = CheckpointRow {
+        id: checkpoint.id.clone(),
+        agent_id: checkpoint.agent_id.clone().unwrap_or_default(),
+        state_json: serialized,
+        description: Some(checkpoint.label.clone()),
+        created_at: chrono::Utc
+            .timestamp_millis_opt(checkpoint.timestamp as i64)
+            .single()
+            .unwrap_or_else(chrono::Utc::now)
+            .to_rfc3339(),
+    };
+    if let Err(error) = state.db.save_checkpoint(&row) {
+        eprintln!(
+            "time-machine: failed to persist checkpoint {}: {error}",
+            checkpoint.id
+        );
+    }
+}
+
+fn commit_time_machine_checkpoint(
+    state: &AppState,
+    checkpoint: nexus_kernel::time_machine::Checkpoint,
+) -> Result<String, String> {
+    let checkpoint_id = {
+        let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        let (id, _) = supervisor
+            .time_machine_mut()
+            .commit_checkpoint(checkpoint.clone())
+            .map_err(|e| e.to_string())?;
+        id
+    };
+    save_checkpoint_to_db(state, &checkpoint);
+    Ok(checkpoint_id)
+}
+
+fn record_agent_execution_checkpoint(
+    state: &AppState,
+    agent_id: &str,
+    label: &str,
+    before: Option<&AgentCheckpointSnapshot>,
+    after: Option<&AgentCheckpointSnapshot>,
+    action: &str,
+) {
+    let Some(after_snapshot) = after.cloned() else {
+        return;
+    };
+    let before_snapshot = before.cloned().unwrap_or_else(|| after_snapshot.clone());
+
+    let before_memories =
+        serde_json::to_value(&before_snapshot.memories).unwrap_or_else(|_| json!([]));
+    let after_memories =
+        serde_json::to_value(&after_snapshot.memories).unwrap_or_else(|_| json!([]));
+    let mut builder = {
+        let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        supervisor
+            .time_machine()
+            .begin_checkpoint(label, Some(agent_id.to_string()))
+    };
+    builder.record_agent_state(
+        agent_id,
+        "status",
+        json!(before_snapshot.status),
+        json!(after_snapshot.status),
+    );
+    builder.record_agent_state(
+        agent_id,
+        "fuel_remaining",
+        json!(before_snapshot.fuel_remaining),
+        json!(after_snapshot.fuel_remaining),
+    );
+    builder.record_agent_state(agent_id, "memories", before_memories, after_memories);
+    builder.record_config_change(
+        "state_hash",
+        json!(snapshot_state_hash(&before_snapshot)),
+        json!(snapshot_state_hash(&after_snapshot)),
+    );
+    builder.record_config_change("action", json!(label), json!(action));
+    let checkpoint = builder.build();
+    let _ = commit_time_machine_checkpoint(state, checkpoint);
+}
+
+fn parse_agent_state(value: &str) -> Option<AgentState> {
+    match value {
+        "Created" => Some(AgentState::Created),
+        "Starting" => Some(AgentState::Starting),
+        "Running" => Some(AgentState::Running),
+        "Paused" => Some(AgentState::Paused),
+        "Stopping" => Some(AgentState::Stopping),
+        "Stopped" => Some(AgentState::Stopped),
+        "Destroyed" => Some(AgentState::Destroyed),
+        _ => None,
+    }
+}
+
+fn restore_agent_memories(state: &AppState, agent_id: &str, value: &serde_json::Value) {
+    let Ok(memories) = serde_json::from_value::<Vec<nexus_persistence::MemoryRow>>(value.clone())
+    else {
+        return;
+    };
+    let _ = state.db.delete_memories_by_agent(agent_id);
+    for memory in memories {
+        let _ = state.db.save_memory(
+            &memory.agent_id,
+            &memory.memory_type,
+            &memory.key,
+            &memory.value_json,
+        );
+    }
+}
+
+fn apply_non_file_undo_actions(
+    state: &AppState,
+    actions: &[nexus_kernel::time_machine::UndoAction],
+) {
+    for action in actions {
+        match action {
+            nexus_kernel::time_machine::UndoAction::RestoreAgentState {
+                agent_id,
+                field,
+                value,
+            } => {
+                if let Ok(agent_uuid) = Uuid::parse_str(agent_id) {
+                    let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+                    if let Some(handle) = supervisor.get_agent_mut(agent_uuid) {
+                        match field.as_str() {
+                            "status" => {
+                                if let Some(status) = value.as_str().and_then(parse_agent_state) {
+                                    handle.state = status;
+                                }
+                            }
+                            "fuel_remaining" => {
+                                if let Some(fuel) = value.as_u64() {
+                                    handle.remaining_fuel = fuel;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                if field == "memories" {
+                    restore_agent_memories(state, agent_id, value);
+                }
+            }
+            nexus_kernel::time_machine::UndoAction::RestoreConfig { key, value } => {
+                if key == "state_hash" || key == "action" {
+                    continue;
+                }
+                let Ok(mut config) = load_config() else {
+                    continue;
+                };
+                if key == "governance.enable_warden_review" {
+                    if let Some(enabled) = value.as_bool() {
+                        config.governance.enable_warden_review = enabled;
+                        let _ = save_nexus_config(&config);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn task_timing_for_goal(state: &AppState, agent_id: &str, goal_id: &str) -> Option<(f64, f64)> {
+    let tasks = state.db.load_tasks_by_agent(agent_id, 200).ok()?;
+    let task = tasks.into_iter().find(|task| task.id == goal_id)?;
+    let started = chrono::DateTime::parse_from_rfc3339(&task.started_at).ok()?;
+    let completed = task
+        .completed_at
+        .as_deref()
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .unwrap_or_else(|| chrono::Utc::now().into());
+    Some((
+        ((completed - started).num_milliseconds().max(0) as f64) / 1000.0,
+        task.fuel_budget.unwrap_or(0.0),
+    ))
+}
+
+fn recent_task_outcomes(state: &AppState, agent_id: &str, limit: usize) -> Vec<(bool, f64, f64)> {
+    state
+        .db
+        .load_tasks_by_agent(agent_id, limit)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|task| {
+            let started = chrono::DateTime::parse_from_rfc3339(&task.started_at).ok()?;
+            let completed = task
+                .completed_at
+                .as_deref()
+                .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+                .unwrap_or_else(|| chrono::Utc::now().into());
+            Some((
+                task.success,
+                task.fuel_consumed,
+                ((completed - started).num_milliseconds().max(0) as f64) / 1000.0,
+            ))
+        })
+        .collect()
+}
+
+fn run_post_goal_evolution(
+    bridge: &BackendEventBridge,
+    state: &AppState,
+    agent_id: &str,
+    goal_id: &str,
+    success: bool,
+    fallback_fuel_consumed: f64,
+) {
+    let (autonomy_level, agent_name) = {
+        let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        let Some(handle) = Uuid::parse_str(agent_id)
+            .ok()
+            .and_then(|uuid| supervisor.get_agent(uuid))
+        else {
+            return;
+        };
+        (handle.autonomy_level, handle.manifest.name.clone())
+    };
+
+    if autonomy_level < 4 {
+        return;
+    }
+
+    let mem_store = DbMemoryStore {
+        db: state.db.clone(),
+    };
+    let memory_mgr = nexus_kernel::cognitive::AgentMemoryManager::new(Box::new(mem_store));
+    let (duration_secs, fuel_budget) =
+        task_timing_for_goal(state, agent_id, goal_id).unwrap_or((0.0, fallback_fuel_consumed));
+    let fuel_consumed = state
+        .db
+        .load_tasks_by_agent(agent_id, 200)
+        .ok()
+        .and_then(|tasks| tasks.into_iter().find(|task| task.id == goal_id))
+        .map(|task| task.fuel_consumed)
+        .unwrap_or(fallback_fuel_consumed);
+    let goal_type = state
+        .db
+        .load_tasks_by_agent(agent_id, 200)
+        .ok()
+        .and_then(|tasks| tasks.into_iter().find(|task| task.id == goal_id))
+        .map(|task| task.goal)
+        .unwrap_or_else(|| "scheduled_goal".to_string())
+        .to_lowercase();
+    let strategy_hash = nexus_kernel::cognitive::hash_strategy(&goal_type);
+
+    let _ = state.evolution_tracker.record_task_result(
+        agent_id,
+        goal_id,
+        &strategy_hash,
+        &goal_type,
+        success,
+        fuel_consumed,
+        duration_secs,
+        fuel_budget,
+        60.0,
+        &memory_mgr,
+    );
+
+    let completed_count = state
+        .db
+        .load_tasks_by_agent(agent_id, 500)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|task| task.completed_at.is_some())
+        .count();
+
+    if completed_count > 0 && completed_count % 5 == 0 {
+        if let Ok(Some(best_strategy)) = state
+            .evolution_tracker
+            .select_best_strategy(agent_id, &goal_type)
+        {
+            let _ = memory_mgr.store_procedural(
+                agent_id,
+                &format!("planner_strategy_injection:{best_strategy}"),
+                1.0,
+            );
+            if let Ok(strategies) = state.evolution_tracker.get_agent_strategies(agent_id) {
+                if let Some(strategy) = strategies
+                    .into_iter()
+                    .find(|entry| entry.strategy_hash == best_strategy)
+                {
+                    let score = strategy.composite_score;
+                    let generation = (completed_count / 5) as u64;
+                    state.log_event(
+                        Uuid::parse_str(agent_id).unwrap_or_default(),
+                        EventType::StateChange,
+                        json!({
+                            "action": "agent_evolved_strategy",
+                            "message": format!("Agent {} evolved strategy. New composite score: {:.3}", agent_name, score),
+                            "new_score": score,
+                            "generation": generation,
+                            "strategy_hash": best_strategy,
+                        }),
+                    );
+                    bridge.emit(
+                        "agent-evolved",
+                        json!({
+                            "agent_id": agent_id,
+                            "new_score": score,
+                            "generation": generation,
+                            "strategy_hash": best_strategy,
+                        }),
+                    );
+                }
+            }
+        }
+    }
+
+    if completed_count > 0 && completed_count % 10 == 0 {
+        let outcomes = recent_task_outcomes(state, agent_id, 10);
+        let current_prompt = format!(
+            "Plan safe, governed work for agent {} while respecting its capabilities and audit trail.",
+            agent_name
+        );
+        let llm = GatewayPlannerLlm;
+        let _ = state.evolution_tracker.optimize_planning_prompt(
+            agent_id,
+            &current_prompt,
+            &outcomes,
+            &llm,
+            &memory_mgr,
+        );
+    }
+}
+
 /// Bridges the configured LLM provider to the cognitive planner's `PlannerLlm` trait.
 struct GatewayPlannerLlm;
 
@@ -9753,24 +11310,405 @@ impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
     fn plan_query(&self, prompt: &str) -> Result<String, nexus_kernel::errors::AgentError> {
         let config = nexus_kernel::config::load_config().unwrap_or_default();
         let prov_config = build_provider_config(&config);
-        let provider = select_provider(&prov_config);
-        let model = if config.llm.default_model.trim().is_empty() {
-            // If Ollama, try to pick the first available model
-            if provider.name() == "ollama" {
-                let ollama = OllamaProvider::from_env();
-                ollama
-                    .list_models()
-                    .ok()
-                    .and_then(|models| models.into_iter().next().map(|m| m.name))
-                    .unwrap_or_else(|| "llama3.2".to_string())
-            } else {
-                "mock-1".to_string()
-            }
+        let route_model = ACTIVE_AGENT_LLM_ROUTE
+            .with(|slot| slot.borrow().as_ref().map(|route| route.model.clone()));
+        let (provider, model) = if let Some(route_model) = route_model {
+            provider_from_prefixed_model(&route_model, &prov_config)
+                .unwrap_or_else(|_| (select_provider(&prov_config), route_model))
         } else {
-            config.llm.default_model.clone()
+            let provider = select_provider(&prov_config);
+            let model = if config.llm.default_model.trim().is_empty() {
+                // If Ollama, try to pick the first available model
+                if provider.name() == "ollama" {
+                    let ollama = OllamaProvider::from_env();
+                    ollama
+                        .list_models()
+                        .ok()
+                        .and_then(|models| models.into_iter().next().map(|m| m.name))
+                        .unwrap_or_else(|| "llama3.2".to_string())
+                } else {
+                    "mock-1".to_string()
+                }
+            } else {
+                config.llm.default_model.clone()
+            };
+            (provider, model)
         };
         let response = provider.query(prompt, 4096, &model)?;
         Ok(response.output_text)
+    }
+}
+
+impl nexus_kernel::cognitive::EvolutionLlm for GatewayPlannerLlm {
+    fn optimize_prompt(&self, prompt: &str) -> Result<String, String> {
+        nexus_kernel::cognitive::PlannerLlm::plan_query(self, prompt)
+            .map_err(|error| error.to_string())
+    }
+}
+
+#[cfg(not(test))]
+struct SimulationPlannerLlm;
+
+#[cfg(not(test))]
+impl nexus_kernel::cognitive::PlannerLlm for SimulationPlannerLlm {
+    fn plan_query(&self, prompt: &str) -> Result<String, nexus_kernel::errors::AgentError> {
+        let gateway = GatewayPlannerLlm;
+        match gateway.plan_query(prompt) {
+            Ok(response) if simulation_response_is_usable(prompt, &response) => Ok(response),
+            Ok(_) | Err(_) => Ok(simulation_mock_response(prompt)),
+        }
+    }
+}
+
+#[cfg(test)]
+struct TestSimulationPlannerLlm;
+
+#[cfg(test)]
+impl nexus_kernel::cognitive::PlannerLlm for TestSimulationPlannerLlm {
+    fn plan_query(&self, prompt: &str) -> Result<String, nexus_kernel::errors::AgentError> {
+        Ok(simulation_mock_response(prompt))
+    }
+}
+
+#[cfg(not(test))]
+fn simulation_response_is_usable(prompt: &str, response: &str) -> bool {
+    if response.trim().is_empty() || response.contains("[Mock Response") {
+        return false;
+    }
+    if prompt.contains("structured JSON")
+        || prompt.contains("Return as JSON")
+        || prompt.contains("Return as JSON array")
+        || prompt.contains("Extract all entities")
+        || prompt.contains("What do you do next?")
+    {
+        return nexus_kernel::simulation::extract_json_value(response).is_ok();
+    }
+    true
+}
+
+fn simulation_mock_response(prompt: &str) -> String {
+    if prompt.contains("Analyze this text and extract") {
+        return json!({
+            "scenario": "A simulated governance scenario",
+            "entities": [
+                {"name": "Nexus Council", "entity_type": "organization"},
+                {"name": "Policy X", "entity_type": "policy"}
+            ],
+            "relationships": [
+                {"from": "Nexus Council", "to": "Policy X", "relation_type": "debates"}
+            ],
+            "variables": [
+                {"key": "policy_x_passed", "description": "Whether Policy X passes"}
+            ],
+            "suggested_personas": ["analyst", "executive", "citizen"]
+        })
+        .to_string();
+    }
+    if prompt.contains("Extract all entities") {
+        return json!({
+            "entities": [
+                {"entity_name": "Nexus Council", "entity_type": "organization", "properties": {"domain": "governance"}},
+                {"entity_name": "Policy X", "entity_type": "policy", "properties": {"status": "proposed"}}
+            ],
+            "relationships": [
+                {"from": "Nexus Council", "to": "Policy X", "relation_type": "debates", "strength": 0.75}
+            ]
+        })
+        .to_string();
+    }
+    if prompt.contains("Generate") && prompt.contains("diverse personas") {
+        let count = prompt
+            .split("Generate ")
+            .nth(1)
+            .and_then(|rest| rest.split(" diverse personas").next())
+            .and_then(|digits| digits.parse::<usize>().ok())
+            .unwrap_or(6);
+        return serde_json::to_string(
+            &(0..count)
+                .map(|index| {
+                    json!({
+                        "id": format!("mock-persona-{index}"),
+                        "name": format!("Mock Persona {index}"),
+                        "role": match index % 4 {
+                            0 => "policy analyst",
+                            1 => "tech ceo",
+                            2 => "voter",
+                            _ => "journalist",
+                        },
+                        "personality": {
+                            "openness": 0.55,
+                            "conscientiousness": 0.52,
+                            "extraversion": 0.48,
+                            "agreeableness": 0.58,
+                            "neuroticism": 0.32
+                        },
+                        "beliefs": {
+                            "policy_x": if index % 2 == 0 { 0.35 } else { -0.15 },
+                            "market_confidence": if index % 3 == 0 { 0.25 } else { -0.05 }
+                        },
+                        "goals": ["shape the outcome", "protect long-term interests"],
+                        "memories": [],
+                        "relationships": {},
+                        "behavior_rules": ["react to new information", "protect allies"],
+                        "last_action": null,
+                        "influence_score": 0.42 + (index as f64 * 0.01)
+                    })
+                })
+                .collect::<Vec<_>>(),
+        )
+        .unwrap_or_else(|_| "[]".to_string());
+    }
+    if prompt.contains("Return as JSON array of persona decisions") {
+        let count = prompt.matches("\"id\":\"").count().max(1);
+        let batch = (0..count)
+            .map(|index| {
+                json!({
+                    "id": format!("mock-persona-{index}"),
+                    "action": if index % 4 == 0 { "speak" } else if index % 4 == 1 { "whisper" } else if index % 4 == 2 { "act" } else { "observe" },
+                    "target": if index % 4 == 1 { Some("mock-persona-0") } else { None::<&str> },
+                    "content": if index % 4 == 0 {
+                        Some("We should stabilize support")
+                    } else if index % 4 == 1 {
+                        Some("Coordinate lobbying before the vote")
+                    } else if index % 4 == 2 {
+                        Some("publish a position memo supporting Policy X")
+                    } else {
+                        None::<&str>
+                    },
+                    "reasoning": "Mock simulation batch decision"
+                })
+            })
+            .collect::<Vec<_>>();
+        return serde_json::to_string(&batch).unwrap_or_else(|_| "[]".to_string());
+    }
+    if prompt.contains("What do you do next?") {
+        let action = if prompt.contains("journalist") {
+            json!({"action":"speak","target":null,"content":"I support transparent reporting on Policy X","reasoning":"Public information shifts the world."})
+        } else if prompt.contains("tech ceo") {
+            json!({"action":"whisper","target":"mock-persona-0","content":"Coordinate lobbying before the vote","reasoning":"Private coordination can amplify influence."})
+        } else if prompt.contains("voter") {
+            json!({"action":"observe","target":null,"content":null,"reasoning":"Waiting for more evidence."})
+        } else {
+            json!({"action":"act","target":null,"content":"publish a position memo supporting Policy X","reasoning":"A concrete action moves the coalition."})
+        };
+        return action.to_string();
+    }
+    if prompt.contains("Analyze this simulation summary") {
+        return "The governed simulation converged toward a stable coalition around Policy X."
+            .to_string();
+    }
+    if prompt.contains("Respond in character") {
+        return "I still see this through the lens of Policy X and my accumulated memories."
+            .to_string();
+    }
+    "{}".to_string()
+}
+
+#[derive(Clone, Default)]
+struct BackendEventBridge {
+    #[cfg(all(
+        feature = "tauri-runtime",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    ))]
+    app: Option<tauri::AppHandle<tauri::Wry>>,
+}
+
+impl BackendEventBridge {
+    #[cfg(all(
+        feature = "tauri-runtime",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    ))]
+    fn from_app(app: tauri::AppHandle<tauri::Wry>) -> Self {
+        Self { app: Some(app) }
+    }
+
+    #[cfg(not(all(
+        feature = "tauri-runtime",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    )))]
+    fn from_app(_: ()) -> Self {
+        Self::default()
+    }
+
+    fn emit(&self, _event: &str, _payload: serde_json::Value) {
+        #[cfg(all(
+            feature = "tauri-runtime",
+            any(target_os = "windows", target_os = "macos", target_os = "linux")
+        ))]
+        if let Some(app) = &self.app {
+            let _ = app.emit(_event, _payload);
+        }
+    }
+}
+
+struct ScheduledGoalExecutor {
+    state: AppState,
+}
+
+impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
+    fn execute(&self, agent_id: &str, default_goal: &str) -> Result<(), String> {
+        let agent_uuid = Uuid::parse_str(agent_id).map_err(|e| format!("invalid agent id: {e}"))?;
+        let agent_name = {
+            let supervisor = self
+                .state
+                .supervisor
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            let handle = supervisor
+                .get_agent(agent_uuid)
+                .ok_or_else(|| format!("agent '{agent_id}' not found"))?;
+            handle.manifest.name.clone()
+        };
+
+        {
+            let mut supervisor = self
+                .state
+                .supervisor
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            if let Some(handle) = supervisor.get_agent(agent_uuid) {
+                if handle.state == AgentState::Stopped {
+                    supervisor.restart_agent(agent_uuid).map_err(agent_error)?;
+                }
+            }
+        }
+
+        let goal_id = execute_agent_goal(
+            &self.state,
+            agent_id.to_string(),
+            default_goal.to_string(),
+            5,
+        )?;
+        self.state.log_event(
+            agent_uuid,
+            EventType::StateChange,
+            json!({
+                "action": "scheduled_execution_triggered",
+                "message": format!("Scheduled execution triggered for {agent_name}"),
+                "agent_name": agent_name,
+                "goal_id": goal_id,
+            }),
+        );
+
+        #[cfg(all(
+            feature = "tauri-runtime",
+            any(target_os = "windows", target_os = "macos", target_os = "linux")
+        ))]
+        {
+            if let Some(app) = self.state.app_handle() {
+                spawn_cognitive_loop_with_bridge(
+                    BackendEventBridge::from_app(app),
+                    self.state.clone(),
+                    agent_id.to_string(),
+                    goal_id,
+                );
+            }
+        }
+
+        Ok(())
+    }
+}
+
+struct WardenReviewEngine {
+    state: AppState,
+}
+
+impl nexus_kernel::actuators::ActionReviewEngine for WardenReviewEngine {
+    fn review(
+        &self,
+        actor_agent_id: &str,
+        actor_name: &str,
+        action: &PlannedAction,
+    ) -> Result<nexus_kernel::actuators::ActionReviewDecision, String> {
+        let config = load_config().map_err(agent_error)?;
+        if !config.governance.enable_warden_review {
+            return Ok(nexus_kernel::actuators::ActionReviewDecision::Allow {
+                reason: "Warden governance review disabled".to_string(),
+            });
+        }
+
+        let (warden_id, warden_model, warden_name) = {
+            let supervisor = self
+                .state
+                .supervisor
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            let Some((id, model, name)) =
+                supervisor.health_check().into_iter().find_map(|status| {
+                    supervisor.get_agent(status.id).and_then(|handle| {
+                        if handle.manifest.name.eq_ignore_ascii_case("nexus-warden")
+                            && matches!(
+                                status.state,
+                                AgentState::Running | AgentState::Starting | AgentState::Paused
+                            )
+                        {
+                            Some((
+                                status.id,
+                                handle
+                                    .manifest
+                                    .llm_model
+                                    .clone()
+                                    .unwrap_or_else(get_default_model),
+                                handle.manifest.name.clone(),
+                            ))
+                        } else {
+                            None
+                        }
+                    })
+                })
+            else {
+                return Ok(nexus_kernel::actuators::ActionReviewDecision::Allow {
+                    reason: "Warden inactive".to_string(),
+                });
+            };
+            (id, model, name)
+        };
+
+        let prompt = format!(
+            "Agent {actor_name} wants to execute {}. Is this safe? Respond YES or NO with reason.",
+            format_hitl_action_summary(action)
+        );
+        let provider = select_provider(&build_provider_config(&config));
+        let response = provider
+            .query(&prompt, 256, &warden_model)
+            .map_err(agent_error)?
+            .output_text;
+        let trimmed = response.trim();
+        self.state.log_event(
+            warden_id,
+            EventType::LlmCall,
+            json!({
+                "action": "warden_review",
+                "actor_agent_id": actor_agent_id,
+                "actor_name": actor_name,
+                "warden_name": warden_name,
+                "review_prompt": prompt,
+                "review_response": trimmed,
+            }),
+        );
+
+        if trimmed.to_ascii_uppercase().starts_with("NO") {
+            let reason = trimmed
+                .split_once(' ')
+                .map(|(_, rest)| rest.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .unwrap_or_else(|| "Warden denied the action".to_string());
+            create_warden_consent_request(
+                &self.state,
+                actor_agent_id,
+                actor_name,
+                action,
+                &reason,
+            )?;
+            return Ok(nexus_kernel::actuators::ActionReviewDecision::Deny { reason });
+        }
+
+        let reason = trimmed
+            .split_once(' ')
+            .map(|(_, rest)| rest.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "Warden approved the action".to_string());
+        Ok(nexus_kernel::actuators::ActionReviewDecision::Allow { reason })
     }
 }
 
@@ -9783,16 +11721,146 @@ fn execute_agent_goal(
     goal_description: String,
     priority: u8,
 ) -> Result<String, String> {
+    let before_snapshot = capture_agent_snapshot(state, &agent_id);
     // Assign the goal to the cognitive runtime
     let goal_id = assign_agent_goal(state, agent_id.clone(), goal_description, priority)?;
     persist_task_start(state, &agent_id, &goal_id);
+    let after_snapshot = capture_agent_snapshot(state, &agent_id);
+    record_agent_execution_checkpoint(
+        state,
+        &agent_id,
+        "before_goal_execution",
+        before_snapshot.as_ref(),
+        after_snapshot.as_ref(),
+        "Goal assigned",
+    );
     // Return the goal_id immediately; the loop is spawned by the Tauri command
     Ok(goal_id)
+}
+
+fn format_hitl_action_summary(action: &PlannedAction) -> String {
+    match action {
+        PlannedAction::ShellCommand { command, args } => {
+            if args.is_empty() {
+                format!("ShellCommand: {command}")
+            } else {
+                format!("ShellCommand: {} {}", command, args.join(" "))
+            }
+        }
+        PlannedAction::FileWrite { path, .. } => format!("FileWrite: {path}"),
+        PlannedAction::FileRead { path } => format!("FileRead: {path}"),
+        PlannedAction::DockerCommand { subcommand, args } => {
+            if args.is_empty() {
+                format!("DockerCommand: {subcommand}")
+            } else {
+                format!("DockerCommand: {} {}", subcommand, args.join(" "))
+            }
+        }
+        PlannedAction::ApiCall { method, url, .. } => format!("ApiCall: {} {}", method, url),
+        PlannedAction::WebFetch { url } => format!("WebFetch: {url}"),
+        PlannedAction::BrowserAutomate { start_url, .. } => {
+            format!("BrowserAutomate: {start_url}")
+        }
+        PlannedAction::CaptureScreen { .. } => "CaptureScreen".to_string(),
+        PlannedAction::CaptureWindow { window_title } => {
+            format!("CaptureWindow: {window_title}")
+        }
+        PlannedAction::AnalyzeScreen { query } => format!("AnalyzeScreen: {query}"),
+        PlannedAction::MouseMove { x, y } => format!("MouseMove: {x}, {y}"),
+        PlannedAction::MouseClick { x, y, button } => {
+            format!("MouseClick: {button} @ {x}, {y}")
+        }
+        PlannedAction::MouseDoubleClick { x, y } => format!("MouseDoubleClick: {x}, {y}"),
+        PlannedAction::MouseDrag {
+            from_x,
+            from_y,
+            to_x,
+            to_y,
+        } => format!("MouseDrag: {from_x},{from_y} -> {to_x},{to_y}"),
+        PlannedAction::KeyboardType { text } => format!("KeyboardType: {} chars", text.len()),
+        PlannedAction::KeyboardPress { key } => format!("KeyboardPress: {key}"),
+        PlannedAction::KeyboardShortcut { keys } => {
+            format!("KeyboardShortcut: {}", keys.join("+"))
+        }
+        PlannedAction::ScrollWheel { direction, amount } => {
+            format!("ScrollWheel: {direction} x{amount}")
+        }
+        PlannedAction::ComputerAction { description, .. } => {
+            format!("ComputerAction: {description}")
+        }
+        PlannedAction::HitlRequest { question, .. } => format!("HitlRequest: {question}"),
+        other => other.action_type().to_string(),
+    }
+}
+
+fn format_hitl_batch_message(agent_name: &str, actions: &[String]) -> String {
+    let numbered = actions
+        .iter()
+        .enumerate()
+        .map(|(index, action)| format!("{}. {}", index + 1, action))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "Awaiting your approval — {agent_name} wants to execute {} actions:\n{}\nReview in Approval Center: Approve All, Review Each, or Deny All.",
+        actions.len(),
+        numbered
+    )
+}
+
+fn consent_goal_id(operation_json: &Value) -> Option<String> {
+    operation_json
+        .get("goal_id")
+        .and_then(|value| value.as_str())
+        .map(str::to_string)
+}
+
+fn consent_rows_for_goal(
+    state: &AppState,
+    goal_id: &str,
+) -> Result<Vec<nexus_persistence::ConsentRow>, String> {
+    let pending = state
+        .db
+        .load_pending_consent()
+        .map_err(|e| format!("db error: {e}"))?;
+
+    Ok(pending
+        .into_iter()
+        .filter(|row| {
+            serde_json::from_str::<Value>(&row.operation_json)
+                .ok()
+                .and_then(|value| consent_goal_id(&value))
+                .as_deref()
+                == Some(goal_id)
+        })
+        .collect())
 }
 
 /// Background driver for the cognitive loop. Spawned by the Tauri async command.
 #[allow(clippy::too_many_arguments)]
 fn spawn_cognitive_loop(window: tauri::Window, state: AppState, agent_id: String, goal_id: String) {
+    #[cfg(all(
+        feature = "tauri-runtime",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    ))]
+    let bridge = BackendEventBridge::from_app(window.app_handle().clone());
+    #[cfg(not(all(
+        feature = "tauri-runtime",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    )))]
+    let bridge = {
+        let _ = window;
+        BackendEventBridge::default()
+    };
+
+    spawn_cognitive_loop_with_bridge(bridge, state, agent_id, goal_id);
+}
+
+fn spawn_cognitive_loop_with_bridge(
+    bridge: BackendEventBridge,
+    state: AppState,
+    agent_id: String,
+    goal_id: String,
+) {
     tauri::async_runtime::spawn(async move {
         let planner = nexus_kernel::cognitive::CognitivePlanner::new(Box::new(GatewayPlannerLlm));
         let mem_store = DbMemoryStore {
@@ -9808,27 +11876,45 @@ fn spawn_cognitive_loop(window: tauri::Window, state: AppState, agent_id: String
             workspace_base,
             state.audit.clone(),
             state.supervisor.clone(),
+            Some(Arc::new(WardenReviewEngine {
+                state: state.clone(),
+            })),
         );
 
         let max_cycles = 500u32;
         for _cycle in 0..max_cycles {
+            let before_snapshot = capture_agent_snapshot(&state, &agent_id);
             // Run one cycle
             let result = {
                 let mut audit_guard = state.audit.lock().unwrap_or_else(|p| p.into_inner());
-                state.cognitive_runtime.run_cycle_with_evolution(
-                    &agent_id,
-                    &planner,
-                    &memory_mgr,
-                    &executor,
-                    &mut audit_guard,
-                    Some(&state.evolution_tracker),
-                )
+                with_agent_llm_route(&state, &agent_id, || {
+                    state.cognitive_runtime.run_cycle_with_evolution(
+                        &agent_id,
+                        &planner,
+                        &memory_mgr,
+                        &executor,
+                        &mut audit_guard,
+                        Some(&state.evolution_tracker),
+                    )
+                })
             };
 
             match result {
                 Ok(cycle_result) => {
+                    let after_snapshot = capture_agent_snapshot(&state, &agent_id);
+                    if cycle_result.steps_executed > 0 {
+                        persist_agent_fuel_ledger(&state, &agent_id);
+                        record_agent_execution_checkpoint(
+                            &state,
+                            &agent_id,
+                            "cognitive_loop_step",
+                            before_snapshot.as_ref(),
+                            after_snapshot.as_ref(),
+                            &format!("Phase {}", cycle_result.phase),
+                        );
+                    }
                     // Emit phase/step events to the frontend
-                    let _ = window.emit(
+                    bridge.emit(
                         "agent-cognitive-cycle",
                         json!({
                             "agent_id": &agent_id,
@@ -9843,11 +11929,6 @@ fn spawn_cognitive_loop(window: tauri::Window, state: AppState, agent_id: String
 
                     // If blocked (HITL required), create a consent request
                     if cycle_result.phase == nexus_kernel::cognitive::CognitivePhase::Blocked {
-                        let action_desc = cycle_result
-                            .blocked_reason
-                            .clone()
-                            .unwrap_or_else(|| "perform a governed action".to_string());
-
                         // Get agent name for the notification
                         let agent_name = {
                             let agent_uuid = Uuid::parse_str(&agent_id).unwrap_or_default();
@@ -9856,37 +11937,78 @@ fn spawn_cognitive_loop(window: tauri::Window, state: AppState, agent_id: String
                                 .map(|am| am.name.clone())
                                 .unwrap_or_else(|| agent_id.clone())
                         };
+                        let action_desc = cycle_result
+                            .blocked_reason
+                            .clone()
+                            .unwrap_or_else(|| "perform a governed action".to_string());
+                        let pending_hitl_steps = state
+                            .cognitive_runtime
+                            .pending_hitl_steps(&agent_id)
+                            .unwrap_or_default();
+                        let review_each_mode = state
+                            .cognitive_runtime
+                            .review_each_mode(&agent_id)
+                            .unwrap_or(false);
+                        let batch_actions: Vec<String> = pending_hitl_steps
+                            .iter()
+                            .map(|step| format_hitl_action_summary(&step.action))
+                            .collect();
+                        let use_batch = batch_actions.len() > 1 && !review_each_mode;
 
-                        // Emit user-friendly approval message instead of "Blocked"
-                        let approval_msg = format!(
-                            "Awaiting your approval — {} wants to {}. Go to Approval Center to review.",
-                            agent_name, action_desc
-                        );
-                        let _ = window.emit(
+                        let approval_msg = if use_batch {
+                            format_hitl_batch_message(&agent_name, &batch_actions)
+                        } else {
+                            format!(
+                                "Awaiting your approval — {} wants to {}. Go to Approval Center to review.",
+                                agent_name, action_desc
+                            )
+                        };
+                        let action_label = batch_actions
+                            .first()
+                            .cloned()
+                            .unwrap_or_else(|| action_desc.clone());
+                        bridge.emit(
                             "agent-blocked",
                             json!({
                                 "agent_id": &agent_id,
                                 "goal_id": &goal_id,
                                 "message": &approval_msg,
-                                "action": &action_desc,
+                                "action": if use_batch {
+                                    format!("{} actions pending", batch_actions.len())
+                                } else {
+                                    action_label.clone()
+                                },
                                 "agent_name": &agent_name,
                             }),
                         );
 
-                        // Get the pending step details from cognitive status
                         let status = state.cognitive_runtime.get_agent_status(&agent_id);
-                        let step_info = status
-                            .as_ref()
-                            .map(|s| {
-                                json!({
-                                    "summary": action_desc,
-                                    "goal": s.active_goal.as_ref().map(|g| &g.description),
-                                    "phase": format!("{}", s.phase),
-                                    "fuel_cost": 5.0,
-                                    "side_effects": [action_desc.clone()],
-                                })
+                        let step_info = if use_batch {
+                            json!({
+                                "summary": format!("Execute {} governed actions", batch_actions.len()),
+                                "goal": status.as_ref().and_then(|s| s.active_goal.as_ref().map(|g| g.description.clone())),
+                                "goal_id": &goal_id,
+                                "phase": status.as_ref().map(|s| format!("{}", s.phase)).unwrap_or_else(|| "blocked".to_string()),
+                                "fuel_cost": batch_actions.len() as f64 * 5.0,
+                                "side_effects": batch_actions.clone(),
+                                "batch_action_count": batch_actions.len(),
+                                "batch_actions": batch_actions.clone(),
+                                "review_each_available": true,
                             })
-                            .unwrap_or_else(|| json!({"summary": action_desc}));
+                        } else {
+                            let single_action = pending_hitl_steps
+                                .first()
+                                .map(|step| format_hitl_action_summary(&step.action))
+                                .unwrap_or_else(|| action_desc.clone());
+                            json!({
+                                "summary": single_action.clone(),
+                                "goal": status.as_ref().and_then(|s| s.active_goal.as_ref().map(|g| g.description.clone())),
+                                "goal_id": &goal_id,
+                                "phase": status.as_ref().map(|s| format!("{}", s.phase)).unwrap_or_else(|| "blocked".to_string()),
+                                "fuel_cost": 5.0,
+                                "side_effects": [single_action],
+                            })
+                        };
 
                         let consent_id = Uuid::new_v4().to_string();
                         let notify = state.register_blocked_consent_wait(&agent_id, &consent_id);
@@ -9899,7 +12021,11 @@ fn spawn_cognitive_loop(window: tauri::Window, state: AppState, agent_id: String
                         let consent_row = nexus_persistence::ConsentRow {
                             id: consent_id.clone(),
                             agent_id: agent_id.clone(),
-                            operation_type: "cognitive.hitl_approval".to_string(),
+                            operation_type: if use_batch {
+                                "cognitive.hitl_batch".to_string()
+                            } else {
+                                "cognitive.hitl_approval".to_string()
+                            },
                             operation_json: serde_json::to_string(&step_info).unwrap_or_default(),
                             hitl_tier: "Tier1".to_string(),
                             status: "pending".to_string(),
@@ -9908,10 +12034,18 @@ fn spawn_cognitive_loop(window: tauri::Window, state: AppState, agent_id: String
                             resolved_by: None,
                         };
                         let _ = state.db.enqueue_consent(&consent_row);
+                        record_agent_execution_checkpoint(
+                            &state,
+                            &agent_id,
+                            "awaiting_approval",
+                            before_snapshot.as_ref(),
+                            after_snapshot.as_ref(),
+                            consent_row.operation_type.as_str(),
+                        );
 
                         // Emit consent notification to frontend
                         let notification = consent_row_to_notification(&consent_row, &agent_name);
-                        let _ = window.emit("consent-request-pending", &notification);
+                        bridge.emit("consent-request-pending", json!(notification));
 
                         // Sleep with zero CPU until approve/deny/stop wakes this agent.
                         notify.notified().await;
@@ -9932,18 +12066,32 @@ fn spawn_cognitive_loop(window: tauri::Window, state: AppState, agent_id: String
                             })
                             .unwrap_or_else(|| "unknown".to_string());
 
-                        let _ = window.emit(
+                        bridge.emit(
                             "consent-resolved",
                             json!({"consent_id": consent_id, "status": &resolution_status}),
                         );
 
                         if resolution_status == "approved" {
-                            let _ = window.emit(
+                            let approved_before = capture_agent_snapshot(&state, &agent_id);
+                            let approved_after = capture_agent_snapshot(&state, &agent_id);
+                            record_agent_execution_checkpoint(
+                                &state,
+                                &agent_id,
+                                "approval_granted",
+                                approved_before.as_ref(),
+                                approved_after.as_ref(),
+                                "Approval granted",
+                            );
+                            bridge.emit(
                                 "agent-resumed",
                                 json!({
                                     "agent_id": &agent_id,
                                     "goal_id": &goal_id,
-                                    "message": format!("Approval granted — executing {}...", action_desc),
+                                    "message": if use_batch {
+                                        format!("Approval granted — executing {} approved actions...", batch_actions.len())
+                                    } else {
+                                        format!("Approval granted — executing {}...", action_desc)
+                                    },
                                 }),
                             );
                         }
@@ -9980,7 +12128,7 @@ fn spawn_cognitive_loop(window: tauri::Window, state: AppState, agent_id: String
                                 })
                         };
 
-                        let _ = window.emit(
+                        bridge.emit(
                             "agent-goal-completed",
                             json!({
                                 "agent_id": &agent_id,
@@ -9999,6 +12147,14 @@ fn spawn_cognitive_loop(window: tauri::Window, state: AppState, agent_id: String
                             success,
                             cycle_result.fuel_consumed,
                         );
+                        run_post_goal_evolution(
+                            &bridge,
+                            &state,
+                            &agent_id,
+                            &goal_id,
+                            success,
+                            cycle_result.fuel_consumed,
+                        );
                         return;
                     }
 
@@ -10006,7 +12162,7 @@ fn spawn_cognitive_loop(window: tauri::Window, state: AppState, agent_id: String
                     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 }
                 Err(e) => {
-                    let _ = window.emit(
+                    bridge.emit(
                         "agent-goal-completed",
                         json!({
                             "agent_id": &agent_id,
@@ -10031,7 +12187,7 @@ fn spawn_cognitive_loop(window: tauri::Window, state: AppState, agent_id: String
         }
 
         // If we exhausted max_cycles
-        let _ = window.emit(
+        bridge.emit(
             "agent-goal-completed",
             json!({
                 "agent_id": &agent_id,
@@ -10064,6 +12220,55 @@ fn stop_agent_goal(state: &AppState, agent_id: String) -> Result<(), String> {
         json!({"action": "stop_agent_goal", "agent_id": agent_id}),
     );
     Ok(())
+}
+
+fn execute_hivemind_subtask(
+    state: &AppState,
+    agent_id: &str,
+    description: &str,
+) -> Result<String, String> {
+    let goal_id = execute_agent_goal(state, agent_id.to_string(), description.to_string(), 5)?;
+    spawn_cognitive_loop_with_bridge(
+        BackendEventBridge::default(),
+        state.clone(),
+        agent_id.to_string(),
+        goal_id.clone(),
+    );
+
+    let started = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(300);
+    loop {
+        if started.elapsed() >= timeout {
+            let _ = stop_agent_goal(state, agent_id.to_string());
+            return Err(format!("sub-task timed out after {}s", timeout.as_secs()));
+        }
+
+        if let Ok(tasks) = state.db.load_tasks_by_agent(agent_id, 100) {
+            if let Some(task) = tasks.into_iter().find(|task| task.id == goal_id) {
+                if let Some(completed_at) = task.completed_at {
+                    let summary = task
+                        .result_json
+                        .as_deref()
+                        .and_then(|json| serde_json::from_str::<Value>(json).ok())
+                        .and_then(|json| {
+                            json.get("summary")
+                                .and_then(|value| value.as_str())
+                                .map(str::to_string)
+                        })
+                        .unwrap_or_else(|| {
+                            format!("Sub-task '{}' completed at {}", description, completed_at)
+                        });
+                    return if task.success {
+                        Ok(summary)
+                    } else {
+                        Err(summary)
+                    };
+                }
+            }
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
 }
 
 fn get_agent_cognitive_status(
@@ -10211,7 +12416,9 @@ fn start_hivemind(
 
     let session = state
         .hivemind
-        .execute_hivemind_goal(&goal, agents)
+        .execute_with_executor(&goal, agents, |_task_id, assigned_agent_id, task_desc| {
+            execute_hivemind_subtask(state, assigned_agent_id, task_desc)
+        })
         .map_err(|e| e.to_string())?;
 
     // Persist session
@@ -10322,6 +12529,10 @@ pub struct ConsentNotification {
     pub requested_at: String,
     pub auto_deny_at: String,
     pub min_review_seconds: Option<u64>,
+    pub goal_id: Option<String>,
+    pub batch_action_count: Option<u32>,
+    pub batch_actions: Vec<String>,
+    pub review_each_available: bool,
 }
 
 /// Compute the auto-deny deadline given a risk level and creation timestamp.
@@ -10387,6 +12598,24 @@ fn consent_row_to_notification(
                 None
             }
         });
+    let goal_id = consent_goal_id(&op_json);
+    let batch_action_count = op_json
+        .get("batch_action_count")
+        .and_then(|v| v.as_u64())
+        .map(|value| value as u32);
+    let batch_actions = op_json
+        .get("batch_actions")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    let review_each_available = op_json
+        .get("review_each_available")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     ConsentNotification {
         consent_id: row.id.clone(),
@@ -10400,6 +12629,10 @@ fn consent_row_to_notification(
         requested_at: row.created_at.clone(),
         auto_deny_at,
         min_review_seconds,
+        goal_id,
+        batch_action_count,
+        batch_actions,
+        review_each_available,
     }
 }
 
@@ -10471,6 +12704,15 @@ fn approve_consent_request(
     }
     let _ = state.cognitive_runtime.approve_blocked_step(&agent_id_str);
     state.wake_blocked_consent_wait(&agent_id_str, &consent_id);
+    let approval_snapshot = capture_agent_snapshot(state, &agent_id_str);
+    record_agent_execution_checkpoint(
+        state,
+        &agent_id_str,
+        "approval_granted",
+        approval_snapshot.as_ref(),
+        approval_snapshot.as_ref(),
+        consent_row.operation_type.as_str(),
+    );
 
     // 3. Log audit event
     state.log_event(
@@ -10549,6 +12791,145 @@ fn deny_consent_request(
     Ok(())
 }
 
+fn batch_approve_consents(
+    state: &AppState,
+    goal_id: String,
+    approved_by: String,
+) -> Result<Vec<String>, String> {
+    let consent_rows = consent_rows_for_goal(state, &goal_id)?;
+    if consent_rows.is_empty() {
+        return Err(format!(
+            "no pending consent requests found for goal '{goal_id}'"
+        ));
+    }
+
+    let agent_id = consent_rows[0].agent_id.clone();
+    let approval_count = state
+        .cognitive_runtime
+        .pending_hitl_steps(&agent_id)
+        .map(|steps| steps.len() as u32)
+        .unwrap_or(consent_rows.len() as u32)
+        .max(1);
+
+    let mut resolved_ids = Vec::with_capacity(consent_rows.len());
+    for row in &consent_rows {
+        state
+            .db
+            .resolve_consent(&row.id, "approved", &approved_by)
+            .map_err(|e| format!("db error: {e}"))?;
+        resolved_ids.push(row.id.clone());
+    }
+
+    let _ = state
+        .cognitive_runtime
+        .set_review_each_mode(&agent_id, false);
+    let _ = state
+        .cognitive_runtime
+        .approve_blocked_steps(&agent_id, approval_count);
+    for row in &consent_rows {
+        state.wake_blocked_consent_wait(&row.agent_id, &row.id);
+    }
+
+    state.log_event(
+        Uuid::parse_str(&agent_id).unwrap_or(Uuid::nil()),
+        EventType::UserAction,
+        json!({
+            "action": "consent_batch_approved",
+            "goal_id": goal_id,
+            "consent_ids": resolved_ids.clone(),
+            "approved_by": approved_by,
+            "approved_steps": approval_count,
+        }),
+    );
+
+    Ok(resolved_ids)
+}
+
+fn review_consent_batch(
+    state: &AppState,
+    consent_id: String,
+    reviewed_by: String,
+) -> Result<(), String> {
+    let pending = state
+        .db
+        .load_pending_consent()
+        .map_err(|e| format!("db error: {e}"))?;
+    let consent_row = pending
+        .iter()
+        .find(|row| row.id == consent_id)
+        .ok_or_else(|| format!("consent request '{consent_id}' not found or already resolved"))?;
+
+    state
+        .db
+        .resolve_consent(&consent_id, "review_each", &reviewed_by)
+        .map_err(|e| format!("db error: {e}"))?;
+    let _ = state
+        .cognitive_runtime
+        .set_review_each_mode(&consent_row.agent_id, true);
+    state.wake_blocked_consent_wait(&consent_row.agent_id, &consent_id);
+
+    state.log_event(
+        Uuid::parse_str(&consent_row.agent_id).unwrap_or(Uuid::nil()),
+        EventType::UserAction,
+        json!({
+            "action": "consent_batch_review_each",
+            "consent_id": consent_id,
+            "reviewed_by": reviewed_by,
+        }),
+    );
+
+    Ok(())
+}
+
+fn batch_deny_consents(
+    state: &AppState,
+    goal_id: String,
+    denied_by: String,
+    reason: Option<String>,
+) -> Result<Vec<String>, String> {
+    let consent_rows = consent_rows_for_goal(state, &goal_id)?;
+    if consent_rows.is_empty() {
+        return Err(format!(
+            "no pending consent requests found for goal '{goal_id}'"
+        ));
+    }
+
+    let agent_id = consent_rows[0].agent_id.clone();
+    let deny_reason = reason
+        .clone()
+        .unwrap_or_else(|| "Consent batch denied by user".to_string());
+
+    let mut resolved_ids = Vec::with_capacity(consent_rows.len());
+    for row in &consent_rows {
+        state
+            .db
+            .resolve_consent(&row.id, "denied", &denied_by)
+            .map_err(|e| format!("db error: {e}"))?;
+        resolved_ids.push(row.id.clone());
+    }
+
+    let _ = state
+        .cognitive_runtime
+        .deny_blocked_steps_and_replan(&agent_id, Some(&deny_reason));
+    for row in &consent_rows {
+        state.wake_blocked_consent_wait(&row.agent_id, &row.id);
+    }
+
+    state.log_event(
+        Uuid::parse_str(&agent_id).unwrap_or(Uuid::nil()),
+        EventType::UserAction,
+        json!({
+            "action": "consent_batch_denied",
+            "goal_id": goal_id,
+            "consent_ids": resolved_ids.clone(),
+            "denied_by": denied_by,
+            "reason": reason,
+        }),
+    );
+
+    Ok(resolved_ids)
+}
+
 fn list_pending_consents(state: &AppState) -> Result<Vec<ConsentNotification>, String> {
     let pending = state
         .db
@@ -10598,6 +12979,484 @@ fn get_consent_history(state: &AppState, limit: u32) -> Result<Vec<ConsentNotifi
     Ok(notifications)
 }
 
+fn build_simulation_llm() -> Arc<dyn nexus_kernel::cognitive::PlannerLlm> {
+    #[cfg(test)]
+    {
+        Arc::new(TestSimulationPlannerLlm)
+    }
+
+    #[cfg(not(test))]
+    Arc::new(SimulationPlannerLlm)
+}
+
+fn load_persisted_simulation_state(
+    row: &nexus_persistence::SimulationWorldRow,
+) -> Result<PersistedSimulationState, String> {
+    serde_json::from_str::<PersistedSimulationState>(&row.config_json)
+        .or_else(|_| {
+            serde_json::from_str::<SimulatedWorld>(&row.config_json).map(|world| {
+                PersistedSimulationState {
+                    world,
+                    max_ticks: 100,
+                    tick_interval_ms: 1_000,
+                    batch_size: 25,
+                    persona_decision_timeout_ms: 30_000,
+                    belief_update_rate: 0.12,
+                    fuel_consumed: 0.0,
+                }
+            })
+        })
+        .map_err(|error| format!("invalid simulation state: {error}"))
+}
+
+fn simulation_status_view(
+    row: &nexus_persistence::SimulationWorldRow,
+    persisted: &PersistedSimulationState,
+) -> SimulationStatusView {
+    let variables = persisted
+        .world
+        .environment
+        .variables
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect::<BTreeMap<_, _>>();
+    SimulationStatusView {
+        world_id: row.id.clone(),
+        name: row.name.clone(),
+        status: row.status.clone(),
+        tick_count: row.tick_count.max(0) as u64,
+        persona_count: row.persona_count.max(0) as usize,
+        max_ticks: persisted.max_ticks,
+        tick_interval_ms: persisted.tick_interval_ms,
+        fuel_consumed: persisted.fuel_consumed,
+        estimated_fuel: estimate_simulation_fuel(
+            row.persona_count.max(0) as usize,
+            persisted.max_ticks,
+            persisted.batch_size,
+        ),
+        report_available: row.report_json.is_some(),
+        variables,
+        personas: persisted
+            .world
+            .personas
+            .iter()
+            .map(|persona| SimulationPersonaView {
+                id: persona.id.clone(),
+                name: persona.name.clone(),
+                role: persona.role.clone(),
+                personality: SimulationPersonalityView {
+                    openness: persona.personality.openness,
+                    conscientiousness: persona.personality.conscientiousness,
+                    extraversion: persona.personality.extraversion,
+                    agreeableness: persona.personality.agreeableness,
+                    neuroticism: persona.personality.neuroticism,
+                },
+                beliefs: persona.beliefs.clone(),
+                memories: persona
+                    .memories
+                    .iter()
+                    .rev()
+                    .take(5)
+                    .map(|memory| SimulationMemoryView {
+                        event: memory.event.clone(),
+                        timestamp: memory.timestamp,
+                        emotional_impact: memory.emotional_impact,
+                        source: memory.source.clone(),
+                    })
+                    .collect(),
+                relationships: persona.relationships.clone(),
+                influence_score: persona.influence_score,
+                last_action: persona.last_action.clone(),
+            })
+            .collect(),
+    }
+}
+
+fn create_simulation(
+    state: &AppState,
+    name: String,
+    seed_text: String,
+    persona_count: u32,
+    max_ticks: u32,
+    tick_interval_ms: Option<u64>,
+) -> Result<String, String> {
+    let world_id = Uuid::new_v4().to_string();
+    let llm = build_simulation_llm();
+    let seed = parse_seed(&seed_text, llm.as_ref()).map_err(|error| error.to_string())?;
+    let tick_interval_ms = tick_interval_ms.unwrap_or(1_000).clamp(500, 5_000);
+    let status = if persona_count > 100 {
+        "awaiting_approval"
+    } else {
+        "ready"
+    };
+    let personas = if persona_count > 100 {
+        Vec::new()
+    } else {
+        generate_personas(&seed.scenario, persona_count as usize, llm.as_ref())
+            .map_err(|error| error.to_string())?
+    };
+    let mut world = SimulatedWorld::from_seed(
+        world_id.clone(),
+        name.clone(),
+        seed.scenario.clone(),
+        &seed,
+        personas,
+        llm.as_ref(),
+    )
+    .map_err(|error| error.to_string())?;
+    if persona_count > 100 {
+        world.status = WorldStatus::Building;
+        let consent = nexus_persistence::ConsentRow {
+            id: Uuid::new_v4().to_string(),
+            agent_id: world_id.clone(),
+            operation_type: "large_simulation".to_string(),
+            operation_json: json!({
+                "name": name.clone(),
+                "persona_count": persona_count,
+                "max_ticks": max_ticks,
+                "estimated_fuel": estimate_simulation_fuel(persona_count as usize, max_ticks as u64, 25),
+            })
+            .to_string(),
+            hitl_tier: "tier2".to_string(),
+            status: "pending".to_string(),
+            created_at: chrono::Utc::now().to_rfc3339(),
+            resolved_at: None,
+            resolved_by: None,
+        };
+        state
+            .db
+            .enqueue_consent(&consent)
+            .map_err(|error| format!("db error: {error}"))?;
+    }
+    let persisted = PersistedSimulationState {
+        world: world.clone(),
+        max_ticks: max_ticks as u64,
+        tick_interval_ms,
+        batch_size: 25,
+        persona_decision_timeout_ms: 30_000,
+        belief_update_rate: 0.12,
+        fuel_consumed: 0.0,
+    };
+    state
+        .db
+        .save_simulation_world(
+            &world_id,
+            &name,
+            &seed_text,
+            status,
+            0,
+            persona_count as i64,
+            &serde_json::to_string(&persisted).map_err(|error| error.to_string())?,
+            None,
+            None,
+        )
+        .map_err(|error| format!("db error: {error}"))?;
+    state
+        .db
+        .replace_simulation_personas(
+            &world_id,
+            &world
+                .personas
+                .iter()
+                .map(|persona| {
+                    (
+                        format!("{}::{}", world_id, persona.id),
+                        persona.name.clone(),
+                        persona.role.clone(),
+                        serde_json::to_string(&persona.personality).unwrap_or_default(),
+                        serde_json::to_string(&persona.beliefs).unwrap_or_default(),
+                        serde_json::to_string(&persona.memories).unwrap_or_default(),
+                        serde_json::to_string(&persona.relationships).unwrap_or_default(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        )
+        .map_err(|error| format!("db error: {error}"))?;
+    state.log_event(
+        Uuid::parse_str(&world_id).unwrap_or_else(|_| Uuid::nil()),
+        EventType::UserAction,
+        json!({
+            "action": "create_simulation",
+            "world_id": world_id.clone(),
+            "name": name.clone(),
+            "persona_count": persona_count,
+            "max_ticks": max_ticks,
+            "tick_interval_ms": tick_interval_ms,
+        }),
+    );
+    Ok(world_id)
+}
+
+fn start_simulation_with_observer(
+    state: &AppState,
+    world_id: String,
+    observer: Arc<dyn SimulationObserver>,
+) -> Result<(), String> {
+    if let Some(handle) = state.simulation_manager.get(&world_id) {
+        handle.control.paused.store(false, Ordering::Relaxed);
+        let row = state
+            .db
+            .load_simulation_world(&world_id)
+            .map_err(|error| format!("db error: {error}"))?
+            .ok_or_else(|| format!("simulation {world_id} not found"))?;
+        state
+            .db
+            .save_simulation_world(
+                &row.id,
+                &row.name,
+                &row.seed_text,
+                "running",
+                row.tick_count,
+                row.persona_count,
+                &row.config_json,
+                row.report_json.as_deref(),
+                row.completed_at.as_deref(),
+            )
+            .map_err(|error| format!("db error: {error}"))?;
+        return Ok(());
+    }
+
+    let row = state
+        .db
+        .load_simulation_world(&world_id)
+        .map_err(|error| format!("db error: {error}"))?
+        .ok_or_else(|| format!("simulation {world_id} not found"))?;
+    if row.status == "awaiting_approval" {
+        return Err(
+            "HITL approval is required before starting simulations over 100 personas".to_string(),
+        );
+    }
+    let persisted = load_persisted_simulation_state(&row)?;
+    let llm = build_simulation_llm();
+    let db = state.db.clone();
+    let manager = state.simulation_manager.clone();
+    let control = SimulationControl::default();
+    manager.insert(
+        world_id.clone(),
+        SimulationHandle {
+            control: control.clone(),
+            max_ticks: persisted.max_ticks,
+        },
+    );
+    let thread_world_id = world_id.clone();
+    thread::spawn(move || {
+        let mut runtime = SimulationRuntime::new(persisted.world, llm, db.clone())
+            .with_control(control.clone())
+            .with_observer(observer);
+        runtime.max_ticks = persisted.max_ticks;
+        runtime.tick_interval_ms = persisted.tick_interval_ms;
+        runtime.batch_size = persisted.batch_size;
+        runtime.persona_decision_timeout_ms = persisted.persona_decision_timeout_ms;
+        runtime.belief_update_rate = persisted.belief_update_rate;
+        if let Err(error) = runtime.run_simulation() {
+            let failed_state = PersistedSimulationState {
+                fuel_consumed: runtime.fuel_consumed(),
+                ..runtime.persisted_state()
+            };
+            let _ = db.save_simulation_world(
+                &thread_world_id,
+                &failed_state.world.name,
+                &failed_state.world.description,
+                "failed",
+                failed_state.world.tick_count as i64,
+                failed_state.world.personas.len() as i64,
+                &serde_json::to_string(&failed_state).unwrap_or_default(),
+                Some(
+                    &json!({
+                        "summary": format!("Simulation failed: {error}"),
+                        "key_findings": [],
+                        "opinion_shifts": [],
+                        "coalitions": [],
+                        "turning_points": [],
+                        "prediction": "failed",
+                        "confidence": 0.0,
+                        "uncertainties": [error.to_string()],
+                    })
+                    .to_string(),
+                ),
+                Some(&chrono::Utc::now().to_rfc3339()),
+            );
+        }
+        manager.remove(&thread_world_id);
+    });
+    Ok(())
+}
+
+fn pause_simulation(state: &AppState, world_id: String) -> Result<(), String> {
+    let handle = state
+        .simulation_manager
+        .get(&world_id)
+        .ok_or_else(|| format!("simulation {world_id} is not running"))?;
+    handle.control.paused.store(true, Ordering::Relaxed);
+    let row = state
+        .db
+        .load_simulation_world(&world_id)
+        .map_err(|error| format!("db error: {error}"))?
+        .ok_or_else(|| format!("simulation {world_id} not found"))?;
+    state
+        .db
+        .save_simulation_world(
+            &row.id,
+            &row.name,
+            &row.seed_text,
+            "paused",
+            row.tick_count,
+            row.persona_count,
+            &row.config_json,
+            row.report_json.as_deref(),
+            row.completed_at.as_deref(),
+        )
+        .map_err(|error| format!("db error: {error}"))?;
+    Ok(())
+}
+
+fn inject_simulation_variable(
+    state: &AppState,
+    world_id: String,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    if let Some(handle) = state.simulation_manager.get(&world_id) {
+        handle
+            .control
+            .pending_injections
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push_back((key.clone(), value.clone()));
+    } else {
+        let row = state
+            .db
+            .load_simulation_world(&world_id)
+            .map_err(|error| format!("db error: {error}"))?
+            .ok_or_else(|| format!("simulation {world_id} not found"))?;
+        let mut persisted = load_persisted_simulation_state(&row)?;
+        persisted.world.inject_variable(key.clone(), value.clone());
+        state
+            .db
+            .save_simulation_world(
+                &row.id,
+                &row.name,
+                &row.seed_text,
+                &row.status,
+                row.tick_count,
+                row.persona_count,
+                &serde_json::to_string(&persisted).map_err(|error| error.to_string())?,
+                row.report_json.as_deref(),
+                row.completed_at.as_deref(),
+            )
+            .map_err(|error| format!("db error: {error}"))?;
+    }
+    Ok(())
+}
+
+fn get_simulation_status(
+    state: &AppState,
+    world_id: String,
+) -> Result<SimulationStatusView, String> {
+    let row = state
+        .db
+        .load_simulation_world(&world_id)
+        .map_err(|error| format!("db error: {error}"))?
+        .ok_or_else(|| format!("simulation {world_id} not found"))?;
+    let mut persisted = load_persisted_simulation_state(&row)?;
+    if let Some(handle) = state.simulation_manager.get(&world_id) {
+        persisted.max_ticks = handle.max_ticks;
+    }
+    Ok(simulation_status_view(&row, &persisted))
+}
+
+fn get_simulation_report(state: &AppState, world_id: String) -> Result<PredictionReport, String> {
+    let row = state
+        .db
+        .load_simulation_world(&world_id)
+        .map_err(|error| format!("db error: {error}"))?
+        .ok_or_else(|| format!("simulation {world_id} not found"))?;
+    let report_json = row
+        .report_json
+        .ok_or_else(|| "simulation report not available yet".to_string())?;
+    serde_json::from_str::<PredictionReport>(&report_json)
+        .map_err(|error| format!("invalid report json: {error}"))
+}
+
+fn chat_with_simulation_persona(
+    state: &AppState,
+    world_id: String,
+    persona_id: String,
+    message: String,
+) -> Result<String, String> {
+    let row = state
+        .db
+        .load_simulation_world(&world_id)
+        .map_err(|error| format!("db error: {error}"))?
+        .ok_or_else(|| format!("simulation {world_id} not found"))?;
+    let persisted = load_persisted_simulation_state(&row)?;
+    let runtime = SimulationRuntime::new(persisted.world, build_simulation_llm(), state.db.clone());
+    runtime
+        .chat_with_persona(&persona_id, &message)
+        .map_err(|error| error.to_string())
+}
+
+fn list_simulations(state: &AppState) -> Result<Vec<SimulationSummary>, String> {
+    let rows = state
+        .db
+        .list_simulation_worlds()
+        .map_err(|error| format!("db error: {error}"))?;
+    rows.into_iter()
+        .map(|row| {
+            let prediction_summary = row
+                .report_json
+                .as_deref()
+                .and_then(|report_json| serde_json::from_str::<PredictionReport>(report_json).ok())
+                .map(|report| report.summary);
+            let created_at = chrono::DateTime::parse_from_rfc3339(&row.created_at)
+                .map(|value| value.with_timezone(&chrono::Utc))
+                .unwrap_or_else(|_| chrono::Utc::now());
+            let status = match row.status.as_str() {
+                "awaiting_approval" => KernelSimulationStatus::AwaitingApproval,
+                "ready" => KernelSimulationStatus::Ready,
+                "running" => KernelSimulationStatus::Running,
+                "paused" => KernelSimulationStatus::Paused,
+                "completed" => KernelSimulationStatus::Completed,
+                "failed" => KernelSimulationStatus::Failed,
+                _ => KernelSimulationStatus::Draft,
+            };
+            Ok(SimulationSummary {
+                id: row.id,
+                name: row.name,
+                status,
+                tick_count: row.tick_count.max(0) as u64,
+                persona_count: row.persona_count.max(0) as usize,
+                created_at,
+                prediction_summary,
+            })
+        })
+        .collect()
+}
+
+fn run_parallel_simulation_reports(
+    state: &AppState,
+    seed_text: String,
+    variant_count: u32,
+) -> Result<Vec<PredictionReport>, String> {
+    let llm = build_simulation_llm();
+    let seed = parse_seed(&seed_text, llm.as_ref()).map_err(|error| error.to_string())?;
+    let reports =
+        kernel_run_parallel_simulations(&seed, variant_count as usize, llm, state.db.clone())
+            .map_err(|error| error.to_string())?;
+    let analysis = compare_reports(&reports);
+    state.log_event(
+        Uuid::new_v4(),
+        EventType::UserAction,
+        json!({
+            "action": "run_parallel_simulations",
+            "variant_count": variant_count,
+            "consensus_prediction": analysis.consensus_prediction,
+            "confidence": analysis.confidence,
+        }),
+    );
+    Ok(reports)
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -10608,6 +13467,42 @@ mod runtime {
     use tauri::menu::{Menu, MenuItem};
     #[cfg(not(target_os = "linux"))]
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+    struct TauriSimulationObserver {
+        app: tauri::AppHandle,
+        state: AppState,
+    }
+
+    impl SimulationObserver for TauriSimulationObserver {
+        fn on_tick(&self, progress: &SimulationProgress) {
+            let _ = self.app.emit("simulation-tick", progress);
+            self.state.log_event(
+                Uuid::parse_str(&progress.world_id).unwrap_or_else(|_| Uuid::nil()),
+                EventType::UserAction,
+                json!({
+                    "action": "simulation_tick",
+                    "world_id": &progress.world_id,
+                    "tick": progress.tick,
+                    "status": &progress.status,
+                    "events_count": progress.events_count,
+                    "events": &progress.events,
+                    "fuel_consumed": progress.fuel_consumed,
+                    "belief_summary": &progress.belief_summary,
+                }),
+            );
+        }
+
+        fn on_complete(&self, world_id: &str, report: &PredictionReport) {
+            let _ = self.app.emit(
+                "simulation-complete",
+                &json!({
+                    "world_id": world_id,
+                    "prediction": report.prediction,
+                    "confidence": report.confidence,
+                }),
+            );
+        }
+    }
 
     #[tauri::command]
     fn list_agents(state: tauri::State<'_, AppState>) -> Result<Vec<AgentRow>, String> {
@@ -11533,6 +14428,16 @@ mod runtime {
         super::time_machine_get_diff(state.inner(), id)
     }
 
+    #[tauri::command]
+    fn time_machine_what_if(
+        state: tauri::State<'_, AppState>,
+        id: String,
+        variable_key: String,
+        variable_value: String,
+    ) -> Result<String, String> {
+        super::time_machine_what_if(state.inner(), id, variable_key, variable_value)
+    }
+
     // ── Nexus Link commands ─────────────────────────────────────────────
 
     #[tauri::command]
@@ -12169,6 +15074,52 @@ mod runtime {
     #[tauri::command]
     fn computer_control_status(state: tauri::State<'_, AppState>) -> Result<String, String> {
         super::computer_control_status(state.inner())
+    }
+
+    #[tauri::command]
+    fn capture_screen(
+        state: tauri::State<'_, AppState>,
+        region: Option<ScreenRegion>,
+    ) -> Result<String, String> {
+        super::capture_screen(state.inner(), region)
+    }
+
+    #[tauri::command]
+    fn analyze_screen(state: tauri::State<'_, AppState>, query: String) -> Result<String, String> {
+        super::analyze_screen(state.inner(), query)
+    }
+
+    #[tauri::command]
+    fn analyze_media_file(
+        state: tauri::State<'_, AppState>,
+        path: String,
+        query: String,
+    ) -> Result<String, String> {
+        super::analyze_media_file(state.inner(), path, query)
+    }
+
+    #[tauri::command]
+    fn start_computer_action(
+        state: tauri::State<'_, AppState>,
+        description: String,
+        max_steps: u32,
+    ) -> Result<String, String> {
+        super::start_computer_action(state.inner(), description, max_steps)
+    }
+
+    #[tauri::command]
+    fn stop_computer_action(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<(), String> {
+        super::stop_computer_action(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn get_input_control_status(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<InputControlStatus, String> {
+        super::get_input_control_status(state.inner())
     }
 
     #[tauri::command]
@@ -12858,6 +15809,56 @@ mod runtime {
     }
 
     #[tauri::command]
+    fn batch_approve_consents(
+        window: tauri::Window,
+        state: tauri::State<'_, AppState>,
+        goal_id: String,
+        approved_by: String,
+    ) -> Result<(), String> {
+        let consent_ids = super::batch_approve_consents(state.inner(), goal_id, approved_by)?;
+        for consent_id in consent_ids {
+            let _ = window.emit(
+                "consent-resolved",
+                serde_json::json!({"consent_id": consent_id, "status": "approved"}),
+            );
+        }
+        Ok(())
+    }
+
+    #[tauri::command]
+    fn review_consent_batch(
+        window: tauri::Window,
+        state: tauri::State<'_, AppState>,
+        consent_id: String,
+        reviewed_by: String,
+    ) -> Result<(), String> {
+        super::review_consent_batch(state.inner(), consent_id.clone(), reviewed_by)?;
+        let _ = window.emit(
+            "consent-resolved",
+            serde_json::json!({"consent_id": consent_id, "status": "review_each"}),
+        );
+        Ok(())
+    }
+
+    #[tauri::command]
+    fn batch_deny_consents(
+        window: tauri::Window,
+        state: tauri::State<'_, AppState>,
+        goal_id: String,
+        denied_by: String,
+        reason: Option<String>,
+    ) -> Result<(), String> {
+        let consent_ids = super::batch_deny_consents(state.inner(), goal_id, denied_by, reason)?;
+        for consent_id in consent_ids {
+            let _ = window.emit(
+                "consent-resolved",
+                serde_json::json!({"consent_id": consent_id, "status": "denied"}),
+            );
+        }
+        Ok(())
+    }
+
+    #[tauri::command]
     fn list_pending_consents(
         state: tauri::State<'_, AppState>,
     ) -> Result<Vec<super::ConsentNotification>, String> {
@@ -12870,6 +15871,95 @@ mod runtime {
         limit: u32,
     ) -> Result<Vec<super::ConsentNotification>, String> {
         super::get_consent_history(state.inner(), limit)
+    }
+
+    #[tauri::command]
+    fn create_simulation(
+        state: tauri::State<'_, AppState>,
+        name: String,
+        seed_text: String,
+        persona_count: u32,
+        max_ticks: u32,
+        tick_interval_ms: Option<u64>,
+    ) -> Result<String, String> {
+        super::create_simulation(
+            state.inner(),
+            name,
+            seed_text,
+            persona_count,
+            max_ticks,
+            tick_interval_ms,
+        )
+    }
+
+    #[tauri::command]
+    fn start_simulation(
+        window: tauri::Window,
+        state: tauri::State<'_, AppState>,
+        world_id: String,
+    ) -> Result<(), String> {
+        let observer = Arc::new(TauriSimulationObserver {
+            app: window.app_handle().clone(),
+            state: state.inner().clone(),
+        }) as Arc<dyn SimulationObserver>;
+        super::start_simulation_with_observer(state.inner(), world_id, observer)
+    }
+
+    #[tauri::command]
+    fn pause_simulation(state: tauri::State<'_, AppState>, world_id: String) -> Result<(), String> {
+        super::pause_simulation(state.inner(), world_id)
+    }
+
+    #[tauri::command]
+    fn inject_variable(
+        state: tauri::State<'_, AppState>,
+        world_id: String,
+        key: String,
+        value: String,
+    ) -> Result<(), String> {
+        super::inject_simulation_variable(state.inner(), world_id, key, value)
+    }
+
+    #[tauri::command]
+    fn get_simulation_status(
+        state: tauri::State<'_, AppState>,
+        world_id: String,
+    ) -> Result<SimulationStatusView, String> {
+        super::get_simulation_status(state.inner(), world_id)
+    }
+
+    #[tauri::command]
+    fn get_simulation_report(
+        state: tauri::State<'_, AppState>,
+        world_id: String,
+    ) -> Result<PredictionReport, String> {
+        super::get_simulation_report(state.inner(), world_id)
+    }
+
+    #[tauri::command]
+    fn chat_with_persona(
+        state: tauri::State<'_, AppState>,
+        world_id: String,
+        persona_id: String,
+        message: String,
+    ) -> Result<String, String> {
+        super::chat_with_simulation_persona(state.inner(), world_id, persona_id, message)
+    }
+
+    #[tauri::command]
+    fn list_simulations(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<SimulationSummary>, String> {
+        super::list_simulations(state.inner())
+    }
+
+    #[tauri::command]
+    fn run_parallel_simulations(
+        state: tauri::State<'_, AppState>,
+        seed_text: String,
+        variant_count: u32,
+    ) -> Result<Vec<PredictionReport>, String> {
+        super::run_parallel_simulation_reports(state.inner(), seed_text, variant_count)
     }
 
     // ── Messaging Gateway commands ──
@@ -12918,52 +16008,114 @@ mod runtime {
     }
 
     pub fn run() {
-        let builder = tauri::Builder::<tauri::Wry>::default().manage(AppState::new());
-
-        #[cfg(target_os = "linux")]
-        let builder = builder;
-
-        #[cfg(not(target_os = "linux"))]
-        let builder = builder.setup(|app| {
-            let show_dashboard =
-                MenuItem::with_id(app, "show_dashboard", "Show Dashboard", true, None::<&str>)?;
-            let start_voice =
-                MenuItem::with_id(app, "start_voice", "Start Voice", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_dashboard, &start_voice, &quit])?;
-
-            TrayIconBuilder::new()
-                .menu(&menu)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "show_dashboard" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
+        let builder = tauri::Builder::<tauri::Wry>::default()
+            .plugin(
+                tauri_plugin_global_shortcut::Builder::new()
+                    .with_shortcuts([Shortcut::new(
+                        Some(Modifiers::CONTROL | Modifiers::ALT | Modifiers::SHIFT),
+                        Code::KeyK,
+                    )])
+                    .expect("failed to register emergency kill shortcut")
+                    .with_handler(|app: &tauri::AppHandle<tauri::Wry>, _shortcut, event| {
+                        if event.state != ShortcutState::Pressed {
+                            return;
                         }
-                    }
-                    "start_voice" => {
+
+                        activate_emergency_kill_switch();
+
                         let state = app.state::<AppState>();
-                        let _ = super::start_jarvis_mode(state.inner());
-                    }
-                    "quit" => {
-                        app.exit(0);
-                    }
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Down,
-                        ..
-                    } = event
-                    {
-                        if let Some(window) = tray.app_handle().get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
+                        {
+                            let sessions = state
+                                .computer_action_cancellations
+                                .lock()
+                                .unwrap_or_else(|p| p.into_inner());
+                            for cancelled in sessions.values() {
+                                cancelled.store(true, Ordering::SeqCst);
+                            }
                         }
-                    }
-                })
-                .build(app)?;
+                        {
+                            let mut engine = state
+                                .computer_control
+                                .lock()
+                                .unwrap_or_else(|p| p.into_inner());
+                            engine.disable();
+                        }
+
+                        state.log_event(
+                            Uuid::nil(),
+                            EventType::UserAction,
+                            json!({
+                                "source": "computer-control",
+                                "event": "EmergencyKillSwitch activated",
+                                "shortcut": "Ctrl+Alt+Shift+K",
+                            }),
+                        );
+                        let _ = app.emit(
+                            "input-kill-switch-activated",
+                            json!({
+                                "shortcut": "Ctrl+Alt+Shift+K",
+                            }),
+                        );
+                        show_desktop_notification(
+                            "All agent input control stopped by emergency kill switch",
+                        );
+                    })
+                    .build(),
+            )
+            .manage(AppState::new());
+
+        let builder = builder.setup(|app| {
+            let state = app.state::<AppState>();
+            state.set_app_handle(app.handle().clone());
+            state
+                .agent_scheduler
+                .set_executor(Arc::new(ScheduledGoalExecutor {
+                    state: state.inner().clone(),
+                }));
+            state.initialize_startup_schedules();
+
+            #[cfg(not(target_os = "linux"))]
+            {
+                let show_dashboard =
+                    MenuItem::with_id(app, "show_dashboard", "Show Dashboard", true, None::<&str>)?;
+                let start_voice =
+                    MenuItem::with_id(app, "start_voice", "Start Voice", true, None::<&str>)?;
+                let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&show_dashboard, &start_voice, &quit])?;
+
+                TrayIconBuilder::new()
+                    .menu(&menu)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "show_dashboard" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "start_voice" => {
+                            let state = app.state::<AppState>();
+                            let _ = super::start_jarvis_mode(state.inner());
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Down,
+                            ..
+                        } = event
+                        {
+                            if let Some(window) = tray.app_handle().get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    })
+                    .build(app)?;
+            }
 
             Ok(())
         });
@@ -13074,6 +16226,7 @@ mod runtime {
                 time_machine_undo_checkpoint,
                 time_machine_redo,
                 time_machine_get_diff,
+                time_machine_what_if,
                 nexus_link_status,
                 nexus_link_toggle_sharing,
                 nexus_link_add_peer,
@@ -13137,6 +16290,12 @@ mod runtime {
                 computer_control_get_history,
                 computer_control_toggle,
                 computer_control_status,
+                capture_screen,
+                analyze_screen,
+                analyze_media_file,
+                start_computer_action,
+                stop_computer_action,
+                get_input_control_status,
                 neural_bridge_status,
                 neural_bridge_toggle,
                 neural_bridge_ingest,
@@ -13215,8 +16374,20 @@ mod runtime {
                 trigger_cross_agent_learning,
                 approve_consent_request,
                 deny_consent_request,
+                batch_approve_consents,
+                review_consent_batch,
+                batch_deny_consents,
                 list_pending_consents,
                 get_consent_history,
+                create_simulation,
+                start_simulation,
+                pause_simulation,
+                inject_variable,
+                get_simulation_status,
+                get_simulation_report,
+                chat_with_persona,
+                list_simulations,
+                run_parallel_simulations,
                 start_hivemind,
                 get_hivemind_status,
                 cancel_hivemind,
@@ -13249,30 +16420,35 @@ mod tests {
     use super::{
         agent_memory_clear, agent_memory_forget, agent_memory_get_stats, agent_memory_recall,
         agent_memory_remember, chat_with_documents, check_model_compatibility, complete_build,
-        complete_research, create_agent, create_agent_immediately, economy_create_wallet,
-        economy_earn, economy_freeze_wallet, economy_get_history, economy_get_stats,
-        economy_get_wallet, economy_spend, economy_transfer, evolution_evolve_once,
-        evolution_get_active_strategy, evolution_get_history, evolution_get_status,
-        evolution_register_strategy, evolution_rollback, factory_create_project,
-        factory_get_build_history, factory_list_projects, get_active_llm_provider,
-        get_agent_activity, get_browser_history, get_configured_provider, get_knowledge_base,
-        get_live_system_metrics, get_messaging_status, get_system_specs, ghost_protocol_add_peer,
-        ghost_protocol_remove_peer, ghost_protocol_status, ghost_protocol_toggle, index_document,
-        learning_agent_action, list_agents, list_indexed_documents, list_local_models,
-        list_prebuilt_manifest_paths, mcp_host_add_server, mcp_host_list_servers,
-        mcp_host_list_tools, mcp_host_remove_server, navigate_to, neural_bridge_delete,
-        neural_bridge_ingest, neural_bridge_search, neural_bridge_status, neural_bridge_toggle,
+        complete_research, create_agent, create_agent_immediately, create_simulation,
+        economy_create_wallet, economy_earn, economy_freeze_wallet, economy_get_history,
+        economy_get_stats, economy_get_wallet, economy_spend, economy_transfer,
+        evolution_evolve_once, evolution_get_active_strategy, evolution_get_history,
+        evolution_get_status, evolution_register_strategy, evolution_rollback,
+        factory_create_project, factory_get_build_history, factory_list_projects,
+        get_active_llm_provider, get_agent_activity, get_browser_history, get_configured_provider,
+        get_input_control_status, get_knowledge_base, get_live_system_metrics,
+        get_messaging_status, get_simulation_report, get_simulation_status, get_system_specs,
+        ghost_protocol_add_peer, ghost_protocol_remove_peer, ghost_protocol_status,
+        ghost_protocol_toggle, index_document, inject_simulation_variable, learning_agent_action,
+        list_agents, list_indexed_documents, list_local_models, list_prebuilt_manifest_paths,
+        list_simulations, mcp_host_add_server, mcp_host_list_servers, mcp_host_list_tools,
+        mcp_host_remove_server, navigate_to, neural_bridge_delete, neural_bridge_ingest,
+        neural_bridge_search, neural_bridge_status, neural_bridge_toggle,
         parse_agent_manifest_json, pause_agent, payment_create_invoice, payment_create_plan,
         payment_get_revenue_stats, payment_list_plans, payment_pay_invoice,
         remove_indexed_document, replay_export_bundle, replay_get_bundle, replay_list_bundles,
-        replay_toggle_recording, replay_verify_bundle, resume_agent, search_documents,
-        set_default_agent, start_agent, start_build, start_learning, start_research, stop_agent,
-        time_machine_create_checkpoint, time_machine_list_checkpoints, time_machine_redo,
-        time_machine_undo, tracing_end_span, tracing_end_trace, tracing_get_trace,
-        tracing_list_traces, tracing_start_span, tracing_start_trace, voice_get_status,
-        voice_load_whisper_model, voice_transcribe, AppState, LearningSource,
+        replay_toggle_recording, replay_verify_bundle, resume_agent,
+        run_parallel_simulation_reports, search_documents, set_default_agent, start_agent,
+        start_build, start_learning, start_research, start_simulation_with_observer, stop_agent,
+        stop_computer_action, time_machine_create_checkpoint, time_machine_list_checkpoints,
+        time_machine_redo, time_machine_undo, tracing_end_span, tracing_end_trace,
+        tracing_get_trace, tracing_list_traces, tracing_start_span, tracing_start_trace,
+        voice_get_status, voice_load_whisper_model, voice_transcribe, AppState, LearningSource,
     };
+    use nexus_kernel::simulation::SimulationObserver;
     use serde_json::json;
+    use std::{sync::Arc, thread, time::Duration};
     use uuid::Uuid;
 
     fn build_manifest(name: &str) -> String {
@@ -13332,6 +16508,155 @@ mod tests {
             .err()
             .unwrap_or_default()
             .contains("name must be alphanumeric plus hyphens only"));
+    }
+
+    #[test]
+    fn test_nexus_operator_manifest_parses() {
+        let raw = std::fs::read_to_string("../../agents/prebuilt/nexus-operator.json").unwrap();
+        let manifest = parse_agent_manifest_json(&raw).unwrap();
+        assert_eq!(manifest.name, "nexus-operator");
+        assert!(manifest.capabilities.contains(&"computer.use".to_string()));
+        assert!(manifest
+            .capabilities
+            .contains(&"screen.capture".to_string()));
+        assert_eq!(manifest.autonomy_level, Some(4));
+    }
+
+    struct TestSimulationObserver;
+
+    impl SimulationObserver for TestSimulationObserver {}
+
+    #[test]
+    fn test_create_simulation_command() {
+        let state = AppState::new_in_memory();
+        let world_id = create_simulation(
+            &state,
+            "Forecast".to_string(),
+            "Policy X is heading toward a major vote.".to_string(),
+            12,
+            4,
+            None,
+        )
+        .unwrap();
+        let status = get_simulation_status(&state, world_id.clone()).unwrap();
+        assert_eq!(status.world_id, world_id);
+        assert_eq!(status.persona_count, 12);
+        assert_eq!(status.max_ticks, 4);
+    }
+
+    #[test]
+    fn test_simulation_inject_variable_updates_status() {
+        let state = AppState::new_in_memory();
+        let world_id = create_simulation(
+            &state,
+            "Injectable".to_string(),
+            "A policy scenario with uncertainty.".to_string(),
+            10,
+            3,
+            None,
+        )
+        .unwrap();
+        inject_simulation_variable(
+            &state,
+            world_id.clone(),
+            "policy_signal".to_string(),
+            "passed".to_string(),
+        )
+        .unwrap();
+        let status = get_simulation_status(&state, world_id).unwrap();
+        assert_eq!(
+            status.variables.get("policy_signal"),
+            Some(&"passed".to_string())
+        );
+    }
+
+    #[test]
+    fn test_start_simulation_produces_report() {
+        let state = AppState::new_in_memory();
+        let world_id = create_simulation(
+            &state,
+            "Runtime".to_string(),
+            "A governance forecast with multiple stakeholders.".to_string(),
+            8,
+            2,
+            None,
+        )
+        .unwrap();
+        let row = state.db.load_simulation_world(&world_id).unwrap().unwrap();
+        let mut persisted = super::load_persisted_simulation_state(&row).unwrap();
+        persisted.tick_interval_ms = 0;
+        state
+            .db
+            .save_simulation_world(
+                &row.id,
+                &row.name,
+                &row.seed_text,
+                "ready",
+                row.tick_count,
+                row.persona_count,
+                &serde_json::to_string(&persisted).unwrap(),
+                row.report_json.as_deref(),
+                row.completed_at.as_deref(),
+            )
+            .unwrap();
+        start_simulation_with_observer(&state, world_id.clone(), Arc::new(TestSimulationObserver))
+            .unwrap();
+        for _ in 0..50 {
+            if let Ok(report) = get_simulation_report(&state, world_id.clone()) {
+                assert!(report.confidence > 0.0);
+                return;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        panic!("simulation report was not generated in time");
+    }
+
+    #[test]
+    fn test_list_simulations_and_parallel_reports() {
+        let state = AppState::new_in_memory();
+        create_simulation(
+            &state,
+            "Listed".to_string(),
+            "Market conditions are shifting.".to_string(),
+            10,
+            3,
+            None,
+        )
+        .unwrap();
+        let summaries = list_simulations(&state).unwrap();
+        assert_eq!(summaries.len(), 1);
+        let reports = run_parallel_simulation_reports(
+            &state,
+            "Macro outlook with rate pressure.".to_string(),
+            3,
+        )
+        .unwrap();
+        assert_eq!(reports.len(), 3);
+    }
+
+    #[test]
+    fn test_nexus_prophet_manifest_parses() {
+        let raw = std::fs::read_to_string("../../agents/prebuilt/nexus-prophet.json").unwrap();
+        let manifest = parse_agent_manifest_json(&raw).unwrap();
+        assert_eq!(manifest.name, "nexus-prophet");
+        assert!(manifest.capabilities.contains(&"web.search".to_string()));
+        assert!(manifest.capabilities.contains(&"self.modify".to_string()));
+        assert_eq!(manifest.autonomy_level, Some(4));
+    }
+
+    #[test]
+    fn test_stop_computer_action_updates_status_surface() {
+        let state = AppState::new_in_memory();
+        {
+            let mut engine = state
+                .computer_control
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            engine.enable();
+        }
+        stop_computer_action(&state, "session-1".to_string()).unwrap();
+        let status = get_input_control_status(&state).unwrap();
+        assert!(!status.enabled);
     }
 
     #[test]
@@ -13452,6 +16777,15 @@ mod tests {
     }
 
     #[test]
+    fn test_load_prebuilt_agents_skips_duplicate_names() {
+        let state = AppState::new_in_memory();
+        state.load_prebuilt_agents();
+        state.load_prebuilt_agents();
+        let agents = state.db.list_agents().unwrap();
+        assert_eq!(agents.len(), list_prebuilt_manifest_paths().len());
+    }
+
+    #[test]
     fn test_list_agents_includes_stopped_prebuilt_agents_from_persistence() {
         let state = AppState::new_in_memory();
         state.load_prebuilt_agents();
@@ -13502,7 +16836,7 @@ mod tests {
 
     #[test]
     fn test_tauri_pause_and_resume() {
-        let state = AppState::new();
+        let state = AppState::new_in_memory();
         let created = create_agent(&state, build_manifest("voice-agent"));
         assert!(created.is_ok());
 
@@ -13529,6 +16863,24 @@ mod tests {
             assert_eq!(target.status, "Running");
             assert_eq!(target.last_action, "resumed");
         }
+    }
+
+    #[test]
+    fn test_cleanup_legacy_agent_db_only_once() {
+        let temp = std::env::temp_dir().join(format!("nexus-cleanup-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&temp).unwrap();
+        let db_path = temp.join("nexus.db");
+        let flag_path = temp.join(".cleanup-flag");
+
+        std::fs::write(&db_path, "stale-db").unwrap();
+        super::cleanup_legacy_agent_db_if_needed(&db_path, &flag_path);
+        assert!(!db_path.exists());
+        assert!(flag_path.exists());
+
+        std::fs::write(&db_path, "fresh-db").unwrap();
+        super::cleanup_legacy_agent_db_if_needed(&db_path, &flag_path);
+        assert!(db_path.exists());
+        let _ = std::fs::remove_dir_all(&temp);
     }
 
     // ── Browser Navigate Tests ──
@@ -14588,7 +17940,8 @@ mod tests {
     // ── Consent / HITL Approval Tests ──
 
     use super::{
-        approve_consent_request, deny_consent_request, get_consent_history, list_pending_consents,
+        approve_consent_request, batch_approve_consents, batch_deny_consents, deny_consent_request,
+        get_consent_history, list_pending_consents, review_consent_batch,
     };
     use nexus_persistence::StateStore;
 
@@ -14607,6 +17960,31 @@ mod tests {
                 agent_id: agent_id.to_string(),
                 operation_type: op_type.to_string(),
                 operation_json: op_json,
+                hitl_tier: tier.to_string(),
+                status: "pending".to_string(),
+                created_at: now,
+                resolved_at: None,
+                resolved_by: None,
+            })
+            .unwrap();
+    }
+
+    fn enqueue_test_consent_json(
+        state: &AppState,
+        id: &str,
+        agent_id: &str,
+        op_type: &str,
+        tier: &str,
+        op_json: serde_json::Value,
+    ) {
+        let now = chrono::Utc::now().to_rfc3339();
+        state
+            .db
+            .enqueue_consent(&nexus_persistence::ConsentRow {
+                id: id.to_string(),
+                agent_id: agent_id.to_string(),
+                operation_type: op_type.to_string(),
+                operation_json: op_json.to_string(),
                 hitl_tier: tier.to_string(),
                 status: "pending".to_string(),
                 created_at: now,
@@ -14904,6 +18282,129 @@ mod tests {
 
         let pending = list_pending_consents(&state).unwrap();
         assert_eq!(pending[0].min_review_seconds, Some(60));
+    }
+
+    #[test]
+    fn test_batch_consent_notification_fields() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent_json(
+            &state,
+            "c-batch-1",
+            "a1",
+            "cognitive.hitl_batch",
+            "Tier1",
+            json!({
+                "summary": "Execute 3 governed actions",
+                "goal_id": "goal-1",
+                "batch_action_count": 3,
+                "batch_actions": [
+                    "ShellCommand: ls -la",
+                    "FileWrite: analysis.md",
+                    "ShellCommand: grep TODO src/*.rs"
+                ],
+                "review_each_available": true,
+                "side_effects": ["ShellCommand: ls -la"],
+                "fuel_cost": 15.0
+            }),
+        );
+
+        let pending = list_pending_consents(&state).unwrap();
+        assert_eq!(pending.len(), 1);
+        let notif = &pending[0];
+        assert_eq!(notif.goal_id.as_deref(), Some("goal-1"));
+        assert_eq!(notif.batch_action_count, Some(3));
+        assert_eq!(notif.batch_actions.len(), 3);
+        assert!(notif.review_each_available);
+    }
+
+    #[test]
+    fn test_batch_approve_consents_resolves_goal_rows() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent_json(
+            &state,
+            "c-batch-approve-1",
+            "a1",
+            "cognitive.hitl_batch",
+            "Tier1",
+            json!({"summary": "batch", "goal_id": "goal-batch"}),
+        );
+        enqueue_test_consent_json(
+            &state,
+            "c-batch-approve-2",
+            "a1",
+            "cognitive.hitl_approval",
+            "Tier1",
+            json!({"summary": "single", "goal_id": "goal-batch"}),
+        );
+        enqueue_test_consent_json(
+            &state,
+            "c-batch-approve-3",
+            "a1",
+            "cognitive.hitl_approval",
+            "Tier1",
+            json!({"summary": "other", "goal_id": "goal-other"}),
+        );
+
+        let resolved = batch_approve_consents(&state, "goal-batch".into(), "user".into()).unwrap();
+        assert_eq!(resolved.len(), 2);
+
+        let pending = list_pending_consents(&state).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].goal_id.as_deref(), Some("goal-other"));
+    }
+
+    #[test]
+    fn test_review_consent_batch_resolves_pending_request() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent_json(
+            &state,
+            "c-review-batch-1",
+            "a1",
+            "cognitive.hitl_batch",
+            "Tier1",
+            json!({"summary": "batch", "goal_id": "goal-review", "review_each_available": true}),
+        );
+
+        review_consent_batch(&state, "c-review-batch-1".into(), "user".into()).unwrap();
+
+        let pending = list_pending_consents(&state).unwrap();
+        assert!(pending.is_empty());
+
+        let history = get_consent_history(&state, 10).unwrap();
+        assert!(history.iter().any(|item| {
+            item.consent_id == "c-review-batch-1" && item.risk_level.ends_with(":review_each")
+        }));
+    }
+
+    #[test]
+    fn test_batch_deny_consents_resolves_goal_rows() {
+        let state = AppState::new_in_memory();
+        enqueue_test_consent_json(
+            &state,
+            "c-batch-deny-1",
+            "a1",
+            "cognitive.hitl_batch",
+            "Tier1",
+            json!({"summary": "batch", "goal_id": "goal-deny"}),
+        );
+        enqueue_test_consent_json(
+            &state,
+            "c-batch-deny-2",
+            "a1",
+            "cognitive.hitl_approval",
+            "Tier1",
+            json!({"summary": "single", "goal_id": "goal-deny"}),
+        );
+
+        let resolved = batch_deny_consents(
+            &state,
+            "goal-deny".into(),
+            "user".into(),
+            Some("deny all".into()),
+        )
+        .unwrap();
+        assert_eq!(resolved.len(), 2);
+        assert!(list_pending_consents(&state).unwrap().is_empty());
     }
 
     #[test]

@@ -14,6 +14,7 @@ use nexus_kernel::audit::EventType;
 use serde_json::json;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use wasmtime::{Engine, Linker, Module, Store, StoreLimits, StoreLimitsBuilder};
@@ -408,10 +409,18 @@ impl SandboxRuntime for WasmtimeSandbox {
         // When the store's epoch deadline is reached, wasmtime traps execution.
         let engine_for_timer = Arc::clone(&self.engine);
         let timeout_secs = self.config.execution_timeout_secs.max(1);
+        let stop_timer = Arc::new(AtomicBool::new(false));
+        let stop_timer_worker = Arc::clone(&stop_timer);
         let timer_handle = std::thread::spawn(move || {
             let start = Instant::now();
             while start.elapsed() < Duration::from_secs(timeout_secs) {
+                if stop_timer_worker.load(Ordering::Relaxed) {
+                    break;
+                }
                 std::thread::sleep(Duration::from_secs(1));
+                if stop_timer_worker.load(Ordering::Relaxed) {
+                    break;
+                }
                 engine_for_timer.increment_epoch();
             }
         });
@@ -422,6 +431,7 @@ impl SandboxRuntime for WasmtimeSandbox {
             // Drop store first to release Rc reference, then restore ctx
             store.data_mut().agent_context = None;
             drop(store);
+            stop_timer.store(true, Ordering::Relaxed);
             let _ = timer_handle.join();
             let restored = Rc::try_unwrap(ctx_ref)
                 .map(|cell| cell.into_inner())
@@ -443,6 +453,7 @@ impl SandboxRuntime for WasmtimeSandbox {
             Err(e) => {
                 store.data_mut().agent_context = None;
                 drop(store);
+                stop_timer.store(true, Ordering::Relaxed);
                 let _ = timer_handle.join();
                 let restored = Rc::try_unwrap(ctx_ref)
                     .map(|cell| cell.into_inner())
@@ -520,6 +531,7 @@ impl SandboxRuntime for WasmtimeSandbox {
         // Release the Rc inside the Store, then restore AgentContext
         store.data_mut().agent_context = None;
         drop(store);
+        stop_timer.store(true, Ordering::Relaxed);
         let _ = timer_handle.join();
         let restored = Rc::try_unwrap(ctx_ref)
             .map(|cell| cell.into_inner())

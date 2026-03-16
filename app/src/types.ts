@@ -46,12 +46,28 @@ export interface VoiceRuntimeState {
   overlay_visible: boolean;
 }
 
+export interface ScreenRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface InputControlStatus {
+  enabled: boolean;
+  kill_switch_active: boolean;
+  actions_in_current_window: number;
+  max_actions_per_minute: number;
+  total_actions: number;
+}
+
 export interface LlmConfig {
   default_model: string;
   anthropic_api_key: string;
   openai_api_key: string;
   deepseek_api_key: string;
   gemini_api_key: string;
+  nvidia_api_key: string;
   ollama_url: string;
   routing_strategy?: string;
   providers?: LlmProviderEntry[];
@@ -106,6 +122,10 @@ export interface PrivacyConfig {
   audit_retention_days: number;
 }
 
+export interface GovernanceConfig {
+  enable_warden_review: boolean;
+}
+
 export interface NexusConfig {
   llm: LlmConfig;
   search: SearchConfig;
@@ -113,6 +133,7 @@ export interface NexusConfig {
   messaging: MessagingConfig;
   voice: VoiceConfig;
   privacy: PrivacyConfig;
+  governance: GovernanceConfig;
   hardware?: HardwareConfig;
   ollama?: OllamaConfigSection;
   models?: ModelsConfig;
@@ -344,6 +365,7 @@ export interface ProviderStatus {
   openai: boolean;
   deepseek: boolean;
   gemini: boolean;
+  nvidia: boolean;
 }
 
 export interface ChatTokenEvent {
@@ -521,6 +543,10 @@ export interface ConsentNotification {
   requested_at: string;
   auto_deny_at: string;
   min_review_seconds?: number | null;
+  goal_id?: string | null;
+  batch_action_count?: number | null;
+  batch_actions: string[];
+  review_each_available?: boolean;
 }
 
 // ── Protocols Dashboard Types ──
@@ -861,4 +887,127 @@ export interface LearningEvent {
   url: string | null;
   key_points: string[] | null;
   change_summary: string | null;
+}
+
+export type SimulationLifecycleStatus =
+  | "draft"
+  | "awaiting_approval"
+  | "ready"
+  | "running"
+  | "paused"
+  | "completed"
+  | "failed";
+
+export interface SimulationPersonaView {
+  id: string;
+  name: string;
+  role: string;
+  personality: SimulationPersonalityView;
+  beliefs: Record<string, number>;
+  memories: SimulationMemoryView[];
+  relationships: Record<string, number>;
+  influence_score: number;
+  last_action: string | null;
+}
+
+export interface SimulationPersonalityView {
+  openness: number;
+  conscientiousness: number;
+  extraversion: number;
+  agreeableness: number;
+  neuroticism: number;
+}
+
+export interface SimulationMemoryView {
+  event: string;
+  timestamp: number;
+  emotional_impact: number;
+  source: string;
+}
+
+export interface SimulationStatus {
+  world_id: string;
+  name: string;
+  status: SimulationLifecycleStatus | string;
+  tick_count: number;
+  persona_count: number;
+  max_ticks: number;
+  tick_interval_ms: number;
+  fuel_consumed: number;
+  estimated_fuel: number;
+  report_available: boolean;
+  variables: Record<string, string>;
+  personas: SimulationPersonaView[];
+}
+
+export interface SimulationSummary {
+  id: string;
+  name: string;
+  status: SimulationLifecycleStatus | string;
+  tick_count: number;
+  persona_count: number;
+  created_at: string;
+  prediction_summary: string | null;
+}
+
+export interface SimulationLiveEvent {
+  actor_id: string;
+  actor_name: string;
+  action_type: string;
+  content: string;
+  target_id: string | null;
+  target_name: string | null;
+  impact: number;
+}
+
+export interface SimulationTickEvent {
+  world_id: string;
+  tick: number;
+  status: SimulationLifecycleStatus | string;
+  events_count: number;
+  events: SimulationLiveEvent[];
+  belief_summary: Record<string, number>;
+  fuel_consumed: number;
+}
+
+export interface SimulationCompleteEvent {
+  world_id: string;
+  prediction: string;
+  confidence: number;
+}
+
+export interface Finding {
+  title: string;
+  detail: string;
+  confidence: number;
+}
+
+export interface OpinionShift {
+  topic: string;
+  before: number;
+  after: number;
+  delta: number;
+}
+
+export interface Coalition {
+  name: string;
+  members: string[];
+  focus_topics: string[];
+}
+
+export interface TurningPoint {
+  tick: number;
+  description: string;
+  shift_magnitude: number;
+}
+
+export interface PredictionReport {
+  summary: string;
+  key_findings: Finding[];
+  opinion_shifts: OpinionShift[];
+  coalitions: Coalition[];
+  turning_points: TurningPoint[];
+  prediction: string;
+  confidence: number;
+  uncertainties: string[];
 }

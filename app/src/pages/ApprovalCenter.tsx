@@ -12,10 +12,13 @@ import {
 } from "lucide-react";
 import {
   approveConsentRequest,
+  batchApproveConsents,
+  batchDenyConsents,
   denyConsentRequest,
   getConsentHistory,
   hasDesktopRuntime,
   listPendingConsents,
+  reviewConsentBatch,
 } from "../api/backend";
 import type { ConsentNotification } from "../types";
 
@@ -109,10 +112,16 @@ function PendingCard({
   item,
   onApprove,
   onDeny,
+  onBatchApprove,
+  onBatchDeny,
+  onReviewEach,
 }: {
   item: ConsentNotification;
   onApprove: (id: string) => void;
   onDeny: (id: string, reason?: string) => void;
+  onBatchApprove: (goalId: string) => void;
+  onBatchDeny: (goalId: string, reason?: string) => void;
+  onReviewEach: (consentId: string) => void;
 }) {
   const [showDenyReason, setShowDenyReason] = useState(false);
   const [denyReason, setDenyReason] = useState("");
@@ -120,6 +129,7 @@ function PendingCard({
   const reviewRemaining = useReviewCountdown(item.requested_at, item.min_review_seconds);
   const Icon = getOpIcon(item.operation_type);
   const risk = riskColor(item.risk_level);
+  const isBatch = Boolean(item.goal_id && (item.batch_action_count ?? 0) > 1);
 
   return (
     <div
@@ -179,6 +189,19 @@ function PendingCard({
         </div>
       )}
 
+      {isBatch && item.batch_actions.length > 0 && (
+        <div style={{ marginBottom: "0.75rem" }}>
+          <div style={{ color: "var(--text-secondary, #94a3b8)", fontSize: "0.75rem", marginBottom: "0.25rem" }}>
+            Planned actions:
+          </div>
+          <ol style={{ margin: 0, paddingLeft: "1.2rem", color: "var(--text-primary, #e2e8f0)", fontSize: "0.85rem" }}>
+            {item.batch_actions.map((action, index) => (
+              <li key={`${item.consent_id}-${index}`}>{action}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+
       {/* Meta row */}
       <div
         style={{
@@ -206,7 +229,13 @@ function PendingCard({
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
         <button
           disabled={reviewRemaining > 0}
-          onClick={() => onApprove(item.consent_id)}
+          onClick={() => {
+            if (isBatch && item.goal_id) {
+              onBatchApprove(item.goal_id);
+              return;
+            }
+            onApprove(item.consent_id);
+          }}
           style={{
             background: reviewRemaining > 0 ? "rgba(148, 163, 184, 0.12)" : "rgba(74, 222, 128, 0.15)",
             border: reviewRemaining > 0 ? "1px solid #64748b" : "1px solid #4ade80",
@@ -221,8 +250,25 @@ function PendingCard({
             gap: "0.3rem",
           }}
         >
-          <CheckCircle size={14} /> Approve
+          <CheckCircle size={14} /> {isBatch ? "Approve All" : "Approve"}
         </button>
+        {isBatch && item.review_each_available && (
+          <button
+            onClick={() => onReviewEach(item.consent_id)}
+            style={{
+              background: "rgba(96, 165, 250, 0.15)",
+              border: "1px solid #60a5fa",
+              color: "#60a5fa",
+              padding: "0.4rem 1rem",
+              borderRadius: 6,
+              cursor: "pointer",
+              fontFamily: "var(--font-mono, monospace)",
+              fontSize: "0.85rem",
+            }}
+          >
+            Review Each
+          </button>
+        )}
         {!showDenyReason ? (
           <button
             onClick={() => setShowDenyReason(true)}
@@ -240,7 +286,7 @@ function PendingCard({
               gap: "0.3rem",
             }}
           >
-            <XCircle size={14} /> Deny
+            <XCircle size={14} /> {isBatch ? "Deny All" : "Deny"}
           </button>
         ) : (
           <div style={{ display: "flex", gap: "0.3rem", flex: 1 }}>
@@ -262,7 +308,11 @@ function PendingCard({
             />
             <button
               onClick={() => {
-                onDeny(item.consent_id, denyReason || undefined);
+                if (isBatch && item.goal_id) {
+                  onBatchDeny(item.goal_id, denyReason || undefined);
+                } else {
+                  onDeny(item.consent_id, denyReason || undefined);
+                }
                 setShowDenyReason(false);
                 setDenyReason("");
               }}
@@ -327,7 +377,10 @@ export default function ApprovalCenter(): JSX.Element {
       // New consent request
       mod
         .listen<ConsentNotification>("consent-request-pending", (event) => {
-          setPending((prev) => [event.payload, ...prev]);
+          setPending((prev) => {
+            const next = prev.filter((item) => item.consent_id !== event.payload.consent_id);
+            return [event.payload, ...next];
+          });
           // Desktop notification
           if (typeof Notification !== "undefined" && Notification.permission === "granted") {
             new Notification("Nexus OS \u2014 Agent Approval Required", {
@@ -372,9 +425,7 @@ export default function ApprovalCenter(): JSX.Element {
   const handleApprove = async (consentId: string) => {
     try {
       await approveConsentRequest(consentId, "user");
-      setPending((prev) => prev.filter((p) => p.consent_id !== consentId));
-      const h = await getConsentHistory(20);
-      setHistory(h);
+      await loadData();
     } catch (err) {
       setError(String(err));
     }
@@ -383,9 +434,34 @@ export default function ApprovalCenter(): JSX.Element {
   const handleDeny = async (consentId: string, reason?: string) => {
     try {
       await denyConsentRequest(consentId, "user", reason);
-      setPending((prev) => prev.filter((p) => p.consent_id !== consentId));
-      const h = await getConsentHistory(20);
-      setHistory(h);
+      await loadData();
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  const handleBatchApprove = async (goalId: string) => {
+    try {
+      await batchApproveConsents(goalId, "user");
+      await loadData();
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  const handleBatchDeny = async (goalId: string, reason?: string) => {
+    try {
+      await batchDenyConsents(goalId, "user", reason);
+      await loadData();
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  const handleReviewEach = async (consentId: string) => {
+    try {
+      await reviewConsentBatch(consentId, "user");
+      await loadData();
     } catch (err) {
       setError(String(err));
     }
@@ -503,6 +579,9 @@ export default function ApprovalCenter(): JSX.Element {
                 item={item}
                 onApprove={(id) => void handleApprove(id)}
                 onDeny={(id, reason) => void handleDeny(id, reason)}
+                onBatchApprove={(goalId) => void handleBatchApprove(goalId)}
+                onBatchDeny={(goalId, reason) => void handleBatchDeny(goalId, reason)}
+                onReviewEach={(consentId) => void handleReviewEach(consentId)}
               />
             ))
           )}

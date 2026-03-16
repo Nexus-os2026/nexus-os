@@ -155,11 +155,13 @@ mod tests {
         caps.insert("mcp.call".into());
         ActuatorContext {
             agent_id: "test-agent".into(),
+            agent_name: "test-agent".into(),
             working_dir: std::path::PathBuf::from("/tmp"),
             autonomy_level: AutonomyLevel::L2,
             capabilities: caps,
             fuel_remaining: 1000.0,
             egress_allowlist: vec!["https://api.example.com".into()],
+            action_review_engine: None,
         }
     }
 

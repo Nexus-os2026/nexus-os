@@ -32,6 +32,7 @@ pub struct AgentRow {
     pub id: String,
     pub manifest_json: String,
     pub state: String,
+    pub was_running: bool,
     pub autonomy_level: u8,
     pub execution_mode: String,
     pub parent_agent_id: Option<String>,
@@ -45,11 +46,12 @@ impl AgentRow {
             id: row.get(0)?,
             manifest_json: row.get(1)?,
             state: row.get(2)?,
-            autonomy_level: row.get::<_, u8>(3)?,
-            execution_mode: row.get(4)?,
-            parent_agent_id: row.get(5)?,
-            created_at: row.get(6)?,
-            updated_at: row.get(7)?,
+            was_running: row.get::<_, i64>(3)? != 0,
+            autonomy_level: row.get::<_, u8>(4)?,
+            execution_mode: row.get(5)?,
+            parent_agent_id: row.get(6)?,
+            created_at: row.get(7)?,
+            updated_at: row.get(8)?,
         })
     }
 }
@@ -158,6 +160,27 @@ impl ConsentRow {
             created_at: row.get(6)?,
             resolved_at: row.get(7)?,
             resolved_by: row.get(8)?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CheckpointRow {
+    pub id: String,
+    pub agent_id: String,
+    pub state_json: String,
+    pub description: Option<String>,
+    pub created_at: String,
+}
+
+impl CheckpointRow {
+    pub fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            agent_id: row.get(1)?,
+            state_json: row.get(2)?,
+            description: row.get(3)?,
+            created_at: row.get(4)?,
         })
     }
 }
@@ -526,6 +549,95 @@ impl AdversarialMatchRow {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SimulationWorldRow {
+    pub id: String,
+    pub name: String,
+    pub seed_text: String,
+    pub status: String,
+    pub tick_count: i64,
+    pub persona_count: i64,
+    pub config_json: String,
+    pub report_json: Option<String>,
+    pub created_at: String,
+    pub completed_at: Option<String>,
+}
+
+impl SimulationWorldRow {
+    pub fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            seed_text: row.get(2)?,
+            status: row.get(3)?,
+            tick_count: row.get(4)?,
+            persona_count: row.get(5)?,
+            config_json: row.get(6)?,
+            report_json: row.get(7)?,
+            created_at: row.get(8)?,
+            completed_at: row.get(9)?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SimulationPersonaRow {
+    pub id: String,
+    pub world_id: String,
+    pub name: String,
+    pub role: String,
+    pub personality_json: String,
+    pub beliefs_json: String,
+    pub memories_json: String,
+    pub relationships_json: String,
+    pub created_at: String,
+}
+
+impl SimulationPersonaRow {
+    pub fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            world_id: row.get(1)?,
+            name: row.get(2)?,
+            role: row.get(3)?,
+            personality_json: row.get(4)?,
+            beliefs_json: row.get(5)?,
+            memories_json: row.get(6)?,
+            relationships_json: row.get(7)?,
+            created_at: row.get(8)?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SimulationEventRow {
+    pub id: i64,
+    pub world_id: String,
+    pub tick: i64,
+    pub actor_id: String,
+    pub action_type: String,
+    pub content: Option<String>,
+    pub target_id: Option<String>,
+    pub impact: f64,
+    pub created_at: String,
+}
+
+impl SimulationEventRow {
+    pub fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            world_id: row.get(1)?,
+            tick: row.get(2)?,
+            actor_id: row.get(3)?,
+            action_type: row.get(4)?,
+            content: row.get(5)?,
+            target_id: row.get(6)?,
+            impact: row.get(7)?,
+            created_at: row.get(8)?,
+        })
+    }
+}
+
 // ── StateStore Trait ────────────────────────────────────────────────────────
 
 pub trait StateStore {
@@ -579,6 +691,11 @@ pub trait StateStore {
     fn load_consent_by_agent(&self, agent_id: &str) -> Result<Vec<ConsentRow>>;
     fn load_all_consents(&self, limit: u32) -> Result<Vec<ConsentRow>>;
 
+    // Time machine checkpoint methods
+    fn save_checkpoint(&self, checkpoint: &CheckpointRow) -> Result<()>;
+    fn load_checkpoint(&self, id: &str) -> Result<Option<CheckpointRow>>;
+    fn list_checkpoints(&self, limit: usize) -> Result<Vec<CheckpointRow>>;
+
     // Embedding methods
     fn save_embedding(&self, embedding: &EmbeddingRow) -> Result<()>;
     fn load_embeddings_by_agent(&self, agent_id: &str) -> Result<Vec<EmbeddingRow>>;
@@ -598,6 +715,7 @@ pub trait StateStore {
         memory_type: Option<&str>,
         limit: usize,
     ) -> Result<Vec<MemoryRow>>;
+    fn delete_memories_by_agent(&self, agent_id: &str) -> Result<()>;
     fn touch_memory(&self, id: i64) -> Result<()>;
     fn decay_memories(&self, agent_id: &str, decay_factor: f64) -> Result<()>;
 
@@ -726,6 +844,7 @@ impl NexusDatabase {
                 id TEXT PRIMARY KEY,
                 manifest_json TEXT NOT NULL,
                 state TEXT NOT NULL DEFAULT 'created',
+                was_running INTEGER NOT NULL DEFAULT 0,
                 autonomy_level INTEGER NOT NULL DEFAULT 0,
                 execution_mode TEXT NOT NULL DEFAULT 'native',
                 parent_agent_id TEXT,
@@ -960,6 +1079,45 @@ impl NexusDatabase {
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS simulation_worlds (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                seed_text TEXT NOT NULL,
+                status TEXT NOT NULL,
+                tick_count INTEGER NOT NULL DEFAULT 0,
+                persona_count INTEGER NOT NULL,
+                config_json TEXT NOT NULL,
+                report_json TEXT,
+                created_at TEXT NOT NULL,
+                completed_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS simulation_personas (
+                id TEXT PRIMARY KEY,
+                world_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                role TEXT NOT NULL,
+                personality_json TEXT NOT NULL,
+                beliefs_json TEXT NOT NULL,
+                memories_json TEXT NOT NULL,
+                relationships_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_persona_world ON simulation_personas(world_id);
+
+            CREATE TABLE IF NOT EXISTS simulation_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                world_id TEXT NOT NULL,
+                tick INTEGER NOT NULL,
+                actor_id TEXT NOT NULL,
+                action_type TEXT NOT NULL,
+                content TEXT,
+                target_id TEXT,
+                impact REAL NOT NULL DEFAULT 0.0,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_event_world_tick ON simulation_events(world_id, tick);
+
             COMMIT;",
             )?;
         }
@@ -968,6 +1126,7 @@ impl NexusDatabase {
         self.add_column_if_missing("task_history", "actual_time_secs", "REAL")?;
         self.add_column_if_missing("task_history", "quality_score", "REAL")?;
         self.add_column_if_missing("agents", "parent_agent_id", "TEXT")?;
+        self.add_column_if_missing("agents", "was_running", "INTEGER NOT NULL DEFAULT 0")?;
         Ok(())
     }
 
@@ -1091,16 +1250,18 @@ impl NexusDatabase {
         parent_agent_id: Option<&str>,
     ) -> Result<()> {
         let now = Utc::now().to_rfc3339();
+        let was_running = agent_state_was_running(state);
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
         conn.execute(
             "INSERT INTO agents (
-                id, manifest_json, state, autonomy_level, execution_mode,
+                id, manifest_json, state, was_running, autonomy_level, execution_mode,
                 parent_agent_id, created_at, updated_at
              )
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT(id) DO UPDATE SET
                 manifest_json = excluded.manifest_json,
                 state = excluded.state,
+                was_running = excluded.was_running,
                 autonomy_level = excluded.autonomy_level,
                 execution_mode = excluded.execution_mode,
                 parent_agent_id = excluded.parent_agent_id,
@@ -1109,6 +1270,7 @@ impl NexusDatabase {
                 id,
                 manifest_json,
                 state,
+                was_running as i64,
                 autonomy_level,
                 execution_mode,
                 parent_agent_id,
@@ -1270,6 +1432,186 @@ impl NexusDatabase {
         }
         Ok(result)
     }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn save_simulation_world(
+        &self,
+        id: &str,
+        name: &str,
+        seed_text: &str,
+        status: &str,
+        tick_count: i64,
+        persona_count: i64,
+        config_json: &str,
+        report_json: Option<&str>,
+        completed_at: Option<&str>,
+    ) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.execute(
+            "INSERT INTO simulation_worlds (id, name, seed_text, status, tick_count, persona_count, config_json, report_json, created_at, completed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+             ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                seed_text = excluded.seed_text,
+                status = excluded.status,
+                tick_count = excluded.tick_count,
+                persona_count = excluded.persona_count,
+                config_json = excluded.config_json,
+                report_json = excluded.report_json,
+                completed_at = excluded.completed_at",
+            params![
+                id,
+                name,
+                seed_text,
+                status,
+                tick_count,
+                persona_count,
+                config_json,
+                report_json,
+                &now,
+                completed_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn load_simulation_world(&self, id: &str) -> Result<Option<SimulationWorldRow>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT id, name, seed_text, status, tick_count, persona_count, config_json, report_json, created_at, completed_at
+             FROM simulation_worlds
+             WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query_map(params![id], SimulationWorldRow::from_row)?;
+        match rows.next() {
+            Some(row) => Ok(Some(row?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn list_simulation_worlds(&self) -> Result<Vec<SimulationWorldRow>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT id, name, seed_text, status, tick_count, persona_count, config_json, report_json, created_at, completed_at
+             FROM simulation_worlds
+             ORDER BY created_at DESC, id DESC",
+        )?;
+        let rows = stmt.query_map([], SimulationWorldRow::from_row)?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    pub fn replace_simulation_personas(
+        &self,
+        world_id: &str,
+        personas: &[(String, String, String, String, String, String, String)],
+    ) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM simulation_personas WHERE world_id = ?1",
+            params![world_id],
+        )?;
+        for (id, name, role, personality_json, beliefs_json, memories_json, relationships_json) in
+            personas
+        {
+            tx.execute(
+                "INSERT INTO simulation_personas (id, world_id, name, role, personality_json, beliefs_json, memories_json, relationships_json, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    id,
+                    world_id,
+                    name,
+                    role,
+                    personality_json,
+                    beliefs_json,
+                    memories_json,
+                    relationships_json,
+                    &now
+                ],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn load_simulation_personas(&self, world_id: &str) -> Result<Vec<SimulationPersonaRow>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT id, world_id, name, role, personality_json, beliefs_json, memories_json, relationships_json, created_at
+             FROM simulation_personas
+             WHERE world_id = ?1
+             ORDER BY created_at ASC, id ASC",
+        )?;
+        let rows = stmt.query_map(params![world_id], SimulationPersonaRow::from_row)?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn append_simulation_event(
+        &self,
+        world_id: &str,
+        tick: i64,
+        actor_id: &str,
+        action_type: &str,
+        content: Option<&str>,
+        target_id: Option<&str>,
+        impact: f64,
+    ) -> Result<i64> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.execute(
+            "INSERT INTO simulation_events (world_id, tick, actor_id, action_type, content, target_id, impact, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![world_id, tick, actor_id, action_type, content, target_id, impact, &now],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn load_simulation_events(
+        &self,
+        world_id: &str,
+        tick: Option<i64>,
+    ) -> Result<Vec<SimulationEventRow>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut result = Vec::new();
+        match tick {
+            Some(tick) => {
+                let mut stmt = conn.prepare(
+                    "SELECT id, world_id, tick, actor_id, action_type, content, target_id, impact, created_at
+                     FROM simulation_events
+                     WHERE world_id = ?1 AND tick = ?2
+                     ORDER BY id ASC",
+                )?;
+                let rows = stmt.query_map(params![world_id, tick], SimulationEventRow::from_row)?;
+                for row in rows {
+                    result.push(row?);
+                }
+            }
+            None => {
+                let mut stmt = conn.prepare(
+                    "SELECT id, world_id, tick, actor_id, action_type, content, target_id, impact, created_at
+                     FROM simulation_events
+                     WHERE world_id = ?1
+                     ORDER BY tick ASC, id ASC",
+                )?;
+                let rows = stmt.query_map(params![world_id], SimulationEventRow::from_row)?;
+                for row in rows {
+                    result.push(row?);
+                }
+            }
+        }
+        Ok(result)
+    }
 }
 
 // ── StateStore Implementation ───────────────────────────────────────────────
@@ -1298,8 +1640,8 @@ impl StateStore for NexusDatabase {
     fn load_agent(&self, id: &str) -> Result<Option<AgentRow>> {
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
         let mut stmt = conn.prepare(
-            "SELECT id, manifest_json, state, autonomy_level, execution_mode, parent_agent_id,
-                    created_at, updated_at
+            "SELECT id, manifest_json, state, was_running, autonomy_level, execution_mode,
+                    parent_agent_id, created_at, updated_at
              FROM agents WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map(params![id], AgentRow::from_row)?;
@@ -1312,8 +1654,8 @@ impl StateStore for NexusDatabase {
     fn list_agents(&self) -> Result<Vec<AgentRow>> {
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
         let mut stmt = conn.prepare(
-            "SELECT id, manifest_json, state, autonomy_level, execution_mode, parent_agent_id,
-                    created_at, updated_at
+            "SELECT id, manifest_json, state, was_running, autonomy_level, execution_mode,
+                    parent_agent_id, created_at, updated_at
              FROM agents ORDER BY created_at",
         )?;
         let rows = stmt.query_map([], AgentRow::from_row)?;
@@ -1326,10 +1668,11 @@ impl StateStore for NexusDatabase {
 
     fn update_agent_state(&self, id: &str, state: &str) -> Result<()> {
         let now = Utc::now().to_rfc3339();
+        let was_running = agent_state_was_running(state);
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
         let changed = conn.execute(
-            "UPDATE agents SET state = ?1, updated_at = ?2 WHERE id = ?3",
-            params![state, &now, id],
+            "UPDATE agents SET state = ?1, was_running = ?2, updated_at = ?3 WHERE id = ?4",
+            params![state, was_running as i64, &now, id],
         )?;
         if changed == 0 {
             return Err(PersistenceError::NotFound(format!("agent {id}")));
@@ -1596,6 +1939,54 @@ impl StateStore for NexusDatabase {
         Ok(result)
     }
 
+    fn save_checkpoint(&self, checkpoint: &CheckpointRow) -> Result<()> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.execute(
+            "INSERT INTO checkpoints (id, agent_id, state_json, description, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(id) DO UPDATE SET
+                agent_id = excluded.agent_id,
+                state_json = excluded.state_json,
+                description = excluded.description,
+                created_at = excluded.created_at",
+            params![
+                &checkpoint.id,
+                &checkpoint.agent_id,
+                &checkpoint.state_json,
+                &checkpoint.description,
+                &checkpoint.created_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn load_checkpoint(&self, id: &str) -> Result<Option<CheckpointRow>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT id, agent_id, state_json, description, created_at
+             FROM checkpoints WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query_map(params![id], CheckpointRow::from_row)?;
+        match rows.next() {
+            Some(row) => Ok(Some(row?)),
+            None => Ok(None),
+        }
+    }
+
+    fn list_checkpoints(&self, limit: usize) -> Result<Vec<CheckpointRow>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT id, agent_id, state_json, description, created_at
+             FROM checkpoints ORDER BY created_at DESC LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit as i64], CheckpointRow::from_row)?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
     // ── Embedding Methods ───────────────────────────────────────────────
 
     fn save_embedding(&self, embedding: &EmbeddingRow) -> Result<()> {
@@ -1695,6 +2086,15 @@ impl StateStore for NexusDatabase {
             }
         }
         Ok(result)
+    }
+
+    fn delete_memories_by_agent(&self, agent_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.execute(
+            "DELETE FROM agent_memory WHERE agent_id = ?1",
+            params![agent_id],
+        )?;
+        Ok(())
     }
 
     fn touch_memory(&self, id: i64) -> Result<()> {
@@ -2065,6 +2465,13 @@ impl StateStore for NexusDatabase {
         }
         Ok(result)
     }
+}
+
+fn agent_state_was_running(state: &str) -> bool {
+    matches!(
+        state,
+        "running" | "paused" | "starting" | "Running" | "Paused" | "Starting"
+    )
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
@@ -2752,6 +3159,80 @@ mod tests {
     fn test_load_nonexistent_fuel_returns_none() {
         let db = test_db();
         assert!(db.load_fuel_ledger("nope").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_save_and_load_simulation_world() {
+        let db = test_db();
+        db.save_simulation_world(
+            "world-1",
+            "Forecast",
+            "seed text",
+            "running",
+            3,
+            12,
+            r#"{"name":"Forecast"}"#,
+            None,
+            None,
+        )
+        .unwrap();
+        let loaded = db.load_simulation_world("world-1").unwrap().unwrap();
+        assert_eq!(loaded.name, "Forecast");
+        assert_eq!(loaded.tick_count, 3);
+    }
+
+    #[test]
+    fn test_save_and_load_simulation_events_by_tick() {
+        let db = test_db();
+        db.append_simulation_event("world-1", 0, "p-1", "speak", Some("hello"), None, 0.5)
+            .unwrap();
+        db.append_simulation_event("world-1", 1, "p-2", "observe", None, None, 0.1)
+            .unwrap();
+        let tick_zero = db.load_simulation_events("world-1", Some(0)).unwrap();
+        assert_eq!(tick_zero.len(), 1);
+        assert_eq!(tick_zero[0].action_type, "speak");
+    }
+
+    #[test]
+    fn test_save_and_load_simulation_personas() {
+        let db = test_db();
+        db.replace_simulation_personas(
+            "world-1",
+            &[(
+                "p-1".to_string(),
+                "Ada".to_string(),
+                "analyst".to_string(),
+                "{}".to_string(),
+                r#"{"topic":0.4}"#.to_string(),
+                "[]".to_string(),
+                "{}".to_string(),
+            )],
+        )
+        .unwrap();
+        let loaded = db.load_simulation_personas("world-1").unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, "Ada");
+    }
+
+    #[test]
+    fn test_list_simulation_worlds_orders_latest_first() {
+        let db = test_db();
+        db.save_simulation_world(
+            "world-a",
+            "A",
+            "seed",
+            "completed",
+            1,
+            3,
+            "{}",
+            Some("{}"),
+            Some("2026-01-01T00:00:00Z"),
+        )
+        .unwrap();
+        db.save_simulation_world("world-b", "B", "seed", "running", 2, 4, "{}", None, None)
+            .unwrap();
+        let worlds = db.list_simulation_worlds().unwrap();
+        assert_eq!(worlds.len(), 2);
     }
 
     #[test]

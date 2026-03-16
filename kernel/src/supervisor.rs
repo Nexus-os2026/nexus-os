@@ -149,6 +149,14 @@ impl Supervisor {
 
     pub fn start_agent(&mut self, manifest: AgentManifest) -> Result<AgentId, AgentError> {
         let id = Uuid::new_v4();
+        self.start_agent_with_id(id, manifest)
+    }
+
+    pub fn start_agent_with_id(
+        &mut self,
+        id: AgentId,
+        manifest: AgentManifest,
+    ) -> Result<AgentId, AgentError> {
         let autonomy_level = AutonomyLevel::from_manifest(manifest.autonomy_level);
 
         // L5 singleton enforcement: only one Sovereign agent may be active at a time.
@@ -460,6 +468,22 @@ impl Supervisor {
 
     pub fn fuel_audit_report(&self, id: AgentId) -> Option<FuelAuditReport> {
         self.fuel_ledgers.get(&id).map(|ledger| ledger.snapshot(id))
+    }
+
+    pub fn restore_fuel_report(
+        &mut self,
+        id: AgentId,
+        report: FuelAuditReport,
+        remaining_fuel: u64,
+    ) -> Result<(), AgentError> {
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        handle.remaining_fuel = remaining_fuel;
+        self.fuel_ledgers
+            .insert(id, AgentFuelLedger::from_report(&report));
+        Ok(())
     }
 
     pub fn health_check(&self) -> Vec<AgentStatus> {

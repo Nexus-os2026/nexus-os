@@ -16,6 +16,8 @@ pub struct NexusConfig {
     pub voice: VoiceConfig,
     pub privacy: PrivacyConfig,
     #[serde(default)]
+    pub governance: GovernanceConfig,
+    #[serde(default)]
     pub kill_gates: KillGatesConfig,
     #[serde(default)]
     pub hardware: HardwareConfig,
@@ -38,6 +40,8 @@ pub struct LlmConfig {
     pub deepseek_api_key: String,
     #[serde(default)]
     pub gemini_api_key: String,
+    #[serde(default)]
+    pub nvidia_api_key: String,
     pub ollama_url: String,
     #[serde(default)]
     pub routing_strategy: String,
@@ -113,6 +117,12 @@ pub struct VoiceConfig {
 pub struct PrivacyConfig {
     pub telemetry: bool,
     pub audit_retention_days: u32,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GovernanceConfig {
+    #[serde(default)]
+    pub enable_warden_review: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -210,6 +220,7 @@ impl Default for NexusConfig {
                 openai_api_key: String::new(),
                 deepseek_api_key: String::new(),
                 gemini_api_key: String::new(),
+                nvidia_api_key: String::new(),
                 ollama_url: "http://localhost:11434".to_string(),
                 routing_strategy: String::new(),
                 providers: Vec::new(),
@@ -241,6 +252,7 @@ impl Default for NexusConfig {
                 telemetry: false,
                 audit_retention_days: 365,
             },
+            governance: GovernanceConfig::default(),
             kill_gates: KillGatesConfig::default(),
             hardware: HardwareConfig::default(),
             ollama: OllamaConfig::default(),

@@ -553,18 +553,23 @@ export default function ProjectManager() {
             </div>
           </div>
 
-          {/* Coming Soon placeholder for charts */}
           <div className="pm-charts-row">
             <div className="pm-chart-card">
               <div className="pm-chart-header">Burndown Chart</div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, opacity: 0.5 }}>
-                Coming Soon — charts require historical data
+              <div style={{ display: "grid", placeItems: "center", height: 200, opacity: 0.8, textAlign: "center", gap: 8 }}>
+                <strong>{stats.donePoints} / {stats.totalPoints || 0} points completed</strong>
+                <span>{Math.max(stats.totalPoints - stats.donePoints, 0)} points remaining in the active sprint.</span>
               </div>
             </div>
             <div className="pm-chart-card">
               <div className="pm-chart-header">Velocity History</div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, opacity: 0.5 }}>
-                Coming Soon — need 3+ sprints of data
+              <div style={{ display: "grid", placeItems: "center", height: 200, opacity: 0.8, textAlign: "center", gap: 8 }}>
+                <strong>{sprints.length} sprint{sprints.length === 1 ? "" : "s"} tracked</strong>
+                <span>
+                  {sprints.length >= 3
+                    ? `Average completed points: ${Math.round(sprints.reduce((sum, sprint) => sum + sprint.completedPoints, 0) / sprints.length)}`
+                    : "Complete a few more sprints to unlock a richer velocity history."}
+                </span>
               </div>
             </div>
           </div>

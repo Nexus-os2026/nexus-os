@@ -46,6 +46,7 @@ pub mod sbom;
 #[allow(unsafe_code)]
 pub mod resource_limiter;
 pub mod safety_supervisor;
+pub mod simulation;
 pub mod speculative;
 pub mod supervisor;
 pub mod time_machine;

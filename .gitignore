@@ -1,6 +1,7 @@
 # Rust build artifacts
 /target
 **/target
+target/
 
 # Cargo lock for libraries/workspaces is optional
 # Keep if desired for reproducible top-level builds
@@ -19,3 +20,7 @@ Thumbs.db
 *.log
 *.tmp
 **/__pycache__/
+node_modules/
+**/node_modules/
+.nexus/
+*.db

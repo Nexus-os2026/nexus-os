@@ -44,11 +44,16 @@ import type {
   ProviderUsageStats,
   ResearchSessionState,
   SetupResult,
+  ScreenRegion,
   SystemInfo,
   TestConnectionResult,
   ConsentNotification,
   TrustOverviewAgent,
-  VoiceRuntimeState
+  InputControlStatus,
+  VoiceRuntimeState,
+  PredictionReport,
+  SimulationStatus,
+  SimulationSummary
 } from "../types";
 
 interface TauriWindow extends Window {
@@ -76,6 +81,14 @@ async function invokeDesktop<T>(command: string, args?: Record<string, unknown>)
     throw new Error("desktop runtime unavailable");
   }
   return invoke<T>(command, args);
+}
+
+async function invokeJsonDesktop<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  const payload = await invokeDesktop<string>(command, args);
+  return JSON.parse(payload) as T;
 }
 
 function agentArgs(agentId: string): Record<string, unknown> {
@@ -219,6 +232,64 @@ export function getProviderStatus(): Promise<ProviderStatus> {
   return invokeDesktop<ProviderStatus>("get_provider_status");
 }
 
+export function captureScreen(region?: ScreenRegion): Promise<string> {
+  return invokeDesktop<string>("capture_screen", { region });
+}
+
+export function analyzeScreen(query: string): Promise<string> {
+  return invokeDesktop<string>("analyze_screen", { query });
+}
+
+export function analyzeMediaFile(path: string, query: string): Promise<string> {
+  return invokeDesktop<string>("analyze_media_file", { path, query });
+}
+
+export function startComputerAction(description: string, maxSteps = 20): Promise<string> {
+  return invokeDesktop<string>("start_computer_action", {
+    description,
+    maxSteps,
+    max_steps: maxSteps
+  });
+}
+
+export function stopComputerAction(agentId: string): Promise<void> {
+  return invokeDesktop<void>("stop_computer_action", {
+    agentId,
+    agent_id: agentId
+  });
+}
+
+export function getInputControlStatus(): Promise<InputControlStatus> {
+  return invokeDesktop<InputControlStatus>("get_input_control_status");
+}
+
+export function computerControlCaptureScreen(region?: string): Promise<Record<string, unknown>> {
+  return invokeJsonDesktop<Record<string, unknown>>("computer_control_capture_screen", { region });
+}
+
+export function computerControlExecuteAction(
+  actionJson: string,
+): Promise<Record<string, unknown>> {
+  return invokeJsonDesktop<Record<string, unknown>>("computer_control_execute_action", {
+    actionJson,
+    action_json: actionJson,
+  });
+}
+
+export function computerControlGetHistory(): Promise<Record<string, unknown>[]> {
+  return invokeJsonDesktop<Record<string, unknown>[]>("computer_control_get_history");
+}
+
+export function computerControlToggle(
+  enabled: boolean,
+): Promise<Record<string, unknown>> {
+  return invokeJsonDesktop<Record<string, unknown>>("computer_control_toggle", { enabled });
+}
+
+export function computerControlStatus(): Promise<Record<string, unknown>> {
+  return invokeJsonDesktop<Record<string, unknown>>("computer_control_status");
+}
+
 export function saveApiKey(provider: string, apiKey: string): Promise<void> {
   return invokeDesktop<void>("save_api_key", {
     provider,
@@ -267,6 +338,32 @@ export function checkLlmStatus(): Promise<LlmStatus> {
 
 export function getSystemInfo(): Promise<SystemInfo> {
   return invokeDesktop<SystemInfo>("get_system_info");
+}
+
+export interface TerminalCommandResult {
+  stdout: string;
+  stderr: string;
+  exit_code: number;
+  duration_ms: number;
+  tool: string;
+  needs_approval: boolean;
+  fuel_cost: number;
+}
+
+export async function terminalExecute(
+  command: string,
+  cwd: string,
+): Promise<TerminalCommandResult> {
+  const payload = await invokeDesktop<string>("terminal_execute", { command, cwd });
+  return JSON.parse(payload) as TerminalCommandResult;
+}
+
+export async function terminalExecuteApproved(
+  command: string,
+  cwd: string,
+): Promise<TerminalCommandResult> {
+  const payload = await invokeDesktop<string>("terminal_execute_approved", { command, cwd });
+  return JSON.parse(payload) as TerminalCommandResult;
 }
 
 // ── Permission Dashboard API ──
@@ -704,6 +801,10 @@ export function getLiveSystemMetrics(): Promise<string> {
   return invokeDesktop<string>("get_live_system_metrics");
 }
 
+export function getLiveSystemMetricsJson<T = Record<string, unknown>>(): Promise<T> {
+  return invokeJsonDesktop<T>("get_live_system_metrics");
+}
+
 // ── Time Machine API ──
 
 export function timeMachineListCheckpoints(): Promise<string> {
@@ -734,6 +835,16 @@ export function timeMachineGetDiff(id: string): Promise<string> {
   return invokeDesktop<string>("time_machine_get_diff", { id });
 }
 
+export function timeMachineWhatIf(id: string, variableKey: string, variableValue: string): Promise<string> {
+  return invokeDesktop<string>("time_machine_what_if", {
+    id,
+    variableKey,
+    variable_key: variableKey,
+    variableValue,
+    variable_value: variableValue
+  });
+}
+
 // ── Voice Assistant API ──
 
 export function voiceStartListening(): Promise<string> {
@@ -752,6 +863,13 @@ export function voiceTranscribe(audioBase64: string): Promise<string> {
   return invokeDesktop<string>("voice_transcribe", {
     audioBase64,
     audio_base64: audioBase64,
+  });
+}
+
+export function voiceLoadWhisperModel(modelPath: string): Promise<string> {
+  return invokeDesktop<string>("voice_load_whisper_model", {
+    modelPath,
+    model_path: modelPath,
   });
 }
 
@@ -781,6 +899,22 @@ export function projectGet(id: string): Promise<string> {
 
 export function projectSave(id: string, dataJson: string): Promise<string> {
   return invokeDesktop<string>("project_save", { id, data_json: dataJson });
+}
+
+export function fileManagerList<T = Record<string, unknown>>(path: string): Promise<T[]> {
+  return invokeJsonDesktop<T[]>("file_manager_list", { path });
+}
+
+export function fileManagerWrite(path: string, content: string): Promise<string> {
+  return invokeDesktop<string>("file_manager_write", { path, content });
+}
+
+export function fileManagerRead(path: string): Promise<string> {
+  return invokeDesktop<string>("file_manager_read", { path });
+}
+
+export function fileManagerCreateDir(path: string): Promise<string> {
+  return invokeDesktop<string>("file_manager_create_dir", { path });
 }
 
 export function projectDelete(id: string): Promise<string> {
@@ -979,8 +1113,8 @@ export function agentMemoryClear(agentId: string): Promise<string> {
 
 // ── Messaging Gateway API ──
 
-export function getMessagingStatus(): Promise<string> {
-  return invokeDesktop<string>("get_messaging_status");
+export function getMessagingStatus<T = Record<string, unknown>>(): Promise<T[]> {
+  return invokeDesktop<T[]>("get_messaging_status");
 }
 
 export function setDefaultAgent(userId: string, agentId: string): Promise<void> {
@@ -1073,10 +1207,139 @@ export function denyConsentRequest(
   });
 }
 
+export function batchApproveConsents(
+  goalId: string,
+  approvedBy: string,
+): Promise<void> {
+  return invokeDesktop<void>("batch_approve_consents", {
+    goalId,
+    goal_id: goalId,
+    approvedBy,
+    approved_by: approvedBy,
+  });
+}
+
+export function reviewConsentBatch(
+  consentId: string,
+  reviewedBy: string,
+): Promise<void> {
+  return invokeDesktop<void>("review_consent_batch", {
+    consentId,
+    consent_id: consentId,
+    reviewedBy,
+    reviewed_by: reviewedBy,
+  });
+}
+
+export function batchDenyConsents(
+  goalId: string,
+  deniedBy: string,
+  reason?: string,
+): Promise<void> {
+  return invokeDesktop<void>("batch_deny_consents", {
+    goalId,
+    goal_id: goalId,
+    deniedBy,
+    denied_by: deniedBy,
+    reason: reason ?? null,
+  });
+}
+
 export function listPendingConsents(): Promise<ConsentNotification[]> {
   return invokeDesktop<ConsentNotification[]>("list_pending_consents");
 }
 
 export function getConsentHistory(limit = 20): Promise<ConsentNotification[]> {
   return invokeDesktop<ConsentNotification[]>("get_consent_history", { limit });
+}
+
+export function createSimulation(
+  name: string,
+  seedText: string,
+  personaCount: number,
+  maxTicks: number,
+  tickIntervalMs?: number,
+): Promise<string> {
+  return invokeDesktop<string>("create_simulation", {
+    name,
+    seedText,
+    seed_text: seedText,
+    personaCount,
+    persona_count: personaCount,
+    maxTicks,
+    max_ticks: maxTicks,
+    tickIntervalMs,
+    tick_interval_ms: tickIntervalMs,
+  });
+}
+
+export function startSimulation(worldId: string): Promise<void> {
+  return invokeDesktop<void>("start_simulation", {
+    worldId,
+    world_id: worldId,
+  });
+}
+
+export function pauseSimulation(worldId: string): Promise<void> {
+  return invokeDesktop<void>("pause_simulation", {
+    worldId,
+    world_id: worldId,
+  });
+}
+
+export function injectSimulationVariable(
+  worldId: string,
+  key: string,
+  value: string,
+): Promise<void> {
+  return invokeDesktop<void>("inject_variable", {
+    worldId,
+    world_id: worldId,
+    key,
+    value,
+  });
+}
+
+export function getSimulationStatus(worldId: string): Promise<SimulationStatus> {
+  return invokeDesktop<SimulationStatus>("get_simulation_status", {
+    worldId,
+    world_id: worldId,
+  });
+}
+
+export function getSimulationReport(worldId: string): Promise<PredictionReport> {
+  return invokeDesktop<PredictionReport>("get_simulation_report", {
+    worldId,
+    world_id: worldId,
+  });
+}
+
+export function chatWithSimulationPersona(
+  worldId: string,
+  personaId: string,
+  message: string,
+): Promise<string> {
+  return invokeDesktop<string>("chat_with_persona", {
+    worldId,
+    world_id: worldId,
+    personaId,
+    persona_id: personaId,
+    message,
+  });
+}
+
+export function listSimulations(): Promise<SimulationSummary[]> {
+  return invokeDesktop<SimulationSummary[]>("list_simulations");
+}
+
+export function runParallelSimulations(
+  seedText: string,
+  variantCount: number,
+): Promise<PredictionReport[]> {
+  return invokeDesktop<PredictionReport[]>("run_parallel_simulations", {
+    seedText,
+    seed_text: seedText,
+    variantCount,
+    variant_count: variantCount,
+  });
 }

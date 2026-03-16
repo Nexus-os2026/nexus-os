@@ -1,4 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  hasDesktopRuntime,
+  sendChat,
+  voiceGetStatus,
+  voiceLoadWhisperModel,
+  voiceStartListening,
+  voiceStopListening,
+  voiceTranscribe,
+} from "../api/backend";
 
 /* ================================================================== */
 /*  Types                                                              */
@@ -27,13 +36,13 @@ interface EngineStatus {
   whisperModel: string | null;
 }
 
-/* ================================================================== */
-/*  Tauri invoke helper                                                */
-/* ================================================================== */
-
-async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<T>(cmd, args);
+interface AudioCaptureSession {
+  audioContext: AudioContext;
+  mediaStream: MediaStream;
+  sourceNode: MediaStreamAudioSourceNode;
+  processorNode: ScriptProcessorNode;
+  chunks: Float32Array[];
+  sampleRate: number;
 }
 
 /* ================================================================== */
@@ -260,6 +269,65 @@ function ensurePulseAnimation(): void {
   document.head.appendChild(style);
 }
 
+function mergeAudioChunks(chunks: Float32Array[]): Float32Array {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const merged = new Float32Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return merged;
+}
+
+function resampleTo16Khz(input: Float32Array, inputRate: number): Float32Array {
+  if (inputRate === 16000 || input.length === 0) {
+    return input;
+  }
+
+  const ratio = inputRate / 16000;
+  const outputLength = Math.max(1, Math.round(input.length / ratio));
+  const output = new Float32Array(outputLength);
+
+  for (let index = 0; index < outputLength; index += 1) {
+    const sourceIndex = index * ratio;
+    const left = Math.floor(sourceIndex);
+    const right = Math.min(left + 1, input.length - 1);
+    const mix = sourceIndex - left;
+    output[index] = input[left] * (1 - mix) + input[right] * mix;
+  }
+
+  return output;
+}
+
+function encodePcm16Base64(samples: Float32Array): string {
+  const bytes = new Uint8Array(samples.length * 2);
+  for (let index = 0; index < samples.length; index += 1) {
+    const clamped = Math.max(-1, Math.min(1, samples[index]));
+    const value = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
+    const pcm = Math.round(value);
+    bytes[index * 2] = pcm & 0xff;
+    bytes[index * 2 + 1] = (pcm >> 8) & 0xff;
+  }
+
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    const slice = bytes.subarray(offset, offset + chunkSize);
+    binary += String.fromCharCode(...slice);
+  }
+
+  return window.btoa(binary);
+}
+
+async function teardownCaptureSession(session: AudioCaptureSession): Promise<Float32Array> {
+  session.processorNode.disconnect();
+  session.sourceNode.disconnect();
+  session.mediaStream.getTracks().forEach((track) => track.stop());
+  await session.audioContext.close();
+  return mergeAudioChunks(session.chunks);
+}
+
 /* ================================================================== */
 /*  Component                                                          */
 /* ================================================================== */
@@ -292,40 +360,12 @@ export default function VoiceAssistant() {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
   const nextId = useRef(2);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const captureSessionRef = useRef<AudioCaptureSession | null>(null);
+  const desktopRuntimeAvailable = hasDesktopRuntime();
 
   useEffect(() => {
     ensurePulseAnimation();
   }, []);
-
-  // Fetch engine status from backend on mount
-  useEffect(() => {
-    tauriInvoke<string>("voice_get_status")
-      .then((raw) => {
-        const data = JSON.parse(raw);
-        const engine: TranscriptionEngine = data.transcription_engine ?? "stub";
-        const pyRunning: boolean = data.python_server_running ?? false;
-        const pyAvail: boolean = data.python_available ?? pyRunning;
-        setEngineStatus({
-          engine,
-          whisperLoaded: data.whisper_loaded ?? false,
-          whisperModel: data.whisper_model ?? null,
-        });
-        setServerRunning(pyRunning);
-        setPythonAvailable(pyAvail);
-        setBackendChecked(true);
-      })
-      .catch(() => {
-        // Running outside Tauri — stub mode only
-        setBackendChecked(true);
-      });
-  }, []);
-
-  // Auto-scroll transcript area
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [transcripts]);
 
   const addTranscript = useCallback(
     (text: string, source: Transcript["source"]) => {
@@ -337,58 +377,193 @@ export default function VoiceAssistant() {
     [],
   );
 
-  const handleToggle = useCallback(() => {
-    if (status === "listening") {
-      setStatus("ready");
-      addTranscript("Listening stopped.", "system");
-    } else if (pythonAvailable) {
-      // Real voice: spawn Python subprocess via Tauri
-      setStatus("listening");
-      tauriInvoke<string>("voice_start_listening")
-        .then(() => {
-          setServerRunning(true);
-          addTranscript("Listening started (Python backend) — waiting for voice input...", "system");
-        })
-        .catch((err) => {
-          setStatus("error");
-          addTranscript(`Failed to start listening: ${err}`, "system");
-        });
-    } else {
-      // Stub mode — local-only simulation
+  const refreshBackendStatus = useCallback(async () => {
+    if (!desktopRuntimeAvailable) {
+      setServerRunning(false);
+      setPythonAvailable(false);
+      setEngineStatus({
+        engine: "stub",
+        whisperLoaded: false,
+        whisperModel: null,
+      });
+      setBackendChecked(true);
+      return;
+    }
+
+    try {
+      const raw = await voiceGetStatus();
+      const data = JSON.parse(raw);
+      const engine: TranscriptionEngine = data.transcription_engine ?? "stub";
+      const pyRunning: boolean = data.python_server_running ?? false;
+      setEngineStatus({
+        engine,
+        whisperLoaded: data.whisper_loaded ?? false,
+        whisperModel: data.whisper_model ?? null,
+      });
+      setServerRunning(pyRunning || data.is_listening === true);
+      setPythonAvailable(pyRunning || engine !== "stub");
+    } catch {
+      setServerRunning(false);
+      setPythonAvailable(false);
+    } finally {
+      setBackendChecked(true);
+    }
+  }, [desktopRuntimeAvailable]);
+
+  useEffect(() => {
+    void refreshBackendStatus();
+  }, [refreshBackendStatus]);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [transcripts]);
+
+  useEffect(() => () => {
+    const session = captureSessionRef.current;
+    captureSessionRef.current = null;
+    if (session) {
+      void teardownCaptureSession(session);
+    }
+  }, []);
+
+  const startCapture = useCallback(async () => {
+    if (!desktopRuntimeAvailable) {
+      setStatus("error");
+      addTranscript("Voice capture requires the desktop runtime.", "system");
+      return;
+    }
+
+    if (!engineStatus.whisperLoaded) {
+      addTranscript("Load a Whisper model before recording. Real transcription is not available yet without it.", "system");
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setStatus("error");
+      addTranscript("This environment does not expose microphone capture.", "system");
+      return;
+    }
+
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const AudioCtor = window.AudioContext
+        ?? ((window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
+      if (!AudioCtor) {
+        mediaStream.getTracks().forEach((track) => track.stop());
+        throw new Error("AudioContext is not available in this browser.");
+      }
+
+      const audioContext = new AudioCtor();
+      const sourceNode = audioContext.createMediaStreamSource(mediaStream);
+      const processorNode = audioContext.createScriptProcessor(4096, 1, 1);
+      const chunks: Float32Array[] = [];
+
+      processorNode.onaudioprocess = (event) => {
+        const channelData = event.inputBuffer.getChannelData(0);
+        chunks.push(new Float32Array(channelData));
+      };
+
+      sourceNode.connect(processorNode);
+      processorNode.connect(audioContext.destination);
+      captureSessionRef.current = {
+        audioContext,
+        mediaStream,
+        sourceNode,
+        processorNode,
+        chunks,
+        sampleRate: audioContext.sampleRate,
+      };
+
+      await voiceStartListening();
       setStatus("listening");
       setServerRunning(true);
-      addTranscript("Listening started (stub mode) — use Simulate button for demo.", "system");
+      addTranscript("Listening started. Speak, then press Stop Listening to transcribe.", "system");
+      await refreshBackendStatus();
+    } catch (error) {
+      const session = captureSessionRef.current;
+      captureSessionRef.current = null;
+      if (session) {
+        await teardownCaptureSession(session);
+      }
+      setStatus("error");
+      addTranscript(`Failed to start listening: ${String(error)}`, "system");
     }
-  }, [status, addTranscript, pythonAvailable]);
+  }, [addTranscript, desktopRuntimeAvailable, engineStatus.whisperLoaded, refreshBackendStatus]);
 
-  const handleSimulateInput = useCallback(() => {
-    if (status !== "listening") return;
+  const stopCaptureAndTranscribe = useCallback(async () => {
+    const session = captureSessionRef.current;
+    captureSessionRef.current = null;
+    if (!session) {
+      setStatus("ready");
+      return;
+    }
 
     setStatus("processing");
-    addTranscript("Detected speech input...", "system");
+    try {
+      await voiceStopListening();
+    } catch {
+      // Continue cleanup and transcription even if backend stop state has already been cleared.
+    }
 
-    // Simulate transcription delay
-    setTimeout(() => {
-      addTranscript(
-        "What's the status of the coder agent?",
-        "user",
-      );
-      // Simulate agent response
-      setTimeout(() => {
-        addTranscript(
-          "The Coder agent is currently running with 8,450 fuel remaining. Last action: code review on api-client module 2 minutes ago.",
-          "agent",
-        );
-        setStatus("listening");
-      }, 800);
-    }, 600);
-  }, [status, addTranscript]);
+    try {
+      const merged = await teardownCaptureSession(session);
+      const resampled = resampleTo16Khz(merged, session.sampleRate);
+      if (resampled.length === 0) {
+        addTranscript("No audio was captured. Try again and keep the mic active for a moment.", "system");
+        setStatus("ready");
+        await refreshBackendStatus();
+        return;
+      }
+
+      const transcriptionRaw = await voiceTranscribe(encodePcm16Base64(resampled));
+      const transcription = JSON.parse(transcriptionRaw) as {
+        text?: string;
+        engine?: string;
+        error?: boolean;
+      };
+
+      const text = transcription.text?.trim() ?? "";
+      if (!text) {
+        addTranscript("The backend returned an empty transcription.", "system");
+        setStatus("ready");
+        await refreshBackendStatus();
+        return;
+      }
+
+      if (transcription.error) {
+        addTranscript(text, "system");
+        setStatus("ready");
+        await refreshBackendStatus();
+        return;
+      }
+
+      addTranscript(text, "user");
+
+      const response = await sendChat(text);
+      addTranscript(response.text, "agent");
+      setStatus("ready");
+      await refreshBackendStatus();
+    } catch (error) {
+      setStatus("error");
+      addTranscript(`Transcription failed: ${String(error)}`, "system");
+    }
+  }, [addTranscript, refreshBackendStatus]);
+
+  const handleToggle = useCallback(() => {
+    if (status === "listening") {
+      void stopCaptureAndTranscribe();
+      return;
+    }
+    void startCapture();
+  }, [startCapture, status, stopCaptureAndTranscribe]);
 
   const handleLoadWhisper = useCallback(() => {
     setModelLoading(true);
     addTranscript("Loading Whisper model...", "system");
     const modelPath = "~/.nexus/models/whisper-base";
-    tauriInvoke<string>("voice_load_whisper_model", { modelPath })
+    voiceLoadWhisperModel(modelPath)
       .then((raw) => {
         const data = JSON.parse(raw);
         setEngineStatus({
@@ -404,8 +579,11 @@ export default function VoiceAssistant() {
       .catch((err) => {
         addTranscript(`Failed to load Whisper model: ${err}`, "system");
       })
-      .finally(() => setModelLoading(false));
-  }, [addTranscript]);
+      .finally(async () => {
+        setModelLoading(false);
+        await refreshBackendStatus();
+      });
+  }, [addTranscript, refreshBackendStatus]);
 
   const handleClear = useCallback(() => {
     setTranscripts([
@@ -474,7 +652,7 @@ export default function VoiceAssistant() {
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           <span style={{ fontSize: "0.8rem", color: "var(--text-secondary, #94a3b8)" }}>
             <span style={S.indicator(serverRunning)} />
-            {serverRunning ? "Server Running" : "Server Stopped"}
+            {serverRunning ? "Capture Active" : "Capture Idle"}
           </span>
           <button
             onClick={handleClear}
@@ -516,8 +694,7 @@ export default function VoiceAssistant() {
             </strong>
           </div>
 
-          {/* Python availability notice */}
-          {backendChecked && !pythonAvailable && (
+          {!desktopRuntimeAvailable && (
             <div style={{
               padding: "0.75rem 0.9rem",
               borderRadius: 8,
@@ -530,8 +707,40 @@ export default function VoiceAssistant() {
               boxSizing: "border-box" as const,
             }}>
               <div style={{ marginBottom: "0.45rem" }}>
-                Voice features require Python dependencies. Run this command in your terminal:
+                Voice capture is only available inside the desktop runtime. Open this page from the Tauri app to use `voice_start_listening`, `voice_transcribe`, and `send_chat`.
               </div>
+            </div>
+          )}
+
+          {desktopRuntimeAvailable && backendChecked && !engineStatus.whisperLoaded && (
+            <div style={{
+              padding: "0.75rem 0.9rem",
+              borderRadius: 8,
+              background: "rgba(59,130,246,0.08)",
+              border: "1px solid rgba(59,130,246,0.28)",
+              fontSize: "0.74rem",
+              color: "#93c5fd",
+              lineHeight: 1.5,
+              width: "100%",
+              boxSizing: "border-box" as const,
+            }}>
+              Load a Whisper model to enable real transcription. Once the backend reports `whisper_loaded=true`, this page records microphone audio, calls `voice_transcribe`, and sends the transcript through the chat backend.
+            </div>
+          )}
+
+          {desktopRuntimeAvailable && backendChecked && !pythonAvailable && (
+            <div style={{
+              padding: "0.75rem 0.9rem",
+              borderRadius: 8,
+              background: "rgba(245,158,11,0.08)",
+              border: "1px solid rgba(245,158,11,0.24)",
+              fontSize: "0.74rem",
+              color: "#fbbf24",
+              lineHeight: 1.5,
+              width: "100%",
+              boxSizing: "border-box" as const,
+            }}>
+              Optional Python listener dependencies are not installed. If you want the background listener process available too, run:
               <div
                 style={{
                   display: "flex",
@@ -539,6 +748,7 @@ export default function VoiceAssistant() {
                   gap: "0.5rem",
                   justifyContent: "space-between",
                   flexWrap: "wrap" as const,
+                  marginTop: "0.45rem",
                 }}
               >
                 <code style={{ color: "var(--text-primary, #e2e8f0)" }}>{pythonCommand}</code>
@@ -564,24 +774,6 @@ export default function VoiceAssistant() {
           <button onClick={handleToggle} style={S.toggleBtn(status === "listening")}>
             {status === "listening" ? "Stop Listening" : "Start Listening"}
           </button>
-
-          {status === "listening" && (
-            <button
-              onClick={handleSimulateInput}
-              style={{
-                padding: "0.5rem 1.2rem",
-                borderRadius: 999,
-                border: "1px solid rgba(245,158,11,0.3)",
-                background: "rgba(245,158,11,0.06)",
-                color: "#fbbf24",
-                cursor: "pointer",
-                fontFamily: "var(--font-mono, monospace)",
-                fontSize: "0.75rem",
-              }}
-            >
-              Simulate (Demo)
-            </button>
-          )}
         </div>
 
         {/* Right: Transcripts + settings */}
@@ -669,8 +861,8 @@ export default function VoiceAssistant() {
                   {engineStatus.engine === "candle-whisper"
                     ? "Candle Whisper"
                     : engineStatus.engine === "python-server"
-                      ? "Python Server"
-                      : "Stub (install Whisper model for real transcription)"}
+                      ? "Python Listener"
+                      : "Backend idle - load Whisper for transcription"}
                 </span>
               </div>
             </div>

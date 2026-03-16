@@ -15,6 +15,7 @@ pub mod groq;
 pub mod local_slm;
 pub mod mistral;
 pub mod mock;
+pub mod nvidia;
 pub mod ollama;
 pub mod openai;
 pub mod openai_compatible;
@@ -32,6 +33,7 @@ pub use groq::GroqProvider;
 pub use local_slm::LocalSlmProvider;
 pub use mistral::MistralProvider;
 pub use mock::MockProvider;
+pub use nvidia::NvidiaProvider;
 pub use ollama::OllamaProvider;
 pub use openai::OpenAiProvider;
 pub use openrouter::OpenRouterProvider;
@@ -239,8 +241,8 @@ pub(crate) fn curl_post_json_with_timeout(
 mod tests {
     use super::{
         require_real_api_with, ClaudeProvider, CohereProvider, DeepSeekProvider, FireworksProvider,
-        GeminiProvider, GroqProvider, LlmProvider, MistralProvider, OllamaProvider, OpenAiProvider,
-        OpenRouterProvider, PerplexityProvider, TogetherProvider,
+        GeminiProvider, GroqProvider, LlmProvider, MistralProvider, NvidiaProvider, OllamaProvider,
+        OpenAiProvider, OpenRouterProvider, PerplexityProvider, TogetherProvider,
     };
     use serde_json::json;
 
@@ -585,5 +587,56 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("does not support embeddings"), "got: {err}");
+    }
+
+    #[test]
+    fn test_nvidia_request_format() {
+        let provider = NvidiaProvider::new(Some("nvapi-test-key".to_string()));
+        let request = provider.build_request("Hello NIM", 64, "meta/llama-3.3-70b-instruct");
+
+        assert_eq!(
+            request.endpoint,
+            "https://integrate.api.nvidia.com/v1/chat/completions"
+        );
+        assert_eq!(
+            request.headers.get("authorization").map(String::as_str),
+            Some("Bearer nvapi-test-key")
+        );
+        assert_eq!(
+            request.body,
+            json!({
+                "model": "meta/llama-3.3-70b-instruct",
+                "messages": [{"role": "user", "content": "Hello NIM"}],
+                "max_tokens": 64
+            })
+        );
+    }
+
+    #[test]
+    fn test_nvidia_provider_traits() {
+        let provider = NvidiaProvider::new(Some("key".to_string()));
+        assert_eq!(provider.name(), "nvidia");
+        assert!(provider.cost_per_token() > 0.0);
+        assert!(provider.requires_real_api_opt_in());
+        assert_eq!(provider.endpoint_url(), "https://integrate.api.nvidia.com");
+    }
+
+    #[test]
+    fn test_nvidia_model_list_not_empty() {
+        assert_eq!(super::nvidia::NVIDIA_MODELS.len(), 25);
+    }
+
+    #[test]
+    fn test_nvidia_default_model_in_list() {
+        let default = "meta/llama-3.3-70b-instruct";
+        assert!(super::nvidia::NVIDIA_MODELS
+            .iter()
+            .any(|(id, _)| *id == default));
+    }
+
+    #[test]
+    fn test_nvidia_vision_model_list() {
+        assert_eq!(super::nvidia::NVIDIA_VISION_MODELS.len(), 4);
+        assert!(super::nvidia::NVIDIA_VISION_MODELS.contains(&"meta/llama-3.2-90b-vision-instruct"));
     }
 }

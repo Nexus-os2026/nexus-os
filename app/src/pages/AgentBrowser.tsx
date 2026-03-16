@@ -99,17 +99,15 @@ export function AgentBrowser(): JSX.Element {
           addActivity("info", `Loaded: ${result.title || result.url}`);
         } catch (err) {
           const errorMsg = String(err);
-          console.error("[AgentBrowser] Navigation error:", err);
           addActivity("blocked", `Error: ${errorMsg}`);
           setBlocked(errorMsg);
           setLoading(false);
           return;
         }
       } else {
-        // Demo mode — simulate governance check (no desktop runtime)
-        addActivity("deciding", "[Demo Mode] Checking egress governance policy...", "Firewall");
+        addActivity("deciding", "Desktop runtime unavailable - recording local navigation only.", "Firewall");
         await new Promise((r) => setTimeout(r, 300));
-        addActivity("info", `[Demo Mode] Page loaded: ${target}`);
+        addActivity("info", `Loaded local preview: ${target}`);
       }
 
       setUrl(target);
@@ -346,19 +344,19 @@ export function AgentBrowser(): JSX.Element {
                 <>
                   <div className="governance-info-item">
                     <span className="governance-info-dot governance-info-dot--gray" />
-                    Egress policy: Unknown (demo)
+                    Desktop runtime unavailable
                   </div>
                   <div className="governance-info-item">
                     <span className="governance-info-dot governance-info-dot--gray" />
-                    PII firewall: Unknown (demo)
+                    Live policy state unavailable
                   </div>
                   <div className="governance-info-item">
                     <span className="governance-info-dot governance-info-dot--gray" />
-                    Audit chain: Unknown (demo)
+                    Audit counters reflect this local session
                   </div>
                   <div className="governance-info-item">
                     <span className="governance-info-dot governance-info-dot--gray" />
-                    Fuel metering: Unknown (demo)
+                    Fuel estimate based on tracked actions
                   </div>
                 </>
               )}

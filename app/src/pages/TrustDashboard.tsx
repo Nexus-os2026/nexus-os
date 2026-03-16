@@ -94,7 +94,7 @@ export default function TrustDashboard(): JSX.Element {
                 <h3 className="td-card-name">{agent.name}</h3>
                 <div className="td-indicators">
                   {canPromote && <span className="td-promo-badge">PROMO</span>}
-                  {shouldDemote && <span className="td-demo-badge">DEMO</span>}
+                  {shouldDemote && <span className="td-demo-badge">DEMOTE</span>}
                   <span className={`td-status-badge td-status-${agent.status.toLowerCase()}`}>
                     {agent.status}
                   </span>

@@ -64,6 +64,98 @@ impl OllamaProvider {
         &self.base_url
     }
 
+    pub fn available_vision_models(&self) -> Result<Vec<OllamaModel>, AgentError> {
+        Ok(Self::filter_vision_models(self.list_models()?))
+    }
+
+    fn filter_vision_models(models: Vec<OllamaModel>) -> Vec<OllamaModel> {
+        models
+            .into_iter()
+            .filter(|model| {
+                let lowered = model.name.to_ascii_lowercase();
+                lowered.contains("llava")
+                    || lowered.contains("vision")
+                    || lowered.contains("moondream")
+                    || lowered.contains("bakllava")
+            })
+            .collect()
+    }
+
+    fn resolve_vision_model(&self, requested: &str) -> Result<String, AgentError> {
+        if !requested.trim().is_empty() {
+            return Ok(requested.to_string());
+        }
+
+        Self::pick_vision_model_name(&self.available_vision_models()?)
+    }
+
+    fn pick_vision_model_name(models: &[OllamaModel]) -> Result<String, AgentError> {
+        models
+            .iter()
+            .map(|model| model.name.clone())
+            .next()
+            .ok_or_else(|| {
+                AgentError::SupervisorError(
+                    "No vision model available. Install one with: ollama pull llava".to_string(),
+                )
+            })
+    }
+
+    pub fn build_image_request_body(&self, prompt: &str, image_base64: &str, model: &str) -> Value {
+        json!({
+            "model": model,
+            "stream": false,
+            "messages": [{
+                "role": "user",
+                "content": prompt,
+                "images": [image_base64],
+            }]
+        })
+    }
+
+    pub fn query_with_image(
+        &self,
+        prompt: &str,
+        image_base64: &str,
+        model: &str,
+    ) -> Result<String, AgentError> {
+        let tags_status = curl_get_status(self.tags_endpoint().as_str());
+        match tags_status {
+            Ok(code) if (200..300).contains(&code) => {}
+            _ => {
+                return Err(AgentError::SupervisorError(format!(
+                    "Ollama not running at {}",
+                    self.base_url
+                )));
+            }
+        }
+
+        let model_name = self.resolve_vision_model(model)?;
+        let endpoint = format!("{}/api/chat", self.base_url.trim_end_matches('/'));
+        let mut headers = BTreeMap::new();
+        headers.insert("content-type".to_string(), "application/json".to_string());
+        let body = self.build_image_request_body(prompt, image_base64, &model_name);
+        let (status, payload) =
+            curl_post_json_with_timeout(&endpoint, &headers, &body, self.request_timeout_secs)?;
+        if !(200..300).contains(&status) {
+            return Err(AgentError::SupervisorError(format!(
+                "ollama vision request failed with status {status}"
+            )));
+        }
+
+        payload
+            .pointer("/message/content")
+            .and_then(Value::as_str)
+            .or_else(|| payload.get("response").and_then(Value::as_str))
+            .map(str::to_string)
+            .filter(|text| !text.trim().is_empty())
+            .ok_or_else(|| {
+                AgentError::SupervisorError(
+                    "ollama vision response missing message content".to_string(),
+                )
+            })
+    }
+
     pub fn build_request(&self, prompt: &str, max_tokens: u32, model: &str) -> ProviderRequest {
         let mut headers = BTreeMap::new();
         headers.insert("content-type".to_string(), "application/json".to_string());
@@ -413,5 +505,29 @@ impl LlmProvider for OllamaProvider {
             model_name: model.to_string(),
             token_count: total_tokens,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vision_request_uses_ollama_images_format() {
+        let provider = OllamaProvider::new("http://localhost:11434");
+        let body =
+            provider.build_image_request_body("What do you see?", "ZmFrZS1pbWFnZQ==", "llava");
+        assert_eq!(body["model"], "llava");
+        assert_eq!(body["messages"][0]["role"], "user");
+        assert_eq!(body["messages"][0]["content"], "What do you see?");
+        assert_eq!(body["messages"][0]["images"][0], "ZmFrZS1pbWFnZQ==");
+    }
+
+    #[test]
+    fn vision_model_error_when_none_available() {
+        let err = OllamaProvider::pick_vision_model_name(&[]).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("No vision model available. Install one with: ollama pull llava"));
     }
 }

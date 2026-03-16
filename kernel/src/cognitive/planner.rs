@@ -3,6 +3,7 @@
 use super::types::{AgentGoal, AgentStep, PlannedAction, PlanningContext};
 use crate::capabilities::has_capability;
 use crate::errors::AgentError;
+use regex::Regex;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -32,6 +33,7 @@ impl CognitivePlanner {
         self.query_plan_with_retry(
             &prompt,
             &self.build_invalid_json_retry_prompt(goal, context),
+            &goal.description,
             &goal.id,
             &context.agent_capabilities,
         )
@@ -50,6 +52,7 @@ impl CognitivePlanner {
         self.query_plan_with_retry(
             &prompt,
             &self.build_invalid_json_retry_prompt(goal, context),
+            &goal.description,
             &goal.id,
             &context.agent_capabilities,
         )
@@ -110,6 +113,18 @@ EXACT JSON SCHEMA EXAMPLE:
 ]
 
 Valid action types for this agent: {action_types}
+For each action type, use ONLY these fields:
+- LlmQuery: type, prompt, context
+- FileRead: type, path
+- FileWrite: type, path, content
+- ShellCommand: type, command, args
+- WebSearch: type, query
+- WebFetch: type, url
+- ApiCall: type, method, url, body
+- MemoryStore: type, key, value, memory_type
+- MemoryRecall: type, query, memory_type
+- HitlRequest: type, question, options
+- Noop: type
 Do NOT include duplicate fields.
 Do NOT include any text outside the JSON array."#,
             agent_name = agent_name,
@@ -194,20 +209,18 @@ Do NOT include any text outside the JSON array."#,
         context: &PlanningContext,
     ) -> String {
         format!(
-            r#"The previous response had invalid JSON.
+            r#"Your previous response had invalid JSON. Retry with ONLY a valid JSON array.
+Do not include markdown fences.
+Do not include commentary before or after the array.
+Your response must start with `[` and end with `]`.
+Do not repeat keys or include duplicate fields anywhere in the JSON.
 
 Goal: {goal}
 Agent name: {agent_name}
 Agent description: {agent_description}
 Allowed action types: {action_types}
-
-Respond with ONLY a valid JSON array of steps.
 Each item must be:
-{{"action": {{"type": "..." }}, "description": "..."}}
-
-Do not use markdown fences.
-Do not include duplicate fields.
-Do not include any text before or after the JSON array."#,
+{{"action": {{"type": "..." }}, "description": "..."}}"#,
             goal = goal.description,
             agent_name = context.agent_name.as_deref().unwrap_or("unknown-agent"),
             agent_description = context
@@ -308,6 +321,7 @@ Do not include any text before or after the JSON array."#,
         &self,
         primary_prompt: &str,
         retry_prompt: &str,
+        goal_description: &str,
         goal_id: &str,
         capabilities: &[String],
     ) -> Result<Vec<AgentStep>, AgentError> {
@@ -321,8 +335,9 @@ Do not include any text before or after the JSON array."#,
                 let retry_response = self.llm.plan_query(retry_prompt)?;
                 match self.parse_plan_response(&retry_response, goal_id, capabilities) {
                     Ok(steps) => Ok(steps),
-                    Err(second_error) => Ok(vec![self.noop_step(
+                    Err(second_error) => Ok(vec![self.llm_query_fallback_step(
                         goal_id,
+                        goal_description,
                         format!(
                             "Planner returned invalid JSON twice. First error: {first_error}. Second error: {second_error}"
                         ),
@@ -344,8 +359,10 @@ Do not include any text before or after the JSON array."#,
             ))
         })?;
 
+        let repaired = repair_common_json_issues(&json_str);
         let raw_steps = parse_raw_steps(&json_str)
             .or_else(|_| parse_raw_steps(&remove_trailing_commas(&json_str)))
+            .or_else(|_| parse_raw_steps(&repaired))
             .map_err(|e| AgentError::SupervisorError(format!("failed to parse plan JSON: {e}")))?;
 
         let mut steps = Vec::new();
@@ -367,9 +384,25 @@ Do not include any text before or after the JSON array."#,
         Ok(steps)
     }
 
-    fn noop_step(&self, goal_id: &str, message: String) -> AgentStep {
-        let mut step = AgentStep::new(goal_id.to_string(), PlannedAction::Noop);
-        step.result = Some(message);
+    fn llm_query_fallback_step(
+        &self,
+        goal_id: &str,
+        goal_description: &str,
+        message: String,
+    ) -> AgentStep {
+        let mut step = AgentStep::new(
+            goal_id.to_string(),
+            PlannedAction::LlmQuery {
+                prompt: format!(
+                    "Answer the user's request directly and succinctly: {goal_description}"
+                ),
+                context: vec![message],
+            },
+        );
+        step.result = Some(
+            "Planner degraded to a direct LLM response because structured JSON planning failed."
+                .to_string(),
+        );
         step
     }
 }
@@ -401,48 +434,70 @@ fn parse_raw_steps(json_str: &str) -> Result<Vec<RawStep>, String> {
 
 /// Extract a JSON array from text that may contain markdown fences.
 fn extract_json_array(text: &str) -> Option<String> {
-    let trimmed = text.trim();
-
-    if let Some(start) = trimmed.find('[') {
-        let after = &trimmed[start..];
-        if let Some(end) = find_matching_bracket(after) {
-            return Some(after[..=end].trim().to_string());
+    let sanitized = sanitize_llm_response(text);
+    if let (Some(start), Some(end)) = (sanitized.find('['), sanitized.rfind(']')) {
+        if start < end {
+            return Some(sanitized[start..=end].trim().to_string());
         }
     }
-
     None
 }
 
-fn find_matching_bracket(s: &str) -> Option<usize> {
-    let mut depth = 0i32;
-    let mut in_string = false;
-    let mut escape = false;
-    for (i, ch) in s.char_indices() {
-        if escape {
-            escape = false;
-            continue;
+fn sanitize_llm_response(input: &str) -> String {
+    strip_markdown_fences(input).trim().to_string()
+}
+
+fn strip_markdown_fences(input: &str) -> String {
+    let fence_line_re =
+        Regex::new(r"(?m)^\s*```[a-zA-Z0-9_-]*\s*$").expect("valid markdown fence regex");
+    fence_line_re.replace_all(input, "").to_string()
+}
+
+fn repair_common_json_issues(input: &str) -> String {
+    let no_trailing_commas = remove_trailing_commas(input);
+    remove_duplicate_json_fields(&no_trailing_commas)
+}
+
+fn remove_duplicate_json_fields(input: &str) -> String {
+    let mut current = input.to_string();
+    let candidate_keys = [
+        "args",
+        "context",
+        "options",
+        "body",
+        "path",
+        "content",
+        "command",
+        "method",
+        "url",
+        "query",
+        "key",
+        "value",
+        "memory_type",
+        "prompt",
+        "description",
+        "type",
+    ];
+    let value_pattern = r#"\[[^\[\]]*\]|"(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?|true|false|null"#;
+
+    loop {
+        let mut updated = current.clone();
+        for key in candidate_keys {
+            let pattern = format!(
+                r#",\s*"{key}"\s*:\s*(?:{value_pattern})\s*,\s*"{key}"\s*:\s*(?P<value>{value_pattern})"#
+            );
+            let duplicate_field_re =
+                Regex::new(&pattern).expect("valid duplicate-field cleanup regex");
+            let replacement = format!(r#","{key}": $value"#);
+            updated = duplicate_field_re
+                .replace_all(&updated, replacement.as_str())
+                .to_string();
         }
-        if ch == '\\' && in_string {
-            escape = true;
-            continue;
+        if updated == current {
+            return updated;
         }
-        if ch == '"' {
-            in_string = !in_string;
-            continue;
-        }
-        if in_string {
-            continue;
-        }
-        if ch == '[' {
-            depth += 1;
-        } else if ch == ']' {
-            depth -= 1;
-            if depth == 0 {
-                return Some(i);
-            }
-        }
+        current = updated;
     }
-    None
 }
 
 fn remove_trailing_commas(input: &str) -> String {
@@ -660,10 +715,14 @@ Done."#;
         assert!(extract_json_array("```json\n[1]\n```").is_some());
         assert!(extract_json_array("```\n[1]\n```").is_some());
         assert!(extract_json_array("before text\n[1]\nafter text").is_some());
+        assert_eq!(
+            extract_json_array("preface\n```json\n[1, 2]\n```\ntrailer").as_deref(),
+            Some("[1, 2]")
+        );
     }
 
     #[test]
-    fn test_invalid_json_returns_error() {
+    fn test_invalid_json_returns_llm_query_fallback() {
         let llm = MockLlm {
             response: "not json at all".to_string(),
         };
@@ -672,7 +731,7 @@ Done."#;
         let ctx = make_context(vec![]);
         let steps = planner.plan_goal(&goal, &ctx).unwrap();
         assert_eq!(steps.len(), 1);
-        assert_eq!(steps[0].action.action_type(), "noop");
+        assert_eq!(steps[0].action.action_type(), "llm_query");
     }
 
     #[test]
@@ -736,7 +795,7 @@ Done."#;
     }
 
     #[test]
-    fn test_double_invalid_json_returns_noop_step() {
+    fn test_double_invalid_json_returns_llm_query_step() {
         let llm = SequenceMockLlm {
             responses: Mutex::new(vec![
                 "not valid json".to_string(),
@@ -749,11 +808,22 @@ Done."#;
 
         let steps = planner.plan_goal(&goal, &ctx).unwrap();
         assert_eq!(steps.len(), 1);
-        assert_eq!(steps[0].action.action_type(), "noop");
+        assert_eq!(steps[0].action.action_type(), "llm_query");
         assert!(steps[0]
             .result
             .as_deref()
             .unwrap_or_default()
-            .contains("Planner returned invalid JSON twice"));
+            .contains("Planner degraded"));
+    }
+
+    #[test]
+    fn test_strip_markdown_fences_removes_embedded_fence_lines() {
+        let stripped = strip_markdown_fences("before\n```json\n[{\"a\":1}]\n```\nafter");
+        let normalized = stripped
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_eq!(normalized, "before\n[{\"a\":1}]\nafter");
     }
 }

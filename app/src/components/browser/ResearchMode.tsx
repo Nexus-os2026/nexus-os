@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { ActivityStream } from "./ActivityStream";
 import {
   hasDesktopRuntime,
@@ -163,7 +163,6 @@ export function ResearchMode({
   const [numAgents, setNumAgents] = useState(2);
   const [session, setSession] = useState<ResearchSessionState | null>(null);
   const [running, setRunning] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Track sub-agent state locally for real-time updates
   const [agentStates, setAgentStates] = useState<SubAgentState[]>([]);
@@ -256,126 +255,7 @@ export function ResearchMode({
 
   return (
     <div className="research-mode">
-      {/* Supervisor panel */}
-      <div className="research-supervisor-panel">
-        <div className="research-supervisor-header">
-          <span className="research-supervisor-icon">◈</span>
-          <span className="research-supervisor-title">Supervisor</span>
-          {session && (
-            <span className={`research-status-badge research-status-${session.status}`}>
-              {session.status}
-            </span>
-          )}
-        </div>
-
-        {!session ? (
-          <div className="research-start-form">
-            <input
-              type="text"
-              className="research-topic-input"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void handleStart();
-              }}
-              placeholder="Enter research topic..."
-              disabled={running}
-            />
-            <div className="research-agent-count">
-              <label htmlFor="num-agents">Agents:</label>
-              <select
-                id="num-agents"
-                value={numAgents}
-                onChange={(e) => setNumAgents(Number(e.target.value))}
-                disabled={running}
-              >
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="research-start-btn"
-                onClick={() => void handleStart()}
-                disabled={running || !topic.trim()}
-              >
-                {running ? "Researching..." : "Start Research"}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="research-supervisor-status">
-            <span className="research-supervisor-msg">
-              {session.supervisor_message}
-            </span>
-            {session.status === "complete" && (
-              <button
-                type="button"
-                className="research-new-btn"
-                onClick={() => {
-                  setSession(null);
-                  setAgentStates([]);
-                  setTopic("");
-                }}
-              >
-                New Research
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Sub-agent status cards */}
-      {agentStates.length > 0 && (
-        <div className="research-agents-row">
-          {agentStates.map((agent, i) => (
-            <div
-              key={agent.agent_id}
-              className={`research-agent-card ${
-                activeAgent?.agent_id === agent.agent_id ? "active" : ""
-              }`}
-              style={{
-                borderColor: AGENT_COLORS[i % AGENT_COLORS.length],
-              }}
-            >
-              <div className="research-agent-card-header">
-                <span
-                  className="research-agent-name"
-                  style={{ color: AGENT_COLORS[i % AGENT_COLORS.length] }}
-                >
-                  {agent.agent_name}
-                </span>
-                <span
-                  className={`research-agent-status research-agent-status-${agent.status}`}
-                >
-                  {STATUS_LABELS[agent.status] ?? agent.status}
-                </span>
-              </div>
-              <div className="research-agent-query">
-                {agent.query}
-              </div>
-              {agent.current_url && (
-                <div className="research-agent-url">
-                  {agent.current_url}
-                </div>
-              )}
-              <div className="research-agent-stats">
-                <span>Pages: {agent.pages_visited}</span>
-                <span>Findings: {agent.findings.length}</span>
-                <span>Fuel: {agent.fuel_used}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Split: Activity Stream + Browser View */}
       <div className="research-split">
-        <div className="research-activity-panel">
-          <ActivityStream messages={activities} />
-        </div>
         <div className="research-browser-panel">
           {activeAgent?.current_url || iframeSrc ? (
             <>
@@ -399,31 +279,163 @@ export function ResearchMode({
                   {activeAgent?.current_url ?? iframeSrc}
                 </span>
               </div>
-              <iframe
-                ref={iframeRef}
-                className="browser-iframe"
-                src={activeAgent?.current_url ?? iframeSrc ?? undefined}
-                title="Research Browser"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-              />
+              <div className="browser-iframe-shell">
+                <iframe
+                  className="browser-iframe"
+                  src={activeAgent?.current_url ?? iframeSrc ?? undefined}
+                  title="Research Browser"
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                />
+              </div>
             </>
-          ) : session?.summary ? (
-            <div className="research-summary">
-              <div className="research-summary-header">Research Summary</div>
-              <pre className="research-summary-content">
-                {session.summary}
-              </pre>
-            </div>
           ) : (
-            <div className="browser-placeholder">
-              <span className="browser-placeholder-icon">⌁</span>
-              <span className="browser-placeholder-text">Research Mode</span>
-              <span className="browser-placeholder-hint">
-                Enter a topic above to start multi-agent research
-              </span>
+            <div className="browser-iframe-shell browser-iframe-shell--placeholder">
+              <div className="browser-placeholder">
+                <span className="browser-placeholder-icon">⌁</span>
+                <span className="browser-placeholder-text">Research Mode</span>
+                <span className="browser-placeholder-hint">
+                  Enter a topic in the right panel to start multi-agent research
+                </span>
+              </div>
             </div>
           )}
         </div>
+
+        <aside className="research-sidebar">
+          <div className="research-supervisor-panel">
+            <div className="research-supervisor-header">
+              <span className="research-supervisor-icon">◈</span>
+              <span className="research-supervisor-title">Supervisor</span>
+              {session && (
+                <span className={`research-status-badge research-status-${session.status}`}>
+                  {session.status}
+                </span>
+              )}
+            </div>
+
+            {!session ? (
+              <div className="research-start-form">
+                <input
+                  type="text"
+                  className="research-topic-input"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void handleStart();
+                  }}
+                  placeholder="Enter research topic..."
+                  disabled={running}
+                />
+                <div className="research-agent-count">
+                  <label htmlFor="num-agents">Agents:</label>
+                  <select
+                    id="num-agents"
+                    value={numAgents}
+                    onChange={(e) => setNumAgents(Number(e.target.value))}
+                    disabled={running}
+                  >
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="research-start-btn"
+                    onClick={() => void handleStart()}
+                    disabled={running || !topic.trim()}
+                  >
+                    {running ? "Researching..." : "Start Research"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="research-supervisor-status">
+                <span className="research-supervisor-msg">
+                  {session.supervisor_message}
+                </span>
+                {session.status === "complete" && (
+                  <button
+                    type="button"
+                    className="research-new-btn"
+                    onClick={() => {
+                      setSession(null);
+                      setAgentStates([]);
+                      setTopic("");
+                    }}
+                  >
+                    New Research
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {agentStates.length > 0 && (
+            <div className="research-info-panel">
+              <div className="research-section-title">Sub-Agents</div>
+              <div className="research-agents-row">
+                {agentStates.map((agent, i) => (
+                  <div
+                    key={agent.agent_id}
+                    className={`research-agent-card ${
+                      activeAgent?.agent_id === agent.agent_id ? "active" : ""
+                    }`}
+                    style={{
+                      borderColor: AGENT_COLORS[i % AGENT_COLORS.length],
+                    }}
+                  >
+                    <div className="research-agent-card-header">
+                      <span
+                        className="research-agent-name"
+                        style={{ color: AGENT_COLORS[i % AGENT_COLORS.length] }}
+                      >
+                        {agent.agent_name}
+                      </span>
+                      <span
+                        className={`research-agent-status research-agent-status-${agent.status}`}
+                      >
+                        {STATUS_LABELS[agent.status] ?? agent.status}
+                      </span>
+                    </div>
+                    <div className="research-agent-query">
+                      {agent.query}
+                    </div>
+                    {agent.current_url && (
+                      <div className="research-agent-url">
+                        {agent.current_url}
+                      </div>
+                    )}
+                    <div className="research-agent-stats">
+                      <span>Pages: {agent.pages_visited}</span>
+                      <span>Findings: {agent.findings.length}</span>
+                      <span>Fuel: {agent.fuel_used}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="research-results-panel">
+            <div className="research-section-title">Research Activity</div>
+            <div className="research-activity-panel">
+              <ActivityStream messages={activities} />
+            </div>
+          </div>
+
+          {session?.summary && (
+            <div className="research-summary-panel">
+              <div className="research-summary">
+                <div className="research-summary-header">Research Summary</div>
+                <pre className="research-summary-content">
+                  {session.summary}
+                </pre>
+              </div>
+            </div>
+          )}
+        </aside>
       </div>
     </div>
   );

@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus OS Features | Complete Platform Breakdown</title>
+  <meta name="description" content="Explore the full Nexus OS feature set: computer control, cognitive loops, governed actuators, persistent memory, self-evolution, compliance, marketplace, and desktop applications.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="features">
+  <canvas id="particles-canvas"></canvas>
+
+  <nav class="navbar">
+    <div class="container">
+      <a class="nav-brand" href="index.html" aria-label="Nexus OS Home">
+        <span class="brand-mark">N</span>
+        <span class="brand-copy">
+          <strong>Nexus OS</strong>
+          <span>Governed Autonomy</span>
+        </span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="agents.html">Agents</a></li>
+        <li><a class="active" href="features.html">Features</a></li>
+        <li><a href="security.html">Security</a></li>
+        <li><a href="compare.html">Compare</a></li>
+        <li><a href="docs.html">Docs</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a class="gitlab-link" href="https://gitlab.com/nexaiceo/nexus-os" target="_blank" rel="noreferrer">GitLab</a></li>
+      </ul>
+      <button class="nav-toggle" type="button" aria-label="Toggle navigation">
+        <span class="nav-toggle-lines"></span>
+      </button>
+    </div>
+  </nav>
+
+  <main>
+    <section class="page-hero">
+      <div class="container">
+        <div class="reveal">
+          <div class="eyebrow"><span class="eyebrow-dot"></span>Platform breakdown</div>
+          <h1>Everything inside <span class="gradient-text">Nexus OS</span></h1>
+          <p>The platform is opinionated from top to bottom: governance at the kernel, cognition in the loop, and a desktop surface that makes autonomy observable instead of magical.</p>
+        </div>
+        <div class="page-stats reveal">
+          <div class="page-stat"><strong>14</strong><span>Major capability pillars</span></div>
+          <div class="page-stat"><strong>11</strong><span>SQLite persistence tables</span></div>
+          <div class="page-stat"><strong>40+</strong><span>Desktop app pages</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section style="padding-top:0;">
+      <div class="container">
+        <div class="section-shell reveal">
+          <div class="feature-slab">
+            <div class="feature-copy">
+              <span class="feature-index">01</span>
+              <h2>Computer Control</h2>
+              <p>Nexus Operator brings the agent ecosystem onto the desktop. It sees the screen, reasons about what it sees, acts through the mouse and keyboard, then verifies the result before moving on.</p>
+              <div class="feature-points">
+                <div class="bullet-row"><i></i><div><strong>Screen capture and analysis</strong><p>Visual context is captured locally and interpreted by the vision loop.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Mouse and keyboard control</strong><p>Clicking, typing, scrolling, and navigation all run through governed actuators.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Vision-LLM loop</strong><p>Capture → analyze → act → verify drives each step toward the intended UI state.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Rate limiting and password refusal</strong><p>100 actions per minute max, plus automatic refusal to interact with password fields without explicit approval.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Kill switch and audit trail</strong><p>Emergency stop plus screenshot evidence for every action.</p></div></div>
+              </div>
+            </div>
+            <div class="feature-visual">
+              <div class="feature-visual-grid">
+                <div class="feature-mini"><strong>Vision</strong><p>Local multimodal inference over the current screen.</p></div>
+                <div class="feature-mini"><strong>Actuation</strong><p>Mouse and keyboard orchestration under policy.</p></div>
+                <div class="feature-mini"><strong>Safety</strong><p>Purchase approvals, kill gates, and audit snapshots.</p></div>
+                <div class="feature-mini"><strong>Speed</strong><p>100 actions/minute cap for stable bounded autonomy.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-shell reveal">
+          <div class="feature-slab reverse">
+            <div class="feature-copy">
+              <span class="feature-index">02</span>
+              <h2>Cognitive Loop</h2>
+              <p>Every agent runs the same six-phase cognitive cycle so behavior can be audited, improved, and compared over time.</p>
+              <div class="feature-points">
+                <div class="bullet-row"><i></i><div><strong>Perceive</strong><p>Observe goals, memory, environment state, and current constraints.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Reason + Plan</strong><p>Translate intent into a strategy with expected cost and risk.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Act + Reflect</strong><p>Execute through governed actuators, then compare intent vs outcome.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Learn</strong><p>Persist useful patterns back into memory for future cycles.</p></div></div>
+              </div>
+            </div>
+            <div class="feature-visual">
+              <div class="loop-diagram">
+                <div class="loop-row"><span class="loop-step">Perceive</span><span class="loop-step">Reason</span><span class="loop-step">Plan</span></div>
+                <div class="loop-row"><span class="loop-step">Act</span><span class="loop-step">Reflect</span><span class="loop-step">Learn</span></div>
+                <p>The loop is stable enough for automation and explicit enough for governance to reason about every phase.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-shell reveal">
+          <div class="feature-slab">
+            <div class="feature-copy">
+              <span class="feature-index">03</span>
+              <h2>Governed Actuators</h2>
+              <p>File, shell, web, API, Docker, browser, self-modify, and ecosystem-design channels all flow through one governance envelope.</p>
+              <div class="feature-points">
+                <div class="bullet-row"><i></i><div><strong>Capability-based access</strong><p>Agents can only use the actuators declared in their signed manifest.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Fuel metering</strong><p>Every action costs budget, which makes long-running autonomy observable and controllable.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Audit logging</strong><p>Each actuator call becomes part of the immutable chain.</p></div></div>
+              </div>
+            </div>
+            <div class="feature-visual">
+              <div class="feature-visual-grid">
+                <div class="feature-mini"><strong>File</strong><p>Read, write, create, organize.</p></div>
+                <div class="feature-mini"><strong>Shell</strong><p>Governed command execution.</p></div>
+                <div class="feature-mini"><strong>Web + API</strong><p>Search, fetch, and call external services.</p></div>
+                <div class="feature-mini"><strong>Browser + Docker</strong><p>Interactive surfaces and isolated workloads.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-shell reveal">
+          <div class="feature-slab reverse">
+            <div class="feature-copy">
+              <span class="feature-index">04</span>
+              <h2>Persistent Memory</h2>
+              <p>11 SQLite tables persist what happened, what worked, and what the system should remember next time.</p>
+              <div class="feature-points">
+                <div class="bullet-row"><i></i><div><strong>Episodic memory</strong><p>Stores events, contexts, and outcomes so agents can learn from specific runs.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Semantic memory</strong><p>Builds reusable knowledge over time instead of relearning the same truths.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Procedural memory</strong><p>Captures successful workflows, UI patterns, prompts, and strategy fragments.</p></div></div>
+              </div>
+            </div>
+            <div class="feature-visual">
+              <div class="feature-visual-grid">
+                <div class="feature-mini"><strong>11 tables</strong><p>Structured persistence for cognition and governance.</p></div>
+                <div class="feature-mini"><strong>Cross-agent reuse</strong><p>Insights can propagate through the ecosystem.</p></div>
+                <div class="feature-mini"><strong>Memory types</strong><p>Episodic, semantic, and procedural.</p></div>
+                <div class="feature-mini"><strong>SQLite base</strong><p>Portable, local-first, inspectable storage.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-shell reveal">
+          <div class="feature-slab">
+            <div class="feature-copy">
+              <span class="feature-index">05</span>
+              <h2>HITL Approval System</h2>
+              <p>Human-in-the-loop is not a modal dialog taped on top. It is a first-class operating principle with context, risk previews, and batch controls.</p>
+              <div class="feature-points">
+                <div class="bullet-row"><i></i><div><strong>Real-time notifications</strong><p>Approvals arrive with purpose, impact, and evidence.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Risk previews</strong><p>Humans see what the agent wants to do before they greenlight it.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Batch approvals</strong><p>Repeated low-risk actions can be approved in coherent groups.</p></div></div>
+              </div>
+            </div>
+            <div class="feature-visual">
+              <div class="feature-mini"><strong>Approval Center</strong><p>The desktop app presents queued decisions with risk labels, diff previews, and origin traces.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-shell reveal">
+          <div class="feature-slab reverse">
+            <div class="feature-copy">
+              <span class="feature-index">06</span>
+              <h2>Self-Evolution</h2>
+              <p>L4+ agents do not remain frozen. They score strategies, mutate prompts, compare results, and keep only what wins.</p>
+              <div class="feature-points">
+                <div class="bullet-row"><i></i><div><strong>Strategy scoring</strong><p>Every path gets measured for quality, speed, and fuel efficiency.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Prompt optimization</strong><p>Prompt variants compete, and only empirical gains survive.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Cross-agent learning</strong><p>Winning patterns can propagate from one agent family to another.</p></div></div>
+              </div>
+            </div>
+            <div class="feature-visual">
+              <div class="feature-visual-grid">
+                <div class="feature-mini"><strong>Tournament pressure</strong><p>Selection happens under comparable tasks.</p></div>
+                <div class="feature-mini"><strong>Mutation</strong><p>Governed changes, not random chaos.</p></div>
+                <div class="feature-mini"><strong>Archive</strong><p>Winners persist with lineage and evidence.</p></div>
+                <div class="feature-mini"><strong>Rollback</strong><p>Failed mutations never own the system.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-shell reveal">
+          <div class="feature-slab">
+            <div class="feature-copy">
+              <span class="feature-index">07</span>
+              <h2>Hivemind Orchestration</h2>
+              <p>Complex work gets decomposed into DAGs, distributed across agents, and reassembled in a shared blackboard model.</p>
+              <div class="feature-points">
+                <div class="bullet-row"><i></i><div><strong>DAG decomposition</strong><p>Dependency-aware task graphs expose what can run in parallel.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Parallel execution</strong><p>Independent branches move at once instead of serializing every thought.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Shared blackboard</strong><p>Agents coordinate through a common surface for context and findings.</p></div></div>
+              </div>
+            </div>
+            <div class="feature-visual">
+              <div class="feature-mini"><strong>Use case</strong><p>Research, coding, monitoring, and planning can all run in a single governed graph with role-specific agents.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-shell reveal">
+          <div class="feature-slab reverse">
+            <div class="feature-copy">
+              <span class="feature-index">08</span>
+              <h2>Messaging Bridge</h2>
+              <p>Nexus OS is reachable where people already live: Telegram, Discord, Slack, and WhatsApp.</p>
+              <div class="feature-points">
+                <div class="bullet-row"><i></i><div><strong>Unified command surface</strong><p>Talk to governed agents from multiple channels without fragmenting policy.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Bridge-aware approvals</strong><p>Risky actions still land in the right governed approval experience.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Status and alerts</strong><p>Agents can send results, warnings, and escalation notices back into the same channels.</p></div></div>
+              </div>
+            </div>
+            <div class="feature-visual">
+              <div class="feature-visual-grid">
+                <div class="feature-mini"><strong>Telegram</strong><p>Lightweight command and reporting loop.</p></div>
+                <div class="feature-mini"><strong>Discord</strong><p>Team workflows and collaborative visibility.</p></div>
+                <div class="feature-mini"><strong>Slack</strong><p>Operational alerts and approvals.</p></div>
+                <div class="feature-mini"><strong>WhatsApp</strong><p>Human reach on mobile-first workflows.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-shell reveal">
+          <div class="feature-slab">
+            <div class="feature-copy">
+              <span class="feature-index">09</span>
+              <h2>Cron Scheduler</h2>
+              <p>Agents can operate on schedules, not just chats. Monitoring, reporting, sweeps, and portfolio reviews all become automatic.</p>
+              <div class="feature-points">
+                <div class="bullet-row"><i></i><div><strong>Schedule-backed agents</strong><p>Run by hour, day, week, or custom cadence.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Predictable automation</strong><p>Governed jobs show up consistently and leave auditable runs behind.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Good defaults</strong><p>The shipped agents already encode strong recurring operational loops.</p></div></div>
+              </div>
+            </div>
+            <div class="feature-visual">
+              <div class="feature-mini"><strong>Examples</strong><p>Sentinel every 4 hours, Phantom hourly, Darwin weekly, Sovereign on Mondays, Warden every 3 hours.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-shell reveal">
+          <div class="feature-slab reverse">
+            <div class="feature-copy">
+              <span class="feature-index">10</span>
+              <h2>Time Machine</h2>
+              <p>System-wide undo turns autonomy from scary to usable. If something goes wrong, Nexus OS can roll back with intent.</p>
+              <div class="feature-points">
+                <div class="bullet-row"><i></i><div><strong>Rollback surface</strong><p>Undo agent actions from known points in time.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Recovery confidence</strong><p>Humans trust autonomous systems more when reversal is real.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Pairing with simulation</strong><p>Speculative execution plus rollback gives you a wide safety envelope.</p></div></div>
+              </div>
+            </div>
+            <div class="feature-visual">
+              <div class="feature-mini"><strong>State snapshots</strong><p>Snapshots and audit trails make recovery concrete instead of hand-wavy.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-shell reveal">
+          <div class="feature-slab">
+            <div class="feature-copy">
+              <span class="feature-index">11</span>
+              <h2>Speculative Execution</h2>
+              <p>The system can simulate before it commits, which changes the risk profile of agent actions dramatically.</p>
+              <div class="feature-points">
+                <div class="bullet-row"><i></i><div><strong>Shadow execution</strong><p>Test a plan in a controlled lane before touching reality.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Outcome comparison</strong><p>Score expected results against policy and confidence thresholds.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Safer automation</strong><p>Especially valuable for shell, browser, and ecosystem-level decisions.</p></div></div>
+              </div>
+            </div>
+            <div class="feature-visual">
+              <div class="feature-mini"><strong>Practical effect</strong><p>Agents can run faster because the system gives them a preview lane instead of forcing blind execution.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-shell reveal">
+          <div class="feature-slab reverse">
+            <div class="feature-copy">
+              <span class="feature-index">12</span>
+              <h2>EU AI Act Compliance</h2>
+              <p>Compliance is built into the operating system, not added as sales copy later.</p>
+              <div class="feature-points">
+                <div class="bullet-row"><i></i><div><strong>Risk tiers</strong><p>Different actions and agent classes can be governed according to their real impact profile.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Transparency reports</strong><p>Auditability and explainability become operational artifacts, not aspirations.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>GDPR erasure</strong><p>Memory and data handling are designed with deletion and privacy controls in mind.</p></div></div>
+              </div>
+            </div>
+            <div class="feature-visual">
+              <div class="feature-mini"><strong>Why it matters</strong><p>Governed autonomy gets much more deployable when the compliance story exists in the actual system behavior.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="marketplace">
+      <div class="container">
+        <div class="section-shell reveal">
+          <div class="feature-slab">
+            <div class="feature-copy">
+              <span class="feature-index">13</span>
+              <h2>Agent Marketplace</h2>
+              <p>Browse, install, rate, and extend agents without turning the runtime into an unsafe plugin free-for-all.</p>
+              <div class="feature-points">
+                <div class="bullet-row"><i></i><div><strong>Catalog discovery</strong><p>Find agents by domain, role, level, or capability surface.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Install with provenance</strong><p>Signed manifests and governed capabilities make installation a trust decision, not a leap of faith.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Ratings and iteration</strong><p>Real usage feedback helps the ecosystem improve over time.</p></div></div>
+              </div>
+            </div>
+            <div class="feature-visual">
+              <div class="feature-mini"><strong>Store posture</strong><p>Think curated app layer, not random scripts. The marketplace extends the system without dissolving governance.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-shell reveal">
+          <div class="feature-slab reverse">
+            <div class="feature-copy">
+              <span class="feature-index">14</span>
+              <h2>40+ Desktop App Pages and Docker Deploy</h2>
+              <p>The operating system is not just a kernel. It ships with an interface layer for real operators and a deployment story that does not require a research lab to reproduce.</p>
+              <div class="feature-points">
+                <div class="bullet-row"><i></i><div><strong>Desktop surfaces</strong><p>Agents, Chat, Monitor, Terminal, Files, Code, Database, API, Browser, Approval Center, and more.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Operator workflows</strong><p>The UI exposes state, consent, history, monitoring, and control instead of hiding them.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>One-command deployment</strong><p>Docker gives the platform a direct path into labs, teams, and local infrastructure.</p></div></div>
+              </div>
+            </div>
+            <div class="feature-visual">
+              <div class="feature-visual-grid">
+                <div class="feature-mini"><strong>Desktop app</strong><p>Production-feeling operator UI across the full stack.</p></div>
+                <div class="feature-mini"><strong>Docker</strong><p>Portable deployment without ceremony.</p></div>
+                <div class="feature-mini"><strong>Monitor</strong><p>Observe agents, fuel, jobs, and risk in one place.</p></div>
+                <div class="feature-mini"><strong>Approval Center</strong><p>Human governance with context, not guesswork.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-shell">
+        <div class="footer-grid">
+          <div>
+            <div class="nav-brand" style="margin-bottom:16px;">
+              <span class="brand-mark">N</span>
+              <span class="brand-copy">
+                <strong>Nexus OS</strong>
+                <span>v8.0.0</span>
+              </span>
+            </div>
+            <p>From computer control to compliance, the product is designed as an operating system for governed autonomy, not a thin orchestration wrapper.</p>
+          </div>
+          <div>
+            <h4>Links</h4>
+            <ul>
+              <li><a href="https://gitlab.com/nexaiceo/nexus-os" target="_blank" rel="noreferrer">GitLab</a></li>
+              <li><a href="docs.html">Documentation</a></li>
+              <li><a href="#marketplace">Agent Store</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4>Platform</h4>
+            <ul>
+              <li><a href="security.html">Security</a></li>
+              <li><a href="agents.html">Agents</a></li>
+              <li><a href="compare.html">Compare</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4>Story</h4>
+            <ul>
+              <li><a href="about.html">About</a></li>
+              <li><a href="docs.html">Getting Started</a></li>
+              <li><a href="index.html">Home</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <span>Nexus OS v8.0.0 - One builder, one AI architect, one operating system.</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+  <script src="js/particles.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus OS Security | 16 Layers of Defense</title>
+  <meta name="description" content="Explore the 16-layer security architecture in Nexus OS, from WASM dual-metered sandboxing to Ed25519 signatures, immutable audit chains, and kill gates.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="security">
+  <canvas id="particles-canvas"></canvas>
+
+  <nav class="navbar">
+    <div class="container">
+      <a class="nav-brand" href="index.html" aria-label="Nexus OS Home">
+        <span class="brand-mark">N</span>
+        <span class="brand-copy">
+          <strong>Nexus OS</strong>
+          <span>Governed Autonomy</span>
+        </span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="agents.html">Agents</a></li>
+        <li><a href="features.html">Features</a></li>
+        <li><a class="active" href="security.html">Security</a></li>
+        <li><a href="compare.html">Compare</a></li>
+        <li><a href="docs.html">Docs</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a class="gitlab-link" href="https://gitlab.com/nexaiceo/nexus-os" target="_blank" rel="noreferrer">GitLab</a></li>
+      </ul>
+      <button class="nav-toggle" type="button" aria-label="Toggle navigation">
+        <span class="nav-toggle-lines"></span>
+      </button>
+    </div>
+  </nav>
+
+  <main>
+    <section class="page-hero">
+      <div class="container">
+        <div class="reveal">
+          <div class="eyebrow"><span class="eyebrow-dot"></span>Security architecture</div>
+          <h1>16 layers of <span class="gradient-text">defense</span></h1>
+          <p>Nexus OS assumes powerful agents can fail, drift, or be attacked. The answer is not trust. It is layered verification, policy enforcement, and recovery built into the runtime itself.</p>
+        </div>
+        <div class="page-stats reveal">
+          <div class="page-stat"><strong>16</strong><span>Defense layers</span></div>
+          <div class="page-stat"><strong>20</strong><span>Prompt injection patterns</span></div>
+          <div class="page-stat"><strong>1</strong><span>Immutable audit chain</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section style="padding-top:0;">
+      <div class="container">
+        <div class="section-shell reveal">
+          <div class="feature-slab">
+            <div class="feature-copy">
+              <span class="feature-index">01</span>
+              <h2>Defense in depth</h2>
+              <p>Not one wall. Sixteen overlapping systems that catch drift, abuse, bad prompts, broken plans, and risky execution before damage spreads.</p>
+              <div class="feature-points">
+                <div class="bullet-row"><i></i><div><strong>Prevent</strong><p>Block dangerous behavior at the manifest, policy, and sandbox layers.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Observe</strong><p>Everything important lands in the audit chain and operator surfaces.</p></div></div>
+                <div class="bullet-row"><i></i><div><strong>Recover</strong><p>Rollback, cooldowns, and kill gates keep failure bounded.</p></div></div>
+              </div>
+            </div>
+            <div class="shield-shell">
+              <div class="security-command-center">
+                <div class="security-ring">
+                  <svg class="security-lines" viewBox="0 0 100 100" aria-hidden="true">
+                    <defs>
+                      <linearGradient id="shield-line-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#00f0ff" stop-opacity="0.08"></stop>
+                        <stop offset="55%" stop-color="#00f0ff" stop-opacity="1"></stop>
+                        <stop offset="100%" stop-color="#00ff88" stop-opacity="0.12"></stop>
+                      </linearGradient>
+                    </defs>
+                    <line x1="18" y1="14" x2="50" y2="50"></line>
+                    <line x1="81" y1="14" x2="50" y2="50"></line>
+                    <line x1="10" y1="30" x2="50" y2="50"></line>
+                    <line x1="90" y1="30" x2="50" y2="50"></line>
+                    <line x1="8" y1="50" x2="50" y2="50"></line>
+                    <line x1="92" y1="50" x2="50" y2="50"></line>
+                    <line x1="14" y1="72" x2="50" y2="50"></line>
+                    <line x1="86" y1="72" x2="50" y2="50"></line>
+                    <line x1="28" y1="88" x2="50" y2="50"></line>
+                    <line x1="72" y1="88" x2="50" y2="50"></line>
+                  </svg>
+
+                  <button class="security-node" type="button" style="--x:18%; --y:14%;" data-tooltip="Dual-metered WebAssembly sandbox with fuel and epoch interruption."><span>WASM</span></button>
+                  <button class="security-node" type="button" style="--x:81%; --y:14%;" data-tooltip="Cryptographic signing for agent manifests and identity trust."><span>Ed25519</span></button>
+                  <button class="security-node" type="button" style="--x:10%; --y:30%;" data-tooltip="Immutable chain of recorded events for forensic review."><span>Audit Chain</span></button>
+                  <button class="security-node" type="button" style="--x:90%; --y:30%;" data-tooltip="Pattern-based defense against prompt injection and role override."><span>Prompt Firewall</span></button>
+                  <button class="security-node" type="button" style="--x:8%; --y:50%;" data-tooltip="Outbound destination policy and URL allowlists per agent."><span>Egress Governor</span></button>
+                  <button class="security-node" type="button" style="--x:92%; --y:50%;" data-tooltip="Filesystem boundary rules to stop traversal and escape paths."><span>Path Guards</span></button>
+                  <button class="security-node" type="button" style="--x:14%; --y:72%;" data-tooltip="Shadow execution that simulates before high-impact actions commit."><span>Speculation</span></button>
+                  <button class="security-node" type="button" style="--x:86%; --y:72%;" data-tooltip="Human approval gate for risky acts, purchases, and sensitive changes."><span>HITL Consent</span></button>
+                  <button class="security-node" type="button" style="--x:28%; --y:88%;" data-tooltip="Authenticated API and WebSocket access for runtime surfaces."><span>JWT</span></button>
+                  <button class="security-node" type="button" style="--x:72%; --y:88%;" data-tooltip="Emergency circuit breakers to halt one agent, one level, or the whole system."><span>Kill Gates</span></button>
+                </div>
+
+                <div class="security-core" aria-hidden="true">
+                  <svg viewBox="0 0 64 64">
+                    <path d="M32 8 46 13.6v11.2c0 11.1-5.5 19.8-14 27.2-8.5-7.4-14-16.1-14-27.2V13.6L32 8Z"></path>
+                    <path d="M32 19v22"></path>
+                    <path d="M24 31h16"></path>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="section-heading reveal">
+          <div class="eyebrow"><span class="eyebrow-dot"></span>Security layers</div>
+          <h2>Every action crosses all of these.</h2>
+          <p>The exact layers are visible and explainable. That matters because operators should be able to reason about why an action was allowed, blocked, or rolled back.</p>
+        </div>
+        <div class="layer-grid">
+          <article class="layer-card reveal"><strong>1. WASM Dual-Metered Sandbox</strong><p>Fuel plus epoch interruption prevent infinite loops and resource blowups inside the execution lane.</p></article>
+          <article class="layer-card reveal"><strong>2. Ed25519 Manifest Signing</strong><p>Every agent manifest is cryptographically signed so tampering is detectable before an agent gets to act.</p></article>
+          <article class="layer-card reveal"><strong>3. SHA-256 Audit Chain</strong><p>Events are hash-linked into an immutable chain; modification breaks continuity and reveals itself.</p></article>
+          <article class="layer-card reveal"><strong>4. Prompt Firewall</strong><p>20 injection patterns catch classic role override and extraction attacks before they reach the decision layer.</p></article>
+          <article class="layer-card reveal"><strong>5. Egress Governor</strong><p>Agents can only talk to allowed domains and destinations defined for their role.</p></article>
+          <article class="layer-card reveal"><strong>6. Path Traversal Prevention</strong><p>Declared paths, path normalization, and sandboxed access stop directory escape behavior.</p></article>
+          <article class="layer-card reveal"><strong>7. Command Allowlist / Blocklist</strong><p>Shell access stays governed through explicit command policy and dangerous-command denial.</p></article>
+          <article class="layer-card reveal"><strong>8. Speculative Execution</strong><p>Plans can be simulated before reality, which catches destructive mistakes earlier.</p></article>
+          <article class="layer-card reveal"><strong>9. HITL Consent</strong><p>High-risk actions route through humans with risk previews instead of silent execution.</p></article>
+          <article class="layer-card reveal"><strong>10. Fuel Metering</strong><p>Every action costs fuel, which turns runaway autonomy into a bounded, measurable process.</p></article>
+          <article class="layer-card reveal"><strong>11. Autonomy Guards</strong><p>Capability-based access control ensures the agent only touches what its signed role allows.</p></article>
+          <article class="layer-card reveal"><strong>12. L6 Cool-down</strong><p>Transcendent agents are forced to pause every 100 cycles so cognition-level drift stays bounded.</p></article>
+          <article class="layer-card reveal"><strong>13. Time Machine Rollback</strong><p>System-wide rollback means autonomy can be reversed instead of merely regretted.</p></article>
+          <article class="layer-card reveal"><strong>14. DID Identity</strong><p>Each agent receives an Ed25519 identity so actions remain attributable and auditable.</p></article>
+          <article class="layer-card reveal"><strong>15. JWT Authentication</strong><p>API and WebSocket surfaces require authenticated access rather than ambient trust.</p></article>
+          <article class="layer-card reveal"><strong>16. Kill Gates</strong><p>Emergency circuit breakers can stop one agent, one level, or the whole system immediately.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="security-grid">
+          <article class="feature-card reveal" data-tilt>
+            <span class="feature-chip">AUDIT</span>
+            <h3>Immutable evidence</h3>
+            <p>Audit trails, screenshot trails, approval history, and lineage records let you answer the hard operational question: what actually happened?</p>
+          </article>
+          <article class="feature-card reveal" data-tilt>
+            <span class="feature-chip">GOV</span>
+            <h3>Governed action surface</h3>
+            <p>Capabilities, manifests, and allowlists constrain what agents are even allowed to attempt before execution begins.</p>
+          </article>
+          <article class="feature-card reveal" data-tilt>
+            <span class="feature-chip">SIM</span>
+            <h3>Preview before impact</h3>
+            <p>Speculative execution and world modeling reduce surprise by testing risky plans before they touch real state.</p>
+          </article>
+          <article class="feature-card reveal" data-tilt>
+            <span class="feature-chip">UNDO</span>
+            <h3>Recovery as a feature</h3>
+            <p>Rollback, cooldowns, and kill gates make the system survivable when strong autonomy meets a messy world.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="container">
+        <div class="story-panel reveal">
+          <strong>Don't trust. Verify.</strong>
+          <p>That is the architecture rule. Agents are useful because the system is allowed to be skeptical of them all the way down.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-shell">
+        <div class="footer-grid">
+          <div>
+            <div class="nav-brand" style="margin-bottom:16px;">
+              <span class="brand-mark">N</span>
+              <span class="brand-copy">
+                <strong>Nexus OS</strong>
+                <span>v8.0.0</span>
+              </span>
+            </div>
+            <p>Security is not a section of the website. It is the reason the rest of the website gets to exist.</p>
+          </div>
+          <div>
+            <h4>Links</h4>
+            <ul>
+              <li><a href="https://gitlab.com/nexaiceo/nexus-os" target="_blank" rel="noreferrer">GitLab</a></li>
+              <li><a href="docs.html">Documentation</a></li>
+              <li><a href="features.html#marketplace">Agent Store</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4>Platform</h4>
+            <ul>
+              <li><a href="agents.html">Agents</a></li>
+              <li><a href="compare.html">Compare</a></li>
+              <li><a href="features.html">Features</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4>Story</h4>
+            <ul>
+              <li><a href="about.html">About</a></li>
+              <li><a href="docs.html">Getting Started</a></li>
+              <li><a href="index.html">Home</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <span>Nexus OS v8.0.0 - One builder, one AI architect, one operating system.</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+  <script src="js/particles.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

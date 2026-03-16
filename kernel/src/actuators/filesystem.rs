@@ -192,11 +192,13 @@ mod tests {
         caps.insert("fs.write".into());
         ActuatorContext {
             agent_id: "test-agent".into(),
+            agent_name: "test-agent".into(),
             working_dir: workspace.to_path_buf(),
             autonomy_level: crate::autonomy::AutonomyLevel::L2,
             capabilities: caps,
             fuel_remaining: 1000.0,
             egress_allowlist: vec![],
+            action_review_engine: None,
         }
     }
 

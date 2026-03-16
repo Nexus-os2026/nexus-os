@@ -29,6 +29,10 @@ pub struct ScheduledAgent {
     pub next_run_epoch: i64,
 }
 
+pub trait ScheduledGoalExecutor: Send + Sync {
+    fn execute(&self, agent_id: &str, default_goal: &str) -> Result<(), String>;
+}
+
 /// Handle for a running schedule loop — holds the cancel flag and join handle.
 struct ScheduleHandle {
     handle: JoinHandle<()>,
@@ -46,6 +50,7 @@ pub struct AgentScheduler {
     runtime: Arc<CognitiveRuntime>,
     audit: Arc<Mutex<AuditTrail>>,
     handles: Mutex<HashMap<String, ScheduleHandle>>,
+    executor: Mutex<Option<Arc<dyn ScheduledGoalExecutor>>>,
 }
 
 impl AgentScheduler {
@@ -55,12 +60,18 @@ impl AgentScheduler {
             runtime,
             audit,
             handles: Mutex::new(HashMap::new()),
+            executor: Mutex::new(None),
         }
+    }
+
+    pub fn set_executor(&self, executor: Arc<dyn ScheduledGoalExecutor>) {
+        let mut guard = self.executor.lock().unwrap();
+        *guard = Some(executor);
     }
 
     /// Validate a cron expression without registering anything.
     pub fn validate_cron(expression: &str) -> Result<(), String> {
-        Schedule::from_str(expression)
+        Schedule::from_str(&normalize_cron_expression(expression)?)
             .map(|_| ())
             .map_err(|e| format!("invalid cron expression: {e}"))
     }
@@ -75,7 +86,9 @@ impl AgentScheduler {
         cron_expression: &str,
         default_goal: &str,
     ) -> Result<(), AgentError> {
-        let schedule = Schedule::from_str(cron_expression).map_err(|e| {
+        let normalized_cron = normalize_cron_expression(cron_expression)
+            .map_err(|e| AgentError::SupervisorError(e.to_string()))?;
+        let schedule = Schedule::from_str(&normalized_cron).map_err(|e| {
             AgentError::SupervisorError(format!("invalid cron expression '{cron_expression}': {e}"))
         })?;
 
@@ -88,6 +101,7 @@ impl AgentScheduler {
         let aid = agent_id.to_string();
         let goal_text = default_goal.to_string();
 
+        let executor = self.executor.lock().unwrap().clone();
         let handle = tokio::spawn(schedule_loop(
             aid,
             goal_text,
@@ -95,6 +109,7 @@ impl AgentScheduler {
             next_run.clone(),
             runtime,
             audit,
+            executor,
         ));
 
         // Log the registration.
@@ -167,6 +182,7 @@ async fn schedule_loop(
     next_run: Arc<AtomicI64>,
     runtime: Arc<CognitiveRuntime>,
     audit: Arc<Mutex<AuditTrail>>,
+    executor: Option<Arc<dyn ScheduledGoalExecutor>>,
 ) {
     loop {
         let now = Utc::now();
@@ -187,7 +203,14 @@ async fn schedule_loop(
 
         let agent_uuid = Uuid::parse_str(&agent_id).ok();
 
-        match runtime.assign_goal(&agent_id, goal) {
+        let execution = match &executor {
+            Some(executor) => executor.execute(&agent_id, &default_goal),
+            None => runtime
+                .assign_goal(&agent_id, goal)
+                .map_err(|e| e.to_string()),
+        };
+
+        match execution {
             Ok(()) => {
                 if let Some(uuid) = agent_uuid {
                     if let Ok(mut trail) = audit.lock() {
@@ -217,6 +240,22 @@ async fn schedule_loop(
                 }
             }
         }
+    }
+}
+
+fn normalize_cron_expression(expression: &str) -> Result<String, String> {
+    let trimmed = expression.trim();
+    if trimmed.is_empty() {
+        return Err("invalid cron expression: empty".to_string());
+    }
+
+    let parts = trimmed.split_whitespace().collect::<Vec<_>>();
+    match parts.len() {
+        5 => Ok(format!("0 {}", parts.join(" "))),
+        6 | 7 => Ok(trimmed.to_string()),
+        other => Err(format!(
+            "invalid cron expression: expected 5, 6, or 7 fields, got {other}"
+        )),
     }
 }
 

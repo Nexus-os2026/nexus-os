@@ -346,6 +346,34 @@ impl AgentFuelLedger {
         }
     }
 
+    pub fn from_report(report: &FuelAuditReport) -> Self {
+        let mut alerts_emitted = Vec::new();
+        for threshold in ALERT_THRESHOLDS {
+            let threshold_units = percent_ceiling(report.cap_units.max(1), u64::from(threshold));
+            if report.spent_units >= threshold_units {
+                alerts_emitted.push(threshold);
+            }
+        }
+
+        Self {
+            budget: MonthlyBudget {
+                cap_units: report.cap_units.max(1),
+                spent_units: report.spent_units,
+                period: report.period.clone(),
+                alerts_emitted,
+            },
+            detector: BurnAnomalyDetector::default(),
+            anomalies: report.anomalies.clone(),
+            halts: report.halts,
+            model_breakdown: report
+                .model_breakdown
+                .iter()
+                .cloned()
+                .map(|entry| (entry.model.clone(), entry))
+                .collect(),
+        }
+    }
+
     pub fn period(&self) -> &BudgetPeriodId {
         &self.budget.period
     }

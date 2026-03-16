@@ -250,11 +250,13 @@ mod tests {
         caps.insert("self.modify".to_string());
         ActuatorContext {
             agent_id: Uuid::new_v4().to_string(),
+            agent_name: "governance-policy-agent".to_string(),
             working_dir: workspace.to_path_buf(),
             autonomy_level: level,
             capabilities: caps,
             fuel_remaining: 100_000.0,
             egress_allowlist: vec![],
+            action_review_engine: None,
         }
     }
 

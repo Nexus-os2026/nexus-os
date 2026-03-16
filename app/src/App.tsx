@@ -40,6 +40,7 @@ import type { ConsentNotification, SystemInfo } from "./types";
 import { Agents } from "./pages/Agents";
 import { Audit } from "./pages/Audit";
 import { Chat } from "./pages/Chat";
+import Dashboard from "./pages/Dashboard";
 import { Settings } from "./pages/Settings";
 import { SetupWizard } from "./pages/SetupWizard";
 import { Workflows } from "./pages/Workflows";
@@ -66,6 +67,7 @@ import ApiClient from "./pages/ApiClient";
 import DesignStudio from "./pages/DesignStudio";
 import EmailClient from "./pages/EmailClient";
 import MediaStudio from "./pages/MediaStudio";
+import Messaging from "./pages/Messaging";
 import AppStore from "./pages/AppStore";
 import AiChatHub from "./pages/AiChatHub";
 import DeployPipeline from "./pages/DeployPipeline";
@@ -76,6 +78,8 @@ import Documents from "./pages/Documents";
 import ModelHub from "./pages/ModelHub";
 import TimeMachine from "./pages/TimeMachine";
 import VoiceAssistant from "./pages/VoiceAssistant";
+import WorldSimulation from "./pages/WorldSimulation";
+import ComputerControl from "./pages/ComputerControl";
 import type {
   AgentStatusEvent,
   AgentSummary,
@@ -91,48 +95,18 @@ import type {
 } from "./types";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals";
+type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
-  { id: "chat", label: "Chat", icon: "⌁", shortcut: "Alt+1" },
-  { id: "agents", label: "Agents", icon: "⬢", shortcut: "Alt+2" },
-  { id: "command-center", label: "Command", icon: "⊞", shortcut: "" },
-  { id: "audit", label: "Audit", icon: "⧉", shortcut: "Alt+3" },
-  { id: "audit-timeline", label: "Timeline", icon: "⏱", shortcut: "" },
-  { id: "time-machine", label: "Time Machine", icon: "⏪", shortcut: "" },
-  { id: "workflows", label: "Workflows", icon: "⎇", shortcut: "Alt+4" },
-  { id: "developer-portal", label: "Publish", icon: "⬆", shortcut: "" },
-  { id: "compliance", label: "Compliance", icon: "⛨", shortcut: "" },
-  { id: "cluster", label: "Cluster", icon: "⬣", shortcut: "" },
-  { id: "trust", label: "Trust", icon: "◉", shortcut: "" },
-  { id: "distributed-audit", label: "Chain", icon: "⛓", shortcut: "" },
-  { id: "protocols", label: "Protocols", icon: "⌬", shortcut: "Alt+6" },
-  { id: "permissions", label: "Permissions", icon: "⛊", shortcut: "Alt+7" },
-  { id: "approvals", label: "Approvals", icon: "☑", shortcut: "" },
-  { id: "policy-management", label: "Policies", icon: "⚖", shortcut: "" },
-  { id: "identity", label: "Identity", icon: "⚿", shortcut: "" },
+  { id: "dashboard", label: "Dashboard", icon: "◫", shortcut: "Alt+1" },
+  { id: "audit", label: "Audit", icon: "⧉", shortcut: "Alt+2" },
+  { id: "workflows", label: "Workflows", icon: "⎇", shortcut: "Alt+3" },
   { id: "design-studio", label: "Design", icon: "◇", shortcut: "" },
-  { id: "email-client", label: "Email", icon: "📧", shortcut: "" },
+  { id: "messaging", label: "Messaging", icon: "✉", shortcut: "" },
   { id: "media-studio", label: "Media", icon: "🖼", shortcut: "" },
-  { id: "app-store", label: "Agent Store", icon: "◈", shortcut: "Alt+5" },
-  { id: "ai-chat-hub", label: "AI Chat", icon: "✦", shortcut: "" },
-  { id: "voice-assistant", label: "Voice", icon: "🎙", shortcut: "" },
-  { id: "deploy-pipeline", label: "Deploy", icon: "🚀", shortcut: "" },
-  { id: "learning-center", label: "Learn", icon: "🎓", shortcut: "" },
-  { id: "code-editor", label: "Code", icon: "⌨", shortcut: "" },
-  { id: "terminal", label: "Terminal", icon: "$", shortcut: "" },
   { id: "file-manager", label: "Files", icon: "📁", shortcut: "" },
-  { id: "system-monitor", label: "Monitor", icon: "⊙", shortcut: "" },
-  { id: "documents", label: "Documents", icon: "📑", shortcut: "" },
-  { id: "model-hub", label: "Models", icon: "🧠", shortcut: "" },
-  { id: "notes", label: "Notes", icon: "📝", shortcut: "" },
-  { id: "project-manager", label: "Projects", icon: "◫", shortcut: "" },
-  { id: "database", label: "Database", icon: "◆", shortcut: "" },
-  { id: "api-client", label: "API", icon: "⤴", shortcut: "" },
-  { id: "browser", label: "Browser", icon: "⊜", shortcut: "Alt+9" },
-  { id: "firewall", label: "Firewall", icon: "⛉", shortcut: "" },
-  { id: "settings", label: "Settings", icon: "⚙", shortcut: "Alt+8" }
+  { id: "computer-control", label: "Computer Control", icon: "⌘", shortcut: "" }
 ];
 
 function defaultConfig(): NexusConfig {
@@ -143,6 +117,7 @@ function defaultConfig(): NexusConfig {
       openai_api_key: "",
       deepseek_api_key: "",
       gemini_api_key: "",
+      nvidia_api_key: "",
       ollama_url: "http://localhost:11434"
     },
     search: {
@@ -171,6 +146,9 @@ function defaultConfig(): NexusConfig {
     privacy: {
       telemetry: false,
       audit_retention_days: 365
+    },
+    governance: {
+      enable_warden_review: false
     }
   };
 }
@@ -186,6 +164,38 @@ const BROWSER_AGENT_IDS = {
 };
 
 const BROWSER_AGENT_ID_SET = new Set(Object.values(BROWSER_AGENT_IDS));
+
+function agentStatusRank(status: AgentSummary["status"]): number {
+  switch (status) {
+    case "Running":
+      return 6;
+    case "Starting":
+      return 5;
+    case "Paused":
+      return 4;
+    case "Created":
+      return 3;
+    case "Stopping":
+      return 2;
+    case "Stopped":
+      return 1;
+    case "Destroyed":
+      return 0;
+    default:
+      return -1;
+  }
+}
+
+function dedupeAgentsById(agents: AgentSummary[]): AgentSummary[] {
+  const byId = new Map<string, AgentSummary>();
+  for (const agent of agents) {
+    const existing = byId.get(agent.id);
+    if (!existing || agentStatusRank(agent.status) >= agentStatusRank(existing.status)) {
+      byId.set(agent.id, agent);
+    }
+  }
+  return Array.from(byId.values());
+}
 
 function coreAgents(): AgentSummary[] {
   return [
@@ -323,7 +333,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 export default function App(): JSX.Element {
-  const [page, setPage] = useState<Page>("chat");
+  const [page, setPage] = useState<Page>("dashboard");
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>("mock");
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
@@ -355,6 +365,7 @@ export default function App(): JSX.Element {
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
   const pushToTalk = useRef<PushToTalk | null>(null);
   const previousPageRef = useRef<Page>(page);
+  const uniqueAgents = useMemo(() => dedupeAgentsById(agents), [agents]);
   const { enabled: uiSoundEnabled, volume: uiSoundVolume, setEnabled: setUiSoundEnabled, setVolume: setUiSoundVolume, play } =
     useUiAudio();
 
@@ -533,8 +544,8 @@ export default function App(): JSX.Element {
 
   const connectionStatus: ConnectionStatus = runtimeMode === "desktop" ? "connected" : "mock";
   const runningAgents = useMemo(
-    () => agents.filter((agent) => agent.status === "Running").length,
-    [agents]
+    () => uniqueAgents.filter((agent) => agent.status === "Running").length,
+    [uniqueAgents]
   );
   const [sysInfo, setSysInfo] = useState<SystemInfo | null>(null);
 
@@ -1262,6 +1273,9 @@ export default function App(): JSX.Element {
   }
 
   function renderPage(): JSX.Element {
+    if (page === "dashboard") {
+      return <Dashboard />;
+    }
     if (page === "chat") {
       return (
         <Chat
@@ -1269,7 +1283,7 @@ export default function App(): JSX.Element {
           draft={draft}
           isRecording={isRecording}
           isSending={isSending}
-          agents={agents}
+          agents={uniqueAgents}
           selectedAgent={selectedAgent}
           selectedModel={selectedModel}
           onAgentChange={setSelectedAgent}
@@ -1420,6 +1434,9 @@ export default function App(): JSX.Element {
     if (page === "time-machine") {
       return <TimeMachine />;
     }
+    if (page === "simulation") {
+      return <WorldSimulation />;
+    }
     if (page === "notes") {
       return <NotesApp />;
     }
@@ -1437,6 +1454,9 @@ export default function App(): JSX.Element {
     }
     if (page === "email-client") {
       return <EmailClient />;
+    }
+    if (page === "messaging") {
+      return <Messaging />;
     }
     if (page === "media-studio") {
       return <MediaStudio />;
@@ -1461,6 +1481,9 @@ export default function App(): JSX.Element {
     }
     if (page === "browser") {
       return <AgentBrowser />;
+    }
+    if (page === "computer-control") {
+      return <ComputerControl />;
     }
     if (page === "policy-management") {
       return <PolicyManagement />;

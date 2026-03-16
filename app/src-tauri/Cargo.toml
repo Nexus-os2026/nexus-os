@@ -28,6 +28,7 @@ nexus-enterprise = { path = "../../enterprise" }
 nexus-persistence = { path = "../../persistence" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+base64 = "0.22"
 toml = "0.8"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 sysinfo = "0.32"
@@ -39,9 +40,11 @@ tokio = { version = "1", features = ["rt", "sync", "time"] }
 
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 tauri = { version = "2.5.5", optional = true, default-features = false, features = ["tray-icon", "wry"] }
+tauri-plugin-global-shortcut = "2.3.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 tauri = { version = "2.5.5", optional = true, default-features = false, features = ["tray-icon", "wry"] }
+tauri-plugin-global-shortcut = "2.3.1"
 
 [build-dependencies]
 tauri-build = { version = "2.5.5" }

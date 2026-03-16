@@ -348,9 +348,9 @@ export default function DeployPipeline() {
         {/* Cloud providers note */}
         <div className="dp-audit">
           <div className="dp-section-header">Cloud Providers</div>
-          <div className="dp-audit-entry" style={{ opacity: 0.5 }}>▲ Vercel — Coming Soon</div>
-          <div className="dp-audit-entry" style={{ opacity: 0.5 }}>◆ Netlify — Coming Soon</div>
-          <div className="dp-audit-entry" style={{ opacity: 0.5 }}>☁ Cloudflare — Coming Soon</div>
+          <div className="dp-audit-entry">▲ Vercel — use a project deploy command to target Vercel</div>
+          <div className="dp-audit-entry">◆ Netlify — use a project deploy command to target Netlify</div>
+          <div className="dp-audit-entry">☁ Cloudflare — use a project deploy command to target Workers/Pages</div>
           <div className="dp-audit-entry">⬢ Self-Hosted — Active</div>
         </div>
       </aside>

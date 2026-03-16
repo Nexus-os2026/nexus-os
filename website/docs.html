@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus OS Docs | Getting Started</title>
+  <meta name="description" content="Get started with Nexus OS: prerequisites, installation, first agent tutorial, configuration reference, manifest schema, and API overview.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="docs">
+  <canvas id="particles-canvas"></canvas>
+
+  <nav class="navbar">
+    <div class="container">
+      <a class="nav-brand" href="index.html" aria-label="Nexus OS Home">
+        <span class="brand-mark">N</span>
+        <span class="brand-copy">
+          <strong>Nexus OS</strong>
+          <span>Governed Autonomy</span>
+        </span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="agents.html">Agents</a></li>
+        <li><a href="features.html">Features</a></li>
+        <li><a href="security.html">Security</a></li>
+        <li><a href="compare.html">Compare</a></li>
+        <li><a class="active" href="docs.html">Docs</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a class="gitlab-link" href="https://gitlab.com/nexaiceo/nexus-os" target="_blank" rel="noreferrer">GitLab</a></li>
+      </ul>
+      <button class="nav-toggle" type="button" aria-label="Toggle navigation">
+        <span class="nav-toggle-lines"></span>
+      </button>
+    </div>
+  </nav>
+
+  <main>
+    <section class="page-hero">
+      <div class="container">
+        <div class="reveal">
+          <div class="eyebrow"><span class="eyebrow-dot"></span>Documentation</div>
+          <h1>Getting started with <span class="gradient-text">Nexus OS</span></h1>
+          <p>Install the workspace, launch the desktop app, talk to your first governed agent, and understand the runtime shape well enough to extend it confidently.</p>
+        </div>
+        <div class="page-stats reveal">
+          <div class="page-stat"><strong>Rust</strong><span>Kernel and governance core</span></div>
+          <div class="page-stat"><strong>Node.js</strong><span>Desktop app runtime</span></div>
+          <div class="page-stat"><strong>Ollama</strong><span>Local model backend</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section style="padding-top:0;">
+      <div class="container">
+        <div class="docs-layout">
+          <aside class="toc-panel reveal">
+            <div class="eyebrow"><span class="eyebrow-dot"></span>On this page</div>
+            <ul>
+              <li><a href="#prerequisites">Prerequisites</a></li>
+              <li><a href="#installation">Installation</a></li>
+              <li><a href="#first-agent">First agent</a></li>
+              <li><a href="#configuration">Configuration</a></li>
+              <li><a href="#manifest-schema">Manifest schema</a></li>
+              <li><a href="#api-overview">API overview</a></li>
+              <li><a href="#full-docs">Full docs</a></li>
+            </ul>
+          </aside>
+
+          <div class="docs-stack">
+            <article class="docs-panel reveal" id="prerequisites">
+              <h2>Prerequisites</h2>
+              <p>You need three fundamentals before the stack comes alive locally.</p>
+              <ul>
+                <li><strong>Rust 1.75+</strong> for building the kernel and workspace crates.</li>
+                <li><strong>Node.js 18+</strong> for the Tauri desktop frontend and app tooling.</li>
+                <li><strong>Ollama</strong> for the local LLM runtime behind cognition and vision loops.</li>
+              </ul>
+              <p>Optional but recommended: Docker for deployment, Playwright-compatible browser tooling, and Git for cloning and updates.</p>
+            </article>
+
+            <article class="docs-panel reveal" id="installation">
+              <h2>Installation</h2>
+              <p>There is no build tool ceremony here. Clone, compile, install app dependencies, then launch.</p>
+              <div class="terminal-window" style="margin-top:20px;">
+                <div class="terminal-head">
+                  <div class="window-dots"><span></span><span></span><span></span></div>
+                  <strong>install.sh</strong>
+                </div>
+                <div class="terminal-body">
+                  <div><span class="prompt">$</span> <span class="cmd">git clone https://gitlab.com/nexaiceo/nexus-os</span></div>
+                  <div><span class="prompt">$</span> <span class="cmd">cd nexus-os</span></div>
+                  <div><span class="prompt">$</span> <span class="cmd">cargo build --workspace</span></div>
+                  <div><span class="prompt">$</span> <span class="cmd">ollama pull qwen3.5:4b</span></div>
+                  <div><span class="prompt">$</span> <span class="cmd">ollama serve</span></div>
+                  <div><span class="prompt">$</span> <span class="cmd">cd app && npm install && npm run tauri dev</span></div>
+                </div>
+              </div>
+            </article>
+
+            <article class="docs-panel reveal" id="first-agent">
+              <h2>Your first agent</h2>
+              <p>Start with a safe L1 or L2 agent so you can learn the shape of the system without touching high-risk autonomy.</p>
+              <ol>
+                <li>Open the desktop app and enter the Chat workspace.</li>
+                <li>Select <strong>Nexus CodeSentry</strong> if you want a read-only scan, or <strong>Nexus Sentinel</strong> if you want a governed security review.</li>
+                <li>Send a direct goal such as “Scan the kernel for code quality issues and rank them by severity.”</li>
+                <li>Watch the loop: perceive, reason, plan, act, reflect, learn.</li>
+                <li>Review the audit trail and approval prompts if the agent approaches a risky boundary.</li>
+              </ol>
+              <div class="terminal-window" style="margin-top:20px;">
+                <div class="terminal-head">
+                  <div class="window-dots"><span></span><span></span><span></span></div>
+                  <strong>chat prompt</strong>
+                </div>
+                <div class="terminal-body">
+                  <div><span class="comment"># Example first message</span></div>
+                  <div><span class="cmd">Scan the kernel/src directory for code quality issues and produce a severity-ranked report.</span></div>
+                </div>
+              </div>
+            </article>
+
+            <article class="docs-panel reveal" id="configuration">
+              <h2>Configuration reference</h2>
+              <p>Nexus OS is designed to be inspectable. Environment-level configuration keeps the runtime predictable.</p>
+              <div class="code-block">
+<span class="comment"># .env</span>
+<span class="kw">OLLAMA_HOST</span>=<span class="str">http://localhost:11434</span>
+<span class="kw">NEXUS_DB_PATH</span>=<span class="str">./data/nexus.db</span>
+<span class="kw">NEXUS_LOG_LEVEL</span>=<span class="str">info</span>
+<span class="kw">NEXUS_FUEL_DEFAULT</span>=<span class="str">10000</span>
+<span class="kw">NEXUS_AUDIT_DIR</span>=<span class="str">./data/audit</span>
+<span class="kw">NEXUS_APPROVAL_MODE</span>=<span class="str">interactive</span>
+              </div>
+              <p>Common knobs include default autonomy levels, audit paths, model endpoints, and approval routing behavior.</p>
+            </article>
+
+            <article class="docs-panel reveal" id="manifest-schema">
+              <h2>Agent manifest schema</h2>
+              <p>Every agent is defined by a manifest that names the role, its resource budget, allowed capabilities, and governance requirements.</p>
+              <div class="code-block">
+<span class="section">[agent]</span>
+<span class="key">id</span> = <span class="val">"nexus-example"</span>
+<span class="key">name</span> = <span class="val">"Nexus Example"</span>
+<span class="key">version</span> = <span class="val">"1.0.0"</span>
+<span class="key">description</span> = <span class="val">"What this agent does"</span>
+<span class="key">autonomy_level</span> = <span class="val">2</span>
+
+<span class="section">[resources]</span>
+<span class="key">fuel_budget</span> = <span class="val">10000</span>
+<span class="key">model</span> = <span class="val">"qwen3.5:9b"</span>
+
+<span class="section">[capabilities]</span>
+<span class="key">allowed</span> = <span class="val">["fs.read", "fs.write", "process.exec"]</span>
+
+<span class="section">[schedule]</span>
+<span class="key">cron</span> = <span class="val">"0 */4 * * *"</span>
+
+<span class="section">[governance]</span>
+<span class="key">hitl_tier</span> = <span class="val">"Tier1"</span>
+<span class="key">risk_level</span> = <span class="val">"medium"</span>
+              </div>
+            </article>
+
+            <article class="docs-panel reveal" id="api-overview">
+              <h2>API reference overview</h2>
+              <p>The API layer mirrors the platform architecture: agents, approvals, memory, audit logs, schedules, and runtime state.</p>
+              <ul>
+                <li><strong>Agents API</strong> for listing, starting, stopping, and inspecting agents.</li>
+                <li><strong>Approval API</strong> for queueing, approving, or rejecting risk-bound actions.</li>
+                <li><strong>Audit API</strong> for browsing the immutable event history.</li>
+                <li><strong>Memory API</strong> for reading or erasing structured memories.</li>
+                <li><strong>Runtime API</strong> for status, metrics, and operator dashboards.</li>
+              </ul>
+              <p>JWT authentication and policy enforcement remain active at the transport layer, not just in the UI.</p>
+            </article>
+
+            <article class="docs-panel reveal" id="full-docs">
+              <h2>Full docs and next steps</h2>
+              <p>After the first local run, most teams move into one of four tracks:</p>
+              <ul>
+                <li>Customize an existing agent manifest and tune its capability envelope.</li>
+                <li>Turn on a scheduled agent like Sentinel, Phantom, or Sovereign.</li>
+                <li>Explore the Approval Center and audit chain to understand production controls.</li>
+                <li>Deploy with Docker and connect the messaging bridge for operational workflows.</li>
+              </ul>
+              <div class="button-row">
+                <a class="button primary" href="agents.html">Browse agents</a>
+                <a class="button secondary" href="features.html">See full feature map</a>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-shell">
+        <div class="footer-grid">
+          <div>
+            <div class="nav-brand" style="margin-bottom:16px;">
+              <span class="brand-mark">N</span>
+              <span class="brand-copy">
+                <strong>Nexus OS</strong>
+                <span>v8.0.0</span>
+              </span>
+            </div>
+            <p>From first install to first governed workflow, the documentation is designed to reduce fear and increase operator confidence.</p>
+          </div>
+          <div>
+            <h4>Links</h4>
+            <ul>
+              <li><a href="https://gitlab.com/nexaiceo/nexus-os" target="_blank" rel="noreferrer">GitLab</a></li>
+              <li><a href="docs.html">Documentation</a></li>
+              <li><a href="features.html#marketplace">Agent Store</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4>Platform</h4>
+            <ul>
+              <li><a href="security.html">Security</a></li>
+              <li><a href="agents.html">Agents</a></li>
+              <li><a href="compare.html">Compare</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4>Story</h4>
+            <ul>
+              <li><a href="about.html">About</a></li>
+              <li><a href="index.html">Home</a></li>
+              <li><a href="features.html">Feature Breakdown</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <span>Nexus OS v8.0.0 - One builder, one AI architect, one operating system.</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+  <script src="js/particles.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

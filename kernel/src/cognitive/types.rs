@@ -1,5 +1,6 @@
 //! Core types for the cognitive agent runtime.
 
+use crate::computer_control::ScreenRegion;
 use serde::{Deserialize, Serialize};
 
 /// Phase of the cognitive loop an agent is currently in.
@@ -161,6 +162,51 @@ pub enum PlannedAction {
         actions: Vec<BrowserAction>,
         screenshot_dir: Option<String>,
     },
+    CaptureScreen {
+        region: Option<ScreenRegion>,
+    },
+    CaptureWindow {
+        window_title: String,
+    },
+    AnalyzeScreen {
+        query: String,
+    },
+    MouseMove {
+        x: u32,
+        y: u32,
+    },
+    MouseClick {
+        x: u32,
+        y: u32,
+        button: String,
+    },
+    MouseDoubleClick {
+        x: u32,
+        y: u32,
+    },
+    MouseDrag {
+        from_x: u32,
+        from_y: u32,
+        to_x: u32,
+        to_y: u32,
+    },
+    KeyboardType {
+        text: String,
+    },
+    KeyboardPress {
+        key: String,
+    },
+    KeyboardShortcut {
+        keys: Vec<String>,
+    },
+    ScrollWheel {
+        direction: String,
+        amount: u32,
+    },
+    ComputerAction {
+        description: String,
+        max_steps: u32,
+    },
     AgentMessage {
         target_agent: String,
         message: String,
@@ -251,6 +297,19 @@ impl PlannedAction {
             PlannedAction::KnowledgeGraphUpdate { .. }
             | PlannedAction::KnowledgeGraphQuery { .. } => vec!["knowledge.graph"],
             PlannedAction::BrowserAutomate { .. } => vec!["browser.automate"],
+            PlannedAction::CaptureScreen { .. } | PlannedAction::CaptureWindow { .. } => {
+                vec!["screen.capture"]
+            }
+            PlannedAction::AnalyzeScreen { .. } => vec!["screen.analyze"],
+            PlannedAction::MouseMove { .. }
+            | PlannedAction::MouseClick { .. }
+            | PlannedAction::MouseDoubleClick { .. }
+            | PlannedAction::MouseDrag { .. }
+            | PlannedAction::ScrollWheel { .. } => vec!["input.mouse"],
+            PlannedAction::KeyboardType { .. }
+            | PlannedAction::KeyboardPress { .. }
+            | PlannedAction::KeyboardShortcut { .. } => vec!["input.keyboard"],
+            PlannedAction::ComputerAction { .. } => vec!["computer.use"],
             PlannedAction::AgentMessage { .. } => vec!["agent.message"],
             PlannedAction::HitlRequest { .. } => vec![], // always allowed
             PlannedAction::MemoryStore { .. } => vec![], // always allowed
@@ -288,6 +347,18 @@ impl PlannedAction {
             PlannedAction::KnowledgeGraphUpdate { .. } => "knowledge_graph_update",
             PlannedAction::KnowledgeGraphQuery { .. } => "knowledge_graph_query",
             PlannedAction::BrowserAutomate { .. } => "browser_automate",
+            PlannedAction::CaptureScreen { .. } => "capture_screen",
+            PlannedAction::CaptureWindow { .. } => "capture_window",
+            PlannedAction::AnalyzeScreen { .. } => "analyze_screen",
+            PlannedAction::MouseMove { .. } => "mouse_move",
+            PlannedAction::MouseClick { .. } => "mouse_click",
+            PlannedAction::MouseDoubleClick { .. } => "mouse_double_click",
+            PlannedAction::MouseDrag { .. } => "mouse_drag",
+            PlannedAction::KeyboardType { .. } => "keyboard_type",
+            PlannedAction::KeyboardPress { .. } => "keyboard_press",
+            PlannedAction::KeyboardShortcut { .. } => "keyboard_shortcut",
+            PlannedAction::ScrollWheel { .. } => "scroll_wheel",
+            PlannedAction::ComputerAction { .. } => "computer_action",
             PlannedAction::AgentMessage { .. } => "agent_message",
             PlannedAction::HitlRequest { .. } => "hitl_request",
             PlannedAction::MemoryStore { .. } => "memory_store",
@@ -475,6 +546,17 @@ mod tests {
             vec!["llm.query"]
         );
         assert_eq!(
+            PlannedAction::CaptureScreen { region: None }.required_capabilities(),
+            vec!["screen.capture"]
+        );
+        assert_eq!(
+            PlannedAction::KeyboardShortcut {
+                keys: vec!["Ctrl".into(), "C".into()]
+            }
+            .required_capabilities(),
+            vec!["input.keyboard"]
+        );
+        assert_eq!(
             PlannedAction::FileWrite {
                 path: "/tmp/f".into(),
                 content: "x".into()
@@ -502,6 +584,14 @@ mod tests {
             "shell_command"
         );
         assert_eq!(PlannedAction::Noop.action_type(), "noop");
+        assert_eq!(
+            PlannedAction::ComputerAction {
+                description: "Open Firefox".into(),
+                max_steps: 20
+            }
+            .action_type(),
+            "computer_action"
+        );
         assert_eq!(
             PlannedAction::SelectAlgorithm {
                 algorithm: "world_model".into(),

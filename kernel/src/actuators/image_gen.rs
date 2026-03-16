@@ -355,11 +355,13 @@ mod tests {
         capabilities.insert("image.generate".to_string());
         ActuatorContext {
             agent_id: "agent".into(),
+            agent_name: "agent".into(),
             working_dir: tempdir.path().to_path_buf(),
             autonomy_level: AutonomyLevel::L2,
             capabilities,
             fuel_remaining: 100.0,
             egress_allowlist: vec![],
+            action_review_engine: None,
         }
     }
 

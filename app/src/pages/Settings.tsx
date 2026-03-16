@@ -29,6 +29,13 @@ interface ApiKeyDef {
   update: (v: string) => void;
 }
 
+interface SettingsField {
+  id: string;
+  label: string;
+  value: string;
+  update: (v: string) => void;
+}
+
 export function Settings({
   config,
   onChange,
@@ -115,6 +122,39 @@ export function Settings({
     { id: "github", label: "GitHub", value: "", update: () => {} }
   ];
 
+  const messagingKeys: SettingsField[] = [
+    {
+      id: "telegram",
+      label: "Telegram Bot Token",
+      value: config.messaging.telegram_bot_token,
+      update: (v) => onChange({ ...config, messaging: { ...config.messaging, telegram_bot_token: v } }),
+    },
+    {
+      id: "discord",
+      label: "Discord Bot Token",
+      value: config.messaging.discord_bot_token,
+      update: (v) => onChange({ ...config, messaging: { ...config.messaging, discord_bot_token: v } }),
+    },
+    {
+      id: "slack",
+      label: "Slack Bot Token",
+      value: config.messaging.slack_bot_token,
+      update: (v) => onChange({ ...config, messaging: { ...config.messaging, slack_bot_token: v } }),
+    },
+    {
+      id: "whatsapp-api",
+      label: "WhatsApp API Token",
+      value: config.messaging.whatsapp_api_token,
+      update: (v) => onChange({ ...config, messaging: { ...config.messaging, whatsapp_api_token: v } }),
+    },
+    {
+      id: "whatsapp-business",
+      label: "WhatsApp Business ID",
+      value: config.messaging.whatsapp_business_id,
+      update: (v) => onChange({ ...config, messaging: { ...config.messaging, whatsapp_business_id: v } }),
+    },
+  ];
+
   async function testKey(id: string, value: string): Promise<void> {
     if (!value || value.trim().length < 4) {
       setStatuses((prev) => ({ ...prev, [id]: "error" }));
@@ -196,17 +236,68 @@ export function Settings({
     onChange({ ...config, llm: { ...config.llm, routing_strategy: strategy } });
   }
 
-  // Mic test is simulated — Web Audio API is not wired up.
-  // The visualization uses random values to demonstrate the UI.
   useEffect(() => {
     if (!micTesting) {
       setMicLevel(0.08);
       return;
     }
-    const timer = window.setInterval(() => {
-      setMicLevel((prev) => Math.max(0.08, Math.min(1, prev * 0.35 + (0.14 + Math.random() * 0.82) * 0.65)));
-    }, 120);
-    return () => window.clearInterval(timer);
+
+    let cancelled = false;
+    let animationFrame = 0;
+    let stream: MediaStream | null = null;
+    let audioContext: AudioContext | null = null;
+    let analyser: AnalyserNode | null = null;
+    let source: MediaStreamAudioSourceNode | null = null;
+
+    async function startMeter(): Promise<void> {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        const AudioCtor = window.AudioContext
+          ?? ((window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
+        if (!AudioCtor) {
+          throw new Error("AudioContext unavailable");
+        }
+
+        audioContext = new AudioCtor();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 2048;
+        source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+
+        const samples = new Uint8Array(analyser.fftSize);
+        const tick = () => {
+          if (!analyser || cancelled) return;
+          analyser.getByteTimeDomainData(samples);
+          let sum = 0;
+          for (let index = 0; index < samples.length; index += 1) {
+            const normalized = (samples[index] - 128) / 128;
+            sum += normalized * normalized;
+          }
+          const rms = Math.sqrt(sum / samples.length);
+          setMicLevel(Math.max(0.08, Math.min(1, rms * 4.5)));
+          animationFrame = window.requestAnimationFrame(tick);
+        };
+        tick();
+      } catch {
+        setMicLevel(0.08);
+        setMicTesting(false);
+      }
+    }
+
+    void startMeter();
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(animationFrame);
+      source?.disconnect();
+      stream?.getTracks().forEach((track) => track.stop());
+      void audioContext?.close();
+    };
   }, [micTesting]);
 
   return (
@@ -283,6 +374,29 @@ export function Settings({
                   onChange={(e) => onUiSoundVolumeChange(Number(e.target.value) / 100)}
                 />
               </div>
+            </div>
+            <div className="st-row">
+              <div>
+                <p className="st-row-label">Enable Warden Governance Review</p>
+                <p className="st-row-hint">Have the L6 Warden review L3+ agent actions before execution</p>
+              </div>
+              <label className="st-toggle">
+                <input
+                  type="checkbox"
+                  checked={config.governance.enable_warden_review}
+                  onChange={(e) =>
+                    onChange({
+                      ...config,
+                      governance: {
+                        ...config.governance,
+                        enable_warden_review: e.target.checked,
+                      },
+                    })
+                  }
+                />
+                <span className="st-toggle-track"><span className="st-toggle-thumb" /></span>
+                <span className="st-toggle-text">{config.governance.enable_warden_review ? "On" : "Off"}</span>
+              </label>
             </div>
           </div>
         )}
@@ -371,6 +485,7 @@ export function Settings({
             <h3 className="st-card-title" style={{ marginTop: "1rem" }}>API Keys</h3>
             {[
               { label: "DeepSeek", key: "deepseek_api_key" as const, hint: "~$0.14/M tokens (cheapest)" },
+              { label: "NVIDIA NIM", key: "nvidia_api_key" as const, hint: "free 1000 credits — Llama, Nemotron, DeepSeek R1" },
               { label: "OpenAI", key: "openai_api_key" as const, hint: "~$5/M tokens" },
               { label: "Gemini", key: "gemini_api_key" as const, hint: "~$3.50/M tokens" },
               { label: "Anthropic", key: "anthropic_api_key" as const, hint: "~$3/M tokens" },
@@ -464,6 +579,36 @@ export function Settings({
                 </div>
               );
             })}
+
+            <h3 className="st-card-title" style={{ marginTop: "1rem" }}>Messaging Tokens</h3>
+            <p className="st-row-hint" style={{ marginBottom: "0.75rem" }}>
+              These values back the messaging connectors and the Messaging control page.
+            </p>
+            {messagingKeys.map((key) => (
+              <div key={key.id} className="st-api-row">
+                <div className="st-api-label-wrap">
+                  <span className="st-api-label">{key.label}</span>
+                  <span className={`st-api-status ${statusClass(statuses[key.id] ?? "unknown")}`}>
+                    {statusLabel(statuses[key.id] ?? "unknown")}
+                  </span>
+                </div>
+                <div className="st-api-input-row">
+                  <input
+                    type={secretType}
+                    className="st-api-input"
+                    value={key.value}
+                    onChange={(e) => key.update(e.target.value)}
+                    placeholder={`Enter ${key.label}`}
+                  />
+                  <button type="button" className="st-api-save-btn" onClick={onSave} disabled={saving}>
+                    Save
+                  </button>
+                  <button type="button" className="st-api-test-btn" onClick={() => testKey(key.id, key.value)}>
+                    Validate
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -527,7 +672,7 @@ export function Settings({
                 <div className="st-delete-confirm">
                   <p className="st-row-warn">Are you sure? This uses cryptographic erasure and is irreversible.</p>
                   <div className="st-delete-btns">
-                    <button type="button" className="st-btn st-btn-red" onClick={() => { setDeletePhase("idle"); onChange({ ...config, llm: { ...config.llm, anthropic_api_key: "", openai_api_key: "" }, search: { ...config.search, brave_api_key: "" } }); }}>Confirm Delete</button>
+                    <button type="button" className="st-btn st-btn-red" onClick={() => { setDeletePhase("idle"); onChange({ ...config, llm: { ...config.llm, anthropic_api_key: "", openai_api_key: "", nvidia_api_key: "" }, search: { ...config.search, brave_api_key: "" } }); }}>Confirm Delete</button>
                     <button type="button" className="st-btn st-btn-ghost" onClick={() => setDeletePhase("idle")}>Cancel</button>
                   </div>
                 </div>
@@ -579,7 +724,9 @@ export function Settings({
                 <div className="st-mic-bar">
                   <div className="st-mic-fill" style={{ width: `${Math.round(micLevel * 100)}%` }} />
                 </div>
-                <span className="st-row-hint" style={{ fontSize: "0.7rem", marginLeft: 8 }}>(simulated)</span>
+                <span className="st-row-hint" style={{ fontSize: "0.7rem", marginLeft: 8 }}>
+                  {hasDesktopRuntime() ? "(live input level)" : "(desktop runtime required)"}
+                </span>
               </div>
             </div>
             <div className="st-row">

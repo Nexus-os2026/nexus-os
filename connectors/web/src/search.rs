@@ -6,12 +6,15 @@ use nexus_kernel::errors::AgentError;
 use nexus_kernel::firewall::{ContentOrigin, SemanticBoundary};
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT};
+use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashSet;
 use std::time::Duration;
+use url::Url;
 
 const BRAVE_SEARCH_ENDPOINT: &str = "https://api.search.brave.com/res/v1/web/search";
+const DUCKDUCKGO_HTML_ENDPOINT: &str = "https://html.duckduckgo.com/html/";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchResult {
@@ -124,7 +127,7 @@ impl WebSearchConnector {
         let primary = self.execute_brave_search(&request);
         let mut results = match primary {
             Ok(results) => results,
-            Err(error) => self.try_fallback(normalized.as_str(), error)?,
+            Err(error) => self.try_fallback(normalized.as_str(), max_results, error)?,
         };
 
         if results.len() > max_results {
@@ -212,22 +215,43 @@ impl WebSearchConnector {
     fn try_fallback(
         &self,
         normalized: &str,
+        max_results: usize,
         primary_error: AgentError,
     ) -> Result<Vec<SearchResult>, AgentError> {
-        match self.fallback_provider {
-            FallbackProvider::None => Err(primary_error),
-            FallbackProvider::Bing => Ok(self.mock_provider_results("bing", normalized)),
-            FallbackProvider::SerpApi => Ok(self.mock_provider_results("serpapi", normalized)),
+        match self.execute_duckduckgo_search(normalized, max_results) {
+            Ok(results) if !results.is_empty() => Ok(results),
+            Ok(_) => Err(primary_error),
+            Err(fallback_error) => Err(AgentError::SupervisorError(format!(
+                "primary search failed: {primary_error}; fallback search failed: {fallback_error}"
+            ))),
         }
     }
 
-    fn mock_provider_results(&self, provider: &str, normalized: &str) -> Vec<SearchResult> {
-        vec![SearchResult {
-            title: format!("{provider} result: {normalized}"),
-            url: "https://www.rust-lang.org/learn".to_string(),
-            snippet: "Fallback result".to_string(),
-            relevance_score: 0.9,
-        }]
+    fn execute_duckduckgo_search(
+        &self,
+        query: &str,
+        max_results: usize,
+    ) -> Result<Vec<SearchResult>, AgentError> {
+        let response = self
+            .http_client
+            .get(DUCKDUCKGO_HTML_ENDPOINT)
+            .query(&[("q", query)])
+            .send()
+            .map_err(|error| {
+                AgentError::SupervisorError(format!("duckduckgo fallback request failed: {error}"))
+            })?;
+        if !response.status().is_success() {
+            return Err(AgentError::SupervisorError(format!(
+                "duckduckgo fallback returned status {}",
+                response.status()
+            )));
+        }
+
+        let body = response.text().map_err(|error| {
+            AgentError::SupervisorError(format!("duckduckgo fallback response failed: {error}"))
+        })?;
+
+        Ok(parse_duckduckgo_results(&body, max_results))
     }
 
     fn resolve_brave_api_key(&self) -> Result<String, AgentError> {
@@ -289,6 +313,65 @@ struct BraveWebResult {
     title: String,
     url: String,
     description: Option<String>,
+}
+
+fn parse_duckduckgo_results(body: &str, max_results: usize) -> Vec<SearchResult> {
+    let document = Html::parse_document(body);
+    let result_selector = Selector::parse(".result").expect("valid result selector");
+    let title_selector = Selector::parse("a.result__a").expect("valid title selector");
+    let snippet_selector = Selector::parse(".result__snippet").expect("valid snippet selector");
+
+    let mut results = Vec::new();
+    for (index, result) in document.select(&result_selector).enumerate() {
+        if results.len() >= max_results {
+            break;
+        }
+
+        let Some(title_link) = result.select(&title_selector).next() else {
+            continue;
+        };
+        let title = title_link.text().collect::<String>().trim().to_string();
+        if title.is_empty() {
+            continue;
+        }
+
+        let raw_url = title_link.value().attr("href").unwrap_or_default();
+        let snippet = result
+            .select(&snippet_selector)
+            .next()
+            .map(|value| value.text().collect::<String>().trim().to_string())
+            .unwrap_or_default();
+
+        results.push(SearchResult {
+            title,
+            url: resolve_duckduckgo_url(raw_url),
+            snippet,
+            relevance_score: (1.0 - (index as f32 * 0.05)).max(0.1),
+        });
+    }
+
+    results
+}
+
+fn resolve_duckduckgo_url(href: &str) -> String {
+    if href.starts_with("http://") || href.starts_with("https://") {
+        return href.to_string();
+    }
+    if href.starts_with("//") {
+        return format!("https:{href}");
+    }
+
+    let Some(base) = Url::parse("https://duckduckgo.com").ok() else {
+        return href.to_string();
+    };
+    let Ok(joined) = base.join(href) else {
+        return href.to_string();
+    };
+    if let Some((_, value)) = joined.query_pairs().find(|(key, _)| key == "uddg") {
+        return value.into_owned();
+    }
+
+    joined.to_string()
 }
 
 #[cfg(test)]

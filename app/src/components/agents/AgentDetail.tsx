@@ -17,6 +17,14 @@ interface AgentDetailProps {
   onResume?: (id: string) => void;
 }
 
+interface EvolutionEvent {
+  agent_id: string;
+  new_score: number;
+  generation: number;
+  strategy_hash?: string;
+  received_at: number;
+}
+
 function fuelPercentage(fuelRemaining: number): number {
   return Math.max(0, Math.min(100, Math.round(fuelRemaining / 100)));
 }
@@ -109,6 +117,30 @@ export function AgentDetail({
   const [evoMetrics, setEvoMetrics] = useState<Record<string, unknown> | null>(null);
   const [evoStrategies, setEvoStrategies] = useState<Record<string, unknown>[]>([]);
   const [evoLoading, setEvoLoading] = useState(false);
+  const [evolutionEvents, setEvolutionEvents] = useState<EvolutionEvent[]>([]);
+
+  const historicalEvolutionEvents = useMemo(() => {
+    if (!agent) {
+      return [];
+    }
+    return agentEvents
+      .filter((event) => event.payload?.action === "agent_evolved_strategy")
+      .map((event) => ({
+        agent_id: agent.id,
+        new_score: Number(event.payload?.new_score ?? 0),
+        generation: Number(event.payload?.generation ?? 0),
+        strategy_hash: typeof event.payload?.strategy_hash === "string" ? event.payload.strategy_hash : undefined,
+        received_at: event.timestamp * 1000,
+      }));
+  }, [agent, agentEvents]);
+
+  const combinedEvolutionEvents = useMemo(
+    () =>
+      [...evolutionEvents, ...historicalEvolutionEvents]
+        .sort((left, right) => right.received_at - left.received_at)
+        .slice(0, 8),
+    [evolutionEvents, historicalEvolutionEvents]
+  );
 
   const loadEvolution = useCallback(async (agentId: string) => {
     setEvoLoading(true);
@@ -132,6 +164,53 @@ export function AgentDetail({
       loadEvolution(agent.id);
     }
   }, [agent, activeTab, loadEvolution]);
+
+  useEffect(() => {
+    if (!agent || activeTab !== "evolution") {
+      return;
+    }
+
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen("agent-evolved", (event) => {
+          const payload = event.payload as Partial<EvolutionEvent>;
+          if (disposed || payload.agent_id !== agent.id) {
+            return;
+          }
+          setEvolutionEvents((current) => [
+            {
+              agent_id: agent.id,
+              new_score: Number(payload.new_score ?? 0),
+              generation: Number(payload.generation ?? 0),
+              strategy_hash: payload.strategy_hash,
+              received_at: Date.now(),
+            },
+            ...current,
+          ].slice(0, 10));
+          void loadEvolution(agent.id);
+        })
+      )
+      .then((dispose) => {
+        unlisten = dispose;
+      })
+      .catch(() => undefined);
+
+    return () => {
+      disposed = true;
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, [agent, activeTab, loadEvolution]);
+
+  useEffect(() => {
+    if (!agent) {
+      setEvolutionEvents([]);
+    }
+  }, [agent]);
 
   useEffect(() => {
     if (!agent) {
@@ -386,6 +465,31 @@ export function AgentDetail({
                           <p className="agent-audit-item-payload">
                             Type: {s.goal_type as string} | Uses: {s.uses as number} |
                             Success: {((s.success_rate as number) * 100).toFixed(0)}%
+                          </p>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+
+                  <h4 style={{ margin: "1rem 0 0.5rem", color: "var(--nexus-accent)" }}>
+                    Evolution Events
+                  </h4>
+                  {combinedEvolutionEvents.length === 0 ? (
+                    <p className="agent-card-last">No evolution events recorded yet.</p>
+                  ) : (
+                    <div className="agent-audit-timeline">
+                      {combinedEvolutionEvents.map((event, index) => (
+                        <article key={`${event.received_at}-${index}`} className="agent-audit-item">
+                          <div className="agent-audit-item-head">
+                            <span className="agent-audit-item-label">
+                              Generation {event.generation || 1}
+                            </span>
+                            <span className="agent-audit-item-time">
+                              Score: {event.new_score.toFixed(3)}
+                            </span>
+                          </div>
+                          <p className="agent-audit-item-payload">
+                            {new Date(event.received_at).toLocaleString()} {event.strategy_hash ? `| Strategy ${event.strategy_hash.slice(0, 12)}...` : ""}
                           </p>
                         </article>
                       ))}

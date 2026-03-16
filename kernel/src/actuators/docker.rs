@@ -120,11 +120,13 @@ mod tests {
             tempdir,
             ActuatorContext {
                 agent_id: "agent".into(),
+                agent_name: "agent".into(),
                 working_dir,
                 autonomy_level: AutonomyLevel::L2,
                 capabilities,
                 fuel_remaining: 100.0,
                 egress_allowlist: vec![],
+                action_review_engine: None,
             },
         )
     }

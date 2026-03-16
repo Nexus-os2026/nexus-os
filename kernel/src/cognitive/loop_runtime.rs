@@ -109,6 +109,8 @@ pub struct RegistryExecutor {
     workspace_base: PathBuf,
     /// Shared supervisor for looking up the agent's effective runtime context.
     supervisor: Arc<Mutex<Supervisor>>,
+    /// Optional governance reviewer (for Warden interception).
+    action_review_engine: Option<Arc<dyn crate::actuators::ActionReviewEngine>>,
 }
 
 impl RegistryExecutor {
@@ -121,11 +123,13 @@ impl RegistryExecutor {
         workspace_base: PathBuf,
         _audit: Arc<Mutex<AuditTrail>>,
         supervisor: Arc<Mutex<Supervisor>>,
+        action_review_engine: Option<Arc<dyn crate::actuators::ActionReviewEngine>>,
     ) -> Self {
         Self {
             registry: ActuatorRegistry::with_defaults(),
             workspace_base,
             supervisor,
+            action_review_engine,
         }
     }
 
@@ -133,6 +137,7 @@ impl RegistryExecutor {
     fn build_context(
         &self,
         agent_id: &str,
+        agent_name: &str,
         capabilities: &[String],
         fuel_remaining: f64,
         autonomy_level: AutonomyLevel,
@@ -141,11 +146,13 @@ impl RegistryExecutor {
         let working_dir = self.workspace_base.join(agent_id).join("workspace");
         ActuatorContext {
             agent_id: agent_id.to_string(),
+            agent_name: agent_name.to_string(),
             working_dir,
             autonomy_level,
             capabilities: capabilities.iter().cloned().collect::<HashSet<String>>(),
             fuel_remaining,
             egress_allowlist,
+            action_review_engine: self.action_review_engine.clone(),
         }
     }
 }
@@ -173,6 +180,18 @@ impl ActionExecutor for RegistryExecutor {
                 | PlannedAction::KnowledgeGraphUpdate { .. }
                 | PlannedAction::KnowledgeGraphQuery { .. }
                 | PlannedAction::BrowserAutomate { .. }
+                | PlannedAction::CaptureScreen { .. }
+                | PlannedAction::CaptureWindow { .. }
+                | PlannedAction::AnalyzeScreen { .. }
+                | PlannedAction::MouseMove { .. }
+                | PlannedAction::MouseClick { .. }
+                | PlannedAction::MouseDoubleClick { .. }
+                | PlannedAction::MouseDrag { .. }
+                | PlannedAction::KeyboardType { .. }
+                | PlannedAction::KeyboardPress { .. }
+                | PlannedAction::KeyboardShortcut { .. }
+                | PlannedAction::ScrollWheel { .. }
+                | PlannedAction::ComputerAction { .. }
                 | PlannedAction::ModifyCognitiveParams { .. }
                 | PlannedAction::SelectLlmProvider { .. }
                 | PlannedAction::SelectAlgorithm { .. }
@@ -190,7 +209,7 @@ impl ActionExecutor for RegistryExecutor {
 
         let agent_uuid =
             uuid::Uuid::parse_str(agent_id).map_err(|e| format!("invalid agent id: {e}"))?;
-        let (capabilities, fuel_remaining, autonomy_level, egress_allowlist) = {
+        let (agent_name, capabilities, fuel_remaining, autonomy_level, egress_allowlist) = {
             let supervisor = self
                 .supervisor
                 .lock()
@@ -199,6 +218,7 @@ impl ActionExecutor for RegistryExecutor {
                 .get_agent(agent_uuid)
                 .ok_or_else(|| format!("agent '{agent_id}' not found in supervisor"))?;
             (
+                handle.manifest.name.clone(),
                 handle.manifest.capabilities.clone(),
                 handle.remaining_fuel as f64,
                 AutonomyLevel::from_numeric(handle.autonomy_level).unwrap_or_default(),
@@ -212,6 +232,7 @@ impl ActionExecutor for RegistryExecutor {
 
         let ctx = self.build_context(
             agent_id,
+            &agent_name,
             &capabilities,
             fuel_remaining,
             autonomy_level,
@@ -236,11 +257,14 @@ struct AgentLoopState {
     consecutive_failures: u32,
     steps_completed: u32,
     shutdown: Arc<AtomicBool>,
-    /// One-shot bypass for the currently blocked HITL step after approval.
-    hitl_approval_granted: bool,
+    /// Remaining approved HITL actions for the current plan.
+    hitl_approval_allowance: u32,
+    /// When true, keep showing one approval request per HITL step.
+    review_each_mode: bool,
     /// Strategy hash used for this goal (for evolution tracking).
     strategy_hash: Option<String>,
     /// Timestamp when the goal started (for duration tracking).
+    #[allow(dead_code)]
     started_at_secs: u64,
 }
 
@@ -308,7 +332,8 @@ impl CognitiveRuntime {
             consecutive_failures: 0,
             steps_completed: 0,
             shutdown: shutdown.clone(),
-            hitl_approval_granted: false,
+            hitl_approval_allowance: 0,
+            review_each_mode: false,
             strategy_hash: None,
             started_at_secs: now,
         };
@@ -630,6 +655,17 @@ impl CognitiveRuntime {
                         Some(super::evolution::hash_strategy(&state.goal.description));
                 }
             }
+            if let Ok(memories) = memory_mgr.load_by_type(agent_id, "semantic", 25) {
+                if let Some(prompt_memory) = memories
+                    .into_iter()
+                    .find(|memory| memory.value_json.contains("optimized_planning_prompt:"))
+                {
+                    previous_outcomes.push(format!(
+                        "Use this evolved planning prompt guidance: {}",
+                        prompt_memory.value_json
+                    ));
+                }
+            }
 
             let context = PlanningContext {
                 agent_name: Some(agent_name.clone()),
@@ -693,6 +729,8 @@ impl CognitiveRuntime {
             state.steps = new_steps;
             state.current_step_index = 0;
             state.consecutive_failures = 0;
+            state.hitl_approval_allowance = 0;
+            state.review_each_mode = false;
             state.goal.status = GoalStatus::Active;
         }
 
@@ -714,7 +752,7 @@ impl CognitiveRuntime {
                         SwarmCoordinator.prepare_parallel_step(step);
                     }
                     "world_model" => {
-                        let world_model = WorldModel;
+                        let world_model = WorldModel::default();
                         let simulation =
                             world_model.simulate_action(&state.goal.id, step.action.action_type());
                         let _ = memory_mgr.store_episodic(
@@ -761,7 +799,7 @@ impl CognitiveRuntime {
 
             // Check if HITL is required for high-risk actions
             let requires_hitl = action_requires_hitl(&step.action, autonomy_level);
-            if requires_hitl && !state.hitl_approval_granted {
+            if requires_hitl && state.hitl_approval_allowance == 0 {
                 state.phase = CognitivePhase::Blocked;
                 let reason = format!(
                     "HITL approval required for {} at autonomy L{autonomy_level}",
@@ -782,7 +820,7 @@ impl CognitiveRuntime {
                 });
             }
             if requires_hitl {
-                state.hitl_approval_granted = false;
+                state.hitl_approval_allowance = state.hitl_approval_allowance.saturating_sub(1);
             }
 
             // Execute the action
@@ -839,6 +877,19 @@ impl CognitiveRuntime {
                         (true, fuel, None)
                     }
                     Err(error) => {
+                        if error.starts_with("human approval required:")
+                            || error.starts_with("Warden blocked action:")
+                        {
+                            state.phase = CognitivePhase::Blocked;
+                            return Ok(CycleResult {
+                                phase: CognitivePhase::Blocked,
+                                steps_executed: 0,
+                                fuel_consumed: 0.0,
+                                should_continue: true,
+                                blocked_reason: Some(error),
+                            });
+                        }
+
                         step.status = StepStatus::Failed;
                         step.result = Some(error.clone());
                         state.consecutive_failures += 1;
@@ -954,32 +1005,7 @@ impl CognitiveRuntime {
 
             let _ = memory_mgr.run_decay_cycle(agent_id);
 
-            // Evolution: record outcome for strategy scoring
-            if let Some(evo) = evolution_tracker {
-                let strategy_hash = state
-                    .strategy_hash
-                    .clone()
-                    .unwrap_or_else(|| super::evolution::hash_strategy(&state.goal.description));
-                let goal_type = infer_goal_type(&state.goal.description);
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-                let duration = (now - state.started_at_secs) as f64;
-
-                let _ = evo.record_outcome(
-                    agent_id,
-                    &state.goal.id,
-                    &strategy_hash,
-                    &goal_type,
-                    success,
-                    state.total_fuel_consumed,
-                    duration,
-                    fuel_remaining, // use remaining fuel as budget approximation
-                    60.0,           // estimated duration baseline
-                    memory_mgr,
-                );
-            }
+            let _ = evolution_tracker;
 
             self.emitter.emit(CognitiveEvent::GoalCompleted {
                 agent_id: agent_id.to_string(),
@@ -1065,14 +1091,68 @@ impl CognitiveRuntime {
         self.loops.lock().unwrap().contains_key(agent_id)
     }
 
-    /// Mark the current blocked step as approved so the next cycle executes it once.
-    pub fn approve_blocked_step(&self, agent_id: &str) -> Result<(), AgentError> {
+    /// Return the remaining plan steps that still require HITL approval.
+    pub fn pending_hitl_steps(&self, agent_id: &str) -> Result<Vec<AgentStep>, AgentError> {
+        let autonomy_level = {
+            let sup = self.supervisor.lock().unwrap();
+            let agent_uuid = uuid::Uuid::parse_str(agent_id)
+                .map_err(|e| AgentError::SupervisorError(format!("invalid agent id: {e}")))?;
+            let handle = sup.get_agent(agent_uuid).ok_or_else(|| {
+                AgentError::SupervisorError(format!("agent '{agent_id}' gone from supervisor"))
+            })?;
+            handle.autonomy_level
+        };
+
+        let loops = self.loops.lock().unwrap();
+        let state = loops.get(agent_id).ok_or_else(|| {
+            AgentError::SupervisorError(format!("no active loop for agent '{agent_id}'"))
+        })?;
+
+        Ok(state
+            .steps
+            .iter()
+            .skip(state.current_step_index)
+            .filter(|step| {
+                matches!(step.status, StepStatus::Planned | StepStatus::Executing)
+                    && action_requires_hitl(&step.action, autonomy_level)
+            })
+            .cloned()
+            .collect())
+    }
+
+    pub fn review_each_mode(&self, agent_id: &str) -> Result<bool, AgentError> {
+        let loops = self.loops.lock().unwrap();
+        let state = loops.get(agent_id).ok_or_else(|| {
+            AgentError::SupervisorError(format!("no active loop for agent '{agent_id}'"))
+        })?;
+        Ok(state.review_each_mode)
+    }
+
+    pub fn set_review_each_mode(&self, agent_id: &str, enabled: bool) -> Result<(), AgentError> {
         let mut loops = self.loops.lock().unwrap();
         let state = loops.get_mut(agent_id).ok_or_else(|| {
             AgentError::SupervisorError(format!("no active loop for agent '{agent_id}'"))
         })?;
-        state.hitl_approval_granted = true;
+        state.review_each_mode = enabled;
+        if enabled {
+            state.hitl_approval_allowance = 0;
+        }
         Ok(())
+    }
+
+    /// Mark blocked HITL steps as approved so future cycles may execute them.
+    pub fn approve_blocked_steps(&self, agent_id: &str, count: u32) -> Result<(), AgentError> {
+        let mut loops = self.loops.lock().unwrap();
+        let state = loops.get_mut(agent_id).ok_or_else(|| {
+            AgentError::SupervisorError(format!("no active loop for agent '{agent_id}'"))
+        })?;
+        state.hitl_approval_allowance = state.hitl_approval_allowance.saturating_add(count.max(1));
+        Ok(())
+    }
+
+    /// Mark the current blocked step as approved so the next cycle executes it once.
+    pub fn approve_blocked_step(&self, agent_id: &str) -> Result<(), AgentError> {
+        self.approve_blocked_steps(agent_id, 1)
     }
 
     /// Skip the current blocked step after an explicit denial and continue planning.
@@ -1087,7 +1167,7 @@ impl CognitiveRuntime {
                 AgentError::SupervisorError(format!("no active loop for agent '{agent_id}'"))
             })?;
 
-            state.hitl_approval_granted = false;
+            state.hitl_approval_allowance = 0;
             state.phase = CognitivePhase::Reason;
             state.consecutive_failures = 0;
 
@@ -1104,6 +1184,48 @@ impl CognitiveRuntime {
                 state.current_step_index += 1;
                 Some(snapshot)
             }
+        };
+
+        if let Some(step) = skipped_step.as_ref() {
+            self.emit_step_executed(agent_id, step);
+        }
+
+        Ok(())
+    }
+
+    /// Deny the current blocked step and discard the remaining plan so the agent replans.
+    pub fn deny_blocked_steps_and_replan(
+        &self,
+        agent_id: &str,
+        reason: Option<&str>,
+    ) -> Result<(), AgentError> {
+        let skipped_step = {
+            let mut loops = self.loops.lock().unwrap();
+            let state = loops.get_mut(agent_id).ok_or_else(|| {
+                AgentError::SupervisorError(format!("no active loop for agent '{agent_id}'"))
+            })?;
+
+            state.hitl_approval_allowance = 0;
+            state.review_each_mode = false;
+            state.phase = CognitivePhase::Reason;
+            state.consecutive_failures = 0;
+            state.goal.status = GoalStatus::Active;
+
+            let skipped = if state.current_step_index < state.steps.len() {
+                let deny_reason = reason
+                    .map(ToOwned::to_owned)
+                    .unwrap_or_else(|| "HITL batch denied".to_string());
+                let step = &mut state.steps[state.current_step_index];
+                step.status = StepStatus::Skipped;
+                step.result = Some(deny_reason);
+                Some(step.clone())
+            } else {
+                None
+            };
+
+            state.steps.clear();
+            state.current_step_index = 0;
+            skipped
         };
 
         if let Some(step) = skipped_step.as_ref() {
@@ -1152,13 +1274,24 @@ fn action_requires_hitl(action: &PlannedAction, autonomy_level: u8) -> bool {
         PlannedAction::FileWrite { .. }
         | PlannedAction::ShellCommand { .. }
         | PlannedAction::DockerCommand { .. }
-        | PlannedAction::ApiCall { .. } => autonomy_level < 3,
+        | PlannedAction::ApiCall { .. }
+        | PlannedAction::AnalyzeScreen { .. }
+        | PlannedAction::MouseMove { .. }
+        | PlannedAction::MouseClick { .. }
+        | PlannedAction::MouseDoubleClick { .. }
+        | PlannedAction::MouseDrag { .. }
+        | PlannedAction::KeyboardType { .. }
+        | PlannedAction::KeyboardPress { .. }
+        | PlannedAction::KeyboardShortcut { .. }
+        | PlannedAction::ScrollWheel { .. } => autonomy_level < 3,
         // Medium-risk
         PlannedAction::WebFetch { .. }
         | PlannedAction::BrowserAutomate { .. }
-        | PlannedAction::AgentMessage { .. } => autonomy_level < 2,
+        | PlannedAction::AgentMessage { .. }
+        | PlannedAction::CaptureScreen { .. }
+        | PlannedAction::CaptureWindow { .. } => autonomy_level < 2,
         // HITL request always blocks (that's its purpose)
-        PlannedAction::HitlRequest { .. } => true,
+        PlannedAction::HitlRequest { .. } | PlannedAction::ComputerAction { .. } => true,
         // Low-risk / internal
         PlannedAction::LlmQuery { .. }
         | PlannedAction::FileRead { .. }
@@ -1203,6 +1336,18 @@ fn estimate_fuel_cost(action: &PlannedAction) -> f64 {
         PlannedAction::KnowledgeGraphUpdate { .. } => 4.0,
         PlannedAction::KnowledgeGraphQuery { .. } => 2.0,
         PlannedAction::BrowserAutomate { .. } => 10.0,
+        PlannedAction::CaptureScreen { .. } => 4.0,
+        PlannedAction::CaptureWindow { .. } => 6.0,
+        PlannedAction::AnalyzeScreen { .. } => 12.0,
+        PlannedAction::MouseMove { .. } => 3.0,
+        PlannedAction::MouseClick { .. } => 5.0,
+        PlannedAction::MouseDoubleClick { .. } => 6.0,
+        PlannedAction::MouseDrag { .. } => 7.0,
+        PlannedAction::KeyboardType { text } => 5.0 + (text.chars().count() as f64 * 0.1),
+        PlannedAction::KeyboardPress { .. } => 4.0,
+        PlannedAction::KeyboardShortcut { keys } => 4.0 + keys.len() as f64,
+        PlannedAction::ScrollWheel { amount, .. } => 3.0 + *amount as f64 * 0.1,
+        PlannedAction::ComputerAction { max_steps, .. } => 20.0 + *max_steps as f64,
         PlannedAction::AgentMessage { .. } => 2.0,
         PlannedAction::HitlRequest { .. } => 0.0,
         PlannedAction::MemoryStore { .. } => 0.5,
@@ -1740,6 +1885,100 @@ mod tests {
     }
 
     #[test]
+    fn test_batch_hitl_approval_executes_multiple_steps() {
+        let mut sup = Supervisor::new();
+        let manifest = AgentManifest {
+            name: "batch-hitl".into(),
+            version: "1.0.0".into(),
+            capabilities: vec!["fs.write".into()],
+            fuel_budget: 10000,
+            autonomy_level: Some(1),
+            consent_policy_path: None,
+            requester_id: None,
+            schedule: None,
+            default_goal: None,
+            llm_model: None,
+            fuel_period_id: None,
+            monthly_fuel_cap: None,
+            allowed_endpoints: None,
+            domain_tags: vec![],
+            filesystem_permissions: vec![],
+        };
+        let id = sup.start_agent(manifest).unwrap();
+        let sup = Arc::new(Mutex::new(sup));
+        let (runtime, _) = make_runtime(sup);
+
+        let goal = AgentGoal::new("run multiple writes".into(), 5);
+        runtime.assign_goal(&id.to_string(), goal).unwrap();
+
+        let planner = make_planner(
+            r#"[
+                {"action": {"type": "FileWrite", "path": "/tmp/x", "content": "hello"}, "description": "write x"},
+                {"action": {"type": "FileWrite", "path": "/tmp/y", "content": "world"}, "description": "write y"}
+            ]"#,
+        );
+        let memory_mgr = make_memory_mgr();
+        let executor = MockExecutor::always_ok("ok");
+        let mut audit = AuditTrail::new();
+
+        let blocked = runtime
+            .run_cycle(
+                &id.to_string(),
+                &planner,
+                &memory_mgr,
+                &executor,
+                &mut audit,
+            )
+            .unwrap();
+        assert_eq!(blocked.phase, CognitivePhase::Blocked);
+
+        let pending = runtime.pending_hitl_steps(&id.to_string()).unwrap();
+        assert_eq!(pending.len(), 2);
+
+        runtime
+            .approve_blocked_steps(&id.to_string(), pending.len() as u32)
+            .unwrap();
+
+        let first_resumed = runtime
+            .run_cycle(
+                &id.to_string(),
+                &planner,
+                &memory_mgr,
+                &executor,
+                &mut audit,
+            )
+            .unwrap();
+        assert_eq!(first_resumed.phase, CognitivePhase::Act);
+        assert_eq!(first_resumed.steps_executed, 1);
+
+        let second_resumed = runtime
+            .run_cycle(
+                &id.to_string(),
+                &planner,
+                &memory_mgr,
+                &executor,
+                &mut audit,
+            )
+            .unwrap();
+        assert_eq!(second_resumed.phase, CognitivePhase::Learn);
+        assert_eq!(second_resumed.steps_executed, 1);
+    }
+
+    #[test]
+    fn test_review_each_mode_toggle() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup);
+        let goal = AgentGoal::new("review each".into(), 5);
+        runtime.assign_goal(&agent_id, goal).unwrap();
+
+        assert!(!runtime.review_each_mode(&agent_id).unwrap());
+        runtime.set_review_each_mode(&agent_id, true).unwrap();
+        assert!(runtime.review_each_mode(&agent_id).unwrap());
+        runtime.set_review_each_mode(&agent_id, false).unwrap();
+        assert!(!runtime.review_each_mode(&agent_id).unwrap());
+    }
+
+    #[test]
     fn test_denied_hitl_step_is_skipped() {
         let mut sup = Supervisor::new();
         let manifest = AgentManifest {
@@ -1802,6 +2041,64 @@ mod tests {
             .unwrap();
         assert_eq!(resumed.phase, CognitivePhase::Learn);
         assert_eq!(resumed.steps_executed, 1);
+    }
+
+    #[test]
+    fn test_deny_hitl_batch_clears_plan_for_replan() {
+        let mut sup = Supervisor::new();
+        let manifest = AgentManifest {
+            name: "deny-batch".into(),
+            version: "1.0.0".into(),
+            capabilities: vec!["fs.write".into()],
+            fuel_budget: 10000,
+            autonomy_level: Some(1),
+            consent_policy_path: None,
+            requester_id: None,
+            schedule: None,
+            default_goal: None,
+            llm_model: None,
+            fuel_period_id: None,
+            monthly_fuel_cap: None,
+            allowed_endpoints: None,
+            domain_tags: vec![],
+            filesystem_permissions: vec![],
+        };
+        let id = sup.start_agent(manifest).unwrap();
+        let sup = Arc::new(Mutex::new(sup));
+        let (runtime, _) = make_runtime(sup);
+
+        let goal = AgentGoal::new("deny all".into(), 5);
+        runtime.assign_goal(&id.to_string(), goal).unwrap();
+
+        let planner = make_planner(
+            r#"[
+                {"action": {"type": "FileWrite", "path": "/tmp/x", "content": "hello"}, "description": "write x"},
+                {"action": {"type": "FileWrite", "path": "/tmp/y", "content": "world"}, "description": "write y"}
+            ]"#,
+        );
+        let memory_mgr = make_memory_mgr();
+        let executor = MockExecutor::always_ok("ok");
+        let mut audit = AuditTrail::new();
+
+        let blocked = runtime
+            .run_cycle(
+                &id.to_string(),
+                &planner,
+                &memory_mgr,
+                &executor,
+                &mut audit,
+            )
+            .unwrap();
+        assert_eq!(blocked.phase, CognitivePhase::Blocked);
+
+        runtime
+            .deny_blocked_steps_and_replan(&id.to_string(), Some("deny all"))
+            .unwrap();
+
+        let status = runtime.get_agent_status(&id.to_string()).unwrap();
+        assert_eq!(status.phase, CognitivePhase::Reason);
+        assert_eq!(status.steps_total, 0);
+        assert!(!runtime.review_each_mode(&id.to_string()).unwrap());
     }
 
     #[test]

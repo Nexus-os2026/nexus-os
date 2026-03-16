@@ -3,9 +3,10 @@
 .agent-browser-root {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 4rem);
-  padding: 0.75rem;
-  gap: 0.5rem;
+  height: calc(100vh - 2.75rem);
+  min-height: 0;
+  padding: 0.5rem;
+  gap: 0.75rem;
 }
 
 /* ── Toolbar ── */
@@ -295,7 +296,8 @@
 .browser-iframe {
   width: 100%;
   height: 100%;
-  border: none;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
   background: #0d1117;
 }
 
@@ -365,7 +367,7 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .research-supervisor-panel {
@@ -517,10 +519,9 @@
 /* Sub-agent cards */
 
 .research-agents-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 0.5rem;
-  overflow-x: auto;
-  padding-bottom: 0.25rem;
 }
 
 .research-agents-row::-webkit-scrollbar {
@@ -609,37 +610,83 @@
   display: flex;
   flex: 1;
   min-height: 0;
-  gap: 0;
-  border: 1px solid rgba(0, 255, 157, 0.08);
-  border-radius: 8px;
-  overflow: hidden;
+  gap: 0.75rem;
+  align-items: stretch;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
 }
 
-.research-activity-panel {
-  width: 40%;
-  min-width: 240px;
-  max-width: 500px;
+.research-sidebar {
+  width: min(420px, 36%);
+  min-width: 320px;
   display: flex;
   flex-direction: column;
-  background: var(--bg-secondary, #0a1628);
-  border-right: 1px solid rgba(0, 255, 157, 0.12);
+  gap: 0.75rem;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.1rem;
+}
+
+.research-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.research-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 157, 0.15);
+  border-radius: 999px;
+}
+
+.research-info-panel,
+.research-results-panel,
+.research-summary-panel {
+  border: 1px solid rgba(0, 255, 157, 0.08);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(10, 22, 40, 0.94), rgba(5, 10, 18, 0.96));
+  box-shadow: 0 14px 36px rgba(2, 6, 23, 0.28);
+}
+
+.research-section-title {
+  font-family: var(--font-display, "Orbitron", monospace);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--cyan, var(--nexus-accent));
+  padding: 0.7rem 0.85rem 0;
+}
+
+.research-info-panel {
+  padding: 0 0.75rem 0.75rem;
+}
+
+.research-results-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+  overflow: hidden;
 }
 
 .research-browser-panel {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--bg-primary, #050a12);
+  min-width: 0;
+  min-height: 0;
+  background: linear-gradient(180deg, rgba(5, 10, 18, 0.98), rgba(4, 8, 15, 0.96));
+  border: 1px solid rgba(0, 255, 157, 0.12);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.05), 0 18px 48px rgba(2, 6, 23, 0.32);
   position: relative;
+  overflow: hidden;
 }
 
 .research-browser-bar {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.35rem 0.6rem;
-  background: rgba(0, 0, 0, 0.3);
-  border-bottom: 1px solid rgba(0, 255, 157, 0.08);
+  padding: 0.55rem 0.8rem;
+  background: linear-gradient(180deg, rgba(8, 15, 28, 0.96), rgba(5, 10, 18, 0.94));
+  border-bottom: 1px solid rgba(0, 255, 157, 0.1);
   font-family: var(--font-mono, monospace);
   font-size: 0.7rem;
 }
@@ -658,10 +705,28 @@
   text-overflow: ellipsis;
 }
 
+.browser-iframe-shell {
+  flex: 1;
+  min-height: 0;
+  margin: 0.85rem;
+  padding: 0.85rem;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  background: radial-gradient(circle at top, rgba(15, 23, 42, 0.72), rgba(2, 6, 23, 0.96));
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.9);
+}
+
+.browser-iframe-shell--placeholder {
+  align-items: center;
+  justify-content: center;
+}
+
 /* Research summary */
 
 .research-summary {
-  flex: 1;
   display: flex;
   flex-direction: column;
   padding: 1rem;
@@ -687,6 +752,11 @@
   white-space: pre-wrap;
   word-wrap: break-word;
   margin: 0;
+}
+
+.research-activity-panel {
+  flex: 1;
+  min-height: 260px;
 }
 
 /* Animations — glow-pulse and fade-slide-up are defined in animations.css */
@@ -1650,20 +1720,24 @@
   flex: 1;
   overflow: hidden;
   position: relative;
+  min-height: 0;
 }
 
 .browser-mode-panel {
   position: absolute;
   inset: 0;
+  display: flex;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
+  min-height: 0;
 }
 
 .browser-mode-panel--active {
   opacity: 1;
   pointer-events: auto;
   position: relative;
+  min-height: 0;
 }
 
 /* ── History Dropdown ── */
@@ -1979,6 +2053,22 @@
 .browser-mode-panel--active .learn-browser-panel {
   border-color: rgba(0, 255, 157, 0.15);
   box-shadow: 0 0 12px rgba(0, 255, 157, 0.04);
+}
+
+@media (max-width: 1100px) {
+  .research-split {
+    flex-direction: column;
+  }
+
+  .research-sidebar {
+    width: 100%;
+    min-width: 0;
+    max-height: 50%;
+  }
+
+  .research-browser-panel {
+    min-height: 420px;
+  }
 }
 
 /* Activity stream fade-in enhancement */

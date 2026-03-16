@@ -273,6 +273,63 @@ fn capability_metadata() -> HashMap<&'static str, CapabilityMeta> {
             category_id: "desktop",
         },
     );
+    map.insert(
+        "screen.capture",
+        CapabilityMeta {
+            display_name: "Screen capture",
+            description:
+                "Allows the agent to capture screenshots of the desktop or a specific window.",
+            risk_level: PermissionRiskLevel::High,
+            category_id: "desktop",
+        },
+    );
+    map.insert(
+        "screen.analyze",
+        CapabilityMeta {
+            display_name: "Screen analysis",
+            description:
+                "Allows the agent to send desktop screenshots to a vision model for analysis.",
+            risk_level: PermissionRiskLevel::Critical,
+            category_id: "desktop",
+        },
+    );
+    map.insert(
+        "input.mouse",
+        CapabilityMeta {
+            display_name: "Mouse control",
+            description:
+                "Allows the agent to move, click, drag, and scroll the mouse on the desktop.",
+            risk_level: PermissionRiskLevel::Critical,
+            category_id: "desktop",
+        },
+    );
+    map.insert(
+        "input.keyboard",
+        CapabilityMeta {
+            display_name: "Keyboard control",
+            description: "Allows the agent to type and send keyboard shortcuts on the desktop.",
+            risk_level: PermissionRiskLevel::Critical,
+            category_id: "desktop",
+        },
+    );
+    map.insert(
+        "input.autonomous",
+        CapabilityMeta {
+            display_name: "Autonomous input",
+            description: "Allows L4+ agents to bypass per-action HITL for input control after explicit user grant.",
+            risk_level: PermissionRiskLevel::Critical,
+            category_id: "desktop",
+        },
+    );
+    map.insert(
+        "computer.use",
+        CapabilityMeta {
+            display_name: "Computer use",
+            description: "Allows the agent to plan and execute multi-step computer control loops using vision and input together.",
+            risk_level: PermissionRiskLevel::Critical,
+            category_id: "desktop",
+        },
+    );
 
     map
 }

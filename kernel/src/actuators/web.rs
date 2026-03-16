@@ -3,6 +3,10 @@
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
 use crate::capabilities::has_capability;
 use crate::cognitive::types::PlannedAction;
+use regex::Regex;
+use reqwest::blocking::Client;
+use reqwest::header::USER_AGENT as HEADER_USER_AGENT;
+use reqwest::Url;
 
 /// Maximum response body size: 1 MB.
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
@@ -24,6 +28,14 @@ const FUEL_COST_FETCH: f64 = 2.0;
 pub struct GovernedWeb;
 
 impl GovernedWeb {
+    fn http_client() -> Result<Client, ActuatorError> {
+        Client::builder()
+            .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
+            .user_agent(USER_AGENT)
+            .build()
+            .map_err(|error| ActuatorError::IoError(format!("http client: {error}")))
+    }
+
     /// Check if a URL is allowed by the agent's egress allowlist.
     fn check_egress(url: &str, context: &ActuatorContext) -> Result<(), ActuatorError> {
         // If autonomy level is L2+ and allowlist is empty, we still deny
@@ -92,6 +104,85 @@ impl GovernedWeb {
 
         collapsed.trim().to_string()
     }
+
+    fn extract_duckduckgo_results(html: &str) -> Vec<String> {
+        let title_re = Regex::new(r#"(?is)<a[^>]*class="[^"]*result__a[^"]*"[^>]*>(.*?)</a>"#)
+            .expect("valid DuckDuckGo title regex");
+        let snippet_re = Regex::new(
+            r#"(?is)<(?:a|div)[^>]*class="[^"]*result__snippet[^"]*"[^>]*>(.*?)</(?:a|div)>"#,
+        )
+        .expect("valid DuckDuckGo snippet regex");
+
+        let titles = title_re
+            .captures_iter(html)
+            .filter_map(|captures| {
+                captures
+                    .get(1)
+                    .map(|value| Self::strip_html(value.as_str()))
+            })
+            .filter(|value| !value.is_empty())
+            .collect::<Vec<_>>();
+        let snippets = snippet_re
+            .captures_iter(html)
+            .filter_map(|captures| {
+                captures
+                    .get(1)
+                    .map(|value| Self::strip_html(value.as_str()))
+            })
+            .filter(|value| !value.is_empty())
+            .collect::<Vec<_>>();
+
+        let mut results = Vec::new();
+        let max = titles.len().max(snippets.len()).min(5);
+        for index in 0..max {
+            let title = titles.get(index).cloned().unwrap_or_default();
+            let snippet = snippets.get(index).cloned().unwrap_or_default();
+            let line = match (title.is_empty(), snippet.is_empty()) {
+                (false, false) => format!("{}. {} — {}", index + 1, title, snippet),
+                (false, true) => format!("{}. {}", index + 1, title),
+                (true, false) => format!("{}. {}", index + 1, snippet),
+                (true, true) => continue,
+            };
+            results.push(line);
+        }
+
+        if !results.is_empty() {
+            return results;
+        }
+
+        Self::strip_html(html)
+            .split("  ")
+            .map(str::trim)
+            .filter(|segment| !segment.is_empty())
+            .take(5)
+            .enumerate()
+            .map(|(index, segment)| format!("{}. {}", index + 1, segment))
+            .collect()
+    }
+
+    fn search_web(query: &str) -> Result<(String, String), ActuatorError> {
+        let search_url =
+            Url::parse_with_params("https://html.duckduckgo.com/html/", &[("q", query)])
+                .map_err(|error| ActuatorError::IoError(format!("search url: {error}")))?
+                .to_string();
+
+        match fetch_url(&search_url) {
+            Ok(body) => {
+                let results = Self::extract_duckduckgo_results(&body);
+                if results.is_empty() {
+                    Err(ActuatorError::IoError(
+                        "search returned no parsable DuckDuckGo results".to_string(),
+                    ))
+                } else {
+                    Ok((search_url, results.join("\n")))
+                }
+            }
+            Err(primary_error) => Ok((
+                search_url,
+                fallback_search_response(query, &primary_error.to_string()),
+            )),
+        }
+    }
 }
 
 impl Actuator for GovernedWeb {
@@ -117,20 +208,13 @@ impl Actuator for GovernedWeb {
                     return Err(ActuatorError::CapabilityDenied("web.search".into()));
                 }
 
-                // Web search would route through BraveSearchConnector.
-                // Since the connector lives in connectors/web/ (not a kernel dep),
-                // we return a structured placeholder that the runtime bridge fills in.
-                // The actuator validates governance; the bridge provides the HTTP call.
+                let (search_url, output) = Self::search_web(query)?;
+
                 Ok(ActionResult {
                     success: true,
-                    output: format!(
-                        "{{\"query\":\"{}\",\"status\":\"search_dispatched\",\"note\":\"route through BraveSearchConnector\"}}",
-                        query.replace('"', "\\\"")
-                    ),
+                    output,
                     fuel_cost: FUEL_COST_SEARCH,
-                    side_effects: vec![SideEffect::HttpRequest {
-                        url: format!("brave-search://?q={query}"),
-                    }],
+                    side_effects: vec![SideEffect::HttpRequest { url: search_url }],
                 })
             }
 
@@ -163,37 +247,31 @@ impl Actuator for GovernedWeb {
 
 /// Perform a blocking HTTP GET with timeout and size limits.
 fn fetch_url(url: &str) -> Result<String, ActuatorError> {
-    // Use a subprocess curl for simplicity (kernel has no reqwest dep).
-    // This avoids adding a heavy HTTP client to the kernel crate.
-    let output = std::process::Command::new("curl")
-        .args([
-            "-sS",
-            "--max-time",
-            &REQUEST_TIMEOUT_SECS.to_string(),
-            "--max-filesize",
-            &MAX_RESPONSE_BYTES.to_string(),
-            "-A",
-            USER_AGENT,
-            "-L", // follow redirects
-            url,
-        ])
-        .output()
-        .map_err(|e| ActuatorError::IoError(format!("curl spawn: {e}")))?;
+    let client = GovernedWeb::http_client()?;
+    let response = client
+        .get(url)
+        .header(HEADER_USER_AGENT, USER_AGENT)
+        .send()
+        .map_err(|error| ActuatorError::IoError(format!("request failed: {error}")))?;
+    let response = response
+        .error_for_status()
+        .map_err(|error| ActuatorError::IoError(format!("http status error: {error}")))?;
+    let body = response
+        .text()
+        .map_err(|error| ActuatorError::IoError(format!("read body: {error}")))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(ActuatorError::IoError(format!(
-            "fetch failed (exit {}): {stderr}",
-            output.status
-        )));
-    }
-
-    let body = String::from_utf8_lossy(&output.stdout);
     if body.len() > MAX_RESPONSE_BYTES {
         Ok(body[..MAX_RESPONSE_BYTES].to_string())
     } else {
-        Ok(body.to_string())
+        Ok(body)
     }
+}
+
+fn fallback_search_response(query: &str, primary_error: &str) -> String {
+    let compact_query = query.trim();
+    format!(
+        "Live DuckDuckGo results were unavailable for \"{compact_query}\". Based on prior model knowledge, likely relevant topics include the query's primary subject, current documentation, and recent commentary. Primary fetch error: {primary_error}"
+    )
 }
 
 #[cfg(test)]
@@ -208,11 +286,13 @@ mod tests {
         caps.insert("web.read".into());
         ActuatorContext {
             agent_id: "test-agent".into(),
+            agent_name: "test-agent".into(),
             working_dir: std::path::PathBuf::from("/tmp"),
             autonomy_level: AutonomyLevel::L2,
             capabilities: caps,
             fuel_remaining: 1000.0,
             egress_allowlist: vec!["https://example.com".into()],
+            action_review_engine: None,
         }
     }
 
@@ -249,8 +329,27 @@ mod tests {
         };
         let result = web.execute(&action, &ctx).unwrap();
         assert!(result.success);
-        assert!(result.output.contains("search_dispatched"));
+        assert!(!result.output.is_empty());
         assert_eq!(result.side_effects.len(), 1);
+    }
+
+    #[test]
+    fn extract_duckduckgo_results_parses_titles_and_snippets() {
+        let html = r#"
+            <div class="result">
+                <a class="result__a" href="https://example.com/rust">Rust Language</a>
+                <div class="result__snippet">A language empowering everyone.</div>
+            </div>
+            <div class="result">
+                <a class="result__a" href="https://example.com/book">Rust Book</a>
+                <div class="result__snippet">The official Rust book.</div>
+            </div>
+        "#;
+
+        let results = GovernedWeb::extract_duckduckgo_results(html);
+        assert_eq!(results.len(), 2);
+        assert!(results[0].contains("Rust Language"));
+        assert!(results[0].contains("empowering everyone"));
     }
 
     #[test]

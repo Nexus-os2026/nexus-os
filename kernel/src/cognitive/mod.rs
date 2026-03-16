@@ -16,7 +16,8 @@ pub mod types;
 
 pub use algorithms::{AdversarialArena, EvolutionEngine, SwarmCoordinator, WorldModel};
 pub use evolution::{
-    EvolutionLlm, EvolutionMetrics, EvolutionTracker, StrategyInfo, StrategyScore, StrategyStore,
+    hash_strategy, EvolutionLlm, EvolutionMetrics, EvolutionTracker, StrategyInfo, StrategyScore,
+    StrategyStore,
 };
 pub use hivemind::{
     AgentInfo, HivemindCoordinator, HivemindEvent, HivemindEventEmitter, HivemindLlm,
@@ -27,7 +28,7 @@ pub use loop_runtime::{
 };
 pub use memory_manager::{AgentMemoryManager, MemoryEntry, MemoryStore};
 pub use planner::{CognitivePlanner, PlannerLlm};
-pub use scheduler::{AgentScheduler, ScheduledAgent};
+pub use scheduler::{AgentScheduler, ScheduledAgent, ScheduledGoalExecutor};
 pub use types::{
     AgentGoal, AgentStep, CognitiveEvent, CognitivePhase, CognitiveStatusResponse, CycleResult,
     GoalStatus, LoopConfig, PlannedAction, PlanningContext, StepStatus,

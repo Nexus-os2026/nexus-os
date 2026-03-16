@@ -162,6 +162,34 @@ impl EvolutionTracker {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_task_result(
+        &self,
+        agent_id: &str,
+        task_id: &str,
+        strategy_hash: &str,
+        goal_type: &str,
+        success: bool,
+        fuel_consumed: f64,
+        duration_secs: f64,
+        goal_fuel_budget: f64,
+        estimated_duration: f64,
+        memory_mgr: &AgentMemoryManager,
+    ) -> Result<(), AgentError> {
+        self.record_outcome(
+            agent_id,
+            task_id,
+            strategy_hash,
+            goal_type,
+            success,
+            fuel_consumed,
+            duration_secs,
+            goal_fuel_budget,
+            estimated_duration,
+            memory_mgr,
+        )
+    }
+
     /// Select the best strategy for a goal type.
     pub fn select_best_strategy(
         &self,

@@ -226,7 +226,7 @@ fn instantiate_algorithm(algorithm: &str) -> Result<(), ActuatorError> {
             Ok(())
         }
         "world_model" => {
-            let _ = WorldModel;
+            let _ = WorldModel::default();
             Ok(())
         }
         "adversarial" => {
@@ -786,11 +786,13 @@ mod tests {
         caps.insert("cognitive_modify".to_string());
         ActuatorContext {
             agent_id: Uuid::new_v4().to_string(),
+            agent_name: "cognitive-param-agent".to_string(),
             working_dir: workspace.to_path_buf(),
             autonomy_level: AutonomyLevel::L6,
             capabilities: caps,
             fuel_remaining: 200_000.0,
             egress_allowlist: vec![],
+            action_review_engine: None,
         }
     }
 
