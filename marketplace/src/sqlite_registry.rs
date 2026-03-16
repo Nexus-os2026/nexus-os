@@ -421,7 +421,10 @@ impl SqliteRegistry {
     }
 
     /// Get the signed bundle for a package without mutating download counts.
-    pub fn signed_bundle(&self, package_id: &str) -> Result<SignedPackageBundle, SqliteRegistryError> {
+    pub fn signed_bundle(
+        &self,
+        package_id: &str,
+    ) -> Result<SignedPackageBundle, SqliteRegistryError> {
         self.get_bundle(package_id)
     }
 

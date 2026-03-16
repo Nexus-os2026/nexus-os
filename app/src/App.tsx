@@ -1514,8 +1514,8 @@ export default function App(): JSX.Element {
           version="v8.0.0"
         />
 
-        <div className="flex min-h-screen flex-1 flex-col">
-          <header className="px-4 py-4 sm:px-6">
+        <div className="nexus-main-column">
+          <header className="nexus-shell-header px-4 py-4 sm:px-6">
             <HoloPanel depth="foreground" className="nexus-topbar">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -1587,13 +1587,13 @@ export default function App(): JSX.Element {
             </HoloPanel>
           </header>
 
-          <div className="flex-1 px-4 py-4 sm:px-6 sm:py-6">
+          <main className="nexus-shell-content px-4 py-4 sm:px-6 sm:py-6">
             <PageTransition pageKey={page}>
-              <HoloPanel depth="mid" className="min-h-[calc(100vh-11.5rem)]">
+              <HoloPanel depth="mid" className="nexus-page-panel">
                 {renderPage()}
               </HoloPanel>
             </PageTransition>
-          </div>
+          </main>
         </div>
       </div>
 

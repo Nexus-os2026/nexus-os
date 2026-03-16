@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   searchModels,
   getModelInfo,
   checkModelCompatibility,
   downloadModel,
   listLocalModels,
+  listProviderModels,
   deleteLocalModel,
   getSystemSpecs,
 } from "../api/backend";
+import type { ProviderModel } from "../types";
 
 /* ── types ── */
 
@@ -61,6 +63,16 @@ interface LocalModelConfig {
   min_ram_mb: number;
 }
 
+interface InstalledModelEntry {
+  key: string;
+  title: string;
+  subtitle: string;
+  chips: string[];
+  removable: boolean;
+  deleteId?: string;
+  readyLabel: string;
+}
+
 interface SystemSpecs {
   total_ram_mb: number;
   available_ram_mb: number;
@@ -111,6 +123,7 @@ export default function ModelHub() {
   const [selectedModel, setSelectedModel] = useState<HfModelInfo | null>(null);
   const [selectedModelDetails, setSelectedModelDetails] = useState<HfModelInfo | null>(null);
   const [localModels, setLocalModels] = useState<LocalModelConfig[]>([]);
+  const [ollamaModels, setOllamaModels] = useState<ProviderModel[]>([]);
   const [systemSpecs, setSystemSpecs] = useState<SystemSpecs | null>(null);
   const [compatibilityMap, setCompatibilityMap] = useState<Record<string, SystemCompatibility>>({});
   const [activeDownloads, setActiveDownloads] = useState<Record<string, DownloadProgress>>({});
@@ -119,6 +132,7 @@ export default function ModelHub() {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [localDiscoveryAttempted, setLocalDiscoveryAttempted] = useState(false);
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -130,12 +144,23 @@ export default function ModelHub() {
   /* ── data loading ── */
 
   const loadLocalModels = useCallback(async () => {
+    setLocalDiscoveryAttempted(true);
     try {
-      const raw = await listLocalModels();
+      const [raw, providerModels] = await Promise.all([
+        listLocalModels(),
+        listProviderModels(),
+      ]);
       const models: LocalModelConfig[] = JSON.parse(raw);
       setLocalModels(models);
-    } catch {
+      setOllamaModels(
+        providerModels.filter(
+          (model) => model.local && model.provider === "ollama" && model.installed,
+        ),
+      );
+    } catch (err) {
+      console.error("[ModelHub] failed to load installed models", err);
       setLocalModels([]);
+      setOllamaModels([]);
     }
   }, []);
 
@@ -342,6 +367,50 @@ export default function ModelHub() {
     return compat?.can_run && !compat.warning;
   });
 
+  const installedModels = useMemo<InstalledModelEntry[]>(() => {
+    const entries: InstalledModelEntry[] = [];
+    const seen = new Set<string>();
+
+    for (const model of ollamaModels) {
+      const key = `ollama:${model.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      entries.push({
+        key,
+        title: model.name,
+        subtitle: "Installed in Ollama",
+        chips: [
+          "Ollama",
+          model.size_gb ? `${model.size_gb.toFixed(1)} GB` : "Local model",
+        ],
+        removable: false,
+        readyLabel: "Ready",
+      });
+    }
+
+    for (const model of localModels) {
+      const key = `registry:${model.model_id}:${model.model_path}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      entries.push({
+        key,
+        title: model.model_id.split("/").pop() || model.model_id,
+        subtitle: model.model_path,
+        chips: [
+          model.quantization,
+          model.min_ram_mb >= 1024
+            ? `${(model.min_ram_mb / 1024).toFixed(1)} GB RAM`
+            : `${model.min_ram_mb} MB RAM`,
+        ],
+        removable: true,
+        deleteId: model.model_id,
+        readyLabel: "Downloaded",
+      });
+    }
+
+    return entries;
+  }, [localModels, ollamaModels]);
+
   /* ── sub-renders ── */
 
   const renderSearchPanel = () => (
@@ -382,9 +451,9 @@ export default function ModelHub() {
             color: textSecondary,
             fontSize: 15,
           }}
-        >
-          {isSearching ? "\u23F3" : "\uD83D\uDD0D"}
-        </span>
+          >
+            {isSearching ? "\u23F3" : "\uD83D\uDD0D"}
+          </span>
       </div>
 
       {/* Quick filters */}
@@ -469,7 +538,7 @@ export default function ModelHub() {
               ? "Searching HuggingFace..."
               : searchQuery
                 ? "No models found"
-                : "Type a query or pick a filter to search"}
+                : "Search HuggingFace on the left to discover more models, or use the Installed Models panel to confirm what Ollama already has available."}
           </div>
         ) : (
           searchResults.map((model) => (
@@ -923,8 +992,8 @@ export default function ModelHub() {
           gap: 8,
         }}
       >
-        My Models
-        {localModels.length > 0 && (
+        Installed Models
+        {installedModels.length > 0 && (
           <span
             style={{
               fontSize: 10,
@@ -935,12 +1004,12 @@ export default function ModelHub() {
               fontWeight: 600,
             }}
           >
-            {localModels.length}
+            {installedModels.length}
           </span>
         )}
       </div>
       <div style={{ flex: 1, overflow: "auto" }}>
-        {localModels.length === 0 ? (
+        {installedModels.length === 0 ? (
           <div
             style={{
               padding: 20,
@@ -950,12 +1019,14 @@ export default function ModelHub() {
               lineHeight: 1.6,
             }}
           >
-            No models downloaded yet. Browse and download from the Model Hub.
+            {localDiscoveryAttempted
+              ? "No local models detected yet. This page discovers installed Ollama models automatically and also shows downloaded GGUF models. Make sure Ollama is running if you expect local models here."
+              : "Discovering local models..."}
           </div>
         ) : (
-          localModels.map((model) => (
+          installedModels.map((model) => (
             <div
-              key={model.model_id + model.model_path}
+              key={model.key}
               style={{
                 padding: "10px 14px",
                 borderBottom: `1px solid ${borderColor}`,
@@ -969,9 +1040,22 @@ export default function ModelHub() {
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                 }}
-                title={model.model_id}
+                title={model.title}
               >
-                {model.model_id.split("/").pop() || model.model_id}
+                {model.title}
+              </div>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: textSecondary,
+                  marginTop: 2,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+                title={model.subtitle}
+              >
+                {model.subtitle}
               </div>
               <div
                 style={{
@@ -982,23 +1066,21 @@ export default function ModelHub() {
                   flexWrap: "wrap",
                 }}
               >
-                <span
-                  style={{
-                    fontSize: 10,
-                    padding: "1px 6px",
-                    borderRadius: 3,
-                    background: quantBadge(model.quantization).color + "22",
-                    color: quantBadge(model.quantization).color,
-                    fontWeight: 600,
-                  }}
-                >
-                  {model.quantization}
-                </span>
-                <span style={{ fontSize: 10, color: textSecondary }}>
-                  {model.min_ram_mb >= 1024
-                    ? `${(model.min_ram_mb / 1024).toFixed(1)} GB RAM`
-                    : `${model.min_ram_mb} MB RAM`}
-                </span>
+                {model.chips.map((chip) => (
+                  <span
+                    key={chip}
+                    style={{
+                      fontSize: 10,
+                      padding: "1px 6px",
+                      borderRadius: 3,
+                      background: `${accent}18`,
+                      color: chip === "Ollama" ? accent : textSecondary,
+                      fontWeight: chip === "Ollama" ? 600 : 500,
+                    }}
+                  >
+                    {chip}
+                  </span>
+                ))}
               </div>
               <div
                 style={{
@@ -1018,12 +1100,12 @@ export default function ModelHub() {
                     fontWeight: 600,
                   }}
                 >
-                  Ready
+                  {model.readyLabel}
                 </span>
-                {deleteConfirm === model.model_id ? (
+                {model.removable && deleteConfirm === model.deleteId ? (
                   <div style={{ display: "flex", gap: 4 }}>
                     <button
-                      onClick={() => handleDelete(model.model_id)}
+                      onClick={() => handleDelete(model.deleteId!)}
                       style={{
                         padding: "2px 8px",
                         fontSize: 10,
@@ -1053,9 +1135,9 @@ export default function ModelHub() {
                       Cancel
                     </button>
                   </div>
-                ) : (
+                ) : model.removable ? (
                   <button
-                    onClick={() => setDeleteConfirm(model.model_id)}
+                    onClick={() => setDeleteConfirm(model.deleteId!)}
                     style={{
                       background: "none",
                       border: "none",
@@ -1070,6 +1152,10 @@ export default function ModelHub() {
                   >
                     {"\uD83D\uDDD1"}
                   </button>
+                ) : (
+                  <span style={{ fontSize: 10, color: textSecondary }}>
+                    Managed by Ollama
+                  </span>
                 )}
               </div>
             </div>
@@ -1124,7 +1210,7 @@ export default function ModelHub() {
             fontWeight: 600,
           }}
         >
-          {localModels.length} local
+          {installedModels.length} installed
         </span>
       </div>
 

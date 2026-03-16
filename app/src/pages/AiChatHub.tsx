@@ -124,6 +124,31 @@ function classifyError(err: string): string {
   return err;
 }
 
+function createWelcomeMessage(model?: string): ChatMsg {
+  return {
+    id: `welcome-${Date.now()}`,
+    role: "assistant",
+    content:
+      "AI Chat Hub ready. Select a model and start chatting. This page provides direct LLM access without agent governance.",
+    model,
+    timestamp: Date.now(),
+  };
+}
+
+function createConversation(model: string): Conversation {
+  const now = Date.now();
+  return {
+    id: `conv-${now}`,
+    title: "New conversation",
+    model,
+    messages: [createWelcomeMessage(model)],
+    createdAt: now,
+    updatedAt: now,
+    pinned: false,
+    tags: [],
+  };
+}
+
 /* ─── Build Result Card ─── */
 function BuildResultCard({ data }: { data: BuildResultData }) {
   const { plan, result } = data;
@@ -209,7 +234,17 @@ export default function AiChatHub() {
   const [conversations, setConversations] = useState<Conversation[]>(() => {
     try {
       const saved = localStorage.getItem("nexus-chat-conversations");
-      if (saved) return JSON.parse(saved) as Conversation[];
+      if (saved) {
+        return (JSON.parse(saved) as Conversation[]).map((conversation) =>
+          conversation.messages.length === 0
+            ? {
+                ...conversation,
+                messages: [createWelcomeMessage(conversation.model)],
+                updatedAt: Date.now(),
+              }
+            : conversation,
+        );
+      }
     } catch { /* ignore corrupt data */ }
     return [];
   });
@@ -390,11 +425,7 @@ export default function AiChatHub() {
   /* ─── create initial conversation ─── */
   useEffect(() => {
     if (conversations.length === 0) {
-      const conv: Conversation = {
-        id: `conv-${Date.now()}`, title: "New conversation", model: selectedModel,
-        messages: [], createdAt: Date.now(), updatedAt: Date.now(),
-        pinned: false, tags: [],
-      };
+      const conv = createConversation(selectedModel);
       setConversations([conv]);
       setActiveConvId(conv.id);
     }
@@ -581,11 +612,7 @@ export default function AiChatHub() {
   }, [input, sending, selectedModel, activeConvId, models, logAudit, updateStreamingMsg, sendBuildRequest]);
 
   const newConversation = useCallback(() => {
-    const conv: Conversation = {
-      id: `conv-${Date.now()}`, title: "New conversation", model: selectedModel,
-      messages: [], createdAt: Date.now(), updatedAt: Date.now(),
-      pinned: false, tags: [],
-    };
+    const conv = createConversation(selectedModel);
     setConversations(prev => [conv, ...prev]);
     setActiveConvId(conv.id);
     logAudit("New conversation");
@@ -862,6 +889,15 @@ export default function AiChatHub() {
 
             {/* messages */}
             <div className="ch-messages">
+              {models.length === 0 && (
+                <div className="ch-empty-chat">
+                  <div className="ch-empty-icon">◈</div>
+                  <div className="ch-empty-model">No models available</div>
+                  <div className="ch-empty-hint">
+                    AI Chat Hub needs at least one configured model. Start Ollama or add a provider API key in Settings to begin.
+                  </div>
+                </div>
+              )}
               {activeConv.messages.length === 0 && (
                 <div className="ch-empty-chat">
                   <div className="ch-empty-icon" style={{ color: activeModel?.color }}>{activeModel?.icon}</div>

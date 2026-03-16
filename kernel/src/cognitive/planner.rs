@@ -4,6 +4,7 @@ use super::types::{AgentGoal, AgentStep, PlannedAction, PlanningContext};
 use crate::capabilities::has_capability;
 use crate::errors::AgentError;
 use serde::Deserialize;
+use serde_json::Value;
 
 /// Trait abstraction for the LLM call so the planner is testable with mocks.
 pub trait PlannerLlm: Send + Sync {
@@ -28,9 +29,12 @@ impl CognitivePlanner {
         context: &PlanningContext,
     ) -> Result<Vec<AgentStep>, AgentError> {
         let prompt = self.build_planning_prompt(goal, context);
-        let response = self.llm.plan_query(&prompt)?;
-        let steps = self.parse_plan_response(&response, &goal.id, &context.agent_capabilities)?;
-        Ok(steps)
+        self.query_plan_with_retry(
+            &prompt,
+            &self.build_invalid_json_retry_prompt(goal, context),
+            &goal.id,
+            &context.agent_capabilities,
+        )
     }
 
     /// Re-plan after a step failure, incorporating the error context.
@@ -43,12 +47,19 @@ impl CognitivePlanner {
         context: &PlanningContext,
     ) -> Result<Vec<AgentStep>, AgentError> {
         let prompt = self.build_replan_prompt(goal, failed_step, error, remaining_steps, context);
-        let response = self.llm.plan_query(&prompt)?;
-        let steps = self.parse_plan_response(&response, &goal.id, &context.agent_capabilities)?;
-        Ok(steps)
+        self.query_plan_with_retry(
+            &prompt,
+            &self.build_invalid_json_retry_prompt(goal, context),
+            &goal.id,
+            &context.agent_capabilities,
+        )
     }
 
     fn build_planning_prompt(&self, goal: &AgentGoal, context: &PlanningContext) -> String {
+        let agent_name = context.agent_name.as_deref().unwrap_or("unknown-agent");
+        let agent_description = context.agent_description.as_deref().unwrap_or(
+            "No additional role description was provided. Infer the role from the goal and capabilities.",
+        );
         let capabilities_str = context.agent_capabilities.join(", ");
         let memories_str = if context.relevant_memories.is_empty() {
             "None".to_string()
@@ -64,7 +75,11 @@ impl CognitivePlanner {
         let allowed_actions = self.allowed_actions_description(&context.agent_capabilities);
 
         format!(
-            r#"You are a planning agent. Create a step-by-step plan to achieve the goal below.
+            r#"You are the planning subsystem for Nexus OS. Create a step-by-step plan to achieve the goal below.
+
+AGENT NAME: {agent_name}
+AGENT DESCRIPTION:
+{agent_description}
 
 GOAL: {goal_desc}
 PRIORITY: {priority}
@@ -82,17 +97,23 @@ PREVIOUS OUTCOMES:
 ALLOWED ACTIONS (you MUST only use these):
 {allowed_actions}
 
-Respond with a JSON array of steps. Each step has:
-- "action": an object with "type" field matching one of the allowed actions above, plus action-specific fields
+Respond with ONLY a JSON array. Do not include markdown, prose, comments, or explanations.
+Each step object MUST have exactly these top-level fields:
+- "action": an object with a required "type" field plus action-specific fields
 - "description": a short human-readable description of what the step does
 
-Example response:
+EXACT JSON SCHEMA EXAMPLE:
 [
-  {{"action": {{"type": "LlmQuery", "prompt": "...", "context": []}}, "description": "Ask LLM for analysis"}},
-  {{"action": {{"type": "MemoryStore", "key": "result", "value": "...", "memory_type": "episodic"}}, "description": "Store result"}}
+  {{"action": {{"type": "FileRead", "path": "/workspace/file.txt"}}, "description": "Read the source file"}},
+  {{"action": {{"type": "FileWrite", "path": "/workspace/output.txt", "content": "hello"}}, "description": "Write the output file"}},
+  {{"action": {{"type": "ShellCommand", "command": "ls", "args": ["-la"]}}, "description": "Inspect the workspace"}}
 ]
 
-Respond ONLY with the JSON array, no other text."#,
+Valid action types for this agent: {action_types}
+Do NOT include duplicate fields.
+Do NOT include any text outside the JSON array."#,
+            agent_name = agent_name,
+            agent_description = agent_description,
             goal_desc = goal.description,
             priority = goal.priority,
             capabilities = capabilities_str,
@@ -101,6 +122,7 @@ Respond ONLY with the JSON array, no other text."#,
             memories = memories_str,
             outcomes = outcomes_str,
             allowed_actions = allowed_actions,
+            action_types = self.allowed_action_types(&context.agent_capabilities),
         )
     }
 
@@ -112,6 +134,10 @@ Respond ONLY with the JSON array, no other text."#,
         remaining_steps: &[AgentStep],
         context: &PlanningContext,
     ) -> String {
+        let agent_name = context.agent_name.as_deref().unwrap_or("unknown-agent");
+        let agent_description = context.agent_description.as_deref().unwrap_or(
+            "No additional role description was provided. Infer the role from the goal and capabilities.",
+        );
         let remaining_desc: Vec<String> = remaining_steps
             .iter()
             .map(|s| format!("  - {}", s.action.action_type()))
@@ -125,7 +151,11 @@ Respond ONLY with the JSON array, no other text."#,
         let allowed_actions = self.allowed_actions_description(&context.agent_capabilities);
 
         format!(
-            r#"You are a planning agent. A step in your plan failed. Create an adapted plan.
+            r#"You are the planning subsystem for Nexus OS. A step in your plan failed. Create an adapted plan.
+
+AGENT NAME: {agent_name}
+AGENT DESCRIPTION:
+{agent_description}
 
 GOAL: {goal_desc}
 FAILED STEP: {failed_action} (attempt {attempt}/{max})
@@ -140,7 +170,12 @@ AVAILABLE FUEL: {fuel}
 ALLOWED ACTIONS (you MUST only use these):
 {allowed_actions}
 
-Create an adapted JSON plan that works around the failure. Respond ONLY with a JSON array."#,
+Create an adapted JSON plan that works around the failure.
+Respond with ONLY a valid JSON array of step objects.
+Do NOT include duplicate fields.
+Do NOT include any text outside the JSON array."#,
+            agent_name = agent_name,
+            agent_description = agent_description,
             goal_desc = goal.description,
             failed_action = failed_step.action.action_type(),
             attempt = failed_step.attempts,
@@ -150,6 +185,36 @@ Create an adapted JSON plan that works around the failure. Respond ONLY with a J
             capabilities = context.agent_capabilities.join(", "),
             fuel = context.available_fuel,
             allowed_actions = allowed_actions,
+        )
+    }
+
+    fn build_invalid_json_retry_prompt(
+        &self,
+        goal: &AgentGoal,
+        context: &PlanningContext,
+    ) -> String {
+        format!(
+            r#"The previous response had invalid JSON.
+
+Goal: {goal}
+Agent name: {agent_name}
+Agent description: {agent_description}
+Allowed action types: {action_types}
+
+Respond with ONLY a valid JSON array of steps.
+Each item must be:
+{{"action": {{"type": "..." }}, "description": "..."}}
+
+Do not use markdown fences.
+Do not include duplicate fields.
+Do not include any text before or after the JSON array."#,
+            goal = goal.description,
+            agent_name = context.agent_name.as_deref().unwrap_or("unknown-agent"),
+            agent_description = context
+                .agent_description
+                .as_deref()
+                .unwrap_or("unavailable"),
+            action_types = self.allowed_action_types(&context.agent_capabilities),
         )
     }
 
@@ -206,20 +271,81 @@ Create an adapted JSON plan that works around the failure. Respond ONLY with a J
         actions.join("\n")
     }
 
+    fn allowed_action_types(&self, capabilities: &[String]) -> String {
+        let has =
+            |required: &str| has_capability(capabilities.iter().map(String::as_str), required);
+
+        let mut actions = vec!["MemoryStore", "MemoryRecall", "HitlRequest", "Noop"];
+        if has("llm.query") {
+            actions.push("LlmQuery");
+        }
+        if has("fs.read") {
+            actions.push("FileRead");
+        }
+        if has("fs.write") {
+            actions.push("FileWrite");
+        }
+        if has("process.exec") {
+            actions.push("ShellCommand");
+        }
+        if has("web.search") {
+            actions.push("WebSearch");
+        }
+        if has("web.read") {
+            actions.push("WebFetch");
+        }
+        if has("mcp.call") {
+            actions.push("ApiCall");
+        }
+        if capabilities.iter().any(|c| c == "agent.message") {
+            actions.push("AgentMessage");
+        }
+
+        actions.join(", ")
+    }
+
+    fn query_plan_with_retry(
+        &self,
+        primary_prompt: &str,
+        retry_prompt: &str,
+        goal_id: &str,
+        capabilities: &[String],
+    ) -> Result<Vec<AgentStep>, AgentError> {
+        let first_response = self.llm.plan_query(primary_prompt)?;
+        match self.parse_plan_response(&first_response, goal_id, capabilities) {
+            Ok(steps) => Ok(steps),
+            Err(first_error) => {
+                if !is_retriable_parse_error(&first_error) {
+                    return Err(first_error);
+                }
+                let retry_response = self.llm.plan_query(retry_prompt)?;
+                match self.parse_plan_response(&retry_response, goal_id, capabilities) {
+                    Ok(steps) => Ok(steps),
+                    Err(second_error) => Ok(vec![self.noop_step(
+                        goal_id,
+                        format!(
+                            "Planner returned invalid JSON twice. First error: {first_error}. Second error: {second_error}"
+                        ),
+                    )]),
+                }
+            }
+        }
+    }
+
     fn parse_plan_response(
         &self,
         response: &str,
         goal_id: &str,
         capabilities: &[String],
     ) -> Result<Vec<AgentStep>, AgentError> {
-        // Extract JSON array from response (handle markdown code blocks)
         let json_str = extract_json_array(response).ok_or_else(|| {
             AgentError::SupervisorError(format!(
                 "planner response did not contain a valid JSON array: {response}"
             ))
         })?;
 
-        let raw_steps: Vec<RawStep> = serde_json::from_str(&json_str)
+        let raw_steps = parse_raw_steps(&json_str)
+            .or_else(|_| parse_raw_steps(&remove_trailing_commas(&json_str)))
             .map_err(|e| AgentError::SupervisorError(format!("failed to parse plan JSON: {e}")))?;
 
         let mut steps = Vec::new();
@@ -240,6 +366,12 @@ Create an adapted JSON plan that works around the failure. Respond ONLY with a J
 
         Ok(steps)
     }
+
+    fn noop_step(&self, goal_id: &str, message: String) -> AgentStep {
+        let mut step = AgentStep::new(goal_id.to_string(), PlannedAction::Noop);
+        step.result = Some(message);
+        step
+    }
 }
 
 /// Raw step from LLM JSON response.
@@ -250,42 +382,31 @@ struct RawStep {
     description: Option<String>,
 }
 
+fn parse_raw_steps(json_str: &str) -> Result<Vec<RawStep>, String> {
+    let value: Value =
+        serde_json::from_str(json_str).map_err(|error| format!("invalid JSON: {error}"))?;
+    let items = value
+        .as_array()
+        .ok_or_else(|| "planner JSON root was not an array".to_string())?;
+
+    items
+        .iter()
+        .cloned()
+        .map(|item| {
+            serde_json::from_value::<RawStep>(item)
+                .map_err(|error| format!("invalid planner step: {error}"))
+        })
+        .collect()
+}
+
 /// Extract a JSON array from text that may contain markdown fences.
 fn extract_json_array(text: &str) -> Option<String> {
     let trimmed = text.trim();
 
-    // Try direct parse first
-    if trimmed.starts_with('[') {
-        if let Some(end) = find_matching_bracket(trimmed) {
-            return Some(trimmed[..=end].to_string());
-        }
-    }
-
-    // Try extracting from markdown code block
-    if let Some(start) = trimmed.find("```json") {
-        let after = &trimmed[start + 7..];
-        if let Some(end) = after.find("```") {
-            let inner = after[..end].trim();
-            if inner.starts_with('[') {
-                return Some(inner.to_string());
-            }
-        }
-    }
-
-    // Try extracting from generic code block
-    if let Some(start) = trimmed.find("```") {
-        let after = &trimmed[start + 3..];
-        // Skip optional language tag on same line
-        let after = if let Some(nl) = after.find('\n') {
-            &after[nl + 1..]
-        } else {
-            after
-        };
-        if let Some(end) = after.find("```") {
-            let inner = after[..end].trim();
-            if inner.starts_with('[') {
-                return Some(inner.to_string());
-            }
+    if let Some(start) = trimmed.find('[') {
+        let after = &trimmed[start..];
+        if let Some(end) = find_matching_bracket(after) {
+            return Some(after[..=end].trim().to_string());
         }
     }
 
@@ -324,10 +445,66 @@ fn find_matching_bracket(s: &str) -> Option<usize> {
     None
 }
 
+fn remove_trailing_commas(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut in_string = false;
+    let mut escape = false;
+    let chars: Vec<char> = input.chars().collect();
+    let mut index = 0usize;
+
+    while index < chars.len() {
+        let ch = chars[index];
+
+        if escape {
+            out.push(ch);
+            escape = false;
+            index += 1;
+            continue;
+        }
+
+        if ch == '\\' && in_string {
+            out.push(ch);
+            escape = true;
+            index += 1;
+            continue;
+        }
+
+        if ch == '"' {
+            in_string = !in_string;
+            out.push(ch);
+            index += 1;
+            continue;
+        }
+
+        if !in_string && ch == ',' {
+            let mut lookahead = index + 1;
+            while lookahead < chars.len() && chars[lookahead].is_whitespace() {
+                lookahead += 1;
+            }
+            if lookahead < chars.len() && matches!(chars[lookahead], ']' | '}') {
+                index += 1;
+                continue;
+            }
+        }
+
+        out.push(ch);
+        index += 1;
+    }
+
+    out
+}
+
+fn is_retriable_parse_error(error: &AgentError) -> bool {
+    let message = error.to_string();
+    message.contains("planner response did not contain a valid JSON array")
+        || message.contains("failed to parse plan JSON")
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::types::StepStatus;
     use super::*;
+    use std::sync::Mutex;
 
     struct MockLlm {
         response: String,
@@ -339,8 +516,29 @@ mod tests {
         }
     }
 
+    struct SequenceMockLlm {
+        responses: Mutex<Vec<String>>,
+    }
+
+    impl PlannerLlm for SequenceMockLlm {
+        fn plan_query(&self, _prompt: &str) -> Result<String, AgentError> {
+            let mut responses = self.responses.lock().unwrap();
+            if responses.is_empty() {
+                return Err(AgentError::SupervisorError(
+                    "no more mock planner responses".to_string(),
+                ));
+            }
+            Ok(responses.remove(0))
+        }
+    }
+
     fn make_context(caps: Vec<&str>) -> PlanningContext {
         PlanningContext {
+            agent_name: Some("planner-test-agent".to_string()),
+            agent_description: Some(
+                "A governed planning test agent focused on producing valid execution plans."
+                    .to_string(),
+            ),
             agent_capabilities: caps.into_iter().map(|s| s.to_string()).collect(),
             available_fuel: 1000.0,
             relevant_memories: vec![],
@@ -461,6 +659,7 @@ Done."#;
         assert!(extract_json_array("no json here").is_none());
         assert!(extract_json_array("```json\n[1]\n```").is_some());
         assert!(extract_json_array("```\n[1]\n```").is_some());
+        assert!(extract_json_array("before text\n[1]\nafter text").is_some());
     }
 
     #[test]
@@ -471,7 +670,9 @@ Done."#;
         let planner = CognitivePlanner::new(Box::new(llm));
         let goal = AgentGoal::new("test".into(), 5);
         let ctx = make_context(vec![]);
-        assert!(planner.plan_goal(&goal, &ctx).is_err());
+        let steps = planner.plan_goal(&goal, &ctx).unwrap();
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].action.action_type(), "noop");
     }
 
     #[test]
@@ -487,7 +688,72 @@ Done."#;
         assert!(prompt.contains("llm.query, fs.read"));
         assert!(prompt.contains("LlmQuery"));
         assert!(prompt.contains("FileRead"));
-        // Should NOT contain FileWrite since fs.write not in capabilities
-        assert!(!prompt.contains("FileWrite"));
+        assert!(prompt.contains("planner-test-agent"));
+        assert!(prompt.contains("A governed planning test agent"));
+        assert!(prompt.contains("Do NOT include duplicate fields"));
+        assert!(prompt.contains("EXACT JSON SCHEMA EXAMPLE"));
+    }
+
+    #[test]
+    fn test_duplicate_fields_are_tolerated_via_value_parsing() {
+        let llm = MockLlm {
+            response: r#"[
+                {"action": {"type": "ShellCommand", "command": "ls", "args": ["-l"], "args": ["-la"]}, "description": "inspect"}
+            ]"#
+            .to_string(),
+        };
+        let planner = CognitivePlanner::new(Box::new(llm));
+        let goal = AgentGoal::new("inspect workspace".into(), 5);
+        let ctx = make_context(vec!["process.exec"]);
+
+        let steps = planner.plan_goal(&goal, &ctx).unwrap();
+        assert_eq!(steps.len(), 1);
+        match &steps[0].action {
+            PlannedAction::ShellCommand { command, args } => {
+                assert_eq!(command, "ls");
+                assert_eq!(args, &vec!["-la".to_string()]);
+            }
+            other => panic!("unexpected action: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_invalid_json_retries_and_recovers() {
+        let llm = SequenceMockLlm {
+            responses: Mutex::new(vec![
+                "```json\n[{\"action\": {\"type\": \"Noop\"}, \"description\": \"wait\",}]\n```"
+                    .to_string(),
+                r#"[{"action": {"type": "Noop"}, "description": "wait"}]"#.to_string(),
+            ]),
+        };
+        let planner = CognitivePlanner::new(Box::new(llm));
+        let goal = AgentGoal::new("recover from invalid json".into(), 5);
+        let ctx = make_context(vec![]);
+
+        let steps = planner.plan_goal(&goal, &ctx).unwrap();
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].action.action_type(), "noop");
+    }
+
+    #[test]
+    fn test_double_invalid_json_returns_noop_step() {
+        let llm = SequenceMockLlm {
+            responses: Mutex::new(vec![
+                "not valid json".to_string(),
+                "still not valid json".to_string(),
+            ]),
+        };
+        let planner = CognitivePlanner::new(Box::new(llm));
+        let goal = AgentGoal::new("gracefully degrade".into(), 5);
+        let ctx = make_context(vec![]);
+
+        let steps = planner.plan_goal(&goal, &ctx).unwrap();
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].action.action_type(), "noop");
+        assert!(steps[0]
+            .result
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Planner returned invalid JSON twice"));
     }
 }

@@ -77,6 +77,27 @@ h3 {
     z-index: 1;
   }
 
+  .nexus-main-column {
+    @apply flex flex-1 flex-col;
+    min-width: 0;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .nexus-shell-header {
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  .nexus-shell-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
   .nexus-display {
     font-family: var(--font-display);
     letter-spacing: 0.08em;
@@ -93,6 +114,10 @@ h3 {
     @apply border-b backdrop-blur-xl;
     border-color: var(--border);
     background: linear-gradient(180deg, rgba(13, 17, 23, 0.8), rgba(13, 17, 23, 0.5));
+  }
+
+  .nexus-page-panel {
+    min-height: 100%;
   }
 
   .nexus-panel {

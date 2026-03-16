@@ -308,6 +308,9 @@ export default function Documents() {
           fontWeight: 600,
           fontSize: 13,
           color: textSecondary,
+          whiteSpace: "normal",
+          overflowWrap: "anywhere",
+          lineHeight: 1.4,
         }}
       >
         Indexed Documents

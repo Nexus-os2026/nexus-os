@@ -516,7 +516,7 @@ impl CognitiveRuntime {
             });
         }
 
-        let (capabilities, fuel_remaining, autonomy_level) = {
+        let (agent_name, capabilities, fuel_remaining, autonomy_level) = {
             let sup = self.supervisor.lock().unwrap();
             let agent_uuid = uuid::Uuid::parse_str(agent_id)
                 .map_err(|e| AgentError::SupervisorError(format!("invalid agent id: {e}")))?;
@@ -524,6 +524,7 @@ impl CognitiveRuntime {
                 AgentError::SupervisorError(format!("agent '{agent_id}' gone from supervisor"))
             })?;
             (
+                handle.manifest.name.clone(),
                 handle.manifest.capabilities.clone(),
                 handle.remaining_fuel as f64,
                 handle.autonomy_level,
@@ -631,6 +632,11 @@ impl CognitiveRuntime {
             }
 
             let context = PlanningContext {
+                agent_name: Some(agent_name.clone()),
+                agent_description: Some(format!(
+                    "You are the governed agent '{}'. Plan steps consistent with your role, autonomy level, and declared capabilities.",
+                    agent_name
+                )),
                 agent_capabilities: capabilities.clone(),
                 available_fuel: fuel_remaining,
                 relevant_memories: memory_strs,

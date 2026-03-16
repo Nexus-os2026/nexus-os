@@ -104,6 +104,7 @@ export default function DeployPipeline() {
   const [hitlPending, setHitlPending] = useState<string | null>(null);
 
   const isDesktop = hasDesktopRuntime();
+  const hasPipelines = projects.length > 0;
 
   const addLog = useCallback((level: LogEntry["level"], message: string, stage?: string) => {
     setLogs(prev => [{ timestamp: Date.now(), level, message, stage }, ...prev].slice(0, 200));
@@ -325,7 +326,9 @@ export default function DeployPipeline() {
             </div>
           ))}
           {projects.length === 0 && (
-            <div className="dp-audit-entry">No projects yet. Create one to get started.</div>
+            <div className="dp-audit-entry">
+              No deployment pipelines configured. Create a pipeline to deploy your agent-built projects.
+            </div>
           )}
         </div>
 
@@ -434,9 +437,9 @@ export default function DeployPipeline() {
             ) : projects.length === 0 ? (
               <div className="dp-envs">
                 <div className="dp-env-panel" style={{ textAlign: "center", padding: "3rem" }}>
-                  <h4>No Projects Yet</h4>
+                  <h4>No Deployment Pipelines Configured</h4>
                   <p style={{ color: "#94a3b8", marginTop: "0.5rem" }}>
-                    Create a project to start building, testing, and deploying.
+                    No deployment pipelines configured. Create a pipeline to deploy your agent-built projects.
                   </p>
                   <button className="dp-new-btn" style={{ marginTop: "1rem" }} onClick={() => setShowNewProject(true)}>+ Create First Project</button>
                 </div>
@@ -576,8 +579,11 @@ export default function DeployPipeline() {
             ) : (
               <div className="dp-envs">
                 <div className="dp-env-panel" style={{ textAlign: "center", padding: "3rem" }}>
-                  <h4>Select a Project</h4>
-                  <p style={{ color: "#94a3b8", marginTop: "0.5rem" }}>Choose a project from the sidebar to run the pipeline.</p>
+                  <h4>No Deployment Pipelines Configured</h4>
+                  <p style={{ color: "#94a3b8", marginTop: "0.5rem" }}>
+                    No deployment pipelines configured. Create a pipeline to deploy your agent-built projects.
+                  </p>
+                  <button className="dp-new-btn" style={{ marginTop: "1rem" }} onClick={() => setShowNewProject(true)}>+ Create First Project</button>
                 </div>
               </div>
             )}
@@ -593,9 +599,11 @@ export default function DeployPipeline() {
             {buildHistory.length === 0 ? (
               <div className="dp-envs">
                 <div className="dp-env-panel" style={{ textAlign: "center", padding: "3rem" }}>
-                  <h4>No Build History</h4>
+                  <h4>No Pipeline History Yet</h4>
                   <p style={{ color: "#94a3b8", marginTop: "0.5rem" }}>
-                    {selectedProject ? "Run a build to see results here." : "Select a project first."}
+                    {selectedProject
+                      ? "Run a build or pipeline to see deployment history here."
+                      : "No deployment pipelines configured. Create a pipeline to deploy your agent-built projects."}
                   </p>
                 </div>
               </div>
@@ -633,7 +641,9 @@ export default function DeployPipeline() {
             <div className="dp-logs-list">
               {logs.length === 0 ? (
                 <div style={{ padding: "2rem", textAlign: "center", color: "#64748b" }}>
-                  No logs yet. Run a build or pipeline to see output.
+                  {hasPipelines
+                    ? "No logs yet. Run a build or pipeline to see deployment output."
+                    : "No deployment pipelines configured. Create a pipeline to deploy your agent-built projects."}
                 </div>
               ) : (
                 logs.map((log, i) => (
@@ -656,10 +666,16 @@ export default function DeployPipeline() {
 
       {/* ─── Status Bar ─── */}
       <div className="dp-status-bar">
-        <span className="dp-status-item">{projects.length} projects</span>
-        <span className="dp-status-item">{projects.filter(p => p.status === "Running").length} running</span>
-        <span className="dp-status-item">{buildHistory.length} builds</span>
-        <span className="dp-status-item">{logs.length} log entries</span>
+        {hasPipelines ? (
+          <>
+            <span className="dp-status-item">{projects.length} projects</span>
+            <span className="dp-status-item">{projects.filter(p => p.status === "Running").length} running</span>
+            <span className="dp-status-item">{buildHistory.length} builds</span>
+            <span className="dp-status-item">{logs.length} log entries</span>
+          </>
+        ) : (
+          <span className="dp-status-item">No deployment pipelines configured yet</span>
+        )}
         <span className="dp-status-item dp-status-right">Factory Pipeline (Real Backend)</span>
       </div>
     </div>

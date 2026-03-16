@@ -95,10 +95,12 @@
 .page-transition {
   position: relative;
   min-height: inherit;
+  height: 100%;
 }
 
 .page-transition__layer {
   min-height: inherit;
+  height: 100%;
   transition: opacity 150ms ease, transform 150ms ease;
 }
 

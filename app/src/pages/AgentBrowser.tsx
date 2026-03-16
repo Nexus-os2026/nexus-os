@@ -208,6 +208,8 @@ export function AgentBrowser(): JSX.Element {
     });
   }
 
+  const showPlaywrightEmptyState = !iframeSrc && historyLog.length === 0 && activities.length === 0;
+
   return (
     <div className="agent-browser-root">
       <BrowserToolbar
@@ -381,31 +383,75 @@ export function AgentBrowser(): JSX.Element {
           </div>
         )}
 
-        {/* Mode panels with transitions */}
-        <div className="browser-mode-content">
+        {showPlaywrightEmptyState ? (
           <div
-            className={`browser-mode-panel ${mode === "research" ? "browser-mode-panel--active" : ""}`}
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "2rem",
+            }}
           >
-            {mode === "research" && (
-              <ResearchMode
-                activities={activities}
-                onActivity={addActivity}
-                iframeSrc={iframeSrc}
-                onIframeSrc={setIframeSrc}
-              />
-            )}
+            <div
+              style={{
+                maxWidth: 560,
+                textAlign: "center",
+                padding: "2rem",
+                borderRadius: 18,
+                border: "1px solid rgba(56, 189, 248, 0.18)",
+                background: "rgba(15, 23, 42, 0.88)",
+                boxShadow: "0 24px 80px rgba(2, 6, 23, 0.45)",
+              }}
+            >
+              <div style={{ fontSize: 56, marginBottom: 12 }}>{"\uD83E\uDDED"}</div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: "#e2e8f0", marginBottom: 10 }}>
+                Browser automation requires Playwright.
+              </div>
+              <div style={{ color: "rgba(226,232,240,0.72)", lineHeight: 1.7, marginBottom: 16 }}>
+                Install the Chromium browser runtime below, then reopen this page to use governed browser automation.
+              </div>
+              <code
+                style={{
+                  display: "inline-block",
+                  padding: "0.8rem 1rem",
+                  borderRadius: 10,
+                  background: "rgba(15, 23, 42, 0.95)",
+                  border: "1px solid rgba(0, 255, 157, 0.18)",
+                  color: "var(--nexus-accent)",
+                  fontSize: 15,
+                }}
+              >
+                npx playwright install chromium
+              </code>
+            </div>
           </div>
-          <div
-            className={`browser-mode-panel ${mode === "build" ? "browser-mode-panel--active" : ""}`}
-          >
-            {mode === "build" && <BuildMode onActivity={addActivity} />}
+        ) : (
+          <div className="browser-mode-content">
+            <div
+              className={`browser-mode-panel ${mode === "research" ? "browser-mode-panel--active" : ""}`}
+            >
+              {mode === "research" && (
+                <ResearchMode
+                  activities={activities}
+                  onActivity={addActivity}
+                  iframeSrc={iframeSrc}
+                  onIframeSrc={setIframeSrc}
+                />
+              )}
+            </div>
+            <div
+              className={`browser-mode-panel ${mode === "build" ? "browser-mode-panel--active" : ""}`}
+            >
+              {mode === "build" && <BuildMode onActivity={addActivity} />}
+            </div>
+            <div
+              className={`browser-mode-panel ${mode === "learn" ? "browser-mode-panel--active" : ""}`}
+            >
+              {mode === "learn" && <LearnMode onActivity={addActivity} />}
+            </div>
           </div>
-          <div
-            className={`browser-mode-panel ${mode === "learn" ? "browser-mode-panel--active" : ""}`}
-          >
-            {mode === "learn" && <LearnMode onActivity={addActivity} />}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

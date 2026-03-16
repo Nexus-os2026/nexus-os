@@ -265,6 +265,7 @@ function ensurePulseAnimation(): void {
 /* ================================================================== */
 
 export default function VoiceAssistant() {
+  const pythonCommand = "pip install websockets numpy";
   const [status, setStatus] = useState<VoiceStatus>("ready");
   const [transcripts, setTranscripts] = useState<Transcript[]>([
     {
@@ -288,6 +289,7 @@ export default function VoiceAssistant() {
     whisperModel: null,
   });
   const [modelLoading, setModelLoading] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
   const nextId = useRef(2);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -443,6 +445,16 @@ export default function VoiceAssistant() {
           ? "#ef4444"
           : "#64748b";
 
+  const handleCopyPythonCommand = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(pythonCommand);
+      setCopyStatus("copied");
+      window.setTimeout(() => setCopyStatus("idle"), 2000);
+    } catch (err) {
+      addTranscript(`Copy failed: ${String(err)}`, "system");
+    }
+  }, [addTranscript, pythonCommand]);
+
   return (
     <div style={S.page}>
       {/* Header */}
@@ -507,17 +519,45 @@ export default function VoiceAssistant() {
           {/* Python availability notice */}
           {backendChecked && !pythonAvailable && (
             <div style={{
-              padding: "0.5rem 0.8rem",
+              padding: "0.75rem 0.9rem",
               borderRadius: 8,
               background: "rgba(245,158,11,0.1)",
               border: "1px solid rgba(245,158,11,0.3)",
-              fontSize: "0.72rem",
+              fontSize: "0.74rem",
               color: "#fbbf24",
-              textAlign: "center" as const,
               lineHeight: 1.5,
+              width: "100%",
+              boxSizing: "border-box" as const,
             }}>
-              Voice requires Python.<br />
-              Install: <code style={{ color: "var(--text-primary, #e2e8f0)" }}>pip install websockets numpy</code>
+              <div style={{ marginBottom: "0.45rem" }}>
+                Voice features require Python dependencies. Run this command in your terminal:
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap" as const,
+                }}
+              >
+                <code style={{ color: "var(--text-primary, #e2e8f0)" }}>{pythonCommand}</code>
+                <button
+                  onClick={handleCopyPythonCommand}
+                  style={{
+                    padding: "0.28rem 0.6rem",
+                    borderRadius: 999,
+                    border: "1px solid rgba(245,158,11,0.35)",
+                    background: "rgba(245,158,11,0.12)",
+                    color: "#fde68a",
+                    cursor: "pointer",
+                    fontFamily: "var(--font-mono, monospace)",
+                    fontSize: "0.72rem",
+                  }}
+                >
+                  {copyStatus === "copied" ? "Copied" : "Copy"}
+                </button>
+              </div>
             </div>
           )}
 

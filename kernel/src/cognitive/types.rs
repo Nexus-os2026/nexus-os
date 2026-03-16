@@ -373,6 +373,8 @@ impl Default for LoopConfig {
 /// Context provided to the planner for generating steps.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanningContext {
+    pub agent_name: Option<String>,
+    pub agent_description: Option<String>,
     pub agent_capabilities: Vec<String>,
     pub available_fuel: f64,
     pub relevant_memories: Vec<String>,
@@ -566,6 +568,8 @@ mod tests {
     #[test]
     fn test_planning_context_serde() {
         let ctx = PlanningContext {
+            agent_name: Some("test-agent".into()),
+            agent_description: Some("test agent description".into()),
             agent_capabilities: vec!["llm.query".into()],
             available_fuel: 100.0,
             relevant_memories: vec![],

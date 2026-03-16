@@ -4,7 +4,8 @@ import {
   Legend, Line, LineChart, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { getLiveSystemMetrics } from "../api/backend";
+import { getLiveSystemMetrics, listAgents } from "../api/backend";
+import type { AgentSummary } from "../types";
 import "./system-monitor.css";
 
 /* ================================================================== */
@@ -106,6 +107,7 @@ export default function SystemMonitor(): JSX.Element {
   const [tab, setTab] = useState<TabView>("overview");
   const [history, setHistory] = useState<MetricsSnapshot[]>([]);
   const [latest, setLatest] = useState<LiveMetrics | null>(null);
+  const [allAgents, setAllAgents] = useState<AgentSummary[]>([]);
   const [fuelHistory, setFuelHistory] = useState<FuelHistoryPoint[]>([]);
   const [alerts, setAlerts] = useState<AlertEntry[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
@@ -189,6 +191,30 @@ export default function SystemMonitor(): JSX.Element {
     };
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+
+    async function refreshAgents() {
+      try {
+        const agents = await listAgents();
+        if (mounted) {
+          setAllAgents(agents);
+        }
+      } catch (err) {
+        console.error("[SystemMonitor] failed to list agents", err);
+      }
+    }
+
+    void refreshAgents();
+    const interval = setInterval(() => {
+      void refreshAgents();
+    }, 10000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   const activeAlerts = alerts.filter((a) => !a.dismissed);
 
   const chartMetrics = useMemo(() =>
@@ -216,8 +242,36 @@ export default function SystemMonitor(): JSX.Element {
   const ramPct = latest && latest.total_ram > 0 ? (latest.used_ram / latest.total_ram) * 100 : 0;
   const diskPct = latest && latest.disk_total > 0 ? ((latest.disk_total - latest.disk_available) / latest.disk_total) * 100 : 0;
 
-  const agentPieData = latest?.agents.filter((a) => a.fuel_used > 0).map((a) => ({ name: a.name, value: a.fuel_used })) ?? [];
-  const agentNames = latest?.agents.map((a) => a.name) ?? [];
+  const liveAgentMap = new Map((latest?.agents ?? []).map((agent) => [agent.id, agent]));
+
+  const mergedAgents = useMemo(() => {
+    const normalized = new Map<string, AgentFuel>();
+
+    for (const agent of allAgents) {
+      const live = liveAgentMap.get(agent.id);
+      normalized.set(agent.id, {
+        id: agent.id,
+        name: live?.name ?? agent.name,
+        state: live?.state ?? (agent.status === "Running" ? "Running" : agent.status === "Paused" ? "Idle" : "Stopped"),
+        fuel_budget: live?.fuel_budget ?? agent.fuel_budget ?? 0,
+        fuel_used: live?.fuel_used ?? ((agent.fuel_budget ?? 0) - agent.fuel_remaining),
+        remaining_fuel: live?.remaining_fuel ?? agent.fuel_remaining,
+      });
+    }
+
+    for (const live of latest?.agents ?? []) {
+      if (!normalized.has(live.id)) {
+        normalized.set(live.id, live);
+      }
+    }
+
+    return Array.from(normalized.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allAgents, latest?.agents]);
+
+  const totalAgentCount = mergedAgents.length;
+  const runningAgentCount = mergedAgents.filter((a) => a.state === "Running").length;
+  const agentPieData = mergedAgents.filter((a) => a.fuel_used > 0).map((a) => ({ name: a.name, value: a.fuel_used }));
+  const agentNames = mergedAgents.map((a) => a.name);
 
   /* ================================================================ */
   /*  RENDER                                                           */
@@ -327,7 +381,7 @@ export default function SystemMonitor(): JSX.Element {
               </div>
               <div className="sm-summary-card">
                 <span className="sm-summary-label">Agents Active</span>
-                <span className="sm-summary-value">{latest ? `${latest.agents.filter((a) => a.state === "Running").length} / ${latest.agents.length}` : "—"}</span>
+                <span className="sm-summary-value">{totalAgentCount > 0 ? `${runningAgentCount} / ${totalAgentCount}` : "—"}</span>
               </div>
               <div className="sm-summary-card">
                 <span className="sm-summary-label">Total Fuel Used</span>
@@ -345,7 +399,7 @@ export default function SystemMonitor(): JSX.Element {
         {tab === "agents" && (
           <div className="sm-agents">
             <div className="sm-agents-grid">
-              {(latest?.agents ?? []).map((a) => {
+              {mergedAgents.map((a) => {
                 const fuelPct = a.fuel_budget > 0 ? Math.round((a.fuel_used / a.fuel_budget) * 100) : 0;
                 return (
                   <div key={a.id} className={`sm-agent-card sm-agent-${a.state === "Running" ? "running" : a.state === "Idle" ? "idle" : "stopped"}`}>
@@ -374,8 +428,10 @@ export default function SystemMonitor(): JSX.Element {
                   </div>
                 );
               })}
-              {(latest?.agents ?? []).length === 0 && (
-                <div style={{ color: "rgba(165,243,252,0.5)", padding: 24 }}>No agents registered</div>
+              {mergedAgents.length === 0 && (
+                <div style={{ color: "rgba(165,243,252,0.5)", padding: 24 }}>
+                  No agents available yet. This page shows live system usage and the runtime state of every governed agent.
+                </div>
               )}
             </div>
 
@@ -420,13 +476,13 @@ export default function SystemMonitor(): JSX.Element {
             <div className="sm-chart-card sm-chart-wide">
               <div className="sm-chart-header"><span>FUEL BUDGET USAGE PER AGENT</span></div>
               <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={(latest?.agents ?? []).filter((a) => a.fuel_used > 0)} layout="vertical">
+                <BarChart data={mergedAgents.filter((a) => a.fuel_used > 0)} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(56,189,248,0.08)" />
                   <XAxis type="number" tick={{ fill: "rgba(165,243,252,0.3)", fontSize: 10 }} tickLine={false} />
                   <YAxis type="category" dataKey="name" tick={{ fill: "rgba(165,243,252,0.5)", fontSize: 11 }} tickLine={false} width={90} />
                   <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid rgba(56,189,248,0.2)", borderRadius: 6, fontSize: 12 }} />
                   <Bar dataKey="fuel_used" name="Used" radius={[0, 4, 4, 0]}>
-                    {(latest?.agents ?? []).filter((a) => a.fuel_used > 0).map((a, i) => (
+                    {mergedAgents.filter((a) => a.fuel_used > 0).map((a, i) => (
                       <Cell key={a.id} fill={PIE_COLORS[i % PIE_COLORS.length]} fillOpacity={0.7} />
                     ))}
                   </Bar>
@@ -435,7 +491,7 @@ export default function SystemMonitor(): JSX.Element {
             </div>
 
             <div className="sm-fuel-totals">
-              {(latest?.agents ?? []).map((a, i) => {
+              {mergedAgents.map((a, i) => {
                 const pct = a.fuel_budget > 0 ? Math.round((a.fuel_used / a.fuel_budget) * 100) : 0;
                 return (
                   <div key={a.id} className="sm-fuel-agent">

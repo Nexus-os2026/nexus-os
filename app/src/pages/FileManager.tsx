@@ -105,6 +105,8 @@ function parentPath(p: string): string {
 /* ================================================================== */
 
 export default function FileManager(): JSX.Element {
+  const FILE_LOAD_ERROR = "Unable to load files. Check permissions.";
+
   /* ---- State ---- */
   const [currentPath, setCurrentPath] = useState<string>("");
   const [entries, setEntries] = useState<FsEntry[]>([]);
@@ -143,9 +145,12 @@ export default function FileManager(): JSX.Element {
       setEntries(parsed);
       setCurrentPath(dirPath);
       appendAudit("Navigate", dirPath);
+      return true;
     } catch (e) {
-      setError(String(e));
+      console.error("[FileManager] failed to load directory", dirPath, e);
+      setError(FILE_LOAD_ERROR);
       setEntries([]);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -156,14 +161,19 @@ export default function FileManager(): JSX.Element {
     (async () => {
       try {
         const home: string = await invoke("file_manager_home");
-        await loadDir(home);
-      } catch {
-        // Fallback for browser mode
-        setError("Tauri backend not available — running in browser mode.");
+        const candidates = [pathJoin(home, ".nexus"), home];
+        for (const candidate of candidates) {
+          const loaded = await loadDir(candidate);
+          if (loaded) return;
+        }
+        setError(FILE_LOAD_ERROR);
+      } catch (e) {
+        console.error("[FileManager] failed to resolve initial directory", e);
+        setError(FILE_LOAD_ERROR);
+        setEntries([]);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadDir]);
 
   /* ---- Load file preview ---- */
   const loadPreview = useCallback(async (entry: FsEntry) => {
@@ -421,7 +431,15 @@ export default function FileManager(): JSX.Element {
                 </div>
               ))}
               {displayEntries.length === 0 && !loading && (
-                <div className="fm-empty">{searchQuery ? "No files match your search" : "This folder is empty"}</div>
+                <div className="fm-empty">
+                  {error
+                    ? FILE_LOAD_ERROR
+                    : searchQuery
+                      ? "No files match your search."
+                      : currentPath
+                        ? "This folder is empty."
+                        : "Loading your files..."}
+                </div>
               )}
             </div>
           )}
