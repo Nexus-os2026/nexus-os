@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-03-17T22:44:26.989600",
+  "tests": [
+    {
+      "test": "dream_queue_auto_population",
+      "passed": true,
+      "has_experiment": true,
+      "has_replay": true,
+      "priority_matches_frustration": true,
+      "queue_size": 2
+    },
+    {
+      "test": "replay_dream",
+      "passed": true,
+      "before_score": 4.0,
+      "after_score": 9.0,
+      "improved": true,
+      "tokens_used": 132
+    },
+    {
+      "test": "experiment_dream",
+      "passed": true,
+      "best_score": 9.0,
+      "tokens_used": 395
+    },
+    {
+      "test": "consolidate_dream",
+      "passed": true,
+      "lesson_length": 402,
+      "has_content": true,
+      "tokens_used": 102
+    },
+    {
+      "test": "precompute_dream",
+      "passed": true,
+      "predicted_request": "How to perform CRUD operations on a PostgreSQL table in Rust?",
+      "confidence": 0.92,
+      "prepared_response_length": 58,
+      "tokens_used": 271
+    },
+    {
+      "test": "morning_briefing",
+      "passed": true,
+      "has_greeting": true,
+      "mentions_results": true,
+      "briefing_length": 218
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0,
+    "api_calls_used": 5
+  }
+}

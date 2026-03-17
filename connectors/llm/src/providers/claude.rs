@@ -80,8 +80,6 @@ impl LlmProvider for ClaudeProvider {
 
         #[cfg(feature = "real-claude")]
         {
-            super::require_real_api(true)?;
-
             let Some(api_key) = self.api_key() else {
                 return Err(AgentError::SupervisorError(
                     "ANTHROPIC_API_KEY is not set".to_string(),
@@ -150,10 +148,6 @@ impl LlmProvider for ClaudeProvider {
 
     fn cost_per_token(&self) -> f64 {
         0.000_015
-    }
-
-    fn requires_real_api_opt_in(&self) -> bool {
-        true
     }
 
     fn endpoint_url(&self) -> String {

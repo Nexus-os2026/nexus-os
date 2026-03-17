@@ -6,9 +6,6 @@ use nexus_connectors_llm::providers::{DeepSeekProvider, LlmProvider, OllamaProvi
 
 #[test]
 fn test_deepseek_real_api_optional() {
-    if std::env::var("ENABLE_REAL_API").ok().as_deref() != Some("1") {
-        return;
-    }
     if std::env::var("DEEPSEEK_API_KEY")
         .ok()
         .as_deref()
@@ -25,9 +22,6 @@ fn test_deepseek_real_api_optional() {
 
 #[test]
 fn test_ollama_real_api_optional() {
-    if std::env::var("ENABLE_REAL_API").ok().as_deref() != Some("1") {
-        return;
-    }
     if std::env::var("OLLAMA_URL").is_err() {
         return;
     }
@@ -40,9 +34,6 @@ fn test_ollama_real_api_optional() {
 #[cfg(feature = "real-claude")]
 #[test]
 fn test_claude_real_api_optional() {
-    if std::env::var("ENABLE_REAL_API").ok().as_deref() != Some("1") {
-        return;
-    }
     if std::env::var("ANTHROPIC_API_KEY")
         .ok()
         .as_deref()

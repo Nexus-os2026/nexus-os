@@ -68,10 +68,6 @@ impl LlmProvider for GroqProvider {
         0.000_000_6
     }
 
-    fn requires_real_api_opt_in(&self) -> bool {
-        true
-    }
-
     fn endpoint_url(&self) -> String {
         "https://api.groq.com".to_string()
     }

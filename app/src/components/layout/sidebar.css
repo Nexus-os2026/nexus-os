@@ -99,6 +99,16 @@
   scrollbar-color: rgba(0, 200, 160, 0.35) rgba(5, 10, 18, 0.6);
 }
 
+.nexus-sidebar-section {
+  padding: 0.5rem 0.4rem 0.15rem;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(0, 255, 157, 0.4);
+  user-select: none;
+}
+
 .nexus-sidebar-item {
   position: relative;
   display: flex;

@@ -6,6 +6,7 @@ export interface AgentSummary {
   id: string;
   name: string;
   status: AgentStatus;
+  autonomy_level?: number;
   fuel_remaining: number;
   fuel_budget?: number;
   last_action: string;
@@ -14,6 +15,7 @@ export interface AgentSummary {
   memory_usage_bytes?: number;
   capabilities?: string[];
   did?: string;
+  description?: string;
 }
 
 export interface ScheduledAgent {

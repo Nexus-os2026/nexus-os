@@ -56,7 +56,7 @@ export function SplashScreen({ ready, visible, onDismiss }: SplashScreenProps): 
 
         <h1 className="splash-title">NexusOS</h1>
         <p className="splash-tagline">Don&apos;t trust. Verify.</p>
-        <p className="splash-version">v8.0.0</p>
+        <p className="splash-version">v9.0.0</p>
 
         <div className="splash-loader" aria-hidden="true">
           <div className="splash-loader-scan" />

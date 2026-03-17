@@ -485,7 +485,7 @@ export function Settings({
             <h3 className="st-card-title" style={{ marginTop: "1rem" }}>API Keys</h3>
             {[
               { label: "DeepSeek", key: "deepseek_api_key" as const, hint: "~$0.14/M tokens (cheapest)" },
-              { label: "NVIDIA NIM", key: "nvidia_api_key" as const, hint: "free 1000 credits — Llama, Nemotron, DeepSeek R1" },
+              { label: "NVIDIA NIM", key: "nvidia_api_key" as const, hint: "42 free models — DeepSeek V3.1, GLM-4.7, Nemotron, Llama 4, Qwen 3.5" },
               { label: "OpenAI", key: "openai_api_key" as const, hint: "~$5/M tokens" },
               { label: "Gemini", key: "gemini_api_key" as const, hint: "~$3.50/M tokens" },
               { label: "Anthropic", key: "anthropic_api_key" as const, hint: "~$3/M tokens" },

@@ -7,6 +7,7 @@ import {
   setDefaultAgent,
 } from "../api/backend";
 import type { AgentSummary, NexusConfig } from "../types";
+import { normalizeConfig } from "../utils/config";
 
 type PlatformCard = {
   key: "telegram" | "discord" | "slack" | "whatsapp";
@@ -81,13 +82,14 @@ export default function Messaging(): JSX.Element {
         getMessagingStatus<PlatformStatus>(),
         listAgents(),
       ]);
-      setConfig(configRow);
-      setStatuses(statusRows);
-      setAgents(agentRows);
+      const normalizedConfig = normalizeConfig(configRow);
+      setConfig(normalizedConfig);
+      setStatuses(Array.isArray(statusRows) ? statusRows : []);
+      setAgents(Array.isArray(agentRows) ? agentRows : []);
       setDefaultAgentId((current) => current || agentRows[0]?.id || "");
       setTokens(
         Object.fromEntries(
-          PLATFORMS.map((platform) => [platform.key, platform.tokenPath(configRow)]),
+          PLATFORMS.map((platform) => [platform.key, platform.tokenPath(normalizedConfig)]),
         ),
       );
     } catch (error) {
@@ -96,7 +98,9 @@ export default function Messaging(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    void load();
+    void load().catch((error) => {
+      setMessage(error instanceof Error ? error.message : String(error));
+    });
   }, [load]);
 
   const statusByName = useMemo(

@@ -1,12 +1,12 @@
 {
   "name": "nexus-desktop",
   "private": true,
-  "version": "7.0.0",
+  "version": "9.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
+    "dev": "npx vite",
+    "build": "npx tsc && npx vite build",
+    "preview": "npx vite preview",
     "test": "node --test ./tests/*.test.js",
     "lint": "tsc --noEmit",
     "tauri": "tauri",

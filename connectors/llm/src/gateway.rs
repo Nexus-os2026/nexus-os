@@ -212,6 +212,10 @@ pub struct GovernedLlmGateway<P: LlmProvider> {
     default_period_id: BudgetPeriodId,
     fuel_ledgers: HashMap<Uuid, AgentFuelLedger>,
     safety_supervisor: SafetySupervisor,
+    /// When true, skip the output firewall check on LLM responses.
+    /// Used for user-facing chat where the response is shown directly to the
+    /// human who asked the question — not an exfiltration vector.
+    skip_output_firewall: bool,
 }
 
 impl<P: LlmProvider> GovernedLlmGateway<P> {
@@ -232,7 +236,16 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
             default_period_id: BudgetPeriodId::new("period.default"),
             fuel_ledgers: HashMap::new(),
             safety_supervisor: SafetySupervisor::default(),
+            skip_output_firewall: false,
         }
+    }
+
+    /// Disable the output firewall for this gateway instance.
+    ///
+    /// Use this for user-facing chat where the LLM response is displayed
+    /// directly to the human who asked — not an exfiltration vector.
+    pub fn set_skip_output_firewall(&mut self, skip: bool) {
+        self.skip_output_firewall = skip;
     }
 
     /// Register an agent's allowed egress endpoints (from manifest).
@@ -597,21 +610,25 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
         }
 
         // ── Output firewall (after response, before returning to agent) ──
-        match OutputFilter::check(
-            agent.agent_id,
-            &response.output_text,
-            None,
-            &mut self.audit_trail,
-        ) {
-            FirewallAction::Block { reason } => {
-                return Err(AgentError::CapabilityDenied(format!(
-                    "output firewall blocked: {reason}"
-                )));
+        // Skipped for user-facing chat — the human asked the question and is
+        // reading their own screen, so showing the response is not exfiltration.
+        if !self.skip_output_firewall {
+            match OutputFilter::check(
+                agent.agent_id,
+                &response.output_text,
+                None,
+                &mut self.audit_trail,
+            ) {
+                FirewallAction::Block { reason } => {
+                    return Err(AgentError::CapabilityDenied(format!(
+                        "output firewall blocked: {reason}"
+                    )));
+                }
+                FirewallAction::Redacted { redacted_text, .. } => {
+                    response.output_text = redacted_text;
+                }
+                FirewallAction::Allow => {}
             }
-            FirewallAction::Redacted { redacted_text, .. } => {
-                response.output_text = redacted_text;
-            }
-            FirewallAction::Allow => {}
         }
 
         self.oracle_events.push(OracleEvent {

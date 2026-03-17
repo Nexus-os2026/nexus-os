@@ -27,31 +27,57 @@ except ImportError:
 NVIDIA_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 AVAILABLE_MODELS = [
+    # DeepSeek (Best for Agents)
+    "deepseek-ai/deepseek-v3_1-terminus",
+    "deepseek-ai/deepseek-v3_1",
+    "deepseek-ai/deepseek-v3",
+    "deepseek-ai/deepseek-r1",
+    "deepseek-ai/deepseek-r1-distill-llama-70b",
+    "deepseek-ai/deepseek-r1-distill-qwen-32b",
+    "deepseek-ai/deepseek-r1-distill-qwen-14b",
+    "deepseek-ai/deepseek-r1-distill-llama-8b",
+    # Zhipu GLM
+    "zhipuai/glm-4.7",
+    "zhipuai/glm-5-744b",
+    # Moonshot / Kimi
+    "moonshotai/kimi-k2-instruct",
+    # Meta / Llama
     "meta/llama-4-scout-17b-16e-instruct",
     "meta/llama-4-maverick-17b-128e-instruct",
     "meta/llama-3.3-70b-instruct",
     "meta/llama-3.1-405b-instruct",
     "meta/llama-3.2-90b-vision-instruct",
+    "meta/llama-3.1-8b-instruct",
+    # NVIDIA Nemotron
     "nvidia/llama-3.1-nemotron-ultra-253b-v1",
     "nvidia/llama-3.1-nemotron-70b-instruct",
     "nvidia/nemotron-4-340b-instruct",
     "nvidia/nemotron-3-super-120b-a12b",
     "nvidia/nemotron-3-nano-30b-a3b",
-    "deepseek-ai/deepseek-r1",
-    "deepseek-ai/deepseek-r1-distill-llama-70b",
-    "deepseek-ai/deepseek-v3",
-    "moonshotai/kimi-k2-instruct",
-    "minimax/minimax-m2.5",
-    "zhipuai/glm-5-744b",
+    # Qwen
+    "qwen/qwen3.5-vl-400b",
+    "qwen/qwen2.5-72b-instruct",
+    "qwen/qwen2.5-coder-32b-instruct",
+    "qwen/qwen2.5-7b-instruct",
+    # Mistral
     "mistralai/mistral-large-2-instruct",
     "mistralai/mixtral-8x22b-instruct-v0.1",
     "mistralai/mistral-7b-instruct-v0.3",
+    "mistralai/devstral-2-123b-instruct-2512",
+    # MiniMax
+    "minimax/minimax-m2.5",
+    # Google Gemma
     "google/gemma-3-27b-it",
     "google/gemma-3-12b-it",
+    # Microsoft Phi
     "microsoft/phi-4",
     "microsoft/phi-3-medium-128k-instruct",
-    "qwen/qwen2.5-72b-instruct",
-    "qwen/qwen2.5-coder-32b-instruct",
+    "microsoft/phi-3.5-vision-instruct",
+    # IBM Granite
+    "ibm/granite-3.1-8b-instruct",
+    "ibm/granite-3.3-8b-instruct",
+    # Writer
+    "writer/palmyra-x-004",
 ]
 
 
@@ -64,7 +90,7 @@ class NvidiaNimProvider:
         model: Optional[str] = None,
     ):
         self.api_key = api_key or os.environ.get("NVIDIA_NIM_API_KEY", "")
-        self.model = model or "meta/llama-3.3-70b-instruct"
+        self.model = model or "deepseek-ai/deepseek-v3_1-terminus"
 
         if not self.api_key:
             raise ValueError(

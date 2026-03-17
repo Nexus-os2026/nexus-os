@@ -69,10 +69,6 @@ impl LlmProvider for FireworksProvider {
         0.000_001_2
     }
 
-    fn requires_real_api_opt_in(&self) -> bool {
-        true
-    }
-
     fn endpoint_url(&self) -> String {
         "https://api.fireworks.ai".to_string()
     }

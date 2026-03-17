@@ -2,7 +2,6 @@ use nexus_kernel::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
-use std::env;
 use std::process::Command;
 
 pub mod claude;
@@ -40,9 +39,6 @@ pub use openrouter::OpenRouterProvider;
 pub use perplexity::PerplexityProvider;
 pub use together::TogetherProvider;
 
-const REAL_API_DISABLED_ERROR: &str =
-    "Real API disabled. Set ENABLE_REAL_API=1 to allow external calls.";
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProviderRequest {
     pub endpoint: String,
@@ -72,10 +68,6 @@ pub trait LlmProvider: Send + Sync {
 
     fn is_paid(&self) -> bool {
         self.cost_per_token() > 0.0
-    }
-
-    fn requires_real_api_opt_in(&self) -> bool {
-        false
     }
 
     fn estimate_input_tokens(&self, prompt: &str) -> u32 {
@@ -116,10 +108,6 @@ impl<T: LlmProvider + ?Sized> LlmProvider for Box<T> {
         (**self).is_paid()
     }
 
-    fn requires_real_api_opt_in(&self) -> bool {
-        (**self).requires_real_api_opt_in()
-    }
-
     fn estimate_input_tokens(&self, prompt: &str) -> u32 {
         (**self).estimate_input_tokens(prompt)
     }
@@ -131,22 +119,6 @@ impl<T: LlmProvider + ?Sized> LlmProvider for Box<T> {
     fn embed(&self, texts: &[&str], model: &str) -> Result<EmbeddingResponse, AgentError> {
         (**self).embed(texts, model)
     }
-}
-
-pub(crate) fn require_real_api(feature_enabled: bool) -> Result<(), AgentError> {
-    require_real_api_with(feature_enabled, env::var("ENABLE_REAL_API").ok().as_deref())
-}
-
-pub(crate) fn require_real_api_with(
-    feature_enabled: bool,
-    real_api_value: Option<&str>,
-) -> Result<(), AgentError> {
-    if !feature_enabled || real_api_value != Some("1") {
-        return Err(AgentError::SupervisorError(
-            REAL_API_DISABLED_ERROR.to_string(),
-        ));
-    }
-    Ok(())
 }
 
 pub(crate) fn curl_get_status(endpoint: &str) -> Result<u16, AgentError> {
@@ -240,9 +212,9 @@ pub(crate) fn curl_post_json_with_timeout(
 #[cfg(test)]
 mod tests {
     use super::{
-        require_real_api_with, ClaudeProvider, CohereProvider, DeepSeekProvider, FireworksProvider,
-        GeminiProvider, GroqProvider, LlmProvider, MistralProvider, NvidiaProvider, OllamaProvider,
-        OpenAiProvider, OpenRouterProvider, PerplexityProvider, TogetherProvider,
+        ClaudeProvider, CohereProvider, DeepSeekProvider, FireworksProvider, GeminiProvider,
+        GroqProvider, LlmProvider, MistralProvider, NvidiaProvider, OllamaProvider, OpenAiProvider,
+        OpenRouterProvider, PerplexityProvider, TogetherProvider,
     };
     use serde_json::json;
 
@@ -323,21 +295,6 @@ mod tests {
     }
 
     #[test]
-    fn test_real_api_guard_blocks_without_env() {
-        let provider = DeepSeekProvider::new(Some("key".to_string()));
-        let result = provider.query("hello", 10, "deepseek-chat");
-        assert!(result.is_err());
-        if let Err(error) = result {
-            assert!(error
-                .to_string()
-                .contains("Real API disabled. Set ENABLE_REAL_API=1 to allow external calls."));
-        }
-
-        let guard = require_real_api_with(true, None);
-        assert!(guard.is_err());
-    }
-
-    #[test]
     fn test_openai_request_format() {
         let provider = OpenAiProvider::new(Some("sk-openai-test".to_string()));
         let request = provider.build_request("Hello world", 64, "gpt-4o");
@@ -366,7 +323,6 @@ mod tests {
         assert_eq!(provider.name(), "openai");
         assert!(provider.cost_per_token() > 0.0);
         assert!(provider.is_paid());
-        assert!(provider.requires_real_api_opt_in());
     }
 
     #[test]
@@ -397,7 +353,6 @@ mod tests {
         assert_eq!(provider.name(), "gemini");
         assert!(provider.cost_per_token() > 0.0);
         assert!(provider.is_paid());
-        assert!(provider.requires_real_api_opt_in());
     }
 
     #[test]
@@ -617,18 +572,17 @@ mod tests {
         let provider = NvidiaProvider::new(Some("key".to_string()));
         assert_eq!(provider.name(), "nvidia");
         assert!(provider.cost_per_token() > 0.0);
-        assert!(provider.requires_real_api_opt_in());
         assert_eq!(provider.endpoint_url(), "https://integrate.api.nvidia.com");
     }
 
     #[test]
     fn test_nvidia_model_list_not_empty() {
-        assert_eq!(super::nvidia::NVIDIA_MODELS.len(), 25);
+        assert_eq!(super::nvidia::NVIDIA_MODELS.len(), 39);
     }
 
     #[test]
     fn test_nvidia_default_model_in_list() {
-        let default = "meta/llama-3.3-70b-instruct";
+        let default = "deepseek-ai/deepseek-v3_1-terminus";
         assert!(super::nvidia::NVIDIA_MODELS
             .iter()
             .any(|(id, _)| *id == default));

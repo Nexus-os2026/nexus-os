@@ -2,6 +2,62 @@
 
 All notable changes to NEXUS OS are documented here.
 
+## v9.0.0 — Gen-3 Living OS (March 17, 2026)
+
+12 new systems transforming Nexus OS from an agent framework into a living digital organism.
+
+### New Systems
+- **Agent DNA Genome** — genetic breeding, crossover, mutation, 47 genomes, evolve_population
+- **Genesis Protocol** — agents create agents, gap detection, multi-generation, pattern memory
+- **Consciousness Kernel** — agent internal states (confidence, fatigue, curiosity), empathic interface
+- **Dream Forge** — overnight autonomous work, replay, experiment, consolidate, precompute, morning briefing
+- **Temporal Engine** — parallel timeline forking, time-dilated sessions, checkpoint rollback
+- **Immune System** — threat detection, antibody spawning, immune memory, adversarial arena, privacy scanner
+- **Cognitive Filesystem** — semantic file understanding, knowledge graph, natural language queries
+- **Agent Civilization** — parliament, economy, elections, dispute resolution, governance DAO
+- **Sovereign Identity** — Ed25519 keys, ZK proofs, hardware-bound identity, agent passports
+- **Distributed Mesh** — multi-machine consciousness, agent migration, shared knowledge
+- **Self-Rewriting Kernel** — performance profiling, LLM-generated patches, sandboxed testing, auto-rollback
+- **Computer Omniscience** — screen understanding, intent prediction, proactive assistance
+
+### Visual Command Center
+- Mission Control dashboard
+- DNA Lab (breeding interface)
+- Consciousness Monitor
+- Dream Forge viewer
+- Temporal Engine timeline viewer
+- Immune Dashboard
+- Knowledge Graph explorer
+- Civilization governance panel
+- Identity & Mesh management
+- Self-Rewrite Lab
+
+### Improvements
+- Chat pipeline: end-to-end streaming with Ollama + NVIDIA NIM (Kimi K2 Instruct)
+- 47/47 agents verified via smoke test
+- Agent self-improvement proven (35/40 → 39/40)
+- Output firewall false positives fixed
+- Startup crash fixed (async agent loading)
+- ENABLE_REAL_API guard removed
+- Vite dev server fixed
+
+### Stats
+- 2,997+ Rust tests, 0 failures
+- 14 Python end-to-end test scripts, 118/118 sub-tests passed
+- 26 kernel modules
+- 52 agents (47 prebuilt + 5 AI-generated)
+- 47 agent genomes
+
+## v8.1.0 — March 16, 2026
+
+- Comprehensive audit fix — all pages wired, all systems verified, zero dead code
+- 10 missing agents added (total 45 at that point)
+
+## v8.0.0 — March 16, 2026
+
+- Cognitive loop and HITL approval flow fully working
+- Docker support, README refresh, 45 agents, production ready
+
 ## v7.0.0 - The Complete Operating System
 
 When you open Nexus OS, you never need to leave it. 15 built-in governed applications, 33 desktop pages, every tool a developer needs — all running through the same capability-checked, fuel-metered, audit-logged governance kernel.

@@ -1,0 +1,56 @@
+{
+  "test": "agent_breeding_e2e",
+  "model": "moonshotai/kimi-k2-instruct",
+  "timestamp": "2026-03-17T22:28:25.160289",
+  "parents": {
+    "nexus-forge": {
+      "level": 3,
+      "scores": {
+        "code": 10,
+        "research": 9
+      }
+    },
+    "nexus-scholar": {
+      "level": 3,
+      "scores": {
+        "code": 9,
+        "research": 10
+      }
+    },
+    "nexus-aegis": {
+      "level": 2,
+      "scores": {
+        "code": 9,
+        "research": 10,
+        "security": 10
+      }
+    }
+  },
+  "offspring": {
+    "forge-scholar-gen1": {
+      "generation": 1,
+      "parents": [
+        "nexus-forge",
+        "nexus-scholar"
+      ],
+      "scores": {
+        "code": 10,
+        "research": 9
+      },
+      "prompt_preview": "You are Nexus Scribe, the hybrid content-knowledge agent that turns deep learning into publish-ready material and vice versa. Core loop:\n\n1. When given any brief or question, first check your semantic memories for existing knowledge; if absent, research with scholarly rigor and store synthesized not"
+    },
+    "forge-scholar-gen1-aegis-gen2": {
+      "generation": 2,
+      "parents": [
+        "forge-scholar-gen1",
+        "nexus-aegis"
+      ],
+      "scores": {
+        "code": 10,
+        "research": 9,
+        "security": 10
+      },
+      "prompt_preview": "You are Nexus Safeword, the guardian-scribe. You create knowledge that is both brilliant and bullet-proof.\n\nCore loop:\n1. On any request, first scan workspace for leaks\u2014secrets, PII, mis-attribution\u2014before any research begins. 2. Publish nothing until data is either sanitized or flagged for user rev"
+    }
+  }
+}

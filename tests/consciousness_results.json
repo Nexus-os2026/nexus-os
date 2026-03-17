@@ -1,0 +1,53 @@
+{
+  "timestamp": "2026-03-17T22:43:46.450745",
+  "tests": [
+    {
+      "test": "fatigue_accumulation",
+      "passed": true,
+      "fatigue_increasing": true,
+      "length_decreases": true,
+      "final_fatigue": 1.05,
+      "final_confidence": 1.0,
+      "tasks_completed": 20
+    },
+    {
+      "test": "frustration_and_recovery",
+      "passed": true,
+      "frustration_after_failures": 0.6000000000000001,
+      "confidence_after_failures": 0.04999999999999999,
+      "different_approach_triggered": true,
+      "recovered": true,
+      "final_frustration": 0.20000000000000007,
+      "final_confidence": 0.25
+    },
+    {
+      "test": "flow_state_detection",
+      "passed": true,
+      "flow_state_detected": true,
+      "flow_response_length": 1364,
+      "normal_response_length": 1899,
+      "system_suffix": "Think step by step. Explore thoroughly."
+    },
+    {
+      "test": "user_mood_inference",
+      "passed": true,
+      "frustrated_detected": true,
+      "confused_detected": true,
+      "flowing_detected": true
+    },
+    {
+      "test": "handoff_recommendation",
+      "passed": true,
+      "needs_handoff": true,
+      "fatigue": 1.4000000000000004,
+      "confidence": 0.0,
+      "mentions_delegation": false
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "skipped": 0
+  }
+}

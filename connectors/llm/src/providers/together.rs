@@ -68,10 +68,6 @@ impl LlmProvider for TogetherProvider {
         0.000_001_8
     }
 
-    fn requires_real_api_opt_in(&self) -> bool {
-        true
-    }
-
     fn endpoint_url(&self) -> String {
         "https://api.together.xyz".to_string()
     }

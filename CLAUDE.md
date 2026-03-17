@@ -5,7 +5,7 @@
 ## Project Identity
 
 - Name: Nexus OS
-- Version: 7.0.0
+- Version: 9.0.0
 - Tagline: Don't trust. Verify.
 - Repo: https://gitlab.com/nexaiceo/nexus-os (primary — GitHub suspended)
 - License: MIT

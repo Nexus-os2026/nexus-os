@@ -34,6 +34,7 @@ import { HoloPanel } from "./components/fx/HoloPanel";
 import { NeuralBackground } from "./components/fx/NeuralBackground";
 import { PageTransition } from "./components/fx/PageTransition";
 import { Sidebar, type SidebarItem } from "./components/layout/Sidebar";
+import PageErrorBoundary from "./components/PageErrorBoundary";
 import { VoiceOverlay, type VoiceOverlayState } from "./components/VoiceOverlay";
 import { PulseRing } from "./components/viz/PulseRing";
 import type { ConsentNotification, SystemInfo } from "./types";
@@ -80,6 +81,16 @@ import TimeMachine from "./pages/TimeMachine";
 import VoiceAssistant from "./pages/VoiceAssistant";
 import WorldSimulation from "./pages/WorldSimulation";
 import ComputerControl from "./pages/ComputerControl";
+import MissionControl from "./pages/MissionControl";
+import AgentDnaLab from "./pages/AgentDnaLab";
+import TimelineViewer from "./pages/TimelineViewer";
+import KnowledgeGraph from "./pages/KnowledgeGraph";
+import ImmuneDashboard from "./pages/ImmuneDashboard";
+import ConsciousnessMonitor from "./pages/ConsciousnessMonitor";
+import DreamForge from "./pages/DreamForge";
+import TemporalEngine from "./pages/TemporalEngine";
+import CivilizationPage from "./pages/Civilization";
+import SelfRewriteLab from "./pages/SelfRewriteLab";
 import type {
   AgentStatusEvent,
   AgentSummary,
@@ -93,64 +104,135 @@ import type {
   OllamaStatus,
   VoiceRuntimeState
 } from "./types";
+import { createDefaultConfig, normalizeConfig } from "./utils/config";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation";
+type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
-  { id: "dashboard", label: "Dashboard", icon: "◫", shortcut: "Alt+1" },
-  { id: "audit", label: "Audit", icon: "⧉", shortcut: "Alt+2" },
-  { id: "workflows", label: "Workflows", icon: "⎇", shortcut: "Alt+3" },
-  { id: "design-studio", label: "Design", icon: "◇", shortcut: "" },
-  { id: "messaging", label: "Messaging", icon: "✉", shortcut: "" },
-  { id: "media-studio", label: "Media", icon: "🖼", shortcut: "" },
-  { id: "file-manager", label: "Files", icon: "📁", shortcut: "" },
-  { id: "computer-control", label: "Computer Control", icon: "⌘", shortcut: "" }
+  // ── CORE ──
+  { id: "chat", label: "Chat", icon: "◈", shortcut: "Alt+1", section: "CORE" },
+  { id: "agents", label: "Agents", icon: "◎", shortcut: "Alt+2", section: "CORE" },
+  { id: "command-center", label: "Command", icon: "⌘", shortcut: "", section: "CORE" },
+  { id: "audit", label: "Audit", icon: "⧉", shortcut: "", section: "CORE" },
+  { id: "audit-timeline", label: "Timeline", icon: "◷", shortcut: "", section: "CORE" },
+  { id: "time-machine", label: "Time Machine", icon: "⏳", shortcut: "", section: "CORE" },
+  // ── INTELLIGENCE ──
+  { id: "mission-control", label: "Mission Control", icon: "⊕", shortcut: "Alt+3", section: "INTELLIGENCE" },
+  { id: "dna-lab", label: "DNA Lab", icon: "🧬", shortcut: "", section: "INTELLIGENCE" },
+  { id: "consciousness", label: "Consciousness", icon: "◉", shortcut: "", section: "INTELLIGENCE" },
+  { id: "dreams", label: "Dream Forge", icon: "☽", shortcut: "", section: "INTELLIGENCE" },
+  { id: "temporal", label: "Temporal Engine", icon: "⑂", shortcut: "", section: "INTELLIGENCE" },
+  // ── SECURITY ──
+  { id: "immune-dashboard", label: "Immune System", icon: "⛨", shortcut: "", section: "SECURITY" },
+  { id: "identity", label: "Identity & Mesh", icon: "⊡", shortcut: "", section: "SECURITY" },
+  { id: "firewall", label: "Firewall", icon: "🛡", shortcut: "", section: "SECURITY" },
+  { id: "computer-control", label: "Computer Control", icon: "🖥", shortcut: "", section: "SECURITY" },
+  // ── KNOWLEDGE ──
+  { id: "knowledge-graph", label: "Knowledge Graph", icon: "⊛", shortcut: "", section: "KNOWLEDGE" },
+  { id: "civilization", label: "Civilization", icon: "⚖", shortcut: "", section: "KNOWLEDGE" },
+  { id: "self-rewrite", label: "Self-Rewrite Lab", icon: "✎", shortcut: "", section: "KNOWLEDGE" },
+  // ── WORKFLOWS ──
+  { id: "workflows", label: "Workflows", icon: "⎇", shortcut: "", section: "WORKFLOWS" },
+  { id: "marketplace", label: "Publish", icon: "⬡", shortcut: "", section: "WORKFLOWS" },
+  // ── GOVERNANCE ──
+  { id: "trust", label: "Trust", icon: "⛨", shortcut: "", section: "GOVERNANCE" },
+  { id: "distributed-audit", label: "Chain", icon: "⛓", shortcut: "", section: "GOVERNANCE" },
+  { id: "protocols", label: "Protocols", icon: "⊞", shortcut: "", section: "GOVERNANCE" },
+  { id: "permissions", label: "Permissions", icon: "⊟", shortcut: "", section: "GOVERNANCE" },
+  { id: "approvals", label: "Approvals", icon: "✔", shortcut: "", section: "GOVERNANCE" },
+  { id: "policy-management", label: "Policies", icon: "⚖", shortcut: "", section: "GOVERNANCE" },
+  // ── TOOLS ──
+  { id: "design-studio", label: "Design", icon: "◇", shortcut: "", section: "TOOLS" },
+  { id: "email-client", label: "Email", icon: "✉", shortcut: "", section: "TOOLS" },
+  { id: "media-studio", label: "Media", icon: "▶", shortcut: "", section: "TOOLS" },
+  { id: "app-store", label: "Agent Store", icon: "⬡", shortcut: "", section: "TOOLS" },
+  { id: "ai-chat-hub", label: "AI Chat", icon: "◈", shortcut: "", section: "TOOLS" },
+  { id: "voice-assistant", label: "Voice", icon: "🎙", shortcut: "", section: "TOOLS" },
+  { id: "deploy-pipeline", label: "Deploy", icon: "⚙", shortcut: "", section: "TOOLS" },
+  { id: "learning-center", label: "Learn", icon: "📖", shortcut: "", section: "TOOLS" },
+  { id: "code-editor", label: "Code", icon: "⟨⟩", shortcut: "", section: "TOOLS" },
+  { id: "terminal", label: "Terminal", icon: ">_", shortcut: "", section: "TOOLS" },
+  { id: "file-manager", label: "Files", icon: "📁", shortcut: "", section: "TOOLS" },
+  { id: "database", label: "Database", icon: "⊞", shortcut: "", section: "TOOLS" },
+  { id: "browser", label: "Browser", icon: "🌐", shortcut: "", section: "TOOLS" },
+  { id: "messaging", label: "Messaging", icon: "💬", shortcut: "", section: "TOOLS" },
+  { id: "simulation", label: "World Simulation", icon: "🌍", shortcut: "", section: "TOOLS" },
+  { id: "documents", label: "Documents", icon: "📄", shortcut: "", section: "TOOLS" },
+  { id: "model-hub", label: "Models", icon: "🧠", shortcut: "", section: "TOOLS" },
+  { id: "notes", label: "Notes", icon: "📝", shortcut: "", section: "TOOLS" },
+  { id: "project-manager", label: "Projects", icon: "📋", shortcut: "", section: "TOOLS" },
+  { id: "system-monitor", label: "Monitor", icon: "📊", shortcut: "", section: "TOOLS" },
+  // ── SYSTEM ──
+  { id: "settings", label: "Settings", icon: "⚙", shortcut: "", section: "SYSTEM" },
 ];
 
-function defaultConfig(): NexusConfig {
-  return {
-    llm: {
-      default_model: "claude-sonnet-4-5",
-      anthropic_api_key: "",
-      openai_api_key: "",
-      deepseek_api_key: "",
-      gemini_api_key: "",
-      nvidia_api_key: "",
-      ollama_url: "http://localhost:11434"
-    },
-    search: {
-      brave_api_key: ""
-    },
-    social: {
-      x_api_key: "",
-      x_api_secret: "",
-      x_access_token: "",
-      x_access_secret: "",
-      facebook_page_token: "",
-      instagram_access_token: ""
-    },
-    messaging: {
-      telegram_bot_token: "",
-      whatsapp_business_id: "",
-      whatsapp_api_token: "",
-      discord_bot_token: "",
-      slack_bot_token: ""
-    },
-    voice: {
-      whisper_model: "auto",
-      wake_word: "hey nexus",
-      tts_voice: "default"
-    },
-    privacy: {
-      telemetry: false,
-      audit_retention_days: 365
-    },
-    governance: {
-      enable_warden_review: false
-    }
-  };
+const PAGE_ROUTE_OVERRIDES: Partial<Record<Page, string>> = {
+  "mission-control": "/dashboard",
+  "dna-lab": "/dna-lab",
+  consciousness: "/consciousness",
+  dreams: "/dreams",
+  temporal: "/temporal",
+  "immune-dashboard": "/immune",
+  identity: "/identity",
+  firewall: "/firewall",
+  "computer-control": "/computer-control",
+  "knowledge-graph": "/knowledge",
+  civilization: "/civilization",
+  "self-rewrite": "/self-rewrite",
+  chat: "/chat",
+  agents: "/agents",
+  "command-center": "/command",
+  audit: "/audit",
+  "audit-timeline": "/timeline",
+  "time-machine": "/time-machine",
+  workflows: "/workflows",
+  marketplace: "/publish",
+  trust: "/trust",
+  "distributed-audit": "/chain",
+  protocols: "/protocols",
+  permissions: "/permissions",
+  approvals: "/approvals",
+  "policy-management": "/policies",
+  "design-studio": "/design",
+  "email-client": "/email",
+  "media-studio": "/media",
+  "app-store": "/agent-store",
+  "ai-chat-hub": "/ai-chat",
+  "voice-assistant": "/voice",
+  "deploy-pipeline": "/deploy",
+  "learning-center": "/learn",
+  "code-editor": "/code",
+  terminal: "/terminal",
+  "file-manager": "/files",
+  "system-monitor": "/monitor",
+  documents: "/documents",
+  "model-hub": "/models",
+  notes: "/notes",
+  "project-manager": "/projects",
+  database: "/database",
+  browser: "/browser",
+  messaging: "/messaging",
+  simulation: "/world-simulation",
+  settings: "/settings",
+  dashboard: "/legacy-dashboard",
+};
+
+const ROUTE_TO_PAGE = new Map<string, Page>(
+  Object.entries(PAGE_ROUTE_OVERRIDES).map(([page, route]) => [route, page as Page])
+);
+
+function pageFromLocation(pathname: string): Page | null {
+  const normalized = pathname.replace(/\/+$/, "") || "/";
+  if (normalized === "/" || normalized.endsWith("/index.html")) {
+    return "mission-control";
+  }
+  return ROUTE_TO_PAGE.get(normalized) ?? null;
+}
+
+function routeForPage(page: Page): string {
+  return PAGE_ROUTE_OVERRIDES[page] ?? `/${page}`;
 }
 
 // Browser-mode agent IDs — deterministic UUIDs for offline chat when no desktop runtime
@@ -203,6 +285,7 @@ function coreAgents(): AgentSummary[] {
       id: BROWSER_AGENT_IDS.coder,
       name: "Coder",
       status: "Running",
+      autonomy_level: 3,
       fuel_remaining: 9200,
       fuel_budget: 10000,
       last_action: "refactored auth middleware",
@@ -215,6 +298,7 @@ function coreAgents(): AgentSummary[] {
       id: BROWSER_AGENT_IDS.designer,
       name: "Designer",
       status: "Running",
+      autonomy_level: 2,
       fuel_remaining: 6500,
       fuel_budget: 10000,
       last_action: "generated landing page mockup",
@@ -227,6 +311,7 @@ function coreAgents(): AgentSummary[] {
       id: BROWSER_AGENT_IDS.screenPoster,
       name: "Screen Poster",
       status: "Paused",
+      autonomy_level: 2,
       fuel_remaining: 4100,
       fuel_budget: 10000,
       last_action: "awaiting human approval for X post",
@@ -239,6 +324,7 @@ function coreAgents(): AgentSummary[] {
       id: BROWSER_AGENT_IDS.webBuilder,
       name: "Web Builder",
       status: "Running",
+      autonomy_level: 3,
       fuel_remaining: 7800,
       fuel_budget: 10000,
       last_action: "deployed staging build v2.4.1",
@@ -251,6 +337,7 @@ function coreAgents(): AgentSummary[] {
       id: BROWSER_AGENT_IDS.workflowStudio,
       name: "Workflow Studio",
       status: "Stopped",
+      autonomy_level: 3,
       fuel_remaining: 2300,
       fuel_budget: 10000,
       last_action: "completed daily analytics pipeline",
@@ -263,6 +350,7 @@ function coreAgents(): AgentSummary[] {
       id: BROWSER_AGENT_IDS.selfImprove,
       name: "Self-Improve",
       status: "Running",
+      autonomy_level: 4,
       fuel_remaining: 8400,
       fuel_budget: 10000,
       last_action: "optimized prompt routing latency",
@@ -333,12 +421,15 @@ function sleep(ms: number): Promise<void> {
 }
 
 export default function App(): JSX.Element {
-  const [page, setPage] = useState<Page>("dashboard");
+  const [page, setPage] = useState<Page>(() => {
+    if (typeof window === "undefined") return "mission-control";
+    return pageFromLocation(window.location.pathname) ?? "mission-control";
+  });
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>("mock");
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEventRow[]>([]);
-  const [config, setConfig] = useState<NexusConfig>(defaultConfig);
+  const [config, setConfig] = useState<NexusConfig>(createDefaultConfig);
   const [draft, setDraft] = useState("");
   const [selectedAgent, setSelectedAgent] = useState("");
   const [selectedModel, setSelectedModel] = useState("mock");
@@ -365,6 +456,7 @@ export default function App(): JSX.Element {
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
   const pushToTalk = useRef<PushToTalk | null>(null);
   const previousPageRef = useRef<Page>(page);
+  const routeSyncRef = useRef(false);
   const uniqueAgents = useMemo(() => dedupeAgentsById(agents), [agents]);
   const { enabled: uiSoundEnabled, volume: uiSoundVolume, setEnabled: setUiSoundEnabled, setVolume: setUiSoundVolume, play } =
     useUiAudio();
@@ -374,7 +466,40 @@ export default function App(): JSX.Element {
   }
 
   useEffect(() => {
-    pushToTalk.current = new PushToTalk();
+    try {
+      pushToTalk.current = new PushToTalk();
+    } catch (error) {
+      setRuntimeError(`Voice controls unavailable: ${formatError(error)}`);
+    }
+
+    return () => {
+      pushToTalk.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const route = routeForPage(page);
+    if (window.location.pathname !== route) {
+      if (routeSyncRef.current) {
+        window.history.pushState({ page }, "", route);
+      } else {
+        window.history.replaceState({ page }, "", route);
+      }
+    }
+    routeSyncRef.current = true;
+  }, [page]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handlePopState = () => {
+      const next = pageFromLocation(window.location.pathname);
+      if (next) {
+        setPage(next);
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   useEffect(() => {
@@ -382,7 +507,7 @@ export default function App(): JSX.Element {
       setRuntimeMode("mock");
       setAgents(browserAgents());
       setAuditEvents(emptyAudit());
-      setConfig(defaultConfig());
+      setConfig(createDefaultConfig());
       setMessages([
         makeMessage("user", "Review the auth middleware in src/auth.rs for security issues"),
         makeMessage(
@@ -418,6 +543,7 @@ export default function App(): JSX.Element {
           getConfig(),
           jarvisStatus()
         ]);
+        const normalizedConfig = normalizeConfig(loadedConfig);
         if (cancelled) {
           return;
         }
@@ -425,7 +551,7 @@ export default function App(): JSX.Element {
         setRuntimeError(null);
         setAgents(loadedAgents);
         setAuditEvents(loadedAudit);
-        setConfig(loadedConfig);
+        setConfig(normalizedConfig);
         applyVoiceState(voice);
 
         // Refresh Ollama status in background
@@ -437,7 +563,8 @@ export default function App(): JSX.Element {
         }).catch(() => {});
 
         // Check if first-run setup is needed
-        const needsSetup = !loadedConfig.hardware?.gpu || loadedConfig.hardware.gpu.length === 0;
+        const needsSetup =
+          !normalizedConfig.hardware?.gpu || normalizedConfig.hardware.gpu.length === 0;
         if (needsSetup) {
           setShowSetupWizard(true);
         }
@@ -445,7 +572,7 @@ export default function App(): JSX.Element {
         setMessages([
           makeMessage(
             "assistant",
-            `Connected to desktop backend. Default model: ${loadedConfig.llm.default_model || "mock-1"}.`
+            `Connected to desktop backend. Default model: ${normalizedConfig.llm.default_model || "mock-1"}.`
           )
         ]);
         play("notification");
@@ -459,7 +586,7 @@ export default function App(): JSX.Element {
         setRuntimeError(`Desktop backend unavailable: ${formatError(error)}`);
         setAgents(browserAgents());
         setAuditEvents(emptyAudit());
-        setConfig(defaultConfig());
+        setConfig(createDefaultConfig());
         setMessages([
           makeMessage("assistant", "Backend connection failed; running in mock mode.")
         ]);
@@ -482,56 +609,99 @@ export default function App(): JSX.Element {
   // Listen for real-time agent status updates from the backend
   useEffect(() => {
     if (!hasDesktopRuntime()) return;
+    let cancelled = false;
     let unlisten: (() => void) | undefined;
-    import("@tauri-apps/api/event").then((mod) => {
-      mod.listen<AgentStatusEvent>("agent-status-changed", (event) => {
-        const { agent_id, status, fuel_remaining } = event.payload;
-        setAgents((prev) =>
-          prev.map((a) =>
-            a.id === agent_id
-              ? { ...a, status: status as AgentSummary["status"], fuel_remaining }
-              : a
-          )
-        );
-      }).then((fn) => { unlisten = fn; });
-    });
-    return () => { unlisten?.(); };
+
+    const registerListener = async (): Promise<void> => {
+      try {
+        const mod = await import("@tauri-apps/api/event");
+        if (cancelled) {
+          return;
+        }
+        unlisten = await mod.listen<AgentStatusEvent>("agent-status-changed", (event) => {
+          const { agent_id, status, fuel_remaining } = event.payload;
+          setAgents((prev) =>
+            prev.map((a) =>
+              a.id === agent_id
+                ? { ...a, status: status as AgentSummary["status"], fuel_remaining }
+                : a
+            )
+          );
+        });
+      } catch {
+        // Real-time updates are optional; fail closed instead of crashing startup.
+      }
+    };
+
+    void registerListener();
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, []);
 
   // Global listener for consent-request-pending — fires on ALL pages
   useEffect(() => {
     if (!hasDesktopRuntime()) return;
     const cleanups: (() => void)[] = [];
+    let cancelled = false;
 
-    // Request browser notification permission eagerly
-    if (typeof Notification !== "undefined" && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
+    const registerListeners = async (): Promise<void> => {
+      try {
+        if (typeof Notification !== "undefined" && Notification.permission === "default") {
+          void Notification.requestPermission().catch(() => {});
+        }
+      } catch {
+        // Ignore notification permission failures.
+      }
 
-    import("@tauri-apps/api/event").then((mod) => {
-      mod
-        .listen<ConsentNotification>("consent-request-pending", (event) => {
-          setPendingApprovalCount((prev) => prev + 1);
-          play("notification");
+      try {
+        const mod = await import("@tauri-apps/api/event");
+        if (cancelled) {
+          return;
+        }
 
-          // Desktop notification via browser Notification API (works in Tauri webview)
-          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-            new Notification("Nexus OS — Agent Approval Required", {
-              body: `${event.payload.agent_name} wants to: ${event.payload.operation_summary}`,
-              tag: `consent-${event.payload.consent_id}`,
-            });
-          }
-        })
-        .then((fn) => cleanups.push(fn));
+        const pendingCleanup = await mod.listen<ConsentNotification>(
+          "consent-request-pending",
+          (event) => {
+            setPendingApprovalCount((prev) => prev + 1);
+            play("notification");
 
-      mod
-        .listen<{ consent_id: string; status: string }>("consent-resolved", () => {
-          setPendingApprovalCount((prev) => Math.max(0, prev - 1));
-        })
-        .then((fn) => cleanups.push(fn));
-    });
+            try {
+              if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+                new Notification("Nexus OS — Agent Approval Required", {
+                  body: `${event.payload.agent_name} wants to: ${event.payload.operation_summary}`,
+                  tag: `consent-${event.payload.consent_id}`,
+                });
+              }
+            } catch {
+              // Ignore desktop notification failures.
+            }
+          },
+        );
+        cleanups.push(pendingCleanup);
 
-    return () => { for (const fn of cleanups) fn(); };
+        const resolvedCleanup = await mod.listen<{ consent_id: string; status: string }>(
+          "consent-resolved",
+          () => {
+            setPendingApprovalCount((prev) => Math.max(0, prev - 1));
+          },
+        );
+        cleanups.push(resolvedCleanup);
+      } catch {
+        // Consent listeners are optional; do not crash the shell if the event bridge is unavailable.
+      }
+    };
+
+    void registerListeners();
+
+    return () => {
+      cancelled = true;
+      for (const fn of cleanups) {
+        fn();
+      }
+    };
   }, [play]);
 
   useEffect(() => {
@@ -550,6 +720,11 @@ export default function App(): JSX.Element {
   const [sysInfo, setSysInfo] = useState<SystemInfo | null>(null);
 
   useEffect(() => {
+    if (!hasDesktopRuntime()) {
+      setSysInfo(null);
+      return;
+    }
+
     let active = true;
     function poll(): void {
       getSystemInfo()
@@ -843,10 +1018,9 @@ export default function App(): JSX.Element {
     ]);
 
     if (runtimeMode === "desktop") {
-      // If a real agent is selected (UUID but NOT a browser-mode stub), ALWAYS route through cognitive loop
-      const isRealAgent = selectedAgent.length > 0
-        && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(selectedAgent)
-        && !BROWSER_AGENT_ID_SET.has(selectedAgent);
+      // Cognitive loop disabled — route all messages through LLM chat for now.
+      // To re-enable agent goal execution, uncomment and restore the isRealAgent block.
+      const isRealAgent = false;
       if (isRealAgent) {
         try {
           const eventMod = await import("@tauri-apps/api/event");
@@ -977,7 +1151,9 @@ export default function App(): JSX.Element {
         return;
       }
 
-      const systemPrompt = AGENT_PROMPTS[selectedAgent] || AGENT_PROMPTS[""];
+      // Use agent description as system prompt when a real agent is selected
+      const agentDesc = agents.find((a) => a.id === selectedAgent)?.description;
+      const systemPrompt = agentDesc || AGENT_PROMPTS[selectedAgent] || AGENT_PROMPTS[""];
       const apiMessages = [
         { role: "system", content: systemPrompt },
         ...messages.filter(m => m.role === "user" || m.role === "assistant").slice(-20).map(m => ({
@@ -994,7 +1170,20 @@ export default function App(): JSX.Element {
         try {
           const eventMod = await import("@tauri-apps/api/event");
           unlisten = await eventMod.listen<ChatTokenEvent>("chat-token", (event) => {
-            const { full, done } = event.payload;
+            const { full, done, error } = event.payload;
+
+            if (error) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, content: `Error: ${error}`, model: "system", streaming: false }
+                    : m
+                )
+              );
+              setRuntimeError(`Chat error: ${error}`);
+              return;
+            }
+
             fullText = full;
 
             if (done) {
@@ -1167,7 +1356,7 @@ export default function App(): JSX.Element {
         const result = await runSetupWizard(ollamaStatus.base_url);
         if (result.config_saved) {
           const refreshedConfig = await getConfig();
-          setConfig(refreshedConfig);
+          setConfig(normalizeConfig(refreshedConfig));
         }
       } catch (error) {
         setRuntimeError(`Setup failed: ${formatError(error)}`);
@@ -1211,7 +1400,7 @@ export default function App(): JSX.Element {
     }
     try {
       const [loadedConfig, voice] = await Promise.all([getConfig(), jarvisStatus(), refreshDesktopData()]);
-      setConfig(loadedConfig);
+      setConfig(normalizeConfig(loadedConfig));
       applyVoiceState(voice);
       setRuntimeError(null);
       play("notification");
@@ -1327,6 +1516,7 @@ export default function App(): JSX.Element {
             setPermissionAgentId(id);
             setPage("permissions");
           }}
+          onNavigate={(p) => setPage(p as Page)}
         />
       );
     }
@@ -1491,6 +1681,36 @@ export default function App(): JSX.Element {
     if (page === "firewall") {
       return <Firewall />;
     }
+    if (page === "mission-control") {
+      return <MissionControl onNavigate={(p) => setPage(p as Page)} />;
+    }
+    if (page === "dna-lab") {
+      return <AgentDnaLab />;
+    }
+    if (page === "timeline-viewer") {
+      return <TimelineViewer />;
+    }
+    if (page === "knowledge-graph") {
+      return <KnowledgeGraph />;
+    }
+    if (page === "immune-dashboard") {
+      return <ImmuneDashboard />;
+    }
+    if (page === "consciousness") {
+      return <ConsciousnessMonitor />;
+    }
+    if (page === "dreams") {
+      return <DreamForge />;
+    }
+    if (page === "temporal") {
+      return <TemporalEngine />;
+    }
+    if (page === "civilization") {
+      return <CivilizationPage />;
+    }
+    if (page === "self-rewrite") {
+      return <SelfRewriteLab />;
+    }
     return (
       <Settings
         config={config}
@@ -1534,7 +1754,7 @@ export default function App(): JSX.Element {
             setPage(id as Page);
             play("click");
           }}
-          version="v8.0.0"
+          version="v9.0.0"
         />
 
         <div className="nexus-main-column">
@@ -1612,9 +1832,15 @@ export default function App(): JSX.Element {
 
           <main className="nexus-shell-content px-4 py-4 sm:px-6 sm:py-6">
             <PageTransition pageKey={page}>
-              <HoloPanel depth="mid" className="nexus-page-panel">
-                {renderPage()}
-              </HoloPanel>
+              <PageErrorBoundary
+                key={page}
+                pageLabel={NAV_ITEMS.find((item) => item.id === page)?.label ?? page}
+                onOpenSafePage={() => setPage("chat")}
+              >
+                <HoloPanel depth="mid" className="nexus-page-panel">
+                  {renderPage()}
+                </HoloPanel>
+              </PageErrorBoundary>
             </PageTransition>
           </main>
         </div>

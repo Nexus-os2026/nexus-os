@@ -16,12 +16,17 @@ import "./code-editor.css";
 const HAS_DESKTOP = hasDesktopRuntime();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const invoke: (cmd: string, args?: Record<string, unknown>) => Promise<any> =
-  HAS_DESKTOP
-    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (window as any).__TAURI__.invoke
-    : async (_cmd: string, _args?: Record<string, unknown>) =>
-        JSON.stringify([]);
+async function invoke(cmd: string, args?: Record<string, unknown>): Promise<any> {
+  if (
+    typeof window !== "undefined" &&
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    typeof (window as any).__TAURI__?.invoke === "function"
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (window as any).__TAURI__.invoke(cmd, args);
+  }
+  return JSON.stringify([]);
+}
 
 /* ================================================================== */
 /*  Types                                                              */
@@ -200,7 +205,7 @@ export default function CodeEditor(): JSX.Element {
   const [splitView, setSplitView] = useState<SplitView>("off");
   const [bottomPanel, setBottomPanel] = useState<BottomPanel>("none");
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([
-    { id: 0, type: "system", text: "Nexus OS Terminal v7.0 — governed shell", ts: Date.now() },
+    { id: 0, type: "system", text: "Nexus OS Terminal v9.0 — governed shell", ts: Date.now() },
     { id: 1, type: "system", text: "Type commands below. Dangerous operations require approval.", ts: Date.now() },
   ]);
   const [terminalInput, setTerminalInput] = useState("");

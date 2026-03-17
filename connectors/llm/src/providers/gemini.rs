@@ -1,4 +1,4 @@
-use super::{curl_post_json, require_real_api, LlmProvider, LlmResponse, ProviderRequest};
+use super::{curl_post_json, LlmProvider, LlmResponse, ProviderRequest};
 use nexus_kernel::errors::AgentError;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -65,8 +65,6 @@ impl GeminiProvider {
 
 impl LlmProvider for GeminiProvider {
     fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
-        require_real_api(cfg!(feature = "real-api-tests"))?;
-
         let Some(api_key) = self.api_key() else {
             return Err(AgentError::SupervisorError(
                 "GEMINI_API_KEY is not set".to_string(),
@@ -113,10 +111,6 @@ impl LlmProvider for GeminiProvider {
 
     fn cost_per_token(&self) -> f64 {
         0.000_003_5
-    }
-
-    fn requires_real_api_opt_in(&self) -> bool {
-        true
     }
 
     fn endpoint_url(&self) -> String {

@@ -82,6 +82,11 @@ function dedupeDropdownAgents(agents: AgentSummary[]): AgentSummary[] {
   );
 }
 
+function dropdownAgentLabel(agent: AgentSummary): string {
+  const level = agent.autonomy_level ?? 0;
+  return `${agent.name} (L${level})`;
+}
+
 function bubbleClass(role: ChatMessage["role"], variant?: ChatMessage["variant"]): string {
   if (role === "user") {
     return "jarvis-message jarvis-message-user";
@@ -284,7 +289,7 @@ export function Chat({
             <option value="">All Agents</option>
             {dropdownAgents.map((agent) => (
               <option key={agent.id} value={agent.id}>
-                {agent.name} ({agent.status})
+                {dropdownAgentLabel(agent)}
               </option>
             ))}
           </select>

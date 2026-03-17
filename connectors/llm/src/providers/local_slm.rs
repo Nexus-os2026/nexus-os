@@ -1445,10 +1445,6 @@ impl LlmProvider for LocalSlmProvider {
         false
     }
 
-    fn requires_real_api_opt_in(&self) -> bool {
-        false // no external API calls
-    }
-
     fn estimate_input_tokens(&self, prompt: &str) -> u32 {
         // If a model is loaded, use its tokenizer for accurate count.
         if let Ok(active) = self.active_model.read() {
@@ -1502,12 +1498,6 @@ mod tests {
         assert!(result.is_err());
         let err = format!("{}", result.unwrap_err());
         assert!(err.contains("no model loaded"));
-    }
-
-    #[test]
-    fn does_not_require_real_api() {
-        let provider = make_provider();
-        assert!(!provider.requires_real_api_opt_in());
     }
 
     #[test]

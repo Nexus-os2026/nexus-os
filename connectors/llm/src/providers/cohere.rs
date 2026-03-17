@@ -1,5 +1,5 @@
 use super::openai_compatible::{bearer_headers, extract_content_text};
-use super::{require_real_api, LlmProvider, LlmResponse, ProviderRequest};
+use super::{LlmProvider, LlmResponse, ProviderRequest};
 use nexus_kernel::errors::AgentError;
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
@@ -58,8 +58,6 @@ impl CohereProvider {
 
 impl LlmProvider for CohereProvider {
     fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
-        require_real_api(cfg!(feature = "real-api-tests"))?;
-
         let Some(api_key) = self.api_key() else {
             return Err(AgentError::SupervisorError(
                 "COHERE_API_KEY is not set".to_string(),
@@ -130,10 +128,6 @@ impl LlmProvider for CohereProvider {
 
     fn cost_per_token(&self) -> f64 {
         0.000_002
-    }
-
-    fn requires_real_api_opt_in(&self) -> bool {
-        true
     }
 
     fn endpoint_url(&self) -> String {

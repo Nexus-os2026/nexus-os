@@ -99,6 +99,29 @@ const PIE_COLORS = ["var(--nexus-accent)", "#c084fc", "#34d399", "#f59e0b", "#60
 
 const MAX_DATA_POINTS = 60;
 
+function normalizeLiveMetrics(input: unknown): LiveMetrics {
+  if (!input || typeof input !== "object") {
+    throw new Error("System metrics payload was empty");
+  }
+
+  const candidate = input as Partial<LiveMetrics>;
+  return {
+    cpu_name: candidate.cpu_name ?? "Unknown CPU",
+    cpu_cores: Number(candidate.cpu_cores ?? 0),
+    cpu_avg: Number(candidate.cpu_avg ?? 0),
+    per_core_usage: Array.isArray(candidate.per_core_usage) ? candidate.per_core_usage : [],
+    total_ram: Number(candidate.total_ram ?? 0),
+    used_ram: Number(candidate.used_ram ?? 0),
+    available_ram: Number(candidate.available_ram ?? 0),
+    uptime_secs: Number(candidate.uptime_secs ?? 0),
+    process_count: Number(candidate.process_count ?? 0),
+    nexus_disk_bytes: Number(candidate.nexus_disk_bytes ?? 0),
+    disk_total: Number(candidate.disk_total ?? 0),
+    disk_available: Number(candidate.disk_available ?? 0),
+    agents: Array.isArray(candidate.agents) ? candidate.agents : [],
+  };
+}
+
 /* ================================================================== */
 /*  Component                                                          */
 /* ================================================================== */
@@ -125,7 +148,7 @@ export default function SystemMonitor(): JSX.Element {
       try {
         const raw = await getLiveSystemMetrics();
         if (!mounted) return;
-        const data: LiveMetrics = JSON.parse(raw);
+        const data = normalizeLiveMetrics(JSON.parse(raw));
         setLatest(data);
         setError(null);
 
@@ -198,10 +221,10 @@ export default function SystemMonitor(): JSX.Element {
       try {
         const agents = await listAgents();
         if (mounted) {
-          setAllAgents(agents);
+          setAllAgents(Array.isArray(agents) ? agents : []);
         }
-      } catch (err) {
-        console.error("[SystemMonitor] failed to list agents", err);
+      } catch {
+        // Ignore agent list refresh failures; live metrics still render.
       }
     }
 
@@ -237,12 +260,13 @@ export default function SystemMonitor(): JSX.Element {
   ];
 
   // Derived values
-  const totalFuel = latest?.agents.reduce((a, b) => a + b.fuel_used, 0) ?? 0;
-  const totalBudget = latest?.agents.reduce((a, b) => a + b.fuel_budget, 0) ?? 1;
+  const liveAgents = Array.isArray(latest?.agents) ? latest.agents : [];
+  const totalFuel = liveAgents.reduce((a, b) => a + b.fuel_used, 0);
+  const totalBudget = liveAgents.reduce((a, b) => a + b.fuel_budget, 0) || 1;
   const ramPct = latest && latest.total_ram > 0 ? (latest.used_ram / latest.total_ram) * 100 : 0;
   const diskPct = latest && latest.disk_total > 0 ? ((latest.disk_total - latest.disk_available) / latest.disk_total) * 100 : 0;
 
-  const liveAgentMap = new Map((latest?.agents ?? []).map((agent) => [agent.id, agent]));
+  const liveAgentMap = new Map(liveAgents.map((agent) => [agent.id, agent]));
 
   const mergedAgents = useMemo(() => {
     const normalized = new Map<string, AgentFuel>();
@@ -259,14 +283,14 @@ export default function SystemMonitor(): JSX.Element {
       });
     }
 
-    for (const live of latest?.agents ?? []) {
+    for (const live of liveAgents) {
       if (!normalized.has(live.id)) {
         normalized.set(live.id, live);
       }
     }
 
     return Array.from(normalized.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [allAgents, latest?.agents]);
+  }, [allAgents, liveAgents]);
 
   const totalAgentCount = mergedAgents.length;
   const runningAgentCount = mergedAgents.filter((a) => a.state === "Running").length;

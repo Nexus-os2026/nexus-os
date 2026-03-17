@@ -1,6 +1,4 @@
-use super::{
-    curl_post_json_with_timeout, require_real_api, LlmProvider, LlmResponse, ProviderRequest,
-};
+use super::{curl_post_json_with_timeout, LlmProvider, LlmResponse, ProviderRequest};
 use nexus_kernel::errors::AgentError;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -9,15 +7,60 @@ use std::env;
 const NVIDIA_NIM_ENDPOINT: &str = "https://integrate.api.nvidia.com/v1/chat/completions";
 
 /// Available NVIDIA NIM models — free tier (1000 credits on signup).
+/// 42 models from 12 providers. All free on build.nvidia.com as of March 2026.
 pub const NVIDIA_MODELS: &[(&str, &str)] = &[
-    // Meta / Llama
+    // ═══ DeepSeek (Best for Agents) ═══
+    (
+        "deepseek-ai/deepseek-v3_1-terminus",
+        "DeepSeek V3.1 Terminus 671B — Best for agents, hybrid Think/Non-Think, 128K ctx",
+    ),
+    (
+        "deepseek-ai/deepseek-v3_1",
+        "DeepSeek V3.1 — Hybrid thinking, smarter tool calling, 128K ctx",
+    ),
+    ("deepseek-ai/deepseek-v3", "DeepSeek V3 — Coding specialist"),
+    (
+        "deepseek-ai/deepseek-r1",
+        "DeepSeek R1 — Reasoning optimized",
+    ),
+    (
+        "deepseek-ai/deepseek-r1-distill-llama-70b",
+        "DeepSeek R1 Distill 70B — Reasoning distilled to Llama",
+    ),
+    (
+        "deepseek-ai/deepseek-r1-distill-qwen-32b",
+        "DeepSeek R1 Distill Qwen 32B — Reasoning distilled",
+    ),
+    (
+        "deepseek-ai/deepseek-r1-distill-qwen-14b",
+        "DeepSeek R1 Distill Qwen 14B — Lightweight reasoning",
+    ),
+    (
+        "deepseek-ai/deepseek-r1-distill-llama-8b",
+        "DeepSeek R1 Distill 8B — Fast reasoning",
+    ),
+    // ═══ Zhipu GLM (Agentic Coding) ═══
+    (
+        "zhipuai/glm-4.7",
+        "GLM-4.7 — Multilingual agentic coding, stronger reasoning, tool use, UI skills",
+    ),
+    (
+        "zhipuai/glm-5-744b",
+        "GLM-5 744B MoE — Complex reasoning, 205K ctx, MIT license, 40 RPM free",
+    ),
+    // ═══ Moonshot / Kimi ═══
+    (
+        "moonshotai/kimi-k2-instruct",
+        "Kimi K2 Instruct — Coding and long context specialist",
+    ),
+    // ═══ Meta / Llama ═══
     (
         "meta/llama-4-scout-17b-16e-instruct",
         "Llama 4 Scout 17B — Fast general purpose",
     ),
     (
         "meta/llama-4-maverick-17b-128e-instruct",
-        "Llama 4 Maverick 17B — Long context specialist",
+        "Llama 4 Maverick 17B — Long context 128 experts",
     ),
     (
         "meta/llama-3.3-70b-instruct",
@@ -31,7 +74,11 @@ pub const NVIDIA_MODELS: &[(&str, &str)] = &[
         "meta/llama-3.2-90b-vision-instruct",
         "Llama 3.2 90B Vision — Multimodal",
     ),
-    // NVIDIA Nemotron
+    (
+        "meta/llama-3.1-8b-instruct",
+        "Llama 3.1 8B — Fast lightweight",
+    ),
+    // ═══ NVIDIA Nemotron ═══
     (
         "nvidia/llama-3.1-nemotron-ultra-253b-v1",
         "Nemotron Ultra 253B — NVIDIA most capable",
@@ -46,38 +93,27 @@ pub const NVIDIA_MODELS: &[(&str, &str)] = &[
     ),
     (
         "nvidia/nemotron-3-super-120b-a12b",
-        "Nemotron 3 Super 120B — Agentic reasoning",
+        "Nemotron 3 Super 120B — Hybrid Mamba-Transformer, 1M ctx, agentic",
     ),
     (
         "nvidia/nemotron-3-nano-30b-a3b",
-        "Nemotron 3 Nano 30B — Fast lightweight",
+        "Nemotron 3 Nano 30B — Fast efficient agentic",
     ),
-    // DeepSeek
+    // ═══ Qwen ═══
     (
-        "deepseek-ai/deepseek-r1",
-        "DeepSeek R1 — Reasoning optimized",
+        "qwen/qwen3.5-vl-400b",
+        "Qwen 3.5 VLM 400B MoE — Vision, chat, RAG, agentic",
     ),
     (
-        "deepseek-ai/deepseek-r1-distill-llama-70b",
-        "DeepSeek R1 Distill 70B — Reasoning distilled",
+        "qwen/qwen2.5-72b-instruct",
+        "Qwen 2.5 72B — Alibaba frontier",
     ),
-    ("deepseek-ai/deepseek-v3", "DeepSeek V3 — Coding specialist"),
-    // Moonshot / Kimi
     (
-        "moonshotai/kimi-k2-instruct",
-        "Kimi K2 — Coding and long context",
+        "qwen/qwen2.5-coder-32b-instruct",
+        "Qwen 2.5 Coder 32B — Coding specialist",
     ),
-    // MiniMax
-    (
-        "minimax/minimax-m2.5",
-        "MiniMax M2.5 — Office and document tasks",
-    ),
-    // Zhipu
-    (
-        "zhipuai/glm-5-744b",
-        "GLM-5 744B — Complex reasoning heavyweight",
-    ),
-    // Mistral
+    ("qwen/qwen2.5-7b-instruct", "Qwen 2.5 7B — Lightweight"),
+    // ═══ Mistral ═══
     (
         "mistralai/mistral-large-2-instruct",
         "Mistral Large 2 — 123B flagship",
@@ -90,7 +126,16 @@ pub const NVIDIA_MODELS: &[(&str, &str)] = &[
         "mistralai/mistral-7b-instruct-v0.3",
         "Mistral 7B — Lightweight fast",
     ),
-    // Google Gemma
+    (
+        "mistralai/devstral-2-123b-instruct-2512",
+        "Devstral 2 123B — Coding focused",
+    ),
+    // ═══ MiniMax ═══
+    (
+        "minimax/minimax-m2.5",
+        "MiniMax M2.5 230B — Coding, reasoning, office tasks",
+    ),
+    // ═══ Google Gemma ═══
     (
         "google/gemma-3-27b-it",
         "Gemma 3 27B — Efficient open model",
@@ -99,26 +144,35 @@ pub const NVIDIA_MODELS: &[(&str, &str)] = &[
         "google/gemma-3-12b-it",
         "Gemma 3 12B — Edge and fast inference",
     ),
-    // Microsoft Phi
+    // ═══ Microsoft Phi ═══
     ("microsoft/phi-4", "Phi-4 — Small but smart reasoning"),
     (
         "microsoft/phi-3-medium-128k-instruct",
-        "Phi-3 Medium 128K — Long context specialist",
-    ),
-    // Qwen
-    (
-        "qwen/qwen2.5-72b-instruct",
-        "Qwen 2.5 72B — Alibaba frontier",
+        "Phi-3 Medium 128K — Long context",
     ),
     (
-        "qwen/qwen2.5-coder-32b-instruct",
-        "Qwen 2.5 Coder 32B — Coding specialist",
+        "microsoft/phi-3.5-vision-instruct",
+        "Phi-3.5 Vision — Multimodal",
+    ),
+    // ═══ IBM Granite ═══
+    (
+        "ibm/granite-3.1-8b-instruct",
+        "Granite 3.1 8B — Enterprise lightweight",
+    ),
+    (
+        "ibm/granite-3.3-8b-instruct",
+        "Granite 3.3 8B — Updated enterprise",
+    ),
+    // ═══ Writer ═══
+    (
+        "writer/palmyra-x-004",
+        "Palmyra X 004 — Enterprise writing and reasoning",
     ),
 ];
 
 pub const NVIDIA_VISION_MODELS: &[&str] = &[
     "meta/llama-3.2-90b-vision-instruct",
-    "nvidia/llama-3.2-neva-72b-preview",
+    "qwen/qwen3.5-vl-400b",
     "microsoft/phi-3.5-vision-instruct",
     "google/gemma-3-27b-it",
 ];
@@ -181,8 +235,6 @@ impl NvidiaProvider {
 
 impl LlmProvider for NvidiaProvider {
     fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
-        require_real_api(cfg!(feature = "real-api-tests"))?;
-
         let Some(api_key) = self.api_key() else {
             return Err(AgentError::SupervisorError(
                 "NVIDIA_NIM_API_KEY is not set. Get a free key at https://build.nvidia.com"
@@ -235,10 +287,6 @@ impl LlmProvider for NvidiaProvider {
 
     fn cost_per_token(&self) -> f64 {
         0.000_001 // Free tier / very low cost
-    }
-
-    fn requires_real_api_opt_in(&self) -> bool {
-        true
     }
 
     fn endpoint_url(&self) -> String {

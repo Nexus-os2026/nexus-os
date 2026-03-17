@@ -2,6 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAuditLog, getLiveSystemMetricsJson, listAgents } from "../api/backend";
 import type { AgentSummary, AuditEventRow } from "../types";
 
+type SystemMetricsAgent = {
+  id?: string;
+  name?: string;
+  fuel_budget?: number;
+  fuel_used?: number;
+  remaining_fuel?: number;
+  state?: string;
+};
+
 type SystemMetrics = {
   cpu_name?: string;
   cpu_avg?: number;
@@ -10,14 +19,7 @@ type SystemMetrics = {
   total_ram?: number;
   uptime_secs?: number;
   process_count?: number;
-  agents?: Array<{
-    id: string;
-    name: string;
-    fuel_budget?: number;
-    fuel_used?: number;
-    remaining_fuel?: number;
-    state?: string;
-  }>;
+  agents?: SystemMetricsAgent[];
 };
 
 function formatPercent(value: number): string {
@@ -32,6 +34,18 @@ function formatUptime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   return `${hours}h ${minutes}m`;
+}
+
+function normalizeMetrics(input: unknown): SystemMetrics | null {
+  if (!input || typeof input !== "object") {
+    return null;
+  }
+
+  const candidate = input as SystemMetrics;
+  return {
+    ...candidate,
+    agents: Array.isArray(candidate.agents) ? candidate.agents : [],
+  };
 }
 
 export default function Dashboard(): JSX.Element {
@@ -50,9 +64,9 @@ export default function Dashboard(): JSX.Element {
         getAuditLog(undefined, 12),
         getLiveSystemMetricsJson<SystemMetrics>(),
       ]);
-      setAgents(agentRows);
-      setAuditEvents(auditRows);
-      setMetrics(metricRows);
+      setAgents(Array.isArray(agentRows) ? agentRows : []);
+      setAuditEvents(Array.isArray(auditRows) ? auditRows : []);
+      setMetrics(normalizeMetrics(metricRows));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
     } finally {
@@ -61,19 +75,22 @@ export default function Dashboard(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    void refresh().catch((loadError) => {
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
+      setLoading(false);
+    });
   }, [refresh]);
 
   const activeAgents = useMemo(
     () =>
       agents.filter((agent) =>
-        ["running", "starting", "paused"].includes(agent.status.toLowerCase()),
+        ["running", "starting", "paused"].includes(String(agent.status ?? "").toLowerCase()),
       ).length,
     [agents],
   );
 
   const fuelSummary = useMemo(() => {
-    const source = metrics?.agents ?? [];
+    const source = Array.isArray(metrics?.agents) ? metrics.agents : [];
     return source.reduce(
       (acc, agent) => {
         acc.budget += Number(agent.fuel_budget ?? 0);

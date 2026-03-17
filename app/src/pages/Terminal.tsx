@@ -6,20 +6,25 @@ import "./terminal.css";
 /* ================================================================== */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const invoke: (cmd: string, args?: Record<string, unknown>) => Promise<any> =
-  typeof window !== "undefined" && "__TAURI__" in window
-    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (window as any).__TAURI__.invoke
-    : async (_cmd: string, _args?: Record<string, unknown>) =>
-        JSON.stringify({
-          stdout: "Tauri backend not available — running in browser mode.\n",
-          stderr: "",
-          exit_code: 0,
-          duration_ms: 0,
-          tool: "fallback",
-          needs_approval: false,
-          fuel_cost: 0,
-        });
+async function invoke(cmd: string, args?: Record<string, unknown>): Promise<any> {
+  if (
+    typeof window !== "undefined" &&
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    typeof (window as any).__TAURI__?.invoke === "function"
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (window as any).__TAURI__.invoke(cmd, args);
+  }
+  return JSON.stringify({
+    stdout: "Tauri backend not available — running in browser mode.\n",
+    stderr: "",
+    exit_code: 0,
+    duration_ms: 0,
+    tool: "fallback",
+    needs_approval: false,
+    fuel_cost: 0,
+  });
+}
 
 /* ================================================================== */
 /*  Types                                                              */
@@ -108,7 +113,7 @@ const WARN_PATTERNS = [
 ];
 
 const HELP_TEXT = [
-  "Nexus OS Terminal — Governed Shell v7.0",
+  "Nexus OS Terminal — Governed Shell v9.0",
   "",
   "All commands execute via TypedTools (no raw shell).",
   "Built-in (client-side):",
@@ -202,7 +207,7 @@ export default function Terminal(): JSX.Element {
   const [activePane, setActivePane] = useState(1);
   const [lines, setLines] = useState<TermLine[]>([
     { id: 0, type: "system", text: "╔══════════════════════════════════════════════════════════════╗", ts: Date.now(), pane: 1 },
-    { id: 1, type: "system", text: "║  Nexus OS Terminal v7.0 — Governed Shell                    ║", ts: Date.now(), pane: 1 },
+    { id: 1, type: "system", text: "║  Nexus OS Terminal v9.0 — Governed Shell                    ║", ts: Date.now(), pane: 1 },
     { id: 2, type: "system", text: "║  Don't trust. Verify. Every command is audit-logged.        ║", ts: Date.now(), pane: 1 },
     { id: 3, type: "system", text: "║  Dangerous commands require Tier2+ HITL approval.           ║", ts: Date.now(), pane: 1 },
     { id: 4, type: "system", text: "║  Type 'help' for available commands.                        ║", ts: Date.now(), pane: 1 },

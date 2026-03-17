@@ -68,10 +68,6 @@ impl LlmProvider for PerplexityProvider {
         0.000_003
     }
 
-    fn requires_real_api_opt_in(&self) -> bool {
-        true
-    }
-
     fn endpoint_url(&self) -> String {
         "https://api.perplexity.ai".to_string()
     }

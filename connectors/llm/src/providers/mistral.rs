@@ -68,10 +68,6 @@ impl LlmProvider for MistralProvider {
         0.000_002_5
     }
 
-    fn requires_real_api_opt_in(&self) -> bool {
-        true
-    }
-
     fn endpoint_url(&self) -> String {
         "https://api.mistral.ai".to_string()
     }

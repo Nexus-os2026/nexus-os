@@ -580,8 +580,8 @@ fn canonical_patterns_consistent() {
     assert_eq!(PII_PATTERNS.len(), 6, "must have exactly 6 PII patterns");
     assert_eq!(
         EXFIL_PATTERNS.len(),
-        7,
-        "must have exactly 7 exfiltration patterns"
+        4,
+        "must have exactly 4 exfiltration patterns"
     );
     assert_eq!(
         SENSITIVE_PATHS.len(),

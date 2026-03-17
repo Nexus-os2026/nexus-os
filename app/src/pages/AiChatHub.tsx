@@ -1,6 +1,15 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
-import { sendChat, chatWithOllama, conductBuild, listAgents, hasDesktopRuntime, listProviderModels, getProviderStatus, saveApiKey } from "../api/backend";
-import type { ChatTokenEvent, ConductorPlanEvent, ConductorAgentCompletedEvent, ConductorFinishedEvent, ConductorBuildResponse, ProviderModel, ProviderStatus } from "../types";
+import {
+  sendChat, chatWithOllama, conductBuild, listAgents, hasDesktopRuntime,
+  listProviderModels, getProviderStatus, saveApiKey, getPreinstalledAgents,
+  startAgent, stopAgent, pauseAgent, resumeAgent, getAuditLog,
+  approveConsentRequest, denyConsentRequest,
+} from "../api/backend";
+import type {
+  ChatTokenEvent, ConductorPlanEvent, ConductorAgentCompletedEvent,
+  ConductorFinishedEvent, ConductorBuildResponse, ProviderModel, ProviderStatus,
+  PreinstalledAgent, ConsentNotification, AuditEventRow,
+} from "../types";
 import "./ai-chat-hub.css";
 
 /* ─── types ─── */
@@ -26,7 +35,7 @@ interface BuildResultData {
 
 interface ChatMsg {
   id: string;
-  role: "user" | "assistant" | "system" | "agent";
+  role: "user" | "assistant" | "system" | "agent" | "approval";
   content: string;
   model?: string;
   agent?: string;
@@ -35,6 +44,20 @@ interface ChatMsg {
   codeBlock?: { lang: string; code: string; output?: string };
   streaming?: boolean;
   buildResult?: BuildResultData;
+  approval?: ConsentNotification;
+  approvalStatus?: "pending" | "approved" | "denied";
+}
+
+type AgentRunStatus = "Idle" | "Running" | "Paused" | "Stopped" | "Error";
+
+interface SelectedAgent {
+  agent_id: string;
+  name: string;
+  description: string;
+  autonomy_level: number;
+  fuel_budget: number;
+  capabilities: string[];
+  status: AgentRunStatus;
 }
 
 interface Conversation {
@@ -56,6 +79,7 @@ const PROVIDER_META: Record<string, { icon: string; color: string; label: string
   openai: { icon: "◈", color: "#74b9ff", label: "OpenAI", fuelCost: 12 },
   deepseek: { icon: "◈", color: "#a78bfa", label: "DeepSeek", fuelCost: 3 },
   google: { icon: "◈", color: "#ffd700", label: "Google", fuelCost: 10 },
+  nvidia: { icon: "◈", color: "#76b900", label: "NVIDIA NIM", fuelCost: 1 },
 };
 
 // Cloud models to show as locked when no API key is configured
@@ -68,13 +92,46 @@ const LOCKED_CLOUD_MODELS: Array<{ id: string; name: string; provider: string }>
   { id: "deepseek/deepseek-coder", name: "DeepSeek Coder", provider: "deepseek" },
   { id: "google/gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "google" },
   { id: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "google" },
+  // NVIDIA NIM (free tier)
+  { id: "nvidia/deepseek-v3.1-terminus", name: "DeepSeek V3.1 Terminus 671B", provider: "nvidia" },
+  { id: "nvidia/nemotron-ultra-253b", name: "Nemotron Ultra 253B", provider: "nvidia" },
+  { id: "nvidia/glm-4.7", name: "GLM-4.7 Agentic Coding", provider: "nvidia" },
+  { id: "nvidia/llama-3.3-70b", name: "Llama 3.3 70B (NIM)", provider: "nvidia" },
 ];
 
-interface AgentEntry {
-  id: string;
-  name: string;
-  icon: string;
-  color: string;
+const AUTONOMY_LABELS: Record<number, string> = {
+  0: "L0 · Inert",
+  1: "L1 · Suggest",
+  2: "L2 · Act-with-approval",
+  3: "L3 · Act-then-report",
+  4: "L4 · Autonomous-bounded",
+  5: "L5 · Full autonomy",
+  6: "L6 · Transcendent",
+};
+
+function autonomyShort(level: number): string {
+  return `L${level}`;
+}
+
+function autonomyColor(level: number): string {
+  const colors: Record<number, string> = {
+    0: "#64748b", 1: "#22c55e", 2: "#60a5fa",
+    3: "#f59e0b", 4: "#fb923c", 5: "#ef4444", 6: "#a855f7",
+  };
+  return colors[level] ?? "#64748b";
+}
+
+function normalizeAgentRunStatus(status: string): AgentRunStatus {
+  if (status === "Running" || status === "Starting") {
+    return "Running";
+  }
+  if (status === "Paused") {
+    return "Paused";
+  }
+  if (status === "Error") {
+    return "Error";
+  }
+  return "Idle";
 }
 
 const BUILD_ACTION_KEYWORDS = ["build", "create", "generate", "make me", "design", "fix", "clone"];
@@ -274,10 +331,18 @@ export default function AiChatHub() {
   const [showApiKeyModal, setShowApiKeyModal] = useState<string | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [apiKeySaving, setApiKeySaving] = useState(false);
-  const [agentEntries, setAgentEntries] = useState<AgentEntry[]>([]);
   const [joinedAgents, setJoinedAgents] = useState<string[]>([]);
   const [auditLog, setAuditLog] = useState<string[]>(["Chat hub ready"]);
   const [conductorProgress, setConductorProgress] = useState<string[]>([]);
+  // Agent control state
+  const [preinstalledAgents, setPreinstalledAgents] = useState<PreinstalledAgent[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<SelectedAgent | null>(null);
+  const [agentStatus, setAgentStatus] = useState<AgentRunStatus>("Idle");
+  const [showAgentDropdown, setShowAgentDropdown] = useState(false);
+  const [showAgentLogs, setShowAgentLogs] = useState(false);
+  const [agentLogs, setAgentLogs] = useState<AuditEventRow[]>([]);
+  const [agentActionLoading, setAgentActionLoading] = useState(false);
+  const [showAgentInfo, setShowAgentInfo] = useState(false);
 
   // compare state
   const [compareModels, setCompareModels] = useState<[string, string]>(["", ""]);
@@ -367,19 +432,189 @@ export default function AiChatHub() {
     loadModels();
   }, [loadModels]);
 
-  /* ─── load agents from backend ─── */
-  useEffect(() => {
+  /* ─── load prebuilt agents from backend ─── */
+  const loadPreinstalledAgents = useCallback(async () => {
     if (!hasDesktopRuntime()) return;
-    const AGENT_COLORS = ["var(--nexus-accent)", "#a78bfa", "#22c55e", "#f59e0b", "#60a5fa", "#fb923c"];
-    listAgents().then((agents) => {
-      setAgentEntries(agents.map((a, i) => ({
-        id: a.id,
-        name: a.name,
-        icon: "\u2B22",
-        color: AGENT_COLORS[i % AGENT_COLORS.length],
+    try {
+      const agents = await getPreinstalledAgents();
+      setPreinstalledAgents(agents);
+      // Update selected agent status if one is selected
+      if (selectedAgent) {
+        const updated = agents.find(a => a.agent_id === selectedAgent.agent_id);
+        if (updated) {
+          const status = normalizeAgentRunStatus(updated.status);
+          setAgentStatus(status);
+          setSelectedAgent(prev => prev ? { ...prev, status } : null);
+        }
+      }
+    } catch { /* backend unavailable */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAgent?.agent_id]);
+
+  useEffect(() => {
+    loadPreinstalledAgents();
+  }, [loadPreinstalledAgents]);
+
+  // Refresh agent status periodically when an agent is selected and running
+  useEffect(() => {
+    if (!selectedAgent || agentStatus === "Idle" || agentStatus === "Stopped") return;
+    const interval = setInterval(loadPreinstalledAgents, 5000);
+    return () => clearInterval(interval);
+  }, [selectedAgent, agentStatus, loadPreinstalledAgents]);
+
+  /* ─── listen for HITL consent-request-pending events ─── */
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const eventMod = await import("@tauri-apps/api/event");
+        unlisten = await eventMod.listen<ConsentNotification>("consent-request-pending", (event) => {
+          const notification = event.payload;
+          // Only show if it's for the currently selected agent (or show all if none selected)
+          const approvalMsg: ChatMsg = {
+            id: `approval-${notification.consent_id}`,
+            role: "approval",
+            content: notification.operation_summary,
+            agent: notification.agent_name,
+            timestamp: Date.now(),
+            approval: notification,
+            approvalStatus: "pending",
+          };
+          // Add to active conversation
+          setConversations(prev => prev.map(c => c.id === activeConvId ? {
+            ...c,
+            messages: [...c.messages, approvalMsg],
+            updatedAt: Date.now(),
+          } : c));
+          logAudit(`HITL: ${notification.agent_name} requests approval`);
+        });
+      } catch { /* not in Tauri */ }
+    })();
+    return () => { unlisten?.(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConvId]);
+
+  /* ─── agent lifecycle actions ─── */
+  const handleAgentAction = useCallback(async (action: "start" | "pause" | "resume" | "stop" | "kill") => {
+    if (!selectedAgent) return;
+    setAgentActionLoading(true);
+    try {
+      switch (action) {
+        case "start":
+          await startAgent(selectedAgent.agent_id);
+          setAgentStatus("Running");
+          logAudit(`Started ${selectedAgent.name}`);
+          break;
+        case "pause":
+          await pauseAgent(selectedAgent.agent_id);
+          setAgentStatus("Paused");
+          logAudit(`Paused ${selectedAgent.name}`);
+          break;
+        case "resume":
+          await resumeAgent(selectedAgent.agent_id);
+          setAgentStatus("Running");
+          logAudit(`Resumed ${selectedAgent.name}`);
+          break;
+        case "stop":
+          await stopAgent(selectedAgent.agent_id);
+          setAgentStatus("Stopped");
+          logAudit(`Stopped ${selectedAgent.name}`);
+          break;
+        case "kill":
+          await stopAgent(selectedAgent.agent_id); // kill uses stop (no separate kill command)
+          setAgentStatus("Stopped");
+          logAudit(`Force stopped ${selectedAgent.name}`);
+          break;
+      }
+      await loadPreinstalledAgents();
+    } catch (err) {
+      logAudit(`Agent ${action} failed: ${String(err).slice(0, 60)}`);
+      setAgentStatus("Error");
+    } finally {
+      setAgentActionLoading(false);
+    }
+  }, [selectedAgent, logAudit, loadPreinstalledAgents]);
+
+  const handleLoadAgentLogs = useCallback(async () => {
+    if (!selectedAgent) return;
+    try {
+      const logs = await getAuditLog(selectedAgent.agent_id, 50);
+      setAgentLogs(logs);
+    } catch {
+      setAgentLogs([]);
+    }
+  }, [selectedAgent]);
+
+  const toggleAgentLogs = useCallback(() => {
+    const next = !showAgentLogs;
+    setShowAgentLogs(next);
+    if (next) handleLoadAgentLogs();
+  }, [showAgentLogs, handleLoadAgentLogs]);
+
+  const selectAgent = useCallback((agent: PreinstalledAgent) => {
+    const status = normalizeAgentRunStatus(agent.status);
+    setSelectedAgent({
+      agent_id: agent.agent_id,
+      name: agent.name,
+      description: agent.description,
+      autonomy_level: agent.autonomy_level,
+      fuel_budget: agent.fuel_budget,
+      capabilities: agent.capabilities,
+      status,
+    });
+    setAgentStatus(status);
+    setShowAgentDropdown(false);
+    setShowAgentLogs(false);
+    setAgentLogs([]);
+    logAudit(`Selected agent: ${agent.name} (${autonomyShort(agent.autonomy_level)})`);
+  }, [logAudit]);
+
+  // Auto-select agent from Agents page navigation (via sessionStorage)
+  useEffect(() => {
+    const agentId = sessionStorage.getItem("nexus-chat-agent");
+    if (!agentId || preinstalledAgents.length === 0) return;
+    sessionStorage.removeItem("nexus-chat-agent");
+    const found = preinstalledAgents.find(a => a.agent_id === agentId);
+    if (found) selectAgent(found);
+  }, [preinstalledAgents, selectAgent]);
+
+  const handleApproval = useCallback(async (consentId: string, action: "approve" | "deny") => {
+    try {
+      if (action === "approve") {
+        await approveConsentRequest(consentId, "user");
+      } else {
+        await denyConsentRequest(consentId, "user", "User denied from chat");
+      }
+      // Update the message status
+      setConversations(prev => prev.map(c => ({
+        ...c,
+        messages: c.messages.map(m =>
+          m.approval?.consent_id === consentId
+            ? { ...m, approvalStatus: action === "approve" ? "approved" as const : "denied" as const }
+            : m
+        ),
       })));
-    }).catch(() => {});
-  }, []);
+      logAudit(`HITL: ${action === "approve" ? "Approved" : "Denied"} consent ${consentId.slice(0, 8)}`);
+    } catch (err) {
+      logAudit(`HITL ${action} failed: ${String(err).slice(0, 60)}`);
+    }
+  }, [logAudit]);
+
+  // Group preinstalled agents by autonomy level for the dropdown
+  const agentsByLevel = useMemo(() => {
+    const grouped: Record<number, PreinstalledAgent[]> = {};
+    for (const agent of preinstalledAgents) {
+      const level = agent.autonomy_level;
+      if (!grouped[level]) grouped[level] = [];
+      grouped[level].push(agent);
+    }
+    return Object.entries(grouped)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([level, agents]) => ({
+        level: Number(level),
+        agents: agents.sort((a, b) => a.name.localeCompare(b.name)),
+      }));
+  }, [preinstalledAgents]);
 
   /* ─── listen for conductor events ─── */
   useEffect(() => {
@@ -809,22 +1044,32 @@ export default function AiChatHub() {
           ))}
         </div>
 
-        {/* agent panel */}
+        {/* agent panel — all prebuilt agents */}
         <div className="ch-agent-section">
           <button className="ch-section-header ch-agent-toggle" onClick={() => setShowAgentPanel(!showAgentPanel)}>
-            Agents in Chat {showAgentPanel ? "▲" : "▼"}
+            All Agents ({preinstalledAgents.length}) {showAgentPanel ? "▲" : "▼"}
           </button>
           {showAgentPanel && (
             <div className="ch-agent-list">
-              {agentEntries.length === 0 && <div style={{ padding: "0.5rem", opacity: 0.5, fontSize: "0.8rem" }}>No agents registered</div>}
-              {agentEntries.map(a => (
-                <button key={a.id} className={`ch-agent-btn ${joinedAgents.includes(a.id) ? "active" : ""}`} onClick={() => {
-                  setJoinedAgents(prev => prev.includes(a.id) ? prev.filter(x => x !== a.id) : [...prev, a.id]);
-                  logAudit(`${joinedAgents.includes(a.id) ? "Removed" : "Added"} ${a.name}`);
-                }}>
-                  <span style={{ color: a.color }}>{a.icon}</span> {a.name}
-                  {joinedAgents.includes(a.id) && <span className="ch-agent-active">✓</span>}
-                </button>
+              {preinstalledAgents.length === 0 && <div style={{ padding: "0.5rem", opacity: 0.5, fontSize: "0.8rem" }}>No agents loaded</div>}
+              {agentsByLevel.map(group => (
+                <div key={group.level}>
+                  <div className="ch-agent-group-header" style={{ color: autonomyColor(group.level) }}>
+                    {autonomyShort(group.level)} — {AUTONOMY_LABELS[group.level] ?? `Level ${group.level}`} ({group.agents.length})
+                  </div>
+                  {group.agents.map(a => (
+                    <button
+                      key={a.agent_id}
+                      className={`ch-agent-btn ${selectedAgent?.agent_id === a.agent_id ? "active" : ""}`}
+                      onClick={() => selectAgent(a)}
+                    >
+                      <span className="ch-agent-level-dot" style={{ background: autonomyColor(a.autonomy_level) }} />
+                      <span className="ch-agent-btn-name">{a.name}</span>
+                      <span className="ch-agent-btn-level" style={{ color: autonomyColor(a.autonomy_level) }}>{autonomyShort(a.autonomy_level)}</span>
+                      {a.status === "Running" && <span className="ch-agent-running-dot" />}
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
           )}
@@ -846,7 +1091,54 @@ export default function AiChatHub() {
           <div className="ch-chat">
             {/* header */}
             <div className="ch-chat-header">
-              <div className="ch-chat-title">{activeConv.title}</div>
+              <div className="ch-chat-header-left">
+                {selectedAgent ? (
+                  <div className="ch-agent-header-badge">
+                    <span className="ch-agent-header-dot" style={{ background: autonomyColor(selectedAgent.autonomy_level) }} />
+                    <span className="ch-agent-header-name">{selectedAgent.name}</span>
+                    <span className="ch-agent-header-level" style={{ color: autonomyColor(selectedAgent.autonomy_level) }}>
+                      {autonomyShort(selectedAgent.autonomy_level)}
+                    </span>
+                    <button className="ch-agent-info-btn" onClick={() => setShowAgentInfo(!showAgentInfo)} title="Agent info">ⓘ</button>
+                    <button className="ch-agent-deselect-btn" onClick={() => { setSelectedAgent(null); setAgentStatus("Idle"); setShowAgentLogs(false); }} title="Deselect agent">✕</button>
+                  </div>
+                ) : (
+                  <div className="ch-chat-title">{activeConv.title}</div>
+                )}
+                {/* Agent dropdown */}
+                <div className="ch-agent-dropdown-wrap">
+                  <button className="ch-agent-dropdown-btn" onClick={() => setShowAgentDropdown(!showAgentDropdown)}>
+                    {selectedAgent
+                      ? `⬢ ${selectedAgent.name} (${autonomyShort(selectedAgent.autonomy_level)})`
+                      : "⬢ All Agents"} ▾
+                  </button>
+                  {showAgentDropdown && (
+                    <div className="ch-agent-dropdown">
+                      <div className="ch-agent-dropdown-header">Select Agent ({preinstalledAgents.length})</div>
+                      <button className="ch-agent-dropdown-item" onClick={() => { setSelectedAgent(null); setAgentStatus("Idle"); setShowAgentDropdown(false); }}>
+                        <span>—</span> No agent (direct LLM)
+                      </button>
+                      {agentsByLevel.map(group => (
+                        <div key={group.level}>
+                          <div className="ch-agent-dropdown-group" style={{ color: autonomyColor(group.level) }}>
+                            {AUTONOMY_LABELS[group.level] ?? `Level ${group.level}`}
+                          </div>
+                          {group.agents.map(a => (
+                            <button
+                              key={a.agent_id}
+                              className={`ch-agent-dropdown-item ${selectedAgent?.agent_id === a.agent_id ? "active" : ""}`}
+                              onClick={() => selectAgent(a)}
+                            >
+                              <span className="ch-agent-level-dot" style={{ background: autonomyColor(a.autonomy_level) }} />
+                              {a.name} ({autonomyShort(a.autonomy_level)})
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
               <div className="ch-chat-actions">
                 <button className="ch-hdr-btn" onClick={() => togglePin(activeConv.id)} title="Pin">{activeConv.pinned ? "📌" : "📍"}</button>
                 <button className="ch-hdr-btn" onClick={saveAsNote} title="Save as note">📝</button>
@@ -856,6 +1148,74 @@ export default function AiChatHub() {
                 </button>
               </div>
             </div>
+
+            {/* Agent info panel */}
+            {showAgentInfo && selectedAgent && (
+              <div className="ch-agent-info-panel">
+                <div className="ch-agent-info-row">
+                  <span className="ch-agent-info-label">Description</span>
+                  <span className="ch-agent-info-value">{selectedAgent.description.slice(0, 200)}{selectedAgent.description.length > 200 ? "..." : ""}</span>
+                </div>
+                <div className="ch-agent-info-row">
+                  <span className="ch-agent-info-label">Autonomy</span>
+                  <span className="ch-agent-info-value" style={{ color: autonomyColor(selectedAgent.autonomy_level) }}>
+                    {AUTONOMY_LABELS[selectedAgent.autonomy_level]}
+                  </span>
+                </div>
+                <div className="ch-agent-info-row">
+                  <span className="ch-agent-info-label">Fuel Budget</span>
+                  <span className="ch-agent-info-value">{selectedAgent.fuel_budget.toLocaleString()}</span>
+                </div>
+                <div className="ch-agent-info-row">
+                  <span className="ch-agent-info-label">Capabilities</span>
+                  <span className="ch-agent-info-value">{selectedAgent.capabilities.join(", ")}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Agent control bar */}
+            {selectedAgent && (
+              <div className="ch-agent-controls">
+                <div className="ch-agent-status">
+                  <span className={`ch-agent-status-dot ch-agent-status-${agentStatus.toLowerCase()}`} />
+                  <span className="ch-agent-status-text">{agentStatus}</span>
+                </div>
+                <div className="ch-agent-btns">
+                  {(agentStatus === "Idle" || agentStatus === "Stopped" || agentStatus === "Error") && (
+                    <button className="ch-ctrl-btn ch-ctrl-start" onClick={() => handleAgentAction("start")} disabled={agentActionLoading}>
+                      ▶ Start
+                    </button>
+                  )}
+                  {agentStatus === "Running" && (
+                    <button className="ch-ctrl-btn ch-ctrl-pause" onClick={() => handleAgentAction("pause")} disabled={agentActionLoading}>
+                      ❚❚ Pause
+                    </button>
+                  )}
+                  {agentStatus === "Paused" && (
+                    <button className="ch-ctrl-btn ch-ctrl-resume" onClick={() => handleAgentAction("resume")} disabled={agentActionLoading}>
+                      ▶ Resume
+                    </button>
+                  )}
+                  {(agentStatus === "Running" || agentStatus === "Paused") && (
+                    <>
+                      <button className="ch-ctrl-btn ch-ctrl-stop" onClick={() => handleAgentAction("stop")} disabled={agentActionLoading}>
+                        ■ Stop
+                      </button>
+                      <button
+                        className="ch-ctrl-btn ch-ctrl-kill"
+                        onClick={() => { if (window.confirm(`Force kill ${selectedAgent.name}?`)) handleAgentAction("kill"); }}
+                        disabled={agentActionLoading}
+                      >
+                        ✕ Kill
+                      </button>
+                    </>
+                  )}
+                  <button className={`ch-ctrl-btn ch-ctrl-logs ${showAgentLogs ? "active" : ""}`} onClick={toggleAgentLogs}>
+                    📋 Logs
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* tags */}
             {activeConv.tags.length > 0 && (
@@ -887,6 +1247,26 @@ export default function AiChatHub() {
               </div>
             )}
 
+            {/* agent logs panel */}
+            {showAgentLogs && selectedAgent && (
+              <div className="ch-agent-logs">
+                <div className="ch-agent-logs-header">
+                  <span>Agent Logs — {selectedAgent.name}</span>
+                  <button className="ch-agent-logs-refresh" onClick={handleLoadAgentLogs}>↻ Refresh</button>
+                </div>
+                <div className="ch-agent-logs-body">
+                  {agentLogs.length === 0 && <div className="ch-agent-logs-empty">No log entries</div>}
+                  {agentLogs.map((log, i) => (
+                    <div key={i} className="ch-agent-log-entry">
+                      <span className="ch-agent-log-time">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                      <span className="ch-agent-log-action">{log.event_type}</span>
+                      <span className="ch-agent-log-detail">{JSON.stringify(log.payload).slice(0, 120)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* messages */}
             <div className="ch-messages">
               {models.length === 0 && (
@@ -914,6 +1294,7 @@ export default function AiChatHub() {
                 <div key={msg.id} className={`ch-msg ch-msg-${msg.role}`}>
                   <div className="ch-msg-avatar">
                     {msg.role === "user" ? "U" :
+                     msg.role === "approval" ? "⚠" :
                      msg.role === "agent" ? "⬢" :
                      <span style={{ color: models.find(m => m.id === msg.model)?.color }}>{models.find(m => m.id === msg.model)?.icon ?? "◈"}</span>}
                   </div>
@@ -921,6 +1302,7 @@ export default function AiChatHub() {
                     <div className="ch-msg-header">
                       <span className="ch-msg-name">
                         {msg.role === "user" ? "You" :
+                         msg.role === "approval" ? `HITL Approval — ${msg.agent}` :
                          msg.role === "agent" ? msg.agent :
                          msg.buildResult ? "Conductor" :
                          models.find(m => m.id === msg.model)?.name ?? msg.model}
@@ -935,8 +1317,58 @@ export default function AiChatHub() {
                     {msg.imageUrl && (
                       <div className="ch-msg-image" style={{ background: msg.imageUrl }} />
                     )}
-                    {/* Build result card */}
-                    {msg.buildResult ? (
+                    {/* HITL Approval card */}
+                    {msg.approval ? (
+                      <div className={`ch-approval-card ch-approval-${msg.approvalStatus}`}>
+                        <div className="ch-approval-header">
+                          <span className="ch-approval-icon">⚠</span>
+                          <span className="ch-approval-title">Human Approval Required</span>
+                          <span className={`ch-approval-risk ch-risk-${msg.approval.risk_level.toLowerCase()}`}>
+                            {msg.approval.risk_level}
+                          </span>
+                        </div>
+                        <div className="ch-approval-body">
+                          <div className="ch-approval-row">
+                            <span className="ch-approval-label">Action</span>
+                            <span className="ch-approval-value">{msg.approval.operation_type}: {msg.approval.operation_summary}</span>
+                          </div>
+                          <div className="ch-approval-row">
+                            <span className="ch-approval-label">Agent</span>
+                            <span className="ch-approval-value">{msg.approval.agent_name} ({msg.approval.agent_id.slice(0, 8)})</span>
+                          </div>
+                          <div className="ch-approval-row">
+                            <span className="ch-approval-label">Fuel Cost</span>
+                            <span className="ch-approval-value">⚡ {msg.approval.fuel_cost_estimate}</span>
+                          </div>
+                          {msg.approval.side_effects_preview.length > 0 && (
+                            <div className="ch-approval-row">
+                              <span className="ch-approval-label">Side Effects</span>
+                              <span className="ch-approval-value">{msg.approval.side_effects_preview.join(", ")}</span>
+                            </div>
+                          )}
+                          {msg.approval.auto_deny_at && (
+                            <div className="ch-approval-row">
+                              <span className="ch-approval-label">Timeout</span>
+                              <span className="ch-approval-value ch-approval-timeout">{msg.approval.auto_deny_at}</span>
+                            </div>
+                          )}
+                        </div>
+                        {msg.approvalStatus === "pending" ? (
+                          <div className="ch-approval-actions">
+                            <button className="ch-approval-btn ch-approval-approve" onClick={() => handleApproval(msg.approval!.consent_id, "approve")}>
+                              ✓ Approve
+                            </button>
+                            <button className="ch-approval-btn ch-approval-deny" onClick={() => handleApproval(msg.approval!.consent_id, "deny")}>
+                              ✕ Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <div className={`ch-approval-resolved ch-approval-resolved-${msg.approvalStatus}`}>
+                            {msg.approvalStatus === "approved" ? "✓ Approved" : "✕ Denied"}
+                          </div>
+                        )}
+                      </div>
+                    ) : msg.buildResult ? (
                       <BuildResultCard data={msg.buildResult} />
                     ) : msg.streaming && !msg.content ? (
                       <div className="ch-typing"><span /><span /><span /></div>
@@ -1075,7 +1507,8 @@ export default function AiChatHub() {
         <span className="ch-status-item">{conversations.length} conversations</span>
         <span className="ch-status-item">{activeConv?.messages.length ?? 0} messages</span>
         {voiceActive && <span className="ch-status-item ch-status-voice">🎙 Jarvis Active</span>}
-        {joinedAgents.length > 0 && <span className="ch-status-item">⬢ {joinedAgents.length} agents</span>}
+        {selectedAgent && <span className="ch-status-item">⬢ {selectedAgent.name} ({agentStatus})</span>}
+        <span className="ch-status-item">{preinstalledAgents.length} agents</span>
         <span className="ch-status-item ch-status-right">⚡ {fuelUsed} fuel</span>
         <span className="ch-status-item">{models.filter(m => !m.locked).length} models</span>
       </div>

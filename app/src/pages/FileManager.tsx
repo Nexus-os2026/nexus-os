@@ -6,12 +6,17 @@ import "./file-manager.css";
 /* ================================================================== */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const invoke: (cmd: string, args?: Record<string, unknown>) => Promise<any> =
-  typeof window !== "undefined" && "__TAURI__" in window
-    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (window as any).__TAURI__.invoke
-    : async (_cmd: string, _args?: Record<string, unknown>) =>
-        JSON.stringify([]);
+async function invoke(cmd: string, args?: Record<string, unknown>): Promise<any> {
+  if (
+    typeof window !== "undefined" &&
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    typeof (window as any).__TAURI__?.invoke === "function"
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (window as any).__TAURI__.invoke(cmd, args);
+  }
+  return JSON.stringify([]);
+}
 
 /* ================================================================== */
 /*  Types                                                              */

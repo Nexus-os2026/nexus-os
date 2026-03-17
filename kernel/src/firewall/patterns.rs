@@ -66,9 +66,13 @@ pub const PII_PATTERNS: &[&str] = &[
 /// and system-info commands.
 ///
 /// Sourced from `prompt_firewall.rs` `OutputFilter`.
-pub const EXFIL_PATTERNS: &[&str] = &[
-    "10.", "172.16.", "192.168.", "/etc/", "/proc/", "/sys/", "uname",
-];
+/// Data exfiltration indicators: sensitive file paths and system-info commands.
+///
+/// NOTE: Internal IP prefixes ("10.", "172.16.", "192.168.") were removed —
+/// they caused false positives on numbered lists ("10. Strategy"), decimals,
+/// and version strings. Full RFC 1918 IPs are already caught by
+/// `INTERNAL_IP_PATTERN` (a proper regex with four-octet matching).
+pub const EXFIL_PATTERNS: &[&str] = &["/etc/", "/proc/", "/sys/", "uname"];
 
 // ---------------------------------------------------------------------------
 // Sensitive paths
@@ -145,7 +149,7 @@ mod tests {
         let summary = pattern_summary();
         assert_eq!(summary.injection_count, 20);
         assert_eq!(summary.pii_count, 6);
-        assert_eq!(summary.exfil_count, 7);
+        assert_eq!(summary.exfil_count, 4);
         assert_eq!(summary.sensitive_path_count, 3);
         assert!(summary.has_ssn_detection);
         assert!(summary.has_passport_detection);

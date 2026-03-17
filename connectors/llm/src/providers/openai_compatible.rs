@@ -1,4 +1,4 @@
-use super::{require_real_api, LlmResponse, ProviderRequest};
+use super::{LlmResponse, ProviderRequest};
 use nexus_kernel::errors::AgentError;
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
@@ -54,8 +54,6 @@ pub(crate) fn build_openai_chat_request(
 pub(crate) fn execute_openai_compatible_query(
     query: OpenAiCompatibleQuery<'_>,
 ) -> Result<LlmResponse, AgentError> {
-    require_real_api(cfg!(feature = "real-api-tests"))?;
-
     let Some(api_key) = query.api_key.filter(|value| !value.trim().is_empty()) else {
         return Err(AgentError::SupervisorError(
             query.missing_key_error.to_string(),

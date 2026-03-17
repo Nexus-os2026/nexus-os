@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "NexusOS",
-  "version": "8.0.0",
+  "version": "9.0.0",
   "identifier": "com.nexus-os.app",
   "build": {
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": { "script": "npm run dev", "cwd": ".." },
+    "beforeBuildCommand": { "script": "npm run build", "cwd": ".." },
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist",
     "features": [

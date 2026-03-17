@@ -72,10 +72,6 @@ impl LlmProvider for OpenRouterProvider {
         0.000_002
     }
 
-    fn requires_real_api_opt_in(&self) -> bool {
-        true
-    }
-
     fn endpoint_url(&self) -> String {
         "https://openrouter.ai".to_string()
     }

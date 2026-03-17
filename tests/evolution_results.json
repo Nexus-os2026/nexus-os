@@ -1,0 +1,309 @@
+{
+  "test": "agent_self_improvement_e2e",
+  "model": "moonshotai/kimi-k2-instruct",
+  "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+  "generations": 3,
+  "timestamp": "2026-03-17T22:32:44.132432",
+  "results": [
+    {
+      "agent": "nexus-forge",
+      "task": "3-bullet summarization with 6 required terms and 20-word limit",
+      "history": [
+        {
+          "generation": 0,
+          "score": 10,
+          "max_score": 10,
+          "scoring": {
+            "score": 10,
+            "max_score": 10,
+            "failures": [],
+            "bullets_found": 3,
+            "terms_found": [
+              "emissions",
+              "renewable",
+              "IPCC",
+              "1.5",
+              "Paris Agreement",
+              "net-zero"
+            ],
+            "terms_missing": []
+          },
+          "response_preview": "- IPCC urges 45% cut in emissions by 2030 to cap warming at 1.5\u00b0C, net-zero by 2050.  \n- Renewable energy costs plummet; solar dropped 89% since 2010, aiding net-zero and Paris Agreement goals.  \n- Pa",
+          "prompt_preview": "You are Nexus Forge, the content creation powerhouse. You research, write, edit, and refine any type of written content to publication quality. Process: 1) Analyze the content brief \u2014 type (blog, repo",
+          "accepted": true
+        },
+        {
+          "generation": 1,
+          "score": 10,
+          "max_score": 10,
+          "scoring": {
+            "score": 10,
+            "max_score": 10,
+            "failures": [],
+            "bullets_found": 3,
+            "terms_found": [
+              "emissions",
+              "renewable",
+              "IPCC",
+              "1.5",
+              "Paris Agreement",
+              "net-zero"
+            ],
+            "terms_missing": []
+          },
+          "response_preview": "- IPCC urges 45% cut in emissions by 2030, net-zero by 2050 to cap warming at 1.5 under Paris Agreement.  \n- Renewable energy\u2014solar, wind\u2014costs dropped 89% since 2010, offering scalable path to slash ",
+          "prompt_preview": "You are Nexus Forge, the content creation powerhouse. You research, write, edit, and refine any type of written content to publication quality.\n\nProcess:\n1) Analyze the content brief \u2014 type (blog, rep",
+          "accepted": false
+        },
+        {
+          "generation": 2,
+          "score": 10,
+          "max_score": 10,
+          "scoring": {
+            "score": 10,
+            "max_score": 10,
+            "failures": [],
+            "bullets_found": 3,
+            "terms_found": [
+              "emissions",
+              "renewable",
+              "IPCC",
+              "1.5",
+              "Paris Agreement",
+              "net-zero"
+            ],
+            "terms_missing": []
+          },
+          "response_preview": "- IPCC stresses limiting warming to 1.5, cutting emissions 45% by 2030, reaching net-zero by 2050.\n- Paris Agreement nations pledge; renewable costs drop 89%, yet policies lag 1.5\u00b0C and net-zero goals",
+          "prompt_preview": "You are Nexus Forge, the content creation powerhouse. You research, write, edit, and refine any type of written content to publication quality. Process: 1) Analyze the content brief \u2014 type (blog, repo",
+          "accepted": false
+        },
+        {
+          "generation": 3,
+          "score": 10,
+          "max_score": 10,
+          "scoring": {
+            "score": 10,
+            "max_score": 10,
+            "failures": [],
+            "bullets_found": 3,
+            "terms_found": [
+              "emissions",
+              "renewable",
+              "IPCC",
+              "1.5",
+              "Paris Agreement",
+              "net-zero"
+            ],
+            "terms_missing": []
+          },
+          "response_preview": "- IPCC stresses slashing emissions 45% by 2030 to cap warming at 1.5 and reach net-zero by 2050.  \n- Paris Agreement drives nations to embrace renewable energy like solar and wind, yet current policie",
+          "prompt_preview": "You are Nexus Forge, the content creation powerhouse. You research, write, edit, and refine any type of written content to publication quality. Process: 1) Analyze the content brief \u2014 type (blog, repo",
+          "accepted": false
+        }
+      ],
+      "baseline_score": 10,
+      "final_score": 10,
+      "improved": false,
+      "final_prompt_preview": "You are Nexus Forge, the content creation powerhouse. You research, write, edit, and refine any type of written content to publication quality. Process: 1) Analyze the content brief \u2014 type (blog, report, documentation, social post, email campaign), audience, tone, length, key messages. 2) Research t"
+    },
+    {
+      "agent": "nexus-codesentry",
+      "task": "Find bugs in Python code with examples and alternatives",
+      "history": [
+        {
+          "generation": 0,
+          "score": 9,
+          "max_score": 10,
+          "scoring": {
+            "score": 9,
+            "max_score": 10,
+            "failures": []
+          },
+          "response_preview": "Bug 1 \u2013 Wrong starting value for the maximum\n------------------------------------------------\nExplanation  \nThe loop starts by assuming the maximum is `0`.  \nIf every element in the list is negative, ",
+          "prompt_preview": "You are Nexus CodeSentry, the autonomous code quality scanner. You operate at L1 read-only autonomous, which means you can inspect, analyze, and report without approval, but you do not modify code, re",
+          "accepted": true
+        },
+        {
+          "generation": 1,
+          "score": 9,
+          "max_score": 10,
+          "scoring": {
+            "score": 9,
+            "max_score": 10,
+            "failures": []
+          },
+          "response_preview": "Code Health Report \u2013 Single-file scan  \nFile: `<input>` (function `find_max`)\n\nSeverity \u2192 Bug Type \u2192 Line(s) \u2192 Description \u2192 Fix  \nCritical \u2192 Logic bug \u2192 Lines 7-9 \u2192 Assumes `0` is the lower bound ins",
+          "prompt_preview": "You are Nexus CodeSentry, the autonomous code quality scanner. You operate at L1 read-only autonomous, which means you can inspect, analyze, and report without approval, but you do not modify code, re",
+          "accepted": false
+        },
+        {
+          "generation": 2,
+          "score": 7,
+          "max_score": 10,
+          "scoring": {
+            "score": 7,
+            "max_score": 10,
+            "failures": [
+              "did not mention negative number edge case"
+            ]
+          },
+          "response_preview": "# Bug Analysis: `find_max(numbers)`\n\n## Bug 1 \u2013 Incorrect starting maximum  \n**What:** The function initializes `max_val = 0`, so any list whose actual maximum is \u2264 0 will incorrectly return 0 instead",
+          "prompt_preview": "You are Nexus CodeSentry, the autonomous code quality scanner. You operate at L1 read-only autonomous, which means you can inspect, analyze, and report without approval, but you do not modify code, re",
+          "accepted": false
+        },
+        {
+          "generation": 3,
+          "score": 9,
+          "max_score": 10,
+          "scoring": {
+            "score": 9,
+            "max_score": 10,
+            "failures": []
+          },
+          "response_preview": "## Code Health Report \u2013 `find_max` function\n\nLanguage: **Python 3**  \nScope: single function in an unspecified file\n\n---\n\n### Critical (crash or wrong result on common inputs)\n\n#### 1. **Initial value",
+          "prompt_preview": "You are Nexus CodeSentry, the autonomous code quality scanner. You operate at L1 read-only autonomous, which means you can inspect, analyze, and report without approval, but you do not modify code, re",
+          "accepted": false
+        }
+      ],
+      "baseline_score": 9,
+      "final_score": 9,
+      "improved": false,
+      "final_prompt_preview": "You are Nexus CodeSentry, the autonomous code quality scanner. You operate at L1 read-only autonomous, which means you can inspect, analyze, and report without approval, but you do not modify code, rewrite files, or change the workspace. Your process: 1) Scan all source files in the workspace. 2) Fo"
+    },
+    {
+      "agent": "nexus-scholar",
+      "task": "Explain quantum entanglement to a child (strict format)",
+      "history": [
+        {
+          "generation": 0,
+          "score": 6,
+          "max_score": 10,
+          "scoring": {
+            "score": 6,
+            "max_score": 10,
+            "failures": [
+              "expected exactly 2 sentences, got 1",
+              "did not convey the connection concept",
+              "did not mention distance aspect"
+            ]
+          },
+          "response_preview": "Imagine you and your best friend each have magic walkie-talkie marbles; when you spin yours, the other instantly spins the same way, even if you're on opposite sides of the planet.",
+          "prompt_preview": "You are Nexus Scholar, the autonomous knowledge management system. You learn, organize, and teach. Your capabilities: 1) When given a learning topic, create a structured learning path \u2014 fundamentals, ",
+          "accepted": true
+        },
+        {
+          "generation": 1,
+          "score": 10,
+          "max_score": 10,
+          "scoring": {
+            "score": 10,
+            "max_score": 10,
+            "failures": []
+          },
+          "response_preview": "Two magic coins spin together like best buddies\u2014even when one flies to your grandma\u2019s house, they always land matching heads or tails. Their invisible handshake keeps working no matter how far apart y",
+          "prompt_preview": "You are Nexus Scholar, the autonomous knowledge management system. You learn, organize, and teach. Your capabilities:  \n1) When given a learning topic, create a structured learning path \u2014 fundamentals",
+          "accepted": true
+        },
+        {
+          "generation": 2,
+          "score": 10,
+          "max_score": 10,
+          "scoring": {
+            "score": 10,
+            "max_score": 10,
+            "failures": []
+          },
+          "response_preview": "Your two magic marbles always copy each other's secret color even when one rides to school with you and the other stays home. The color match keeps working no matter how far apart they are.",
+          "prompt_preview": "You are Nexus Scholar, the autonomous knowledge management system. You learn, organize, and teach. Your capabilities: 1) When given a learning topic, create a structured learning path \u2014 fundamentals, ",
+          "accepted": false
+        },
+        {
+          "generation": 3,
+          "score": 10,
+          "max_score": 10,
+          "scoring": {
+            "score": 10,
+            "max_score": 10,
+            "failures": []
+          },
+          "response_preview": "Two magic marbles act like twins; when you spin one, the other instantly spins the same way. They stay linked even when far apart.",
+          "prompt_preview": "You are Nexus Scholar, the autonomous knowledge management system. You learn, organize, and teach. Your capabilities: 1) When given a learning topic, create a structured learning path \u2014 fundamentals, ",
+          "accepted": false
+        }
+      ],
+      "baseline_score": 6,
+      "final_score": 10,
+      "improved": true,
+      "final_prompt_preview": "You are Nexus Scholar, the autonomous knowledge management system. You learn, organize, and teach. Your capabilities:  \n1) When given a learning topic, create a structured learning path \u2014 fundamentals, intermediate concepts, advanced topics, practical applications.  \n2) For each concept, search for "
+    },
+    {
+      "agent": "architect-prime",
+      "task": "Design REST API as OpenAPI YAML spec (strict format)",
+      "history": [
+        {
+          "generation": 0,
+          "score": 10,
+          "max_score": 10,
+          "scoring": {
+            "score": 10,
+            "max_score": 10,
+            "failures": []
+          },
+          "response_preview": "```yaml\nopenapi: 3.0.0\ninfo:\n  title: Todo API\n  version: 1.0.0\n\npaths:\n  /todos:\n    get:\n      summary: List all todos\n      responses:\n        \"200\":\n          description: A list of todos\n        ",
+          "prompt_preview": "You are Nexus Architect Prime, the autonomous ecosystem engineer. You do not simply finish tasks; you design the right society of agents to finish them repeatedly, safely, and economically. You are L6",
+          "accepted": true
+        },
+        {
+          "generation": 1,
+          "score": 10,
+          "max_score": 10,
+          "scoring": {
+            "score": 10,
+            "max_score": 10,
+            "failures": []
+          },
+          "response_preview": "```yaml\nopenapi: 3.0.3\ninfo:\n  title: Todo App API\n  version: 1.0.0\npaths:\n  /todos:\n    get:\n      summary: List all todos\n      responses:\n        '200':\n          description: List of todos\n       ",
+          "prompt_preview": "You are Nexus Architect Prime, the autonomous ecosystem engineer. You do not simply finish tasks; you design the right society of agents to finish them repeatedly, safely, and economically. You are L6",
+          "accepted": false
+        },
+        {
+          "generation": 2,
+          "score": 10,
+          "max_score": 10,
+          "scoring": {
+            "score": 10,
+            "max_score": 10,
+            "failures": []
+          },
+          "response_preview": "```yaml\nopenapi: 3.0.0\ninfo:\n  title: Todo API\n  version: 1.0.0\n  description: Simple REST API for managing todo items\npaths:\n  /todos:\n    get:\n      summary: List all todos\n      operationId: listTo",
+          "prompt_preview": "You are Nexus Architect Prime, the autonomous ecosystem engineer. You do not simply finish tasks; you design the right society of agents to finish them repeatedly, safely, and economically. You are L6",
+          "accepted": false
+        },
+        {
+          "generation": 3,
+          "score": 10,
+          "max_score": 10,
+          "scoring": {
+            "score": 10,
+            "max_score": 10,
+            "failures": []
+          },
+          "response_preview": "```yaml\nopenapi: 3.0.0\ninfo:\n  title: Todo API\n  version: 1.0.0\n  description: Simple REST API for managing todo items\n\nservers:\n  - url: https://api.example.com/v1\n\npaths:\n  /todos:\n    get:\n      op",
+          "prompt_preview": "You are Nexus Architect Prime, the autonomous ecosystem engineer. You do not simply finish tasks; you design the right society of agents to finish them repeatedly, safely, and economically. You are L6",
+          "accepted": false
+        }
+      ],
+      "baseline_score": 10,
+      "final_score": 10,
+      "improved": false,
+      "final_prompt_preview": "You are Nexus Architect Prime, the autonomous ecosystem engineer. You do not simply finish tasks; you design the right society of agents to finish them repeatedly, safely, and economically. You are L6 Transcendent, so your main responsibility is deciding when individual excellence is inferior to coo"
+    }
+  ],
+  "summary": {
+    "total_baseline": 35,
+    "total_final": 39,
+    "agents_tested": 4,
+    "agents_improved": 1
+  }
+}
