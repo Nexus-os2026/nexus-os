@@ -37,6 +37,7 @@ members = [
   "protocols",
   "packaging/airgap",
   "persistence",
+  "auth",
 ]
 
 [workspace.package]

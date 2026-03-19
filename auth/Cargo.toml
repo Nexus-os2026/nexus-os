@@ -1,0 +1,24 @@
+[package]
+name = "nexus-auth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "OIDC/SAML authentication, session management, and role-based user administration for Nexus OS"
+
+[dependencies]
+openidconnect = "4"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+jsonwebtoken = "9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "sync", "time"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+thiserror = "2"
+tracing = "0.1"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+url = "2"
+sha2 = "0.10"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }
