@@ -1,7 +1,7 @@
 use crate::providers::{
     ClaudeProvider, CohereProvider, DeepSeekProvider, FireworksProvider, GeminiProvider,
-    GroqProvider, LlmProvider, LlmResponse, MistralProvider, NvidiaProvider,
-    OllamaProvider, OpenAiProvider, OpenRouterProvider, PerplexityProvider, TogetherProvider,
+    GroqProvider, LlmProvider, LlmResponse, MistralProvider, NvidiaProvider, OllamaProvider,
+    OpenAiProvider, OpenRouterProvider, PerplexityProvider, TogetherProvider,
 };
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::errors::AgentError;
@@ -98,7 +98,9 @@ impl Default for AgentFuelBudgetConfig {
     }
 }
 
-pub fn select_provider(config: &ProviderSelectionConfig) -> Result<Box<dyn LlmProvider>, AgentError> {
+pub fn select_provider(
+    config: &ProviderSelectionConfig,
+) -> Result<Box<dyn LlmProvider>, AgentError> {
     if let Some(explicit) = config.provider.as_deref() {
         return explicit_provider(explicit, config);
     }
@@ -108,7 +110,9 @@ pub fn select_provider(config: &ProviderSelectionConfig) -> Result<Box<dyn LlmPr
     }
 
     if has_key(&config.deepseek_api_key) {
-        return Ok(Box::new(DeepSeekProvider::new(config.deepseek_api_key.clone())));
+        return Ok(Box::new(DeepSeekProvider::new(
+            config.deepseek_api_key.clone(),
+        )));
     }
 
     if has_key(&config.groq_api_key) {
@@ -116,19 +120,27 @@ pub fn select_provider(config: &ProviderSelectionConfig) -> Result<Box<dyn LlmPr
     }
 
     if has_key(&config.mistral_api_key) {
-        return Ok(Box::new(MistralProvider::new(config.mistral_api_key.clone())));
+        return Ok(Box::new(MistralProvider::new(
+            config.mistral_api_key.clone(),
+        )));
     }
 
     if has_key(&config.together_api_key) {
-        return Ok(Box::new(TogetherProvider::new(config.together_api_key.clone())));
+        return Ok(Box::new(TogetherProvider::new(
+            config.together_api_key.clone(),
+        )));
     }
 
     if has_key(&config.fireworks_api_key) {
-        return Ok(Box::new(FireworksProvider::new(config.fireworks_api_key.clone())));
+        return Ok(Box::new(FireworksProvider::new(
+            config.fireworks_api_key.clone(),
+        )));
     }
 
     if has_key(&config.perplexity_api_key) {
-        return Ok(Box::new(PerplexityProvider::new(config.perplexity_api_key.clone())));
+        return Ok(Box::new(PerplexityProvider::new(
+            config.perplexity_api_key.clone(),
+        )));
     }
 
     if has_key(&config.cohere_api_key) {
@@ -136,7 +148,9 @@ pub fn select_provider(config: &ProviderSelectionConfig) -> Result<Box<dyn LlmPr
     }
 
     if has_key(&config.openrouter_api_key) {
-        return Ok(Box::new(OpenRouterProvider::new(config.openrouter_api_key.clone())));
+        return Ok(Box::new(OpenRouterProvider::new(
+            config.openrouter_api_key.clone(),
+        )));
     }
 
     if has_key(&config.nvidia_api_key) {
@@ -153,7 +167,9 @@ pub fn select_provider(config: &ProviderSelectionConfig) -> Result<Box<dyn LlmPr
 
     #[cfg(feature = "real-claude")]
     if has_key(&config.anthropic_api_key) {
-        return Ok(Box::new(ClaudeProvider::new(config.anthropic_api_key.clone())));
+        return Ok(Box::new(ClaudeProvider::new(
+            config.anthropic_api_key.clone(),
+        )));
     }
 
     // Auto-detect Ollama on default port
@@ -180,7 +196,10 @@ fn has_key(key: &Option<String>) -> bool {
         .unwrap_or(false)
 }
 
-fn explicit_provider(explicit: &str, config: &ProviderSelectionConfig) -> Result<Box<dyn LlmProvider>, AgentError> {
+fn explicit_provider(
+    explicit: &str,
+    config: &ProviderSelectionConfig,
+) -> Result<Box<dyn LlmProvider>, AgentError> {
     match explicit.to_lowercase().as_str() {
         "ollama" => Ok(Box::new(OllamaProvider::new(
             config

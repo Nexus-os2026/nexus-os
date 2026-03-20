@@ -52,7 +52,12 @@ impl SwarmCoordinator {
     /// Create N variants of a step with diverse parameters for parallel evaluation.
     /// If `count` is 0, uses the configured population size.
     pub fn prepare_parallel_variants(&self, step: &AgentStep, count: usize) -> Vec<AgentStep> {
-        let count = if count == 0 { self.population_size } else { count }.max(1);
+        let count = if count == 0 {
+            self.population_size
+        } else {
+            count
+        }
+        .max(1);
         let mut variants = Vec::with_capacity(count);
 
         for i in 0..count {
@@ -92,11 +97,7 @@ impl SwarmCoordinator {
             })
             .collect();
 
-        scored.sort_by(|a, b| {
-            b.fitness
-                .partial_cmp(&a.fitness)
-                .unwrap_or(Ordering::Equal)
-        });
+        scored.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap_or(Ordering::Equal));
 
         let best = scored.remove(0);
         self.best_solutions.push(best.clone());
@@ -135,11 +136,9 @@ impl SwarmCoordinator {
 
     /// Get the best solution found so far.
     pub fn best_solution(&self) -> Option<&RankedSolution> {
-        self.best_solutions.iter().max_by(|a, b| {
-            a.fitness
-                .partial_cmp(&b.fitness)
-                .unwrap_or(Ordering::Equal)
-        })
+        self.best_solutions
+            .iter()
+            .max_by(|a, b| a.fitness.partial_cmp(&b.fitness).unwrap_or(Ordering::Equal))
     }
 
     /// Current generation count.

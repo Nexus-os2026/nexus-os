@@ -183,10 +183,14 @@ impl InferenceQueue {
 
     /// Return a snapshot of queue statistics.
     pub fn stats(&self) -> QueueStats {
-        let pending = self.pending.lock().unwrap_or_else(|poisoned| {
-            eprintln!("Lock was poisoned, recovering inner data");
-            poisoned.into_inner()
-        }).len();
+        let pending = self
+            .pending
+            .lock()
+            .unwrap_or_else(|poisoned| {
+                eprintln!("Lock was poisoned, recovering inner data");
+                poisoned.into_inner()
+            })
+            .len();
         QueueStats {
             pending,
             in_flight: self.in_flight.load(Ordering::Relaxed),
@@ -208,10 +212,13 @@ impl InferenceQueue {
 
     /// Number of pending requests.
     pub fn pending_count(&self) -> usize {
-        self.pending.lock().unwrap_or_else(|poisoned| {
-            eprintln!("Lock was poisoned, recovering inner data");
-            poisoned.into_inner()
-        }).len()
+        self.pending
+            .lock()
+            .unwrap_or_else(|poisoned| {
+                eprintln!("Lock was poisoned, recovering inner data");
+                poisoned.into_inner()
+            })
+            .len()
     }
 }
 
@@ -287,9 +294,7 @@ impl InferenceScheduler {
             entries
                 .into_iter()
                 .fold(Vec::new(), |mut acc: Vec<Vec<QueueEntry>>, entry| {
-                    if acc.is_empty()
-                        || acc.last().is_none_or(|last| last.len() >= chunk_size)
-                    {
+                    if acc.is_empty() || acc.last().is_none_or(|last| last.len() >= chunk_size) {
                         acc.push(Vec::new());
                     }
                     if let Some(last) = acc.last_mut() {

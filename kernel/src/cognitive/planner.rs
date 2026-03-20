@@ -448,8 +448,8 @@ fn sanitize_llm_response(input: &str) -> String {
 }
 
 fn strip_markdown_fences(input: &str) -> String {
-    static FENCE_LINE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-        match Regex::new(r"(?m)^\s*```[a-zA-Z0-9_-]*\s*$") {
+    static FENCE_LINE_RE: std::sync::LazyLock<Regex> =
+        std::sync::LazyLock::new(|| match Regex::new(r"(?m)^\s*```[a-zA-Z0-9_-]*\s*$") {
             Ok(re) => re,
             Err(e) => {
                 eprintln!("Failed to compile markdown fence regex: {e}");
@@ -458,8 +458,7 @@ fn strip_markdown_fences(input: &str) -> String {
                     Err(_) => std::process::abort(),
                 }
             }
-        }
-    });
+        });
     FENCE_LINE_RE.replace_all(input, "").to_string()
 }
 

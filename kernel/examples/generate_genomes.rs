@@ -8,7 +8,6 @@ fn main() {
     let prebuilt_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../agents/prebuilt");
     let genome_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../agents/genomes");
 
-
     if let Err(e) = std::fs::create_dir_all(&genome_dir) {
         eprintln!("Failed to create genomes dir: {e}");
         std::process::exit(1);
@@ -49,7 +48,7 @@ fn main() {
 
         let genome = genome_from_manifest(&manifest);
         let out_path = genome_dir.join(format!("{}.genome.json", genome.agent_id));
-    
+
         let json = match serde_json::to_string_pretty(&genome) {
             Ok(j) => j,
             Err(e) => {

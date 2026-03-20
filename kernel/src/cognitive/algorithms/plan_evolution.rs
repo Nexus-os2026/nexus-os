@@ -98,9 +98,9 @@ impl PlanEvolutionEngine {
             // Phase 2: Swarm evaluation — create variants of the first step,
             // evaluate them, and propagate best parameters
             if let Some(first_step) = evolved.first() {
-                let variants =
-                    self.swarm
-                        .prepare_parallel_variants(first_step, self.config.swarm_size);
+                let variants = self
+                    .swarm
+                    .prepare_parallel_variants(first_step, self.config.swarm_size);
 
                 let swarm_results: Vec<(AgentStep, String, f64)> = variants
                     .into_iter()
@@ -119,7 +119,8 @@ impl PlanEvolutionEngine {
                 let action_type = step.action.action_type();
                 let content = format!("{:?}", step.action);
                 let (passed, _summary, _confidence) =
-                    self.arena.challenge(action_type, &content, agent_capabilities);
+                    self.arena
+                        .challenge(action_type, &content, agent_capabilities);
                 if !passed {
                     all_passed = false;
                 }
@@ -204,7 +205,11 @@ mod tests {
             ..DarwinConfig::default()
         });
 
-        let steps = vec![make_step("g1", 5.0), make_step("g1", 10.0), make_step("g1", 3.0)];
+        let steps = vec![
+            make_step("g1", 5.0),
+            make_step("g1", 10.0),
+            make_step("g1", 3.0),
+        ];
 
         let result = engine.evolve_plan(steps, &[], |s| {
             let fuel: f64 = s.iter().map(|st| st.fuel_cost).sum();

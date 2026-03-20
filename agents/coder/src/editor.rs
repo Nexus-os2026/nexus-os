@@ -141,16 +141,15 @@ impl MultiFileEditor {
         for change in &planned {
             if let Err(error) = self.apply_single(change) {
                 rollback(self.project_root.as_path(), &backups)?;
-                if let Err(e) = self.audit_trail
-                    .append_event(
-                        self.agent_id,
-                        EventType::Error,
-                        json!({
-                            "tool": "editor.apply_changeset",
-                            "error": error.to_string(),
-                            "rolled_back": true,
-                        }),
-                    ) {
+                if let Err(e) = self.audit_trail.append_event(
+                    self.agent_id,
+                    EventType::Error,
+                    json!({
+                        "tool": "editor.apply_changeset",
+                        "error": error.to_string(),
+                        "rolled_back": true,
+                    }),
+                ) {
                     tracing::error!("Audit append failed: {e}");
                 }
                 return Err(error);
@@ -160,16 +159,15 @@ impl MultiFileEditor {
         if let Err(reason) = validator() {
             rollback(self.project_root.as_path(), &backups)?;
             let error = EditorError::ValidationFailed(reason);
-            if let Err(e) = self.audit_trail
-                .append_event(
-                    self.agent_id,
-                    EventType::Error,
-                    json!({
-                        "tool": "editor.apply_changeset",
-                        "error": error.to_string(),
-                        "rolled_back": true,
-                    }),
-                ) {
+            if let Err(e) = self.audit_trail.append_event(
+                self.agent_id,
+                EventType::Error,
+                json!({
+                    "tool": "editor.apply_changeset",
+                    "error": error.to_string(),
+                    "rolled_back": true,
+                }),
+            ) {
                 tracing::error!("Audit append failed: {e}");
             }
             return Err(error);
@@ -215,16 +213,15 @@ impl MultiFileEditor {
             }
         }
 
-        if let Err(e) = self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "tool": "editor.apply_changeset",
-                    "changed_files": changed_files,
-                    "backups_saved": backups.len(),
-                }),
-            ) {
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "tool": "editor.apply_changeset",
+                "changed_files": changed_files,
+                "backups_saved": backups.len(),
+            }),
+        ) {
             tracing::error!("Audit append failed: {e}");
         }
 

@@ -78,13 +78,13 @@ impl SequentialWorkflow {
 
         if !review.approve(strategy_summary.as_str()) {
             if let Err(e) = self.audit_trail.append_event(
-                    uuid::Uuid::nil(),
-                    EventType::UserAction,
-                    json!({
-                        "event": "workflow_review_rejected",
-                        "topic": topic
-                    }),
-                ) {
+                uuid::Uuid::nil(),
+                EventType::UserAction,
+                json!({
+                    "event": "workflow_review_rejected",
+                    "topic": topic
+                }),
+            ) {
                 eprintln!("[WARN] audit write failed: {e}");
             }
             return WorkflowReport {
@@ -103,14 +103,14 @@ impl SequentialWorkflow {
             if let ComplianceDecision::Blocked(reason) = compliance {
                 failures += 1;
                 if let Err(e) = self.audit_trail.append_event(
-                        uuid::Uuid::nil(),
-                        EventType::Error,
-                        json!({
-                            "event": "workflow_platform_blocked",
-                            "platform": format!("{platform:?}"),
-                            "reason": reason
-                        }),
-                    ) {
+                    uuid::Uuid::nil(),
+                    EventType::Error,
+                    json!({
+                        "event": "workflow_platform_blocked",
+                        "platform": format!("{platform:?}"),
+                        "reason": reason
+                    }),
+                ) {
                     eprintln!("[WARN] audit write failed: {e}");
                 }
                 continue;
@@ -146,15 +146,15 @@ impl SequentialWorkflow {
         };
 
         if let Err(e) = self.audit_trail.append_event(
-                uuid::Uuid::nil(),
-                EventType::ToolCall,
-                json!({
-                    "event": "workflow_completed",
-                    "successes": report.successes,
-                    "failures": report.failures,
-                    "total": report.total_platforms
-                }),
-            ) {
+            uuid::Uuid::nil(),
+            EventType::ToolCall,
+            json!({
+                "event": "workflow_completed",
+                "successes": report.successes,
+                "failures": report.failures,
+                "total": report.total_platforms
+            }),
+        ) {
             eprintln!("[WARN] audit write failed: {e}");
         }
 

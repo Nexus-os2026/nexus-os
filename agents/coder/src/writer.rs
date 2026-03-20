@@ -53,8 +53,9 @@ impl Default for CodeWriter {
 impl CodeWriter {
     pub fn new() -> Self {
         let config = ProviderSelectionConfig::from_env();
-        let provider: Box<dyn LlmProvider> = select_provider(&config)
-            .unwrap_or_else(|_| Box::new(nexus_connectors_llm::providers::OllamaProvider::from_env()));
+        let provider: Box<dyn LlmProvider> = select_provider(&config).unwrap_or_else(|_| {
+            Box::new(nexus_connectors_llm::providers::OllamaProvider::from_env())
+        });
         let gateway = GovernedLlmGateway::new(provider);
         let capabilities = ["llm.query".to_string()]
             .into_iter()
@@ -102,16 +103,15 @@ impl CodeWriter {
         }
 
         for change in &changes {
-            if let Err(e) = self.audit_trail
-                .append_event(
-                    self.runtime.agent_id,
-                    EventType::ToolCall,
-                    json!({
-                        "step": "write_code",
-                        "task": task,
-                        "change": format!("{change:?}"),
-                    }),
-                ) {
+            if let Err(e) = self.audit_trail.append_event(
+                self.runtime.agent_id,
+                EventType::ToolCall,
+                json!({
+                    "step": "write_code",
+                    "task": task,
+                    "change": format!("{change:?}"),
+                }),
+            ) {
                 tracing::error!("Audit append failed: {e}");
             }
         }

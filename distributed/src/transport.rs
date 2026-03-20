@@ -114,7 +114,11 @@ impl Transport for LocalTransport {
         kind: MessageKind,
         payload: Vec<u8>,
     ) -> Result<(), TransportError> {
-        let registered = self.registered.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        let registered = self
+            .registered
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
         for node_id in registered {
             if node_id != from {
                 self.send(Message {

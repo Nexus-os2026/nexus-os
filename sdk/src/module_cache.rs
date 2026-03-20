@@ -95,10 +95,13 @@ impl ModuleCache {
 
     /// Number of cached modules.
     pub fn len(&self) -> usize {
-        self.inner.lock().unwrap_or_else(|poisoned| {
-            eprintln!("Lock was poisoned, recovering inner data");
-            poisoned.into_inner()
-        }).len()
+        self.inner
+            .lock()
+            .unwrap_or_else(|poisoned| {
+                eprintln!("Lock was poisoned, recovering inner data");
+                poisoned.into_inner()
+            })
+            .len()
     }
 
     /// Whether the cache is empty.
@@ -119,10 +122,13 @@ impl ModuleCache {
 
     /// Clear all cached modules.
     pub fn clear(&self) {
-        self.inner.lock().unwrap_or_else(|poisoned| {
-            eprintln!("Lock was poisoned, recovering inner data");
-            poisoned.into_inner()
-        }).clear();
+        self.inner
+            .lock()
+            .unwrap_or_else(|poisoned| {
+                eprintln!("Lock was poisoned, recovering inner data");
+                poisoned.into_inner()
+            })
+            .clear();
     }
 }
 

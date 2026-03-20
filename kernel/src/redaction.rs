@@ -13,11 +13,13 @@ fn empty_regex() -> Regex {
         .unwrap_or_else(|e| {
             eprintln!("regex engine broken, cannot compile trivial patterns: {e}");
             // Return a regex that matches nothing — last resort construction
-            Regex::new("[^\\s\\S]").unwrap_or_else(|_| Regex::new(".").unwrap_or_else(|_| {
-                // If the regex engine truly cannot compile ANY pattern, we have a fundamentally
-                // broken runtime. Abort is the only safe option vs silently proceeding.
-                std::process::abort()
-            }))
+            Regex::new("[^\\s\\S]").unwrap_or_else(|_| {
+                Regex::new(".").unwrap_or_else(|_| {
+                    // If the regex engine truly cannot compile ANY pattern, we have a fundamentally
+                    // broken runtime. Abort is the only safe option vs silently proceeding.
+                    std::process::abort()
+                })
+            })
         })
 }
 

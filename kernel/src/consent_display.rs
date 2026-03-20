@@ -92,10 +92,7 @@ pub fn render_approval(request: &ApprovalRequest) -> ApprovalDisplay {
             );
         }
         GovernedOperation::McpExternalToolCall => {
-            warnings.push(
-                "This operation will call a tool on an external MCP server"
-                    .to_string(),
-            );
+            warnings.push("This operation will call a tool on an external MCP server".to_string());
         }
         GovernedOperation::IntegrationSend => {
             warnings.push(

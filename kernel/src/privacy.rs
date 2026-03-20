@@ -70,10 +70,7 @@ impl PrivacyManager {
         let cipher = Aes256Gcm::new_from_slice(&user_key.bytes)
             .map_err(|_| AgentError::SupervisorError("invalid AES-256 key length".to_string()))?;
         cipher
-            .decrypt(
-                &Nonce::from(encrypted.nonce),
-                encrypted.ciphertext.as_ref(),
-            )
+            .decrypt(&Nonce::from(encrypted.nonce), encrypted.ciphertext.as_ref())
             .map_err(|_| AgentError::SupervisorError("decryption failure".to_string()))
     }
 

@@ -56,14 +56,14 @@ impl UserReviewGate {
             .insert(request_id.to_string(), decision.clone());
 
         if let Err(e) = self.audit_trail.append_event(
-                agent_id,
-                EventType::UserAction,
-                json!({
-                    "event": "research_review_decision",
-                    "request_id": request_id,
-                    "decision": format!("{decision:?}")
-                }),
-            ) {
+            agent_id,
+            EventType::UserAction,
+            json!({
+                "event": "research_review_decision",
+                "request_id": request_id,
+                "decision": format!("{decision:?}")
+            }),
+        ) {
             eprintln!("[WARN] audit write failed: {e}");
         }
     }

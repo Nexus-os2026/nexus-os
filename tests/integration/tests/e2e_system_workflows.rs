@@ -244,7 +244,11 @@ fn test_integration_self_improvement_learning() {
         }
         Err(e) => {
             let msg = format!("{e}");
-            if msg.contains("ollama") || msg.contains("provider") || msg.contains("LLM") || msg.contains("404") {
+            if msg.contains("ollama")
+                || msg.contains("provider")
+                || msg.contains("LLM")
+                || msg.contains("404")
+            {
                 eprintln!(
                     "SKIPPED: analyze_history requires a working LLM provider. Error: {e}\n\
                      To run this test: ollama pull llama3.2"

@@ -56,16 +56,16 @@ impl FailureRecoveryManager {
             FailureStrategy::Retry => {
                 let delay = backoff_delay_seconds(attempt, 60);
                 if let Err(e) = self.audit_trail.append_event(
-                        uuid::Uuid::nil(),
-                        EventType::Error,
-                        json!({
-                            "event": "workflow_retry_scheduled",
-                            "workflow_id": workflow_id,
-                            "step_id": step_id,
-                            "attempt": attempt,
-                            "delay_seconds": delay
-                        }),
-                    ) {
+                    uuid::Uuid::nil(),
+                    EventType::Error,
+                    json!({
+                        "event": "workflow_retry_scheduled",
+                        "workflow_id": workflow_id,
+                        "step_id": step_id,
+                        "attempt": attempt,
+                        "delay_seconds": delay
+                    }),
+                ) {
                     eprintln!("[WARN] audit write failed: {e}");
                 }
                 RecoveryActionResult::RetryScheduled {
@@ -74,14 +74,14 @@ impl FailureRecoveryManager {
             }
             FailureStrategy::Skip => {
                 if let Err(e) = self.audit_trail.append_event(
-                        uuid::Uuid::nil(),
-                        EventType::Error,
-                        json!({
-                            "event": "workflow_step_skipped",
-                            "workflow_id": workflow_id,
-                            "step_id": step_id
-                        }),
-                    ) {
+                    uuid::Uuid::nil(),
+                    EventType::Error,
+                    json!({
+                        "event": "workflow_step_skipped",
+                        "workflow_id": workflow_id,
+                        "step_id": step_id
+                    }),
+                ) {
                     eprintln!("[WARN] audit write failed: {e}");
                 }
                 RecoveryActionResult::StepSkipped
@@ -89,15 +89,15 @@ impl FailureRecoveryManager {
             FailureStrategy::Escalate => {
                 self.paused_workflows.insert(workflow_id.to_string());
                 if let Err(e) = self.audit_trail.append_event(
-                        uuid::Uuid::nil(),
-                        EventType::Error,
-                        json!({
-                            "event": "workflow_escalated",
-                            "workflow_id": workflow_id,
-                            "step_id": step_id,
-                            "notify": "messaging_bridge"
-                        }),
-                    ) {
+                    uuid::Uuid::nil(),
+                    EventType::Error,
+                    json!({
+                        "event": "workflow_escalated",
+                        "workflow_id": workflow_id,
+                        "step_id": step_id,
+                        "notify": "messaging_bridge"
+                    }),
+                ) {
                     eprintln!("[WARN] audit write failed: {e}");
                 }
                 RecoveryActionResult::EscalatedToUser
@@ -122,13 +122,13 @@ impl FailureRecoveryManager {
         self.executed_compensations.insert(action_id.to_string());
 
         if let Err(e) = self.audit_trail.append_event(
-                uuid::Uuid::nil(),
-                EventType::ToolCall,
-                json!({
-                    "event": "workflow_compensation_applied",
-                    "action_id": action_id
-                }),
-            ) {
+            uuid::Uuid::nil(),
+            EventType::ToolCall,
+            json!({
+                "event": "workflow_compensation_applied",
+                "action_id": action_id
+            }),
+        ) {
             eprintln!("[WARN] audit write failed: {e}");
         }
 

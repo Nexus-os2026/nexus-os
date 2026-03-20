@@ -464,7 +464,9 @@ impl AirgapInstaller {
             return Err(format!("validation failed: {}", result.issues.join("; ")));
         }
 
-        let bundle = result.bundle.ok_or("Bundle missing after successful validation")?;
+        let bundle = result
+            .bundle
+            .ok_or("Bundle missing after successful validation")?;
 
         // Create install directory
         let install = Path::new(install_dir);

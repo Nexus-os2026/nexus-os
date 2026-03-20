@@ -128,7 +128,9 @@ impl PatternStore {
 
             // Only consider matches above 70% threshold
             if similarity > 0.7
-                && best.as_ref().is_none_or(|(_, best_score)| similarity > *best_score)
+                && best
+                    .as_ref()
+                    .is_none_or(|(_, best_score)| similarity > *best_score)
             {
                 best = Some((pattern, similarity));
             }

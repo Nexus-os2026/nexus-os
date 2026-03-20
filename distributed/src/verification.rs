@@ -351,7 +351,8 @@ mod tests {
         let mut trail = AuditTrail::new();
         let agent_id = Uuid::new_v4();
         for i in 0..count {
-            if let Err(e) = trail.append_event(agent_id, EventType::StateChange, json!({"seq": i})) {
+            if let Err(e) = trail.append_event(agent_id, EventType::StateChange, json!({"seq": i}))
+            {
                 eprintln!("[WARN] audit write failed: {e}");
             }
         }

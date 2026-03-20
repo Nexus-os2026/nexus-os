@@ -308,20 +308,19 @@ impl TerminalExecutor {
             stderr: collected_stderr,
             duration_ms,
         };
-        if let Err(e) = self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "tool": "terminal.execute",
-                    "command": command,
-                    "cwd": cwd.to_string_lossy().to_string(),
-                    "exit_code": result.exit_code,
-                    "duration_ms": result.duration_ms,
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
-                }),
-            ) {
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "tool": "terminal.execute",
+                "command": command,
+                "cwd": cwd.to_string_lossy().to_string(),
+                "exit_code": result.exit_code,
+                "duration_ms": result.duration_ms,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+            }),
+        ) {
             tracing::error!("Audit append failed: {e}");
         }
         Ok(result)
@@ -364,20 +363,19 @@ impl TerminalExecutor {
         stderr: &str,
         duration_ms: u128,
     ) {
-        if let Err(e) = self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::Error,
-                json!({
-                    "tool": "terminal.execute",
-                    "command": command,
-                    "cwd": cwd.to_string_lossy().to_string(),
-                    "error": error.to_string(),
-                    "duration_ms": duration_ms,
-                    "stdout": stdout,
-                    "stderr": stderr,
-                }),
-            ) {
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::Error,
+            json!({
+                "tool": "terminal.execute",
+                "command": command,
+                "cwd": cwd.to_string_lossy().to_string(),
+                "error": error.to_string(),
+                "duration_ms": duration_ms,
+                "stdout": stdout,
+                "stderr": stderr,
+            }),
+        ) {
             tracing::error!("Audit append failed: {e}");
         }
     }

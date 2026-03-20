@@ -41,10 +41,7 @@ struct DiscordField {
 }
 
 impl DiscordIntegration {
-    pub fn new(
-        bot_token: String,
-        default_channel_id: String,
-    ) -> Result<Self, IntegrationError> {
+    pub fn new(bot_token: String, default_channel_id: String) -> Result<Self, IntegrationError> {
         if bot_token.is_empty() {
             return Err(IntegrationError::MissingCredential {
                 env_var: "NEXUS_DISCORD_BOT_TOKEN".into(),
@@ -285,9 +282,18 @@ mod tests {
 
     #[test]
     fn discord_severity_colors() {
-        assert_eq!(DiscordIntegration::severity_color(&Severity::Critical), 0xFF4444);
-        assert_eq!(DiscordIntegration::severity_color(&Severity::Warning), 0xFFB85C);
-        assert_eq!(DiscordIntegration::severity_color(&Severity::Info), 0x4AF7D3);
+        assert_eq!(
+            DiscordIntegration::severity_color(&Severity::Critical),
+            0xFF4444
+        );
+        assert_eq!(
+            DiscordIntegration::severity_color(&Severity::Warning),
+            0xFFB85C
+        );
+        assert_eq!(
+            DiscordIntegration::severity_color(&Severity::Info),
+            0x4AF7D3
+        );
     }
 
     #[test]
@@ -301,7 +307,10 @@ mod tests {
             source_event: "test".into(),
         };
         // The channel from the notification should override the default
-        let channel = msg.channel.as_deref().unwrap_or(&discord.default_channel_id);
+        let channel = msg
+            .channel
+            .as_deref()
+            .unwrap_or(&discord.default_channel_id);
         assert_eq!(channel, "999888777");
     }
 

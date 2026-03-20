@@ -303,16 +303,16 @@ impl QuorumEngine {
         if active < required_votes {
             let outcome = QuorumOutcome::InsufficientNodes;
             if let Err(e) = audit_trail.append_event(
-                    agent_id,
-                    EventType::StateChange,
-                    serde_json::json!({
-                        "event": "quorum.propose_failed",
-                        "reason": "insufficient_nodes",
-                        "active_nodes": active,
-                        "required_votes": required_votes,
-                        "action": &action_description,
-                    }),
-                ) {
+                agent_id,
+                EventType::StateChange,
+                serde_json::json!({
+                    "event": "quorum.propose_failed",
+                    "reason": "insufficient_nodes",
+                    "active_nodes": active,
+                    "required_votes": required_votes,
+                    "action": &action_description,
+                }),
+            ) {
                 eprintln!("[WARN] audit write failed: {e}");
             }
             return Err(outcome);
@@ -330,16 +330,16 @@ impl QuorumEngine {
         };
 
         if let Err(e) = audit_trail.append_event(
-                agent_id,
-                EventType::StateChange,
-                serde_json::json!({
-                    "event": "quorum.proposed",
-                    "request_id": request_id.to_string(),
-                    "action": &action_description,
-                    "required_votes": required_votes,
-                    "policy_hash": &policy_hash,
-                }),
-            ) {
+            agent_id,
+            EventType::StateChange,
+            serde_json::json!({
+                "event": "quorum.proposed",
+                "request_id": request_id.to_string(),
+                "action": &action_description,
+                "required_votes": required_votes,
+                "policy_hash": &policy_hash,
+            }),
+        ) {
             eprintln!("[WARN] audit write failed: {e}");
         }
 

@@ -153,9 +153,7 @@ mod tests {
     #[test]
     fn cost_integration_calls_custom_rate() {
         let mut rates = CostRates::default();
-        rates
-            .integration_rates
-            .insert("slack".into(), 0.005);
+        rates.integration_rates.insert("slack".into(), 0.005);
         let cost = rates.estimate(
             &ResourceType::IntegrationCalls {
                 provider: "slack".into(),

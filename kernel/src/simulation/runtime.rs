@@ -233,9 +233,7 @@ impl SimulationRuntime {
             .map_err(|_| {
                 AgentError::SupervisorError("report generation timed out after 30s".to_string())
             })?
-            .map_err(|e| {
-                AgentError::SupervisorError(format!("report generation failed: {e}"))
-            })?;
+            .map_err(|e| AgentError::SupervisorError(format!("report generation failed: {e}")))?;
         let state = self.persisted_state();
         persist_world_snapshot(&self.db, &state, Some(&report))?;
         self.observer.on_complete(&self.world.id, &report);

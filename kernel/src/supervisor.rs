@@ -25,7 +25,9 @@ pub fn max_fuel_cost(action_type: &str) -> u64 {
         "a2a_discover" => 500,
         "a2a_status_check" => 200,
         // Integration provider costs — messaging vs ticket-creation
-        "integration_slack" | "integration_teams" | "integration_discord"
+        "integration_slack"
+        | "integration_teams"
+        | "integration_discord"
         | "integration_telegram" => 500,
         "integration_jira" | "integration_github" => 1_000,
         "integration_webhook" => 300,
@@ -1166,9 +1168,7 @@ impl Supervisor {
         if actual_cost > reservation.reserved_amount {
             eprintln!(
                 "FUEL OVERRUN: reserved {} but actual was {} for {}",
-                reservation.reserved_amount,
-                actual_cost,
-                reservation.action_type
+                reservation.reserved_amount, actual_cost, reservation.action_type
             );
         }
 

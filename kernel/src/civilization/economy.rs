@@ -184,9 +184,13 @@ impl CivilizationEconomy {
         self.ensure_agent(from);
         self.ensure_agent(to);
 
-        let from_bal = self.balances.get(from).ok_or_else(|| {
-            EconomyError::AgentNotFound(format!("balance missing after ensure: {from}"))
-        })?.balance;
+        let from_bal = self
+            .balances
+            .get(from)
+            .ok_or_else(|| {
+                EconomyError::AgentNotFound(format!("balance missing after ensure: {from}"))
+            })?
+            .balance;
         if from_bal < amount {
             return Err(EconomyError::InsufficientBalance {
                 agent_id: from.to_string(),

@@ -218,7 +218,8 @@ impl DevicePairingManager {
         self.pairings.insert(code.node_id, pairing);
         self.persist_pairing(code.node_id)?;
 
-        self.pairings.get(&code.node_id)
+        self.pairings
+            .get(&code.node_id)
             .ok_or_else(|| "pairing lookup failed after insert".to_string())
     }
 

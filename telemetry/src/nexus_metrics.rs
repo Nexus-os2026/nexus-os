@@ -27,9 +27,7 @@ impl NexusMetricsExtended {
         Self::try_install().unwrap_or_else(|e| {
             tracing::error!("Prometheus recorder installation failed: {e} — metrics disabled");
             // Retry without the global recorder (metrics will be no-ops)
-            let handle = PrometheusBuilder::new()
-                .build_recorder()
-                .handle();
+            let handle = PrometheusBuilder::new().build_recorder().handle();
             Self {
                 handle: Arc::new(handle),
                 start_time: Instant::now(),
@@ -39,8 +37,7 @@ impl NexusMetricsExtended {
 
     /// Try to install the Prometheus recorder, returning an error on failure.
     pub fn try_install() -> Result<Self, Box<dyn std::error::Error>> {
-        let handle = PrometheusBuilder::new()
-            .install_recorder()?;
+        let handle = PrometheusBuilder::new().install_recorder()?;
 
         // ── Original metrics (preserve compatibility) ──────────────────
         describe_gauge!("nexus_agents_active", "Number of currently active agents");

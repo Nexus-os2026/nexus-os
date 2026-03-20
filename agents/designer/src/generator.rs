@@ -71,8 +71,9 @@ impl Default for DesignGenerator {
 impl DesignGenerator {
     pub fn new() -> Self {
         let config = ProviderSelectionConfig::from_env();
-        let provider: Box<dyn LlmProvider> = select_provider(&config)
-            .unwrap_or_else(|_| Box::new(nexus_connectors_llm::providers::OllamaProvider::from_env()));
+        let provider: Box<dyn LlmProvider> = select_provider(&config).unwrap_or_else(|_| {
+            Box::new(nexus_connectors_llm::providers::OllamaProvider::from_env())
+        });
         let gateway = GovernedLlmGateway::new(provider);
         let capabilities = ["llm.query".to_string()]
             .into_iter()

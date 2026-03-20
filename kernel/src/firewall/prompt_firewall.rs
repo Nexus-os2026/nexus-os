@@ -314,9 +314,9 @@ fn ssn_pattern() -> &'static Regex {
     SSN.get_or_init(|| {
         Regex::new(SSN_PATTERN).unwrap_or_else(|e| {
             eprintln!("Failed to compile SSN regex: {e}");
-            Regex::new("^$").or_else(|_| Regex::new("")).unwrap_or_else(|_| {
-                    std::process::abort()
-                })
+            Regex::new("^$")
+                .or_else(|_| Regex::new(""))
+                .unwrap_or_else(|_| std::process::abort())
         })
     })
 }
@@ -326,9 +326,9 @@ fn passport_pattern() -> &'static Regex {
     PASSPORT.get_or_init(|| {
         Regex::new(PASSPORT_PATTERN).unwrap_or_else(|e| {
             eprintln!("Failed to compile passport regex: {e}");
-            Regex::new("^$").or_else(|_| Regex::new("")).unwrap_or_else(|_| {
-                    std::process::abort()
-                })
+            Regex::new("^$")
+                .or_else(|_| Regex::new(""))
+                .unwrap_or_else(|_| std::process::abort())
         })
     })
 }
@@ -380,9 +380,9 @@ fn internal_ip_pattern() -> &'static Regex {
     IP.get_or_init(|| {
         Regex::new(INTERNAL_IP_PATTERN).unwrap_or_else(|e| {
             eprintln!("Failed to compile internal IP regex: {e}");
-            Regex::new("^$").or_else(|_| Regex::new("")).unwrap_or_else(|_| {
-                    std::process::abort()
-                })
+            Regex::new("^$")
+                .or_else(|_| Regex::new(""))
+                .unwrap_or_else(|_| std::process::abort())
         })
     })
 }

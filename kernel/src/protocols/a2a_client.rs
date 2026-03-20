@@ -112,10 +112,7 @@ impl A2aClient {
         // Fuel gate: reserve before network call
         let reservation = self.reserve_fuel("a2a_discover")?;
 
-        let card_url = format!(
-            "{}/a2a/agent-card",
-            base_url.trim_end_matches('/')
-        );
+        let card_url = format!("{}/a2a/agent-card", base_url.trim_end_matches('/'));
 
         let output = std::process::Command::new("curl")
             .args(["-s", "-m", "10", &card_url])
@@ -168,7 +165,11 @@ impl A2aClient {
     ) -> Result<A2aTaskResult, A2aClientError> {
         // HITL gate: require human approval before sending data to external agent
         if let Some(consent_mutex) = &self.consent {
-            let payload = format!("a2a_delegate:{}:{}", agent_url, &message[..message.len().min(200)]);
+            let payload = format!(
+                "a2a_delegate:{}:{}",
+                agent_url,
+                &message[..message.len().min(200)]
+            );
             if let Ok(mut consent) = consent_mutex.lock() {
                 if let Ok(mut audit) = self.audit.lock() {
                     let result = consent.enforce_operation(
@@ -180,10 +181,16 @@ impl A2aClient {
                     if let Err(e) = result {
                         let msg = match &e {
                             ConsentError::ApprovalRequired { request_id, .. } => {
-                                format!("HITL approval required for A2A delegation to {} (request: {})", agent_url, request_id)
+                                format!(
+                                    "HITL approval required for A2A delegation to {} (request: {})",
+                                    agent_url, request_id
+                                )
                             }
                             ConsentError::RequestDenied { request_id } => {
-                                format!("Human denied A2A delegation to {} (request: {})", agent_url, request_id)
+                                format!(
+                                    "Human denied A2A delegation to {} (request: {})",
+                                    agent_url, request_id
+                                )
                             }
                             other => format!("A2A delegation blocked: {}", other),
                         };
@@ -369,11 +376,7 @@ impl A2aClient {
     }
 
     /// Cancel a task on a remote agent.
-    pub fn cancel_task(
-        &mut self,
-        agent_url: &str,
-        task_id: &str,
-    ) -> Result<(), A2aClientError> {
+    pub fn cancel_task(&mut self, agent_url: &str, task_id: &str) -> Result<(), A2aClientError> {
         self.request_counter += 1;
 
         let rpc_request = JsonRpcRequest {
@@ -443,16 +446,12 @@ impl A2aClient {
         match &self.fuel {
             Some(ctx) => {
                 let cost = max_fuel_cost(action);
-                ctx.reserve_fuel(cost).map(Some).map_err(|_| {
-                    A2aClientError::FuelExhausted {
+                ctx.reserve_fuel(cost)
+                    .map(Some)
+                    .map_err(|_| A2aClientError::FuelExhausted {
                         action: action.to_string(),
-                        detail: format!(
-                            "need {} fuel, have {}",
-                            cost,
-                            ctx.fuel_remaining()
-                        ),
-                    }
-                })
+                        detail: format!("need {} fuel, have {}", cost, ctx.fuel_remaining()),
+                    })
             }
             None => Ok(None),
         }
@@ -505,19 +504,11 @@ impl A2aClient {
         }
 
         let response_text = String::from_utf8_lossy(&output.stdout);
-        serde_json::from_str(&response_text).map_err(|e| {
-            A2aClientError::ResponseParse(format!("Failed to parse response: {e}"))
-        })
+        serde_json::from_str(&response_text)
+            .map_err(|e| A2aClientError::ResponseParse(format!("Failed to parse response: {e}")))
     }
 
-    fn audit_action(
-        &self,
-        action: &str,
-        agent_name: &str,
-        url: &str,
-        success: bool,
-        detail: &str,
-    ) {
+    fn audit_action(&self, action: &str, agent_name: &str, url: &str, success: bool, detail: &str) {
         if let Ok(mut audit) = self.audit.lock() {
             let _ = audit.append_event(
                 Uuid::nil(),

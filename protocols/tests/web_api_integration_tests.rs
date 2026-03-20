@@ -38,9 +38,11 @@ fn test_manifest(name: &str, caps: Vec<&str>, fuel: u64) -> AgentManifest {
 }
 
 fn setup_gateway() -> (axum::Router, GatewayState) {
-    let state = GatewayState::new("integration-test").unwrap().with_llm_provider(Box::new(
-        nexus_connectors_llm::providers::mock::MockProvider::new(),
-    ));
+    let state = GatewayState::new("integration-test")
+        .unwrap()
+        .with_llm_provider(Box::new(
+            nexus_connectors_llm::providers::mock::MockProvider::new(),
+        ));
     state.register_agent(
         test_manifest(
             "test-agent",

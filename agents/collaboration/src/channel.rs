@@ -139,19 +139,18 @@ impl GovernedChannel {
         self.message_count_this_minute += 1;
 
         // Audit log
-        if let Err(e) = self.audit_trail
-            .append_event(
-                self.sender,
-                EventType::ToolCall,
-                json!({
-                    "action": "channel_send",
-                    "channel_id": self.id.to_string(),
-                    "message_id": msg.id.to_string(),
-                    "message_type": msg.message_type,
-                    "to": msg.to.to_string(),
-                    "fuel_remaining": self.fuel_remaining,
-                }),
-            ) {
+        if let Err(e) = self.audit_trail.append_event(
+            self.sender,
+            EventType::ToolCall,
+            json!({
+                "action": "channel_send",
+                "channel_id": self.id.to_string(),
+                "message_id": msg.id.to_string(),
+                "message_type": msg.message_type,
+                "to": msg.to.to_string(),
+                "fuel_remaining": self.fuel_remaining,
+            }),
+        ) {
             tracing::error!("Audit append failed: {e}");
         }
 

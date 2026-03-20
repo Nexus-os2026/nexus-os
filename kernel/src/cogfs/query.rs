@@ -226,10 +226,9 @@ impl NaturalQuery {
         if let Ok(date_re) = Regex::new(r"(\d{4}-\d{2}-\d{2})") {
             if let Some(cap) = date_re.captures(&lower) {
                 if let Ok(date) = chrono::NaiveDate::parse_from_str(&cap[1], "%Y-%m-%d") {
-                    if let (Some(s), Some(e)) = (
-                        date.and_hms_opt(0, 0, 0),
-                        date.and_hms_opt(23, 59, 59),
-                    ) {
+                    if let (Some(s), Some(e)) =
+                        (date.and_hms_opt(0, 0, 0), date.and_hms_opt(23, 59, 59))
+                    {
                         return Some(DateRange {
                             start: s.and_utc(),
                             end: e.and_utc(),

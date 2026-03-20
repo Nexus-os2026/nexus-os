@@ -55,10 +55,10 @@ pub mod redaction;
 pub mod release_signing;
 pub mod replay;
 pub mod reputation;
-pub mod sbom;
 #[allow(unsafe_code)]
 pub mod resource_limiter;
 pub mod safety_supervisor;
+pub mod sbom;
 pub mod self_improve;
 pub mod self_rewrite;
 pub mod simulation;

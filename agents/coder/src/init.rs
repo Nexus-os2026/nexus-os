@@ -103,19 +103,18 @@ impl ProjectInitializer {
             default_ci(language).as_str(),
         )?;
 
-        if let Err(e) = self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "tool": "init_project",
-                    "language": language,
-                    "framework": framework,
-                    "name": name,
-                    "description_provided": description.is_some(),
-                    "path": root.to_string_lossy().to_string(),
-                }),
-            ) {
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "tool": "init_project",
+                "language": language,
+                "framework": framework,
+                "name": name,
+                "description_provided": description.is_some(),
+                "path": root.to_string_lossy().to_string(),
+            }),
+        ) {
             tracing::error!("Audit append failed: {e}");
         }
 
@@ -367,8 +366,9 @@ fn build_readme(
 
     if let Some(user_description) = description {
         let config = ProviderSelectionConfig::from_env();
-        let provider: Box<dyn LlmProvider> = select_provider(&config)
-            .unwrap_or_else(|_| Box::new(nexus_connectors_llm::providers::OllamaProvider::from_env()));
+        let provider: Box<dyn LlmProvider> = select_provider(&config).unwrap_or_else(|_| {
+            Box::new(nexus_connectors_llm::providers::OllamaProvider::from_env())
+        });
         let mut gateway = GovernedLlmGateway::new(provider);
         let capabilities = [LLM_CAPABILITY.to_string()]
             .into_iter()

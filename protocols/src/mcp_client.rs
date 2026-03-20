@@ -705,8 +705,7 @@ impl StdioMcpClient {
             return Err("Empty response from MCP server".to_string());
         }
 
-        serde_json::from_str(&line)
-            .map_err(|e| format!("Failed to parse JSON-RPC response: {e}"))
+        serde_json::from_str(&line).map_err(|e| format!("Failed to parse JSON-RPC response: {e}"))
     }
 
     /// Shut down the child process.
@@ -830,7 +829,10 @@ impl GovernedMcpHost {
 
         // 2. HITL consent — require human approval before calling external MCP tool
         if let Some(consent_mutex) = &self.consent {
-            let server_id = self.host.tool_index().get(tool_name)
+            let server_id = self
+                .host
+                .tool_index()
+                .get(tool_name)
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string());
             let payload = format!("mcp_call:{}:{}:{}", server_id, tool_name, arguments);
@@ -877,10 +879,7 @@ impl GovernedMcpHost {
 
     /// Get remaining fuel.
     pub fn fuel_remaining(&self) -> f64 {
-        self.fuel_remaining
-            .lock()
-            .map(|f| *f)
-            .unwrap_or(0.0)
+        self.fuel_remaining.lock().map(|f| *f).unwrap_or(0.0)
     }
 
     /// Access the audit trail.

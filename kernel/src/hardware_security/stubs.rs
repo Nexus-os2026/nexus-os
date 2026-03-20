@@ -32,7 +32,8 @@ impl KeyBackend for TpmBackend {
             return Err(self.unavailable_error());
         }
         Err(KeyError::BackendFailure(
-            "TPM hardware not detected. This feature requires a physical TPM 2.0 module.".to_string(),
+            "TPM hardware not detected. This feature requires a physical TPM 2.0 module."
+                .to_string(),
         ))
     }
 
@@ -41,7 +42,8 @@ impl KeyBackend for TpmBackend {
             return Err(self.unavailable_error());
         }
         Err(KeyError::BackendFailure(
-            "TPM hardware not detected. This feature requires a physical TPM 2.0 module.".to_string(),
+            "TPM hardware not detected. This feature requires a physical TPM 2.0 module."
+                .to_string(),
         ))
     }
 
@@ -50,7 +52,8 @@ impl KeyBackend for TpmBackend {
             return Err(self.unavailable_error());
         }
         Err(KeyError::BackendFailure(
-            "TPM hardware not detected. This feature requires a physical TPM 2.0 module.".to_string(),
+            "TPM hardware not detected. This feature requires a physical TPM 2.0 module."
+                .to_string(),
         ))
     }
 
@@ -59,7 +62,8 @@ impl KeyBackend for TpmBackend {
             return Err(self.unavailable_error());
         }
         Err(KeyError::BackendFailure(
-            "TPM hardware not detected. This feature requires a physical TPM 2.0 module.".to_string(),
+            "TPM hardware not detected. This feature requires a physical TPM 2.0 module."
+                .to_string(),
         ))
     }
 

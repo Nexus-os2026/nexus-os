@@ -56,7 +56,12 @@ fn governance_overhead_regression() {
     let start = Instant::now();
     for _ in 0..iterations {
         let response = gateway
-            .query(&mut context, "benchmark governance path", 512, "bench-model")
+            .query(
+                &mut context,
+                "benchmark governance path",
+                512,
+                "bench-model",
+            )
             .expect("governed query should succeed");
         black_box(response);
     }

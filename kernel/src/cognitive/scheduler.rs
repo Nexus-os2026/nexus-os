@@ -101,7 +101,11 @@ impl AgentScheduler {
         let aid = agent_id.to_string();
         let goal_text = default_goal.to_string();
 
-        let executor = self.executor.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        let executor = self
+            .executor
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
         let handle = tokio::spawn(schedule_loop(
             aid,
             goal_text,

@@ -89,7 +89,10 @@ impl CollectingEmitter {
 
 impl EventEmitter for CollectingEmitter {
     fn emit(&self, event: CognitiveEvent) {
-        self.events.lock().unwrap_or_else(|p| p.into_inner()).push(event);
+        self.events
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .push(event);
     }
 }
 
@@ -738,8 +741,7 @@ impl CognitiveRuntime {
                     }
                     "darwin" => {
                         let caps = self.agent_capabilities(agent_id);
-                        let mut darwin =
-                            self.darwin.lock().unwrap_or_else(|p| p.into_inner());
+                        let mut darwin = self.darwin.lock().unwrap_or_else(|p| p.into_inner());
                         let result = darwin.evolve_plan(new_steps.clone(), &caps, |s| {
                             let fuel: f64 = s.iter().map(|st| st.fuel_cost).sum();
                             1.0 - s.len() as f64 * 0.1 - fuel * 0.01
@@ -969,112 +971,112 @@ impl CognitiveRuntime {
                 act_result = Some((true, state.total_fuel_consumed, None));
                 // Skip general executor for A2A actions
             } else {
+                // Execute the action
+                let action_clone = step.action.clone();
+                let (step_executed, step_fuel, step_error) =
+                    match executor.execute(agent_id, &action_clone, audit) {
+                        Ok(result) => {
+                            step.status = StepStatus::Succeeded;
+                            let preview = if result.len() > 200 {
+                                format!("{}...", &result[..200])
+                            } else {
+                                result.clone()
+                            };
+                            step.result = Some(result);
+                            step.fuel_cost = estimate_fuel_cost(&action_clone);
+                            state.total_fuel_consumed += step.fuel_cost;
+                            state.consecutive_failures = 0;
+                            state.steps_completed += 1;
+                            state.current_step_index += 1;
+                            let fuel = step.fuel_cost;
 
-            // Execute the action
-            let action_clone = step.action.clone();
-            let (step_executed, step_fuel, step_error) =
-                match executor.execute(agent_id, &action_clone, audit) {
-                    Ok(result) => {
-                        step.status = StepStatus::Succeeded;
-                        let preview = if result.len() > 200 {
-                            format!("{}...", &result[..200])
-                        } else {
-                            result.clone()
-                        };
-                        step.result = Some(result);
-                        step.fuel_cost = estimate_fuel_cost(&action_clone);
-                        state.total_fuel_consumed += step.fuel_cost;
-                        state.consecutive_failures = 0;
-                        state.steps_completed += 1;
-                        state.current_step_index += 1;
-                        let fuel = step.fuel_cost;
+                            self.emit_step_executed(agent_id, step);
 
-                        self.emit_step_executed(agent_id, step);
-
-                        // Consume fuel from supervisor
-                        if let Ok(agent_uuid) = uuid::Uuid::parse_str(agent_id) {
-                            let fuel_units = fuel as u64;
-                            let mut sup = self.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-                            if let Some(handle) = sup.get_agent(agent_uuid) {
-                                let remaining = handle.remaining_fuel;
-                                if remaining >= fuel_units {
-                                    let _ = sup.record_llm_spend(
-                                        agent_uuid,
-                                        "cognitive",
-                                        0,
-                                        fuel_units as u32,
-                                        fuel_units,
-                                    );
+                            // Consume fuel from supervisor
+                            if let Ok(agent_uuid) = uuid::Uuid::parse_str(agent_id) {
+                                let fuel_units = fuel as u64;
+                                let mut sup =
+                                    self.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+                                if let Some(handle) = sup.get_agent(agent_uuid) {
+                                    let remaining = handle.remaining_fuel;
+                                    if remaining >= fuel_units {
+                                        let _ = sup.record_llm_spend(
+                                            agent_uuid,
+                                            "cognitive",
+                                            0,
+                                            fuel_units as u32,
+                                            fuel_units,
+                                        );
+                                    }
                                 }
                             }
+
+                            audit.append_event(
+                                uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+                                EventType::UserAction,
+                                json!({
+                                    "event": "cognitive.step_executed",
+                                    "action": action_clone.action_type(),
+                                    "status": "succeeded",
+                                    "fuel_cost": fuel,
+                                    "result_preview": preview,
+                                }),
+                            )?;
+
+                            (true, fuel, None)
                         }
+                        Err(error) => {
+                            if error.starts_with("human approval required:")
+                                || error.starts_with("Warden blocked action:")
+                            {
+                                state.phase = CognitivePhase::Blocked;
+                                return Ok(CycleResult {
+                                    phase: CognitivePhase::Blocked,
+                                    steps_executed: 0,
+                                    fuel_consumed: 0.0,
+                                    should_continue: true,
+                                    blocked_reason: Some(error),
+                                });
+                            }
 
-                        audit.append_event(
-                            uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
-                            EventType::UserAction,
-                            json!({
-                                "event": "cognitive.step_executed",
-                                "action": action_clone.action_type(),
-                                "status": "succeeded",
-                                "fuel_cost": fuel,
-                                "result_preview": preview,
-                            }),
-                        )?;
+                            step.status = StepStatus::Failed;
+                            step.result = Some(error.clone());
+                            state.consecutive_failures += 1;
 
-                        (true, fuel, None)
-                    }
-                    Err(error) => {
-                        if error.starts_with("human approval required:")
-                            || error.starts_with("Warden blocked action:")
-                        {
-                            state.phase = CognitivePhase::Blocked;
-                            return Ok(CycleResult {
-                                phase: CognitivePhase::Blocked,
-                                steps_executed: 0,
-                                fuel_consumed: 0.0,
-                                should_continue: true,
-                                blocked_reason: Some(error),
-                            });
+                            self.emit_step_executed(agent_id, step);
+
+                            audit.append_event(
+                                uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+                                EventType::UserAction,
+                                json!({
+                                    "event": "cognitive.step_failed",
+                                    "action": action_clone.action_type(),
+                                    "error": error,
+                                    "attempt": step.attempts,
+                                }),
+                            )?;
+
+                            if step.attempts >= step.max_retries {
+                                state.current_step_index += 1;
+                            }
+
+                            (false, 0.0, Some(error))
                         }
+                    };
 
-                        step.status = StepStatus::Failed;
-                        step.result = Some(error.clone());
-                        state.consecutive_failures += 1;
+                // If more steps remain, return and continue next cycle
+                if state.current_step_index < state.steps.len() {
+                    return Ok(CycleResult {
+                        phase: CognitivePhase::Act,
+                        steps_executed: if step_executed { 1 } else { 0 },
+                        fuel_consumed: step_fuel,
+                        should_continue: true,
+                        blocked_reason: step_error,
+                    });
+                }
 
-                        self.emit_step_executed(agent_id, step);
-
-                        audit.append_event(
-                            uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
-                            EventType::UserAction,
-                            json!({
-                                "event": "cognitive.step_failed",
-                                "action": action_clone.action_type(),
-                                "error": error,
-                                "attempt": step.attempts,
-                            }),
-                        )?;
-
-                        if step.attempts >= step.max_retries {
-                            state.current_step_index += 1;
-                        }
-
-                        (false, 0.0, Some(error))
-                    }
-                };
-
-            // If more steps remain, return and continue next cycle
-            if state.current_step_index < state.steps.len() {
-                return Ok(CycleResult {
-                    phase: CognitivePhase::Act,
-                    steps_executed: if step_executed { 1 } else { 0 },
-                    fuel_consumed: step_fuel,
-                    should_continue: true,
-                    blocked_reason: step_error,
-                });
-            }
-
-            // All steps done — fall through to reflection/completion below
-            act_result = Some((step_executed, step_fuel, step_error));
+                // All steps done — fall through to reflection/completion below
+                act_result = Some((step_executed, step_fuel, step_error));
             } // end else (non-A2A action)
         }
 
@@ -1120,11 +1122,8 @@ impl CognitiveRuntime {
                         .last()
                         .map(|s| format!("{:?}", s.action))
                         .unwrap_or_default();
-                    let (passed, summary, confidence) = arena.challenge(
-                        state.goal.description.as_str(),
-                        &step_content,
-                        &caps,
-                    );
+                    let (passed, summary, confidence) =
+                        arena.challenge(state.goal.description.as_str(), &step_content, &caps);
                     let _ = memory_mgr.store_episodic(
                         agent_id,
                         "adversarial_reflect",
@@ -1136,9 +1135,7 @@ impl CognitiveRuntime {
                         ),
                     );
                     if !passed {
-                        eprintln!(
-                            "Adversarial review failed for agent {agent_id}: {summary}"
-                        );
+                        eprintln!("Adversarial review failed for agent {agent_id}: {summary}");
                     }
                 }
             }
@@ -1219,17 +1216,32 @@ impl CognitiveRuntime {
 
     /// Stop a running agent loop.
     pub fn stop_agent_loop(&self, agent_id: &str) -> Result<(), AgentError> {
-        if let Some(flag) = self.shutdown_flags.lock().unwrap_or_else(|p| p.into_inner()).get(agent_id) {
+        if let Some(flag) = self
+            .shutdown_flags
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(agent_id)
+        {
             flag.store(true, Ordering::Relaxed);
         }
-        self.loops.lock().unwrap_or_else(|p| p.into_inner()).remove(agent_id);
-        self.shutdown_flags.lock().unwrap_or_else(|p| p.into_inner()).remove(agent_id);
+        self.loops
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(agent_id);
+        self.shutdown_flags
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(agent_id);
         Ok(())
     }
 
     /// Get the current cognitive phase for an agent.
     pub fn get_agent_phase(&self, agent_id: &str) -> Option<CognitivePhase> {
-        self.loops.lock().unwrap_or_else(|p| p.into_inner()).get(agent_id).map(|s| s.phase)
+        self.loops
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(agent_id)
+            .map(|s| s.phase)
     }
 
     /// Get full cognitive status for an agent.
@@ -1260,7 +1272,10 @@ impl CognitiveRuntime {
 
     /// Check if an agent has an active cognitive loop.
     pub fn has_active_loop(&self, agent_id: &str) -> bool {
-        self.loops.lock().unwrap_or_else(|p| p.into_inner()).contains_key(agent_id)
+        self.loops
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .contains_key(agent_id)
     }
 
     /// Return the remaining plan steps that still require HITL approval.

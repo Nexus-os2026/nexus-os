@@ -50,12 +50,11 @@ async fn run_server() -> Result<(), String> {
         std::env::var("JWT_SECRET").unwrap_or_else(|_| "nexus-default-secret".to_string());
 
     // 1. Create gateway state.
-    let state = GatewayState::new(&jwt_secret)
-        .map_err(|e| format!("failed to initialize gateway: {e}"))?;
+    let state =
+        GatewayState::new(&jwt_secret).map_err(|e| format!("failed to initialize gateway: {e}"))?;
 
     // 2. Install Prometheus metrics.
-    let metrics = NexusMetrics::install()
-        .map_err(|e| format!("failed to install metrics: {e}"))?;
+    let metrics = NexusMetrics::install().map_err(|e| format!("failed to install metrics: {e}"))?;
     let state = state.with_metrics(metrics);
 
     // 3. Build router.

@@ -145,11 +145,9 @@ fn conductor_builds_website_e2e() {
         "web build should create at least one file"
     );
 
-    let has_html = created.iter().any(|p| {
-        p.extension()
-            .map(|ext| ext == "html")
-            .unwrap_or(false)
-    });
+    let has_html = created
+        .iter()
+        .any(|p| p.extension().map(|ext| ext == "html").unwrap_or(false));
     assert!(has_html, "web build should create an HTML file");
 
     // Cleanup

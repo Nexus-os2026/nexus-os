@@ -233,8 +233,7 @@ mod tests {
     #[test]
     fn detects_capability_escalation() {
         let mut arena = AdversarialArena::new();
-        let (passed, summary, _) =
-            arena.challenge("shell_command", "sudo rm -rf /etc/passwd", &[]);
+        let (passed, summary, _) = arena.challenge("shell_command", "sudo rm -rf /etc/passwd", &[]);
         assert!(!passed, "should fail on escalation: {summary}");
     }
 

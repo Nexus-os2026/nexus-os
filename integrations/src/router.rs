@@ -123,8 +123,10 @@ impl IntegrationRouter {
         if let Some(cfg) = &config.discord {
             if cfg.enabled {
                 if let Ok(integration) = Self::build_discord(cfg) {
-                    rate_limits
-                        .insert("discord".to_string(), SlidingWindow::new(cfg.rate_limit_rpm));
+                    rate_limits.insert(
+                        "discord".to_string(),
+                        SlidingWindow::new(cfg.rate_limit_rpm),
+                    );
                     providers.push(Box::new(integration));
                 }
             }
@@ -134,8 +136,10 @@ impl IntegrationRouter {
         if let Some(cfg) = &config.telegram {
             if cfg.enabled {
                 if let Ok(integration) = Self::build_telegram(cfg) {
-                    rate_limits
-                        .insert("telegram".to_string(), SlidingWindow::new(cfg.rate_limit_rpm));
+                    rate_limits.insert(
+                        "telegram".to_string(),
+                        SlidingWindow::new(cfg.rate_limit_rpm),
+                    );
                     providers.push(Box::new(integration));
                 }
             }
@@ -239,10 +243,7 @@ impl IntegrationRouter {
             // Once approved, the channel is whitelisted for 24 hours.
             if let Some(consent_mutex) = &self.consent {
                 if !self.is_channel_approved(&provider_name) {
-                    let payload = format!(
-                        "integration_send:{}:{}",
-                        provider_name, event_kind
-                    );
+                    let payload = format!("integration_send:{}:{}", provider_name, event_kind);
                     let hitl_result = if let (Ok(mut consent), Ok(mut audit_guard)) =
                         (consent_mutex.lock(), self.audit.lock())
                     {
@@ -461,9 +462,7 @@ impl IntegrationRouter {
 
     fn build_telegram(cfg: &ProviderConfig) -> Result<TelegramIntegration, IntegrationError> {
         let bot_token = cfg.resolve_setting("bot_token").unwrap_or_default();
-        let chat_id = cfg
-            .resolve_setting("default_chat_id")
-            .unwrap_or_default();
+        let chat_id = cfg.resolve_setting("default_chat_id").unwrap_or_default();
         TelegramIntegration::new(bot_token, chat_id)
     }
 }

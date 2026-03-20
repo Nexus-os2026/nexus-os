@@ -266,9 +266,7 @@ impl SemanticIndexer {
         }
 
         // Relative paths
-        if let Ok(rel_re) =
-            Regex::new(r#"(?:^|[\s"'`(])((?:\.\./|\./)?[\w]+(?:/[\w.]+)+\.\w+)"#)
-        {
+        if let Ok(rel_re) = Regex::new(r#"(?:^|[\s"'`(])((?:\.\./|\./)?[\w]+(?:/[\w.]+)+\.\w+)"#) {
             for cap in rel_re.captures_iter(content) {
                 let p = cap[1].to_string();
                 if seen.insert(p.clone()) {

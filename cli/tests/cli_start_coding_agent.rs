@@ -23,7 +23,12 @@ fn test_cli_start_coding_agent_dry_run() {
             assert!(output.contains("dry_run=true"));
             assert!(output.contains("iterations="));
         }
-        Err(e) if e.contains("ollama") || e.contains("provider") || e.contains("LLM") || e.contains("404") => {
+        Err(e)
+            if e.contains("ollama")
+                || e.contains("provider")
+                || e.contains("LLM")
+                || e.contains("404") =>
+        {
             // Ollama not running, model not pulled, or provider unavailable —
             // this is an environment issue, not a code bug.
             eprintln!(

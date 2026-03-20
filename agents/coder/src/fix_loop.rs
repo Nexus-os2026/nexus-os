@@ -69,8 +69,9 @@ impl Default for LlmErrorFixer {
 impl LlmErrorFixer {
     pub fn new() -> Self {
         let config = ProviderSelectionConfig::from_env();
-        let provider: Box<dyn LlmProvider> = select_provider(&config)
-            .unwrap_or_else(|_| Box::new(nexus_connectors_llm::providers::OllamaProvider::from_env()));
+        let provider: Box<dyn LlmProvider> = select_provider(&config).unwrap_or_else(|_| {
+            Box::new(nexus_connectors_llm::providers::OllamaProvider::from_env())
+        });
         let gateway = GovernedLlmGateway::new(provider);
         let capabilities = ["llm.query".to_string()]
             .into_iter()
@@ -150,34 +151,32 @@ pub fn fix_until_pass_with(
     for iteration in 1..=limit {
         if !pending_changes.is_empty() {
             applied_changes += apply_changes(project_path, pending_changes.as_slice())?;
-            if let Err(e) = audit
-                .append_event(
-                    Uuid::nil(),
-                    EventType::ToolCall,
-                    json!({
-                        "step": "apply_changes",
-                        "iteration": iteration,
-                        "changes": pending_changes.len(),
-                    }),
-                ) {
+            if let Err(e) = audit.append_event(
+                Uuid::nil(),
+                EventType::ToolCall,
+                json!({
+                    "step": "apply_changes",
+                    "iteration": iteration,
+                    "changes": pending_changes.len(),
+                }),
+            ) {
                 tracing::error!("Audit append failed: {e}");
             }
         }
 
         charge_fuel(&mut fuel_remaining, FUEL_COST_TEST_RUN)?;
         let test_result = executor.run_tests(project_path)?;
-        if let Err(e) = audit
-            .append_event(
-                Uuid::nil(),
-                EventType::ToolCall,
-                json!({
-                    "step": "run_tests",
-                    "iteration": iteration,
-                    "framework": format!("{:?}", test_result.framework),
-                    "passed": test_result.passed,
-                    "failed": test_result.failed,
-                }),
-            ) {
+        if let Err(e) = audit.append_event(
+            Uuid::nil(),
+            EventType::ToolCall,
+            json!({
+                "step": "run_tests",
+                "iteration": iteration,
+                "framework": format!("{:?}", test_result.framework),
+                "passed": test_result.passed,
+                "failed": test_result.failed,
+            }),
+        ) {
             tracing::error!("Audit append failed: {e}");
         }
 
@@ -203,17 +202,16 @@ pub fn fix_until_pass_with(
         charge_fuel(&mut fuel_remaining, FUEL_COST_FIX_GENERATION)?;
         pending_changes =
             fixer.propose_fixes(project_path, last_result.errors.as_slice(), iteration)?;
-        if let Err(e) = audit
-            .append_event(
-                Uuid::nil(),
-                EventType::LlmCall,
-                json!({
-                    "step": "generate_fix",
-                    "iteration": iteration,
-                    "proposed_changes": pending_changes.len(),
-                    "remaining_fuel": fuel_remaining,
-                }),
-            ) {
+        if let Err(e) = audit.append_event(
+            Uuid::nil(),
+            EventType::LlmCall,
+            json!({
+                "step": "generate_fix",
+                "iteration": iteration,
+                "proposed_changes": pending_changes.len(),
+                "remaining_fuel": fuel_remaining,
+            }),
+        ) {
             tracing::error!("Audit append failed: {e}");
         }
     }

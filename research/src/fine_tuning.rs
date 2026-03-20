@@ -112,16 +112,16 @@ impl FineTuningManager {
         let mut audit_trail = AuditTrail::new();
 
         if let Err(e) = audit_trail.append_event(
-                created_by,
-                EventType::UserAction,
-                json!({
-                    "event": "fine_tuning.job_created",
-                    "job_id": id.to_string(),
-                    "base_model": base_model,
-                    "training_data_hash": training_data_hash,
-                    "status": "Pending",
-                }),
-            ) {
+            created_by,
+            EventType::UserAction,
+            json!({
+                "event": "fine_tuning.job_created",
+                "job_id": id.to_string(),
+                "base_model": base_model,
+                "training_data_hash": training_data_hash,
+                "status": "Pending",
+            }),
+        ) {
             eprintln!("[WARN] audit write failed: {e}");
         }
 
@@ -159,15 +159,15 @@ impl FineTuningManager {
         job.approved_by = Some(approver_id);
 
         if let Err(e) = job.audit_trail.append_event(
-                approver_id,
-                EventType::UserAction,
-                json!({
-                    "event": "fine_tuning.job_approved",
-                    "job_id": job_id.to_string(),
-                    "approver": approver_id.to_string(),
-                    "status": "Approved",
-                }),
-            ) {
+            approver_id,
+            EventType::UserAction,
+            json!({
+                "event": "fine_tuning.job_approved",
+                "job_id": job_id.to_string(),
+                "approver": approver_id.to_string(),
+                "status": "Approved",
+            }),
+        ) {
             eprintln!("[WARN] audit write failed: {e}");
         }
 
@@ -197,16 +197,16 @@ impl FineTuningManager {
         };
 
         if let Err(e) = job.audit_trail.append_event(
-                approver_id,
-                EventType::UserAction,
-                json!({
-                    "event": "fine_tuning.job_rejected",
-                    "job_id": job_id.to_string(),
-                    "approver": approver_id.to_string(),
-                    "reason": reason,
-                    "status": "Rejected",
-                }),
-            ) {
+            approver_id,
+            EventType::UserAction,
+            json!({
+                "event": "fine_tuning.job_rejected",
+                "job_id": job_id.to_string(),
+                "approver": approver_id.to_string(),
+                "reason": reason,
+                "status": "Rejected",
+            }),
+        ) {
             eprintln!("[WARN] audit write failed: {e}");
         }
 
@@ -229,14 +229,14 @@ impl FineTuningManager {
         job.status = JobStatus::Training;
 
         if let Err(e) = job.audit_trail.append_event(
-                job.created_by,
-                EventType::StateChange,
-                json!({
-                    "event": "fine_tuning.training_started",
-                    "job_id": job_id.to_string(),
-                    "status": "Training",
-                }),
-            ) {
+            job.created_by,
+            EventType::StateChange,
+            json!({
+                "event": "fine_tuning.training_started",
+                "job_id": job_id.to_string(),
+                "status": "Training",
+            }),
+        ) {
             eprintln!("[WARN] audit write failed: {e}");
         }
 
@@ -279,15 +279,15 @@ impl FineTuningManager {
         if all_passed {
             job.status = JobStatus::Completed;
             if let Err(e) = job.audit_trail.append_event(
-                    created_by,
-                    EventType::StateChange,
-                    json!({
-                        "event": "fine_tuning.evaluation_passed",
-                        "job_id": job_id.to_string(),
-                        "status": "Completed",
-                        "results": results_json,
-                    }),
-                ) {
+                created_by,
+                EventType::StateChange,
+                json!({
+                    "event": "fine_tuning.evaluation_passed",
+                    "job_id": job_id.to_string(),
+                    "status": "Completed",
+                    "results": results_json,
+                }),
+            ) {
                 eprintln!("[WARN] audit write failed: {e}");
             }
         } else {
@@ -301,16 +301,16 @@ impl FineTuningManager {
                 reason: reason.clone(),
             };
             if let Err(e) = job.audit_trail.append_event(
-                    created_by,
-                    EventType::StateChange,
-                    json!({
-                        "event": "fine_tuning.evaluation_failed",
-                        "job_id": job_id.to_string(),
-                        "status": "Failed",
-                        "reason": reason,
-                        "results": results_json,
-                    }),
-                ) {
+                created_by,
+                EventType::StateChange,
+                json!({
+                    "event": "fine_tuning.evaluation_failed",
+                    "job_id": job_id.to_string(),
+                    "status": "Failed",
+                    "reason": reason,
+                    "results": results_json,
+                }),
+            ) {
                 eprintln!("[WARN] audit write failed: {e}");
             }
         }

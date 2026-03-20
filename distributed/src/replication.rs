@@ -206,10 +206,18 @@ mod tests {
         let mut node_b = ReplicationManager::new(b_id, transport);
 
         let agent = Uuid::new_v4();
-        if let Err(e) = node_a.trail_mut().append_event(agent, EventType::StateChange, json!({"action": "create"})) {
+        if let Err(e) = node_a.trail_mut().append_event(
+            agent,
+            EventType::StateChange,
+            json!({"action": "create"}),
+        ) {
             eprintln!("[WARN] audit write failed: {e}");
         }
-        if let Err(e) = node_a.trail_mut().append_event(agent, EventType::ToolCall, json!({"tool": "search"})) {
+        if let Err(e) =
+            node_a
+                .trail_mut()
+                .append_event(agent, EventType::ToolCall, json!({"tool": "search"}))
+        {
             eprintln!("[WARN] audit write failed: {e}");
         }
 
@@ -230,7 +238,11 @@ mod tests {
         let mut node_b = ReplicationManager::new(b_id, transport);
 
         let agent = Uuid::new_v4();
-        if let Err(e) = node_a.trail_mut().append_event(agent, EventType::StateChange, json!({"seq": 1})) {
+        if let Err(e) =
+            node_a
+                .trail_mut()
+                .append_event(agent, EventType::StateChange, json!({"seq": 1}))
+        {
             eprintln!("[WARN] audit write failed: {e}");
         }
 
@@ -240,10 +252,18 @@ mod tests {
         assert_eq!(node_b.trail().events().len(), 1);
 
         // Add more events on A
-        if let Err(e) = node_a.trail_mut().append_event(agent, EventType::ToolCall, json!({"seq": 2})) {
+        if let Err(e) =
+            node_a
+                .trail_mut()
+                .append_event(agent, EventType::ToolCall, json!({"seq": 2}))
+        {
             eprintln!("[WARN] audit write failed: {e}");
         }
-        if let Err(e) = node_a.trail_mut().append_event(agent, EventType::LlmCall, json!({"seq": 3})) {
+        if let Err(e) =
+            node_a
+                .trail_mut()
+                .append_event(agent, EventType::LlmCall, json!({"seq": 3}))
+        {
             eprintln!("[WARN] audit write failed: {e}");
         }
 
@@ -264,10 +284,18 @@ mod tests {
         let node_b = ReplicationManager::new(b_id, transport);
 
         let agent = Uuid::new_v4();
-        if let Err(e) = node_a.trail_mut().append_event(agent, EventType::StateChange, json!({"x": 1})) {
+        if let Err(e) =
+            node_a
+                .trail_mut()
+                .append_event(agent, EventType::StateChange, json!({"x": 1}))
+        {
             eprintln!("[WARN] audit write failed: {e}");
         }
-        if let Err(e) = node_a.trail_mut().append_event(agent, EventType::StateChange, json!({"x": 2})) {
+        if let Err(e) =
+            node_a
+                .trail_mut()
+                .append_event(agent, EventType::StateChange, json!({"x": 2}))
+        {
             eprintln!("[WARN] audit write failed: {e}");
         }
 
@@ -295,7 +323,11 @@ mod tests {
         let mut node_b = ReplicationManager::new(b_id, transport);
 
         let agent = Uuid::new_v4();
-        if let Err(e) = node_a.trail_mut().append_event(agent, EventType::StateChange, json!({"v": 1})) {
+        if let Err(e) =
+            node_a
+                .trail_mut()
+                .append_event(agent, EventType::StateChange, json!({"v": 1}))
+        {
             eprintln!("[WARN] audit write failed: {e}");
         }
 

@@ -132,21 +132,18 @@ impl GovernanceBridge {
         // Register with MCP server for tool discovery/invocation
         self.mcp_server.register_agent(agent_id, manifest.clone());
 
-        if let Err(e) = self.audit_trail
-            .append_event(
-                agent_id,
-                EventType::StateChange,
-                json!({
-                    "event_kind": "bridge.agent_registered",
-                    "agent_name": manifest.name,
-                    "capabilities": manifest.capabilities,
-                    "fuel_budget": fuel,
-                }),
-            )
-        {
+        if let Err(e) = self.audit_trail.append_event(
+            agent_id,
+            EventType::StateChange,
+            json!({
+                "event_kind": "bridge.agent_registered",
+                "agent_name": manifest.name,
+                "capabilities": manifest.capabilities,
+                "fuel_budget": fuel,
+            }),
+        ) {
             eprintln!("audit write failed: {e}");
         }
-
 
         agent_id
     }
@@ -182,18 +179,16 @@ impl GovernanceBridge {
         // Step 3: Capability check — infer required capability from payload
         let required_capability = infer_capability_from_payload(&request.payload);
         if !agent.manifest.capabilities.contains(&required_capability) {
-            if let Err(e) = self.audit_trail
-                .append_event(
-                    agent_id,
-                    EventType::Error,
-                    json!({
-                        "event_kind": "bridge.a2a_capability_denied",
-                        "sender": request.sender_id,
-                        "receiver": request.receiver_agent,
-                        "required_capability": required_capability,
-                    }),
-                )
-            {
+            if let Err(e) = self.audit_trail.append_event(
+                agent_id,
+                EventType::Error,
+                json!({
+                    "event_kind": "bridge.a2a_capability_denied",
+                    "sender": request.sender_id,
+                    "receiver": request.receiver_agent,
+                    "required_capability": required_capability,
+                }),
+            ) {
                 eprintln!("audit write failed: {e}");
             }
 
@@ -203,18 +198,16 @@ impl GovernanceBridge {
         // Step 4: Fuel check (1 fuel unit per A2A task)
         let fuel_cost = 1u64;
         if agent.fuel_remaining < fuel_cost {
-            if let Err(e) = self.audit_trail
-                .append_event(
-                    agent_id,
-                    EventType::Error,
-                    json!({
-                        "event_kind": "bridge.a2a_fuel_exhausted",
-                        "sender": request.sender_id,
-                        "receiver": request.receiver_agent,
-                        "fuel_remaining": agent.fuel_remaining,
-                    }),
-                )
-            {
+            if let Err(e) = self.audit_trail.append_event(
+                agent_id,
+                EventType::Error,
+                json!({
+                    "event_kind": "bridge.a2a_fuel_exhausted",
+                    "sender": request.sender_id,
+                    "receiver": request.receiver_agent,
+                    "fuel_remaining": agent.fuel_remaining,
+                }),
+            ) {
                 eprintln!("audit write failed: {e}");
             }
 
@@ -357,19 +350,17 @@ impl GovernanceBridge {
                 .get_tool_governance(agent_id, &request.tool_name),
         );
         if let Some(violation) = firewall_result {
-            if let Err(e) = self.audit_trail
-                .append_event(
-                    agent_id,
-                    EventType::Error,
-                    json!({
-                        "event_kind": "bridge.mcp_firewall_blocked",
-                        "caller": request.caller_id,
-                        "agent": request.agent_name,
-                        "tool": request.tool_name,
-                        "violation": violation,
-                    }),
-                )
-            {
+            if let Err(e) = self.audit_trail.append_event(
+                agent_id,
+                EventType::Error,
+                json!({
+                    "event_kind": "bridge.mcp_firewall_blocked",
+                    "caller": request.caller_id,
+                    "agent": request.agent_name,
+                    "tool": request.tool_name,
+                    "violation": violation,
+                }),
+            ) {
                 eprintln!("audit write failed: {e}");
             }
 
@@ -391,23 +382,20 @@ impl GovernanceBridge {
         }
 
         // Audit the bridge-level invocation
-        if let Err(e) = self.audit_trail
-            .append_event(
-                agent_id,
-                EventType::ToolCall,
-                json!({
-                    "event_kind": "bridge.mcp_tool_invoked",
-                    "caller": request.caller_id,
-                    "agent": request.agent_name,
-                    "tool": request.tool_name,
-                    "fuel_consumed": tool_result.fuel_consumed,
-                    "simulated": simulation.is_some(),
-                }),
-            )
-        {
+        if let Err(e) = self.audit_trail.append_event(
+            agent_id,
+            EventType::ToolCall,
+            json!({
+                "event_kind": "bridge.mcp_tool_invoked",
+                "caller": request.caller_id,
+                "agent": request.agent_name,
+                "tool": request.tool_name,
+                "fuel_consumed": tool_result.fuel_consumed,
+                "simulated": simulation.is_some(),
+            }),
+        ) {
             eprintln!("audit write failed: {e}");
         }
-
 
         Ok(McpInvokeResponse {
             result: tool_result,
@@ -438,16 +426,14 @@ impl GovernanceBridge {
         if !self.allowed_senders.is_empty()
             && !self.allowed_senders.contains(&sender_id.to_string())
         {
-            if let Err(e) = self.audit_trail
-                .append_event(
-                    Uuid::nil(),
-                    EventType::Error,
-                    json!({
-                        "event_kind": "bridge.sender_rejected",
-                        "sender": sender_id,
-                    }),
-                )
-            {
+            if let Err(e) = self.audit_trail.append_event(
+                Uuid::nil(),
+                EventType::Error,
+                json!({
+                    "event_kind": "bridge.sender_rejected",
+                    "sender": sender_id,
+                }),
+            ) {
                 eprintln!("audit write failed: {e}");
             }
 

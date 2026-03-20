@@ -376,10 +376,10 @@ mod tests {
         let mut trail = AuditTrail::new();
         for i in 0..count {
             if let Err(e) = trail.append_event(
-                    agent_id,
-                    EventType::ToolCall,
-                    json!({"tool": "web.search", "seq": i}),
-                ) {
+                agent_id,
+                EventType::ToolCall,
+                json!({"tool": "web.search", "seq": i}),
+            ) {
                 eprintln!("[WARN] audit write failed: {e}");
             }
         }

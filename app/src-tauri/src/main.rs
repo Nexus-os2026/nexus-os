@@ -895,20 +895,19 @@ impl AppState {
                 }
                 nexus_metering::MeteringStore::open(&metering_path).unwrap_or_else(|e| {
                     eprintln!("metering: falling back to in-memory DB: {e}");
-                    nexus_metering::MeteringStore::in_memory()
-                        .unwrap_or_else(|e2| {
-                            eprintln!("╔══════════════════════════════════════════╗");
-                            eprintln!("║  FATAL: Nexus OS failed to start         ║");
-                            eprintln!("╠══════════════════════════════════════════╣");
-                            eprintln!("║  Error: {e2}");
-                            eprintln!("║                                          ║");
-                            eprintln!("║  Please check:                           ║");
-                            eprintln!("║  1. Config file exists and is valid      ║");
-                            eprintln!("║  2. Required ports are available         ║");
-                            eprintln!("║  3. Sufficient disk space and memory     ║");
-                            eprintln!("╚══════════════════════════════════════════╝");
-                            std::process::exit(1);
-                        })
+                    nexus_metering::MeteringStore::in_memory().unwrap_or_else(|e2| {
+                        eprintln!("╔══════════════════════════════════════════╗");
+                        eprintln!("║  FATAL: Nexus OS failed to start         ║");
+                        eprintln!("╠══════════════════════════════════════════╣");
+                        eprintln!("║  Error: {e2}");
+                        eprintln!("║                                          ║");
+                        eprintln!("║  Please check:                           ║");
+                        eprintln!("║  1. Config file exists and is valid      ║");
+                        eprintln!("║  2. Required ports are available         ║");
+                        eprintln!("║  3. Sufficient disk space and memory     ║");
+                        eprintln!("╚══════════════════════════════════════════╝");
+                        std::process::exit(1);
+                    })
                 })
             })),
             metering_rates: Arc::new(nexus_metering::CostRates::default()),
@@ -934,7 +933,10 @@ impl AppState {
     #[cfg(test)]
     pub fn new_in_memory() -> Self {
         let supervisor = Arc::new(Mutex::new(Supervisor::new()));
-        let test_db = Arc::new(NexusDatabase::in_memory().unwrap_or_else(|e| { eprintln!("in-memory DB must succeed: {e}"); std::process::exit(1) }));
+        let test_db = Arc::new(NexusDatabase::in_memory().unwrap_or_else(|e| {
+            eprintln!("in-memory DB must succeed: {e}");
+            std::process::exit(1)
+        }));
         let evolution_tracker = Arc::new(nexus_kernel::cognitive::EvolutionTracker::new(Box::new(
             DbStrategyStore {
                 db: test_db.clone(),
@@ -1068,8 +1070,10 @@ impl AppState {
             workspace_manager: Arc::new(Mutex::new(WorkspaceManager::new())),
             integration_router: Arc::new(IntegrationRouter::empty()),
             metering_store: Arc::new(Mutex::new(
-                nexus_metering::MeteringStore::in_memory()
-                    .unwrap_or_else(|e| { eprintln!("in-memory metering DB must succeed: {e}"); std::process::exit(1) }),
+                nexus_metering::MeteringStore::in_memory().unwrap_or_else(|e| {
+                    eprintln!("in-memory metering DB must succeed: {e}");
+                    std::process::exit(1)
+                }),
             )),
             metering_rates: Arc::new(nexus_metering::CostRates::default()),
             telemetry_config: Arc::new(Mutex::new(nexus_telemetry::TelemetryConfig::desktop())),
@@ -5110,11 +5114,7 @@ pub fn a2a_get_task_status(
     serde_json::to_value(&result).map_err(|e| e.to_string())
 }
 
-pub fn a2a_cancel_task(
-    state: &AppState,
-    agent_url: String,
-    task_id: String,
-) -> Result<(), String> {
+pub fn a2a_cancel_task(state: &AppState, agent_url: String, task_id: String) -> Result<(), String> {
     let mut client = state.a2a_client.lock().unwrap_or_else(|p| p.into_inner());
     client
         .cancel_task(&agent_url, &task_id)
@@ -12465,12 +12465,27 @@ const DB_BLOCKED_KEYWORDS: &[&str] = &["DROP", "TRUNCATE", "ALTER", "DELETE", "G
 
 /// Allowed table names for direct SQL interpolation (whitelist approach).
 const ALLOWED_TABLES: &[&str] = &[
-    "agents", "audit_entries", "genomes", "capabilities",
-    "fuel_records", "sessions", "workspaces", "workspace_members",
-    "usage_records", "integration_configs", "backup_metadata",
-    "settings", "identities", "trust_links", "sqlite_master",
-    "sqlite_sequence", "consent_requests", "agent_memories",
-    "cognitive_tasks", "evolution_log", "marketplace_plugins",
+    "agents",
+    "audit_entries",
+    "genomes",
+    "capabilities",
+    "fuel_records",
+    "sessions",
+    "workspaces",
+    "workspace_members",
+    "usage_records",
+    "integration_configs",
+    "backup_metadata",
+    "settings",
+    "identities",
+    "trust_links",
+    "sqlite_master",
+    "sqlite_sequence",
+    "consent_requests",
+    "agent_memories",
+    "cognitive_tasks",
+    "evolution_log",
+    "marketplace_plugins",
 ];
 
 fn validate_table_name(name: &str) -> Result<&str, String> {
@@ -12665,8 +12680,8 @@ pub fn db_list_tables(state: &AppState, connection_string: String) -> Result<Str
     let mut detailed = Vec::new();
     for tbl in &tables {
         let name = tbl["name"].as_str().unwrap_or("");
-        let validated_name = validate_table_name(name)
-            .map_err(|e| format!("table validation error: {e}"))?;
+        let validated_name =
+            validate_table_name(name).map_err(|e| format!("table validation error: {e}"))?;
         let mut col_stmt = conn
             .prepare(&format!("PRAGMA table_info(\"{}\")", validated_name))
             .map_err(|e| format!("pragma error: {e}"))?;
@@ -12728,8 +12743,8 @@ pub fn db_export_table(
         json!({"action": "db_export", "table": table_name, "format": format}),
     );
 
-    let validated_name = validate_table_name(&table_name)
-        .map_err(|e| format!("Table validation failed: {e}"))?;
+    let validated_name =
+        validate_table_name(&table_name).map_err(|e| format!("Table validation failed: {e}"))?;
 
     let conn = rusqlite::Connection::open(&connection_string)
         .map_err(|e| format!("SQLite connection failed: {e}"))?;
@@ -12791,7 +12806,9 @@ pub fn db_export_table(
                 .collect();
             serde_json::to_string_pretty(&json_rows).map_err(|e| format!("json error: {e}"))
         }
-        _ => Err(format!("Unsupported export format: {format}. Use 'csv' or 'json'")),
+        _ => Err(format!(
+            "Unsupported export format: {format}. Use 'csv' or 'json'"
+        )),
     }
 }
 
@@ -12963,7 +12980,10 @@ pub fn learning_execute_challenge(
 
             // Check for unimplemented code
             if code.contains("todo!()") || code.contains("unimplemented!()") {
-                issues.push("Code contains unimplemented sections (todo!() or unimplemented!())".to_string());
+                issues.push(
+                    "Code contains unimplemented sections (todo!() or unimplemented!())"
+                        .to_string(),
+                );
                 passed = false;
             }
 
@@ -12994,13 +13014,15 @@ pub fn learning_execute_challenge(
                         issues.push("Expected audit trail usage".to_string());
                         passed = false;
                     }
-                    if !code.contains("append") && !code.contains("log") && !code.contains("record") {
+                    if !code.contains("append") && !code.contains("log") && !code.contains("record")
+                    {
                         issues.push("Expected event recording/appending logic".to_string());
                         passed = false;
                     }
                 }
                 "fuel-budget" => {
-                    if !code.contains("fuel") && !code.contains("Fuel") && !code.contains("budget") {
+                    if !code.contains("fuel") && !code.contains("Fuel") && !code.contains("budget")
+                    {
                         issues.push("Expected fuel budget tracking".to_string());
                         passed = false;
                     }
@@ -13008,7 +13030,9 @@ pub fn learning_execute_challenge(
                 _ => {
                     // Generic: must have some structure
                     if code.lines().filter(|l| !l.trim().is_empty()).count() < 5 {
-                        issues.push("Solution is too short — expected at least 5 lines of code".to_string());
+                        issues.push(
+                            "Solution is too short — expected at least 5 lines of code".to_string(),
+                        );
                         passed = false;
                     }
                 }
@@ -13804,8 +13828,14 @@ impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
         let route_model = ACTIVE_AGENT_LLM_ROUTE
             .with(|slot| slot.borrow().as_ref().map(|route| route.model.clone()));
         let (provider, model) = if let Some(route_model) = route_model {
-            provider_from_prefixed_model(&route_model, &prov_config)
-                .unwrap_or_else(|_| (select_provider(&prov_config).unwrap_or_else(|_| Box::new(OllamaProvider::from_env()) as Box<dyn LlmProvider>), route_model))
+            provider_from_prefixed_model(&route_model, &prov_config).unwrap_or_else(|_| {
+                (
+                    select_provider(&prov_config).unwrap_or_else(|_| {
+                        Box::new(OllamaProvider::from_env()) as Box<dyn LlmProvider>
+                    }),
+                    route_model,
+                )
+            })
         } else {
             let provider = select_provider(&prov_config)?;
             let model = if config.llm.default_model.trim().is_empty() {
@@ -14214,7 +14244,8 @@ impl nexus_kernel::actuators::ActionReviewEngine for WardenReviewEngine {
             "Agent {actor_name} wants to execute {}. Is this safe? Respond YES or NO with reason.",
             format_hitl_action_summary(action)
         );
-        let provider = select_provider(&build_provider_config(&config)).map_err(|e| e.to_string())?;
+        let provider =
+            select_provider(&build_provider_config(&config)).map_err(|e| e.to_string())?;
         let response = provider
             .query(&prompt, 256, &warden_model)
             .map_err(agent_error)?
@@ -17995,12 +18026,7 @@ fn integrations_list(state: &AppState) -> Result<String, String> {
             "MicrosoftTeams",
             "NEXUS_TEAMS_WEBHOOK_URL",
         ),
-        (
-            "discord",
-            "Discord",
-            "Discord",
-            "NEXUS_DISCORD_BOT_TOKEN",
-        ),
+        ("discord", "Discord", "Discord", "NEXUS_DISCORD_BOT_TOKEN"),
         (
             "telegram",
             "Telegram",
@@ -19047,9 +19073,7 @@ mod runtime {
     }
 
     #[tauri::command]
-    fn a2a_known_agents(
-        state: tauri::State<'_, AppState>,
-    ) -> Result<serde_json::Value, String> {
+    fn a2a_known_agents(state: tauri::State<'_, AppState>) -> Result<serde_json::Value, String> {
         super::a2a_known_agents(state.inner())
     }
 
@@ -21021,10 +21045,7 @@ mod runtime {
     }
 
     #[tauri::command]
-    fn db_disconnect(
-        state: tauri::State<'_, AppState>,
-        db_path: String,
-    ) -> Result<(), String> {
+    fn db_disconnect(state: tauri::State<'_, AppState>, db_path: String) -> Result<(), String> {
         super::db_disconnect(state.inner(), db_path)
     }
 
@@ -23153,8 +23174,15 @@ mod tests {
 
     #[test]
     fn test_nexus_operator_manifest_parses() {
-        let raw = std::fs::read_to_string("../../agents/prebuilt/nexus-operator.json").unwrap_or_else(|e| { eprintln!("read_to_string failed: {e}"); std::process::exit(1) });
-        let manifest = parse_agent_manifest_json(&raw).unwrap_or_else(|e| { eprintln!("manifest parse failed: {e}"); std::process::exit(1) });
+        let raw = std::fs::read_to_string("../../agents/prebuilt/nexus-operator.json")
+            .unwrap_or_else(|e| {
+                eprintln!("read_to_string failed: {e}");
+                std::process::exit(1)
+            });
+        let manifest = parse_agent_manifest_json(&raw).unwrap_or_else(|e| {
+            eprintln!("manifest parse failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(manifest.name, "nexus-operator");
         assert!(manifest.capabilities.contains(&"computer.use".to_string()));
         assert!(manifest
@@ -23178,8 +23206,14 @@ mod tests {
             4,
             None,
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let status = get_simulation_status(&state, world_id.clone()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let status = get_simulation_status(&state, world_id.clone()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(status.world_id, world_id);
         assert_eq!(status.persona_count, 12);
         assert_eq!(status.max_ticks, 4);
@@ -23196,15 +23230,24 @@ mod tests {
             3,
             None,
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         inject_simulation_variable(
             &state,
             world_id.clone(),
             "policy_signal".to_string(),
             "passed".to_string(),
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let status = get_simulation_status(&state, world_id).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let status = get_simulation_status(&state, world_id).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(
             status.variables.get("policy_signal"),
             Some(&"passed".to_string())
@@ -23222,9 +23265,25 @@ mod tests {
             2,
             None,
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let row = state.db.load_simulation_world(&world_id).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) }).unwrap_or_else(|| { eprintln!("simulation world not found"); std::process::exit(1) });
-        let mut persisted = super::load_persisted_simulation_state(&row).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let row = state
+            .db
+            .load_simulation_world(&world_id)
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            })
+            .unwrap_or_else(|| {
+                eprintln!("simulation world not found");
+                std::process::exit(1)
+            });
+        let mut persisted = super::load_persisted_simulation_state(&row).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         persisted.tick_interval_ms = 0;
         state
             .db
@@ -23239,9 +23298,15 @@ mod tests {
                 row.report_json.as_deref(),
                 row.completed_at.as_deref(),
             )
-            .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
         start_simulation_with_observer(&state, world_id.clone(), Arc::new(TestSimulationObserver))
-            .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
         for _ in 0..50 {
             if let Ok(report) = get_simulation_report(&state, world_id.clone()) {
                 assert!(report.confidence > 0.0);
@@ -23249,7 +23314,8 @@ mod tests {
             }
             thread::sleep(Duration::from_millis(20));
         }
-        eprintln!("simulation report was not generated in time"); std::process::exit(1);
+        eprintln!("simulation report was not generated in time");
+        std::process::exit(1);
     }
 
     #[test]
@@ -23263,22 +23329,38 @@ mod tests {
             3,
             None,
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let summaries = list_simulations(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let summaries = list_simulations(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(summaries.len(), 1);
         let reports = run_parallel_simulation_reports(
             &state,
             "Macro outlook with rate pressure.".to_string(),
             3,
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(reports.len(), 3);
     }
 
     #[test]
     fn test_nexus_prophet_manifest_parses() {
-        let raw = std::fs::read_to_string("../../agents/prebuilt/nexus-prophet.json").unwrap_or_else(|e| { eprintln!("read_to_string failed: {e}"); std::process::exit(1) });
-        let manifest = parse_agent_manifest_json(&raw).unwrap_or_else(|e| { eprintln!("manifest parse failed: {e}"); std::process::exit(1) });
+        let raw = std::fs::read_to_string("../../agents/prebuilt/nexus-prophet.json")
+            .unwrap_or_else(|e| {
+                eprintln!("read_to_string failed: {e}");
+                std::process::exit(1)
+            });
+        let manifest = parse_agent_manifest_json(&raw).unwrap_or_else(|e| {
+            eprintln!("manifest parse failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(manifest.name, "nexus-prophet");
         assert!(manifest.capabilities.contains(&"web.search".to_string()));
         assert!(manifest.capabilities.contains(&"self.modify".to_string()));
@@ -23295,8 +23377,14 @@ mod tests {
                 .unwrap_or_else(|p| p.into_inner());
             engine.enable();
         }
-        stop_computer_action(&state, "session-1".to_string()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let status = get_input_control_status(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        stop_computer_action(&state, "session-1".to_string()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let status = get_input_control_status(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(!status.enabled);
     }
 
@@ -23305,10 +23393,16 @@ mod tests {
         let state = AppState::new_in_memory();
         let created = create_agent(&state, build_transcendent_manifest("transcendent-pending"));
         assert!(created.is_ok());
-        let created = created.unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let created = created.unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(created.starts_with("approval-requested:"));
 
-        let pending = state.db.load_pending_consent().unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let pending = state.db.load_pending_consent().unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].operation_type, "transcendent_creation");
         assert!(pending[0]
@@ -23356,12 +23450,17 @@ mod tests {
             let path = paths
                 .iter()
                 .find(|path| path.file_name().and_then(|name| name.to_str()) == Some(file))
-                .unwrap_or_else(|| { eprintln!("manifest should exist: {file}"); std::process::exit(1) });
+                .unwrap_or_else(|| {
+                    eprintln!("manifest should exist: {file}");
+                    std::process::exit(1)
+                });
             let raw = std::fs::read_to_string(path).unwrap_or_else(|e| {
-                eprintln!("manifest {file} should be readable: {e}"); std::process::exit(1);
+                eprintln!("manifest {file} should be readable: {e}");
+                std::process::exit(1);
             });
             let manifest = parse_agent_manifest_json(&raw).unwrap_or_else(|e| {
-                eprintln!("manifest {file} failed to parse: {e}"); std::process::exit(1);
+                eprintln!("manifest {file} failed to parse: {e}");
+                std::process::exit(1);
             });
             assert_eq!(manifest.autonomy_level, Some(6));
         }
@@ -23387,12 +23486,17 @@ mod tests {
             let path = paths
                 .iter()
                 .find(|path| path.file_name().and_then(|name| name.to_str()) == Some(file))
-                .unwrap_or_else(|| { eprintln!("manifest should exist: {file}"); std::process::exit(1) });
+                .unwrap_or_else(|| {
+                    eprintln!("manifest should exist: {file}");
+                    std::process::exit(1)
+                });
             let raw = std::fs::read_to_string(path).unwrap_or_else(|e| {
-                eprintln!("manifest {file} should be readable: {e}"); std::process::exit(1);
+                eprintln!("manifest {file} should be readable: {e}");
+                std::process::exit(1);
             });
             parse_agent_manifest_json(&raw).unwrap_or_else(|e| {
-                eprintln!("manifest {file} failed to parse: {e}"); std::process::exit(1);
+                eprintln!("manifest {file} failed to parse: {e}");
+                std::process::exit(1);
             });
             let description = super::parse_manifest_description(&raw);
             let word_count = description.split_whitespace().count();
@@ -23413,7 +23517,10 @@ mod tests {
     fn test_load_prebuilt_agents_registers_every_manifest() {
         let state = AppState::new_in_memory();
         state.load_prebuilt_agents();
-        let agents = state.db.list_agents().unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let agents = state.db.list_agents().unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(agents.len(), list_prebuilt_manifest_paths().len());
     }
 
@@ -23422,7 +23529,10 @@ mod tests {
         let state = AppState::new_in_memory();
         state.load_prebuilt_agents();
         state.load_prebuilt_agents();
-        let agents = state.db.list_agents().unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let agents = state.db.list_agents().unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(agents.len(), list_prebuilt_manifest_paths().len());
     }
 
@@ -23431,7 +23541,10 @@ mod tests {
         let state = AppState::new_in_memory();
         state.load_prebuilt_agents();
 
-        let agents = list_agents(&state).unwrap_or_else(|e| { eprintln!("list_agents should succeed: {e}"); std::process::exit(1) });
+        let agents = list_agents(&state).unwrap_or_else(|e| {
+            eprintln!("list_agents should succeed: {e}");
+            std::process::exit(1)
+        });
         let manifest_count = list_prebuilt_manifest_paths().len();
 
         assert_eq!(agents.len(), manifest_count);
@@ -23444,8 +23557,10 @@ mod tests {
         let state = AppState::new_in_memory();
         state.load_prebuilt_agents();
 
-        let agents = super::get_preinstalled_agents(&state)
-            .unwrap_or_else(|e| { eprintln!("preinstalled agent query should succeed: {e}"); std::process::exit(1) });
+        let agents = super::get_preinstalled_agents(&state).unwrap_or_else(|e| {
+            eprintln!("preinstalled agent query should succeed: {e}");
+            std::process::exit(1)
+        });
         let manifest_count = list_prebuilt_manifest_paths().len();
 
         assert_eq!(agents.len(), manifest_count);
@@ -23458,20 +23573,45 @@ mod tests {
         let state = AppState::new_in_memory();
         let created = create_agent_immediately(
             &state,
-            parse_agent_manifest_json(&build_transcendent_manifest("transcendent-start")).unwrap_or_else(|e| { eprintln!("manifest parse failed: {e}"); std::process::exit(1) }),
+            parse_agent_manifest_json(&build_transcendent_manifest("transcendent-start"))
+                .unwrap_or_else(|e| {
+                    eprintln!("manifest parse failed: {e}");
+                    std::process::exit(1)
+                }),
             build_transcendent_manifest("transcendent-start"),
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
-        stop_agent(&state, created.clone()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        start_agent(&state, created.clone()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        stop_agent(&state, created.clone()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        start_agent(&state, created.clone()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
-        let pending = state.db.load_pending_consent().unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let pending = state.db.load_pending_consent().unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(pending.len(), 1);
         assert!(pending[0].operation_json.contains("activate_existing"));
 
-        let listed = list_agents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let agent = listed.iter().find(|row| row.id == created).unwrap_or_else(|| { eprintln!("unexpected None"); std::process::exit(1) });
+        let listed = list_agents(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let agent = listed
+            .iter()
+            .find(|row| row.id == created)
+            .unwrap_or_else(|| {
+                eprintln!("unexpected None");
+                std::process::exit(1)
+            });
         assert_eq!(agent.status, "Stopped");
     }
 
@@ -23485,22 +23625,34 @@ mod tests {
             let paused = pause_agent(&state, agent_id.clone());
             assert!(paused.is_ok());
 
-            let paused_rows = list_agents(&state).unwrap_or_else(|e| { eprintln!("list should succeed: {e}"); std::process::exit(1) });
+            let paused_rows = list_agents(&state).unwrap_or_else(|e| {
+                eprintln!("list should succeed: {e}");
+                std::process::exit(1)
+            });
             let target = paused_rows
                 .iter()
                 .find(|a| a.id == agent_id)
-                .unwrap_or_else(|| { eprintln!("agent should exist"); std::process::exit(1) });
+                .unwrap_or_else(|| {
+                    eprintln!("agent should exist");
+                    std::process::exit(1)
+                });
             assert_eq!(target.status, "Paused");
             assert_eq!(target.last_action, "paused");
 
             let resumed = resume_agent(&state, agent_id.clone());
             assert!(resumed.is_ok());
 
-            let resumed_rows = list_agents(&state).unwrap_or_else(|e| { eprintln!("list should succeed: {e}"); std::process::exit(1) });
+            let resumed_rows = list_agents(&state).unwrap_or_else(|e| {
+                eprintln!("list should succeed: {e}");
+                std::process::exit(1)
+            });
             let target = resumed_rows
                 .iter()
                 .find(|a| a.id == agent_id)
-                .unwrap_or_else(|| { eprintln!("agent should exist"); std::process::exit(1) });
+                .unwrap_or_else(|| {
+                    eprintln!("agent should exist");
+                    std::process::exit(1)
+                });
             assert_eq!(target.status, "Running");
             assert_eq!(target.last_action, "resumed");
         }
@@ -23509,16 +23661,25 @@ mod tests {
     #[test]
     fn test_cleanup_legacy_agent_db_only_once() {
         let temp = std::env::temp_dir().join(format!("nexus-cleanup-test-{}", Uuid::new_v4()));
-        std::fs::create_dir_all(&temp).unwrap_or_else(|e| { eprintln!("create_dir_all failed: {e}"); std::process::exit(1) });
+        std::fs::create_dir_all(&temp).unwrap_or_else(|e| {
+            eprintln!("create_dir_all failed: {e}");
+            std::process::exit(1)
+        });
         let db_path = temp.join("nexus.db");
         let flag_path = temp.join(".cleanup-flag");
 
-        std::fs::write(&db_path, "stale-db").unwrap_or_else(|e| { eprintln!("fs::write failed: {e}"); std::process::exit(1) });
+        std::fs::write(&db_path, "stale-db").unwrap_or_else(|e| {
+            eprintln!("fs::write failed: {e}");
+            std::process::exit(1)
+        });
         super::cleanup_legacy_agent_db_if_needed(&db_path, &flag_path);
         assert!(!db_path.exists());
         assert!(flag_path.exists());
 
-        std::fs::write(&db_path, "fresh-db").unwrap_or_else(|e| { eprintln!("fs::write failed: {e}"); std::process::exit(1) });
+        std::fs::write(&db_path, "fresh-db").unwrap_or_else(|e| {
+            eprintln!("fs::write failed: {e}");
+            std::process::exit(1)
+        });
         super::cleanup_legacy_agent_db_if_needed(&db_path, &flag_path);
         assert!(db_path.exists());
         let _ = std::fs::remove_dir_all(&temp);
@@ -23531,17 +23692,26 @@ mod tests {
         let state = AppState::new();
         let result = navigate_to(&state, "https://docs.rust-lang.org/".to_string());
         assert!(result.is_ok());
-        let nav = result.unwrap_or_else(|e| { eprintln!("command failed: {e}"); std::process::exit(1) });
+        let nav = result.unwrap_or_else(|e| {
+            eprintln!("command failed: {e}");
+            std::process::exit(1)
+        });
         assert!(nav.allowed);
         assert_eq!(nav.url, "https://docs.rust-lang.org/");
 
         // History should have one entry
-        let hist = get_browser_history(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let hist = get_browser_history(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(hist.len(), 1);
         assert_eq!(hist[0].url, "https://docs.rust-lang.org/");
 
         // Activity log should have recorded the visit
-        let activity = get_agent_activity(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let activity = get_agent_activity(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(!activity.is_empty());
 
         // Audit trail should have at least one event
@@ -23554,12 +23724,18 @@ mod tests {
         let state = AppState::new();
         let result = navigate_to(&state, "https://malware.example.com/payload".to_string());
         assert!(result.is_ok());
-        let nav = result.unwrap_or_else(|e| { eprintln!("command failed: {e}"); std::process::exit(1) });
+        let nav = result.unwrap_or_else(|e| {
+            eprintln!("command failed: {e}");
+            std::process::exit(1)
+        });
         assert!(!nav.allowed);
         assert!(nav.deny_reason.is_some());
         assert!(nav
             .deny_reason
-            .unwrap_or_else(|| { eprintln!("expected deny_reason"); std::process::exit(1) })
+            .unwrap_or_else(|| {
+                eprintln!("expected deny_reason");
+                std::process::exit(1)
+            })
             .contains("blocked by egress policy"));
     }
 
@@ -23568,7 +23744,10 @@ mod tests {
         let state = AppState::new();
         let result = navigate_to(&state, "ftp://files.example.com/data".to_string());
         assert!(result.is_ok());
-        let nav = result.unwrap_or_else(|e| { eprintln!("command failed: {e}"); std::process::exit(1) });
+        let nav = result.unwrap_or_else(|e| {
+            eprintln!("command failed: {e}");
+            std::process::exit(1)
+        });
         assert!(!nav.allowed);
     }
 
@@ -23579,7 +23758,10 @@ mod tests {
         let state = AppState::new();
         let result = start_research(&state, "Rust async patterns".to_string(), 3);
         assert!(result.is_ok());
-        let session = result.unwrap_or_else(|e| { eprintln!("command failed: {e}"); std::process::exit(1) });
+        let session = result.unwrap_or_else(|e| {
+            eprintln!("command failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(session.sub_agents.len(), 3);
         assert_eq!(session.status, "running");
         assert_eq!(session.topic, "Rust async patterns");
@@ -23598,10 +23780,16 @@ mod tests {
     #[test]
     fn test_research_complete_merges_findings() {
         let state = AppState::new();
-        let session = start_research(&state, "WebAssembly".to_string(), 2).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let session = start_research(&state, "WebAssembly".to_string(), 2).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         let result = complete_research(&state, session.session_id);
         assert!(result.is_ok());
-        let completed = result.unwrap_or_else(|e| { eprintln!("command failed: {e}"); std::process::exit(1) });
+        let completed = result.unwrap_or_else(|e| {
+            eprintln!("command failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(completed.status, "complete");
         assert!(completed.total_fuel_used > 0);
     }
@@ -23611,14 +23799,20 @@ mod tests {
     #[test]
     fn test_build_session_streams_code() {
         let state = AppState::new();
-        let session = start_build(&state, "Dashboard widget".to_string()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let session = start_build(&state, "Dashboard widget".to_string()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(session.status, "planning");
         assert!(!session.messages.is_empty());
 
         // Complete the build
         let result = complete_build(&state, session.session_id);
         assert!(result.is_ok());
-        let completed = result.unwrap_or_else(|e| { eprintln!("command failed: {e}"); std::process::exit(1) });
+        let completed = result.unwrap_or_else(|e| {
+            eprintln!("command failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(completed.status, "complete");
     }
 
@@ -23640,7 +23834,10 @@ mod tests {
             },
         ];
 
-        let session = start_learning(&state, sources).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let session = start_learning(&state, sources).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(session.status, "browsing");
         assert_eq!(session.sources.len(), 2);
 
@@ -23652,7 +23849,10 @@ mod tests {
             Some("https://docs.rust-lang.org/stable/".to_string()),
             None,
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(browsed.pages_visited, 1);
         assert!(browsed.fuel_used > 0);
 
@@ -23664,7 +23864,10 @@ mod tests {
             Some("https://docs.rust-lang.org/stable/".to_string()),
             Some("Rust 1.78 adds diagnostic attributes".to_string()),
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(extracted.knowledge_base.len(), 1);
         assert!(extracted.knowledge_base[0]
             .key_points
@@ -23679,7 +23882,10 @@ mod tests {
             None,
             None,
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(compared.knowledge_base[0].is_new);
 
         // Complete session
@@ -23690,11 +23896,17 @@ mod tests {
             None,
             None,
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(done.status, "complete");
 
         // Global knowledge base should now have entries
-        let kb = get_knowledge_base(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let kb = get_knowledge_base(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(!kb.is_empty());
     }
 
@@ -23721,7 +23933,10 @@ mod tests {
             category: "documentation".to_string(),
         }];
 
-        let session = start_learning(&state, sources).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let session = start_learning(&state, sources).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
         // Try browsing a blocked URL during the session
         let result = learning_agent_action(
@@ -23756,7 +23971,10 @@ mod tests {
             &tmp,
             "Rust is a systems programming language focused on safety.",
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
         // Index the document
         let ingest_result = index_document(&state, tmp.to_string_lossy().to_string());
@@ -23770,7 +23988,11 @@ mod tests {
         let chat_result = chat_with_documents(&state, "What is Rust?".to_string());
         assert!(chat_result.is_ok(), "chat failed: {:?}", chat_result.err());
 
-        let parsed: serde_json::Value = serde_json::from_str(&chat_result.unwrap_or_else(|e| e)).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let parsed: serde_json::Value = serde_json::from_str(&chat_result.unwrap_or_else(|e| e))
+            .unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            });
         assert!(parsed.get("answer").is_some());
         assert!(parsed.get("sources").is_some());
         assert!(parsed.get("model").is_some());
@@ -23786,14 +24008,21 @@ mod tests {
         let result = get_active_llm_provider(&state);
         assert!(result.is_ok());
 
-        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e)).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e))
+            .unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            });
         assert!(parsed.get("provider").is_some());
         assert!(parsed.get("model").is_some());
         assert!(parsed.get("embedding_model").is_some());
         assert!(parsed.get("status").is_some());
         assert!(parsed.get("message").is_some());
 
-        let provider = parsed["provider"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) });
+        let provider = parsed["provider"].as_str().unwrap_or_else(|| {
+            eprintln!("expected string value");
+            std::process::exit(1)
+        });
         assert!(!provider.is_empty());
     }
 
@@ -23804,14 +24033,34 @@ mod tests {
         std::env::set_var("LLM_PROVIDER", "mock");
         let state = AppState::new();
         let tmp = std::env::temp_dir().join("nexus_test_index_e2e.md");
-        std::fs::write(&tmp, "# Heading\n\nSome markdown content about Nexus OS.").unwrap_or_else(|e| { eprintln!("fs::write failed: {e}"); std::process::exit(1) });
+        std::fs::write(&tmp, "# Heading\n\nSome markdown content about Nexus OS.").unwrap_or_else(
+            |e| {
+                eprintln!("fs::write failed: {e}");
+                std::process::exit(1)
+            },
+        );
 
         let result = index_document(&state, tmp.to_string_lossy().to_string());
         assert!(result.is_ok(), "index_document failed: {:?}", result.err());
 
-        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e)).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
-        assert!(parsed["chunk_count"].as_u64().unwrap_or_else(|| { eprintln!("expected u64 value"); std::process::exit(1) }) > 0);
-        assert_eq!(parsed["path"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }), tmp.to_string_lossy());
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e))
+            .unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            });
+        assert!(
+            parsed["chunk_count"].as_u64().unwrap_or_else(|| {
+                eprintln!("expected u64 value");
+                std::process::exit(1)
+            }) > 0
+        );
+        assert_eq!(
+            parsed["path"].as_str().unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            }),
+            tmp.to_string_lossy()
+        );
 
         let _ = std::fs::remove_file(&tmp);
         // Note: don't remove LLM_PROVIDER — tests run in parallel in the same process.
@@ -23826,13 +24075,23 @@ mod tests {
             &tmp,
             "Quantum computing uses qubits for parallel computation.",
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
-        let _ = index_document(&state, tmp.to_string_lossy().to_string()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let _ = index_document(&state, tmp.to_string_lossy().to_string()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         let result = search_documents(&state, "quantum".to_string(), Some(5));
         assert!(result.is_ok(), "search failed: {:?}", result.err());
 
-        let parsed: Vec<serde_json::Value> = serde_json::from_str(&result.unwrap_or_else(|e| e)).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&result.unwrap_or_else(|e| e))
+            .unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            });
         // MockProvider embeddings may not produce high cosine similarity for all queries,
         // so we only verify the response parses as an array of valid result objects.
         for r in &parsed {
@@ -23850,14 +24109,32 @@ mod tests {
         let state = AppState::new();
         let tmp1 = std::env::temp_dir().join("nexus_test_list_a.txt");
         let tmp2 = std::env::temp_dir().join("nexus_test_list_b.txt");
-        std::fs::write(&tmp1, "Document A content.").unwrap_or_else(|e| { eprintln!("fs::write failed: {e}"); std::process::exit(1) });
-        std::fs::write(&tmp2, "Document B content.").unwrap_or_else(|e| { eprintln!("fs::write failed: {e}"); std::process::exit(1) });
+        std::fs::write(&tmp1, "Document A content.").unwrap_or_else(|e| {
+            eprintln!("fs::write failed: {e}");
+            std::process::exit(1)
+        });
+        std::fs::write(&tmp2, "Document B content.").unwrap_or_else(|e| {
+            eprintln!("fs::write failed: {e}");
+            std::process::exit(1)
+        });
 
-        let _ = index_document(&state, tmp1.to_string_lossy().to_string()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let _ = index_document(&state, tmp2.to_string_lossy().to_string()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let _ = index_document(&state, tmp1.to_string_lossy().to_string()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let _ = index_document(&state, tmp2.to_string_lossy().to_string()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
-        let result = list_indexed_documents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let parsed: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let result = list_indexed_documents(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(parsed.len(), 2);
 
         let _ = std::fs::remove_file(&tmp1);
@@ -23870,16 +24147,37 @@ mod tests {
         std::env::set_var("LLM_PROVIDER", "mock");
         let state = AppState::new();
         let tmp = std::env::temp_dir().join("nexus_test_remove.txt");
-        std::fs::write(&tmp, "Content to be removed.").unwrap_or_else(|e| { eprintln!("fs::write failed: {e}"); std::process::exit(1) });
+        std::fs::write(&tmp, "Content to be removed.").unwrap_or_else(|e| {
+            eprintln!("fs::write failed: {e}");
+            std::process::exit(1)
+        });
         let path_str = tmp.to_string_lossy().to_string();
 
-        let _ = index_document(&state, path_str.clone()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let result = remove_indexed_document(&state, path_str).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
-        assert!(parsed["removed"].as_bool().unwrap_or_else(|| { eprintln!("expected bool value"); std::process::exit(1) }));
+        let _ = index_document(&state, path_str.clone()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let result = remove_indexed_document(&state, path_str).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
+        assert!(parsed["removed"].as_bool().unwrap_or_else(|| {
+            eprintln!("expected bool value");
+            std::process::exit(1)
+        }));
 
-        let list = list_indexed_documents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let docs: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let list = list_indexed_documents(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let docs: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert!(docs.is_empty());
 
         let _ = std::fs::remove_file(&tmp);
@@ -23894,18 +24192,31 @@ mod tests {
         let result = list_local_models(&state);
         assert!(result.is_ok());
         // Must parse as a JSON array (may be empty)
-        let _: Vec<serde_json::Value> = serde_json::from_str(&result.unwrap_or_else(|e| e)).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let _: Vec<serde_json::Value> = serde_json::from_str(&result.unwrap_or_else(|e| e))
+            .unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            });
     }
 
     #[test]
     fn test_get_system_specs_has_fields() {
         let result = get_system_specs();
         assert!(result.is_ok());
-        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e)).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e))
+            .unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            });
         assert!(parsed.get("total_ram_mb").is_some());
         assert!(parsed.get("cpu_name").is_some());
         assert!(parsed.get("cpu_cores").is_some());
-        assert!(parsed["total_ram_mb"].as_u64().unwrap_or_else(|| { eprintln!("expected u64 value"); std::process::exit(1) }) > 0);
+        assert!(
+            parsed["total_ram_mb"].as_u64().unwrap_or_else(|| {
+                eprintln!("expected u64 value");
+                std::process::exit(1)
+            }) > 0
+        );
     }
 
     #[test]
@@ -23913,7 +24224,11 @@ mod tests {
         let state = AppState::new();
         let result = get_live_system_metrics(&state);
         assert!(result.is_ok());
-        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e)).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e))
+            .unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            });
         assert!(parsed.get("cpu_avg").is_some());
         assert!(parsed.get("cpu_cores").is_some());
         assert!(parsed.get("total_ram").is_some());
@@ -23921,7 +24236,12 @@ mod tests {
         assert!(parsed.get("uptime_secs").is_some());
         assert!(parsed.get("process_count").is_some());
         assert!(parsed.get("agents").is_some());
-        assert!(parsed["total_ram"].as_u64().unwrap_or_else(|| { eprintln!("expected u64 value"); std::process::exit(1) }) > 0);
+        assert!(
+            parsed["total_ram"].as_u64().unwrap_or_else(|| {
+                eprintln!("expected u64 value");
+                std::process::exit(1)
+            }) > 0
+        );
     }
 
     #[test]
@@ -23930,7 +24250,11 @@ mod tests {
         // 500 MB file
         let result = check_model_compatibility(&state, 500_000_000);
         assert!(result.is_ok());
-        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e)).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e))
+            .unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            });
         assert!(parsed.get("can_run").is_some());
     }
 
@@ -23940,24 +24264,56 @@ mod tests {
     fn test_time_machine_create_and_list_checkpoints() {
         let state = AppState::new();
         let baseline: Vec<serde_json::Value> =
-            serde_json::from_str(&time_machine_list_checkpoints(&state).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
+            serde_json::from_str(&time_machine_list_checkpoints(&state).unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            }))
+            .unwrap_or_else(|e| {
+                eprintln!("deserialization failed: {e}");
+                std::process::exit(1)
+            });
         let baseline_count = baseline.len();
 
         let created = time_machine_create_checkpoint(&state, "test-checkpoint".to_string());
         assert!(created.is_ok());
-        let cp_id = created.unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let cp_id = created.unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(!cp_id.is_empty());
 
-        let list_result = time_machine_list_checkpoints(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let parsed: Vec<serde_json::Value> = serde_json::from_str(&list_result).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let list_result = time_machine_list_checkpoints(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let parsed: Vec<serde_json::Value> =
+            serde_json::from_str(&list_result).unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            });
         assert!(
             parsed.len() == baseline_count || parsed.len() == baseline_count + 1,
             "checkpoint list should either grow by one or evict at capacity"
         );
         // Our checkpoint should be the last one
-        let last = parsed.last().unwrap_or_else(|| { eprintln!("unexpected None"); std::process::exit(1) });
-        assert_eq!(last["label"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }), "test-checkpoint");
-        assert_eq!(last["id"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }), cp_id);
+        let last = parsed.last().unwrap_or_else(|| {
+            eprintln!("unexpected None");
+            std::process::exit(1)
+        });
+        assert_eq!(
+            last["label"].as_str().unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            }),
+            "test-checkpoint"
+        );
+        assert_eq!(
+            last["id"].as_str().unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            }),
+            cp_id
+        );
     }
 
     #[test]
@@ -23973,19 +24329,51 @@ mod tests {
     fn test_time_machine_create_undo_redo_cycle() {
         let state = AppState::new();
 
-        let _ = time_machine_create_checkpoint(&state, "cycle-test".to_string()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let _ =
+            time_machine_create_checkpoint(&state, "cycle-test".to_string()).unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
 
         // Undo
         let undo_result = time_machine_undo(&state);
         assert!(undo_result.is_ok());
-        let undo_parsed: serde_json::Value = serde_json::from_str(&undo_result.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
-        assert_eq!(undo_parsed["label"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }), "cycle-test");
+        let undo_parsed: serde_json::Value =
+            serde_json::from_str(&undo_result.unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            }))
+            .unwrap_or_else(|e| {
+                eprintln!("deserialization failed: {e}");
+                std::process::exit(1)
+            });
+        assert_eq!(
+            undo_parsed["label"].as_str().unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            }),
+            "cycle-test"
+        );
 
         // Redo
         let redo_result = time_machine_redo(&state);
         assert!(redo_result.is_ok());
-        let redo_parsed: serde_json::Value = serde_json::from_str(&redo_result.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
-        assert_eq!(redo_parsed["label"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }), "cycle-test");
+        let redo_parsed: serde_json::Value =
+            serde_json::from_str(&redo_result.unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            }))
+            .unwrap_or_else(|e| {
+                eprintln!("deserialization failed: {e}");
+                std::process::exit(1)
+            });
+        assert_eq!(
+            redo_parsed["label"].as_str().unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            }),
+            "cycle-test"
+        );
     }
 
     // ── Voice wiring tests ──────────────────────────────────────────────
@@ -23995,7 +24383,11 @@ mod tests {
         let state = AppState::new();
         let result = voice_get_status(&state);
         assert!(result.is_ok());
-        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e)).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e))
+            .unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            });
         assert!(parsed.get("is_listening").is_some());
         assert!(parsed.get("wake_word").is_some());
         assert!(parsed.get("python_server_running").is_some());
@@ -24013,7 +24405,11 @@ mod tests {
         // With no whisper model loaded and no python server, should return clear error
         let result = voice_transcribe(&state, "AAAA".to_string());
         assert!(result.is_ok());
-        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e)).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e))
+            .unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            });
         assert_eq!(
             parsed["text"].as_str(),
             Some("Voice transcription requires Whisper model - load via Model Hub")
@@ -24029,8 +24425,14 @@ mod tests {
         let result = voice_load_whisper_model(&state, "/nonexistent/whisper/model".to_string());
         assert!(result.is_err());
         // Whisper should still not be loaded
-        let status = voice_get_status(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let parsed: serde_json::Value = serde_json::from_str(&status).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let status = voice_get_status(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let parsed: serde_json::Value = serde_json::from_str(&status).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(parsed["whisper_loaded"].as_bool(), Some(false));
     }
 
@@ -24041,7 +24443,11 @@ mod tests {
         // Send some base64 data (doesn't matter what — stub ignores content)
         let result = voice_transcribe(&state, "SGVsbG8gV29ybGQ=".to_string());
         assert!(result.is_ok());
-        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e)).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e))
+            .unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            });
         // Must always have text, engine, and duration_ms
         assert!(parsed["text"].is_string());
         assert!(parsed["engine"].is_string());
@@ -24065,9 +24471,18 @@ mod tests {
         assert!(earn_result.is_ok());
 
         // Check balance (default_balance=100 + earned=100 = 200)
-        let wallet = economy_get_wallet(&state, agent_id.clone()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let wallet_parsed: serde_json::Value = serde_json::from_str(&wallet).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
-        let balance = wallet_parsed["balance"].as_f64().unwrap_or_else(|| { eprintln!("expected f64 value"); std::process::exit(1) });
+        let wallet = economy_get_wallet(&state, agent_id.clone()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let wallet_parsed: serde_json::Value = serde_json::from_str(&wallet).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
+        let balance = wallet_parsed["balance"].as_f64().unwrap_or_else(|| {
+            eprintln!("expected f64 value");
+            std::process::exit(1)
+        });
         assert!((balance - 200.0).abs() < 0.01);
 
         // Spend credits (within default spending_limit of 10.0)
@@ -24081,19 +24496,40 @@ mod tests {
         assert!(spend_result.is_ok());
 
         // Verify balance after spend (200 - 5 = 195)
-        let wallet2 = economy_get_wallet(&state, agent_id.clone()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let w2: serde_json::Value = serde_json::from_str(&wallet2).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
-        let balance2 = w2["balance"].as_f64().unwrap_or_else(|| { eprintln!("expected f64 value"); std::process::exit(1) });
+        let wallet2 = economy_get_wallet(&state, agent_id.clone()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let w2: serde_json::Value = serde_json::from_str(&wallet2).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
+        let balance2 = w2["balance"].as_f64().unwrap_or_else(|| {
+            eprintln!("expected f64 value");
+            std::process::exit(1)
+        });
         assert!((balance2 - 195.0).abs() < 0.01);
 
         // History should have 2 transactions
-        let history = economy_get_history(&state, agent_id.clone()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let h: Vec<serde_json::Value> = serde_json::from_str(&history).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let history = economy_get_history(&state, agent_id.clone()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let h: Vec<serde_json::Value> = serde_json::from_str(&history).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(h.len(), 2);
 
         // Stats
-        let stats = economy_get_stats(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let s: serde_json::Value = serde_json::from_str(&stats).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let stats = economy_get_stats(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let s: serde_json::Value = serde_json::from_str(&stats).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert!(s.get("total_wallets").is_some());
     }
 
@@ -24103,9 +24539,18 @@ mod tests {
         let from_id = uuid::Uuid::new_v4().to_string();
         let to_id = uuid::Uuid::new_v4().to_string();
 
-        economy_create_wallet(&state, from_id.clone()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        economy_create_wallet(&state, to_id.clone()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        economy_earn(&state, from_id.clone(), 200.0, "seed".to_string()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        economy_create_wallet(&state, from_id.clone()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        economy_create_wallet(&state, to_id.clone()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        economy_earn(&state, from_id.clone(), 200.0, "seed".to_string()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
         let transfer = economy_transfer(
             &state,
@@ -24117,22 +24562,54 @@ mod tests {
         assert!(transfer.is_ok());
 
         // from: default(100) + earn(200) - transfer(50) = 250
-        let from_w = economy_get_wallet(&state, from_id).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let from_v: serde_json::Value = serde_json::from_str(&from_w).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
-        assert!((from_v["balance"].as_f64().unwrap_or_else(|| { eprintln!("expected f64 value"); std::process::exit(1) }) - 250.0).abs() < 0.01);
+        let from_w = economy_get_wallet(&state, from_id).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let from_v: serde_json::Value = serde_json::from_str(&from_w).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
+        assert!(
+            (from_v["balance"].as_f64().unwrap_or_else(|| {
+                eprintln!("expected f64 value");
+                std::process::exit(1)
+            }) - 250.0)
+                .abs()
+                < 0.01
+        );
 
         // to: default(100) + received(50) = 150
-        let to_w = economy_get_wallet(&state, to_id).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let to_v: serde_json::Value = serde_json::from_str(&to_w).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
-        assert!((to_v["balance"].as_f64().unwrap_or_else(|| { eprintln!("expected f64 value"); std::process::exit(1) }) - 150.0).abs() < 0.01);
+        let to_w = economy_get_wallet(&state, to_id).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let to_v: serde_json::Value = serde_json::from_str(&to_w).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
+        assert!(
+            (to_v["balance"].as_f64().unwrap_or_else(|| {
+                eprintln!("expected f64 value");
+                std::process::exit(1)
+            }) - 150.0)
+                .abs()
+                < 0.01
+        );
     }
 
     #[test]
     fn test_economy_freeze_wallet() {
         let state = AppState::new();
         let agent_id = uuid::Uuid::new_v4().to_string();
-        economy_create_wallet(&state, agent_id.clone()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        economy_earn(&state, agent_id.clone(), 100.0, "seed".to_string()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        economy_create_wallet(&state, agent_id.clone()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        economy_earn(&state, agent_id.clone(), 100.0, "seed".to_string()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
         let freeze = economy_freeze_wallet(&state, agent_id.clone());
         assert!(freeze.is_ok());
@@ -24153,8 +24630,14 @@ mod tests {
     #[test]
     fn test_ghost_protocol_status_has_device_id() {
         let state = AppState::new();
-        let result = ghost_protocol_status(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let result = ghost_protocol_status(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert!(parsed.get("device_id").is_some());
         assert!(parsed.get("enabled").is_some());
         assert!(parsed.get("peer_count").is_some());
@@ -24165,19 +24648,40 @@ mod tests {
     fn test_ghost_protocol_toggle() {
         let state = AppState::new();
 
-        let toggle = ghost_protocol_toggle(&state, true).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let parsed: serde_json::Value = serde_json::from_str(&toggle).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
-        assert!(parsed["enabled"].as_bool().unwrap_or_else(|| { eprintln!("expected bool value"); std::process::exit(1) }));
+        let toggle = ghost_protocol_toggle(&state, true).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let parsed: serde_json::Value = serde_json::from_str(&toggle).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
+        assert!(parsed["enabled"].as_bool().unwrap_or_else(|| {
+            eprintln!("expected bool value");
+            std::process::exit(1)
+        }));
 
-        let status = ghost_protocol_status(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let s: serde_json::Value = serde_json::from_str(&status).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
-        assert!(s["enabled"].as_bool().unwrap_or_else(|| { eprintln!("expected bool value"); std::process::exit(1) }));
+        let status = ghost_protocol_status(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let s: serde_json::Value = serde_json::from_str(&status).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
+        assert!(s["enabled"].as_bool().unwrap_or_else(|| {
+            eprintln!("expected bool value");
+            std::process::exit(1)
+        }));
     }
 
     #[test]
     fn test_ghost_protocol_add_remove_peer() {
         let state = AppState::new();
-        ghost_protocol_toggle(&state, true).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        ghost_protocol_toggle(&state, true).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
         let add_result = ghost_protocol_add_peer(
             &state,
@@ -24185,13 +24689,38 @@ mod tests {
             "test-peer".to_string(),
         );
         assert!(add_result.is_ok());
-        let added: serde_json::Value = serde_json::from_str(&add_result.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
-        let peer_device_id = added["device_id"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }).to_string();
+        let added: serde_json::Value = serde_json::from_str(&add_result.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
+        let peer_device_id = added["device_id"]
+            .as_str()
+            .unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            })
+            .to_string();
 
         // Verify peer count
-        let status = ghost_protocol_status(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let s: serde_json::Value = serde_json::from_str(&status).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
-        assert_eq!(s["peer_count"].as_u64().unwrap_or_else(|| { eprintln!("expected u64 value"); std::process::exit(1) }), 1);
+        let status = ghost_protocol_status(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let s: serde_json::Value = serde_json::from_str(&status).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
+        assert_eq!(
+            s["peer_count"].as_u64().unwrap_or_else(|| {
+                eprintln!("expected u64 value");
+                std::process::exit(1)
+            }),
+            1
+        );
 
         // Remove peer
         let remove = ghost_protocol_remove_peer(&state, peer_device_id);
@@ -24203,8 +24732,14 @@ mod tests {
     #[test]
     fn test_evolution_status() {
         let state = AppState::new();
-        let result = evolution_get_status(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let result = evolution_get_status(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert!(parsed.get("enabled").is_some());
         assert!(parsed.get("total_strategies").is_some());
         assert!(parsed.get("active_agents").is_some());
@@ -24223,18 +24758,44 @@ mod tests {
             params,
         );
         assert!(reg.is_ok());
-        let strategy: serde_json::Value = serde_json::from_str(&reg.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
-        assert_eq!(strategy["name"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }), "test-strategy");
+        let strategy: serde_json::Value = serde_json::from_str(&reg.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
+        assert_eq!(
+            strategy["name"].as_str().unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            }),
+            "test-strategy"
+        );
 
         // Evolve
         let evolve = evolution_evolve_once(&state, agent_id.clone());
         assert!(evolve.is_ok());
-        let evolved: serde_json::Value = serde_json::from_str(&evolve.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
+        let evolved: serde_json::Value = serde_json::from_str(&evolve.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
         assert!(evolved.get("generation").is_some());
 
         // History
-        let history = evolution_get_history(&state, agent_id.clone()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let h: serde_json::Value = serde_json::from_str(&history).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let history = evolution_get_history(&state, agent_id.clone()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let h: serde_json::Value = serde_json::from_str(&history).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert!(h.get("total_generations").is_some());
 
         // Active strategy
@@ -24253,8 +24814,14 @@ mod tests {
         let state = AppState::new();
 
         // Initially empty
-        let list = mcp_host_list_servers(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let servers: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let list = mcp_host_list_servers(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let servers: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert!(servers.is_empty());
 
         // Add server
@@ -24266,18 +24833,50 @@ mod tests {
             None,
         );
         assert!(add.is_ok());
-        let added: serde_json::Value = serde_json::from_str(&add.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
-        let server_id = added["id"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }).to_string();
+        let added: serde_json::Value = serde_json::from_str(&add.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
+        let server_id = added["id"]
+            .as_str()
+            .unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            })
+            .to_string();
 
         // List should have 1
-        let list2 = mcp_host_list_servers(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let servers2: Vec<serde_json::Value> = serde_json::from_str(&list2).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let list2 = mcp_host_list_servers(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let servers2: Vec<serde_json::Value> = serde_json::from_str(&list2).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(servers2.len(), 1);
-        assert_eq!(servers2[0]["name"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }), "test-server");
+        assert_eq!(
+            servers2[0]["name"].as_str().unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            }),
+            "test-server"
+        );
 
         // Tools should be empty (not connected)
-        let tools = mcp_host_list_tools(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let tools_parsed: Vec<serde_json::Value> = serde_json::from_str(&tools).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let tools = mcp_host_list_tools(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let tools_parsed: Vec<serde_json::Value> =
+            serde_json::from_str(&tools).unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            });
         assert!(tools_parsed.is_empty());
 
         // Remove
@@ -24285,8 +24884,14 @@ mod tests {
         assert!(remove.is_ok());
 
         // List should be empty again
-        let list3 = mcp_host_list_servers(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let servers3: Vec<serde_json::Value> = serde_json::from_str(&list3).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let list3 = mcp_host_list_servers(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let servers3: Vec<serde_json::Value> = serde_json::from_str(&list3).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert!(servers3.is_empty());
     }
 
@@ -24295,8 +24900,14 @@ mod tests {
     #[test]
     fn test_neural_bridge_status() {
         let state = AppState::new();
-        let result = neural_bridge_status(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let result = neural_bridge_status(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert!(parsed.get("stats").is_some());
         assert!(parsed.get("config").is_some());
     }
@@ -24304,7 +24915,10 @@ mod tests {
     #[test]
     fn test_neural_bridge_ingest_and_search() {
         let state = AppState::new();
-        neural_bridge_toggle(&state, true).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        neural_bridge_toggle(&state, true).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
         // Ingest content
         let ingest = neural_bridge_ingest(
@@ -24314,8 +24928,21 @@ mod tests {
             json!({}),
         );
         assert!(ingest.is_ok());
-        let entry: serde_json::Value = serde_json::from_str(&ingest.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
-        let entry_id = entry["id"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }).to_string();
+        let entry: serde_json::Value = serde_json::from_str(&ingest.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
+        let entry_id = entry["id"]
+            .as_str()
+            .unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            })
+            .to_string();
         assert!(!entry_id.is_empty());
 
         // Search
@@ -24327,14 +24954,31 @@ mod tests {
             Some(5),
         );
         assert!(search.is_ok());
-        let results: Vec<serde_json::Value> = serde_json::from_str(&search.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
+        let results: Vec<serde_json::Value> = serde_json::from_str(&search.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
         assert!(!results.is_empty());
 
         // Delete
         let del = neural_bridge_delete(&state, entry_id);
         assert!(del.is_ok());
-        let d: serde_json::Value = serde_json::from_str(&del.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
-        assert!(d["deleted"].as_bool().unwrap_or_else(|| { eprintln!("expected bool value"); std::process::exit(1) }));
+        let d: serde_json::Value = serde_json::from_str(&del.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
+        assert!(d["deleted"].as_bool().unwrap_or_else(|| {
+            eprintln!("expected bool value");
+            std::process::exit(1)
+        }));
     }
 
     // ── Tracing wiring tests ────────────────────────────────────────────
@@ -24346,9 +24990,28 @@ mod tests {
         // Start trace
         let trace_result = tracing_start_trace(&state, "test-operation".to_string(), None);
         assert!(trace_result.is_ok());
-        let t: serde_json::Value = serde_json::from_str(&trace_result.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
-        let trace_id = t["trace_id"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }).to_string();
-        let root_span_id = t["span_id"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }).to_string();
+        let t: serde_json::Value = serde_json::from_str(&trace_result.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
+        let trace_id = t["trace_id"]
+            .as_str()
+            .unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            })
+            .to_string();
+        let root_span_id = t["span_id"]
+            .as_str()
+            .unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            })
+            .to_string();
 
         // Start child span
         let span_result = tracing_start_span(
@@ -24359,8 +25022,21 @@ mod tests {
             None,
         );
         assert!(span_result.is_ok());
-        let s: serde_json::Value = serde_json::from_str(&span_result.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
-        let child_span_id = s["span_id"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }).to_string();
+        let s: serde_json::Value = serde_json::from_str(&span_result.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
+        let child_span_id = s["span_id"]
+            .as_str()
+            .unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            })
+            .to_string();
 
         // End child span
         let end_child = tracing_end_span(&state, child_span_id, "Ok".to_string(), None);
@@ -24373,12 +25049,25 @@ mod tests {
         // End trace
         let end_trace = tracing_end_trace(&state, trace_id.clone());
         assert!(end_trace.is_ok());
-        let completed: serde_json::Value = serde_json::from_str(&end_trace.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
+        let completed: serde_json::Value = serde_json::from_str(&end_trace.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
         assert!(completed.get("spans").is_some());
 
         // List traces
-        let list = tracing_list_traces(&state, Some(10)).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let traces: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let list = tracing_list_traces(&state, Some(10)).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let traces: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert!(!traces.is_empty());
 
         // Get specific trace
@@ -24403,22 +25092,48 @@ mod tests {
             vec!["science".to_string()],
         );
         assert!(mem_result.is_ok());
-        let entry: serde_json::Value = serde_json::from_str(&mem_result.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
+        let entry: serde_json::Value = serde_json::from_str(&mem_result.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
         assert!(entry.get("id").is_some());
 
         // Recall
         let recall = agent_memory_recall(&state, agent_id.clone(), "sky".to_string(), Some(5));
         assert!(recall.is_ok());
-        let results: Vec<serde_json::Value> = serde_json::from_str(&recall.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
+        let results: Vec<serde_json::Value> = serde_json::from_str(&recall.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
         assert!(!results.is_empty());
 
         // Stats
-        let stats = agent_memory_get_stats(&state, agent_id.clone()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let s: serde_json::Value = serde_json::from_str(&stats).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let stats = agent_memory_get_stats(&state, agent_id.clone()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let s: serde_json::Value = serde_json::from_str(&stats).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert!(s.get("total").is_some());
 
         // Forget
-        let memory_id = entry["id"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }).to_string();
+        let memory_id = entry["id"]
+            .as_str()
+            .unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            })
+            .to_string();
         let forget = agent_memory_forget(&state, agent_id.clone(), memory_id);
         assert!(forget.is_ok());
 
@@ -24442,19 +25157,50 @@ mod tests {
             tmp_dir.to_string_lossy().to_string(),
         );
         assert!(create.is_ok());
-        let project: serde_json::Value = serde_json::from_str(&create.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
-        assert_eq!(project["name"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }), "test-project");
+        let project: serde_json::Value = serde_json::from_str(&create.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
+        assert_eq!(
+            project["name"].as_str().unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            }),
+            "test-project"
+        );
         assert!(project.get("id").is_some());
 
         // List
-        let list = factory_list_projects(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let projects: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let list = factory_list_projects(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let projects: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(projects.len(), 1);
 
         // Build history (empty initially)
-        let project_id = project["id"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }).to_string();
-        let history = factory_get_build_history(&state, project_id).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let h: Vec<serde_json::Value> = serde_json::from_str(&history).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let project_id = project["id"]
+            .as_str()
+            .unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            })
+            .to_string();
+        let history = factory_get_build_history(&state, project_id).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let h: Vec<serde_json::Value> = serde_json::from_str(&history).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert!(h.is_empty());
 
         let _ = std::fs::remove_dir_all(&tmp_dir);
@@ -24478,32 +25224,102 @@ mod tests {
             ],
         );
         assert!(plan.is_ok());
-        let plan_parsed: serde_json::Value = serde_json::from_str(&plan.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
-        let plan_id = plan_parsed["id"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }).to_string();
-        assert_eq!(plan_parsed["name"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }), "Pro Plan");
-        assert_eq!(plan_parsed["price_cents"].as_u64().unwrap_or_else(|| { eprintln!("expected u64 value"); std::process::exit(1) }), 999);
+        let plan_parsed: serde_json::Value = serde_json::from_str(&plan.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
+        let plan_id = plan_parsed["id"]
+            .as_str()
+            .unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            })
+            .to_string();
+        assert_eq!(
+            plan_parsed["name"].as_str().unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            }),
+            "Pro Plan"
+        );
+        assert_eq!(
+            plan_parsed["price_cents"].as_u64().unwrap_or_else(|| {
+                eprintln!("expected u64 value");
+                std::process::exit(1)
+            }),
+            999
+        );
 
         // List plans
-        let plans = payment_list_plans(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let plans_parsed: Vec<serde_json::Value> = serde_json::from_str(&plans).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let plans = payment_list_plans(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let plans_parsed: Vec<serde_json::Value> =
+            serde_json::from_str(&plans).unwrap_or_else(|e| {
+                eprintln!("JSON parse failed: {e}");
+                std::process::exit(1)
+            });
         assert_eq!(plans_parsed.len(), 1);
 
         // Create invoice
         let invoice = payment_create_invoice(&state, plan_id, "buyer-123".to_string());
         assert!(invoice.is_ok());
-        let inv: serde_json::Value = serde_json::from_str(&invoice.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
-        let invoice_id = inv["id"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }).to_string();
-        assert_eq!(inv["status"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }), "Pending");
+        let inv: serde_json::Value = serde_json::from_str(&invoice.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
+        let invoice_id = inv["id"]
+            .as_str()
+            .unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            })
+            .to_string();
+        assert_eq!(
+            inv["status"].as_str().unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            }),
+            "Pending"
+        );
 
         // Pay invoice
         let pay = payment_pay_invoice(&state, invoice_id);
         assert!(pay.is_ok());
-        let paid: serde_json::Value = serde_json::from_str(&pay.unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) })).unwrap_or_else(|e| { eprintln!("deserialization failed: {e}"); std::process::exit(1) });
-        assert_eq!(paid["status"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }), "Paid");
+        let paid: serde_json::Value = serde_json::from_str(&pay.unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        }))
+        .unwrap_or_else(|e| {
+            eprintln!("deserialization failed: {e}");
+            std::process::exit(1)
+        });
+        assert_eq!(
+            paid["status"].as_str().unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            }),
+            "Paid"
+        );
 
         // Revenue stats
-        let stats = payment_get_revenue_stats(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let s: serde_json::Value = serde_json::from_str(&stats).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let stats = payment_get_revenue_stats(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let s: serde_json::Value = serde_json::from_str(&stats).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert!(s.get("total_revenue_cents").is_some());
     }
 
@@ -24512,18 +25328,33 @@ mod tests {
         let state = AppState::new();
 
         // Toggle recording on
-        let toggle = replay_toggle_recording(&state, true).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let t: serde_json::Value = serde_json::from_str(&toggle).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let toggle = replay_toggle_recording(&state, true).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let t: serde_json::Value = serde_json::from_str(&toggle).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(t["recording"], true);
 
         // Initially no bundles
-        let list = replay_list_bundles(&state, None, Some(50)).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let bundles: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let list = replay_list_bundles(&state, None, Some(50)).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let bundles: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert!(bundles.is_empty());
 
         // Record a bundle manually via the recorder
         {
-            let mut recorder = state.replay_recorder.lock().unwrap_or_else(|p| p.into_inner());
+            let mut recorder = state
+                .replay_recorder
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
             let bid = recorder.capture_pre_state(
                 "test-agent",
                 "tool_call",
@@ -24543,38 +25374,78 @@ mod tests {
                     vec![],
                     json!({"out": "ok"}),
                 )
-                .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+                .unwrap_or_else(|e| {
+                    eprintln!("operation failed: {e}");
+                    std::process::exit(1)
+                });
         }
 
         // List bundles — should have 1
-        let list2 = replay_list_bundles(&state, None, Some(50)).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let bundles2: Vec<serde_json::Value> = serde_json::from_str(&list2).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let list2 = replay_list_bundles(&state, None, Some(50)).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let bundles2: Vec<serde_json::Value> = serde_json::from_str(&list2).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(bundles2.len(), 1);
-        let bundle_id = bundles2[0]["id"].as_str().unwrap_or_else(|| { eprintln!("expected string value"); std::process::exit(1) }).to_string();
+        let bundle_id = bundles2[0]["id"]
+            .as_str()
+            .unwrap_or_else(|| {
+                eprintln!("expected string value");
+                std::process::exit(1)
+            })
+            .to_string();
 
         // Get full bundle
-        let full = replay_get_bundle(&state, bundle_id.clone()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let b: serde_json::Value = serde_json::from_str(&full).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let full = replay_get_bundle(&state, bundle_id.clone()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let b: serde_json::Value = serde_json::from_str(&full).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(b["agent_id"], "test-agent");
         assert_eq!(b["action_type"], "tool_call");
 
         // Verify bundle
-        let verdict = replay_verify_bundle(&state, bundle_id.clone()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let verdict = replay_verify_bundle(&state, bundle_id.clone()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(verdict.contains("Verified"));
 
         // Export bundle
-        let exported = replay_export_bundle(&state, bundle_id).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let exported = replay_export_bundle(&state, bundle_id).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(exported.contains("test-agent"));
         assert!(exported.contains("bundle_hash"));
 
         // Filter by agent
-        let filtered = replay_list_bundles(&state, Some("nonexistent".into()), Some(50)).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let empty: Vec<serde_json::Value> = serde_json::from_str(&filtered).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let filtered = replay_list_bundles(&state, Some("nonexistent".into()), Some(50))
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
+        let empty: Vec<serde_json::Value> = serde_json::from_str(&filtered).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert!(empty.is_empty());
 
         // Toggle off
-        let off = replay_toggle_recording(&state, false).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let o: serde_json::Value = serde_json::from_str(&off).unwrap_or_else(|e| { eprintln!("JSON parse failed: {e}"); std::process::exit(1) });
+        let off = replay_toggle_recording(&state, false).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let o: serde_json::Value = serde_json::from_str(&off).unwrap_or_else(|e| {
+            eprintln!("JSON parse failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(o["recording"], false);
     }
 
@@ -24607,7 +25478,10 @@ mod tests {
                 resolved_at: None,
                 resolved_by: None,
             })
-            .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
     }
 
     fn enqueue_test_consent_json(
@@ -24632,7 +25506,10 @@ mod tests {
                 resolved_at: None,
                 resolved_by: None,
             })
-            .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
     }
 
     #[test]
@@ -24642,7 +25519,10 @@ mod tests {
         let result = approve_consent_request(&state, "c-approve-1".into(), "admin".into());
         assert!(result.is_ok());
         // Verify it's no longer pending
-        let pending = list_pending_consents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let pending = list_pending_consents(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(pending.iter().all(|p| p.consent_id != "c-approve-1"));
     }
 
@@ -24660,7 +25540,10 @@ mod tests {
                 6,
                 "native",
             )
-            .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
         state
             .db
             .enqueue_consent(&nexus_persistence::ConsentRow {
@@ -24682,11 +25565,21 @@ mod tests {
                 resolved_at: None,
                 resolved_by: None,
             })
-            .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
 
-        approve_consent_request(&state, "c-transcendent-create".into(), "admin".into()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        approve_consent_request(&state, "c-transcendent-create".into(), "admin".into())
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
 
-        let agents = state.db.list_agents().unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let agents = state.db.list_agents().unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(agents.iter().all(|row| row.id != pending_agent_id));
         assert!(agents
             .iter()
@@ -24701,7 +25594,10 @@ mod tests {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_time()
             .build()
-            .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
 
         runtime.block_on(async {
             let waiter = tokio::spawn({
@@ -24711,12 +25607,22 @@ mod tests {
                 }
             });
 
-            approve_consent_request(&state, "c-approve-wake".into(), "admin".into()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+            approve_consent_request(&state, "c-approve-wake".into(), "admin".into())
+                .unwrap_or_else(|e| {
+                    eprintln!("operation failed: {e}");
+                    std::process::exit(1)
+                });
 
             tokio::time::timeout(std::time::Duration::from_millis(100), waiter)
                 .await
-                .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) })
-                .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+                .unwrap_or_else(|e| {
+                    eprintln!("operation failed: {e}");
+                    std::process::exit(1)
+                })
+                .unwrap_or_else(|e| {
+                    eprintln!("operation failed: {e}");
+                    std::process::exit(1)
+                });
         });
     }
 
@@ -24731,7 +25637,10 @@ mod tests {
             Some("too risky".into()),
         );
         assert!(result.is_ok());
-        let pending = list_pending_consents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let pending = list_pending_consents(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(pending.iter().all(|p| p.consent_id != "c-deny-1"));
     }
 
@@ -24749,7 +25658,10 @@ mod tests {
                 6,
                 "native",
             )
-            .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
         state
             .db
             .enqueue_consent(&nexus_persistence::ConsentRow {
@@ -24771,7 +25683,10 @@ mod tests {
                 resolved_at: None,
                 resolved_by: None,
             })
-            .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
 
         deny_consent_request(
             &state,
@@ -24779,9 +25694,15 @@ mod tests {
             "admin".into(),
             Some("not today".into()),
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
-        let agents = state.db.list_agents().unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let agents = state.db.list_agents().unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(agents.iter().all(|row| row.id != pending_agent_id));
     }
 
@@ -24793,7 +25714,10 @@ mod tests {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_time()
             .build()
-            .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
 
         runtime.block_on(async {
             let waiter = tokio::spawn({
@@ -24809,12 +25733,21 @@ mod tests {
                 "admin".into(),
                 Some("too risky".into()),
             )
-            .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
 
             tokio::time::timeout(std::time::Duration::from_millis(100), waiter)
                 .await
-                .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) })
-                .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+                .unwrap_or_else(|e| {
+                    eprintln!("operation failed: {e}");
+                    std::process::exit(1)
+                })
+                .unwrap_or_else(|e| {
+                    eprintln!("operation failed: {e}");
+                    std::process::exit(1)
+                });
         });
     }
 
@@ -24826,9 +25759,15 @@ mod tests {
         enqueue_test_consent(&state, "c-lp-3", "a2", "web.search", "Tier0");
 
         // Resolve one
-        approve_consent_request(&state, "c-lp-1".into(), "admin".into()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        approve_consent_request(&state, "c-lp-1".into(), "admin".into()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
-        let pending = list_pending_consents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let pending = list_pending_consents(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(pending.len(), 2);
         assert!(pending.iter().any(|p| p.consent_id == "c-lp-2"));
         assert!(pending.iter().any(|p| p.consent_id == "c-lp-3"));
@@ -24844,11 +25783,23 @@ mod tests {
         enqueue_test_consent(&state, "c-hist-5", "a3", "llm.query", "Tier0");
 
         // Resolve 3 of them
-        approve_consent_request(&state, "c-hist-1".into(), "admin".into()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        deny_consent_request(&state, "c-hist-2".into(), "admin".into(), None).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        approve_consent_request(&state, "c-hist-3".into(), "user".into()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        approve_consent_request(&state, "c-hist-1".into(), "admin".into()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        deny_consent_request(&state, "c-hist-2".into(), "admin".into(), None).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        approve_consent_request(&state, "c-hist-3".into(), "user".into()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
-        let history = get_consent_history(&state, 20).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let history = get_consent_history(&state, 20).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(history.len(), 5);
     }
 
@@ -24860,7 +25811,10 @@ mod tests {
         enqueue_test_consent(&state, "c-risk-3", "a1", "process.exec", "Tier2");
         enqueue_test_consent(&state, "c-risk-4", "a1", "self_mutation", "Tier3");
 
-        let pending = list_pending_consents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let pending = list_pending_consents(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         let risk_levels: Vec<&str> = pending.iter().map(|p| p.risk_level.as_str()).collect();
         assert!(risk_levels.contains(&"Low"));
         assert!(risk_levels.contains(&"Medium"));
@@ -24886,7 +25840,10 @@ mod tests {
     fn test_consent_notification_fields() {
         let state = AppState::new_in_memory();
         enqueue_test_consent(&state, "c-fields-1", "a1", "fs.write", "Tier2");
-        let pending = list_pending_consents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let pending = list_pending_consents(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(pending.len(), 1);
         let notif = &pending[0];
         assert_eq!(notif.consent_id, "c-fields-1");
@@ -24919,9 +25876,15 @@ mod tests {
                 resolved_at: None,
                 resolved_by: None,
             })
-            .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
 
-        let pending = list_pending_consents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let pending = list_pending_consents(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(pending[0].min_review_seconds, Some(60));
     }
 
@@ -24949,7 +25912,10 @@ mod tests {
             }),
         );
 
-        let pending = list_pending_consents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let pending = list_pending_consents(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(pending.len(), 1);
         let notif = &pending[0];
         assert_eq!(notif.goal_id.as_deref(), Some("goal-1"));
@@ -24986,10 +25952,17 @@ mod tests {
             json!({"summary": "other", "goal_id": "goal-other"}),
         );
 
-        let resolved = batch_approve_consents(&state, "goal-batch".into(), "user".into()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let resolved = batch_approve_consents(&state, "goal-batch".into(), "user".into())
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
         assert_eq!(resolved.len(), 2);
 
-        let pending = list_pending_consents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let pending = list_pending_consents(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].goal_id.as_deref(), Some("goal-other"));
     }
@@ -25006,12 +25979,23 @@ mod tests {
             json!({"summary": "batch", "goal_id": "goal-review", "review_each_available": true}),
         );
 
-        review_consent_batch(&state, "c-review-batch-1".into(), "user".into()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        review_consent_batch(&state, "c-review-batch-1".into(), "user".into()).unwrap_or_else(
+            |e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            },
+        );
 
-        let pending = list_pending_consents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let pending = list_pending_consents(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(pending.is_empty());
 
-        let history = get_consent_history(&state, 10).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let history = get_consent_history(&state, 10).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(history.iter().any(|item| {
             item.consent_id == "c-review-batch-1" && item.risk_level.ends_with(":review_each")
         }));
@@ -25043,18 +26027,35 @@ mod tests {
             "user".into(),
             Some("deny all".into()),
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(resolved.len(), 2);
-        assert!(list_pending_consents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) }).is_empty());
+        assert!(list_pending_consents(&state)
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            })
+            .is_empty());
     }
 
     #[test]
     fn test_consent_audit_events_on_approve() {
         let state = AppState::new_in_memory();
         enqueue_test_consent(&state, "c-audit-a", "a1", "fs.write", "Tier1");
-        approve_consent_request(&state, "c-audit-a".into(), "admin".into()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        approve_consent_request(&state, "c-audit-a".into(), "admin".into()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         // Verify audit event was logged
-        let events = state.db.load_audit_events(None, 100, 0).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let events = state
+            .db
+            .load_audit_events(None, 100, 0)
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
         let consent_events: Vec<_> = events
             .iter()
             .filter(|e| e.detail_json.contains("consent_approved"))
@@ -25072,8 +26073,17 @@ mod tests {
             "admin".into(),
             Some("unauthorized".into()),
         )
-        .unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        let events = state.db.load_audit_events(None, 100, 0).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        let events = state
+            .db
+            .load_audit_events(None, 100, 0)
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
         let consent_events: Vec<_> = events
             .iter()
             .filter(|e| e.detail_json.contains("consent_denied"))
@@ -25085,7 +26095,10 @@ mod tests {
     fn test_approve_already_resolved_fails() {
         let state = AppState::new_in_memory();
         enqueue_test_consent(&state, "c-double", "a1", "fs.write", "Tier1");
-        approve_consent_request(&state, "c-double".into(), "admin".into()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        approve_consent_request(&state, "c-double".into(), "admin".into()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         // Second approve should fail (no longer pending)
         let result = approve_consent_request(&state, "c-double".into(), "admin".into());
         assert!(result.is_err());
@@ -25097,7 +26110,10 @@ mod tests {
         for i in 0..10 {
             enqueue_test_consent(&state, &format!("c-limit-{i}"), "a1", "fs.read", "Tier0");
         }
-        let history = get_consent_history(&state, 5).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let history = get_consent_history(&state, 5).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert_eq!(history.len(), 5);
     }
 
@@ -25112,7 +26128,10 @@ mod tests {
     #[test]
     fn test_empty_pending_list() {
         let state = AppState::new_in_memory();
-        let pending = list_pending_consents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let pending = list_pending_consents(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(pending.is_empty());
     }
 
@@ -25121,13 +26140,45 @@ mod tests {
         let state = AppState::new_in_memory();
         enqueue_test_consent(&state, "c-resolve-1", "a1", "fs.read", "Tier0");
         enqueue_test_consent(&state, "c-resolve-2", "a1", "fs.write", "Tier1");
-        assert_eq!(list_pending_consents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) }).len(), 2);
+        assert_eq!(
+            list_pending_consents(&state)
+                .unwrap_or_else(|e| {
+                    eprintln!("operation failed: {e}");
+                    std::process::exit(1)
+                })
+                .len(),
+            2
+        );
 
-        approve_consent_request(&state, "c-resolve-1".into(), "user".into()).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        assert_eq!(list_pending_consents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) }).len(), 1);
+        approve_consent_request(&state, "c-resolve-1".into(), "user".into()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+        assert_eq!(
+            list_pending_consents(&state)
+                .unwrap_or_else(|e| {
+                    eprintln!("operation failed: {e}");
+                    std::process::exit(1)
+                })
+                .len(),
+            1
+        );
 
-        deny_consent_request(&state, "c-resolve-2".into(), "user".into(), None).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
-        assert_eq!(list_pending_consents(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) }).len(), 0);
+        deny_consent_request(&state, "c-resolve-2".into(), "user".into(), None).unwrap_or_else(
+            |e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            },
+        );
+        assert_eq!(
+            list_pending_consents(&state)
+                .unwrap_or_else(|e| {
+                    eprintln!("operation failed: {e}");
+                    std::process::exit(1)
+                })
+                .len(),
+            0
+        );
     }
 
     // ── Messaging Gateway Tests ──
@@ -25135,7 +26186,10 @@ mod tests {
     #[test]
     fn test_messaging_status_empty_by_default() {
         let state = AppState::new_in_memory();
-        let status = get_messaging_status(&state).unwrap_or_else(|e| { eprintln!("operation failed: {e}"); std::process::exit(1) });
+        let status = get_messaging_status(&state).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
         assert!(status.is_empty());
     }
 

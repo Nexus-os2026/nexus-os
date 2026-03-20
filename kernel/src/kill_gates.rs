@@ -255,25 +255,22 @@ impl KillGateRegistry {
             let _ = self.escalate_once(subsystem, agent_id, audit);
         }
 
-        if let Err(e) = audit
-            .append_event(
-                agent_id,
-                EventType::StateChange,
-                json!({
-                    "event_kind": "killgate.checked",
-                    "subsystem": subsystem,
-                    "metric": metric_value,
-                    "status": match status {
-                        GateStatus::Open => "open",
-                        GateStatus::Frozen => "frozen",
-                        GateStatus::Halted => "halted",
-                    },
-                }),
-            )
-        {
+        if let Err(e) = audit.append_event(
+            agent_id,
+            EventType::StateChange,
+            json!({
+                "event_kind": "killgate.checked",
+                "subsystem": subsystem,
+                "metric": metric_value,
+                "status": match status {
+                    GateStatus::Open => "open",
+                    GateStatus::Frozen => "frozen",
+                    GateStatus::Halted => "halted",
+                },
+            }),
+        ) {
             eprintln!("audit write failed: {e}");
         }
-
 
         status
     }
@@ -291,21 +288,18 @@ impl KillGateRegistry {
             .ok_or_else(|| KillGateError::UnknownSubsystem(subsystem.to_string()))?;
 
         gate.frozen = true;
-        if let Err(e) = audit
-            .append_event(
-                agent_id,
-                EventType::UserAction,
-                json!({
-                    "event_kind": "killgate.frozen",
-                    "subsystem": subsystem,
-                    "reason": "manual freeze",
-                    "by": operator_id,
-                }),
-            )
-        {
+        if let Err(e) = audit.append_event(
+            agent_id,
+            EventType::UserAction,
+            json!({
+                "event_kind": "killgate.frozen",
+                "subsystem": subsystem,
+                "reason": "manual freeze",
+                "by": operator_id,
+            }),
+        ) {
             eprintln!("audit write failed: {e}");
         }
-
 
         self.escalate_to(subsystem, EscalationLevel::Freeze, agent_id, audit);
         Ok(GateStatus::Frozen)
@@ -326,20 +320,17 @@ impl KillGateRegistry {
         gate.halted = true;
         gate.frozen = true;
 
-        if let Err(e) = audit
-            .append_event(
-                agent_id,
-                EventType::Error,
-                json!({
-                    "event_kind": "killgate.halted",
-                    "subsystem": subsystem,
-                    "reason": format!("manual halt by {}", operator_id),
-                }),
-            )
-        {
+        if let Err(e) = audit.append_event(
+            agent_id,
+            EventType::Error,
+            json!({
+                "event_kind": "killgate.halted",
+                "subsystem": subsystem,
+                "reason": format!("manual halt by {}", operator_id),
+            }),
+        ) {
             eprintln!("audit write failed: {e}");
         }
-
 
         self.escalate_to(subsystem, EscalationLevel::Incident, agent_id, audit);
         Ok(GateStatus::Halted)
@@ -366,18 +357,16 @@ impl KillGateRegistry {
         gate.halted = false;
         self.escalation_levels.remove(subsystem);
 
-        if let Err(e) = audit
-            .append_event(
-                agent_id,
-                EventType::UserAction,
-                json!({
-                    "event_kind": "killgate.unfrozen",
-                    "subsystem": subsystem,
-                    "operator_id": operator_id,
-                    "hitl_tier": hitl_tier,
-                }),
-            )
-        {
+        if let Err(e) = audit.append_event(
+            agent_id,
+            EventType::UserAction,
+            json!({
+                "event_kind": "killgate.unfrozen",
+                "subsystem": subsystem,
+                "operator_id": operator_id,
+                "hitl_tier": hitl_tier,
+            }),
+        ) {
             eprintln!("audit write failed: {e}");
         }
 
@@ -412,37 +401,31 @@ impl KillGateRegistry {
         let next = current.next();
         self.escalation_levels.insert(subsystem.to_string(), next);
 
-        if let Err(e) = audit
-            .append_event(
-                agent_id,
-                EventType::UserAction,
-                json!({
-                    "event_kind": "killgate.escalated",
-                    "subsystem": subsystem,
-                    "from_level": current.as_str(),
-                    "to_level": next.as_str(),
-                }),
-            )
-        {
+        if let Err(e) = audit.append_event(
+            agent_id,
+            EventType::UserAction,
+            json!({
+                "event_kind": "killgate.escalated",
+                "subsystem": subsystem,
+                "from_level": current.as_str(),
+                "to_level": next.as_str(),
+            }),
+        ) {
             eprintln!("audit write failed: {e}");
         }
 
-
         if next == EscalationLevel::Incident {
-            if let Err(e) = audit
-                .append_event(
-                    agent_id,
-                    EventType::UserAction,
-                    json!({
-                        "event_kind": "killgate.notification_sent",
-                        "subsystem": subsystem,
-                        "via": "messaging_bridge",
-                    }),
-                )
-            {
+            if let Err(e) = audit.append_event(
+                agent_id,
+                EventType::UserAction,
+                json!({
+                    "event_kind": "killgate.notification_sent",
+                    "subsystem": subsystem,
+                    "via": "messaging_bridge",
+                }),
+            ) {
                 eprintln!("audit write failed: {e}");
             }
-
         }
 
         next

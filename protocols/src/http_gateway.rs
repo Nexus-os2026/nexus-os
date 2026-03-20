@@ -1010,7 +1010,12 @@ async fn a2a_agent_card(
         }
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?;
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?;
 
     result.map(Json)
 }
@@ -1099,7 +1104,12 @@ async fn a2a_task_submit(
         }))
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?;
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?;
 
     result.map(Json)
 }
@@ -1133,7 +1143,12 @@ async fn a2a_task_status(
         }
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?;
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?;
 
     result.map(Json)
 }
@@ -1170,7 +1185,12 @@ async fn mcp_tool_list(
         }
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?;
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?;
 
     result.map(Json)
 }
@@ -1235,7 +1255,12 @@ async fn mcp_tool_invoke(
         }
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?;
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?;
 
     result.map(Json)
 }
@@ -1332,7 +1357,12 @@ async fn api_create_agent(
         })))
     })
     .await
-    .unwrap_or_else(|e| Err(error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}"))));
+    .unwrap_or_else(|e| {
+        Err(error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        ))
+    });
 
     match result {
         Ok(v) => (StatusCode::CREATED, v).into_response(),
@@ -1369,7 +1399,12 @@ async fn api_start_agent(State(state): State<GatewayState>, Path(id): Path<Strin
         ))
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?
 }
 
 /// `POST /api/agents/:id/stop` — stop an agent.
@@ -1401,7 +1436,12 @@ async fn api_stop_agent(State(state): State<GatewayState>, Path(id): Path<String
         ))
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?
 }
 
 /// `GET /api/agents/:id/status` — get single agent status.
@@ -1425,7 +1465,12 @@ async fn api_agent_status(State(state): State<GatewayState>, Path(id): Path<Stri
         })))
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?
 }
 
 // ── Permissions ─────────────────────────────────────────────────────────────
@@ -1451,7 +1496,12 @@ async fn api_get_permissions(
             .map_err(|e| error_json(StatusCode::NOT_FOUND, e.to_string()))
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?
 }
 
 /// `PUT /api/agents/:id/permissions` — update a single permission.
@@ -1483,7 +1533,12 @@ async fn api_update_permission(
         Ok(Json(serde_json::json!({"status": "updated"})))
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?
 }
 
 /// `POST /api/agents/:id/permissions/bulk` — bulk update permissions.
@@ -1523,7 +1578,12 @@ async fn api_bulk_update_permissions(
         ))
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?
 }
 
 // ── Audit ───────────────────────────────────────────────────────────────────
@@ -1582,7 +1642,12 @@ async fn api_audit_events(
         })))
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?
 }
 
 /// `GET /api/audit/events/:id` — get a single audit event by ID.
@@ -1611,7 +1676,12 @@ async fn api_audit_event_by_id(
         })))
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?
 }
 
 // ── Compliance ──────────────────────────────────────────────────────────────
@@ -1698,7 +1768,12 @@ async fn api_compliance_report(
         Ok(Json(val))
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?
 }
 
 /// `POST /api/compliance/erase/:agent_id` — GDPR Article 17 cryptographic erasure.
@@ -1751,7 +1826,12 @@ async fn api_compliance_erase(
         Ok(Json(val))
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?
 }
 
 // ── Marketplace ─────────────────────────────────────────────────────────────
@@ -1791,7 +1871,12 @@ async fn api_marketplace_search(Query(query): Query<MarketplaceSearchQuery>) -> 
         Ok(Json(serde_json::json!({ "results": agents })))
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?
 }
 
 /// `GET /api/marketplace/agents/:id` — get marketplace agent detail.
@@ -1810,7 +1895,12 @@ async fn api_marketplace_agent(Path(id): Path<String>) -> ApiResult {
         Ok(Json(val))
     })
     .await
-    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
+    .map_err(|e| {
+        error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        )
+    })?
 }
 
 /// `POST /api/marketplace/install/:id` — install a marketplace agent.
@@ -1838,7 +1928,12 @@ async fn api_marketplace_install(
         })))
     })
     .await
-    .unwrap_or_else(|e| Err(error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}"))));
+    .unwrap_or_else(|e| {
+        Err(error_json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("internal error: {e}"),
+        ))
+    });
 
     match result {
         Ok(v) => (StatusCode::CREATED, v).into_response(),
@@ -2644,9 +2739,11 @@ mod tests {
     }
 
     fn setup_gateway() -> (Router, GatewayState) {
-        let state = GatewayState::new("ignored").unwrap().with_llm_provider(Box::new(
-            nexus_connectors_llm::providers::mock::MockProvider::new(),
-        ));
+        let state = GatewayState::new("ignored")
+            .unwrap()
+            .with_llm_provider(Box::new(
+                nexus_connectors_llm::providers::mock::MockProvider::new(),
+            ));
         state.register_agent(
             test_manifest("test-agent", vec!["web.search", "llm.query"], 10_000),
             "https://example.com",

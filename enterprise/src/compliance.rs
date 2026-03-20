@@ -612,38 +612,38 @@ mod tests {
         let agent = Uuid::new_v4();
 
         if let Err(e) = trail.append_event(
-                agent,
-                EventType::ToolCall,
-                json!({"action": "capability_check", "cap": "llm.query"}),
-            ) {
+            agent,
+            EventType::ToolCall,
+            json!({"action": "capability_check", "cap": "llm.query"}),
+        ) {
             eprintln!("[WARN] audit write failed: {e}");
         }
         if let Err(e) = trail.append_event(
-                agent,
-                EventType::UserAction,
-                json!({"event": "consent.approval", "tier": 2}),
-            ) {
+            agent,
+            EventType::UserAction,
+            json!({"event": "consent.approval", "tier": 2}),
+        ) {
             eprintln!("[WARN] audit write failed: {e}");
         }
         if let Err(e) = trail.append_event(
-                agent,
-                EventType::StateChange,
-                json!({"event": "safety.kpi_check", "status": "normal"}),
-            ) {
+            agent,
+            EventType::StateChange,
+            json!({"event": "safety.kpi_check", "status": "normal"}),
+        ) {
             eprintln!("[WARN] audit write failed: {e}");
         }
         if let Err(e) = trail.append_event(
-                agent,
-                EventType::StateChange,
-                json!({"event": "fuel.budget_check", "remaining": 500}),
-            ) {
+            agent,
+            EventType::StateChange,
+            json!({"event": "fuel.budget_check", "remaining": 500}),
+        ) {
             eprintln!("[WARN] audit write failed: {e}");
         }
         if let Err(e) = trail.append_event(
-                agent,
-                EventType::LlmCall,
-                json!({"action": "llm_query", "tokens": 100}),
-            ) {
+            agent,
+            EventType::LlmCall,
+            json!({"action": "llm_query", "tokens": 100}),
+        ) {
             eprintln!("[WARN] audit write failed: {e}");
         }
 

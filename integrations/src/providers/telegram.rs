@@ -16,10 +16,7 @@ pub struct TelegramIntegration {
 }
 
 impl TelegramIntegration {
-    pub fn new(
-        bot_token: String,
-        default_chat_id: String,
-    ) -> Result<Self, IntegrationError> {
+    pub fn new(bot_token: String, default_chat_id: String) -> Result<Self, IntegrationError> {
         if bot_token.is_empty() {
             return Err(IntegrationError::MissingCredential {
                 env_var: "NEXUS_TELEGRAM_BOT_TOKEN".into(),
@@ -101,15 +98,12 @@ impl TelegramIntegration {
             }
         }
 
-        let response = self
-            .http
-            .post(&url)
-            .json(&body)
-            .send()
-            .map_err(|e| IntegrationError::ConnectionError {
+        let response = self.http.post(&url).json(&body).send().map_err(|e| {
+            IntegrationError::ConnectionError {
                 provider: "telegram".into(),
                 message: e.to_string(),
-            })?;
+            }
+        })?;
 
         if !response.status().is_success() {
             let status = response.status().as_u16();
@@ -161,24 +155,21 @@ impl Integration for TelegramIntegration {
     }
 
     fn send_notification(&self, message: &Notification) -> Result<(), IntegrationError> {
-        let chat_id = message
-            .channel
-            .as_deref()
-            .unwrap_or(&self.default_chat_id);
+        let chat_id = message.channel.as_deref().unwrap_or(&self.default_chat_id);
         let text = self.build_message_text(message);
         self.send_message_to_chat(chat_id, &text, None)
     }
 
     fn health_check(&self) -> Result<(), IntegrationError> {
         let url = self.api_url("getMe");
-        let response = self
-            .http
-            .get(&url)
-            .send()
-            .map_err(|e| IntegrationError::ConnectionError {
-                provider: "telegram".into(),
-                message: e.to_string(),
-            })?;
+        let response =
+            self.http
+                .get(&url)
+                .send()
+                .map_err(|e| IntegrationError::ConnectionError {
+                    provider: "telegram".into(),
+                    message: e.to_string(),
+                })?;
 
         if response.status().is_success() {
             Ok(())
@@ -206,8 +197,7 @@ impl Integration for TelegramIntegration {
 /// Escape special characters for Telegram MarkdownV2 format.
 fn escape_markdown(text: &str) -> String {
     let special = [
-        '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.',
-        '!',
+        '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!',
     ];
     let mut escaped = String::with_capacity(text.len() + 16);
     for ch in text.chars() {
@@ -264,8 +254,14 @@ mod tests {
 
     #[test]
     fn telegram_severity_emojis() {
-        assert_eq!(TelegramIntegration::severity_emoji(&Severity::Critical), "🚨");
-        assert_eq!(TelegramIntegration::severity_emoji(&Severity::Warning), "⚠️");
+        assert_eq!(
+            TelegramIntegration::severity_emoji(&Severity::Critical),
+            "🚨"
+        );
+        assert_eq!(
+            TelegramIntegration::severity_emoji(&Severity::Warning),
+            "⚠️"
+        );
         assert_eq!(TelegramIntegration::severity_emoji(&Severity::Info), "ℹ️");
     }
 

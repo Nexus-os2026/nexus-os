@@ -112,24 +112,19 @@ impl ResourceLimiter {
             cmd.pre_exec(move || {
                 // Put the child in its own process group so we can kill the
                 // entire tree later with killpg.
-                setpgid(Pid::from_raw(0), Pid::from_raw(0))
-                    .map_err(std::io::Error::other)?;
+                setpgid(Pid::from_raw(0), Pid::from_raw(0)).map_err(std::io::Error::other)?;
 
                 // RLIMIT_AS — virtual address space (memory).
-                setrlimit(Resource::RLIMIT_AS, mem, mem)
-                    .map_err(std::io::Error::other)?;
+                setrlimit(Resource::RLIMIT_AS, mem, mem).map_err(std::io::Error::other)?;
 
                 // RLIMIT_CPU — CPU time in seconds.
-                setrlimit(Resource::RLIMIT_CPU, cpu, cpu)
-                    .map_err(std::io::Error::other)?;
+                setrlimit(Resource::RLIMIT_CPU, cpu, cpu).map_err(std::io::Error::other)?;
 
                 // RLIMIT_NPROC — max child processes (fork-bomb defense).
-                setrlimit(Resource::RLIMIT_NPROC, nproc, nproc)
-                    .map_err(std::io::Error::other)?;
+                setrlimit(Resource::RLIMIT_NPROC, nproc, nproc).map_err(std::io::Error::other)?;
 
                 // RLIMIT_FSIZE — max file size a process can create.
-                setrlimit(Resource::RLIMIT_FSIZE, fsize, fsize)
-                    .map_err(std::io::Error::other)?;
+                setrlimit(Resource::RLIMIT_FSIZE, fsize, fsize).map_err(std::io::Error::other)?;
 
                 Ok(())
             });
@@ -299,10 +294,7 @@ mod tests {
         };
         let limiter = ResourceLimiter::new(limits);
         let mut cmd = std::process::Command::new("sh");
-        cmd.args([
-            "-c",
-            "head -c 67108864 /dev/zero | cat > /dev/null",
-        ]);
+        cmd.args(["-c", "head -c 67108864 /dev/zero | cat > /dev/null"]);
         limiter.apply_to_command(&mut cmd);
         let status = cmd.status().expect("failed to spawn");
         let _ = status;

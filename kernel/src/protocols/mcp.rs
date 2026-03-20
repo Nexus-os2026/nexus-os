@@ -381,21 +381,18 @@ impl McpServer {
 
         let fuel_remaining = manifest.fuel_budget;
 
-        if let Err(e) = self.audit_trail
-            .append_event(
-                agent_id,
-                EventType::StateChange,
-                json!({
-                    "event_kind": "mcp.agent_registered",
-                    "agent_name": manifest.name,
-                    "tool_count": tools.len(),
-                    "fuel_budget": fuel_remaining,
-                }),
-            )
-        {
+        if let Err(e) = self.audit_trail.append_event(
+            agent_id,
+            EventType::StateChange,
+            json!({
+                "event_kind": "mcp.agent_registered",
+                "agent_name": manifest.name,
+                "tool_count": tools.len(),
+                "fuel_budget": fuel_remaining,
+            }),
+        ) {
             eprintln!("audit write failed: {e}");
         }
-
 
         // Register egress policy from manifest allowed_endpoints.
         let allowed = manifest.allowed_endpoints.clone().unwrap_or_default();
@@ -513,17 +510,15 @@ impl McpServer {
         // Step 2: Capability check — tool's required capabilities must be in manifest
         for required_cap in &tool.governance.required_capabilities {
             if !agent.manifest.capabilities.contains(required_cap) {
-                if let Err(e) = self.audit_trail
-                    .append_event(
-                        agent_id,
-                        EventType::Error,
-                        json!({
-                            "event_kind": "mcp.capability_denied",
-                            "tool": tool_name,
-                            "missing_capability": required_cap,
-                        }),
-                    )
-                {
+                if let Err(e) = self.audit_trail.append_event(
+                    agent_id,
+                    EventType::Error,
+                    json!({
+                        "event_kind": "mcp.capability_denied",
+                        "tool": tool_name,
+                        "missing_capability": required_cap,
+                    }),
+                ) {
                     eprintln!("audit write failed: {e}");
                 }
 
@@ -534,18 +529,16 @@ impl McpServer {
         // Step 3: Fuel check — must have enough before execution
         let fuel_cost = tool.governance.estimated_fuel_cost;
         if agent.fuel_remaining < fuel_cost {
-            if let Err(e) = self.audit_trail
-                .append_event(
-                    agent_id,
-                    EventType::Error,
-                    json!({
-                        "event_kind": "mcp.fuel_exhausted",
-                        "tool": tool_name,
-                        "fuel_remaining": agent.fuel_remaining,
-                        "fuel_required": fuel_cost,
-                    }),
-                )
-            {
+            if let Err(e) = self.audit_trail.append_event(
+                agent_id,
+                EventType::Error,
+                json!({
+                    "event_kind": "mcp.fuel_exhausted",
+                    "tool": tool_name,
+                    "fuel_remaining": agent.fuel_remaining,
+                    "fuel_required": fuel_cost,
+                }),
+            ) {
                 eprintln!("audit write failed: {e}");
             }
 

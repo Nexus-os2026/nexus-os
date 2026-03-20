@@ -87,10 +87,7 @@ impl SecretsVault {
 
         let cipher = self.cipher_from_key(user_key)?;
         let plaintext = cipher
-            .decrypt(
-                &Nonce::from(encrypted.nonce),
-                encrypted.ciphertext.as_ref(),
-            )
+            .decrypt(&Nonce::from(encrypted.nonce), encrypted.ciphertext.as_ref())
             .map_err(|_| AgentError::SupervisorError("failed to decrypt secret".to_string()))?;
 
         let decoded = String::from_utf8(plaintext)

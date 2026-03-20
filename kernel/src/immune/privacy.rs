@@ -173,8 +173,18 @@ impl PrivacyScanner {
 
     fn add_builtin_rules(&mut self) {
         let builtin: &[(&str, &str, PrivacyCategory, bool)] = &[
-            ("openai_api_key", r"sk-[A-Za-z0-9]{20,}", PrivacyCategory::ApiKey, false),
-            ("aws_access_key", r"AKIA[0-9A-Z]{16}", PrivacyCategory::ApiKey, false),
+            (
+                "openai_api_key",
+                r"sk-[A-Za-z0-9]{20,}",
+                PrivacyCategory::ApiKey,
+                false,
+            ),
+            (
+                "aws_access_key",
+                r"AKIA[0-9A-Z]{16}",
+                PrivacyCategory::ApiKey,
+                false,
+            ),
             (
                 "generic_api_key",
                 r#"(?i)(?:api[_-]?key|apikey)\s*[:=]\s*['"]?([A-Za-z0-9_\-]{16,})"#,
@@ -193,7 +203,12 @@ impl PrivacyScanner {
                 PrivacyCategory::PrivateIp,
                 false,
             ),
-            ("credit_card", r"\b(?:\d[ -]*?){13,19}\b", PrivacyCategory::CreditCard, true),
+            (
+                "credit_card",
+                r"\b(?:\d[ -]*?){13,19}\b",
+                PrivacyCategory::CreditCard,
+                true,
+            ),
             ("ssn", r"\b\d{3}-\d{2}-\d{4}\b", PrivacyCategory::Ssn, false),
             (
                 "email_address",

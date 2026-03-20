@@ -43,14 +43,14 @@ impl ApprovalFlow {
         fuel_budget: u64,
     ) -> ApprovalRequest {
         if let Err(e) = self.audit_trail.append_event(
-                uuid::Uuid::nil(),
-                EventType::UserAction,
-                json!({
-                    "event": "factory_approval_presented",
-                    "capabilities": capabilities,
-                    "fuel_budget": fuel_budget,
-                }),
-            ) {
+            uuid::Uuid::nil(),
+            EventType::UserAction,
+            json!({
+                "event": "factory_approval_presented",
+                "capabilities": capabilities,
+                "fuel_budget": fuel_budget,
+            }),
+        ) {
             eprintln!("[WARN] audit write failed: {e}");
         }
 

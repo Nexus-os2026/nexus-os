@@ -117,11 +117,9 @@ impl SoftwareBackend {
                 "sealed payload too short".to_string(),
             ));
         }
-        let meta_len = u32::from_le_bytes(
-            plaintext[..4]
-                .try_into()
-                .map_err(|_| KeyError::InvalidKeyMaterial("payload: expected 4 bytes for length".to_string()))?,
-        ) as usize;
+        let meta_len = u32::from_le_bytes(plaintext[..4].try_into().map_err(|_| {
+            KeyError::InvalidKeyMaterial("payload: expected 4 bytes for length".to_string())
+        })?) as usize;
         if plaintext.len() < 4 + meta_len + 32 {
             return Err(KeyError::InvalidKeyMaterial(
                 "sealed payload truncated".to_string(),

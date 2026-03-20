@@ -222,8 +222,12 @@ impl TokenManager {
             kid: identity.did.clone(),
         };
 
-        let header_b64 = base64_url_encode(&serde_json::to_vec(&header).map_err(|e| TokenError::Serialization(e.to_string()))?);
-        let payload_b64 = base64_url_encode(&serde_json::to_vec(claims).map_err(|e| TokenError::Serialization(e.to_string()))?);
+        let header_b64 = base64_url_encode(
+            &serde_json::to_vec(&header).map_err(|e| TokenError::Serialization(e.to_string()))?,
+        );
+        let payload_b64 = base64_url_encode(
+            &serde_json::to_vec(claims).map_err(|e| TokenError::Serialization(e.to_string()))?,
+        );
 
         let signing_input = format!("{header_b64}.{payload_b64}");
         let signature = identity
