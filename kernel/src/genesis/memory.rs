@@ -127,7 +127,11 @@ impl PatternStore {
             let similarity = capability_similarity * 0.6 + keyword_similarity * 0.4;
 
             // Only consider matches above 70% threshold
-            if similarity > 0.7 && (best.is_none() || similarity > best.unwrap().1) {
+            if similarity > 0.7
+                && best
+                    .as_ref()
+                    .is_none_or(|(_, best_score)| similarity > *best_score)
+            {
                 best = Some((pattern, similarity));
             }
         }

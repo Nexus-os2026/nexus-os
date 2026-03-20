@@ -358,6 +358,7 @@ export default function VoiceAssistant() {
   });
   const [modelLoading, setModelLoading] = useState(false);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nextId = useRef(2);
   const scrollRef = useRef<HTMLDivElement>(null);
   const captureSessionRef = useRef<AudioCaptureSession | null>(null);
@@ -365,6 +366,9 @@ export default function VoiceAssistant() {
 
   useEffect(() => {
     ensurePulseAnimation();
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
   }, []);
 
   const addTranscript = useCallback(
@@ -627,7 +631,8 @@ export default function VoiceAssistant() {
     try {
       await navigator.clipboard.writeText(pythonCommand);
       setCopyStatus("copied");
-      window.setTimeout(() => setCopyStatus("idle"), 2000);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = window.setTimeout(() => setCopyStatus("idle"), 2000);
     } catch (err) {
       addTranscript(`Copy failed: ${String(err)}`, "system");
     }

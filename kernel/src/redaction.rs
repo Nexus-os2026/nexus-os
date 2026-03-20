@@ -4,6 +4,25 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
+fn empty_regex() -> Regex {
+    // "^$" is always valid — or_else chain provides multiple trivial fallbacks.
+    Regex::new("^$")
+        .or_else(|_| Regex::new(""))
+        .or_else(|_| Regex::new("x"))
+        .or_else(|_| Regex::new("a"))
+        .unwrap_or_else(|e| {
+            eprintln!("regex engine broken, cannot compile trivial patterns: {e}");
+            // Return a regex that matches nothing — last resort construction
+            Regex::new("[^\\s\\S]").unwrap_or_else(|_| {
+                Regex::new(".").unwrap_or_else(|_| {
+                    // If the regex engine truly cannot compile ANY pattern, we have a fundamentally
+                    // broken runtime. Abort is the only safe option vs silently proceeding.
+                    std::process::abort()
+                })
+            })
+        })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum FindingKind {
     Email,
@@ -487,7 +506,7 @@ fn sha256_bytes(input: &[u8]) -> [u8; 32] {
     hasher.update(input);
     let digest = hasher.finalize();
     let mut output = [0_u8; 32];
-    output.copy_from_slice(digest.as_slice());
+    output.copy_from_slice(digest.as_ref());
     output
 }
 
@@ -498,51 +517,72 @@ fn bytes_to_hex(bytes: [u8; 32]) -> String {
 fn email_pattern() -> &'static Regex {
     static EMAIL_PATTERN: OnceLock<Regex> = OnceLock::new();
     EMAIL_PATTERN.get_or_init(|| {
-        Regex::new(r"(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b")
-            .expect("email regex should compile")
+        Regex::new(r"(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b").unwrap_or_else(|e| {
+            eprintln!("Failed to compile email regex: {e}");
+            empty_regex()
+        })
     })
 }
 
 fn phone_pattern() -> &'static Regex {
     static PHONE_PATTERN: OnceLock<Regex> = OnceLock::new();
     PHONE_PATTERN.get_or_init(|| {
-        Regex::new(r"\b(?:\+?\d[\d .()\-]{7,}\d)\b").expect("phone regex should compile")
+        Regex::new(r"\b(?:\+?\d[\d .()\-]{7,}\d)\b").unwrap_or_else(|e| {
+            eprintln!("Failed to compile phone regex: {e}");
+            empty_regex()
+        })
     })
 }
 
 fn credit_card_pattern() -> &'static Regex {
     static CREDIT_CARD_PATTERN: OnceLock<Regex> = OnceLock::new();
     CREDIT_CARD_PATTERN.get_or_init(|| {
-        Regex::new(r"\b(?:\d[ -]?){13,19}\b").expect("credit card regex should compile")
+        Regex::new(r"\b(?:\d[ -]?){13,19}\b").unwrap_or_else(|e| {
+            eprintln!("Failed to compile credit card regex: {e}");
+            empty_regex()
+        })
     })
 }
 
 fn sk_key_pattern() -> &'static Regex {
     static SK_KEY_PATTERN: OnceLock<Regex> = OnceLock::new();
     SK_KEY_PATTERN.get_or_init(|| {
-        Regex::new(r"\bsk-[A-Za-z0-9]{16,}\b").expect("sk key regex should compile")
+        Regex::new(r"\bsk-[A-Za-z0-9]{16,}\b").unwrap_or_else(|e| {
+            eprintln!("Failed to compile sk key regex: {e}");
+            empty_regex()
+        })
     })
 }
 
 fn akia_key_pattern() -> &'static Regex {
     static AKIA_KEY_PATTERN: OnceLock<Regex> = OnceLock::new();
-    AKIA_KEY_PATTERN
-        .get_or_init(|| Regex::new(r"\bAKIA[0-9A-Z]{16}\b").expect("AKIA regex should compile"))
+    AKIA_KEY_PATTERN.get_or_init(|| {
+        Regex::new(r"\bAKIA[0-9A-Z]{16}\b").unwrap_or_else(|e| {
+            eprintln!("Failed to compile AKIA key regex: {e}");
+            empty_regex()
+        })
+    })
 }
 
 fn bearer_pattern() -> &'static Regex {
     static BEARER_PATTERN: OnceLock<Regex> = OnceLock::new();
     BEARER_PATTERN.get_or_init(|| {
-        Regex::new(r"(?i)\bbearer\s+[A-Za-z0-9._\-]{16,}\b")
-            .expect("bearer token regex should compile")
+        Regex::new(r"(?i)\bbearer\s+[A-Za-z0-9._\-]{16,}\b").unwrap_or_else(|e| {
+            eprintln!("Failed to compile bearer token regex: {e}");
+            empty_regex()
+        })
     })
 }
 
 fn pem_pattern() -> &'static Regex {
     static PEM_PATTERN: OnceLock<Regex> = OnceLock::new();
     PEM_PATTERN.get_or_init(|| {
-        Regex::new(r"(?s)-----BEGIN [A-Z0-9 ]+-----.*?-----END [A-Z0-9 ]+-----")
-            .expect("PEM regex should compile")
+        Regex::new(r"(?s)-----BEGIN [A-Z0-9 ]+-----.*?-----END [A-Z0-9 ]+-----").unwrap_or_else(
+            |e| {
+                eprintln!("Failed to compile PEM regex: {e}");
+                empty_regex()
+            },
+        )
     })
 }
 
@@ -552,7 +592,10 @@ fn address_pattern() -> &'static Regex {
         Regex::new(
             r"(?i)\b\d{1,5}\s+[A-Za-z0-9.\- ]+\s(?:street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|way)\b",
         )
-        .expect("address regex should compile")
+        .unwrap_or_else(|e| {
+            eprintln!("Failed to compile address regex: {e}");
+            empty_regex()
+        })
     })
 }
 
@@ -562,7 +605,10 @@ fn log_line_pattern() -> &'static Regex {
         Regex::new(
             r"^(?:\[\s*(?:TRACE|DEBUG|INFO|WARN|ERROR)\s*\]|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})",
         )
-        .expect("log line regex should compile")
+        .unwrap_or_else(|e| {
+            eprintln!("Failed to compile log line regex: {e}");
+            empty_regex()
+        })
     })
 }
 

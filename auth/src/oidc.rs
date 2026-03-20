@@ -106,7 +106,9 @@ impl OidcClient {
             .map_err(|e| AuthError::DiscoveryFailed(e.to_string()))?;
 
         self.discovery = Some(discovery);
-        Ok(self.discovery.as_ref().unwrap())
+        self.discovery
+            .as_ref()
+            .ok_or(AuthError::ProviderNotConfigured)
     }
 
     /// Step 2: Generate the authorization URL with PKCE.

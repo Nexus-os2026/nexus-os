@@ -218,11 +218,11 @@ fn provider_allowed(provider: &str) -> bool {
 fn instantiate_algorithm(algorithm: &str) -> Result<(), ActuatorError> {
     match algorithm {
         "evolutionary" => {
-            let _ = EvolutionEngine;
+            let _ = EvolutionEngine::default();
             Ok(())
         }
         "swarm" => {
-            let _ = SwarmCoordinator;
+            let _ = SwarmCoordinator::default();
             Ok(())
         }
         "world_model" => {
@@ -230,7 +230,11 @@ fn instantiate_algorithm(algorithm: &str) -> Result<(), ActuatorError> {
             Ok(())
         }
         "adversarial" => {
-            let _ = AdversarialArena;
+            let _ = AdversarialArena::default();
+            Ok(())
+        }
+        "darwin" => {
+            let _ = super::super::cognitive::PlanEvolutionEngine::default();
             Ok(())
         }
         other => Err(ActuatorError::IoError(format!(

@@ -208,7 +208,11 @@ impl TemporalEngine {
                 .forks
                 .iter()
                 .enumerate()
-                .max_by(|a, b| a.1.final_score.partial_cmp(&b.1.final_score).unwrap())
+                .max_by(|a, b| {
+                    a.1.final_score
+                        .partial_cmp(&b.1.final_score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
                 .map(|(i, _)| i),
             EvalStrategy::BestAverageScore => decision
                 .forks
@@ -217,14 +221,18 @@ impl TemporalEngine {
                 .max_by(|a, b| {
                     a.1.average_score()
                         .partial_cmp(&b.1.average_score())
-                        .unwrap()
+                        .unwrap_or(std::cmp::Ordering::Equal)
                 })
                 .map(|(i, _)| i),
             EvalStrategy::LowestRisk => decision
                 .forks
                 .iter()
                 .enumerate()
-                .max_by(|a, b| a.1.risk_score.partial_cmp(&b.1.risk_score).unwrap())
+                .max_by(|a, b| {
+                    a.1.risk_score
+                        .partial_cmp(&b.1.risk_score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
                 .map(|(i, _)| i),
             EvalStrategy::UserChoice => {
                 // Don't auto-select; leave for manual selection.

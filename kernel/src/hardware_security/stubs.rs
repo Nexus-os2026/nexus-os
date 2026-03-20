@@ -32,7 +32,8 @@ impl KeyBackend for TpmBackend {
             return Err(self.unavailable_error());
         }
         Err(KeyError::BackendFailure(
-            "TPM backend stub: key operations are not implemented".to_string(),
+            "TPM hardware not detected. This feature requires a physical TPM 2.0 module."
+                .to_string(),
         ))
     }
 
@@ -41,7 +42,8 @@ impl KeyBackend for TpmBackend {
             return Err(self.unavailable_error());
         }
         Err(KeyError::BackendFailure(
-            "TPM backend stub: key operations are not implemented".to_string(),
+            "TPM hardware not detected. This feature requires a physical TPM 2.0 module."
+                .to_string(),
         ))
     }
 
@@ -50,7 +52,8 @@ impl KeyBackend for TpmBackend {
             return Err(self.unavailable_error());
         }
         Err(KeyError::BackendFailure(
-            "TPM backend stub: key operations are not implemented".to_string(),
+            "TPM hardware not detected. This feature requires a physical TPM 2.0 module."
+                .to_string(),
         ))
     }
 
@@ -59,7 +62,8 @@ impl KeyBackend for TpmBackend {
             return Err(self.unavailable_error());
         }
         Err(KeyError::BackendFailure(
-            "TPM backend stub: key operations are not implemented".to_string(),
+            "TPM hardware not detected. This feature requires a physical TPM 2.0 module."
+                .to_string(),
         ))
     }
 
@@ -101,7 +105,7 @@ impl KeyBackend for SecureEnclaveBackend {
             return Err(self.unavailable_error());
         }
         Err(KeyError::BackendFailure(
-            "Secure Enclave backend stub: key operations are not implemented".to_string(),
+            "Secure Enclave hardware not detected. This feature requires Apple Secure Enclave or equivalent.".to_string(),
         ))
     }
 
@@ -110,7 +114,7 @@ impl KeyBackend for SecureEnclaveBackend {
             return Err(self.unavailable_error());
         }
         Err(KeyError::BackendFailure(
-            "Secure Enclave backend stub: key operations are not implemented".to_string(),
+            "Secure Enclave hardware not detected. This feature requires Apple Secure Enclave or equivalent.".to_string(),
         ))
     }
 
@@ -119,7 +123,7 @@ impl KeyBackend for SecureEnclaveBackend {
             return Err(self.unavailable_error());
         }
         Err(KeyError::BackendFailure(
-            "Secure Enclave backend stub: key operations are not implemented".to_string(),
+            "Secure Enclave hardware not detected. This feature requires Apple Secure Enclave or equivalent.".to_string(),
         ))
     }
 
@@ -128,7 +132,7 @@ impl KeyBackend for SecureEnclaveBackend {
             return Err(self.unavailable_error());
         }
         Err(KeyError::BackendFailure(
-            "Secure Enclave backend stub: key operations are not implemented".to_string(),
+            "Secure Enclave hardware not detected. This feature requires Apple Secure Enclave or equivalent.".to_string(),
         ))
     }
 

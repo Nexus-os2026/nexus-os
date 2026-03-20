@@ -131,7 +131,7 @@ impl RoleManager {
                     .partial_cmp(&b.score)
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
-            .expect("candidates not empty");
+            .ok_or_else(|| RoleError::NoCandidates(role.to_string()))?;
 
         let now = now_secs();
         let term_duration = role.term_duration_secs();

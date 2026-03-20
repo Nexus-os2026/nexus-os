@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  selfRewriteGetHistory as fetchRewriteHistory,
+  selfRewritePreviewPatch as fetchPreviewPatch,
+  selfRewriteTestPatch as fetchTestPatch,
+} from "../api/backend";
+import {
   ActionButton,
   CommandModal,
   EmptyState,
@@ -156,7 +161,13 @@ export default function SelfRewriteLab(): JSX.Element {
 
   const loadHistory = useCallback(async () => {
     try {
-      const history = await invoke<RollbackEvent[]>("self_rewrite_get_history");
+      let history: RollbackEvent[];
+      try {
+        const raw = await fetchRewriteHistory();
+        history = JSON.parse(raw) as RollbackEvent[];
+      } catch {
+        history = await invoke<RollbackEvent[]>("self_rewrite_get_history");
+      }
       setRemoteHistory(normalizeArray<RollbackEvent>(history));
     } catch {
       setRemoteHistory([]);
@@ -234,8 +245,14 @@ export default function SelfRewriteLab(): JSX.Element {
         return;
       }
 
-      const preview = await invoke<unknown>("self_rewrite_preview_patch", { patchId: patch.id });
-      const diffText = typeof preview === "string" ? preview : JSON.stringify(preview, null, 2);
+      let diffText: string;
+      try {
+        const raw = await fetchPreviewPatch(patch.id);
+        diffText = typeof raw === "string" ? raw : JSON.stringify(raw, null, 2);
+      } catch {
+        const preview = await invoke<unknown>("self_rewrite_preview_patch", { patchId: patch.id });
+        diffText = typeof preview === "string" ? preview : JSON.stringify(preview, null, 2);
+      }
       setPreviewTitle(patchTitle(patch));
       setPreviewDiff(diffText);
     } catch (previewError) {
@@ -250,7 +267,12 @@ export default function SelfRewriteLab(): JSX.Element {
     setWorking(`test-${patch.id}`);
     setError(null);
     try {
-      const result = await invoke<unknown>("self_rewrite_test_patch", { patchId: patch.id });
+      let result: unknown;
+      try {
+        result = await fetchTestPatch(patch.id);
+      } catch {
+        result = await invoke<unknown>("self_rewrite_test_patch", { patchId: patch.id });
+      }
       appendSessionHistory({
         patch_id: patch.id,
         title: patchTitle(patch),

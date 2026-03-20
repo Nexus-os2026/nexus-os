@@ -311,12 +311,26 @@ impl PromptFirewall {
 
 fn ssn_pattern() -> &'static Regex {
     static SSN: OnceLock<Regex> = OnceLock::new();
-    SSN.get_or_init(|| Regex::new(SSN_PATTERN).expect("SSN regex should compile"))
+    SSN.get_or_init(|| {
+        Regex::new(SSN_PATTERN).unwrap_or_else(|e| {
+            eprintln!("Failed to compile SSN regex: {e}");
+            Regex::new("^$")
+                .or_else(|_| Regex::new(""))
+                .unwrap_or_else(|_| std::process::abort())
+        })
+    })
 }
 
 fn passport_pattern() -> &'static Regex {
     static PASSPORT: OnceLock<Regex> = OnceLock::new();
-    PASSPORT.get_or_init(|| Regex::new(PASSPORT_PATTERN).expect("passport regex should compile"))
+    PASSPORT.get_or_init(|| {
+        Regex::new(PASSPORT_PATTERN).unwrap_or_else(|e| {
+            eprintln!("Failed to compile passport regex: {e}");
+            Regex::new("^$")
+                .or_else(|_| Regex::new(""))
+                .unwrap_or_else(|_| std::process::abort())
+        })
+    })
 }
 
 fn scan_ssn(text: &str) -> Vec<Finding> {
@@ -363,7 +377,14 @@ fn contains_homoglyph(text: &str) -> bool {
 
 fn internal_ip_pattern() -> &'static Regex {
     static IP: OnceLock<Regex> = OnceLock::new();
-    IP.get_or_init(|| Regex::new(INTERNAL_IP_PATTERN).expect("internal IP regex should compile"))
+    IP.get_or_init(|| {
+        Regex::new(INTERNAL_IP_PATTERN).unwrap_or_else(|e| {
+            eprintln!("Failed to compile internal IP regex: {e}");
+            Regex::new("^$")
+                .or_else(|_| Regex::new(""))
+                .unwrap_or_else(|_| std::process::abort())
+        })
+    })
 }
 
 // ---------------------------------------------------------------------------

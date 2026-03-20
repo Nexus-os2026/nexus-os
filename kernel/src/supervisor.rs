@@ -5,6 +5,48 @@ use crate::errors::AgentError;
 use crate::fuel_hardening::{
     AgentFuelLedger, BudgetPeriodId, BurnAnomalyDetector, FuelAuditReport, FuelViolation,
 };
+
+/// Maximum fuel cost per action type.  Used by the reserve-then-commit pattern
+/// to lock the worst-case amount before execution begins.
+pub fn max_fuel_cost(action_type: &str) -> u64 {
+    match action_type {
+        "llm_inference_local" => 2_000,
+        "llm_inference_cloud" => 10_000,
+        "filesystem_read" => 200,
+        "filesystem_write" => 1_000,
+        "network_request" => 2_000,
+        "agent_to_agent" => 500,
+        "mcp_tool_call" => 5_000,
+        "wasm_execution" => 1_000,
+        "supervisor.start" | "supervisor.restart" => 10,
+        "supervisor.stop" => 10,
+        // A2A protocol costs — external agent delegation is expensive
+        "a2a_delegate" => 2_000,
+        "a2a_discover" => 500,
+        "a2a_status_check" => 200,
+        // Integration provider costs — messaging vs ticket-creation
+        "integration_slack"
+        | "integration_teams"
+        | "integration_discord"
+        | "integration_telegram" => 500,
+        "integration_jira" | "integration_github" => 1_000,
+        "integration_webhook" => 300,
+        _ => 1_000, // Conservative default
+    }
+}
+
+/// A fuel reservation held against an agent's balance in the Supervisor.
+///
+/// The reserved amount is immediately subtracted from the agent's
+/// `remaining_fuel`.  Call [`Supervisor::commit_fuel`] to finalise or
+/// [`Supervisor::cancel_fuel`] to return the fuel.
+#[derive(Debug, Clone)]
+pub struct SupervisorFuelReservation {
+    pub id: Uuid,
+    pub agent_id: AgentId,
+    pub reserved_amount: u64,
+    pub action_type: String,
+}
 use crate::kill_gates::KillGateError;
 use crate::lifecycle::{transition_state, AgentState};
 use crate::manifest::AgentManifest;
@@ -430,21 +472,25 @@ impl Supervisor {
         output_tokens: u32,
         cost_units: u64,
     ) -> Result<(), AgentError> {
-        let output_units = u64::from(output_tokens);
-        {
-            let handle = self
-                .agents
-                .get_mut(&id)
-                .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
-            if handle.remaining_fuel < output_units {
-                return Err(self.apply_fuel_violation(
-                    id,
-                    FuelViolation::OverMonthlyCap,
-                    "LLM token spend exceeded remaining fuel",
-                ));
-            }
-            handle.remaining_fuel -= output_units;
+        // Use cost_units as the authoritative cost (not output_tokens alone).
+        // Reserve the full cost_units, then commit the same amount.
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+
+        if handle.remaining_fuel < cost_units {
+            return Err(self.apply_fuel_violation(
+                id,
+                FuelViolation::OverMonthlyCap,
+                "LLM token spend exceeded remaining fuel",
+            ));
         }
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        handle.remaining_fuel -= cost_units;
 
         let ledger = self.fuel_ledgers.get_mut(&id).ok_or_else(|| {
             AgentError::SupervisorError(format!("agent '{id}' missing fuel ledger"))
@@ -458,11 +504,17 @@ impl Supervisor {
             &mut self.audit_trail,
         ) {
             Ok(()) => Ok(()),
-            Err(violation) => Err(self.apply_fuel_violation(
-                id,
-                violation,
-                "fuel hardening violation from LLM spend",
-            )),
+            Err(violation) => {
+                // Refund the deducted fuel since the ledger rejected the spend
+                if let Some(handle) = self.agents.get_mut(&id) {
+                    handle.remaining_fuel += cost_units;
+                }
+                Err(self.apply_fuel_violation(
+                    id,
+                    violation,
+                    "fuel hardening violation from LLM spend",
+                ))
+            }
         }
     }
 
@@ -1036,54 +1088,127 @@ impl Supervisor {
         reason: &str,
         units: u64,
     ) -> Result<(), AgentError> {
-        let (model_name, actual_units) = {
-            let handle = self
-                .agents
-                .get_mut(&id)
-                .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
-            let actual = units.min(handle.remaining_fuel);
-            if actual == 0 && units > 0 {
-                return Err(self.apply_fuel_violation(
-                    id,
-                    FuelViolation::OverMonthlyCap,
-                    "runtime fuel exhausted",
-                ));
-            }
-            handle.remaining_fuel -= actual;
-            let model = handle
-                .manifest
-                .llm_model
-                .clone()
-                .unwrap_or_else(|| "runtime".to_string());
-            (model, actual)
-        };
+        // Reserve-then-commit: reserve the exact amount, execute, commit.
+        let reservation = self.reserve_fuel(id, units, reason)?;
+        // For internal supervisor ops the actual cost equals the requested cost,
+        // so commit immediately with the full amount.
+        self.commit_fuel(reservation, units)
+    }
 
-        // Record fuel consumption in time machine
+    /// Reserve fuel BEFORE execution.  Returns `Err` if the agent does not have
+    /// enough remaining fuel for `max_cost`.  The reserved amount is immediately
+    /// subtracted from the agent's balance and held until [`commit_fuel`] or
+    /// [`cancel_fuel`] is called.
+    pub fn reserve_fuel(
+        &mut self,
+        id: AgentId,
+        max_cost: u64,
+        action_type: &str,
+    ) -> Result<SupervisorFuelReservation, AgentError> {
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+
+        if handle.remaining_fuel < max_cost {
+            return Err(self.apply_fuel_violation(
+                id,
+                FuelViolation::OverMonthlyCap,
+                &format!(
+                    "insufficient fuel for {action_type}: need {max_cost}, have {}",
+                    // re-fetch since apply_fuel_violation may mutate
+                    self.agents.get(&id).map(|h| h.remaining_fuel).unwrap_or(0)
+                ),
+            ));
+        }
+
+        // Lock the fuel — deduct from available immediately
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        let fuel_before = handle.remaining_fuel;
+        handle.remaining_fuel -= max_cost;
+
+        // Record reservation in time machine
         let mut builder = self
             .time_machine
-            .begin_checkpoint("fuel_consumption", Some(id.to_string()));
+            .begin_checkpoint("fuel_reservation", Some(id.to_string()));
         builder.record_agent_state(
             &id.to_string(),
             "fuel",
-            json!(actual_units + self.agents.get(&id).map(|h| h.remaining_fuel).unwrap_or(0)),
-            json!(self.agents.get(&id).map(|h| h.remaining_fuel).unwrap_or(0)),
+            json!(fuel_before),
+            json!(handle.remaining_fuel),
         );
         let checkpoint = builder.build();
         let _ = self.time_machine.commit_checkpoint(checkpoint);
 
-        let ledger = self.fuel_ledgers.get_mut(&id).ok_or_else(|| {
-            AgentError::SupervisorError(format!("agent '{id}' missing fuel ledger"))
-        })?;
+        Ok(SupervisorFuelReservation {
+            id: Uuid::new_v4(),
+            agent_id: id,
+            reserved_amount: max_cost,
+            action_type: action_type.to_string(),
+        })
+    }
+
+    /// Commit actual cost after execution.  Refunds unused reservation back to
+    /// the agent's balance.  `actual_cost` must be ≤ `reservation.reserved_amount`.
+    pub fn commit_fuel(
+        &mut self,
+        reservation: SupervisorFuelReservation,
+        actual_cost: u64,
+    ) -> Result<(), AgentError> {
+        let refund = reservation.reserved_amount.saturating_sub(actual_cost);
+        if refund > 0 {
+            if let Some(handle) = self.agents.get_mut(&reservation.agent_id) {
+                handle.remaining_fuel += refund;
+            }
+        }
+
+        if actual_cost > reservation.reserved_amount {
+            eprintln!(
+                "FUEL OVERRUN: reserved {} but actual was {} for {}",
+                reservation.reserved_amount, actual_cost, reservation.action_type
+            );
+        }
+
+        // Record spend in ledger and time machine
+        let model_name = self
+            .agents
+            .get(&reservation.agent_id)
+            .and_then(|h| h.manifest.llm_model.clone())
+            .unwrap_or_else(|| "runtime".to_string());
+
+        let ledger = self
+            .fuel_ledgers
+            .get_mut(&reservation.agent_id)
+            .ok_or_else(|| {
+                AgentError::SupervisorError(format!(
+                    "agent '{}' missing fuel ledger",
+                    reservation.agent_id
+                ))
+            })?;
         match ledger.record_llm_spend(
-            id,
+            reservation.agent_id,
             model_name.as_str(),
             0,
-            actual_units as u32,
-            actual_units,
+            actual_cost as u32,
+            actual_cost,
             &mut self.audit_trail,
         ) {
             Ok(()) => Ok(()),
-            Err(violation) => Err(self.apply_fuel_violation(id, violation, reason)),
+            Err(violation) => Err(self.apply_fuel_violation(
+                reservation.agent_id,
+                violation,
+                &reservation.action_type,
+            )),
+        }
+    }
+
+    /// Cancel a reservation — return all reserved fuel to the agent.
+    pub fn cancel_fuel(&mut self, reservation: SupervisorFuelReservation) {
+        if let Some(handle) = self.agents.get_mut(&reservation.agent_id) {
+            handle.remaining_fuel += reservation.reserved_amount;
         }
     }
 
@@ -1612,5 +1737,77 @@ priority = 50
             err.to_string(),
             "supervisor error: Maximum two Transcendent agents allowed. Currently active: architect-prime, ascendant. Stop one first."
         );
+    }
+
+    // ── Fuel reservation (reserve-then-commit) tests ──
+
+    #[test]
+    fn fuel_reservation_blocks_if_insufficient() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+        let remaining = sup.agents.get(&id).unwrap().remaining_fuel;
+        // Try to reserve more than available
+        let result = sup.reserve_fuel(id, remaining + 1, "test_action");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn fuel_reservation_deducts_on_reserve_and_refunds_on_cancel() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+        let initial = sup.agents.get(&id).unwrap().remaining_fuel;
+
+        let reservation = sup.reserve_fuel(id, 500, "test_action").unwrap();
+        assert_eq!(
+            sup.agents.get(&id).unwrap().remaining_fuel,
+            initial - 500,
+            "reserve should deduct immediately"
+        );
+
+        sup.cancel_fuel(reservation);
+        assert_eq!(
+            sup.agents.get(&id).unwrap().remaining_fuel,
+            initial,
+            "cancel should refund fully"
+        );
+    }
+
+    #[test]
+    fn fuel_reservation_commit_refunds_unused() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+        let initial = sup.agents.get(&id).unwrap().remaining_fuel;
+
+        let reservation = sup.reserve_fuel(id, 800, "test_action").unwrap();
+        // Actual cost is only 300 — should refund 500
+        sup.commit_fuel(reservation, 300).unwrap();
+
+        // Account for the 1-unit cost of supervisor.start (consumed during setup)
+        // and the 300 actual units committed here.
+        let expected = initial - 300;
+        assert_eq!(
+            sup.agents.get(&id).unwrap().remaining_fuel,
+            expected,
+            "commit should refund unused reservation (reserved 800, used 300)"
+        );
+    }
+
+    #[test]
+    fn fuel_reservation_commit_exact_no_refund() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+        let initial = sup.agents.get(&id).unwrap().remaining_fuel;
+
+        let reservation = sup.reserve_fuel(id, 400, "test_action").unwrap();
+        sup.commit_fuel(reservation, 400).unwrap();
+
+        assert_eq!(
+            sup.agents.get(&id).unwrap().remaining_fuel,
+            initial - 400,
+            "exact commit should consume all reserved fuel"
+        );
+    }
+
+    #[test]
+    fn max_fuel_cost_returns_conservative_defaults() {
+        assert_eq!(max_fuel_cost("llm_inference_cloud"), 10_000);
+        assert_eq!(max_fuel_cost("filesystem_read"), 200);
+        assert_eq!(max_fuel_cost("unknown_action"), 1_000);
     }
 }

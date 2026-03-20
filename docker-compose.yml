@@ -13,9 +13,18 @@ services:
       NEXUS_HTTP_ADDR: 0.0.0.0:8080
       NEXUS_FRONTEND_DIST: /opt/nexus/app/dist
       NEXUS_CONFIG_PATH: /data/config
+      NEXUS_MODE: server
       JWT_SECRET: ${JWT_SECRET:-changeme}
       OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  # ---------- Optional services (activate with --profile) ----------
 
   ollama:
     image: ollama/ollama:latest
@@ -26,5 +35,72 @@ services:
       - ollama:/root/.ollama
     restart: unless-stopped
 
+  # ---------- HA profile: multi-replica with shared PostgreSQL ----------
+
+  postgres:
+    image: postgres:16-bookworm
+    profiles: ["ha"]
+    environment:
+      POSTGRES_DB: nexus
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexus}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  nexus-ha-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["ha"]
+    ports:
+      - "8081:8080"
+    volumes:
+      - "./nexus-data:/data"
+    environment:
+      NEXUS_HTTP_ADDR: 0.0.0.0:8080
+      NEXUS_FRONTEND_DIST: /opt/nexus/app/dist
+      NEXUS_CONFIG_PATH: /data/config
+      NEXUS_MODE: server
+      JWT_SECRET: ${JWT_SECRET:-changeme}
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      DATABASE_URL: postgres://nexus:${POSTGRES_PASSWORD:-nexus}@postgres:5432/nexus
+      HOSTNAME: nexus-ha-1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nexus-ha-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["ha"]
+    ports:
+      - "8082:8080"
+    volumes:
+      - "./nexus-data:/data"
+    environment:
+      NEXUS_HTTP_ADDR: 0.0.0.0:8080
+      NEXUS_FRONTEND_DIST: /opt/nexus/app/dist
+      NEXUS_CONFIG_PATH: /data/config
+      NEXUS_MODE: server
+      JWT_SECRET: ${JWT_SECRET:-changeme}
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      DATABASE_URL: postgres://nexus:${POSTGRES_PASSWORD:-nexus}@postgres:5432/nexus
+      HOSTNAME: nexus-ha-2
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   ollama:
+  pgdata:

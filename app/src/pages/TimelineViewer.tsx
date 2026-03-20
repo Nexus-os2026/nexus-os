@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { getTemporalHistory, temporalSelectFork } from "../api/backend";
+import { Play, Check, Diamond, X, Circle, RefreshCw, GitCommit } from "lucide-react";
 
 /* ================================================================== */
 /*  Types                                                              */
@@ -46,13 +47,13 @@ function scoreColor(score: number): string {
   return "#ef4444";
 }
 
-function statusIcon(status: string): string {
+function statusIcon(status: string): React.ReactNode {
   switch (status) {
-    case "Active": return "▶";
-    case "Completed": return "✓";
-    case "Committed": return "◆";
-    case "Abandoned": return "✗";
-    default: return "○";
+    case "Active": return <Play size={12} />;
+    case "Completed": return <Check size={12} />;
+    case "Committed": return <Diamond size={12} />;
+    case "Abandoned": return <X size={12} />;
+    default: return <Circle size={12} />;
   }
 }
 
@@ -74,7 +75,8 @@ export default function TimelineViewer(): JSX.Element {
 
   const refresh = useCallback(async () => {
     try {
-      const h = await invoke<TemporalHistory>("get_temporal_history");
+      const raw = await getTemporalHistory();
+      const h: TemporalHistory = typeof raw === "string" ? JSON.parse(raw) : raw;
       setHistory(h);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -86,7 +88,7 @@ export default function TimelineViewer(): JSX.Element {
   const handleCommit = useCallback(async (forkId: string) => {
     setCommitting(true);
     try {
-      await invoke("temporal_select_fork", { forkId });
+      await temporalSelectFork(forkId);
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -190,7 +192,7 @@ export default function TimelineViewer(): JSX.Element {
                     background: "#22d3ee", color: "#0f172a", border: "none",
                     fontFamily: "monospace", fontWeight: 700, fontSize: "0.85rem",
                   }}>
-                  {committing ? "Committing..." : "Commit This Timeline"}
+                  {committing ? "Committing..." : <><GitCommit size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Commit This Timeline</>}
                 </button>
               ) : null}
             </div>
@@ -219,7 +221,7 @@ function ForkNode({ fork, depth, childrenOf, onSelect, selectedId }: {
 
   return (
     <div style={{ marginLeft: depth * 20 }}>
-      <button type="button" onClick={() => onSelect(fork)} style={{
+      <button type="button" className="cursor-pointer" onClick={() => onSelect(fork)} style={{
         display: "flex", alignItems: "center", gap: 8, width: "100%",
         padding: "6px 10px", borderRadius: 6, cursor: "pointer",
         background: isSelected ? "rgba(34,211,238,0.1)" : "transparent",

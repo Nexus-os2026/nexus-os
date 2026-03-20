@@ -181,21 +181,24 @@ impl NaturalQuery {
 
         if lower.contains("yesterday") {
             let start = now - Duration::days(1);
-            return Some(DateRange {
-                start: start.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc(),
-                end: start
-                    .date_naive()
-                    .and_hms_opt(23, 59, 59)
-                    .unwrap()
-                    .and_utc(),
-            });
+            if let (Some(s), Some(e)) = (
+                start.date_naive().and_hms_opt(0, 0, 0),
+                start.date_naive().and_hms_opt(23, 59, 59),
+            ) {
+                return Some(DateRange {
+                    start: s.and_utc(),
+                    end: e.and_utc(),
+                });
+            }
         }
 
         if lower.contains("today") {
-            return Some(DateRange {
-                start: now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc(),
-                end: now,
-            });
+            if let Some(s) = now.date_naive().and_hms_opt(0, 0, 0) {
+                return Some(DateRange {
+                    start: s.and_utc(),
+                    end: now,
+                });
+            }
         }
 
         if lower.contains("last week") {
@@ -220,13 +223,18 @@ impl NaturalQuery {
         }
 
         // Explicit date: "on 2024-06-15"
-        let date_re = Regex::new(r"(\d{4}-\d{2}-\d{2})").unwrap();
-        if let Some(cap) = date_re.captures(&lower) {
-            if let Ok(date) = chrono::NaiveDate::parse_from_str(&cap[1], "%Y-%m-%d") {
-                return Some(DateRange {
-                    start: date.and_hms_opt(0, 0, 0).unwrap().and_utc(),
-                    end: date.and_hms_opt(23, 59, 59).unwrap().and_utc(),
-                });
+        if let Ok(date_re) = Regex::new(r"(\d{4}-\d{2}-\d{2})") {
+            if let Some(cap) = date_re.captures(&lower) {
+                if let Ok(date) = chrono::NaiveDate::parse_from_str(&cap[1], "%Y-%m-%d") {
+                    if let (Some(s), Some(e)) =
+                        (date.and_hms_opt(0, 0, 0), date.and_hms_opt(23, 59, 59))
+                    {
+                        return Some(DateRange {
+                            start: s.and_utc(),
+                            end: e.and_utc(),
+                        });
+                    }
+                }
             }
         }
 

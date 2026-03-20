@@ -3,6 +3,7 @@ use designer_agent::generator::{generate_design, DesignComponent, LayoutKind, La
 use designer_agent::screenshot_to_code::screenshot_to_code;
 
 #[test]
+#[ignore = "requires Ollama with a deployed model"]
 fn test_design_generation() {
     let spec = generate_design("Dashboard for analytics app").expect("design generation succeeds");
 
@@ -50,6 +51,7 @@ fn test_component_library() {
 }
 
 #[test]
+#[ignore = "requires Ollama with a deployed model"]
 fn test_screenshot_analysis() {
     let result = screenshot_to_code(
         "card component with padding 24px white background radius 12px medium shadow title and body text",

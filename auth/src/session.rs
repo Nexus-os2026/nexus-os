@@ -170,6 +170,41 @@ impl SessionManager {
     pub async fn session_count(&self) -> usize {
         self.sessions.read().await.len()
     }
+
+    /// Save all non-expired sessions to a JSON file for persistence across restarts.
+    pub async fn save_to_file(&self, path: &std::path::Path) -> Result<(), AuthError> {
+        let sessions = self.sessions.read().await;
+        let now = Utc::now();
+        let active: HashMap<Uuid, AuthenticatedUser> = sessions
+            .iter()
+            .filter(|(_, s)| s.expires_at > now)
+            .map(|(k, v)| (*k, v.clone()))
+            .collect();
+        let json = serde_json::to_string_pretty(&active)
+            .map_err(|e| AuthError::Serialization(e.to_string()))?;
+        std::fs::write(path, json).map_err(|e| AuthError::Io(e.to_string()))
+    }
+
+    /// Load sessions from a JSON file, restoring only non-expired sessions.
+    /// Returns the number of sessions loaded.
+    pub async fn load_from_file(&self, path: &std::path::Path) -> Result<usize, AuthError> {
+        if !path.exists() {
+            return Ok(0);
+        }
+        let json = std::fs::read_to_string(path).map_err(|e| AuthError::Io(e.to_string()))?;
+        let loaded: HashMap<Uuid, AuthenticatedUser> =
+            serde_json::from_str(&json).map_err(|e| AuthError::Serialization(e.to_string()))?;
+        let now = Utc::now();
+        let mut sessions = self.sessions.write().await;
+        let mut count = 0;
+        for (id, user) in loaded {
+            if user.expires_at > now {
+                sessions.insert(id, user);
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
 }
 
 #[cfg(test)]
@@ -261,6 +296,35 @@ mod tests {
 
         let active = mgr.list_active_sessions().await;
         assert_eq!(active.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn session_persistence_roundtrip() {
+        let mgr = SessionManager::new(8);
+        mgr.create_session(NewSessionRequest {
+            id: "persist-1".into(),
+            email: "persist@example.com".into(),
+            name: "Persist User".into(),
+            role: UserRole::Operator,
+            provider: "oidc".into(),
+            refresh_token: None,
+            workspace_id: None,
+        })
+        .await;
+
+        let tmp = std::env::temp_dir().join(format!("nexus-sessions-{}.json", Uuid::new_v4()));
+        mgr.save_to_file(&tmp).await.unwrap();
+
+        let mgr2 = SessionManager::new(8);
+        let loaded = mgr2.load_from_file(&tmp).await.unwrap();
+        assert_eq!(loaded, 1);
+        assert_eq!(mgr2.session_count().await, 1);
+
+        let active = mgr2.list_active_sessions().await;
+        assert_eq!(active[0].email, "persist@example.com");
+
+        // Cleanup
+        let _ = std::fs::remove_file(&tmp);
     }
 
     #[tokio::test]

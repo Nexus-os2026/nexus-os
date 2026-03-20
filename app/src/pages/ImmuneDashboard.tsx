@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import {
+  getImmuneStatus as fetchImmuneStatus,
+  getImmuneMemory as fetchImmuneMemory,
+  setPrivacyRules,
+  runAdversarialSession as fetchAdversarialSession,
+  triggerImmuneScan,
+  listAgents,
+  getThreatLog,
+} from "../api/backend";
 import {
   ActionButton,
   DataRow,
@@ -65,6 +73,14 @@ interface ArenaSession {
   results: RoundResult[];
 }
 
+interface PrivacyRule {
+  id: string;
+  name: string;
+  pattern: string;
+  action: string;
+  enabled: boolean;
+}
+
 interface AgentOption {
   id: string;
   name: string;
@@ -108,9 +124,15 @@ function fallbackThreatAction(threat: ThreatEvent): string {
 
 async function loadThreatLog(): Promise<ThreatEvent[]> {
   try {
-    return normalizeArray<ThreatEvent>(await invoke("get_threat_log", { limit: 20 }));
+    const raw = await getThreatLog(20);
+    return normalizeArray<ThreatEvent>(JSON.parse(raw));
   } catch {
-    return normalizeArray<ThreatEvent>(await invoke("get_threat_log"));
+    try {
+      const raw = await getThreatLog();
+      return normalizeArray<ThreatEvent>(JSON.parse(raw));
+    } catch {
+      return [];
+    }
   }
 }
 
@@ -129,15 +151,22 @@ export default function ImmuneDashboard(): JSX.Element {
   const [arenaRunning, setArenaRunning] = useState(false);
   const [arenaSession, setArenaSession] = useState<ArenaSession | null>(null);
   const [revealedRounds, setRevealedRounds] = useState(0);
+  const [privacyRules, setPrivacyRules] = useState<PrivacyRule[]>([
+    { id: "pii-redact", name: "PII Redaction", pattern: "SSN|email|phone", action: "redact", enabled: true },
+    { id: "api-key-block", name: "API Key Leak Prevention", pattern: "sk-|api_key|secret", action: "block", enabled: true },
+    { id: "ip-mask", name: "IP Address Masking", pattern: "\\d+\\.\\d+\\.\\d+\\.\\d+", action: "mask", enabled: false },
+    { id: "exfil-detect", name: "Exfiltration Detection", pattern: "outbound|upload|export", action: "alert", enabled: true },
+  ]);
+  const [savingRules, setSavingRules] = useState(false);
 
   const refresh = useCallback(async () => {
     setError(null);
     try {
       const [statusResult, threatResult, memoryResult, agentResult] = await Promise.allSettled([
-        invoke<ImmuneStatus>("get_immune_status"),
+        fetchImmuneStatus().then((raw) => JSON.parse(raw) as ImmuneStatus),
         loadThreatLog(),
-        invoke<ThreatSignature[]>("get_immune_memory"),
-        invoke<AgentOption[]>("list_agents"),
+        fetchImmuneMemory().then((raw) => JSON.parse(raw) as ThreatSignature[]),
+        listAgents() as Promise<AgentOption[]>,
       ]);
 
       if (statusResult.status === "fulfilled") {
@@ -194,7 +223,7 @@ export default function ImmuneDashboard(): JSX.Element {
     setError(null);
     setScanStatus("Running full privacy scan...");
     try {
-      await invoke("trigger_immune_scan");
+      await triggerImmuneScan();
       setScanStatus("Full scan completed");
       await refresh();
     } catch (scanError) {
@@ -213,11 +242,8 @@ export default function ImmuneDashboard(): JSX.Element {
     setArenaRunning(true);
     setError(null);
     try {
-      const session = await invoke<ArenaSession>("run_adversarial_session", {
-        attackerId: arenaAttacker,
-        defenderId: arenaDefender,
-        rounds: arenaRounds,
-      });
+      const raw = await fetchAdversarialSession(arenaAttacker, arenaDefender, arenaRounds);
+      const session = JSON.parse(raw) as ArenaSession;
       setArenaSession({
         ...session,
         results: normalizeArray<RoundResult>(session?.results),
@@ -228,6 +254,24 @@ export default function ImmuneDashboard(): JSX.Element {
       setArenaRunning(false);
     }
   }, [arenaAttacker, arenaDefender, arenaRounds]);
+
+  const handleToggleRule = useCallback((ruleId: string) => {
+    setPrivacyRules((current) =>
+      current.map((rule) => (rule.id === ruleId ? { ...rule, enabled: !rule.enabled } : rule))
+    );
+  }, []);
+
+  const handleSavePrivacyRules = useCallback(async () => {
+    setSavingRules(true);
+    setError(null);
+    try {
+      await setPrivacyRules(privacyRules);
+    } catch (ruleError) {
+      setError(ruleError instanceof Error ? ruleError.message : String(ruleError));
+    } finally {
+      setSavingRules(false);
+    }
+  }, [privacyRules]);
 
   const threatTone = threatPresentation(status?.threat_level ?? "");
   const visibleArenaResults = arenaSession?.results.slice(0, revealedRounds) ?? [];
@@ -439,6 +483,34 @@ export default function ImmuneDashboard(): JSX.Element {
             </div>
             <ActionButton accent="#00ffcc" disabled={scanning} onClick={() => void handleScan()}>
               {scanning ? "Running Scan..." : "Run Full Scan"}
+            </ActionButton>
+          </div>
+        </Panel>
+
+        <Panel title="Privacy Rules" accent="#a78bfa" style={{ gridColumn: "1 / -1" }}>
+          <div style={{ ...commandScrollStyle, maxHeight: 300, paddingRight: 6 }}>
+            {privacyRules.map((rule) => (
+              <article key={rule.id} style={{ ...commandInsetStyle, marginBottom: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <StatusDot color={rule.enabled ? "#22c55e" : "#64748b"} />
+                    <span style={{ ...commandMonoValueStyle, color: "#f8fafc" }}>{rule.name}</span>
+                  </div>
+                  <ActionButton
+                    accent={rule.enabled ? "#22c55e" : "#64748b"}
+                    onClick={() => handleToggleRule(rule.id)}
+                  >
+                    {rule.enabled ? "Enabled" : "Disabled"}
+                  </ActionButton>
+                </div>
+                <DataRow label="Pattern" value={rule.pattern} valueColor="#a78bfa" />
+                <DataRow label="Action" value={toTitleCase(rule.action)} />
+              </article>
+            ))}
+          </div>
+          <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
+            <ActionButton accent="#a78bfa" disabled={savingRules} onClick={() => void handleSavePrivacyRules()}>
+              {savingRules ? "Saving Rules..." : "Save Privacy Rules"}
             </ActionButton>
           </div>
         </Panel>

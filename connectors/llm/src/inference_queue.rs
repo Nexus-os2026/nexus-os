@@ -134,7 +134,10 @@ impl InferenceQueue {
         };
 
         {
-            let mut queue = self.pending.lock().unwrap();
+            let mut queue = self.pending.lock().unwrap_or_else(|poisoned| {
+                eprintln!("Lock was poisoned, recovering inner data");
+                poisoned.into_inner()
+            });
             // Insert in priority order (stable: append then sort).
             queue.push(entry);
             queue.sort_by_key(|e| e.request.priority);
@@ -147,7 +150,10 @@ impl InferenceQueue {
 
     /// Take the next highest-priority entry from the queue. Returns `None` if empty.
     fn take_next(&self) -> Option<QueueEntry> {
-        let mut queue = self.pending.lock().unwrap();
+        let mut queue = self.pending.lock().unwrap_or_else(|poisoned| {
+            eprintln!("Lock was poisoned, recovering inner data");
+            poisoned.into_inner()
+        });
         if queue.is_empty() {
             None
         } else {
@@ -157,7 +163,10 @@ impl InferenceQueue {
 
     /// Take the next entry, blocking until one is available or shutdown is signalled.
     fn take_next_blocking(&self) -> Option<QueueEntry> {
-        let mut queue = self.pending.lock().unwrap();
+        let mut queue = self.pending.lock().unwrap_or_else(|poisoned| {
+            eprintln!("Lock was poisoned, recovering inner data");
+            poisoned.into_inner()
+        });
         loop {
             if self.shutdown.load(Ordering::Relaxed) {
                 return None;
@@ -165,13 +174,23 @@ impl InferenceQueue {
             if !queue.is_empty() {
                 return Some(queue.remove(0));
             }
-            queue = self.notify.wait(queue).unwrap();
+            queue = self.notify.wait(queue).unwrap_or_else(|poisoned| {
+                eprintln!("Lock was poisoned, recovering inner data");
+                poisoned.into_inner()
+            });
         }
     }
 
     /// Return a snapshot of queue statistics.
     pub fn stats(&self) -> QueueStats {
-        let pending = self.pending.lock().unwrap().len();
+        let pending = self
+            .pending
+            .lock()
+            .unwrap_or_else(|poisoned| {
+                eprintln!("Lock was poisoned, recovering inner data");
+                poisoned.into_inner()
+            })
+            .len();
         QueueStats {
             pending,
             in_flight: self.in_flight.load(Ordering::Relaxed),
@@ -193,7 +212,13 @@ impl InferenceQueue {
 
     /// Number of pending requests.
     pub fn pending_count(&self) -> usize {
-        self.pending.lock().unwrap().len()
+        self.pending
+            .lock()
+            .unwrap_or_else(|poisoned| {
+                eprintln!("Lock was poisoned, recovering inner data");
+                poisoned.into_inner()
+            })
+            .len()
     }
 }
 
@@ -269,10 +294,12 @@ impl InferenceScheduler {
             entries
                 .into_iter()
                 .fold(Vec::new(), |mut acc: Vec<Vec<QueueEntry>>, entry| {
-                    if acc.is_empty() || acc.last().unwrap().len() >= chunk_size {
+                    if acc.is_empty() || acc.last().is_none_or(|last| last.len() >= chunk_size) {
                         acc.push(Vec::new());
                     }
-                    acc.last_mut().unwrap().push(entry);
+                    if let Some(last) = acc.last_mut() {
+                        last.push(entry);
+                    }
                     acc
                 });
 
@@ -338,10 +365,14 @@ pub fn query_with_queue<P: LlmProvider + 'static>(
     model: &str,
     priority: InferencePriority,
 ) -> InferenceResult {
-    let (_id, rx) = queue.submit(prompt.to_string(), max_tokens, model.to_string(), priority);
+    let (id, rx) = queue.submit(prompt.to_string(), max_tokens, model.to_string(), priority);
     scheduler.drain(provider);
-    rx.recv()
-        .expect("inference result channel closed unexpectedly")
+    rx.recv().unwrap_or_else(|_| InferenceResult {
+        request_id: id,
+        response: Err("inference result channel closed unexpectedly".to_string()),
+        queue_wait_ms: 0,
+        inference_ms: 0,
+    })
 }
 
 #[cfg(test)]

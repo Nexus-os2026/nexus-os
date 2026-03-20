@@ -38,6 +38,10 @@ members = [
   "packaging/airgap",
   "persistence",
   "auth",
+  "telemetry",
+  "tenancy",
+  "integrations",
+  "metering",
 ]
 
 [workspace.package]

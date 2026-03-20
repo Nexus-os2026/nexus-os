@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
+import { Zap, Play, Clock, List, Shield, Triangle, Diamond, Cloud, Hexagon, Check, X, RefreshCw } from "lucide-react";
 import {
   factoryCreateProject,
   factoryBuildProject,
@@ -7,11 +8,15 @@ import {
   factoryListProjects,
   factoryGetBuildHistory,
   hasDesktopRuntime,
+  airgapCreateBundle,
+  airgapGetSystemInfo,
+  airgapInstallBundle,
+  airgapValidateBundle,
 } from "../api/backend";
 import "./deploy-pipeline.css";
 
 /* ─── types ─── */
-type View = "projects" | "pipeline" | "history" | "logs";
+type View = "projects" | "pipeline" | "history" | "logs" | "airgap";
 
 interface FactoryProject {
   id: string;
@@ -73,6 +78,24 @@ interface LogEntry {
 
 type PipelineStage = "idle" | "building" | "testing" | "deploying" | "done" | "failed";
 
+interface AirgapSystemInfo {
+  os: string;
+  arch: string;
+  hostname: string;
+}
+
+interface AirgapBundleResult {
+  path: string;
+  size_bytes: number;
+  components: string[];
+}
+
+interface AirgapValidation {
+  valid: boolean;
+  errors: string[];
+  components: string[];
+}
+
 const LANGUAGES = ["rust", "javascript", "typescript", "python", "go"];
 const STATUS_COLORS: Record<string, string> = {
   Created: "#64748b",
@@ -102,6 +125,20 @@ export default function DeployPipeline() {
 
   // HITL state
   const [hitlPending, setHitlPending] = useState<string | null>(null);
+
+  // Airgap state
+  const [airgapSysInfo, setAirgapSysInfo] = useState<AirgapSystemInfo | null>(null);
+  const [bundleTargetOs, setBundleTargetOs] = useState("linux");
+  const [bundleTargetArch, setBundleTargetArch] = useState("x86_64");
+  const [bundleOutputPath, setBundleOutputPath] = useState("./nexus-bundle");
+  const [bundleComponents, setBundleComponents] = useState("");
+  const [bundleResult, setBundleResult] = useState<AirgapBundleResult | null>(null);
+  const [validatePath, setValidatePath] = useState("");
+  const [validateResult, setValidateResult] = useState<AirgapValidation | null>(null);
+  const [installBundlePath, setInstallBundlePath] = useState("");
+  const [installDir, setInstallDir] = useState("/opt/nexus");
+  const [installResult, setInstallResult] = useState<string | null>(null);
+  const [airgapLoading, setAirgapLoading] = useState(false);
 
   const isDesktop = hasDesktopRuntime();
   const hasPipelines = projects.length > 0;
@@ -146,6 +183,57 @@ export default function DeployPipeline() {
   useEffect(() => {
     if (selectedProject) loadBuildHistory(selectedProject);
   }, [selectedProject, loadBuildHistory]);
+
+  /* ─── load airgap system info ─── */
+  useEffect(() => {
+    if (view !== "airgap" || !isDesktop) return;
+    airgapGetSystemInfo().then(raw => {
+      try { setAirgapSysInfo(JSON.parse(raw)); } catch { /* ignore */ }
+    }).catch(() => {});
+  }, [view, isDesktop]);
+
+  const handleCreateBundle = useCallback(async () => {
+    setAirgapLoading(true);
+    setBundleResult(null);
+    try {
+      const raw = await airgapCreateBundle(
+        bundleTargetOs, bundleTargetArch, bundleOutputPath,
+        bundleComponents.trim() || undefined,
+      );
+      setBundleResult(JSON.parse(raw));
+      addLog("success", `Airgap bundle created at ${bundleOutputPath}`);
+    } catch (e) {
+      addLog("error", `Bundle creation failed: ${e}`);
+    }
+    setAirgapLoading(false);
+  }, [bundleTargetOs, bundleTargetArch, bundleOutputPath, bundleComponents, addLog]);
+
+  const handleValidateBundle = useCallback(async () => {
+    if (!validatePath.trim()) return;
+    setAirgapLoading(true);
+    setValidateResult(null);
+    try {
+      const raw = await airgapValidateBundle(validatePath);
+      setValidateResult(JSON.parse(raw));
+    } catch (e) {
+      addLog("error", `Validation failed: ${e}`);
+    }
+    setAirgapLoading(false);
+  }, [validatePath, addLog]);
+
+  const handleInstallBundle = useCallback(async () => {
+    if (!installBundlePath.trim()) return;
+    setAirgapLoading(true);
+    setInstallResult(null);
+    try {
+      const raw = await airgapInstallBundle(installBundlePath, installDir);
+      setInstallResult(raw);
+      addLog("success", `Bundle installed to ${installDir}`);
+    } catch (e) {
+      addLog("error", `Install failed: ${e}`);
+    }
+    setAirgapLoading(false);
+  }, [installBundlePath, installDir, addLog]);
 
   /* ─── actions ─── */
   const createProject = useCallback(async () => {
@@ -304,9 +392,9 @@ export default function DeployPipeline() {
         </div>
 
         <div className="dp-views">
-          {([["projects", "⚡", "Projects"], ["pipeline", "▶", "Pipeline"], ["history", "◷", "History"], ["logs", "▤", "Logs"]] as const).map(([id, icon, label]) => (
-            <button key={id} className={`dp-view-btn ${view === id ? "active" : ""}`} onClick={() => setView(id)}>
-              <span>{icon}</span> {label}
+          {([["projects", "zap", "Projects"], ["pipeline", "play", "Pipeline"], ["history", "clock", "History"], ["logs", "list", "Logs"], ["airgap", "shield", "Airgap"]] as const).map(([id, icon, label]) => (
+            <button key={id} className={`dp-view-btn cursor-pointer ${view === id ? "active" : ""}`} onClick={() => setView(id)}>
+              <span>{icon === "zap" ? <Zap size={14} aria-hidden="true" /> : icon === "play" ? <Play size={14} aria-hidden="true" /> : icon === "clock" ? <Clock size={14} aria-hidden="true" /> : icon === "list" ? <List size={14} aria-hidden="true" /> : <Shield size={14} aria-hidden="true" />}</span> {label}
             </button>
           ))}
         </div>
@@ -348,10 +436,10 @@ export default function DeployPipeline() {
         {/* Cloud providers note */}
         <div className="dp-audit">
           <div className="dp-section-header">Cloud Providers</div>
-          <div className="dp-audit-entry">▲ Vercel — use a project deploy command to target Vercel</div>
-          <div className="dp-audit-entry">◆ Netlify — use a project deploy command to target Netlify</div>
-          <div className="dp-audit-entry">☁ Cloudflare — use a project deploy command to target Workers/Pages</div>
-          <div className="dp-audit-entry">⬢ Self-Hosted — Active</div>
+          <div className="dp-audit-entry"><Triangle size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} /> Vercel — use a project deploy command to target Vercel</div>
+          <div className="dp-audit-entry"><Diamond size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} /> Netlify — use a project deploy command to target Netlify</div>
+          <div className="dp-audit-entry"><Cloud size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} /> Cloudflare — use a project deploy command to target Workers/Pages</div>
+          <div className="dp-audit-entry"><Hexagon size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} /> Self-Hosted — Active</div>
         </div>
       </aside>
 
@@ -362,7 +450,7 @@ export default function DeployPipeline() {
         {hitlPending && (
           <div className="dp-hitl-overlay">
             <div className="dp-hitl-dialog">
-              <div className="dp-hitl-icon">⛨</div>
+              <div className="dp-hitl-icon"><Shield size={24} aria-hidden="true" /></div>
               <h3>HITL Approval Required</h3>
               <p className="dp-hitl-msg">
                 Running the full pipeline (build → test → deploy) for project <strong>{activeProject?.name}</strong>.
@@ -477,7 +565,7 @@ export default function DeployPipeline() {
         {view === "pipeline" && (
           <div className="dp-deploys">
             <div className="dp-deploys-header">
-              <h3 className="dp-view-title">▶ Pipeline {activeProject ? `— ${activeProject.name}` : ""}</h3>
+              <h3 className="dp-view-title"><Play size={16} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} /> Pipeline {activeProject ? `— ${activeProject.name}` : ""}</h3>
             </div>
 
             {activeProject ? (
@@ -524,7 +612,7 @@ export default function DeployPipeline() {
                           textAlign: "center",
                         }}>
                           <div style={{ fontSize: "1.2rem", marginBottom: "0.25rem" }}>
-                            {isPassed ? "✓" : isFailed ? "✗" : isActive ? "⟳" : `${i + 1}`}
+                            {isPassed ? <Check size={16} aria-hidden="true" /> : isFailed ? <X size={16} aria-hidden="true" /> : isActive ? <RefreshCw size={16} aria-hidden="true" /> : `${i + 1}`}
                           </div>
                           <div style={{ fontSize: "0.85rem", color: "#e2e8f0" }}>{stage}</div>
                         </div>
@@ -628,6 +716,116 @@ export default function DeployPipeline() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ═══ AIRGAP VIEW ═══ */}
+        {view === "airgap" && (
+          <div className="dp-deploys">
+            <div className="dp-deploys-header">
+              <h3 className="dp-view-title">Airgap Deployment</h3>
+            </div>
+
+            {/* System Info */}
+            {airgapSysInfo && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20, padding: "0 1rem" }}>
+                <div style={{ padding: 12, background: "rgba(15,23,42,0.7)", border: "1px solid #1e293b", borderRadius: 8 }}>
+                  <div style={{ fontSize: "0.7rem", color: "#64748b", textTransform: "uppercase", marginBottom: 4 }}>OS</div>
+                  <div style={{ fontSize: "0.85rem", color: "#e2e8f0", fontFamily: "monospace" }}>{airgapSysInfo.os}</div>
+                </div>
+                <div style={{ padding: 12, background: "rgba(15,23,42,0.7)", border: "1px solid #1e293b", borderRadius: 8 }}>
+                  <div style={{ fontSize: "0.7rem", color: "#64748b", textTransform: "uppercase", marginBottom: 4 }}>Architecture</div>
+                  <div style={{ fontSize: "0.85rem", color: "#e2e8f0", fontFamily: "monospace" }}>{airgapSysInfo.arch}</div>
+                </div>
+                <div style={{ padding: 12, background: "rgba(15,23,42,0.7)", border: "1px solid #1e293b", borderRadius: 8 }}>
+                  <div style={{ fontSize: "0.7rem", color: "#64748b", textTransform: "uppercase", marginBottom: 4 }}>Hostname</div>
+                  <div style={{ fontSize: "0.85rem", color: "#e2e8f0", fontFamily: "monospace" }}>{airgapSysInfo.hostname}</div>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, padding: "0 1rem" }}>
+              {/* Create Bundle */}
+              <div style={{ padding: 16, background: "rgba(15,23,42,0.7)", border: "1px solid #1e293b", borderRadius: 8 }}>
+                <h4 style={{ color: "#22d3ee", fontFamily: "monospace", fontSize: "0.85rem", marginBottom: 12 }}>Create Bundle</h4>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <select value={bundleTargetOs} onChange={e => setBundleTargetOs(e.target.value)}
+                      style={{ flex: 1, padding: "6px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.8rem" }}>
+                      <option value="linux">Linux</option>
+                      <option value="macos">macOS</option>
+                      <option value="windows">Windows</option>
+                    </select>
+                    <select value={bundleTargetArch} onChange={e => setBundleTargetArch(e.target.value)}
+                      style={{ flex: 1, padding: "6px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.8rem" }}>
+                      <option value="x86_64">x86_64</option>
+                      <option value="aarch64">aarch64</option>
+                    </select>
+                  </div>
+                  <input value={bundleOutputPath} onChange={e => setBundleOutputPath(e.target.value)} placeholder="Output path"
+                    style={{ padding: "6px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.8rem" }} />
+                  <input value={bundleComponents} onChange={e => setBundleComponents(e.target.value)} placeholder="Components (optional, comma sep)"
+                    style={{ padding: "6px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.8rem" }} />
+                  <button onClick={() => void handleCreateBundle()} disabled={airgapLoading}
+                    style={{ padding: "8px 16px", background: "rgba(34,211,238,0.15)", border: "1px solid #22d3ee", borderRadius: 6, color: "#22d3ee", cursor: "pointer", fontFamily: "monospace", fontSize: "0.8rem", fontWeight: 600 }}>
+                    {airgapLoading ? "Creating..." : "Create Bundle"}
+                  </button>
+                </div>
+                {bundleResult && (
+                  <div style={{ marginTop: 10, padding: 10, background: "rgba(34,211,238,0.05)", border: "1px solid rgba(34,211,238,0.2)", borderRadius: 6, fontSize: "0.78rem" }}>
+                    <div style={{ color: "#22d3ee" }}>Bundle created: {bundleResult.path}</div>
+                    <div style={{ color: "#94a3b8" }}>Size: {(bundleResult.size_bytes / 1024 / 1024).toFixed(1)} MB</div>
+                    <div style={{ color: "#94a3b8" }}>Components: {bundleResult.components.join(", ")}</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Validate + Install */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {/* Validate Bundle */}
+                <div style={{ padding: 16, background: "rgba(15,23,42,0.7)", border: "1px solid #1e293b", borderRadius: 8 }}>
+                  <h4 style={{ color: "#22d3ee", fontFamily: "monospace", fontSize: "0.85rem", marginBottom: 12 }}>Validate Bundle</h4>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input value={validatePath} onChange={e => setValidatePath(e.target.value)} placeholder="Bundle path"
+                      style={{ flex: 1, padding: "6px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.8rem" }} />
+                    <button onClick={() => void handleValidateBundle()} disabled={airgapLoading || !validatePath.trim()}
+                      style={{ padding: "6px 14px", background: "rgba(34,211,238,0.15)", border: "1px solid #22d3ee", borderRadius: 6, color: "#22d3ee", cursor: "pointer", fontFamily: "monospace", fontSize: "0.8rem" }}>
+                      Validate
+                    </button>
+                  </div>
+                  {validateResult && (
+                    <div style={{ marginTop: 8, fontSize: "0.78rem" }}>
+                      <div style={{ color: validateResult.valid ? "#22c55e" : "#ef4444" }}>
+                        {validateResult.valid ? "Valid" : "Invalid"} — {validateResult.components.length} component(s)
+                      </div>
+                      {validateResult.errors.length > 0 && validateResult.errors.map((err, i) => (
+                        <div key={i} style={{ color: "#ef4444", fontSize: "0.72rem" }}>{err}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Install Bundle */}
+                <div style={{ padding: 16, background: "rgba(15,23,42,0.7)", border: "1px solid #1e293b", borderRadius: 8 }}>
+                  <h4 style={{ color: "#22d3ee", fontFamily: "monospace", fontSize: "0.85rem", marginBottom: 12 }}>Install Bundle</h4>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <input value={installBundlePath} onChange={e => setInstallBundlePath(e.target.value)} placeholder="Bundle path"
+                      style={{ padding: "6px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.8rem" }} />
+                    <input value={installDir} onChange={e => setInstallDir(e.target.value)} placeholder="Install directory"
+                      style={{ padding: "6px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.8rem" }} />
+                    <button onClick={() => void handleInstallBundle()} disabled={airgapLoading || !installBundlePath.trim()}
+                      style={{ padding: "8px 16px", background: "rgba(245,158,11,0.15)", border: "1px solid #f59e0b", borderRadius: 6, color: "#f59e0b", cursor: "pointer", fontFamily: "monospace", fontSize: "0.8rem", fontWeight: 600 }}>
+                      {airgapLoading ? "Installing..." : "Install Bundle"}
+                    </button>
+                  </div>
+                  {installResult && (
+                    <div style={{ marginTop: 8, padding: 8, background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 6, fontSize: "0.78rem", color: "#22c55e" }}>
+                      {installResult}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

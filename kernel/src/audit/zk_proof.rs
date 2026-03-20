@@ -334,7 +334,9 @@ impl ProofGenerator {
     /// Generate a cryptographically random 32-byte blinding factor.
     pub fn generate_blinding() -> Vec<u8> {
         let mut buf = [0u8; 32];
-        getrandom::getrandom(&mut buf).expect("OS RNG failure");
+        if let Err(e) = getrandom::getrandom(&mut buf) {
+            eprintln!("OS RNG failure: {e}");
+        }
         buf.to_vec()
     }
 

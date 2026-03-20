@@ -1,9 +1,12 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { Hammer, Clock, Lock, Pin, MapPin, StickyNote, Trash2, Mic, MicOff, ClipboardList, Image, Zap, GraduationCap, Rocket, Hexagon, Play, Pause, Square, X, AlertTriangle, Check, FolderOpen, ChevronUp, ChevronDown, RefreshCw } from "lucide-react";
 import {
   sendChat, chatWithOllama, conductBuild, listAgents, hasDesktopRuntime,
   listProviderModels, getProviderStatus, saveApiKey, getPreinstalledAgents,
   startAgent, stopAgent, pauseAgent, resumeAgent, getAuditLog,
   approveConsentRequest, denyConsentRequest,
+  startConversationalBuild, builderRespond, remixProject, analyzeProblem,
+  startTeachMode, teachModeRespond,
 } from "../api/backend";
 import type {
   ChatTokenEvent, ConductorPlanEvent, ConductorAgentCompletedEvent,
@@ -13,7 +16,7 @@ import type {
 import "./ai-chat-hub.css";
 
 /* ─── types ─── */
-type View = "chat" | "compare" | "history";
+type View = "chat" | "compare" | "history" | "build";
 
 interface Model {
   id: string;
@@ -138,9 +141,14 @@ const BUILD_ACTION_KEYWORDS = ["build", "create", "generate", "make me", "design
 const BUILD_TARGET_KEYWORDS = ["website", "site", "app", "page", "project", "component", "landing", "portfolio", "dashboard", "frontend"];
 
 function isBuildRequest(msg: string): boolean {
-  const lower = msg.toLowerCase();
-  return BUILD_ACTION_KEYWORDS.some(kw => lower.includes(kw))
-    && BUILD_TARGET_KEYWORDS.some(kw => lower.includes(kw));
+  // Only route to Conductor (file-generating build) when the message starts with
+  // "/build" prefix. All other project-like requests go through the backend
+  // complexity detection pipeline which handles autopilot + agent routing.
+  const lower = msg.toLowerCase().trim();
+  if (lower.startsWith("/build ") || lower.startsWith("/conductor ")) {
+    return true;
+  }
+  return false;
 }
 
 function providerModelToModel(m: ProviderModel, locked: boolean): Model {
@@ -225,7 +233,7 @@ function BuildResultCard({ data }: { data: BuildResultData }) {
   return (
     <div className="ch-build-card">
       <div className="ch-build-header">
-        <span className="ch-build-icon">⬢</span>
+        <span className="ch-build-icon"><Hexagon size={16} aria-hidden="true" /></span>
         <span className="ch-build-title">Conductor Build Complete</span>
         <span className={`ch-build-status ch-build-status-${result.status.toLowerCase()}`}>
           {result.status}
@@ -238,7 +246,7 @@ function BuildResultCard({ data }: { data: BuildResultData }) {
         <div className="ch-build-tasks">
           {plan.tasks.map((task, i) => (
             <div key={i} className="ch-build-task">
-              <span className="ch-build-task-check">✓</span>
+              <span className="ch-build-task-check"><Check size={12} aria-hidden="true" /></span>
               <span className="ch-build-task-desc">{task.description}</span>
               <span className="ch-build-task-role">{task.role}</span>
             </div>
@@ -260,9 +268,9 @@ function BuildResultCard({ data }: { data: BuildResultData }) {
 
       {/* Stats */}
       <div className="ch-build-stats">
-        <span className="ch-build-stat">⬢ {result.agents_used} agents</span>
-        <span className="ch-build-stat">⚡ {result.total_fuel_used} fuel</span>
-        <span className="ch-build-stat">⏱ {result.duration_secs.toFixed(1)}s</span>
+        <span className="ch-build-stat"><Hexagon size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> {result.agents_used} agents</span>
+        <span className="ch-build-stat"><Zap size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> {result.total_fuel_used} fuel</span>
+        <span className="ch-build-stat"><Clock size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> {result.duration_secs.toFixed(1)}s</span>
       </div>
 
       {/* Summary */}
@@ -273,12 +281,12 @@ function BuildResultCard({ data }: { data: BuildResultData }) {
       {/* Actions */}
       <div className="ch-build-actions">
         {hasIndex && (
-          <button className="ch-build-btn ch-build-btn-primary" onClick={openPreview}>
-            ▶ Preview
+          <button className="ch-build-btn ch-build-btn-primary cursor-pointer" onClick={openPreview}>
+            <Play size={12} aria-hidden="true" /> Preview
           </button>
         )}
-        <button className="ch-build-btn" onClick={openFileManager}>
-          📁 View Files
+        <button className="ch-build-btn cursor-pointer" onClick={openFileManager}>
+          <FolderOpen size={12} aria-hidden="true" /> View Files
         </button>
       </div>
     </div>
@@ -350,6 +358,14 @@ export default function AiChatHub() {
   const [compareResults, setCompareResults] = useState<[string, string]>(["", ""]);
   const [comparing, setComparing] = useState(false);
 
+  // builder state (Experience Layer)
+  const [builderMessages, setBuilderMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const [builderInput, setBuilderInput] = useState("");
+  const [builderSending, setBuilderSending] = useState(false);
+  const [builderStarted, setBuilderStarted] = useState(false);
+  const [builderProjectId, setBuilderProjectId] = useState<string | null>(null);
+  const [teachModeActive, setTeachModeActive] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const streamingMsgIdRef = useRef<string | null>(null);
@@ -391,7 +407,7 @@ export default function AiChatHub() {
             id: locked.id,
             name: locked.name,
             provider: meta.label,
-            icon: "🔒",
+            icon: "locked",
             color: "#666",
             speed: "medium",
             capability: "expert",
@@ -488,6 +504,36 @@ export default function AiChatHub() {
           } : c));
           logAudit(`HITL: ${notification.agent_name} requests approval`);
         });
+      } catch { /* not in Tauri */ }
+    })();
+    return () => { unlisten?.(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConvId]);
+
+  /* ─── listen for auto-evolution events ─── */
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const eventMod = await import("@tauri-apps/api/event");
+        unlisten = await eventMod.listen<{ agent_id: string; old_score: number; new_score: number }>(
+          "agent-evolved",
+          (event) => {
+            const { agent_id, old_score, new_score } = event.payload;
+            const evoMsg: ChatMsg = {
+              id: `evo-${Date.now()}`,
+              role: "system",
+              content: `Agent ${agent_id} self-improved! Score: ${old_score.toFixed(1)} → ${new_score.toFixed(1)}`,
+              timestamp: Date.now(),
+            };
+            setConversations(prev => prev.map(c => c.id === activeConvId ? {
+              ...c,
+              messages: [...c.messages, evoMsg],
+              updatedAt: Date.now(),
+            } : c));
+            logAudit(`Auto-evolution: ${agent_id} improved ${old_score.toFixed(1)} → ${new_score.toFixed(1)}`);
+          },
+        );
       } catch { /* not in Tauri */ }
     })();
     return () => { unlisten?.(); };
@@ -729,7 +775,7 @@ export default function AiChatHub() {
   const sendBuildRequest = useCallback(async (currentInput: string, currentConvId: string, assistantMsgId: string) => {
     logAudit("Routing to Conductor...");
     setConductorProgress([]);
-    updateStreamingMsg(currentConvId, assistantMsgId, "⬢ Conductor orchestrating build...", false);
+    updateStreamingMsg(currentConvId, assistantMsgId, "Conductor orchestrating build...", false);
 
     try {
       const response = await conductBuild(currentInput, undefined, selectedModel);
@@ -811,7 +857,7 @@ export default function AiChatHub() {
           if (errMsg.includes("__TAURI__") || errMsg.includes("invoke")) {
             // Not in Tauri runtime — fallback to send_chat
             try {
-              const response = await sendChat(currentInput, selectedModel);
+              const response = await sendChat(currentInput, selectedModel, selectedAgent?.name);
               updateStreamingMsg(currentConvId, assistantMsgId, response.text, true);
               logAudit(`Response from ${response.model} via ${providerDisplayName(selectedModel)}`);
             } catch (fallbackErr) {
@@ -826,7 +872,7 @@ export default function AiChatHub() {
       } else {
         // For cloud models: use governed send_chat with provider-prefixed model
         try {
-          const response = await sendChat(currentInput, selectedModel);
+          const response = await sendChat(currentInput, selectedModel, selectedAgent?.name);
           updateStreamingMsg(currentConvId, assistantMsgId, response.text, true);
           logAudit(`Response from ${response.model} via ${providerDisplayName(selectedModel)}`);
         } catch (err) {
@@ -898,6 +944,62 @@ export default function AiChatHub() {
     setComparing(false);
   }, [comparePrompt, compareModels, models, logAudit]);
 
+  // ── Builder handler ──
+  const handleBuilderSend = useCallback(async () => {
+    const text = builderInput.trim();
+    if (!text) return;
+    setBuilderMessages(prev => [...prev, { role: "user", content: text }]);
+    setBuilderInput("");
+    setBuilderSending(true);
+    try {
+      let raw: string;
+      if (teachModeActive && builderProjectId) {
+        raw = await teachModeRespond(builderProjectId, text);
+        const step = JSON.parse(raw);
+        setBuilderMessages(prev => [...prev, {
+          role: "assistant",
+          content: `**Step ${step.step_number}/${step.total_steps}: ${step.title}**\n\n${step.explanation}${step.analogy ? `\n\n[Tip] *${step.analogy}*` : ""}${step.implementation_preview ? `\n\n\`\`\`\n${step.implementation_preview}\n\`\`\`` : ""}`,
+        }]);
+      } else if (!builderStarted) {
+        raw = await startConversationalBuild(text);
+        setBuilderStarted(true);
+        const resp = JSON.parse(raw);
+        if (resp.project_id) setBuilderProjectId(resp.project_id);
+        setBuilderMessages(prev => [...prev, { role: "assistant", content: resp.message }]);
+        if (teachModeActive && resp.project_id) {
+          const teachRaw = await startTeachMode(resp.project_id);
+          const step = JSON.parse(teachRaw);
+          setBuilderMessages(prev => [...prev, { role: "assistant", content: `**Teach Mode Active**\n\n**${step.title}**: ${step.explanation}${step.analogy ? `\n\n[Tip] *${step.analogy}*` : ""}` }]);
+        }
+      } else if (builderProjectId) {
+        // Check if this is a remix request
+        const lower = text.toLowerCase();
+        if (lower.startsWith("change ") || lower.startsWith("make ") || lower.startsWith("add ") || lower.startsWith("remove ")) {
+          raw = await remixProject(builderProjectId, text);
+          const result = JSON.parse(raw);
+          const statusEmoji = result.applied ? "[Done]" : "[Pending]";
+          setBuilderMessages(prev => [...prev, {
+            role: "assistant",
+            content: `${statusEmoji} **${result.classification}** change: ${result.description}\n\n${result.applied ? "Done!" : `This will take ~${result.estimated_minutes} minutes. Ready to build?`}`,
+          }]);
+        } else {
+          raw = await builderRespond(text);
+          const resp = JSON.parse(raw);
+          if (resp.project_id) setBuilderProjectId(resp.project_id);
+          setBuilderMessages(prev => [...prev, { role: "assistant", content: resp.message }]);
+        }
+      } else {
+        raw = await builderRespond(text);
+        const resp = JSON.parse(raw);
+        if (resp.project_id) setBuilderProjectId(resp.project_id);
+        setBuilderMessages(prev => [...prev, { role: "assistant", content: resp.message }]);
+      }
+    } catch (err) {
+      setBuilderMessages(prev => [...prev, { role: "assistant", content: `Error: ${err}` }]);
+    }
+    setBuilderSending(false);
+  }, [builderInput, builderStarted, builderProjectId, teachModeActive]);
+
   const generateImage = useCallback(() => {
     if (!input.trim()) return;
     const msg: ChatMsg = { id: `m-${Date.now()}`, role: "user", content: `Generate image: ${input}`, timestamp: Date.now() };
@@ -948,9 +1050,9 @@ export default function AiChatHub() {
 
         {/* views */}
         <div className="ch-views">
-          {([["chat", "⌁", "Chat"], ["compare", "⇔", "Compare"], ["history", "⏱", "History"]] as const).map(([id, icon, label]) => (
-            <button key={id} className={`ch-view-btn ${view === id ? "active" : ""}`} onClick={() => setView(id)}>
-              <span>{icon}</span> {label}
+          {([["chat", "chat", "Chat"], ["build", "build", "Build"], ["compare", "compare", "Compare"], ["history", "history", "History"]] as const).map(([id, icon, label]) => (
+            <button key={id} className={`ch-view-btn cursor-pointer ${view === id ? "active" : ""}`} onClick={() => setView(id)}>
+              <span>{icon === "chat" ? "\u2301" : icon === "build" ? <Hammer size={14} aria-hidden="true" /> : icon === "compare" ? "\u21D4" : <Clock size={14} aria-hidden="true" />}</span> {label}
             </button>
           ))}
         </div>
@@ -962,9 +1064,9 @@ export default function AiChatHub() {
             <span className="ch-model-icon" style={{ color: activeModel?.color }}>{activeModel?.icon}</span>
             <div className="ch-model-info">
               <span className="ch-model-name">{activeModel?.name ?? "Select a model"}</span>
-              <span className="ch-model-provider">{activeModel?.provider ?? "—"} · ⚡{activeModel?.fuelCost ?? 0}</span>
+              <span className="ch-model-provider">{activeModel?.provider ?? "—"} · <Zap size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} />{activeModel?.fuelCost ?? 0}</span>
             </div>
-            <span className="ch-model-arrow">{showModelPicker ? "▲" : "▼"}</span>
+            <span className="ch-model-arrow">{showModelPicker ? <ChevronUp size={12} aria-hidden="true" /> : <ChevronDown size={12} aria-hidden="true" />}</span>
           </button>
           {showModelPicker && (
             <div className="ch-model-list">
@@ -982,7 +1084,7 @@ export default function AiChatHub() {
                       <span className="ch-model-icon" style={{ color: m.color }}>{m.icon}</span>
                       <div className="ch-model-info">
                         <span className="ch-model-name">{m.name}</span>
-                        <span className="ch-model-provider">{m.provider} · ⚡{m.fuelCost}</span>
+                        <span className="ch-model-provider">{m.provider} · <Zap size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} />{m.fuelCost}</span>
                       </div>
                     </button>
                   ))}
@@ -1004,10 +1106,10 @@ export default function AiChatHub() {
                         logAudit(`Switched to ${m.name}`);
                       }
                     }}>
-                      <span className="ch-model-icon" style={{ color: m.color }}>{m.locked ? "🔒" : m.icon}</span>
+                      <span className="ch-model-icon" style={{ color: m.color }}>{m.locked ? <Lock size={14} aria-hidden="true" /> : m.icon}</span>
                       <div className="ch-model-info">
                         <span className="ch-model-name">{m.name}</span>
-                        <span className="ch-model-provider">{m.provider} · ⚡{m.fuelCost}{m.locked ? " · Add API key" : ""}</span>
+                        <span className="ch-model-provider">{m.provider} · <Zap size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} />{m.fuelCost}{m.locked ? " · Add API key" : ""}</span>
                       </div>
                     </button>
                   ))}
@@ -1032,7 +1134,7 @@ export default function AiChatHub() {
           {(view === "history" ? filteredConversations : conversations).filter(c => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase())).map(conv => (
             <div key={conv.id} className={`ch-conv-item ${activeConvId === conv.id ? "active" : ""}`} onClick={() => { setActiveConvId(conv.id); setView("chat"); }}>
               <div className="ch-conv-title">
-                {conv.pinned && <span className="ch-pin">📌</span>}
+                {conv.pinned && <span className="ch-pin"><Pin size={12} aria-hidden="true" /></span>}
                 {conv.title}
               </div>
               <div className="ch-conv-meta">
@@ -1047,7 +1149,7 @@ export default function AiChatHub() {
         {/* agent panel — all prebuilt agents */}
         <div className="ch-agent-section">
           <button className="ch-section-header ch-agent-toggle" onClick={() => setShowAgentPanel(!showAgentPanel)}>
-            All Agents ({preinstalledAgents.length}) {showAgentPanel ? "▲" : "▼"}
+            All Agents ({preinstalledAgents.length}) {showAgentPanel ? <ChevronUp size={12} aria-hidden="true" /> : <ChevronDown size={12} aria-hidden="true" />}
           </button>
           {showAgentPanel && (
             <div className="ch-agent-list">
@@ -1100,17 +1202,18 @@ export default function AiChatHub() {
                       {autonomyShort(selectedAgent.autonomy_level)}
                     </span>
                     <button className="ch-agent-info-btn" onClick={() => setShowAgentInfo(!showAgentInfo)} title="Agent info">ⓘ</button>
-                    <button className="ch-agent-deselect-btn" onClick={() => { setSelectedAgent(null); setAgentStatus("Idle"); setShowAgentLogs(false); }} title="Deselect agent">✕</button>
+                    <button className="ch-agent-deselect-btn cursor-pointer" onClick={() => { setSelectedAgent(null); setAgentStatus("Idle"); setShowAgentLogs(false); }} title="Deselect agent"><X size={12} aria-hidden="true" /></button>
                   </div>
                 ) : (
                   <div className="ch-chat-title">{activeConv.title}</div>
                 )}
                 {/* Agent dropdown */}
                 <div className="ch-agent-dropdown-wrap">
-                  <button className="ch-agent-dropdown-btn" onClick={() => setShowAgentDropdown(!showAgentDropdown)}>
+                  <button className="ch-agent-dropdown-btn cursor-pointer" onClick={() => setShowAgentDropdown(!showAgentDropdown)}>
+                    <Hexagon size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />
                     {selectedAgent
-                      ? `⬢ ${selectedAgent.name} (${autonomyShort(selectedAgent.autonomy_level)})`
-                      : "⬢ All Agents"} ▾
+                      ? `${selectedAgent.name} (${autonomyShort(selectedAgent.autonomy_level)})`
+                      : "All Agents"} <ChevronDown size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} />
                   </button>
                   {showAgentDropdown && (
                     <div className="ch-agent-dropdown">
@@ -1140,11 +1243,11 @@ export default function AiChatHub() {
                 </div>
               </div>
               <div className="ch-chat-actions">
-                <button className="ch-hdr-btn" onClick={() => togglePin(activeConv.id)} title="Pin">{activeConv.pinned ? "📌" : "📍"}</button>
-                <button className="ch-hdr-btn" onClick={saveAsNote} title="Save as note">📝</button>
-                <button className="ch-hdr-btn" onClick={() => deleteConversation(activeConv.id)} title="Delete">🗑</button>
-                <button className={`ch-hdr-btn ch-voice-btn ${voiceActive ? "active" : ""}`} onClick={() => { setVoiceActive(!voiceActive); logAudit(voiceActive ? "Voice off" : "Voice on — Jarvis mode"); }} title="Voice">
-                  {voiceActive ? "🎙" : "🎤"}
+                <button className="ch-hdr-btn cursor-pointer" onClick={() => togglePin(activeConv.id)} title="Pin">{activeConv.pinned ? <Pin size={16} aria-hidden="true" /> : <MapPin size={16} aria-hidden="true" />}</button>
+                <button className="ch-hdr-btn cursor-pointer" onClick={saveAsNote} title="Save as note"><StickyNote size={16} aria-hidden="true" /></button>
+                <button className="ch-hdr-btn cursor-pointer" onClick={() => deleteConversation(activeConv.id)} title="Delete"><Trash2 size={16} aria-hidden="true" /></button>
+                <button className={`ch-hdr-btn ch-voice-btn cursor-pointer ${voiceActive ? "active" : ""}`} onClick={() => { setVoiceActive(!voiceActive); logAudit(voiceActive ? "Voice off" : "Voice on — Jarvis mode"); }} title="Voice">
+                  {voiceActive ? <Mic size={16} aria-hidden="true" /> : <MicOff size={16} aria-hidden="true" />}
                 </button>
               </div>
             </div>
@@ -1182,36 +1285,36 @@ export default function AiChatHub() {
                 </div>
                 <div className="ch-agent-btns">
                   {(agentStatus === "Idle" || agentStatus === "Stopped" || agentStatus === "Error") && (
-                    <button className="ch-ctrl-btn ch-ctrl-start" onClick={() => handleAgentAction("start")} disabled={agentActionLoading}>
-                      ▶ Start
+                    <button className="ch-ctrl-btn ch-ctrl-start cursor-pointer" onClick={() => handleAgentAction("start")} disabled={agentActionLoading}>
+                      <Play size={12} aria-hidden="true" /> Start
                     </button>
                   )}
                   {agentStatus === "Running" && (
-                    <button className="ch-ctrl-btn ch-ctrl-pause" onClick={() => handleAgentAction("pause")} disabled={agentActionLoading}>
-                      ❚❚ Pause
+                    <button className="ch-ctrl-btn ch-ctrl-pause cursor-pointer" onClick={() => handleAgentAction("pause")} disabled={agentActionLoading}>
+                      <Pause size={12} aria-hidden="true" /> Pause
                     </button>
                   )}
                   {agentStatus === "Paused" && (
-                    <button className="ch-ctrl-btn ch-ctrl-resume" onClick={() => handleAgentAction("resume")} disabled={agentActionLoading}>
-                      ▶ Resume
+                    <button className="ch-ctrl-btn ch-ctrl-resume cursor-pointer" onClick={() => handleAgentAction("resume")} disabled={agentActionLoading}>
+                      <Play size={12} aria-hidden="true" /> Resume
                     </button>
                   )}
                   {(agentStatus === "Running" || agentStatus === "Paused") && (
                     <>
-                      <button className="ch-ctrl-btn ch-ctrl-stop" onClick={() => handleAgentAction("stop")} disabled={agentActionLoading}>
-                        ■ Stop
+                      <button className="ch-ctrl-btn ch-ctrl-stop cursor-pointer" onClick={() => handleAgentAction("stop")} disabled={agentActionLoading}>
+                        <Square size={12} aria-hidden="true" /> Stop
                       </button>
                       <button
-                        className="ch-ctrl-btn ch-ctrl-kill"
+                        className="ch-ctrl-btn ch-ctrl-kill cursor-pointer"
                         onClick={() => { if (window.confirm(`Force kill ${selectedAgent.name}?`)) handleAgentAction("kill"); }}
                         disabled={agentActionLoading}
                       >
-                        ✕ Kill
+                        <X size={12} aria-hidden="true" /> Kill
                       </button>
                     </>
                   )}
-                  <button className={`ch-ctrl-btn ch-ctrl-logs ${showAgentLogs ? "active" : ""}`} onClick={toggleAgentLogs}>
-                    📋 Logs
+                  <button className={`ch-ctrl-btn ch-ctrl-logs cursor-pointer ${showAgentLogs ? "active" : ""}`} onClick={toggleAgentLogs}>
+                    <ClipboardList size={12} aria-hidden="true" /> Logs
                   </button>
                 </div>
               </div>
@@ -1240,7 +1343,7 @@ export default function AiChatHub() {
             {/* conductor progress banner */}
             {conductorProgress.length > 0 && sending && (
               <div className="ch-conductor-progress">
-                <div className="ch-conductor-label">⬢ Conductor Progress</div>
+                <div className="ch-conductor-label"><Hexagon size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} /> Conductor Progress</div>
                 {conductorProgress.map((p, i) => (
                   <div key={i} className="ch-conductor-step">{p}</div>
                 ))}
@@ -1252,7 +1355,7 @@ export default function AiChatHub() {
               <div className="ch-agent-logs">
                 <div className="ch-agent-logs-header">
                   <span>Agent Logs — {selectedAgent.name}</span>
-                  <button className="ch-agent-logs-refresh" onClick={handleLoadAgentLogs}>↻ Refresh</button>
+                  <button className="ch-agent-logs-refresh cursor-pointer" onClick={handleLoadAgentLogs}><RefreshCw size={12} aria-hidden="true" /> Refresh</button>
                 </div>
                 <div className="ch-agent-logs-body">
                   {agentLogs.length === 0 && <div className="ch-agent-logs-empty">No log entries</div>}
@@ -1294,9 +1397,9 @@ export default function AiChatHub() {
                 <div key={msg.id} className={`ch-msg ch-msg-${msg.role}`}>
                   <div className="ch-msg-avatar">
                     {msg.role === "user" ? "U" :
-                     msg.role === "approval" ? "⚠" :
-                     msg.role === "agent" ? "⬢" :
-                     <span style={{ color: models.find(m => m.id === msg.model)?.color }}>{models.find(m => m.id === msg.model)?.icon ?? "◈"}</span>}
+                     msg.role === "approval" ? <AlertTriangle size={16} aria-hidden="true" /> :
+                     msg.role === "agent" ? <Hexagon size={16} aria-hidden="true" /> :
+                     <span style={{ color: models.find(m => m.id === msg.model)?.color }}>{models.find(m => m.id === msg.model)?.icon ?? "\u25C8"}</span>}
                   </div>
                   <div className="ch-msg-body">
                     <div className="ch-msg-header">
@@ -1321,7 +1424,7 @@ export default function AiChatHub() {
                     {msg.approval ? (
                       <div className={`ch-approval-card ch-approval-${msg.approvalStatus}`}>
                         <div className="ch-approval-header">
-                          <span className="ch-approval-icon">⚠</span>
+                          <span className="ch-approval-icon"><AlertTriangle size={14} aria-hidden="true" /></span>
                           <span className="ch-approval-title">Human Approval Required</span>
                           <span className={`ch-approval-risk ch-risk-${msg.approval.risk_level.toLowerCase()}`}>
                             {msg.approval.risk_level}
@@ -1338,7 +1441,7 @@ export default function AiChatHub() {
                           </div>
                           <div className="ch-approval-row">
                             <span className="ch-approval-label">Fuel Cost</span>
-                            <span className="ch-approval-value">⚡ {msg.approval.fuel_cost_estimate}</span>
+                            <span className="ch-approval-value"><Zap size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> {msg.approval.fuel_cost_estimate}</span>
                           </div>
                           {msg.approval.side_effects_preview.length > 0 && (
                             <div className="ch-approval-row">
@@ -1355,16 +1458,16 @@ export default function AiChatHub() {
                         </div>
                         {msg.approvalStatus === "pending" ? (
                           <div className="ch-approval-actions">
-                            <button className="ch-approval-btn ch-approval-approve" onClick={() => handleApproval(msg.approval!.consent_id, "approve")}>
-                              ✓ Approve
+                            <button className="ch-approval-btn ch-approval-approve cursor-pointer" onClick={() => handleApproval(msg.approval!.consent_id, "approve")}>
+                              <Check size={12} aria-hidden="true" /> Approve
                             </button>
-                            <button className="ch-approval-btn ch-approval-deny" onClick={() => handleApproval(msg.approval!.consent_id, "deny")}>
-                              ✕ Reject
+                            <button className="ch-approval-btn ch-approval-deny cursor-pointer" onClick={() => handleApproval(msg.approval!.consent_id, "deny")}>
+                              <X size={12} aria-hidden="true" /> Reject
                             </button>
                           </div>
                         ) : (
                           <div className={`ch-approval-resolved ch-approval-resolved-${msg.approvalStatus}`}>
-                            {msg.approvalStatus === "approved" ? "✓ Approved" : "✕ Denied"}
+                            {msg.approvalStatus === "approved" ? <><Check size={12} aria-hidden="true" /> Approved</> : <><X size={12} aria-hidden="true" /> Denied</>}
                           </div>
                         )}
                       </div>
@@ -1393,7 +1496,7 @@ export default function AiChatHub() {
               <div className="ch-input-row">
                 <textarea ref={inputRef} className="ch-input" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder={`Message ${activeModel?.name ?? "AI"}...`} rows={1} />
                 <div className="ch-input-actions">
-                  <button className="ch-input-btn" onClick={generateImage} title="Generate image" disabled={!input.trim()}>🖼</button>
+                  <button className="ch-input-btn cursor-pointer" onClick={generateImage} title="Generate image" disabled={!input.trim()}><Image size={16} aria-hidden="true" /></button>
                   <button className="ch-send-btn" onClick={sendMessage} disabled={!input.trim() || sending}>
                     {sending ? "..." : "→"}
                   </button>
@@ -1401,9 +1504,10 @@ export default function AiChatHub() {
               </div>
               <div className="ch-input-meta">
                 <span className="ch-input-model" style={{ color: activeModel?.color }}>{activeModel?.icon} {activeModel?.name}</span>
-                <span>⚡ {activeModel?.fuelCost} fuel/msg</span>
-                {isBuildRequest(input) && <span className="ch-input-conductor">⬢ Conductor mode</span>}
-                {joinedAgents.length > 0 && <span>⬢ {joinedAgents.length} agent{joinedAgents.length > 1 ? "s" : ""} joined</span>}
+                <span><Zap size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> {activeModel?.fuelCost} fuel/msg</span>
+                {isBuildRequest(input) && <span className="ch-input-conductor"><Hexagon size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> Conductor mode</span>}
+                {!selectedAgent && !isBuildRequest(input) && input.trim().length > 0 && <span style={{ color: "#60a5fa" }}><Hexagon size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> Auto-routing</span>}
+                {joinedAgents.length > 0 && <span><Hexagon size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> {joinedAgents.length} agent{joinedAgents.length > 1 ? "s" : ""} joined</span>}
               </div>
             </div>
           </div>
@@ -1413,7 +1517,7 @@ export default function AiChatHub() {
         {view === "compare" && (
           <div className="ch-compare">
             <div className="ch-cmp-header">
-              <h3 className="ch-cmp-title">⇔ Model Comparison</h3>
+              <h3 className="ch-cmp-title">Model Comparison</h3>
             </div>
             <div className="ch-cmp-selectors">
               <div className="ch-cmp-select">
@@ -1445,7 +1549,7 @@ export default function AiChatHub() {
                       <div className="ch-cmp-result-header">
                         <span style={{ color: m?.color }}>{m?.icon}</span>
                         <span className="ch-cmp-result-name">{m?.name}</span>
-                        <span className="ch-cmp-result-meta">{m?.provider} · ⚡{m?.fuelCost}</span>
+                        <span className="ch-cmp-result-meta">{m?.provider} · <Zap size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} />{m?.fuelCost}</span>
                       </div>
                       <div className="ch-cmp-result-body" dangerouslySetInnerHTML={{ __html: renderContent(compareResults[i]) }} />
                     </div>
@@ -1456,11 +1560,96 @@ export default function AiChatHub() {
           </div>
         )}
 
+        {/* ═══ BUILD VIEW (Conversational Builder) ═══ */}
+        {view === "build" && (
+          <div className="ch-compare" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            <div className="ch-cmp-header">
+              <h3 className="ch-cmp-title"><Hammer size={18} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} /> Build Anything — Just Describe It</h3>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className={`ch-view-btn ${teachModeActive ? "active" : ""}`}
+                  style={{ fontSize: 12, padding: "4px 10px" }}
+                  onClick={() => setTeachModeActive(!teachModeActive)}
+                >
+                  {teachModeActive ? <><GraduationCap size={14} aria-hidden="true" /> Teach Mode ON</> : <><GraduationCap size={14} aria-hidden="true" /> Teach Me</>}
+                </button>
+              </div>
+            </div>
+
+            {/* Builder chat messages */}
+            <div style={{ flex: 1, overflow: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 12 }}>
+              {builderMessages.length === 0 && (
+                <div style={{ textAlign: "center", padding: "40px 20px", opacity: 0.6 }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}><Rocket size={48} aria-hidden="true" /></div>
+                  <h3 style={{ margin: "0 0 8px", color: "#e2e8f0" }}>What do you want to build?</h3>
+                  <p style={{ margin: 0, color: "#94a3b8", fontSize: 14 }}>
+                    Describe your idea in plain English. No coding required.
+                  </p>
+                  <div style={{ marginTop: 20, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
+                    {["I want to sell t-shirts online", "Build me a portfolio website", "I need a customer support bot", "Help me automate my invoicing"].map(suggestion => (
+                      <button
+                        key={suggestion}
+                        style={{ background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", borderRadius: 8, padding: "8px 14px", color: "#a5b4fc", cursor: "pointer", fontSize: 13 }}
+                        onClick={() => { setBuilderInput(suggestion); }}
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {builderMessages.map((msg, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+                  <div style={{
+                    maxWidth: "80%",
+                    padding: "12px 16px",
+                    borderRadius: 12,
+                    background: msg.role === "user" ? "rgba(99,102,241,0.25)" : "rgba(30,41,59,0.8)",
+                    border: msg.role === "user" ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(51,65,85,0.5)",
+                    color: "#e2e8f0",
+                    fontSize: 14,
+                    lineHeight: 1.6,
+                    whiteSpace: "pre-wrap",
+                  }}>
+                    {msg.content}
+                  </div>
+                </div>
+              ))}
+              {builderSending && (
+                <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                  <div style={{ padding: "12px 16px", borderRadius: 12, background: "rgba(30,41,59,0.8)", border: "1px solid rgba(51,65,85,0.5)", color: "#94a3b8" }}>
+                    Thinking...
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Builder input */}
+            <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(51,65,85,0.5)", display: "flex", gap: 8 }}>
+              <textarea
+                value={builderInput}
+                onChange={e => setBuilderInput(e.target.value)}
+                placeholder={builderStarted ? "Describe what you want to change..." : "Describe what you want to build..."}
+                rows={2}
+                style={{ flex: 1, background: "rgba(15,23,42,0.6)", border: "1px solid rgba(51,65,85,0.5)", borderRadius: 8, padding: "10px 12px", color: "#e2e8f0", fontSize: 14, resize: "none" }}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleBuilderSend(); } }}
+              />
+              <button
+                style={{ background: "rgba(99,102,241,0.3)", border: "1px solid rgba(99,102,241,0.4)", borderRadius: 8, padding: "10px 16px", color: "#a5b4fc", cursor: "pointer", fontWeight: 600 }}
+                onClick={handleBuilderSend}
+                disabled={!builderInput.trim() || builderSending}
+              >
+                {builderStarted ? "Send" : "Build It"}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ═══ HISTORY VIEW ═══ */}
         {view === "history" && (
           <div className="ch-history">
             <div className="ch-hist-header">
-              <h3 className="ch-hist-title">⏱ Chat History</h3>
+              <h3 className="ch-hist-title"><Clock size={16} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} /> Chat History</h3>
               <span className="ch-hist-count">{filteredConversations.length} conversations</span>
             </div>
             <div className="ch-hist-list">
@@ -1470,7 +1659,7 @@ export default function AiChatHub() {
                   <div key={conv.id} className="ch-hist-item" onClick={() => { setActiveConvId(conv.id); setView("chat"); }}>
                     <div className="ch-hist-icon" style={{ color: m?.color }}>{m?.icon}</div>
                     <div className="ch-hist-info">
-                      <div className="ch-hist-name">{conv.pinned && "📌 "}{conv.title}</div>
+                      <div className="ch-hist-name">{conv.pinned && <><Pin size={12} aria-hidden="true" /> </>}{conv.title}</div>
                       <div className="ch-hist-meta">
                         {m?.name} · {conv.messages.length} messages · {formatTime(conv.updatedAt)}
                       </div>
@@ -1481,8 +1670,8 @@ export default function AiChatHub() {
                       )}
                     </div>
                     <div className="ch-hist-actions">
-                      <button className="ch-hist-act-btn" onClick={e => { e.stopPropagation(); togglePin(conv.id); }}>{conv.pinned ? "📌" : "📍"}</button>
-                      <button className="ch-hist-act-btn" onClick={e => { e.stopPropagation(); deleteConversation(conv.id); }}>🗑</button>
+                      <button className="ch-hist-act-btn cursor-pointer" onClick={e => { e.stopPropagation(); togglePin(conv.id); }}>{conv.pinned ? <Pin size={14} aria-hidden="true" /> : <MapPin size={14} aria-hidden="true" />}</button>
+                      <button className="ch-hist-act-btn cursor-pointer" onClick={e => { e.stopPropagation(); deleteConversation(conv.id); }}><Trash2 size={14} aria-hidden="true" /></button>
                     </div>
                   </div>
                 );
@@ -1506,10 +1695,10 @@ export default function AiChatHub() {
         <span className="ch-status-item">{activeModel ? `via ${activeModel.provider}` : ""}</span>
         <span className="ch-status-item">{conversations.length} conversations</span>
         <span className="ch-status-item">{activeConv?.messages.length ?? 0} messages</span>
-        {voiceActive && <span className="ch-status-item ch-status-voice">🎙 Jarvis Active</span>}
-        {selectedAgent && <span className="ch-status-item">⬢ {selectedAgent.name} ({agentStatus})</span>}
+        {voiceActive && <span className="ch-status-item ch-status-voice"><Mic size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> Jarvis Active</span>}
+        {selectedAgent && <span className="ch-status-item"><Hexagon size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> {selectedAgent.name} ({agentStatus})</span>}
         <span className="ch-status-item">{preinstalledAgents.length} agents</span>
-        <span className="ch-status-item ch-status-right">⚡ {fuelUsed} fuel</span>
+        <span className="ch-status-item ch-status-right"><Zap size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> {fuelUsed} fuel</span>
         <span className="ch-status-item">{models.filter(m => !m.locked).length} models</span>
       </div>
 

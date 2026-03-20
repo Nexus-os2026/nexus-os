@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { runDilatedSession as runDilatedSessionApi } from "../api/backend";
 
 /* ================================================================== */
 /*  Types                                                              */
@@ -160,9 +161,8 @@ export default function TemporalEngine(): JSX.Element {
     setError(null);
     try {
       const agentIds = dilatedAgents.split(",").map((s) => s.trim()).filter(Boolean);
-      const result = await invoke<DilatedSession>("run_dilated_session", {
-        task: dilatedTask, agents: agentIds, iterations: dilatedIterations,
-      });
+      const raw = await runDilatedSessionApi(dilatedTask, agentIds, dilatedIterations);
+      const result: DilatedSession = JSON.parse(raw);
       setDilatedResult(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

@@ -398,20 +398,20 @@ impl AgentFuelLedger {
             self.anomalies.clear();
             self.halts = 0;
             self.model_breakdown.clear();
-            audit
-                .append_event(
-                    agent_id,
-                    EventType::StateChange,
-                    json!({
-                        "event_kind": "fuel.period_set",
-                        "agent_id": agent_id,
-                        "previous_period": previous.0,
-                        "period": period.0,
-                        "cap_units": self.budget.cap_units,
-                        "spent_units": self.budget.spent_units,
-                    }),
-                )
-                .expect("audit: fail-closed");
+            if let Err(e) = audit.append_event(
+                agent_id,
+                EventType::StateChange,
+                json!({
+                    "event_kind": "fuel.period_set",
+                    "agent_id": agent_id,
+                    "previous_period": previous.0,
+                    "period": period.0,
+                    "cap_units": self.budget.cap_units,
+                    "spent_units": self.budget.spent_units,
+                }),
+            ) {
+                eprintln!("audit write failed: {e}");
+            }
         }
 
         changed
@@ -419,19 +419,19 @@ impl AgentFuelLedger {
 
     pub fn set_cap_units(&mut self, agent_id: Uuid, cap_units: u64, audit: &mut AuditTrail) {
         self.budget.cap_units = cap_units.max(1);
-        audit
-            .append_event(
-                agent_id,
-                EventType::UserAction,
-                json!({
-                    "event_kind": "fuel.period_set",
-                    "agent_id": agent_id,
-                    "period": self.budget.period.0,
-                    "cap_units": self.budget.cap_units,
-                    "spent_units": self.budget.spent_units,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = audit.append_event(
+            agent_id,
+            EventType::UserAction,
+            json!({
+                "event_kind": "fuel.period_set",
+                "agent_id": agent_id,
+                "period": self.budget.period.0,
+                "cap_units": self.budget.cap_units,
+                "spent_units": self.budget.spent_units,
+            }),
+        ) {
+            eprintln!("audit write failed: {e}");
+        }
     }
 
     pub fn record_llm_spend(
@@ -460,39 +460,39 @@ impl AgentFuelLedger {
         entry.spent_units = entry.spent_units.saturating_add(cost_units);
         entry.calls = entry.calls.saturating_add(1);
 
-        audit
-            .append_event(
+        if let Err(e) = audit.append_event(
+            agent_id,
+            EventType::LlmCall,
+            json!({
+                "event_kind": "fuel.spend_recorded",
+                "agent_id": agent_id,
+                "period": self.budget.period.0,
+                "model": model,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cost_units": cost_units,
+                "spent_units": self.budget.spent_units,
+                "cap_units": self.budget.cap_units,
+            }),
+        ) {
+            eprintln!("audit write failed: {e}");
+        }
+
+        for threshold in crossed_thresholds {
+            if let Err(e) = audit.append_event(
                 agent_id,
-                EventType::LlmCall,
+                EventType::UserAction,
                 json!({
-                    "event_kind": "fuel.spend_recorded",
+                    "event_kind": "fuel.alert_threshold_crossed",
                     "agent_id": agent_id,
                     "period": self.budget.period.0,
-                    "model": model,
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "cost_units": cost_units,
+                    "threshold_percent": threshold,
                     "spent_units": self.budget.spent_units,
                     "cap_units": self.budget.cap_units,
                 }),
-            )
-            .expect("audit: fail-closed");
-
-        for threshold in crossed_thresholds {
-            audit
-                .append_event(
-                    agent_id,
-                    EventType::UserAction,
-                    json!({
-                        "event_kind": "fuel.alert_threshold_crossed",
-                        "agent_id": agent_id,
-                        "period": self.budget.period.0,
-                        "threshold_percent": threshold,
-                        "spent_units": self.budget.spent_units,
-                        "cap_units": self.budget.cap_units,
-                    }),
-                )
-                .expect("audit: fail-closed");
+            ) {
+                eprintln!("audit write failed: {e}");
+            }
         }
 
         if let Some(anomaly) = self.detector.observe(cost_units) {
@@ -505,23 +505,24 @@ impl AgentFuelLedger {
                 cost_units,
                 self.budget.spent_units,
             );
-            audit
-                .append_event(
-                    agent_id,
-                    EventType::Error,
-                    json!({
-                        "event_kind": "fuel.anomaly_detected",
-                        "agent_id": agent_id,
-                        "period": self.budget.period.0,
-                        "model": model,
-                        "cost_units": cost_units,
-                        "spent_units": self.budget.spent_units,
-                        "cap_units": self.budget.cap_units,
-                        "anomaly": anomaly,
-                        "evidence_hash": evidence_hash,
-                    }),
-                )
-                .expect("audit: fail-closed");
+            if let Err(e) = audit.append_event(
+                agent_id,
+                EventType::Error,
+                json!({
+                    "event_kind": "fuel.anomaly_detected",
+                    "agent_id": agent_id,
+                    "period": self.budget.period.0,
+                    "model": model,
+                    "cost_units": cost_units,
+                    "spent_units": self.budget.spent_units,
+                    "cap_units": self.budget.cap_units,
+                    "anomaly": anomaly,
+                    "evidence_hash": evidence_hash,
+                }),
+            ) {
+                eprintln!("audit write failed: {e}");
+            }
+
             return Err(FuelViolation::AnomalyDetected);
         }
 
@@ -534,23 +535,24 @@ impl AgentFuelLedger {
                 cost_units,
                 self.budget.spent_units,
             );
-            audit
-                .append_event(
-                    agent_id,
-                    EventType::Error,
-                    json!({
-                        "event_kind": "fuel.exhausted_halt",
-                        "agent_id": agent_id,
-                        "period": self.budget.period.0,
-                        "model": model,
-                        "cost_units": cost_units,
-                        "spent_units": self.budget.spent_units,
-                        "cap_units": self.budget.cap_units,
-                        "violation": "OverMonthlyCap",
-                        "evidence_hash": evidence_hash,
-                    }),
-                )
-                .expect("audit: fail-closed");
+            if let Err(e) = audit.append_event(
+                agent_id,
+                EventType::Error,
+                json!({
+                    "event_kind": "fuel.exhausted_halt",
+                    "agent_id": agent_id,
+                    "period": self.budget.period.0,
+                    "model": model,
+                    "cost_units": cost_units,
+                    "spent_units": self.budget.spent_units,
+                    "cap_units": self.budget.cap_units,
+                    "violation": "OverMonthlyCap",
+                    "evidence_hash": evidence_hash,
+                }),
+            ) {
+                eprintln!("audit write failed: {e}");
+            }
+
             return Err(FuelViolation::OverMonthlyCap);
         }
 
@@ -579,22 +581,22 @@ impl AgentFuelLedger {
             self.budget.cap_units,
         );
 
-        audit
-            .append_event(
-                agent_id,
-                EventType::Error,
-                json!({
-                    "event_kind": event_kind,
-                    "agent_id": agent_id,
-                    "period": self.budget.period.0,
-                    "reason": reason,
-                    "spent_units": self.budget.spent_units,
-                    "cap_units": self.budget.cap_units,
-                    "violation": violation,
-                    "evidence_hash": evidence_hash,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = audit.append_event(
+            agent_id,
+            EventType::Error,
+            json!({
+                "event_kind": event_kind,
+                "agent_id": agent_id,
+                "period": self.budget.period.0,
+                "reason": reason,
+                "spent_units": self.budget.spent_units,
+                "cap_units": self.budget.cap_units,
+                "violation": violation,
+                "evidence_hash": evidence_hash,
+            }),
+        ) {
+            eprintln!("audit write failed: {e}");
+        }
     }
 
     pub fn snapshot(&self, agent_id: Uuid) -> FuelAuditReport {
@@ -665,14 +667,14 @@ impl FuelContext {
     pub fn fuel_remaining(&self) -> u64 {
         self.inner
             .lock()
-            .expect("fuel lock poisoned")
+            .unwrap_or_else(|p| p.into_inner())
             .fuel_remaining
     }
 
     /// Immediately deduct `amount` fuel.  Returns `Err(FuelExhausted)` if
     /// insufficient fuel is available.
     pub fn deduct_fuel(&self, amount: u64) -> Result<(), AgentError> {
-        let mut inner = self.inner.lock().expect("fuel lock poisoned");
+        let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         if inner.fuel_remaining < amount {
             return Err(AgentError::FuelExhausted);
         }
@@ -687,7 +689,7 @@ impl FuelContext {
     /// to return it.  Dropping the reservation without committing automatically
     /// cancels it (fuel is returned).
     pub fn reserve_fuel(&self, amount: u64) -> Result<FuelReservation, AgentError> {
-        let mut inner = self.inner.lock().expect("fuel lock poisoned");
+        let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         if inner.fuel_remaining < amount {
             return Err(AgentError::FuelExhausted);
         }
@@ -718,7 +720,7 @@ impl FuelReservation {
     /// Cancel the reservation — the fuel is returned to the context.
     pub fn cancel(mut self) {
         if !self.committed {
-            let mut inner = self.context.lock().expect("fuel lock poisoned");
+            let mut inner = self.context.lock().unwrap_or_else(|p| p.into_inner());
             inner.fuel_remaining += self.amount;
             self.committed = true; // prevent double-return in Drop
         }
@@ -728,7 +730,7 @@ impl FuelReservation {
 impl Drop for FuelReservation {
     fn drop(&mut self) {
         if !self.committed {
-            let mut inner = self.context.lock().expect("fuel lock poisoned");
+            let mut inner = self.context.lock().unwrap_or_else(|p| p.into_inner());
             inner.fuel_remaining += self.amount;
         }
     }

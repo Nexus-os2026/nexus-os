@@ -1,5 +1,7 @@
-use nexus_connectors_llm::gateway::{AgentRuntimeContext, GovernedLlmGateway};
-use nexus_connectors_llm::providers::{LlmProvider, MockProvider};
+use nexus_connectors_llm::gateway::{
+    select_provider, AgentRuntimeContext, GovernedLlmGateway, ProviderSelectionConfig,
+};
+use nexus_connectors_llm::providers::LlmProvider;
 use nexus_sdk::audit::{AuditEvent, AuditTrail, EventType};
 use nexus_sdk::errors::AgentError;
 use serde_json::json;
@@ -101,20 +103,20 @@ impl ProjectInitializer {
             default_ci(language).as_str(),
         )?;
 
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "tool": "init_project",
-                    "language": language,
-                    "framework": framework,
-                    "name": name,
-                    "description_provided": description.is_some(),
-                    "path": root.to_string_lossy().to_string(),
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "tool": "init_project",
+                "language": language,
+                "framework": framework,
+                "name": name,
+                "description_provided": description.is_some(),
+                "path": root.to_string_lossy().to_string(),
+            }),
+        ) {
+            tracing::error!("Audit append failed: {e}");
+        }
 
         Ok(root)
     }
@@ -363,7 +365,10 @@ fn build_readme(
     summary.push_str(format!("Scaffold generated for {language} / {framework}.\n\n").as_str());
 
     if let Some(user_description) = description {
-        let provider: Box<dyn LlmProvider> = Box::new(MockProvider::new());
+        let config = ProviderSelectionConfig::from_env();
+        let provider: Box<dyn LlmProvider> = select_provider(&config).unwrap_or_else(|_| {
+            Box::new(nexus_connectors_llm::providers::OllamaProvider::from_env())
+        });
         let mut gateway = GovernedLlmGateway::new(provider);
         let capabilities = [LLM_CAPABILITY.to_string()]
             .into_iter()

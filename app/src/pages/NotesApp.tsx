@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { ClipboardList, FolderOpen, Microscope, Calendar, Hexagon, FileText, Package, StickyNote, Bug, Search, ChevronLeft, ChevronRight, ChevronDown, Pin, PinOff, Tag, Download, Copy, Zap, Play } from "lucide-react";
+import { notesGet } from "../api/backend";
 import "./notes-app.css";
 
 /* ─── Tauri invoke ─── */
@@ -58,14 +60,24 @@ const INITIAL_TAGS: NoteTag[] = [
 ];
 
 const INITIAL_FOLDERS: Folder[] = [
-  { id: "f-all", name: "All Notes", icon: "📋", parentId: null, collapsed: false },
-  { id: "f-projects", name: "Projects", icon: "📁", parentId: null, collapsed: false },
-  { id: "f-research", name: "Research", icon: "🔬", parentId: null, collapsed: false },
-  { id: "f-meetings", name: "Meetings", icon: "📅", parentId: null, collapsed: true },
-  { id: "f-agent", name: "Agent Notes", icon: "⬢", parentId: null, collapsed: false },
-  { id: "f-templates", name: "Templates", icon: "📄", parentId: null, collapsed: true },
-  { id: "f-archive", name: "Archive", icon: "📦", parentId: null, collapsed: true },
+  { id: "f-all", name: "All Notes", icon: "clipboard-list", parentId: null, collapsed: false },
+  { id: "f-projects", name: "Projects", icon: "folder-open", parentId: null, collapsed: false },
+  { id: "f-research", name: "Research", icon: "microscope", parentId: null, collapsed: false },
+  { id: "f-meetings", name: "Meetings", icon: "calendar", parentId: null, collapsed: true },
+  { id: "f-agent", name: "Agent Notes", icon: "hexagon", parentId: null, collapsed: false },
+  { id: "f-templates", name: "Templates", icon: "file-text", parentId: null, collapsed: true },
+  { id: "f-archive", name: "Archive", icon: "package", parentId: null, collapsed: true },
 ];
+
+const FOLDER_ICON_MAP: Record<string, React.ReactNode> = {
+  "clipboard-list": <ClipboardList size={14} aria-hidden="true" />,
+  "folder-open": <FolderOpen size={14} aria-hidden="true" />,
+  "microscope": <Microscope size={14} aria-hidden="true" />,
+  "calendar": <Calendar size={14} aria-hidden="true" />,
+  "hexagon": <Hexagon size={14} aria-hidden="true" />,
+  "file-text": <FileText size={14} aria-hidden="true" />,
+  "package": <Package size={14} aria-hidden="true" />,
+};
 
 const TEMPLATES: Record<string, { title: string; content: string; tags: string[] }> = {
   "meeting": {
@@ -155,6 +167,12 @@ export default function NotesApp() {
 
   const selectedNote = useMemo(() => notes.find(n => n.id === selectedNoteId) ?? null, [notes, selectedNoteId]);
 
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, []);
+
   /* ─── load notes from disk on mount ─── */
   useEffect(() => {
     (async () => {
@@ -226,6 +244,34 @@ export default function NotesApp() {
     });
     return list;
   }, [notes, selectedFolderId, selectedTagFilter, searchQuery, sortBy, tags]);
+
+  /* ─── fetch single note from backend on selection ─── */
+  const fetchNoteContent = useCallback(async (id: string) => {
+    try {
+      const raw = await notesGet(id);
+      const data: Record<string, unknown> = JSON.parse(raw);
+      if (data && data.id) {
+        setNotes(prev => prev.map(n => {
+          if (n.id !== id) return n;
+          return {
+            ...n,
+            title: (data.title as string) || n.title,
+            content: (data.content as string) ?? n.content,
+            updatedAt: (data.updatedAt as number) || n.updatedAt,
+          };
+        }));
+      }
+    } catch {
+      // Backend may not have the note yet, use local state
+    }
+  }, []);
+
+  // Fetch latest content when selecting a note
+  useEffect(() => {
+    if (selectedNoteId) {
+      void fetchNoteContent(selectedNoteId);
+    }
+  }, [selectedNoteId, fetchNoteContent]);
 
   /* ─── handlers ─── */
   const updateNote = useCallback((id: string, updates: Partial<Note>) => {
@@ -379,7 +425,7 @@ export default function NotesApp() {
             <h2 className="na-sidebar-title">Notes</h2>
             <div className="na-sidebar-actions">
               <button className="na-btn-icon" onClick={() => setShowTemplateMenu(!showTemplateMenu)} title="New note">+</button>
-              <button className="na-btn-icon" onClick={() => setShowSidebar(false)} title="Hide sidebar">◀</button>
+              <button className="na-btn-icon cursor-pointer" onClick={() => setShowSidebar(false)} title="Hide sidebar"><ChevronLeft size={14} aria-hidden="true" /></button>
             </div>
           </div>
 
@@ -388,8 +434,8 @@ export default function NotesApp() {
             <div className="na-template-menu">
               <div className="na-template-header">New from template</div>
               {Object.entries(TEMPLATES).map(([key, _tmpl]) => (
-                <button key={key} className="na-template-item" onClick={() => createNote(key)}>
-                  <span className="na-template-icon">{key === "meeting" ? "📅" : key === "research" ? "🔬" : key === "project" ? "📁" : key === "bug-report" ? "🐛" : "📝"}</span>
+                <button key={key} className="na-template-item cursor-pointer" onClick={() => createNote(key)}>
+                  <span className="na-template-icon">{key === "meeting" ? <Calendar size={14} aria-hidden="true" /> : key === "research" ? <Microscope size={14} aria-hidden="true" /> : key === "project" ? <FolderOpen size={14} aria-hidden="true" /> : key === "bug-report" ? <Bug size={14} aria-hidden="true" /> : <StickyNote size={14} aria-hidden="true" />}</span>
                   <span>{key.replace("-", " ").replace(/\b\w/g, c => c.toUpperCase())}</span>
                 </button>
               ))}
@@ -398,7 +444,7 @@ export default function NotesApp() {
 
           {/* search */}
           <div className="na-search-box">
-            <span className="na-search-icon">⌕</span>
+            <span className="na-search-icon"><Search size={14} aria-hidden="true" /></span>
             <input id="na-search" className="na-search-input" placeholder="Search notes..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
             {searchQuery && <button className="na-search-clear" onClick={() => setSearchQuery("")}>×</button>}
           </div>
@@ -407,14 +453,14 @@ export default function NotesApp() {
           <div className="na-folders">
             {folders.map(folder => (
               <div key={folder.id} className={`na-folder-item ${selectedFolderId === folder.id ? "active" : ""}`}>
-                <button className="na-folder-btn" onClick={() => { setSelectedFolderId(folder.id); setSelectedTagFilter(null); }}>
-                  <span className="na-folder-icon">{folder.icon}</span>
+                <button className="na-folder-btn cursor-pointer" onClick={() => { setSelectedFolderId(folder.id); setSelectedTagFilter(null); }}>
+                  <span className="na-folder-icon">{FOLDER_ICON_MAP[folder.icon] ?? folder.icon}</span>
                   <span className="na-folder-name">{folder.name}</span>
                   <span className="na-folder-count">{getNoteCount(folder.id)}</span>
                 </button>
                 {folder.parentId === null && folder.id !== "f-all" && (
-                  <button className="na-folder-toggle" onClick={() => toggleFolder(folder.id)}>
-                    {folder.collapsed ? "▸" : "▾"}
+                  <button className="na-folder-toggle cursor-pointer" onClick={() => toggleFolder(folder.id)}>
+                    {folder.collapsed ? <ChevronRight size={12} aria-hidden="true" /> : <ChevronDown size={12} aria-hidden="true" />}
                   </button>
                 )}
               </div>
@@ -450,7 +496,7 @@ export default function NotesApp() {
       <div className="na-note-list">
         <div className="na-list-header">
           <div className="na-list-title">
-            {!showSidebar && <button className="na-btn-icon" onClick={() => setShowSidebar(true)} title="Show sidebar">▶</button>}
+            {!showSidebar && <button className="na-btn-icon cursor-pointer" onClick={() => setShowSidebar(true)} title="Show sidebar"><Play size={12} aria-hidden="true" /></button>}
             <span>{folders.find(f => f.id === selectedFolderId)?.name ?? "All Notes"}</span>
             {selectedTagFilter && <span className="na-filter-badge" style={{ borderColor: getTagById(selectedTagFilter)?.color }}>#{getTagById(selectedTagFilter)?.name}</span>}
           </div>
@@ -466,7 +512,7 @@ export default function NotesApp() {
         <div className="na-list-items">
           {filteredNotes.length === 0 && (
             <div className="na-empty">
-              <div className="na-empty-icon">📝</div>
+              <div className="na-empty-icon"><StickyNote size={24} aria-hidden="true" /></div>
               <div>No notes found</div>
               <button className="na-btn-create" onClick={() => createNote()}>Create Note</button>
             </div>
@@ -474,9 +520,9 @@ export default function NotesApp() {
           {filteredNotes.map(note => (
             <div key={note.id} className={`na-note-card ${selectedNoteId === note.id ? "active" : ""} ${note.pinned ? "pinned" : ""}`} onClick={() => setSelectedNoteId(note.id)}>
               <div className="na-note-card-header">
-                <span className="na-note-card-title">{note.pinned && <span className="na-pin">📌</span>}{note.title}</span>
+                <span className="na-note-card-title">{note.pinned && <span className="na-pin"><Pin size={12} aria-hidden="true" /></span>}{note.title}</span>
                 <div className="na-note-card-actions">
-                  <button className="na-btn-tiny" onClick={e => { e.stopPropagation(); togglePin(note.id); }}>{note.pinned ? "⊘" : "📌"}</button>
+                  <button className="na-btn-tiny cursor-pointer" onClick={e => { e.stopPropagation(); togglePin(note.id); }}>{note.pinned ? <PinOff size={12} aria-hidden="true" /> : <Pin size={12} aria-hidden="true" />}</button>
                   <button className="na-btn-tiny" onClick={e => { e.stopPropagation(); deleteNote(note.id); }}>×</button>
                 </div>
               </div>
@@ -511,23 +557,23 @@ export default function NotesApp() {
                   <button className={`na-view-btn ${viewMode === "split" ? "active" : ""}`} onClick={() => setViewMode("split")}>Split</button>
                   <button className={`na-view-btn ${viewMode === "preview" ? "active" : ""}`} onClick={() => setViewMode("preview")}>Preview</button>
                 </div>
-                <button className={`na-btn-icon ${showTagPicker ? "active" : ""}`} onClick={() => setShowTagPicker(!showTagPicker)} title="Tags">🏷</button>
+                <button className={`na-btn-icon cursor-pointer ${showTagPicker ? "active" : ""}`} onClick={() => setShowTagPicker(!showTagPicker)} title="Tags"><Tag size={14} aria-hidden="true" /></button>
                 <div className="na-export-wrapper">
-                  <button className="na-btn-icon" onClick={() => setShowExportMenu(!showExportMenu)} title="Export">⤓</button>
+                  <button className="na-btn-icon cursor-pointer" onClick={() => setShowExportMenu(!showExportMenu)} title="Export"><Download size={14} aria-hidden="true" /></button>
                   {showExportMenu && (
                     <div className="na-export-menu">
-                      <button className="na-export-item" onClick={() => { setShowExportMenu(false); setFuelUsed(f => f + 5); }}>📄 Markdown (.md)</button>
+                      <button className="na-export-item cursor-pointer" onClick={() => { setShowExportMenu(false); setFuelUsed(f => f + 5); }}><FileText size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} /> Markdown (.md)</button>
                     </div>
                   )}
                 </div>
                 <div className="na-move-wrapper">
                   <select className="na-move-select" value={selectedNote.folderId} onChange={e => moveNote(selectedNote.id, e.target.value)}>
                     {folders.filter(f => f.id !== "f-all").map(f => (
-                      <option key={f.id} value={f.id}>{f.icon} {f.name}</option>
+                      <option key={f.id} value={f.id}>{f.name}</option>
                     ))}
                   </select>
                 </div>
-                <button className="na-btn-icon" onClick={() => duplicateNote(selectedNote.id)} title="Duplicate">⧉</button>
+                <button className="na-btn-icon cursor-pointer" onClick={() => duplicateNote(selectedNote.id)} title="Duplicate"><Copy size={14} aria-hidden="true" /></button>
               </div>
             </div>
 
@@ -572,7 +618,7 @@ export default function NotesApp() {
               {saving && <span className="na-status-item">Saving...</span>}
               {selectedNote.template && <span className="na-status-item">Template: {selectedNote.template}</span>}
               <span className="na-status-item na-status-right">
-                <span className="na-fuel-icon">⚡</span> {fuelUsed} fuel used
+                <span className="na-fuel-icon"><Zap size={12} aria-hidden="true" /></span> {fuelUsed} fuel used
               </span>
               <span className="na-status-item">{notes.length} notes</span>
               <span className="na-status-item">Ctrl+N new · Ctrl+B sidebar · Ctrl+E view · Ctrl+F search</span>
@@ -580,7 +626,7 @@ export default function NotesApp() {
           </>
         ) : (
           <div className="na-no-note">
-            <div className="na-no-note-icon">📝</div>
+            <div className="na-no-note-icon"><StickyNote size={32} aria-hidden="true" /></div>
             <div className="na-no-note-text">Select a note or create a new one</div>
             <button className="na-btn-create" onClick={() => createNote()}>New Note</button>
           </div>

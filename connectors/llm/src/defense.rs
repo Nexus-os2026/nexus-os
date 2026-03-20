@@ -65,18 +65,18 @@ impl CircuitBreaker {
 
         if events.len() > self.threshold {
             halt_to_stopped(state);
-            audit_trail
-                .append_event(
-                    agent_id,
-                    EventType::Error,
-                    json!({
-                        "event": "circuit_breaker_activated",
-                        "violation_count": events.len(),
-                        "window_seconds": self.window_seconds,
-                        "state_after": format!("{state:?}")
-                    }),
-                )
-                .expect("audit: fail-closed");
+            if let Err(e) = audit_trail.append_event(
+                agent_id,
+                EventType::Error,
+                json!({
+                    "event": "circuit_breaker_activated",
+                    "violation_count": events.len(),
+                    "window_seconds": self.window_seconds,
+                    "state_after": format!("{state:?}")
+                }),
+            ) {
+                tracing::error!("Audit append failed: {e}");
+            }
             return true;
         }
 
@@ -127,17 +127,17 @@ pub fn validate_output_actions(
     for tool_call in &tool_calls {
         if !capabilities.contains(tool_call) {
             violations.push(format!("unauthorized tool_call: {tool_call}"));
-            audit_trail
-                .append_event(
-                    agent_id,
-                    EventType::Error,
-                    json!({
-                        "event": "output_validation_violation",
-                        "tool_call": tool_call,
-                        "reason": "capability_not_declared"
-                    }),
-                )
-                .expect("audit: fail-closed");
+            if let Err(e) = audit_trail.append_event(
+                agent_id,
+                EventType::Error,
+                json!({
+                    "event": "output_validation_violation",
+                    "tool_call": tool_call,
+                    "reason": "capability_not_declared"
+                }),
+            ) {
+                tracing::error!("Audit append failed: {e}");
+            }
         }
     }
 

@@ -1,0 +1,20 @@
+[package]
+name = "nexus-integrations"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Enterprise integration plugins for Nexus OS — Slack, Teams, Jira, ServiceNow, GitHub, GitLab, and custom webhooks"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+nexus-kernel = { path = "../kernel" }
+nexus-connectors-core = { path = "../connectors/core" }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+sha2 = "0.10"
+base64 = "0.22"

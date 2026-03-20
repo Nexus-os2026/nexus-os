@@ -227,10 +227,10 @@ impl NexusLink {
     fn encrypt_payload(data: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
         let cipher = Aes256Gcm::new(key.into());
         let nonce_bytes = Self::generate_nonce();
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce = Nonce::from(nonce_bytes);
 
         let ciphertext = cipher
-            .encrypt(nonce, data)
+            .encrypt(&nonce, data)
             .map_err(|e| format!("AES-256-GCM encryption failed: {e}"))?;
 
         let mut out = Vec::with_capacity(12 + ciphertext.len());
@@ -248,11 +248,14 @@ impl NexusLink {
         }
 
         let (nonce_bytes, ciphertext) = encrypted.split_at(12);
-        let nonce = Nonce::from_slice(nonce_bytes);
+        let nonce_arr: [u8; 12] = nonce_bytes
+            .try_into()
+            .map_err(|_| "invalid nonce length".to_string())?;
+        let nonce = Nonce::from(nonce_arr);
         let cipher = Aes256Gcm::new(key.into());
 
         cipher
-            .decrypt(nonce, ciphertext)
+            .decrypt(&nonce, ciphertext)
             .map_err(|_| "AES-256-GCM decryption failed — wrong key or tampered data".to_string())
     }
 

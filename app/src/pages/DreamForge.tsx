@@ -1,5 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import React, { useCallback, useEffect, useState } from "react";
+import { Check, Play, Circle, X } from "lucide-react";
+import {
+  getDreamStatus as fetchDreamStatus,
+  getDreamQueue as fetchDreamQueue,
+  getDreamHistory as fetchDreamHistory,
+  getMorningBriefing as fetchMorningBriefing,
+  triggerDreamNow,
+  setDreamConfig,
+} from "../api/backend";
 
 /* ================================================================== */
 /*  Types                                                              */
@@ -61,13 +69,13 @@ function dreamTypeColor(t: string): string {
   }
 }
 
-function statusIcon(s: string): string {
+function statusIcon(s: string): React.ReactNode {
   switch (s.toLowerCase()) {
-    case "completed": return "✓";
-    case "running": return "▶";
-    case "pending": return "○";
-    case "failed": return "✗";
-    default: return "·";
+    case "completed": return <Check size={14} aria-hidden="true" />;
+    case "running": return <Play size={14} aria-hidden="true" />;
+    case "pending": return <Circle size={14} aria-hidden="true" />;
+    case "failed": return <X size={14} aria-hidden="true" />;
+    default: return <Circle size={10} aria-hidden="true" />;
   }
 }
 
@@ -93,10 +101,10 @@ export default function DreamForge(): JSX.Element {
   const refresh = useCallback(async () => {
     try {
       const results = await Promise.allSettled([
-        invoke<DreamStatus>("get_dream_status"),
-        invoke<DreamBriefing>("get_morning_briefing"),
-        invoke<DreamQueueItem[]>("get_dream_queue"),
-        invoke<DreamHistoryEntry[]>("get_dream_history", { count: 20 }),
+        fetchDreamStatus().then((raw) => JSON.parse(raw) as DreamStatus),
+        fetchMorningBriefing().then((raw) => JSON.parse(raw) as DreamBriefing),
+        fetchDreamQueue().then((raw) => JSON.parse(raw) as DreamQueueItem[]),
+        fetchDreamHistory(20).then((raw) => JSON.parse(raw) as DreamHistoryEntry[]),
       ]);
       if (results[0].status === "fulfilled") {
         const s = results[0].value;
@@ -120,7 +128,7 @@ export default function DreamForge(): JSX.Element {
   const handleTrigger = useCallback(async () => {
     setTriggering(true);
     try {
-      await invoke("trigger_dream_now");
+      await triggerDreamNow();
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -132,12 +140,12 @@ export default function DreamForge(): JSX.Element {
   const handleSaveConfig = useCallback(async () => {
     setSaving(true);
     try {
-      await invoke("set_dream_config", {
-        enabled: config.enabled,
-        idleTriggerMinutes: config.idle_trigger_minutes,
-        tokenBudget: config.token_budget,
-        apiCallBudget: config.api_call_budget,
-      });
+      await setDreamConfig(
+        config.enabled,
+        config.idle_trigger_minutes,
+        config.token_budget,
+        config.api_call_budget,
+      );
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

@@ -336,7 +336,10 @@ impl EvolutionEngine {
         self.active_strategies
             .insert(agent_id.to_string(), parent_id.clone());
 
-        Ok(self.strategies.get(&parent_id).unwrap().clone())
+        self.strategies
+            .get(&parent_id)
+            .cloned()
+            .ok_or_else(|| "Parent strategy not found after insertion".to_string())
     }
 
     /// Get evolution history for an agent.

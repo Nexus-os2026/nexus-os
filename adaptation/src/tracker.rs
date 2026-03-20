@@ -202,19 +202,19 @@ impl ChangeTracker {
     }
 
     fn log_version_event(&mut self, version: &StrategyVersion, action: &str) {
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::StateChange,
-                json!({
-                    "event": "strategy_version_changed",
-                    "action": action,
-                    "version": version.version,
-                    "summary": version.summary,
-                    "timestamp": version.timestamp
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::StateChange,
+            json!({
+                "event": "strategy_version_changed",
+                "action": action,
+                "version": version.version,
+                "summary": version.summary,
+                "timestamp": version.timestamp
+            }),
+        ) {
+            tracing::error!("Audit append failed: {e}");
+        }
     }
 }
 

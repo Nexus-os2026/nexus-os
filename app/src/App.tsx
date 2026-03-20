@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   chatWithOllama,
   checkOllama,
@@ -37,6 +37,7 @@ import { Sidebar, type SidebarItem } from "./components/layout/Sidebar";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 import { VoiceOverlay, type VoiceOverlayState } from "./components/VoiceOverlay";
 import { PulseRing } from "./components/viz/PulseRing";
+import LivingBackground from "./components/LivingBackground";
 import type { ConsentNotification, SystemInfo } from "./types";
 import { Agents } from "./pages/Agents";
 import { Audit } from "./pages/Audit";
@@ -45,52 +46,63 @@ import Dashboard from "./pages/Dashboard";
 import { Settings } from "./pages/Settings";
 import { SetupWizard } from "./pages/SetupWizard";
 import { Workflows } from "./pages/Workflows";
-import CommandCenter from "./pages/CommandCenter";
-import AuditTimeline from "./pages/AuditTimeline";
-import ComplianceDashboard from "./pages/ComplianceDashboard";
-import ClusterStatusPage from "./pages/ClusterStatus";
-import TrustDashboard from "./pages/TrustDashboard";
-import DistributedAudit from "./pages/DistributedAudit";
-import { PermissionDashboard } from "./pages/PermissionDashboard";
-import Protocols from "./pages/Protocols";
-import Identity from "./pages/Identity";
-import Firewall from "./pages/Firewall";
-import DeveloperPortal from "./pages/DeveloperPortal";
-import { AgentBrowser } from "./pages/AgentBrowser";
-import CodeEditor from "./pages/CodeEditor";
-import Terminal from "./pages/Terminal";
-import FileManager from "./pages/FileManager";
-import SystemMonitor from "./pages/SystemMonitor";
-import NotesApp from "./pages/NotesApp";
-import ProjectManager from "./pages/ProjectManager";
-import DatabaseManager from "./pages/DatabaseManager";
-import ApiClient from "./pages/ApiClient";
-import DesignStudio from "./pages/DesignStudio";
-import EmailClient from "./pages/EmailClient";
-import MediaStudio from "./pages/MediaStudio";
-import Messaging from "./pages/Messaging";
-import AppStore from "./pages/AppStore";
-import AiChatHub from "./pages/AiChatHub";
-import DeployPipeline from "./pages/DeployPipeline";
-import LearningCenter from "./pages/LearningCenter";
-import ApprovalCenter from "./pages/ApprovalCenter";
-import PolicyManagement from "./pages/PolicyManagement";
-import Documents from "./pages/Documents";
-import ModelHub from "./pages/ModelHub";
-import TimeMachine from "./pages/TimeMachine";
-import VoiceAssistant from "./pages/VoiceAssistant";
-import WorldSimulation from "./pages/WorldSimulation";
-import ComputerControl from "./pages/ComputerControl";
-import MissionControl from "./pages/MissionControl";
-import AgentDnaLab from "./pages/AgentDnaLab";
-import TimelineViewer from "./pages/TimelineViewer";
-import KnowledgeGraph from "./pages/KnowledgeGraph";
-import ImmuneDashboard from "./pages/ImmuneDashboard";
-import ConsciousnessMonitor from "./pages/ConsciousnessMonitor";
-import DreamForge from "./pages/DreamForge";
-import TemporalEngine from "./pages/TemporalEngine";
-import CivilizationPage from "./pages/Civilization";
-import SelfRewriteLab from "./pages/SelfRewriteLab";
+const CommandCenter = React.lazy(() => import("./pages/CommandCenter"));
+const AuditTimeline = React.lazy(() => import("./pages/AuditTimeline"));
+const ComplianceDashboard = React.lazy(() => import("./pages/ComplianceDashboard"));
+const ClusterStatusPage = React.lazy(() => import("./pages/ClusterStatus"));
+const TrustDashboard = React.lazy(() => import("./pages/TrustDashboard"));
+const DistributedAudit = React.lazy(() => import("./pages/DistributedAudit"));
+const PermissionDashboard = React.lazy(() => import("./pages/PermissionDashboard").then(m => ({ default: m.PermissionDashboard })));
+const Protocols = React.lazy(() => import("./pages/Protocols"));
+const Identity = React.lazy(() => import("./pages/Identity"));
+const Firewall = React.lazy(() => import("./pages/Firewall"));
+const DeveloperPortal = React.lazy(() => import("./pages/DeveloperPortal"));
+const AgentBrowser = React.lazy(() => import("./pages/AgentBrowser").then(m => ({ default: m.AgentBrowser })));
+const CodeEditor = React.lazy(() => import("./pages/CodeEditor"));
+const Terminal = React.lazy(() => import("./pages/Terminal"));
+const FileManager = React.lazy(() => import("./pages/FileManager"));
+const SystemMonitor = React.lazy(() => import("./pages/SystemMonitor"));
+const NotesApp = React.lazy(() => import("./pages/NotesApp"));
+const ProjectManager = React.lazy(() => import("./pages/ProjectManager"));
+const DatabaseManager = React.lazy(() => import("./pages/DatabaseManager"));
+const ApiClient = React.lazy(() => import("./pages/ApiClient"));
+const DesignStudio = React.lazy(() => import("./pages/DesignStudio"));
+const EmailClient = React.lazy(() => import("./pages/EmailClient"));
+const MediaStudio = React.lazy(() => import("./pages/MediaStudio"));
+const Messaging = React.lazy(() => import("./pages/Messaging"));
+const AppStore = React.lazy(() => import("./pages/AppStore"));
+const AiChatHub = React.lazy(() => import("./pages/AiChatHub"));
+const DeployPipeline = React.lazy(() => import("./pages/DeployPipeline"));
+const LearningCenter = React.lazy(() => import("./pages/LearningCenter"));
+const ApprovalCenter = React.lazy(() => import("./pages/ApprovalCenter"));
+const PolicyManagement = React.lazy(() => import("./pages/PolicyManagement"));
+const Documents = React.lazy(() => import("./pages/Documents"));
+const ModelHub = React.lazy(() => import("./pages/ModelHub"));
+const TimeMachine = React.lazy(() => import("./pages/TimeMachine"));
+const VoiceAssistant = React.lazy(() => import("./pages/VoiceAssistant"));
+const WorldSimulation = React.lazy(() => import("./pages/WorldSimulation"));
+const ComputerControl = React.lazy(() => import("./pages/ComputerControl"));
+const MissionControl = React.lazy(() => import("./pages/MissionControl"));
+const AgentDnaLab = React.lazy(() => import("./pages/AgentDnaLab"));
+const TimelineViewer = React.lazy(() => import("./pages/TimelineViewer"));
+const KnowledgeGraph = React.lazy(() => import("./pages/KnowledgeGraph"));
+const ImmuneDashboard = React.lazy(() => import("./pages/ImmuneDashboard"));
+const ConsciousnessMonitor = React.lazy(() => import("./pages/ConsciousnessMonitor"));
+const DreamForge = React.lazy(() => import("./pages/DreamForge"));
+const TemporalEngine = React.lazy(() => import("./pages/TemporalEngine"));
+const CivilizationPage = React.lazy(() => import("./pages/Civilization"));
+const SelfRewriteLab = React.lazy(() => import("./pages/SelfRewriteLab"));
+const AdminDashboard = React.lazy(() => import("./pages/AdminDashboard"));
+const AdminUsers = React.lazy(() => import("./pages/AdminUsers"));
+const AdminFleet = React.lazy(() => import("./pages/AdminFleet"));
+const AdminPolicyEditor = React.lazy(() => import("./pages/AdminPolicyEditor"));
+const AdminCompliance = React.lazy(() => import("./pages/AdminCompliance"));
+const AdminSystemHealth = React.lazy(() => import("./pages/AdminSystemHealth"));
+const Integrations = React.lazy(() => import("./pages/Integrations"));
+const Login = React.lazy(() => import("./pages/Login"));
+const Workspaces = React.lazy(() => import("./pages/Workspaces"));
+const Telemetry = React.lazy(() => import("./pages/Telemetry"));
+const UsageBilling = React.lazy(() => import("./pages/UsageBilling"));
 import type {
   AgentStatusEvent,
   AgentSummary,
@@ -107,65 +119,87 @@ import type {
 import { createDefaultConfig, normalizeConfig } from "./utils/config";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite";
+type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
   // ── CORE ──
-  { id: "chat", label: "Chat", icon: "◈", shortcut: "Alt+1", section: "CORE" },
-  { id: "agents", label: "Agents", icon: "◎", shortcut: "Alt+2", section: "CORE" },
-  { id: "command-center", label: "Command", icon: "⌘", shortcut: "", section: "CORE" },
-  { id: "audit", label: "Audit", icon: "⧉", shortcut: "", section: "CORE" },
-  { id: "audit-timeline", label: "Timeline", icon: "◷", shortcut: "", section: "CORE" },
-  { id: "time-machine", label: "Time Machine", icon: "⏳", shortcut: "", section: "CORE" },
+  { id: "chat", label: "Chat", icon: "MessageSquare", shortcut: "Alt+1", section: "CORE" },
+  { id: "agents", label: "Agents", icon: "Users", shortcut: "Alt+2", section: "CORE" },
+  { id: "command-center", label: "Command", icon: "Terminal", shortcut: "", section: "CORE" },
+  { id: "audit", label: "Audit", icon: "Shield", shortcut: "", section: "CORE" },
+  { id: "audit-timeline", label: "Timeline", icon: "Clock", shortcut: "", section: "CORE" },
+  { id: "time-machine", label: "Time Machine", icon: "History", shortcut: "", section: "CORE" },
   // ── INTELLIGENCE ──
-  { id: "mission-control", label: "Mission Control", icon: "⊕", shortcut: "Alt+3", section: "INTELLIGENCE" },
-  { id: "dna-lab", label: "DNA Lab", icon: "🧬", shortcut: "", section: "INTELLIGENCE" },
-  { id: "consciousness", label: "Consciousness", icon: "◉", shortcut: "", section: "INTELLIGENCE" },
-  { id: "dreams", label: "Dream Forge", icon: "☽", shortcut: "", section: "INTELLIGENCE" },
-  { id: "temporal", label: "Temporal Engine", icon: "⑂", shortcut: "", section: "INTELLIGENCE" },
+  { id: "mission-control", label: "Mission Control", icon: "LayoutDashboard", shortcut: "Alt+3", section: "INTELLIGENCE" },
+  { id: "dna-lab", label: "DNA Lab", icon: "Dna", shortcut: "", section: "INTELLIGENCE" },
+  { id: "consciousness", label: "Consciousness", icon: "Brain", shortcut: "", section: "INTELLIGENCE" },
+  { id: "dreams", label: "Dream Forge", icon: "Moon", shortcut: "", section: "INTELLIGENCE" },
+  { id: "temporal", label: "Temporal Engine", icon: "GitBranch", shortcut: "", section: "INTELLIGENCE" },
+  { id: "timeline-viewer", label: "Timeline", icon: "GitMerge", shortcut: "", section: "INTELLIGENCE" },
   // ── SECURITY ──
-  { id: "immune-dashboard", label: "Immune System", icon: "⛨", shortcut: "", section: "SECURITY" },
-  { id: "identity", label: "Identity & Mesh", icon: "⊡", shortcut: "", section: "SECURITY" },
-  { id: "firewall", label: "Firewall", icon: "🛡", shortcut: "", section: "SECURITY" },
-  { id: "computer-control", label: "Computer Control", icon: "🖥", shortcut: "", section: "SECURITY" },
+  { id: "immune-dashboard", label: "Immune System", icon: "ShieldCheck", shortcut: "", section: "SECURITY" },
+  { id: "identity", label: "Identity & Mesh", icon: "Fingerprint", shortcut: "", section: "SECURITY" },
+  { id: "firewall", label: "Firewall", icon: "Lock", shortcut: "", section: "SECURITY" },
+  { id: "computer-control", label: "Computer Control", icon: "Monitor", shortcut: "", section: "SECURITY" },
   // ── KNOWLEDGE ──
-  { id: "knowledge-graph", label: "Knowledge Graph", icon: "⊛", shortcut: "", section: "KNOWLEDGE" },
-  { id: "civilization", label: "Civilization", icon: "⚖", shortcut: "", section: "KNOWLEDGE" },
-  { id: "self-rewrite", label: "Self-Rewrite Lab", icon: "✎", shortcut: "", section: "KNOWLEDGE" },
+  { id: "knowledge-graph", label: "Knowledge Graph", icon: "Network", shortcut: "", section: "KNOWLEDGE" },
+  { id: "civilization", label: "Civilization", icon: "Landmark", shortcut: "", section: "KNOWLEDGE" },
+  { id: "self-rewrite", label: "Self-Rewrite Lab", icon: "Code2", shortcut: "", section: "KNOWLEDGE" },
   // ── WORKFLOWS ──
-  { id: "workflows", label: "Workflows", icon: "⎇", shortcut: "", section: "WORKFLOWS" },
-  { id: "marketplace", label: "Publish", icon: "⬡", shortcut: "", section: "WORKFLOWS" },
+  { id: "workflows", label: "Workflows", icon: "Workflow", shortcut: "", section: "WORKFLOWS" },
+  { id: "marketplace", label: "Publish", icon: "Upload", shortcut: "", section: "WORKFLOWS" },
+  { id: "marketplace-browser", label: "Browse Agents", icon: "Search", shortcut: "", section: "WORKFLOWS" },
   // ── GOVERNANCE ──
-  { id: "trust", label: "Trust", icon: "⛨", shortcut: "", section: "GOVERNANCE" },
-  { id: "distributed-audit", label: "Chain", icon: "⛓", shortcut: "", section: "GOVERNANCE" },
-  { id: "protocols", label: "Protocols", icon: "⊞", shortcut: "", section: "GOVERNANCE" },
-  { id: "permissions", label: "Permissions", icon: "⊟", shortcut: "", section: "GOVERNANCE" },
-  { id: "approvals", label: "Approvals", icon: "✔", shortcut: "", section: "GOVERNANCE" },
-  { id: "policy-management", label: "Policies", icon: "⚖", shortcut: "", section: "GOVERNANCE" },
+  { id: "trust", label: "Trust", icon: "Award", shortcut: "", section: "GOVERNANCE" },
+  { id: "compliance", label: "Compliance", icon: "ShieldCheck", shortcut: "", section: "GOVERNANCE" },
+  { id: "distributed-audit", label: "Chain", icon: "Link", shortcut: "", section: "GOVERNANCE" },
+  { id: "protocols", label: "Protocols", icon: "Layers", shortcut: "", section: "GOVERNANCE" },
+  { id: "permissions", label: "Permissions", icon: "Key", shortcut: "", section: "GOVERNANCE" },
+  { id: "approvals", label: "Approvals", icon: "CheckCircle", shortcut: "", section: "GOVERNANCE" },
+  { id: "policy-management", label: "Policies", icon: "Scale", shortcut: "", section: "GOVERNANCE" },
   // ── TOOLS ──
-  { id: "design-studio", label: "Design", icon: "◇", shortcut: "", section: "TOOLS" },
-  { id: "email-client", label: "Email", icon: "✉", shortcut: "", section: "TOOLS" },
-  { id: "media-studio", label: "Media", icon: "▶", shortcut: "", section: "TOOLS" },
-  { id: "app-store", label: "Agent Store", icon: "⬡", shortcut: "", section: "TOOLS" },
-  { id: "ai-chat-hub", label: "AI Chat", icon: "◈", shortcut: "", section: "TOOLS" },
-  { id: "voice-assistant", label: "Voice", icon: "🎙", shortcut: "", section: "TOOLS" },
-  { id: "deploy-pipeline", label: "Deploy", icon: "⚙", shortcut: "", section: "TOOLS" },
-  { id: "learning-center", label: "Learn", icon: "📖", shortcut: "", section: "TOOLS" },
-  { id: "code-editor", label: "Code", icon: "⟨⟩", shortcut: "", section: "TOOLS" },
-  { id: "terminal", label: "Terminal", icon: ">_", shortcut: "", section: "TOOLS" },
-  { id: "file-manager", label: "Files", icon: "📁", shortcut: "", section: "TOOLS" },
-  { id: "database", label: "Database", icon: "⊞", shortcut: "", section: "TOOLS" },
-  { id: "browser", label: "Browser", icon: "🌐", shortcut: "", section: "TOOLS" },
-  { id: "messaging", label: "Messaging", icon: "💬", shortcut: "", section: "TOOLS" },
-  { id: "simulation", label: "World Simulation", icon: "🌍", shortcut: "", section: "TOOLS" },
-  { id: "documents", label: "Documents", icon: "📄", shortcut: "", section: "TOOLS" },
-  { id: "model-hub", label: "Models", icon: "🧠", shortcut: "", section: "TOOLS" },
-  { id: "notes", label: "Notes", icon: "📝", shortcut: "", section: "TOOLS" },
-  { id: "project-manager", label: "Projects", icon: "📋", shortcut: "", section: "TOOLS" },
-  { id: "system-monitor", label: "Monitor", icon: "📊", shortcut: "", section: "TOOLS" },
+  { id: "api-client", label: "API Client", icon: "Zap", shortcut: "", section: "TOOLS" },
+  { id: "design-studio", label: "Design", icon: "Palette", shortcut: "", section: "TOOLS" },
+  { id: "email-client", label: "Email", icon: "Mail", shortcut: "", section: "TOOLS" },
+  { id: "media-studio", label: "Media", icon: "Play", shortcut: "", section: "TOOLS" },
+  { id: "app-store", label: "Agent Store", icon: "Store", shortcut: "", section: "TOOLS" },
+  { id: "ai-chat-hub", label: "AI Chat", icon: "Bot", shortcut: "", section: "TOOLS" },
+  { id: "voice-assistant", label: "Voice", icon: "Mic", shortcut: "", section: "TOOLS" },
+  { id: "deploy-pipeline", label: "Deploy", icon: "Rocket", shortcut: "", section: "TOOLS" },
+  { id: "learning-center", label: "Learn", icon: "BookOpen", shortcut: "", section: "TOOLS" },
+  { id: "code-editor", label: "Code", icon: "FileCode", shortcut: "", section: "TOOLS" },
+  { id: "terminal", label: "Terminal", icon: "TerminalSquare", shortcut: "", section: "TOOLS" },
+  { id: "file-manager", label: "Files", icon: "FolderOpen", shortcut: "", section: "TOOLS" },
+  { id: "database", label: "Database", icon: "Database", shortcut: "", section: "TOOLS" },
+  { id: "browser", label: "Browser", icon: "Globe", shortcut: "", section: "TOOLS" },
+  { id: "messaging", label: "Messaging", icon: "MessageCircle", shortcut: "", section: "TOOLS" },
+  { id: "simulation", label: "World Sim", icon: "Globe2", shortcut: "", section: "TOOLS" },
+  { id: "documents", label: "Documents", icon: "FileText", shortcut: "", section: "TOOLS" },
+  { id: "model-hub", label: "Models", icon: "Cpu", shortcut: "", section: "TOOLS" },
+  { id: "notes", label: "Notes", icon: "StickyNote", shortcut: "", section: "TOOLS" },
+  { id: "project-manager", label: "Projects", icon: "Kanban", shortcut: "", section: "TOOLS" },
+  { id: "system-monitor", label: "Monitor", icon: "Activity", shortcut: "", section: "TOOLS" },
+  // ── ADMIN ──
+  { id: "admin-console", label: "Admin", icon: "ShieldAlert", shortcut: "", section: "ADMIN" },
+  { id: "admin-users", label: "Users", icon: "UserCog", shortcut: "", section: "ADMIN" },
+  { id: "admin-fleet", label: "Fleet", icon: "Boxes", shortcut: "", section: "ADMIN" },
+  { id: "admin-policies", label: "Policies", icon: "ScrollText", shortcut: "", section: "ADMIN" },
+  { id: "admin-compliance", label: "Compliance", icon: "ClipboardCheck", shortcut: "", section: "ADMIN" },
+  { id: "admin-health", label: "Health", icon: "HeartPulse", shortcut: "", section: "ADMIN" },
+  { id: "cluster", label: "Cluster", icon: "Server", shortcut: "", section: "ADMIN" },
+  // ── DEVELOPER ──
+  { id: "developer-portal", label: "Developer", icon: "Code", shortcut: "", section: "DEVELOPER" },
+  // ── INTEGRATIONS ──
+  { id: "integrations", label: "Integrations", icon: "PlugZap", shortcut: "", section: "INTEGRATIONS" },
+  // ── ENTERPRISE ──
+  { id: "login", label: "Auth / Sessions", icon: "LogIn", shortcut: "", section: "ENTERPRISE" },
+  { id: "workspaces", label: "Workspaces", icon: "Building2", shortcut: "", section: "ENTERPRISE" },
+  { id: "telemetry", label: "Telemetry", icon: "BarChart3", shortcut: "", section: "ENTERPRISE" },
+  { id: "usage-billing", label: "Usage & Billing", icon: "Receipt", shortcut: "", section: "ENTERPRISE" },
   // ── SYSTEM ──
-  { id: "settings", label: "Settings", icon: "⚙", shortcut: "", section: "SYSTEM" },
+  { id: "dashboard", label: "System Dash", icon: "Gauge", shortcut: "", section: "SYSTEM" },
+  { id: "settings", label: "Settings", icon: "Settings", shortcut: "", section: "SYSTEM" },
 ];
 
 const PAGE_ROUTE_OVERRIDES: Partial<Record<Page, string>> = {
@@ -235,17 +269,16 @@ function routeForPage(page: Page): string {
   return PAGE_ROUTE_OVERRIDES[page] ?? `/${page}`;
 }
 
-// Browser-mode agent IDs — deterministic UUIDs for offline chat when no desktop runtime
-const BROWSER_AGENT_IDS = {
-  coder: "a0000000-0000-4000-8000-000000000001",
-  designer: "a0000000-0000-4000-8000-000000000002",
-  screenPoster: "a0000000-0000-4000-8000-000000000003",
-  webBuilder: "a0000000-0000-4000-8000-000000000004",
-  workflowStudio: "a0000000-0000-4000-8000-000000000005",
-  selfImprove: "a0000000-0000-4000-8000-000000000006",
+const PAGE_SUMMARIES: Partial<Record<Page, string>> = {
+  "mission-control": "System core telemetry, agent constellation, and live governance signals.",
+  chat: "Conversational control layer for routing directives through the Nexus runtime.",
+  agents: "Entity grid for supervising autonomous agents, permissions, and runtime health.",
+  "dna-lab": "Evolution bay for breeding, comparing, and mutating agent genomes.",
+  settings: "Control panel for runtime policy, providers, privacy posture, and system tuning.",
+  "audit-timeline": "Trace temporal events, decisions, and governance history across the mesh.",
+  "command-center": "Run direct commands against the governed operating layer.",
+  approvals: "Resolve human-in-the-loop requests before protected actions execute.",
 };
-
-const BROWSER_AGENT_ID_SET = new Set(Object.values(BROWSER_AGENT_IDS));
 
 function agentStatusRank(status: AgentSummary["status"]): number {
   switch (status) {
@@ -279,81 +312,96 @@ function dedupeAgentsById(agents: AgentSummary[]): AgentSummary[] {
   return Array.from(byId.values());
 }
 
-function coreAgents(): AgentSummary[] {
+// ── Demo-mode fallback data ────────────────────────────────────────
+// These are shown ONLY in browser demo mode (no Tauri desktop backend).
+// A prominent "DEMO MODE" banner is displayed whenever these are active.
+
+const DEMO_AGENT_IDS = {
+  coder: "a0000000-0000-4000-8000-000000000001",
+  designer: "a0000000-0000-4000-8000-000000000002",
+  screenPoster: "a0000000-0000-4000-8000-000000000003",
+  webBuilder: "a0000000-0000-4000-8000-000000000004",
+  workflowStudio: "a0000000-0000-4000-8000-000000000005",
+  selfImprove: "a0000000-0000-4000-8000-000000000006",
+};
+
+const DEMO_AGENT_ID_SET = new Set(Object.values(DEMO_AGENT_IDS));
+
+function demoAgents(): AgentSummary[] {
   return [
     {
-      id: BROWSER_AGENT_IDS.coder,
-      name: "Coder",
+      id: DEMO_AGENT_IDS.coder,
+      name: "Coder (demo)",
       status: "Running",
       autonomy_level: 3,
       fuel_remaining: 9200,
       fuel_budget: 10000,
-      last_action: "refactored auth middleware",
+      last_action: "demo — no backend connected",
       isSystem: true,
       sandbox_runtime: "wasmtime",
       memory_usage_bytes: 131072,
       capabilities: ["llm.query", "fs.read", "fs.write"]
     },
     {
-      id: BROWSER_AGENT_IDS.designer,
-      name: "Designer",
+      id: DEMO_AGENT_IDS.designer,
+      name: "Designer (demo)",
       status: "Running",
       autonomy_level: 2,
       fuel_remaining: 6500,
       fuel_budget: 10000,
-      last_action: "generated landing page mockup",
+      last_action: "demo — no backend connected",
       isSystem: true,
       sandbox_runtime: "wasmtime",
       memory_usage_bytes: 98304,
       capabilities: ["llm.query", "fs.read"]
     },
     {
-      id: BROWSER_AGENT_IDS.screenPoster,
-      name: "Screen Poster",
+      id: DEMO_AGENT_IDS.screenPoster,
+      name: "Screen Poster (demo)",
       status: "Paused",
       autonomy_level: 2,
       fuel_remaining: 4100,
       fuel_budget: 10000,
-      last_action: "awaiting human approval for X post",
+      last_action: "demo — awaiting HITL approval",
       isSystem: true,
       sandbox_runtime: "wasmtime",
       memory_usage_bytes: 65536,
       capabilities: ["llm.query", "fs.read", "request_approval"]
     },
     {
-      id: BROWSER_AGENT_IDS.webBuilder,
-      name: "Web Builder",
+      id: DEMO_AGENT_IDS.webBuilder,
+      name: "Web Builder (demo)",
       status: "Running",
       autonomy_level: 3,
       fuel_remaining: 7800,
       fuel_budget: 10000,
-      last_action: "deployed staging build v2.4.1",
+      last_action: "demo — no backend connected",
       isSystem: true,
       sandbox_runtime: "wasmtime",
       memory_usage_bytes: 196608,
       capabilities: ["llm.query", "fs.read", "fs.write"]
     },
     {
-      id: BROWSER_AGENT_IDS.workflowStudio,
-      name: "Workflow Studio",
+      id: DEMO_AGENT_IDS.workflowStudio,
+      name: "Workflow Studio (demo)",
       status: "Stopped",
       autonomy_level: 3,
       fuel_remaining: 2300,
       fuel_budget: 10000,
-      last_action: "completed daily analytics pipeline",
+      last_action: "demo — pipeline idle",
       isSystem: true,
       sandbox_runtime: "wasmtime",
       memory_usage_bytes: 0,
       capabilities: ["llm.query", "fs.read"]
     },
     {
-      id: BROWSER_AGENT_IDS.selfImprove,
-      name: "Self-Improve",
+      id: DEMO_AGENT_IDS.selfImprove,
+      name: "Self-Improve (demo)",
       status: "Running",
       autonomy_level: 4,
       fuel_remaining: 8400,
       fuel_budget: 10000,
-      last_action: "optimized prompt routing latency",
+      last_action: "demo — no backend connected",
       isSystem: true,
       sandbox_runtime: "wasmtime",
       memory_usage_bytes: 114688,
@@ -362,34 +410,27 @@ function coreAgents(): AgentSummary[] {
   ];
 }
 
-function browserAgents(): AgentSummary[] {
-  return coreAgents();
-}
-
-
-function emptyAudit(): AuditEventRow[] {
-  return [];
-}
-
-function browserChatReply(message: string): ChatResponse {
+function demoChatReply(message: string): ChatResponse {
   const lowered = message.toLowerCase();
   let text: string;
   if (lowered.includes("status")) {
-    text = "6 agents deployed across the governed runtime. 4 running, 1 paused (Screen Poster - awaiting HITL approval for social post), 1 stopped (Workflow Studio - pipeline complete). Average fuel: 64%. All capability checks passing. Open the Agents page for full mission control.";
-  } else if (lowered.includes("search") || lowered.includes("find") || lowered.includes("look up") || lowered.includes("browse")) {
-    text = `I can help with that! Let me use the Web Search connector (Brave Search) to find information. Querying now via the governed web.search capability... Here are the top results I found. Would you like me to dig deeper into any of these, or shall I have the Web Builder agent create a summary page?`;
-  } else if (lowered.includes("post") || lowered.includes("tweet") || lowered.includes("social") || lowered.includes("share")) {
-    text = "I'll route this through the Screen Poster agent. Since social posting is a Tier 1 operation, it requires your approval before publishing. I've drafted the content and submitted it for HITL review. Check the Agents page to approve or edit before it goes live.";
-  } else if (lowered.includes("code") || lowered.includes("build") || lowered.includes("compile") || lowered.includes("fix")) {
-    text = "On it. I'm dispatching this to the Coder agent with process.exec and fs.write capabilities. It will analyze the codebase, implement the changes, and run the test suite. Fuel cost estimate: ~800 units. You can monitor progress in real-time on the Agents page.";
+    text = "[DEMO] 6 demo agents shown. 4 running, 1 paused, 1 stopped. Install the Nexus OS desktop app for real agent data.";
   } else if (lowered.includes("hello") || lowered.includes("hi") || lowered.includes("hey")) {
-    text = "Hello! I'm NexusOS, your governed agent operating system. I have 6 specialized agents ready to help: Coder, Designer, Screen Poster, Web Builder, Workflow Studio, and Self-Improve. I can search the web, post content, read/write files, execute code, and more - all through governed capabilities with full audit trails. What can I help you with?";
+    text = "[DEMO] Hello! This is the Nexus OS demo preview. You are seeing placeholder data — install the desktop app for full governed chat, agent management, and all runtime features.";
   } else if (lowered.includes("help") || lowered.includes("what can you")) {
-    text = "I'm NexusOS with full access to: Web Search (Brave connector), Social Posting (Screen Poster agent with HITL approval), File System (read/write), Code Execution (Coder agent), LLM Queries (multiple providers), Browser Automation (Web Builder), and Workflow Orchestration. All actions go through kernel capability checks with fuel budgeting and append-only audit trails. Just tell me what you need!";
+    text = "[DEMO] Nexus OS capabilities include: governed chat, agent management, code execution, web search, social posting, file system access, and workflow orchestration. All features require the desktop backend — install it for full functionality.";
   } else {
-    text = "Understood. Let me route this through the appropriate agent. I have web search via Brave Search connector, social media posting via Screen Poster, file system access, LLM capabilities across multiple providers, and browser automation through Web Builder. All actions are governed with capability checks and fuel budgets. Processing your request now...";
+    text = "[DEMO] This is a demo preview. Chat responses, agent data, and all actions are simulated. Install the Nexus OS desktop app to connect to the governed runtime.";
   }
-  return { text, model: "nexus-mock", token_count: text.split(" ").length, cost: 0, latency_ms: 18 };
+  return { text, model: "demo", token_count: text.split(" ").length, cost: 0, latency_ms: 10 };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function emptyAudit(): AuditEventRow[] {
+  return [];
 }
 
 function makeMessage(role: ChatMessage["role"], content: string, extra?: Partial<ChatMessage>): ChatMessage {
@@ -414,10 +455,6 @@ function formatError(value: unknown): string {
     return value.message;
   }
   return String(value);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export default function App(): JSX.Element {
@@ -505,27 +542,13 @@ export default function App(): JSX.Element {
   useEffect(() => {
     if (!hasDesktopRuntime()) {
       setRuntimeMode("mock");
-      setAgents(browserAgents());
+      setAgents(demoAgents());
       setAuditEvents(emptyAudit());
       setConfig(createDefaultConfig());
       setMessages([
-        makeMessage("user", "Review the auth middleware in src/auth.rs for security issues"),
         makeMessage(
           "assistant",
-          "Scanning src/auth.rs... Found 3 items:\n\n1. JWT token validation does not check expiration claim (line 42). Add `validate_exp: true` to the validation params.\n\n2. CORS origin is set to wildcard `*` (line 18). Restrict to your domain in production.\n\n3. Rate limiter uses in-memory store. Consider Redis-backed store for multi-instance deployments.\n\nShall I generate patches for these findings?",
-          { model: "claude-sonnet-4-5" }
-        ),
-        makeMessage("user", "Yes, fix issue 1 and 2. Leave the rate limiter for now."),
-        makeMessage(
-          "assistant",
-          "Patches applied:\n\n`src/auth.rs:42` - Added `validate_exp: true` to JWT validation config.\n`src/auth.rs:18` - Replaced wildcard CORS with `https://app.nexus-os.dev`.\n\nBoth changes verified with `cargo test --lib auth`. All 12 auth tests pass.",
-          { model: "claude-sonnet-4-5" }
-        ),
-        makeMessage("user", "What's the current agent status?"),
-        makeMessage(
-          "assistant",
-          "6 agents deployed. 4 running, 1 paused (Screen Poster - awaiting approval), 1 stopped (Workflow Studio - task complete). Average fuel: 64%. Open the Agents page for full mission control.",
-          { model: "mock-1" }
+          "[DEMO MODE] You are viewing a demo preview of Nexus OS. Agent data is simulated and actions are disabled. Install the desktop app for full functionality."
         )
       ]);
       bumpActivity();
@@ -584,11 +607,11 @@ export default function App(): JSX.Element {
         }
         setRuntimeMode("mock");
         setRuntimeError(`Desktop backend unavailable: ${formatError(error)}`);
-        setAgents(browserAgents());
+        setAgents(demoAgents());
         setAuditEvents(emptyAudit());
         setConfig(createDefaultConfig());
         setMessages([
-          makeMessage("assistant", "Backend connection failed; running in mock mode.")
+          makeMessage("assistant", "[DEMO MODE] Backend connection failed. Showing demo data. Restart the desktop app and refresh to reconnect.")
         ]);
         play("error");
         setAppReady(true);
@@ -712,11 +735,27 @@ export default function App(): JSX.Element {
     }
   }, [page, play]);
 
+  useEffect(() => {
+    if (page !== "chat") {
+      return;
+    }
+
+    const pendingAgent = sessionStorage.getItem("nexus-chat-agent");
+    if (!pendingAgent) {
+      return;
+    }
+
+    setSelectedAgent(pendingAgent);
+    sessionStorage.removeItem("nexus-chat-agent");
+  }, [page]);
+
   const connectionStatus: ConnectionStatus = runtimeMode === "desktop" ? "connected" : "mock";
   const runningAgents = useMemo(
     () => uniqueAgents.filter((agent) => agent.status === "Running").length,
     [uniqueAgents]
   );
+  const activePageLabel = NAV_ITEMS.find((item) => item.id === page)?.label ?? "Nexus OS";
+  const activePageSummary = PAGE_SUMMARIES[page] ?? "Navigate the Nexus AI operating system and monitor its living runtime.";
   const [sysInfo, setSysInfo] = useState<SystemInfo | null>(null);
 
   useEffect(() => {
@@ -796,21 +835,16 @@ export default function App(): JSX.Element {
     }
   }
 
-  function updateMockAgentStatus(id: string, status: AgentSummary["status"]): void {
-    setAgents((prev) =>
-      prev.map((agent) =>
-        agent.id === id
-          ? { ...agent, status, last_action: `status changed to ${status.toLowerCase()}` }
-          : agent
-      )
-    );
+  function showDemoToast(): void {
+    setRuntimeError("Action unavailable in demo mode \u2014 requires desktop backend");
+    play("error");
+    // Auto-clear after 3s
+    setTimeout(() => setRuntimeError((prev) => prev === "Action unavailable in demo mode \u2014 requires desktop backend" ? null : prev), 3000);
   }
 
   async function handleStartAgent(id: string): Promise<void> {
     if (runtimeMode !== "desktop") {
-      updateMockAgentStatus(id, "Running");
-      play("success");
-      bumpActivity();
+      showDemoToast();
       return;
     }
     try {
@@ -831,9 +865,7 @@ export default function App(): JSX.Element {
 
   async function handlePauseAgent(id: string): Promise<void> {
     if (runtimeMode !== "desktop") {
-      updateMockAgentStatus(id, "Paused");
-      play("click");
-      bumpActivity();
+      showDemoToast();
       return;
     }
     try {
@@ -850,9 +882,7 @@ export default function App(): JSX.Element {
 
   async function handleStopAgent(id: string): Promise<void> {
     if (runtimeMode !== "desktop") {
-      updateMockAgentStatus(id, "Stopped");
-      play("click");
-      bumpActivity();
+      showDemoToast();
       return;
     }
     try {
@@ -869,29 +899,7 @@ export default function App(): JSX.Element {
 
   async function handleCreateAgent(manifestJson: string): Promise<void> {
     if (runtimeMode !== "desktop") {
-      const newAgent: AgentSummary = {
-        id: makeId(),
-        name: "mock-created-agent",
-        status: "Running",
-        fuel_remaining: 10_000,
-        last_action: "created from factory"
-      };
-      setAgents((prev) => [newAgent, ...prev]);
-      setAuditEvents((prev) => [
-        {
-          event_id: makeId(),
-          timestamp: Math.floor(Date.now() / 1000),
-          agent_id: newAgent.id,
-          event_type: "UserAction",
-          payload: { action: "create_agent", manifest: manifestJson },
-          previous_hash: prev[0]?.hash ?? "genesis",
-          hash: makeId()
-        },
-        ...prev
-      ]);
-      setRuntimeError(null);
-      play("success");
-      bumpActivity();
+      showDemoToast();
       return;
     }
 
@@ -919,13 +927,7 @@ export default function App(): JSX.Element {
 
   async function handleDeleteAgent(id: string): Promise<void> {
     if (runtimeMode !== "desktop") {
-      // In mock mode, prevent deleting core mock agents
-      if (BROWSER_AGENT_ID_SET.has(id)) {
-        return;
-      }
-      setAgents((prev) => prev.filter((a) => a.id !== id));
-      play("click");
-      bumpActivity();
+      showDemoToast();
       return;
     }
     try {
@@ -941,9 +943,7 @@ export default function App(): JSX.Element {
 
   async function handleClearAllAgents(): Promise<void> {
     if (runtimeMode !== "desktop") {
-      setAgents([]);
-      play("click");
-      bumpActivity();
+      showDemoToast();
       return;
     }
     try {
@@ -959,12 +959,12 @@ export default function App(): JSX.Element {
 
   const AGENT_PROMPTS: Record<string, string> = {
     "": "You are NexusOS, a governed AI operating system. You help users with coding, design, automation, and content. Be concise and helpful.",
-    [BROWSER_AGENT_IDS.coder]: "You are the NexusOS Coder Agent. You write clean code in Rust, TypeScript, and Python. You analyze architecture, review code, fix bugs, and run tests. Show code in fenced blocks.",
-    [BROWSER_AGENT_IDS.designer]: "You are the NexusOS Designer Agent. You create UI components, design systems, and design tokens. Output React/TypeScript.",
-    [BROWSER_AGENT_IDS.screenPoster]: "You are the NexusOS Screen Poster Agent. You draft social media posts for X, Instagram, Facebook, Reddit. Optimize for engagement.",
-    [BROWSER_AGENT_IDS.webBuilder]: "You are the NexusOS Web Builder Agent. You generate websites from descriptions using React and modern web tech.",
-    [BROWSER_AGENT_IDS.workflowStudio]: "You are the NexusOS Workflow Studio Agent. You design automation pipelines with DAG nodes, retries, and checkpoints.",
-    [BROWSER_AGENT_IDS.selfImprove]: "You are the NexusOS Self-Improve Agent. You analyze performance metrics and optimize prompts.",
+    [DEMO_AGENT_IDS.coder]: "You are the NexusOS Coder Agent. You write clean code in Rust, TypeScript, and Python. You analyze architecture, review code, fix bugs, and run tests. Show code in fenced blocks.",
+    [DEMO_AGENT_IDS.designer]: "You are the NexusOS Designer Agent. You create UI components, design systems, and design tokens. Output React/TypeScript.",
+    [DEMO_AGENT_IDS.screenPoster]: "You are the NexusOS Screen Poster Agent. You draft social media posts for X, Instagram, Facebook, Reddit. Optimize for engagement.",
+    [DEMO_AGENT_IDS.webBuilder]: "You are the NexusOS Web Builder Agent. You generate websites from descriptions using React and modern web tech.",
+    [DEMO_AGENT_IDS.workflowStudio]: "You are the NexusOS Workflow Studio Agent. You design automation pipelines with DAG nodes, retries, and checkpoints.",
+    [DEMO_AGENT_IDS.selfImprove]: "You are the NexusOS Self-Improve Agent. You analyze performance metrics and optimize prompts.",
   };
 
   function getModelForAgent(agentId: string): string {
@@ -1260,10 +1260,9 @@ export default function App(): JSX.Element {
         }
       }
     } else {
-      // Mock mode fallback
+      // Demo mode — simulated reply
       try {
-        const response = browserChatReply(input);
-        // Simulate streaming word-by-word
+        const response = demoChatReply(input);
         const chunks = response.text.split(" ");
         let current = "";
         for (let index = 0; index < chunks.length; index += 1) {
@@ -1278,8 +1277,6 @@ export default function App(): JSX.Element {
           );
           await sleep(done ? 0 : 16);
         }
-        setRuntimeError(null);
-        setOverlay((prev) => ({ ...prev, phase: "speaking", amplitude: 0.5 }));
         play("notification");
         bumpActivity();
       } catch (error) {
@@ -1290,7 +1287,6 @@ export default function App(): JSX.Element {
               : message
           )
         );
-        setRuntimeError(`Chat request failed: ${formatError(error)}`);
         play("error");
       } finally {
         setIsSending(false);
@@ -1334,11 +1330,12 @@ export default function App(): JSX.Element {
     }
     setIsSavingConfig(true);
     try {
-      if (runtimeMode === "desktop") {
-        await saveConfig(config);
-      } else {
-        await sleep(140);
+      if (runtimeMode !== "desktop") {
+        showDemoToast();
+        setIsSavingConfig(false);
+        return;
       }
+      await saveConfig(config);
       setRuntimeError(null);
       play("success");
     } catch (error) {
@@ -1362,28 +1359,7 @@ export default function App(): JSX.Element {
         setRuntimeError(`Setup failed: ${formatError(error)}`);
       }
     } else {
-      // Mock mode: update config locally
-      setConfig((prev) => ({
-        ...prev,
-        hardware: {
-          gpu: hw.gpu,
-          vram_mb: hw.vram_mb,
-          ram_mb: hw.ram_mb,
-          detected_at: hw.detected_at
-        },
-        ollama: {
-          base_url: ollamaStatus.base_url,
-          status: ollamaStatus.connected ? "connected" : "disconnected"
-        },
-        models: {
-          primary: hw.recommended_primary,
-          fast: hw.recommended_fast
-        },
-        llm: {
-          ...prev.llm,
-          default_model: hw.recommended_primary
-        }
-      }));
+      showDemoToast();
     }
     setShowSetupWizard(false);
     play("success");
@@ -1392,10 +1368,7 @@ export default function App(): JSX.Element {
 
   async function handleRefresh(): Promise<void> {
     if (runtimeMode !== "desktop") {
-      setAgents(browserAgents());
-      setAuditEvents(emptyAudit());
-      setRuntimeError(null);
-      bumpActivity();
+      showDemoToast();
       return;
     }
     try {
@@ -1413,15 +1386,7 @@ export default function App(): JSX.Element {
 
   async function enableJarvisMode(): Promise<void> {
     if (runtimeMode !== "desktop") {
-      setOverlay({
-        visible: true,
-        listening: true,
-        transcription: "hey nexus",
-        responseText: "mock voice mode active",
-        phase: "listening",
-        amplitude: 0.44
-      });
-      play("notification");
+      showDemoToast();
       return;
     }
     try {
@@ -1438,15 +1403,6 @@ export default function App(): JSX.Element {
 
   async function disableJarvisMode(): Promise<void> {
     if (runtimeMode !== "desktop") {
-      setOverlay({
-        visible: false,
-        listening: false,
-        transcription: "",
-        responseText: "",
-        phase: "idle",
-        amplitude: 0.12
-      });
-      play("click");
       return;
     }
     try {
@@ -1711,6 +1667,39 @@ export default function App(): JSX.Element {
     if (page === "self-rewrite") {
       return <SelfRewriteLab />;
     }
+    if (page === "admin-console") {
+      return <AdminDashboard />;
+    }
+    if (page === "admin-users") {
+      return <AdminUsers />;
+    }
+    if (page === "admin-fleet") {
+      return <AdminFleet />;
+    }
+    if (page === "admin-policies") {
+      return <AdminPolicyEditor />;
+    }
+    if (page === "admin-compliance") {
+      return <AdminCompliance />;
+    }
+    if (page === "admin-health") {
+      return <AdminSystemHealth />;
+    }
+    if (page === "integrations") {
+      return <Integrations />;
+    }
+    if (page === "login") {
+      return <Login />;
+    }
+    if (page === "workspaces") {
+      return <Workspaces />;
+    }
+    if (page === "telemetry") {
+      return <Telemetry />;
+    }
+    if (page === "usage-billing") {
+      return <UsageBilling />;
+    }
     return (
       <Settings
         config={config}
@@ -1734,6 +1723,7 @@ export default function App(): JSX.Element {
 
   return (
     <>
+      <LivingBackground status={runningAgents > 0 ? "healthy" : "busy"} agentCount={runningAgents} />
       <NeuralBackground activityPulse={activityPulse} />
       <SplashScreen
         ready={appReady}
@@ -1758,76 +1748,94 @@ export default function App(): JSX.Element {
         />
 
         <div className="nexus-main-column">
-          <header className="nexus-shell-header px-4 py-4 sm:px-6">
-            <HoloPanel depth="foreground" className="nexus-topbar">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="nexus-display text-2xl text-cyan-100">Desktop Command Grid</p>
-                  <div className="mt-1 flex items-center gap-2 text-xs">
-                    <span
-                      className={`inline-flex h-2.5 w-2.5 rounded-full ${
-                        connectionStatus === "connected" ? "bg-cyan-300 shadow-[0_0_12px_rgba(56,189,248,0.95)]" : "bg-amber-300"
-                      }`}
-                    />
-                    <span className="text-cyan-100/70">
-                      {connectionStatus === "connected" ? "Connected to governed kernel backend" : "Mock runtime mode"}
+          {runtimeMode !== "desktop" && (
+            <div
+              style={{
+                background: "linear-gradient(90deg, #b45309, #d97706, #b45309)",
+                color: "#fff",
+                textAlign: "center",
+                padding: "8px 16px",
+                fontSize: "0.82rem",
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                zIndex: 100,
+                flexShrink: 0,
+                boxShadow: "0 2px 12px rgba(217,119,6,0.4)",
+              }}
+            >
+              Demo Mode — Running without backend. Install Nexus OS desktop for full functionality.
+            </div>
+          )}
+          <header className="nexus-shell-header px-4 py-2.5 sm:px-6">
+            <div className="nexus-control-bar">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-[280px] flex-1">
+                  <div className="nexus-control-bar__eyebrow">
+                    <span className="nexus-control-bar__eyebrow-dot" />
+                    {connectionStatus === "connected" ? "Live Governed Runtime" : "Simulation Runtime"}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <h1 className="nexus-display m-0 text-xl text-cyan-50">
+                      {activePageLabel}
+                    </h1>
+                    <span className="nexus-topbar-chip" style={{ color: connectionStatus === "connected" ? "var(--nexus-accent)" : "var(--nexus-amber)" }}>
+                      <span className="nexus-topbar-chip__signal" />
+                      {connectionStatus === "connected" ? "live" : "mock"}
                     </span>
                   </div>
+                  <p className="nexus-control-bar__summary">
+                    {activePageSummary}
+                  </p>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="hidden items-center gap-3 md:flex">
-                    <span className="font-mono text-xs text-cyan-300 whitespace-nowrap">
-                      {sysInfo
-                        ? `CPU: ${sysInfo.cpu_usage_percent}% | RAM: ${sysInfo.ram_used_gb}/${sysInfo.ram_total_gb} GB`
-                        : "CPU: --% | RAM: --/-- GB"}
-                    </span>
-                    <PulseRing active={runningAgents > 0} size={44} />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <button
-                      onClick={() => {
-                        void handleRefresh();
-                      }}
-                      className="nexus-btn nexus-btn-secondary"
-                    >
-                      Refresh
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (overlay.visible) {
-                          void disableJarvisMode();
-                          return;
-                        }
-                        void enableJarvisMode();
-                      }}
-                      className={`nexus-btn font-semibold ${
-                        overlay.visible ? "bg-rose-600/90 text-white hover:bg-rose-500" : "nexus-btn-primary"
-                      }`}
-                    >
-                      {overlay.visible ? "Stop Jarvis" : "Start Jarvis"}
-                    </button>
-                  </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2.5">
+                  <span className="nexus-topbar-chip">
+                    <span className="nexus-topbar-chip__signal" style={{ background: "var(--nexus-accent)" }} />
+                    {runningAgents} agents active
+                  </span>
+                  <span className="nexus-topbar-chip">
+                    <span className="nexus-topbar-chip__signal" style={{ background: "var(--nexus-amber)" }} />
+                    CPU {sysInfo?.cpu_usage_percent ?? "--"}%
+                  </span>
+                  <span className="nexus-topbar-chip">
+                    <span className="nexus-topbar-chip__signal" style={{ background: "var(--nexus-purple)" }} />
+                    RAM {sysInfo ? `${sysInfo.ram_used_gb}/${sysInfo.ram_total_gb}G` : "--"}
+                  </span>
+                  <button
+                    onClick={() => { void handleRefresh(); }}
+                    className="nx-btn nx-btn-ghost"
+                    style={{ padding: "0.45rem 0.9rem", fontSize: "0.7rem" }}
+                  >
+                    Refresh
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (overlay.visible) { void disableJarvisMode(); return; }
+                      void enableJarvisMode();
+                    }}
+                    className={overlay.visible ? "nx-btn nx-btn-danger" : "nx-btn nx-btn-primary"}
+                    style={{
+                      padding: "0.45rem 1rem",
+                      fontSize: "0.7rem",
+                      ...(overlay.visible ? {} : { boxShadow: "0 0 18px rgba(74,247,211,0.16)" })
+                    }}
+                  >
+                    {overlay.visible ? "Stop Jarvis" : "Start Jarvis"}
+                  </button>
                 </div>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-4 text-xs">
-                <span className="text-cyan-100/60">
-                  Active agents: <span className="text-cyan-100">{runningAgents}</span>
-                </span>
-                <span className="text-cyan-100/60">
-                  Runtime: <span className="text-cyan-100">{connectionStatus}</span>
-                </span>
               </div>
               {backendRestarting ? (
-                <div className="nexus-notification mt-3" style={{ background: "rgba(250,204,21,0.15)", borderColor: "#facc15", color: "#facc15", padding: "0.4rem 0.8rem", borderRadius: 6, border: "1px solid", fontSize: "0.8rem" }}>
-                  <p className="text-xs">Backend restarting... Reconnecting every 2s.</p>
+                <div className="mt-2 nx-badge-warning" style={{ display: "block", padding: "0.35rem 0.7rem", borderRadius: 6, fontSize: "0.75rem" }}>
+                  Backend restarting... Reconnecting every 2s.
                 </div>
               ) : null}
               {runtimeError && !backendRestarting ? (
-                <div className="nexus-notification nexus-notification-error mt-3">
-                  <p className="text-xs text-rose-100">{runtimeError}</p>
+                <div className="mt-2 nx-badge-error" style={{ display: "block", padding: "0.35rem 0.7rem", borderRadius: 6, fontSize: "0.75rem" }}>
+                  {runtimeError}
                 </div>
               ) : null}
-            </HoloPanel>
+            </div>
           </header>
 
           <main className="nexus-shell-content px-4 py-4 sm:px-6 sm:py-6">
@@ -1838,7 +1846,9 @@ export default function App(): JSX.Element {
                 onOpenSafePage={() => setPage("chat")}
               >
                 <HoloPanel depth="mid" className="nexus-page-panel">
-                  {renderPage()}
+                  <Suspense fallback={<div style={{ padding: "2rem", textAlign: "center", color: "var(--text-secondary, #94a3b8)" }}>Loading...</div>}>
+                    {renderPage()}
+                  </Suspense>
                 </HoloPanel>
               </PageErrorBoundary>
             </PageTransition>

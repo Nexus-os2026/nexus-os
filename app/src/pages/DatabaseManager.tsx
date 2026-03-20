@@ -1,20 +1,12 @@
 import { useState, useCallback, useMemo } from "react";
 import { BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import {
+  Play, Keyboard, LayoutGrid, Hexagon, PieChart as PieChartIcon,
+  Clock, Table2, Diamond, Power, Check, X, RotateCcw, Zap,
+  OctagonAlert, BarChart3, TrendingUp, Circle,
+} from "lucide-react";
+import { dbConnect, dbListTables, dbExecuteQuery, dbExportTable, dbDisconnect } from "../api/backend";
 import "./database-manager.css";
-
-/* ─── Tauri invoke ─── */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function invoke(cmd: string, args?: Record<string, unknown>): Promise<any> {
-  if (
-    typeof window !== "undefined" &&
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    typeof (window as any).__TAURI__?.invoke === "function"
-  ) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (window as any).__TAURI__.invoke(cmd, args);
-  }
-  return JSON.stringify({ error: "Tauri backend not available" });
-}
 
 /* ─── types ─── */
 type TabId = "query" | "builder" | "schema" | "visualize" | "history";
@@ -105,11 +97,11 @@ export default function DatabaseManager() {
     if (!connectInput.trim()) return;
     setConnecting(true);
     try {
-      const raw: string = await invoke("db_connect", { connectionString: connectInput.trim() });
+      const raw: string = await dbConnect(connectInput.trim());
       const result = JSON.parse(raw);
 
       // Now get detailed table info
-      const tablesRaw: string = await invoke("db_list_tables", { connectionString: connectInput.trim() });
+      const tablesRaw: string = await dbListTables(connectInput.trim());
       const tables: DbTable[] = JSON.parse(tablesRaw);
 
       const newConn: DbConnection = {
@@ -156,10 +148,7 @@ export default function DatabaseManager() {
     setExecuting(true);
     setQueryError(null);
     try {
-      const raw: string = await invoke("db_execute_query", {
-        connectionString: selectedConn.path,
-        query: sql,
-      });
+      const raw: string = await dbExecuteQuery(selectedConn.path, sql);
       const data = JSON.parse(raw);
 
       // Convert array-of-arrays rows to array-of-objects
@@ -193,7 +182,7 @@ export default function DatabaseManager() {
       // Refresh tables after write operations
       const upper = sql.trim().toUpperCase();
       if (upper.startsWith("CREATE") || upper.startsWith("INSERT") || upper.startsWith("UPDATE")) {
-        const tablesRaw: string = await invoke("db_list_tables", { connectionString: selectedConn.path });
+        const tablesRaw: string = await dbListTables(selectedConn.path);
         const tables: DbTable[] = JSON.parse(tablesRaw);
         setConnections(prev => prev.map((c, i) => i === selectedConnIdx ? { ...c, tables } : c));
       }
@@ -245,13 +234,50 @@ export default function DatabaseManager() {
     });
   };
 
-  const handleExport = (format: "csv" | "json") => {
-    if (!queryResult) return;
+  const handleExport = async (format: "csv" | "json") => {
+    if (!queryResult || !selectedConn) return;
     setFuelUsed(f => f + 2);
-    setHistory(prev => [{ id: `qh-${Date.now()}`, query: `EXPORT ${format.toUpperCase()}`, database: selectedConn?.name ?? "", timestamp: Date.now(), duration: 0, rowCount: queryResult.rowCount, status: "success" }, ...prev]);
+    try {
+      // If we have a table name from the last query, export it via backend
+      const tableName = sqlQuery.trim().match(/^SELECT\s.*\sFROM\s+["`]?(\w+)["`]?/i)?.[1];
+      let exportData: string;
+      if (tableName && selectedConn.path) {
+        exportData = await dbExportTable(selectedConn.path, tableName, format);
+      } else {
+        // Fallback: format current query results client-side
+        if (format === "csv") {
+          const header = queryResult.columns.join(",");
+          const rows = queryResult.rows.map((r) =>
+            queryResult.columns.map((c) => String(r[c] ?? "")).join(","),
+          ).join("\n");
+          exportData = header + "\n" + rows;
+        } else {
+          exportData = JSON.stringify(queryResult.rows, null, 2);
+        }
+      }
+      // Trigger download via blob
+      const blob = new Blob([exportData], { type: format === "csv" ? "text/csv" : "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `export_${Date.now()}.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setHistory(prev => [{ id: `qh-${Date.now()}`, query: `EXPORT ${format.toUpperCase()}`, database: selectedConn?.name ?? "", timestamp: Date.now(), duration: 0, rowCount: queryResult.rowCount, status: "success" }, ...prev]);
+    } catch {
+      setHistory(prev => [{ id: `qh-${Date.now()}`, query: `EXPORT ${format.toUpperCase()}`, database: selectedConn?.name ?? "", timestamp: Date.now(), duration: 0, rowCount: 0, status: "error" }, ...prev]);
+    }
   };
 
-  const disconnectDb = (idx: number) => {
+  const disconnectDb = async (idx: number) => {
+    const conn = connections[idx];
+    if (conn) {
+      try {
+        await dbDisconnect(conn.path);
+      } catch (e) {
+        if (import.meta.env.DEV) console.error("Disconnect error:", e);
+      }
+    }
     setConnections(prev => prev.filter((_, i) => i !== idx));
     if (selectedConnIdx >= connections.length - 1) {
       setSelectedConnIdx(Math.max(0, connections.length - 2));
@@ -309,16 +335,16 @@ export default function DatabaseManager() {
           {connections.map((conn, idx) => (
             <div key={conn.id} className={`db-conn ${selectedConnIdx === idx ? "active" : ""}`}>
               <div className="db-conn-header" onClick={() => { setSelectedConnIdx(idx); if (conn.tables.length > 0) setSelectedTable(conn.tables[0].name); }}>
-                <span className="db-conn-engine" style={{ color: "#38bdf8" }}>◆</span>
+                <span className="db-conn-engine" style={{ color: "#38bdf8" }}><Diamond size={12} /></span>
                 <span className="db-conn-name">{conn.name}</span>
-                <span className={`db-conn-status db-status-${conn.status}`}>●</span>
-                <button className="db-conn-toggle" onClick={e => { e.stopPropagation(); disconnectDb(idx); }}>⏏</button>
+                <span className={`db-conn-status db-status-${conn.status}`}><Circle size={8} fill="currentColor" /></span>
+                <button className="db-conn-toggle cursor-pointer" onClick={e => { e.stopPropagation(); disconnectDb(idx); }}><Power size={12} /></button>
               </div>
               {selectedConnIdx === idx && (
                 <div className="db-tables-list">
                   {conn.tables.map(table => (
                     <div key={table.name} className={`db-table-item ${selectedTable === table.name ? "active" : ""}`} onClick={() => { setSelectedTable(table.name); setBuilderTable(table.name); }}>
-                      <span className="db-table-icon">▤</span>
+                      <span className="db-table-icon"><Table2 size={12} /></span>
                       <span className="db-table-name">{table.name}</span>
                       <span className="db-table-count">{table.rowCount}</span>
                     </div>
@@ -333,14 +359,14 @@ export default function DatabaseManager() {
         {tableObj && (
           <div className="db-schema-quick">
             <div className="db-schema-quick-header">
-              <span>▤ {tableObj.name}</span>
+              <span><Table2 size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />{tableObj.name}</span>
               <span className="db-schema-rows">{tableObj.rowCount} rows</span>
             </div>
             <div className="db-schema-cols">
               {tableObj.columns.map(col => (
                 <div key={col.name} className="db-schema-col">
                   <span className={`db-col-icon ${col.primaryKey ? "pk" : ""}`}>
-                    {col.primaryKey ? "PK" : "·"}
+                    {col.primaryKey ? "PK" : "-"}
                   </span>
                   <span className="db-col-name">{col.name}</span>
                   <span className="db-col-type">{col.type}</span>
@@ -357,14 +383,14 @@ export default function DatabaseManager() {
         <div className="db-tabs">
           <div className="db-tabs-left">
             {(["query", "builder", "schema", "visualize", "history"] as TabId[]).map(tab => (
-              <button key={tab} className={`db-tab ${activeTab === tab ? "active" : ""}`} onClick={() => setActiveTab(tab)}>
-                {tab === "query" ? "⌨" : tab === "builder" ? "⊞" : tab === "schema" ? "⬡" : tab === "visualize" ? "◔" : "⏱"} {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              <button key={tab} className={`db-tab cursor-pointer ${activeTab === tab ? "active" : ""}`} onClick={() => setActiveTab(tab)}>
+                {tab === "query" ? <Keyboard size={14} /> : tab === "builder" ? <LayoutGrid size={14} /> : tab === "schema" ? <Hexagon size={14} /> : tab === "visualize" ? <PieChartIcon size={14} /> : <Clock size={14} />} {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </div>
           <div className="db-tabs-right">
-            {selectedConn && <span className="db-conn-info">◆ {selectedConn.name} (SQLite)</span>}
-            <span className="db-fuel">⚡ {fuelUsed} fuel</span>
+            {selectedConn && <span className="db-conn-info"><Diamond size={10} style={{ display: "inline", verticalAlign: "middle", marginRight: 2 }} /> {selectedConn.name} (SQLite)</span>}
+            <span className="db-fuel"><Zap size={10} style={{ display: "inline", verticalAlign: "middle" }} /> {fuelUsed} fuel</span>
           </div>
         </div>
 
@@ -373,8 +399,8 @@ export default function DatabaseManager() {
           <div className="db-query-tab">
             <div className="db-query-editor">
               <div className="db-query-toolbar">
-                <button className="db-btn-run" onClick={() => executeQuery(sqlQuery)} disabled={executing}>
-                  {executing ? "Running..." : "▶ Run Query"}
+                <button className="db-btn-run cursor-pointer" onClick={() => executeQuery(sqlQuery)} disabled={executing}>
+                  {executing ? "Running..." : <><Play size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Run Query</>}
                 </button>
                 <button className="db-btn-secondary" onClick={() => handleExport("csv")}>CSV</button>
                 <button className="db-btn-secondary" onClick={() => handleExport("json")}>JSON</button>
@@ -392,7 +418,7 @@ export default function DatabaseManager() {
             <div className="db-query-results">
               {queryError && (
                 <div className="db-query-error">
-                  <span className="db-error-icon">⛔</span>
+                  <span className="db-error-icon"><OctagonAlert size={14} /></span>
                   <span>{queryError}</span>
                 </div>
               )}
@@ -418,7 +444,7 @@ export default function DatabaseManager() {
               )}
               {!queryResult && !queryError && (
                 <div className="db-no-results">
-                  <div className="db-no-results-icon">⌨</div>
+                  <div className="db-no-results-icon"><Keyboard size={32} /></div>
                   <div>{selectedConn ? "Write a query and press Ctrl+Enter or click Run" : "Connect to a database first, then run queries"}</div>
                 </div>
               )}
@@ -430,7 +456,7 @@ export default function DatabaseManager() {
         {activeTab === "builder" && (
           <div className="db-builder-tab">
             {!selectedConn ? (
-              <div className="db-no-results"><div className="db-no-results-icon">⊞</div><div>Connect to a database first</div></div>
+              <div className="db-no-results"><div className="db-no-results-icon"><LayoutGrid size={32} /></div><div>Connect to a database first</div></div>
             ) : (
               <>
                 <div className="db-builder-controls">
@@ -468,8 +494,8 @@ export default function DatabaseManager() {
                           <option value="!=">!=</option>
                           <option value=">">&gt;</option>
                           <option value="<">&lt;</option>
-                          <option value=">=">≥</option>
-                          <option value="<=">≤</option>
+                          <option value=">=">&gt;=</option>
+                          <option value="<=">&lt;=</option>
                           <option value="LIKE">LIKE</option>
                           <option value="IN">IN</option>
                         </select>
@@ -499,7 +525,7 @@ export default function DatabaseManager() {
                 <div className="db-builder-preview">
                   <div className="db-builder-preview-header">
                     <span>Generated SQL</span>
-                    <button className="db-btn-run" onClick={() => { setSqlQuery(builderSql); executeQuery(builderSql); setActiveTab("query"); }}>▶ Run</button>
+                    <button className="db-btn-run cursor-pointer" onClick={() => { setSqlQuery(builderSql); executeQuery(builderSql); setActiveTab("query"); }}><Play size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Run</button>
                   </div>
                   <pre className="db-builder-sql">{builderSql}</pre>
                 </div>
@@ -512,7 +538,7 @@ export default function DatabaseManager() {
         {activeTab === "schema" && (
           <div className="db-schema-tab">
             {!selectedConn ? (
-              <div className="db-no-results"><div className="db-no-results-icon">⬡</div><div>Connect to a database first</div></div>
+              <div className="db-no-results"><div className="db-no-results-icon"><Hexagon size={32} /></div><div>Connect to a database first</div></div>
             ) : (
               <>
                 <div className="db-schema-header">
@@ -523,7 +549,7 @@ export default function DatabaseManager() {
                   {selectedConn.tables.map(table => (
                     <div key={table.name} className={`db-schema-card ${selectedTable === table.name ? "selected" : ""}`} onClick={() => setSelectedTable(table.name)}>
                       <div className="db-schema-card-header">
-                        <span className="db-schema-card-icon">▤</span>
+                        <span className="db-schema-card-icon"><Table2 size={12} /></span>
                         <span className="db-schema-card-name">{table.name}</span>
                         <span className="db-schema-card-rows">{table.rowCount} rows</span>
                       </div>
@@ -557,8 +583,8 @@ export default function DatabaseManager() {
                     <label>Chart Type</label>
                     <div className="db-viz-type-btns">
                       {(["bar", "pie", "line"] as const).map(t => (
-                        <button key={t} className={`db-viz-type-btn ${vizType === t ? "active" : ""}`} onClick={() => setVizType(t)}>
-                          {t === "bar" ? "▥" : t === "pie" ? "◔" : "◠"} {t.charAt(0).toUpperCase() + t.slice(1)}
+                        <button key={t} className={`db-viz-type-btn cursor-pointer ${vizType === t ? "active" : ""}`} onClick={() => setVizType(t)}>
+                          {t === "bar" ? <BarChart3 size={14} /> : t === "pie" ? <PieChartIcon size={14} /> : <TrendingUp size={14} />} {t.charAt(0).toUpperCase() + t.slice(1)}
                         </button>
                       ))}
                     </div>
@@ -619,7 +645,7 @@ export default function DatabaseManager() {
               </>
             ) : (
               <div className="db-no-results">
-                <div className="db-no-results-icon">◔</div>
+                <div className="db-no-results-icon"><PieChartIcon size={32} /></div>
                 <div>Run a query first, then visualize the results</div>
               </div>
             )}
@@ -636,18 +662,18 @@ export default function DatabaseManager() {
             <div className="db-history-list">
               {history.length === 0 && (
                 <div className="db-no-results">
-                  <div className="db-no-results-icon">⏱</div>
+                  <div className="db-no-results-icon"><Clock size={32} /></div>
                   <div>No queries executed yet</div>
                 </div>
               )}
               {history.map(entry => (
                 <div key={entry.id} className={`db-history-item ${entry.status}`}>
                   <div className="db-history-item-header">
-                    <span className={`db-history-status ${entry.status}`}>{entry.status === "success" ? "✓" : "✗"}</span>
+                    <span className={`db-history-status ${entry.status}`}>{entry.status === "success" ? <Check size={12} /> : <X size={12} />}</span>
                     <span className="db-history-time">{formatTimestamp(entry.timestamp)}</span>
-                    <span className="db-history-db" style={{ color: "#38bdf8" }}>◆ {entry.database}</span>
+                    <span className="db-history-db" style={{ color: "#38bdf8" }}><Diamond size={10} style={{ display: "inline", verticalAlign: "middle", marginRight: 2 }} /> {entry.database}</span>
                     <span className="db-history-meta">{entry.rowCount} rows · {entry.duration}ms</span>
-                    <button className="db-history-rerun" onClick={() => { setSqlQuery(entry.query); setActiveTab("query"); }} title="Load query">↻</button>
+                    <button className="db-history-rerun cursor-pointer" onClick={() => { setSqlQuery(entry.query); setActiveTab("query"); }} title="Load query"><RotateCcw size={12} /></button>
                   </div>
                   <pre className="db-history-query">{entry.query}</pre>
                   {entry.error && <div className="db-history-error">{entry.error}</div>}
@@ -662,7 +688,7 @@ export default function DatabaseManager() {
       <div className="db-status-bar">
         {selectedConn ? (
           <>
-            <span className="db-status-item">◆ {selectedConn.name}</span>
+            <span className="db-status-item"><Diamond size={10} style={{ display: "inline", verticalAlign: "middle", marginRight: 2 }} /> {selectedConn.name}</span>
             <span className="db-status-item">Connected</span>
             <span className="db-status-item">{selectedConn.tables.length} tables</span>
           </>
@@ -670,7 +696,7 @@ export default function DatabaseManager() {
           <span className="db-status-item">No connection</span>
         )}
         {queryResult && <span className="db-status-item">{queryResult.rowCount} rows · {queryResult.duration}ms</span>}
-        <span className="db-status-item db-status-right">⚡ {fuelUsed} fuel</span>
+        <span className="db-status-item db-status-right"><Zap size={10} style={{ display: "inline", verticalAlign: "middle" }} /> {fuelUsed} fuel</span>
         <span className="db-status-item">{history.length} queries logged</span>
         <span className="db-status-item">Ctrl+Enter run</span>
       </div>

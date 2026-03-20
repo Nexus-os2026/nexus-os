@@ -303,18 +303,18 @@ impl AgentContext {
             ));
         }
 
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::LlmCall,
-                json!({
-                    "action": "llm_query",
-                    "prompt_len": prompt.len(),
-                    "max_tokens": max_tokens,
-                    "fuel_cost": LLM_QUERY_FUEL_COST,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::LlmCall,
+            json!({
+                "action": "llm_query",
+                "prompt_len": prompt.len(),
+                "max_tokens": max_tokens,
+                "fuel_cost": LLM_QUERY_FUEL_COST,
+            }),
+        ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
 
         Ok(format!("[mock-llm-response to {} chars]", prompt.len()))
     }
@@ -392,17 +392,17 @@ impl AgentContext {
             return Ok(format!("[recorded-file-read: {}]", path));
         }
 
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "action": "read_file",
-                    "path": path,
-                    "fuel_cost": READ_FILE_FUEL_COST,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "action": "read_file",
+                "path": path,
+                "fuel_cost": READ_FILE_FUEL_COST,
+            }),
+        ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
 
         Ok(format!("[mock-file-content of {}]", path))
     }
@@ -423,18 +423,18 @@ impl AgentContext {
             return Ok(());
         }
 
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "action": "write_file",
-                    "path": path,
-                    "content_len": content.len(),
-                    "fuel_cost": WRITE_FILE_FUEL_COST,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "action": "write_file",
+                "path": path,
+                "content_len": content.len(),
+                "fuel_cost": WRITE_FILE_FUEL_COST,
+            }),
+        ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
 
         Ok(())
     }
@@ -464,16 +464,16 @@ impl AgentContext {
             return record;
         }
 
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::UserAction,
-                json!({
-                    "action": "request_approval",
-                    "description": description,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::UserAction,
+            json!({
+                "action": "request_approval",
+                "description": description,
+            }),
+        ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
 
         self.approval_records.push(record.clone());
         record
@@ -486,17 +486,17 @@ impl AgentContext {
     pub fn deduct_wasm_fuel(&mut self, units: u64) {
         self.fuel_remaining = self.fuel_remaining.saturating_sub(units);
         if units > 0 {
-            self.audit_trail
-                .append_event(
-                    self.agent_id,
-                    EventType::ToolCall,
-                    json!({
-                        "action": "wasm_fuel_consumed",
-                        "units": units,
-                        "remaining": self.fuel_remaining,
-                    }),
-                )
-                .expect("audit: fail-closed");
+            if let Err(e) = self.audit_trail.append_event(
+                self.agent_id,
+                EventType::ToolCall,
+                json!({
+                    "action": "wasm_fuel_consumed",
+                    "units": units,
+                    "remaining": self.fuel_remaining,
+                }),
+            ) {
+                eprintln!("[WARN] audit write failed: {e}");
+            }
         }
     }
 
@@ -512,18 +512,18 @@ impl AgentContext {
     /// could have spent the same fuel.
     pub fn reserve_fuel(&mut self, cost: u64) -> Result<FuelReservation, AgentError> {
         if self.fuel_remaining < cost {
-            self.audit_trail
-                .append_event(
-                    self.agent_id,
-                    EventType::Error,
-                    json!({
-                        "action": "fuel_reservation_failed",
-                        "requested": cost,
-                        "remaining": self.fuel_remaining,
-                        "already_reserved": self.fuel_reserved,
-                    }),
-                )
-                .expect("audit: fail-closed");
+            if let Err(e) = self.audit_trail.append_event(
+                self.agent_id,
+                EventType::Error,
+                json!({
+                    "action": "fuel_reservation_failed",
+                    "requested": cost,
+                    "remaining": self.fuel_remaining,
+                    "already_reserved": self.fuel_reserved,
+                }),
+            ) {
+                eprintln!("[WARN] audit write failed: {e}");
+            }
             return Err(AgentError::FuelExhausted);
         }
 
@@ -531,18 +531,18 @@ impl AgentContext {
         self.fuel_remaining -= cost;
         self.fuel_reserved += cost;
 
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "action": "fuel_reserved",
-                    "reservation_id": id.to_string(),
-                    "amount": cost,
-                    "remaining_after": self.fuel_remaining,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "action": "fuel_reserved",
+                "reservation_id": id.to_string(),
+                "amount": cost,
+                "remaining_after": self.fuel_remaining,
+            }),
+        ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
 
         Ok(FuelReservation {
             id,
@@ -554,36 +554,36 @@ impl AgentContext {
     /// Finalize a committed reservation — fuel is permanently spent.
     pub fn commit_reservation(&mut self, token: CommittedReservation) {
         self.fuel_reserved = self.fuel_reserved.saturating_sub(token.amount);
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "action": "fuel_reservation_committed",
-                    "reservation_id": token.id.to_string(),
-                    "amount": token.amount,
-                    "remaining": self.fuel_remaining,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "action": "fuel_reservation_committed",
+                "reservation_id": token.id.to_string(),
+                "amount": token.amount,
+                "remaining": self.fuel_remaining,
+            }),
+        ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
     }
 
     /// Cancel a reservation — returns fuel to the available pool.
     pub fn cancel_reservation(&mut self, token: CancelledReservation) {
         self.fuel_reserved = self.fuel_reserved.saturating_sub(token.amount);
         self.fuel_remaining += token.amount;
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "action": "fuel_reservation_cancelled",
-                    "reservation_id": token.id.to_string(),
-                    "amount": token.amount,
-                    "remaining_after": self.fuel_remaining,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "action": "fuel_reservation_cancelled",
+                "reservation_id": token.id.to_string(),
+                "amount": token.amount,
+                "remaining_after": self.fuel_remaining,
+            }),
+        ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
     }
 
     /// Return fuel from a reservation that was dropped without commit/cancel.
@@ -605,17 +605,17 @@ impl AgentContext {
         // is responsible for emitting the operation-level audit event, so we
         // only emit on failure (fuel_exhausted) to avoid double-logging.
         if self.fuel_remaining < cost {
-            self.audit_trail
-                .append_event(
-                    self.agent_id,
-                    EventType::Error,
-                    json!({
-                        "action": "fuel_exhausted",
-                        "requested": cost,
-                        "remaining": self.fuel_remaining,
-                    }),
-                )
-                .expect("audit: fail-closed");
+            if let Err(e) = self.audit_trail.append_event(
+                self.agent_id,
+                EventType::Error,
+                json!({
+                    "action": "fuel_exhausted",
+                    "requested": cost,
+                    "remaining": self.fuel_remaining,
+                }),
+            ) {
+                eprintln!("[WARN] audit write failed: {e}");
+            }
             return Err(AgentError::FuelExhausted);
         }
         self.fuel_remaining -= cost;

@@ -23,4 +23,8 @@ Thumbs.db
 node_modules/
 **/node_modules/
 .nexus/
+# Claude Code auto-generated directories (worktrees can be 1.3GB+)
+.claude/worktrees/
+.claude/skills/
+.claude/projects/
 *.db

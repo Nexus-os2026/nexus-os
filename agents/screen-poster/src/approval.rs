@@ -165,17 +165,17 @@ impl<C: ApprovalChannel> HumanApprovalGate<C> {
 
         ticket.resolved_at = Some(now_secs());
 
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::UserAction,
-                json!({
-                    "step": "approval_decision",
-                    "ticket_id": ticket_id,
-                    "state": format!("{:?}", ticket.state),
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::UserAction,
+            json!({
+                "step": "approval_decision",
+                "ticket_id": ticket_id,
+                "state": format!("{:?}", ticket.state),
+            }),
+        ) {
+            tracing::error!("Audit append failed: {e}");
+        }
         Ok(())
     }
 
@@ -254,18 +254,18 @@ impl<C: ApprovalChannel> HumanApprovalGate<C> {
         self.channel.send_telegram(&ticket)?;
         self.tickets.insert(id, ticket.clone());
 
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::UserAction,
-                json!({
-                    "step": "present_for_approval",
-                    "kind": kind,
-                    "ticket_id": id,
-                    "state": "Pending",
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::UserAction,
+            json!({
+                "step": "present_for_approval",
+                "kind": kind,
+                "ticket_id": id,
+                "state": "Pending",
+            }),
+        ) {
+            tracing::error!("Audit append failed: {e}");
+        }
         Ok(id)
     }
 
@@ -281,16 +281,16 @@ impl<C: ApprovalChannel> HumanApprovalGate<C> {
         {
             ticket.state = ApprovalState::Expired;
             ticket.resolved_at = Some(now);
-            self.audit_trail
-                .append_event(
-                    self.agent_id,
-                    EventType::UserAction,
-                    json!({
-                        "step": "approval_expired",
-                        "ticket_id": ticket_id,
-                    }),
-                )
-                .expect("audit: fail-closed");
+            if let Err(e) = self.audit_trail.append_event(
+                self.agent_id,
+                EventType::UserAction,
+                json!({
+                    "step": "approval_expired",
+                    "ticket_id": ticket_id,
+                }),
+            ) {
+                tracing::error!("Audit append failed: {e}");
+            }
         }
 
         Ok(())

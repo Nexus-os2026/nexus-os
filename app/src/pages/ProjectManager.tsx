@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { hasDesktopRuntime, projectList, projectSave, projectDelete as projectDeleteApi } from "../api/backend";
+import {
+  LayoutGrid, List, Clock, PieChart, Plus, Circle, CircleDot,
+  Target, CheckCircle2, Zap, Hexagon, GitCommit, GitBranch,
+  ExternalLink, FileText, Workflow, CheckSquare, Square,
+  AlertCircle, ArrowUpCircle, MinusCircle,
+} from "lucide-react";
 import "./project-manager.css";
 
 /* ─── types ─── */
@@ -68,19 +74,19 @@ interface ProjectData {
 }
 
 /* ─── constants ─── */
-const COLUMNS: { id: ColumnId; label: string; color: string; icon: string }[] = [
-  { id: "backlog", label: "Backlog", color: "#64748b", icon: "◇" },
-  { id: "todo", label: "To Do", color: "#38bdf8", icon: "○" },
-  { id: "in-progress", label: "In Progress", color: "#a78bfa", icon: "◉" },
-  { id: "review", label: "Review", color: "#fbbf24", icon: "◎" },
-  { id: "done", label: "Done", color: "#34d399", icon: "●" },
+const COLUMNS: { id: ColumnId; label: string; color: string; icon: React.ReactNode }[] = [
+  { id: "backlog", label: "Backlog", color: "#64748b", icon: <Circle size={12} /> },
+  { id: "todo", label: "To Do", color: "#38bdf8", icon: <Circle size={12} /> },
+  { id: "in-progress", label: "In Progress", color: "#a78bfa", icon: <CircleDot size={12} /> },
+  { id: "review", label: "Review", color: "#fbbf24", icon: <Target size={12} /> },
+  { id: "done", label: "Done", color: "#34d399", icon: <CheckCircle2 size={12} /> },
 ];
 
-const PRIORITY_MAP: Record<Priority, { label: string; color: string; icon: string }> = {
-  critical: { label: "Critical", color: "#ef4444", icon: "🔴" },
-  high: { label: "High", color: "#f97316", icon: "🟠" },
-  medium: { label: "Medium", color: "#fbbf24", icon: "🟡" },
-  low: { label: "Low", color: "var(--nexus-accent)", icon: "🔵" },
+const PRIORITY_MAP: Record<Priority, { label: string; color: string; icon: React.ReactNode }> = {
+  critical: { label: "Critical", color: "#ef4444", icon: <AlertCircle size={12} /> },
+  high: { label: "High", color: "#f97316", icon: <ArrowUpCircle size={12} /> },
+  medium: { label: "Medium", color: "#fbbf24", icon: <MinusCircle size={12} /> },
+  low: { label: "Low", color: "var(--nexus-accent)", icon: <Circle size={12} /> },
 };
 
 const TAGS: TaskTag[] = [
@@ -126,7 +132,7 @@ async function saveProject(data: ProjectData): Promise<void> {
   try {
     await projectSave(PROJECT_ID, JSON.stringify({ ...data, savedAt: Date.now() }));
   } catch (e) {
-    console.error("Failed to save project:", e);
+    if (import.meta.env.DEV) console.error("Failed to save project:", e);
   }
 }
 
@@ -170,6 +176,12 @@ export default function ProjectManager() {
   }, []);
 
   const activeSprint = useMemo(() => sprints.find(s => s.active) ?? sprints[0], [sprints]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, []);
 
   /* ─── load on mount ─── */
   useEffect(() => {
@@ -301,12 +313,12 @@ export default function ProjectManager() {
         <div className="pm-header-right">
           <div className="pm-view-toggle">
             {(["board", "list", "timeline", "metrics"] as ViewMode[]).map(v => (
-              <button key={v} className={`pm-view-btn ${viewMode === v ? "active" : ""}`} onClick={() => setViewMode(v)}>
-                {v === "board" ? "⊞" : v === "list" ? "☰" : v === "timeline" ? "⏱" : "◔"} {v.charAt(0).toUpperCase() + v.slice(1)}
+              <button key={v} className={`pm-view-btn cursor-pointer ${viewMode === v ? "active" : ""}`} onClick={() => setViewMode(v)}>
+                {v === "board" ? <LayoutGrid size={14} /> : v === "list" ? <List size={14} /> : v === "timeline" ? <Clock size={14} /> : <PieChart size={14} />} {v.charAt(0).toUpperCase() + v.slice(1)}
               </button>
             ))}
           </div>
-          <button className="pm-btn-new" onClick={() => setShowNewTask(true)}>+ New Task</button>
+          <button className="pm-btn-new cursor-pointer" onClick={() => setShowNewTask(true)}><Plus size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />New Task</button>
         </div>
       </div>
 
@@ -330,7 +342,7 @@ export default function ProjectManager() {
         <div className="pm-stats-strip">
           <span className="pm-stat">{stats.total} tasks</span>
           <span className="pm-stat">{stats.donePoints}/{stats.totalPoints} pts</span>
-          <span className="pm-stat">⏱ {formatTime(stats.totalTime)}</span>
+          <span className="pm-stat"><Clock size={10} style={{ display: "inline", verticalAlign: "middle", marginRight: 2 }} /> {formatTime(stats.totalTime)}</span>
           {!loaded && <span className="pm-stat">Loading...</span>}
         </div>
       </div>
@@ -404,7 +416,7 @@ export default function ProjectManager() {
                         <div className="pm-card-links">
                           {task.links.map((l, i) => (
                             <span key={i} className={`pm-card-link pm-link-${l.type}`} title={l.label}>
-                              {l.type === "commit" ? "⊙" : l.type === "branch" ? "⎇" : l.type === "pr" ? "⤴" : l.type === "note" ? "📝" : "⎇"}
+                              {l.type === "commit" ? <GitCommit size={10} /> : l.type === "branch" ? <GitBranch size={10} /> : l.type === "pr" ? <ExternalLink size={10} /> : l.type === "note" ? <FileText size={10} /> : <Workflow size={10} />}
                             </span>
                           ))}
                         </div>
@@ -446,7 +458,7 @@ export default function ProjectManager() {
                     <td className="pm-table-assignee">{task.assignee}</td>
                     <td>{task.complexity}</td>
                     <td>{formatTime(task.timeSpent)}</td>
-                    <td>⚡{task.fuelCost}</td>
+                    <td><Zap size={10} style={{ display: "inline", verticalAlign: "middle" }} />{task.fuelCost}</td>
                     <td>
                       <div className="pm-table-tags">
                         {task.tags.map(tId => {
@@ -512,7 +524,7 @@ export default function ProjectManager() {
                   </div>
                   <div className="pm-automation-action">{auto.action}</div>
                   <div className="pm-automation-meta">
-                    <span className="pm-automation-agent">⬢ {auto.agent}</span>
+                    <span className="pm-automation-agent"><Hexagon size={10} style={{ display: "inline", verticalAlign: "middle", marginRight: 2 }} /> {auto.agent}</span>
                     {auto.lastRun && <span className="pm-automation-last">Last: {new Date(auto.lastRun).toLocaleTimeString()}</span>}
                   </div>
                 </div>
@@ -545,7 +557,7 @@ export default function ProjectManager() {
             </div>
             <div className="pm-metric-card">
               <div className="pm-metric-label">Total Fuel</div>
-              <div className="pm-metric-value pm-metric-yellow">⚡{stats.totalFuel}</div>
+              <div className="pm-metric-value pm-metric-yellow"><Zap size={14} style={{ display: "inline", verticalAlign: "middle" }} />{stats.totalFuel}</div>
             </div>
             <div className="pm-metric-card">
               <div className="pm-metric-label">Time Tracked</div>
@@ -638,7 +650,7 @@ export default function ProjectManager() {
             <div className="pm-detail-label">Subtasks ({selectedTask.subtasks.filter(s => s.done).length}/{selectedTask.subtasks.length})</div>
             {selectedTask.subtasks.map((sub, i) => (
               <div key={i} className={`pm-subtask ${sub.done ? "done" : ""}`} onClick={() => { toggleSubtask(selectedTask.id, i); setSelectedTask({ ...selectedTask, subtasks: selectedTask.subtasks.map((s, j) => j === i ? { ...s, done: !s.done } : s) }); }}>
-                <span className="pm-subtask-check">{sub.done ? "☑" : "☐"}</span>
+                <span className="pm-subtask-check">{sub.done ? <CheckSquare size={14} /> : <Square size={14} />}</span>
                 <span className="pm-subtask-label">{sub.label}</span>
               </div>
             ))}
@@ -662,7 +674,7 @@ export default function ProjectManager() {
           {/* meta */}
           <div className="pm-detail-meta">
             <div className="pm-detail-meta-row"><span>Time</span><span>{formatTime(selectedTask.timeSpent)}</span></div>
-            <div className="pm-detail-meta-row"><span>Fuel</span><span>⚡{selectedTask.fuelCost}</span></div>
+            <div className="pm-detail-meta-row"><span>Fuel</span><span><Zap size={10} style={{ display: "inline", verticalAlign: "middle" }} />{selectedTask.fuelCost}</span></div>
             <div className="pm-detail-meta-row"><span>Created by</span><span>{selectedTask.createdBy}</span></div>
             <div className="pm-detail-meta-row"><span>Created</span><span>{formatDate(selectedTask.createdAt)}</span></div>
             <div className="pm-detail-meta-row"><span>Updated</span><span>{new Date(selectedTask.updatedAt).toLocaleString()}</span></div>
@@ -677,7 +689,7 @@ export default function ProjectManager() {
         <span className="pm-status-item">{activeSprint.name}</span>
         <span className="pm-status-item">{stats.done}/{stats.total} tasks done</span>
         <span className="pm-status-item">{stats.donePoints}/{stats.totalPoints} points</span>
-        <span className="pm-status-item">⏱ {formatTime(stats.totalTime)}</span>
+        <span className="pm-status-item"><Clock size={10} style={{ display: "inline", verticalAlign: "middle", marginRight: 2 }} /> {formatTime(stats.totalTime)}</span>
         <span className="pm-status-item pm-status-right">{stats.daysLeft} days remaining</span>
         <span className="pm-status-item">{auditLog[0] ?? "Ready"}</span>
       </div>

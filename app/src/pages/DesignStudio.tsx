@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   executeAgentGoal,
   fileManagerCreateDir,
@@ -47,6 +47,13 @@ export default function DesignStudio(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const genTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (genTimerRef.current) clearTimeout(genTimerRef.current);
+    };
+  }, []);
 
   const refreshWorkspace = useCallback(async () => {
     await fileManagerCreateDir(workspace);
@@ -129,7 +136,7 @@ export default function DesignStudio(): JSX.Element {
       );
       setGoalId(nextGoalId);
       setMessage(`Generation dispatched to ${selectedAgentName}. Goal ${nextGoalId}.`);
-      window.setTimeout(() => {
+      genTimerRef.current = window.setTimeout(() => {
         void refreshWorkspace().then(async () => {
           try {
             const content = await fileManagerRead(targetPath);

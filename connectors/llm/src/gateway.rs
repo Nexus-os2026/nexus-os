@@ -1,7 +1,7 @@
 use crate::providers::{
     ClaudeProvider, CohereProvider, DeepSeekProvider, FireworksProvider, GeminiProvider,
-    GroqProvider, LlmProvider, LlmResponse, MistralProvider, MockProvider, NvidiaProvider,
-    OllamaProvider, OpenAiProvider, OpenRouterProvider, PerplexityProvider, TogetherProvider,
+    GroqProvider, LlmProvider, LlmResponse, MistralProvider, NvidiaProvider, OllamaProvider,
+    OpenAiProvider, OpenRouterProvider, PerplexityProvider, TogetherProvider,
 };
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::errors::AgentError;
@@ -98,72 +98,96 @@ impl Default for AgentFuelBudgetConfig {
     }
 }
 
-pub fn select_provider(config: &ProviderSelectionConfig) -> Box<dyn LlmProvider> {
+pub fn select_provider(
+    config: &ProviderSelectionConfig,
+) -> Result<Box<dyn LlmProvider>, AgentError> {
     if let Some(explicit) = config.provider.as_deref() {
         return explicit_provider(explicit, config);
     }
 
     if let Some(url) = config.ollama_url.as_deref() {
-        return Box::new(OllamaProvider::new(url.to_string()));
+        return Ok(Box::new(OllamaProvider::new(url.to_string())));
     }
 
     if has_key(&config.deepseek_api_key) {
-        return Box::new(DeepSeekProvider::new(config.deepseek_api_key.clone()));
+        return Ok(Box::new(DeepSeekProvider::new(
+            config.deepseek_api_key.clone(),
+        )));
     }
 
     if has_key(&config.groq_api_key) {
-        return Box::new(GroqProvider::new(config.groq_api_key.clone()));
+        return Ok(Box::new(GroqProvider::new(config.groq_api_key.clone())));
     }
 
     if has_key(&config.mistral_api_key) {
-        return Box::new(MistralProvider::new(config.mistral_api_key.clone()));
+        return Ok(Box::new(MistralProvider::new(
+            config.mistral_api_key.clone(),
+        )));
     }
 
     if has_key(&config.together_api_key) {
-        return Box::new(TogetherProvider::new(config.together_api_key.clone()));
+        return Ok(Box::new(TogetherProvider::new(
+            config.together_api_key.clone(),
+        )));
     }
 
     if has_key(&config.fireworks_api_key) {
-        return Box::new(FireworksProvider::new(config.fireworks_api_key.clone()));
+        return Ok(Box::new(FireworksProvider::new(
+            config.fireworks_api_key.clone(),
+        )));
     }
 
     if has_key(&config.perplexity_api_key) {
-        return Box::new(PerplexityProvider::new(config.perplexity_api_key.clone()));
+        return Ok(Box::new(PerplexityProvider::new(
+            config.perplexity_api_key.clone(),
+        )));
     }
 
     if has_key(&config.cohere_api_key) {
-        return Box::new(CohereProvider::new(config.cohere_api_key.clone()));
+        return Ok(Box::new(CohereProvider::new(config.cohere_api_key.clone())));
     }
 
     if has_key(&config.openrouter_api_key) {
-        return Box::new(OpenRouterProvider::new(config.openrouter_api_key.clone()));
+        return Ok(Box::new(OpenRouterProvider::new(
+            config.openrouter_api_key.clone(),
+        )));
     }
 
     if has_key(&config.nvidia_api_key) {
-        return Box::new(NvidiaProvider::new(config.nvidia_api_key.clone()));
+        return Ok(Box::new(NvidiaProvider::new(config.nvidia_api_key.clone())));
     }
 
     if has_key(&config.openai_api_key) {
-        return Box::new(OpenAiProvider::new(config.openai_api_key.clone()));
+        return Ok(Box::new(OpenAiProvider::new(config.openai_api_key.clone())));
     }
 
     if has_key(&config.gemini_api_key) {
-        return Box::new(GeminiProvider::new(config.gemini_api_key.clone()));
+        return Ok(Box::new(GeminiProvider::new(config.gemini_api_key.clone())));
     }
 
     #[cfg(feature = "real-claude")]
     if has_key(&config.anthropic_api_key) {
-        return Box::new(ClaudeProvider::new(config.anthropic_api_key.clone()));
+        return Ok(Box::new(ClaudeProvider::new(
+            config.anthropic_api_key.clone(),
+        )));
     }
 
-    // Auto-detect Ollama on default port before falling back to Mock
+    // Auto-detect Ollama on default port
     let ollama_default = OllamaProvider::from_env();
     if ollama_default.health_check().is_ok() {
         eprintln!("[nexus-llm] auto-detected Ollama at localhost:11434, using as default provider");
-        return Box::new(ollama_default);
+        return Ok(Box::new(ollama_default));
     }
 
-    Box::new(MockProvider::new())
+    Err(AgentError::SupervisorError(
+        "No LLM provider configured. Please either:\n\
+         1. Install and start Ollama (ollama serve)\n\
+         2. Set OPENAI_API_KEY in Settings\n\
+         3. Set ANTHROPIC_API_KEY in Settings\n\
+         4. Set any supported provider API key in Settings\n\
+         5. Set LLM_PROVIDER=mock to explicitly use mock responses"
+            .to_string(),
+    ))
 }
 
 fn has_key(key: &Option<String>) -> bool {
@@ -172,30 +196,37 @@ fn has_key(key: &Option<String>) -> bool {
         .unwrap_or(false)
 }
 
-fn explicit_provider(explicit: &str, config: &ProviderSelectionConfig) -> Box<dyn LlmProvider> {
+fn explicit_provider(
+    explicit: &str,
+    config: &ProviderSelectionConfig,
+) -> Result<Box<dyn LlmProvider>, AgentError> {
     match explicit.to_lowercase().as_str() {
-        "ollama" => Box::new(OllamaProvider::new(
+        "ollama" => Ok(Box::new(OllamaProvider::new(
             config
                 .ollama_url
                 .clone()
                 .unwrap_or_else(|| "http://localhost:11434".to_string()),
-        )),
-        "deepseek" => Box::new(DeepSeekProvider::new(config.deepseek_api_key.clone())),
-        "groq" => Box::new(GroqProvider::new(config.groq_api_key.clone())),
-        "mistral" => Box::new(MistralProvider::new(config.mistral_api_key.clone())),
-        "together" => Box::new(TogetherProvider::new(config.together_api_key.clone())),
-        "fireworks" => Box::new(FireworksProvider::new(config.fireworks_api_key.clone())),
-        "perplexity" => Box::new(PerplexityProvider::new(config.perplexity_api_key.clone())),
-        "cohere" => Box::new(CohereProvider::new(config.cohere_api_key.clone())),
-        "openrouter" => Box::new(OpenRouterProvider::new(config.openrouter_api_key.clone())),
+        ))),
+        "deepseek" => Ok(Box::new(DeepSeekProvider::new(config.deepseek_api_key.clone()))),
+        "groq" => Ok(Box::new(GroqProvider::new(config.groq_api_key.clone()))),
+        "mistral" => Ok(Box::new(MistralProvider::new(config.mistral_api_key.clone()))),
+        "together" => Ok(Box::new(TogetherProvider::new(config.together_api_key.clone()))),
+        "fireworks" => Ok(Box::new(FireworksProvider::new(config.fireworks_api_key.clone()))),
+        "perplexity" => Ok(Box::new(PerplexityProvider::new(config.perplexity_api_key.clone()))),
+        "cohere" => Ok(Box::new(CohereProvider::new(config.cohere_api_key.clone()))),
+        "openrouter" => Ok(Box::new(OpenRouterProvider::new(config.openrouter_api_key.clone()))),
         "nvidia" | "nvidia-nim" | "nim" => {
-            Box::new(NvidiaProvider::new(config.nvidia_api_key.clone()))
+            Ok(Box::new(NvidiaProvider::new(config.nvidia_api_key.clone())))
         }
-        "openai" => Box::new(OpenAiProvider::new(config.openai_api_key.clone())),
-        "gemini" | "google" => Box::new(GeminiProvider::new(config.gemini_api_key.clone())),
-        "claude" | "anthropic" => Box::new(ClaudeProvider::new(config.anthropic_api_key.clone())),
-        "mock" => Box::new(MockProvider::new()),
-        _ => Box::new(MockProvider::new()),
+        "openai" => Ok(Box::new(OpenAiProvider::new(config.openai_api_key.clone()))),
+        "gemini" | "google" => Ok(Box::new(GeminiProvider::new(config.gemini_api_key.clone()))),
+        "claude" | "anthropic" => Ok(Box::new(ClaudeProvider::new(config.anthropic_api_key.clone()))),
+        "mock" => Err(AgentError::SupervisorError(
+            "Mock provider is for testing only. Configure a real provider: ollama, openai, claude, gemini, nvidia, deepseek, groq, mistral, together, fireworks, perplexity, cohere, or openrouter.".to_string(),
+        )),
+        _ => Err(AgentError::SupervisorError(
+            format!("Unknown LLM provider '{explicit}'. Supported: ollama, deepseek, groq, mistral, together, fireworks, perplexity, cohere, openrouter, nvidia, openai, gemini, claude"),
+        )),
     }
 }
 

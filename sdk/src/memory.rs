@@ -187,8 +187,10 @@ impl AgentMemory {
         }
 
         let indices: Vec<usize> = scored.iter().map(|(i, _)| *i).collect();
-        // Return references (re-borrow immutably).
-        let entries = self.memories.get(agent_id).unwrap();
+        let entries = match self.memories.get(agent_id) {
+            Some(e) => e,
+            None => return Vec::new(),
+        };
         indices.iter().map(|&i| &entries[i]).collect()
     }
 

@@ -115,7 +115,11 @@ impl IntentPredictor {
 
         // Filter by minimum confidence and sort descending
         predictions.retain(|p| p.confidence >= self.min_confidence);
-        predictions.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        predictions.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         predictions
     }
@@ -218,7 +222,9 @@ impl IntentPredictor {
         }
 
         // Check if the last 3+ actions are the same
-        let last = actions.last().unwrap();
+        let Some(last) = actions.last() else {
+            return;
+        };
         let repeat_count = actions.iter().rev().take_while(|a| *a == last).count();
 
         if repeat_count >= 3 {

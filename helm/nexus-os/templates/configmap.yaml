@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nexus-os.fullname" . }}
+  labels:
+    {{- include "nexus-os.labels" . | nindent 4 }}
+data:
+  NEXUS_MODE: {{ .Values.config.mode | quote }}
+  NEXUS_HTTP_ADDR: {{ .Values.config.httpAddr | quote }}
+  NEXUS_FRONTEND_DIST: {{ .Values.config.frontendDist | quote }}
+  NEXUS_CONFIG_PATH: {{ .Values.config.configPath | quote }}
+  NEXUS_SHUTDOWN_TIMEOUT_SECS: {{ .Values.config.shutdownTimeoutSecs | quote }}
+  NEXUS_CORS_ORIGINS: {{ .Values.config.corsOrigins | quote }}
+  {{- if .Values.ollama.enabled }}
+  OLLAMA_URL: {{ .Values.ollama.url | quote }}
+  {{- end }}

@@ -43,7 +43,16 @@ export default function DeveloperPortal(): JSX.Element {
   const [authorName, setAuthorName] = useState("developer");
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const verifyIntervalRef = useRef<number | null>(null);
+  const delayTimerRef = useRef<number | null>(null);
   const isDesktop = hasDesktopRuntime();
+
+  useEffect(() => {
+    return () => {
+      if (verifyIntervalRef.current) clearInterval(verifyIntervalRef.current);
+      if (delayTimerRef.current) clearTimeout(delayTimerRef.current);
+    };
+  }, []);
 
   const loadMyAgents = useCallback(async (author: string) => {
     if (!isDesktop || !author) return;
@@ -88,9 +97,11 @@ export default function DeveloperPortal(): JSX.Element {
   const simulateVerification = useCallback((checks: MarketplacePublishResult["checks"]) => {
     const stepNames = INITIAL_STEPS.map((s) => s.name);
     let i = 0;
+    if (verifyIntervalRef.current) clearInterval(verifyIntervalRef.current);
     const interval = setInterval(() => {
       if (i >= stepNames.length) {
         clearInterval(interval);
+        verifyIntervalRef.current = null;
         return;
       }
       const name = stepNames[i];
@@ -114,6 +125,7 @@ export default function DeveloperPortal(): JSX.Element {
       );
       i++;
     }, 300);
+    verifyIntervalRef.current = interval;
     // Start first step
     setSteps((prev) =>
       prev.map((s, idx) => (idx === 0 ? { ...s, status: "running" } : s))
@@ -127,14 +139,14 @@ export default function DeveloperPortal(): JSX.Element {
     setPublishResult(null);
     setPublishError("");
 
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => { delayTimerRef.current = window.setTimeout(r, 400); });
     setPublishState("verifying");
 
     if (isDesktop) {
       try {
         const result = await marketplacePublish(bundleData);
         simulateVerification(result.checks);
-        await new Promise((r) => setTimeout(r, INITIAL_STEPS.length * 300 + 200));
+        await new Promise((r) => { delayTimerRef.current = window.setTimeout(r, INITIAL_STEPS.length * 300 + 200); });
         setPublishResult(result);
         setPublishState("done");
         void loadMyAgents(authorName);
@@ -150,7 +162,7 @@ export default function DeveloperPortal(): JSX.Element {
         findings: [] as string[],
       }));
       simulateVerification(browserChecks);
-      await new Promise((r) => setTimeout(r, INITIAL_STEPS.length * 300 + 200));
+      await new Promise((r) => { delayTimerRef.current = window.setTimeout(r, INITIAL_STEPS.length * 300 + 200); });
       setPublishResult({
         package_id: `local-${Date.now()}`,
         name: bundleName.replace(".nexus-agent", ""),

@@ -106,12 +106,29 @@ impl GovernedWeb {
     }
 
     fn extract_duckduckgo_results(html: &str) -> Vec<String> {
-        let title_re = Regex::new(r#"(?is)<a[^>]*class="[^"]*result__a[^"]*"[^>]*>(.*?)</a>"#)
-            .expect("valid DuckDuckGo title regex");
-        let snippet_re = Regex::new(
-            r#"(?is)<(?:a|div)[^>]*class="[^"]*result__snippet[^"]*"[^>]*>(.*?)</(?:a|div)>"#,
-        )
-        .expect("valid DuckDuckGo snippet regex");
+        static TITLE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+            Regex::new(r#"(?is)<a[^>]*class="[^"]*result__a[^"]*"[^>]*>(.*?)</a>"#).unwrap_or_else(
+                |e| {
+                    eprintln!("Failed to compile DuckDuckGo title regex: {e}");
+                    Regex::new("^$")
+                        .or_else(|_| Regex::new(""))
+                        .unwrap_or_else(|_| std::process::abort())
+                },
+            )
+        });
+        static SNIPPET_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+            Regex::new(
+                r#"(?is)<(?:a|div)[^>]*class="[^"]*result__snippet[^"]*"[^>]*>(.*?)</(?:a|div)>"#,
+            )
+            .unwrap_or_else(|e| {
+                eprintln!("Failed to compile DuckDuckGo snippet regex: {e}");
+                Regex::new("^$")
+                    .or_else(|_| Regex::new(""))
+                    .unwrap_or_else(|_| std::process::abort())
+            })
+        });
+        let title_re = &*TITLE_RE;
+        let snippet_re = &*SNIPPET_RE;
 
         let titles = title_re
             .captures_iter(html)

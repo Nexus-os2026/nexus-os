@@ -26,6 +26,11 @@ nexus-airgap = { path = "../../packaging/airgap" }
 nexus-conductor = { path = "../../agents/conductor" }
 nexus-enterprise = { path = "../../enterprise" }
 nexus-persistence = { path = "../../persistence" }
+nexus-auth = { path = "../../auth" }
+nexus-tenancy = { path = "../../tenancy" }
+nexus-telemetry = { path = "../../telemetry" }
+nexus-integrations = { path = "../../integrations" }
+nexus-metering = { path = "../../metering" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 base64 = "0.22"

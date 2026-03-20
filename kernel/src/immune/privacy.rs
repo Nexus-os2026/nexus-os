@@ -172,69 +172,62 @@ impl PrivacyScanner {
     // -----------------------------------------------------------------------
 
     fn add_builtin_rules(&mut self) {
-        // API keys
-        self.rules.push(CompiledRule {
-            name: "openai_api_key".into(),
-            regex: Regex::new(r"sk-[A-Za-z0-9]{20,}").unwrap(),
-            category: PrivacyCategory::ApiKey,
-            luhn_check: false,
-        });
-        self.rules.push(CompiledRule {
-            name: "aws_access_key".into(),
-            regex: Regex::new(r"AKIA[0-9A-Z]{16}").unwrap(),
-            category: PrivacyCategory::ApiKey,
-            luhn_check: false,
-        });
-        self.rules.push(CompiledRule {
-            name: "generic_api_key".into(),
-            regex: Regex::new(r#"(?i)(?:api[_-]?key|apikey)\s*[:=]\s*['"]?([A-Za-z0-9_\-]{16,})"#)
-                .unwrap(),
-            category: PrivacyCategory::ApiKey,
-            luhn_check: false,
-        });
-
-        // Passwords
-        self.rules.push(CompiledRule {
-            name: "password_value".into(),
-            regex: Regex::new(r"(?i)(?:password|passwd|pwd)\s*[:=]\s*\S+").unwrap(),
-            category: PrivacyCategory::Password,
-            luhn_check: false,
-        });
-
-        // Private IPs (RFC 1918)
-        self.rules.push(CompiledRule {
-            name: "private_ip".into(),
-            regex: Regex::new(
+        let builtin: &[(&str, &str, PrivacyCategory, bool)] = &[
+            (
+                "openai_api_key",
+                r"sk-[A-Za-z0-9]{20,}",
+                PrivacyCategory::ApiKey,
+                false,
+            ),
+            (
+                "aws_access_key",
+                r"AKIA[0-9A-Z]{16}",
+                PrivacyCategory::ApiKey,
+                false,
+            ),
+            (
+                "generic_api_key",
+                r#"(?i)(?:api[_-]?key|apikey)\s*[:=]\s*['"]?([A-Za-z0-9_\-]{16,})"#,
+                PrivacyCategory::ApiKey,
+                false,
+            ),
+            (
+                "password_value",
+                r"(?i)(?:password|passwd|pwd)\s*[:=]\s*\S+",
+                PrivacyCategory::Password,
+                false,
+            ),
+            (
+                "private_ip",
                 r"\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b",
-            )
-            .unwrap(),
-            category: PrivacyCategory::PrivateIp,
-            luhn_check: false,
-        });
+                PrivacyCategory::PrivateIp,
+                false,
+            ),
+            (
+                "credit_card",
+                r"\b(?:\d[ -]*?){13,19}\b",
+                PrivacyCategory::CreditCard,
+                true,
+            ),
+            ("ssn", r"\b\d{3}-\d{2}-\d{4}\b", PrivacyCategory::Ssn, false),
+            (
+                "email_address",
+                r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
+                PrivacyCategory::Pii,
+                false,
+            ),
+        ];
 
-        // Credit cards (with Luhn check)
-        self.rules.push(CompiledRule {
-            name: "credit_card".into(),
-            regex: Regex::new(r"\b(?:\d[ -]*?){13,19}\b").unwrap(),
-            category: PrivacyCategory::CreditCard,
-            luhn_check: true,
-        });
-
-        // SSN
-        self.rules.push(CompiledRule {
-            name: "ssn".into(),
-            regex: Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap(),
-            category: PrivacyCategory::Ssn,
-            luhn_check: false,
-        });
-
-        // Email addresses
-        self.rules.push(CompiledRule {
-            name: "email_address".into(),
-            regex: Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b").unwrap(),
-            category: PrivacyCategory::Pii,
-            luhn_check: false,
-        });
+        for (name, pattern, category, luhn_check) in builtin {
+            if let Ok(regex) = Regex::new(pattern) {
+                self.rules.push(CompiledRule {
+                    name: (*name).into(),
+                    regex,
+                    category: *category,
+                    luhn_check: *luhn_check,
+                });
+            }
+        }
     }
 }
 

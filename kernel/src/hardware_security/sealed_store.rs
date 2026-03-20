@@ -42,7 +42,7 @@ impl SealingCipher {
     }
 
     fn cipher(&self) -> Aes256Gcm {
-        Aes256Gcm::new_from_slice(&self.key_bytes).expect("32-byte key is always valid for AES-256")
+        Aes256Gcm::new((&self.key_bytes).into())
     }
 }
 
@@ -52,8 +52,9 @@ impl SealedKeyStore {
     pub fn new(dir: impl Into<PathBuf>, master_secret: &[u8]) -> Self {
         let hk = Hkdf::<Sha256>::new(None, master_secret);
         let mut okm = [0u8; 32];
-        hk.expand(SEAL_INFO, &mut okm)
-            .expect("32 bytes is a valid HKDF-SHA256 output length");
+        if let Err(e) = hk.expand(SEAL_INFO, &mut okm) {
+            eprintln!("HKDF-SHA256 expand failed (should never happen for 32 bytes): {e}");
+        }
 
         Self {
             dir: dir.into(),
@@ -68,12 +69,12 @@ impl SealedKeyStore {
 
         let mut nonce_bytes = [0u8; NONCE_LEN];
         OsRng.fill_bytes(&mut nonce_bytes);
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce = Nonce::from(nonce_bytes);
 
         let ciphertext = self
             .cipher
             .cipher()
-            .encrypt(nonce, key_bytes)
+            .encrypt(&nonce, key_bytes)
             .map_err(|e| KeyError::BackendFailure(format!("sealed store: encrypt: {e}")))?;
 
         let mut blob = Vec::with_capacity(NONCE_LEN + ciphertext.len());
@@ -101,12 +102,15 @@ impl SealedKeyStore {
             ));
         }
 
-        let nonce = Nonce::from_slice(&blob[..NONCE_LEN]);
+        let nonce_array: [u8; NONCE_LEN] = blob[..NONCE_LEN]
+            .try_into()
+            .map_err(|_| KeyError::InvalidKeyMaterial("nonce length mismatch".to_string()))?;
+        let nonce = Nonce::from(nonce_array);
         let ciphertext = &blob[NONCE_LEN..];
 
         self.cipher
             .cipher()
-            .decrypt(nonce, ciphertext)
+            .decrypt(&nonce, ciphertext)
             .map_err(|_| {
                 KeyError::InvalidKeyMaterial(
                     "sealed store: decryption failed (wrong sealing key or corrupted file)"

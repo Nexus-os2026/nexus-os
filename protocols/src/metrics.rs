@@ -22,11 +22,11 @@ impl NexusMetrics {
     ///
     /// **Must be called at most once per process** (the `metrics` crate only
     /// supports a single global recorder).
-    pub fn install() -> Self {
+    pub fn install() -> Result<Self, String> {
         let builder = PrometheusBuilder::new();
         let handle = builder
             .install_recorder()
-            .expect("failed to install Prometheus recorder");
+            .map_err(|e| format!("failed to install Prometheus recorder: {e}"))?;
 
         // Describe all metrics up-front so /metrics always has HELP/TYPE lines.
         describe_gauge!("nexus_agents_active", "Number of currently active agents");
@@ -60,9 +60,9 @@ impl NexusMetrics {
             "Total marketplace agent installs"
         );
 
-        Self {
+        Ok(Self {
             handle: Arc::new(handle),
-        }
+        })
     }
 
     /// Render all metrics in Prometheus text exposition format.
@@ -133,7 +133,7 @@ mod tests {
 
     fn shared_metrics() -> &'static NexusMetrics {
         static METRICS: OnceLock<NexusMetrics> = OnceLock::new();
-        METRICS.get_or_init(NexusMetrics::install)
+        METRICS.get_or_init(|| NexusMetrics::install().expect("test: metrics install"))
     }
 
     #[test]

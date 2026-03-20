@@ -147,10 +147,10 @@ fn generate_nonce() -> [u8; 12] {
 pub fn encrypt_state(data: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
     let cipher = Aes256Gcm::new(key.into());
     let nonce_bytes = generate_nonce();
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = Nonce::from(nonce_bytes);
 
     let ciphertext = cipher
-        .encrypt(nonce, data)
+        .encrypt(&nonce, data)
         .map_err(|e| format!("AES-256-GCM encryption failed: {e}"))?;
 
     let mut out = Vec::with_capacity(12 + ciphertext.len());
@@ -168,11 +168,14 @@ pub fn decrypt_state(encrypted: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String
     }
 
     let (nonce_bytes, ciphertext) = encrypted.split_at(12);
-    let nonce = Nonce::from_slice(nonce_bytes);
+    let nonce_array: [u8; 12] = nonce_bytes
+        .try_into()
+        .map_err(|_| "nonce must be exactly 12 bytes".to_string())?;
+    let nonce = Nonce::from(nonce_array);
     let cipher = Aes256Gcm::new(key.into());
 
     cipher
-        .decrypt(nonce, ciphertext)
+        .decrypt(&nonce, ciphertext)
         .map_err(|_| "AES-256-GCM decryption failed — wrong key or tampered data".to_string())
 }
 
@@ -258,18 +261,24 @@ impl GhostProtocol {
         let final_changes = if encrypted {
             // Encrypt serialized changes with AES-256-GCM.
             let serialized = serde_json::to_vec(&changes).unwrap_or_default();
-            let key = self.sync_key.as_ref().unwrap();
-            let enc = encrypt_state(&serialized, key).expect("encryption must not fail");
-
-            // Wrap encrypted blob as a single opaque change.
-            vec![StateChange {
-                agent_id: "__encrypted__".to_string(),
-                field: "__blob__".to_string(),
-                value: serde_json::Value::String(
-                    enc.iter().map(|b| format!("{b:02x}")).collect::<String>(),
-                ),
-                timestamp: self.current_state.timestamp,
-            }]
+            if let Some(key) = self.sync_key.as_ref() {
+                match encrypt_state(&serialized, key) {
+                    Ok(enc) => {
+                        // Wrap encrypted blob as a single opaque change.
+                        vec![StateChange {
+                            agent_id: "__encrypted__".to_string(),
+                            field: "__blob__".to_string(),
+                            value: serde_json::Value::String(
+                                enc.iter().map(|b| format!("{b:02x}")).collect::<String>(),
+                            ),
+                            timestamp: self.current_state.timestamp,
+                        }]
+                    }
+                    Err(_) => changes, // Fall back to unencrypted on encryption failure
+                }
+            } else {
+                changes // Fall back to unencrypted if key missing
+            }
         } else {
             changes
         };

@@ -179,11 +179,12 @@ impl BehavioralProfiler {
             let elapsed_secs = timestamp.saturating_sub(first.timestamp);
             if elapsed_secs > 0 {
                 let actions_per_min = (window.actions.len() as f64 / elapsed_secs as f64) * 60.0;
-                let baseline = self.baselines.get_mut(agent_id).unwrap();
-                if !baseline.established {
-                    baseline.action_frequency = actions_per_min;
-                    if actions_per_min > baseline.peak_frequency {
-                        baseline.peak_frequency = actions_per_min;
+                if let Some(baseline) = self.baselines.get_mut(agent_id) {
+                    if !baseline.established {
+                        baseline.action_frequency = actions_per_min;
+                        if actions_per_min > baseline.peak_frequency {
+                            baseline.peak_frequency = actions_per_min;
+                        }
                     }
                 }
             }
@@ -191,24 +192,29 @@ impl BehavioralProfiler {
 
         // Update observation window minutes (only during build phase).
         {
-            let baseline = self.baselines.get(agent_id).unwrap();
-            if !baseline.established {
+            let is_building = self
+                .baselines
+                .get(agent_id)
+                .map(|b| !b.established)
+                .unwrap_or(false);
+            if is_building {
                 if let Some(first) = self
                     .active_windows
                     .get(agent_id)
                     .and_then(|w| w.actions.first())
                 {
                     let minutes = timestamp.saturating_sub(first.timestamp).saturating_div(60);
-                    self.baselines
-                        .get_mut(agent_id)
-                        .unwrap()
-                        .observation_window_minutes = minutes;
+                    if let Some(baseline) = self.baselines.get_mut(agent_id) {
+                        baseline.observation_window_minutes = minutes;
+                    }
                 }
             }
         }
 
         // Prune window to last 10 minutes of data.
-        let window = self.active_windows.get_mut(agent_id).unwrap();
+        let Some(window) = self.active_windows.get_mut(agent_id) else {
+            return;
+        };
         let cutoff = timestamp.saturating_sub(600);
         window.actions.retain(|a| a.timestamp >= cutoff);
         if let Some(first) = window.actions.first() {

@@ -1,5 +1,35 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import {
+  MessageSquare, Users, Terminal, Shield, Clock, History,
+  LayoutDashboard, Dna, Brain, Moon, GitBranch,
+  ShieldCheck, Fingerprint, Lock, Monitor,
+  Network, Landmark, Code2,
+  Workflow, Upload,
+  Award, Link, Layers, Key, CheckCircle, Scale,
+  Palette, Mail, Play, Store, Bot, Mic, Rocket, BookOpen,
+  FileCode, TerminalSquare, FolderOpen, Database, Globe, Globe2,
+  MessageCircle, FileText, Cpu, StickyNote, Kanban, Activity,
+  Settings, ChevronDown, ChevronRight,
+  ShieldAlert, UserCog, Boxes, ScrollText, ClipboardCheck, HeartPulse,
+  PlugZap,
+  type LucideIcon
+} from "lucide-react";
 import "./sidebar.css";
+
+const ICON_MAP: Record<string, LucideIcon> = {
+  MessageSquare, Users, Terminal, Shield, Clock, History,
+  LayoutDashboard, Dna, Brain, Moon, GitBranch,
+  ShieldCheck, Fingerprint, Lock, Monitor,
+  Network, Landmark, Code2,
+  Workflow, Upload,
+  Award, Link, Layers, Key, CheckCircle, Scale,
+  Palette, Mail, Play, Store, Bot, Mic, Rocket, BookOpen,
+  FileCode, TerminalSquare, FolderOpen, Database, Globe, Globe2,
+  MessageCircle, FileText, Cpu, StickyNote, Kanban, Activity,
+  Settings,
+  ShieldAlert, UserCog, Boxes, ScrollText, ClipboardCheck, HeartPulse,
+  PlugZap,
+};
 
 export interface SidebarItem {
   id: string;
@@ -18,10 +48,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ items, activeId, onSelect, version }: SidebarProps): JSX.Element {
-  const activeLabel = useMemo(
-    () => items.find((item) => item.id === activeId)?.label ?? "Overview",
-    [activeId, items]
-  );
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
   const grouped = useMemo(() => {
     const sections: { section: string; items: SidebarItem[] }[] = [];
@@ -37,67 +64,127 @@ export function Sidebar({ items, activeId, onSelect, version }: SidebarProps): J
     return sections;
   }, [items]);
 
+  function toggleSection(section: string): void {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(section)) {
+        next.delete(section);
+      } else {
+        next.add(section);
+      }
+      return next;
+    });
+  }
+
   return (
     <aside className="nexus-sidebar-shell expanded">
       <div className="nexus-sidebar-top">
-        <p className="nexus-sidebar-active">NEXUS // {activeLabel.toUpperCase()}</p>
+        <div className="nexus-sidebar-logo">
+          <div className="nexus-sidebar-logo-mark" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="rgba(74,247,211,0.16)" stroke="var(--nexus-accent)" strokeWidth="1.5" strokeLinejoin="round" />
+              <path d="M2 17l10 5 10-5" stroke="var(--nexus-accent)" strokeWidth="1.5" strokeLinejoin="round" opacity="0.45" />
+              <path d="M2 12l10 5 10-5" stroke="var(--nexus-accent)" strokeWidth="1.5" strokeLinejoin="round" opacity="0.72" />
+            </svg>
+          </div>
+          <div className="nexus-sidebar-brand-block">
+            <span className="nexus-sidebar-kicker">AI Operating System</span>
+            <span className="nexus-sidebar-brand">NEXUS // CONTROL</span>
+          </div>
+        </div>
+        <div className="nexus-sidebar-status-pill">
+          <span className="nexus-sidebar-status-dot" />
+          Neural mesh online
+        </div>
       </div>
 
       <nav className="nexus-sidebar-nav">
-        {grouped.map((group) => (
-          <div key={group.section || "_default"}>
-            {group.section ? (
-              <div className="nexus-sidebar-section">{group.section}</div>
-            ) : null}
-            {group.items.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`nexus-sidebar-item ${activeId === item.id ? "active" : ""}`}
-                onClick={() => onSelect(item.id)}
-                title={item.shortcut ? `${item.label} (${item.shortcut})` : item.label}
+        {grouped.map((group) => {
+          const isCollapsed = group.section ? collapsedSections.has(group.section) : false;
+          return (
+            <div key={group.section || "_default"} className="nexus-sidebar-group">
+              {group.section ? (
+                <button
+                  type="button"
+                  className="nexus-sidebar-section"
+                  onClick={() => toggleSection(group.section)}
+                >
+                  <span>{group.section}</span>
+                  {isCollapsed
+                    ? <ChevronRight size={10} aria-hidden="true" />
+                    : <ChevronDown size={10} aria-hidden="true" />
+                  }
+                </button>
+              ) : null}
+              <div
+                className="nexus-sidebar-section-items"
+                style={{
+                  maxHeight: isCollapsed ? 0 : "2000px",
+                  overflow: "hidden",
+                  transition: "max-height 0.3s ease",
+                }}
               >
-                <span className="nexus-sidebar-active-bar" />
-                <span className="nexus-sidebar-icon-wrap">
-                  <span className="nexus-sidebar-icon">{item.icon}</span>
-                </span>
-                {item.badge && item.badge > 0 ? (
-                  <span
-                    style={{
-                      position: "absolute",
-                      top: 4,
-                      right: 8,
-                      background: "#f87171",
-                      color: "#fff",
-                      borderRadius: 10,
-                      padding: "0 5px",
-                      fontSize: "0.65rem",
-                      fontWeight: 700,
-                      lineHeight: "16px",
-                      minWidth: 16,
-                      textAlign: "center",
-                      zIndex: 2,
-                    }}
-                  >
-                    {item.badge}
-                  </span>
-                ) : null}
-                <span className="nexus-sidebar-item-text">
-                  <span className="nexus-sidebar-label">{item.label}</span>
-                  {item.shortcut ? <span className="nexus-sidebar-shortcut">{item.shortcut}</span> : null}
-                </span>
-              </button>
-            ))}
-          </div>
-        ))}
+                {group.items.map((item) => {
+                  const IconComponent = ICON_MAP[item.icon];
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`nexus-sidebar-item ${activeId === item.id ? "active" : ""}`}
+                      onClick={() => onSelect(item.id)}
+                      title={item.shortcut ? `${item.label} (${item.shortcut})` : item.label}
+                    >
+                      <span className="nexus-sidebar-active-bar" />
+                      <span className="nexus-sidebar-icon-wrap">
+                        {IconComponent
+                          ? <IconComponent size={15} aria-hidden="true" />
+                          : <span className="nexus-sidebar-icon">{item.icon}</span>
+                        }
+                      </span>
+                      {item.badge && item.badge > 0 ? (
+                        <span className="nexus-sidebar-badge">{item.badge}</span>
+                      ) : null}
+                      <span className="nexus-sidebar-item-text">
+                        <span className="nexus-sidebar-label">{item.label}</span>
+                        {item.shortcut ? <span className="nexus-sidebar-shortcut">{item.shortcut}</span> : null}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </nav>
 
       <div className="nexus-sidebar-bottom">
-        <span className="nexus-avatar">◉</span>
-        <p className="nexus-version">
-          <span className="nexus-health-dot" />
-          NEXUS {version}
-        </p>
+        <div className="nexus-sidebar-core-ring">
+          <svg width="36" height="36" viewBox="0 0 32 32" aria-label="OS fitness">
+            <circle cx="16" cy="16" r="13" fill="none" stroke="rgba(118,190,255,0.12)" strokeWidth="2" />
+            <circle
+              cx="16"
+              cy="16"
+              r="13"
+              fill="none"
+              stroke="var(--nexus-accent)"
+              strokeWidth="2"
+              strokeDasharray="65 81.7"
+              strokeLinecap="round"
+              transform="rotate(-90 16 16)"
+              style={{ filter: "drop-shadow(0 0 4px rgba(74,247,211,0.55))" }}
+            />
+            <text x="16" y="17.5" textAnchor="middle" fill="var(--nexus-accent)" fontSize="8" fontFamily="var(--font-mono)" fontWeight="600">
+              80
+            </text>
+          </svg>
+        </div>
+        <div className="nexus-version-block">
+          <span className="nexus-version-label">Core Fitness 80%</span>
+          <span className="nexus-version-status">
+            <span className="nexus-health-dot" />
+            {version} operational
+          </span>
+        </div>
       </div>
     </aside>
   );

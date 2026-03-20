@@ -101,7 +101,7 @@ impl SoftwareBackend {
     ///
     /// Format: `meta_len(4 LE) || meta_json || seed(32)`
     fn encode_sealed_payload(meta: &SealedKeyMeta, seed: &[u8; 32]) -> Vec<u8> {
-        let meta_json = serde_json::to_vec(meta).expect("SealedKeyMeta is always serializable");
+        let meta_json = serde_json::to_vec(meta).unwrap_or_default();
         let meta_len = (meta_json.len() as u32).to_le_bytes();
         let mut buf = Vec::with_capacity(4 + meta_json.len() + 32);
         buf.extend_from_slice(&meta_len);
@@ -117,7 +117,9 @@ impl SoftwareBackend {
                 "sealed payload too short".to_string(),
             ));
         }
-        let meta_len = u32::from_le_bytes(plaintext[..4].try_into().expect("4 bytes")) as usize;
+        let meta_len = u32::from_le_bytes(plaintext[..4].try_into().map_err(|_| {
+            KeyError::InvalidKeyMaterial("payload: expected 4 bytes for length".to_string())
+        })?) as usize;
         if plaintext.len() < 4 + meta_len + 32 {
             return Err(KeyError::InvalidKeyMaterial(
                 "sealed payload truncated".to_string(),

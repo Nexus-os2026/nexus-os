@@ -1,5 +1,14 @@
-import { useEffect, useState } from "react";
-import { getComplianceStatus, getComplianceAgents, getAuditLog, hasDesktopRuntime } from "../api/backend";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  getComplianceStatus,
+  getComplianceAgents,
+  getAuditLog,
+  hasDesktopRuntime,
+  auditVerifyChain,
+  complianceGovernanceMetrics,
+  complianceSecurityEvents,
+} from "../api/backend";
+import type { ChainVerifyResult, GovernanceMetrics, SecurityEvent } from "../api/backend";
 import type { ComplianceStatusRow, ComplianceAgentRow, AuditEventRow, Soc2ControlRow } from "../types";
 import "./compliance-dashboard.css";
 
@@ -7,7 +16,7 @@ import "./compliance-dashboard.css";
 // Types (UI-only)
 // ---------------------------------------------------------------------------
 
-type Tab = "overview" | "agents" | "soc2" | "reports" | "erasure" | "provenance" | "retention";
+type Tab = "overview" | "agents" | "soc2" | "chain" | "governance" | "security" | "reports" | "erasure" | "provenance" | "retention";
 
 interface RetentionRule {
   dataClass: string;
@@ -66,6 +75,7 @@ export default function ComplianceDashboard(): JSX.Element {
   const [tab, setTab] = useState<Tab>("overview");
   const [reportAgent, setReportAgent] = useState<string | null>(null);
   const [reportGenerated, setReportGenerated] = useState(false);
+  const reportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [eraseConfirm, setEraseConfirm] = useState<string | null>(null);
   const [erased, setErased] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -74,6 +84,26 @@ export default function ComplianceDashboard(): JSX.Element {
   const [complianceStatus, setComplianceStatus] = useState<ComplianceStatusRow | null>(null);
   const [agents, setAgents] = useState<ComplianceAgentRow[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEventRow[]>([]);
+
+  // Chain verification
+  const [chainResult, setChainResult] = useState<ChainVerifyResult | null>(null);
+  const [chainVerifying, setChainVerifying] = useState(false);
+
+  // Governance metrics
+  const [govMetrics, setGovMetrics] = useState<GovernanceMetrics | null>(null);
+  const [govTimeRange, setGovTimeRange] = useState("24h");
+  const [govLoading, setGovLoading] = useState(false);
+
+  // Security events
+  const [secEvents, setSecEvents] = useState<SecurityEvent[]>([]);
+  const [secTimeRange, setSecTimeRange] = useState("24h");
+  const [secLoading, setSecLoading] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (reportTimerRef.current) clearTimeout(reportTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!hasDesktopRuntime()) {
@@ -123,7 +153,8 @@ export default function ComplianceDashboard(): JSX.Element {
     a.click();
     URL.revokeObjectURL(url);
     setReportGenerated(true);
-    window.setTimeout(() => setReportGenerated(false), 3000);
+    if (reportTimerRef.current) clearTimeout(reportTimerRef.current);
+    reportTimerRef.current = window.setTimeout(() => setReportGenerated(false), 3000);
   }
 
   // --- Erasure ---
@@ -131,6 +162,59 @@ export default function ComplianceDashboard(): JSX.Element {
     setErased((prev) => new Set(prev).add(agentId));
     setEraseConfirm(null);
   }
+
+  // --- Chain verification ---
+  const handleVerifyChain = useCallback(async () => {
+    if (chainVerifying) return;
+    setChainVerifying(true);
+    try {
+      const result = await auditVerifyChain();
+      setChainResult(result);
+    } catch {
+      setChainResult(null);
+    } finally {
+      setChainVerifying(false);
+    }
+  }, [chainVerifying]);
+
+  // --- Load governance metrics ---
+  const loadGovernance = useCallback(async (range: string) => {
+    setGovLoading(true);
+    try {
+      const m = await complianceGovernanceMetrics(range);
+      setGovMetrics(m);
+    } catch {
+      setGovMetrics(null);
+    } finally {
+      setGovLoading(false);
+    }
+  }, []);
+
+  // --- Load security events ---
+  const loadSecurity = useCallback(async (range: string) => {
+    setSecLoading(true);
+    try {
+      const evts = await complianceSecurityEvents(range);
+      setSecEvents(evts);
+    } catch {
+      setSecEvents([]);
+    } finally {
+      setSecLoading(false);
+    }
+  }, []);
+
+  // Auto-load governance/security when switching to those tabs
+  useEffect(() => {
+    if (tab === "governance" && !govMetrics && !govLoading) {
+      loadGovernance(govTimeRange);
+    }
+  }, [tab, govMetrics, govLoading, govTimeRange, loadGovernance]);
+
+  useEffect(() => {
+    if (tab === "security" && secEvents.length === 0 && !secLoading) {
+      loadSecurity(secTimeRange);
+    }
+  }, [tab, secEvents.length, secLoading, secTimeRange, loadSecurity]);
 
   // Build provenance from real audit events
   const provenanceEntries = auditEvents.slice(0, 10).map((evt) => ({
@@ -147,6 +231,9 @@ export default function ComplianceDashboard(): JSX.Element {
     { id: "overview", label: "Overview" },
     { id: "agents", label: "Risk Cards" },
     { id: "soc2", label: "SOC 2" },
+    { id: "chain", label: "Chain" },
+    { id: "governance", label: "Governance" },
+    { id: "security", label: "Security" },
     { id: "reports", label: "Reports" },
     { id: "erasure", label: "Erasure" },
     { id: "provenance", label: "Provenance" },
@@ -372,6 +459,226 @@ export default function ComplianceDashboard(): JSX.Element {
                       <div className="cd-soc2-detail">{detail}</div>
                     )}
                   </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* CHAIN VERIFICATION TAB */}
+      {/* ================================================================= */}
+      {tab === "chain" && (
+        <div className="cd-section">
+          <h3 className="cd-section-title">Hash Chain Verification</h3>
+          <p className="cd-desc">Verify the integrity of the append-only audit trail by checking every hash link in the chain.</p>
+
+          <div className="cd-chain-actions">
+            <button
+              type="button"
+              className="cd-generate-btn"
+              onClick={handleVerifyChain}
+              disabled={chainVerifying}
+            >
+              {chainVerifying ? "Verifying..." : "Verify Chain Now"}
+            </button>
+          </div>
+
+          {chainResult && (
+            <div className="cd-chain-result">
+              <div className="cd-chain-status-row">
+                <div
+                  className="cd-chain-indicator"
+                  style={{ background: chainResult.verified ? "#22c55e" : "#ef4444" }}
+                />
+                <span className="cd-chain-status-text" style={{ color: chainResult.verified ? "#6ee7b7" : "#fca5a5" }}>
+                  {chainResult.verified ? "CHAIN INTACT" : "CHAIN BROKEN"}
+                </span>
+              </div>
+
+              <div className="cd-quick-stats">
+                <div className="cd-qstat">
+                  <span className="cd-qstat-val">{chainResult.chain_length.toLocaleString()}</span>
+                  <span className="cd-qstat-label">Chain Length</span>
+                </div>
+                <div className="cd-qstat">
+                  <span className="cd-qstat-val">{chainResult.verification_time_ms}ms</span>
+                  <span className="cd-qstat-label">Verification Time</span>
+                </div>
+                <div className="cd-qstat">
+                  <span className="cd-qstat-val">{chainResult.last_verified_at > 0 ? new Date(chainResult.last_verified_at * 1000).toLocaleTimeString() : "—"}</span>
+                  <span className="cd-qstat-label">Last Verified</span>
+                </div>
+              </div>
+
+              {chainResult.first_break_at !== null && (
+                <div className="cd-chain-break">
+                  Chain integrity break detected at index <strong>{chainResult.first_break_at}</strong>.
+                  All entries after this point may be unreliable.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* GOVERNANCE METRICS TAB */}
+      {/* ================================================================= */}
+      {tab === "governance" && (
+        <div className="cd-section">
+          <div className="cd-section-header">
+            <h3 className="cd-section-title">Governance Metrics</h3>
+            <select
+              className="cd-time-select"
+              value={govTimeRange}
+              onChange={(e) => {
+                setGovTimeRange(e.target.value);
+                setGovMetrics(null);
+                loadGovernance(e.target.value);
+              }}
+            >
+              <option value="1h">Last Hour</option>
+              <option value="24h">Last 24 Hours</option>
+              <option value="7d">Last 7 Days</option>
+              <option value="30d">Last 30 Days</option>
+              <option value="all">All Time</option>
+            </select>
+          </div>
+
+          {govLoading ? (
+            <p className="cd-desc">Loading governance metrics...</p>
+          ) : govMetrics ? (
+            <>
+              <div className="cd-quick-stats">
+                <div className="cd-qstat">
+                  <span className="cd-qstat-val">{(govMetrics.hitl_approval_rate * 100).toFixed(1)}%</span>
+                  <span className="cd-qstat-label">HITL Approval Rate</span>
+                </div>
+                <div className="cd-qstat">
+                  <span className="cd-qstat-val">{(govMetrics.capability_denial_rate * 100).toFixed(1)}%</span>
+                  <span className="cd-qstat-label">Capability Denial Rate</span>
+                </div>
+                <div className="cd-qstat">
+                  <span className="cd-qstat-val">{govMetrics.pii_redaction_count}</span>
+                  <span className="cd-qstat-label">PII Redactions</span>
+                </div>
+                <div className="cd-qstat">
+                  <span className="cd-qstat-val">{govMetrics.firewall_block_count}</span>
+                  <span className="cd-qstat-label">Firewall Blocks</span>
+                </div>
+                <div className="cd-qstat">
+                  <span className="cd-qstat-val">{govMetrics.total_fuel_consumed.toFixed(1)}</span>
+                  <span className="cd-qstat-label">Fuel Consumed</span>
+                </div>
+                <div className="cd-qstat">
+                  <span className="cd-qstat-val">{govMetrics.total_events.toLocaleString()}</span>
+                  <span className="cd-qstat-label">Total Events</span>
+                </div>
+              </div>
+
+              {/* Autonomy distribution */}
+              <h4 className="cd-subsection-title">Autonomy Level Distribution</h4>
+              <div className="cd-autonomy-bars">
+                {Object.entries(govMetrics.autonomy_distribution)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([level, count]) => {
+                    const maxCount = Math.max(...Object.values(govMetrics.autonomy_distribution), 1);
+                    return (
+                      <div key={level} className="cd-autonomy-row">
+                        <span className="cd-autonomy-label">{level}</span>
+                        <div className="cd-autonomy-bar-track">
+                          <div
+                            className="cd-autonomy-bar-fill"
+                            style={{ width: `${(count / maxCount) * 100}%` }}
+                          />
+                        </div>
+                        <span className="cd-autonomy-count">{count}</span>
+                      </div>
+                    );
+                  })}
+              </div>
+
+              {/* Events over time sparkline */}
+              {govMetrics.events_per_hour.length > 0 && (
+                <>
+                  <h4 className="cd-subsection-title">Events Over Time</h4>
+                  <div className="cd-sparkline">
+                    {(() => {
+                      const maxVal = Math.max(...govMetrics.events_per_hour.map(([, v]) => v), 1);
+                      return govMetrics.events_per_hour.map(([ts, val]) => (
+                        <div
+                          key={ts}
+                          className="cd-spark-bar"
+                          style={{ height: `${(val / maxVal) * 100}%` }}
+                          title={`${new Date(ts * 1000).toLocaleTimeString()}: ${val} events`}
+                        />
+                      ));
+                    })()}
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
+            <p className="cd-desc">No governance metrics available.</p>
+          )}
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* SECURITY EVENTS TAB */}
+      {/* ================================================================= */}
+      {tab === "security" && (
+        <div className="cd-section">
+          <div className="cd-section-header">
+            <h3 className="cd-section-title">Security Events</h3>
+            <select
+              className="cd-time-select"
+              value={secTimeRange}
+              onChange={(e) => {
+                setSecTimeRange(e.target.value);
+                setSecEvents([]);
+                loadSecurity(e.target.value);
+              }}
+            >
+              <option value="1h">Last Hour</option>
+              <option value="24h">Last 24 Hours</option>
+              <option value="7d">Last 7 Days</option>
+              <option value="30d">Last 30 Days</option>
+              <option value="all">All Time</option>
+            </select>
+          </div>
+
+          {secLoading ? (
+            <p className="cd-desc">Loading security events...</p>
+          ) : secEvents.length === 0 ? (
+            <p className="cd-desc">No security events in the selected time range.</p>
+          ) : (
+            <div className="cd-sec-table">
+              <div className="cd-sec-header-row">
+                <span>Time</span>
+                <span>Severity</span>
+                <span>Type</span>
+                <span>Agent</span>
+                <span>Description</span>
+              </div>
+              {secEvents.map((evt, i) => {
+                const sevColor = evt.severity === "error" || evt.severity === "denied"
+                  ? "#fca5a5"
+                  : evt.severity === "warning"
+                    ? "#fcd34d"
+                    : "#6ee7b7";
+                return (
+                  <div key={`${evt.timestamp}-${i}`} className="cd-sec-row">
+                    <span className="cd-sec-time">{new Date(evt.timestamp * 1000).toLocaleString()}</span>
+                    <span className="cd-sec-severity" style={{ color: sevColor }}>
+                      {evt.severity.toUpperCase()}
+                    </span>
+                    <span className="cd-sec-type">{evt.event_type.replace(/_/g, " ")}</span>
+                    <span className="cd-sec-agent">{evt.agent_id.length > 12 ? evt.agent_id.slice(0, 8) + "..." : evt.agent_id}</span>
+                    <span className="cd-sec-desc">{evt.description}</span>
+                  </div>
                 );
               })}
             </div>

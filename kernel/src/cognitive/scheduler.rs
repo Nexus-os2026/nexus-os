@@ -65,7 +65,7 @@ impl AgentScheduler {
     }
 
     pub fn set_executor(&self, executor: Arc<dyn ScheduledGoalExecutor>) {
-        let mut guard = self.executor.lock().unwrap();
+        let mut guard = self.executor.lock().unwrap_or_else(|p| p.into_inner());
         *guard = Some(executor);
     }
 
@@ -101,7 +101,11 @@ impl AgentScheduler {
         let aid = agent_id.to_string();
         let goal_text = default_goal.to_string();
 
-        let executor = self.executor.lock().unwrap().clone();
+        let executor = self
+            .executor
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
         let handle = tokio::spawn(schedule_loop(
             aid,
             goal_text,
@@ -129,7 +133,7 @@ impl AgentScheduler {
             );
         }
 
-        let mut handles = self.handles.lock().unwrap();
+        let mut handles = self.handles.lock().unwrap_or_else(|p| p.into_inner());
         handles.insert(
             agent_id.to_string(),
             ScheduleHandle {
@@ -145,7 +149,7 @@ impl AgentScheduler {
 
     /// Cancel a scheduled agent. No-op if not registered.
     pub fn unregister_agent(&self, agent_id: &str) {
-        let mut handles = self.handles.lock().unwrap();
+        let mut handles = self.handles.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(handle) = handles.remove(agent_id) {
             handle.handle.abort();
         }
@@ -153,7 +157,7 @@ impl AgentScheduler {
 
     /// List all currently scheduled agents with their cron expressions and next run times.
     pub fn list(&self) -> Vec<ScheduledAgent> {
-        let handles = self.handles.lock().unwrap();
+        let handles = self.handles.lock().unwrap_or_else(|p| p.into_inner());
         handles
             .iter()
             .map(|(id, h)| ScheduledAgent {
@@ -167,7 +171,7 @@ impl AgentScheduler {
 
     /// Shut down all scheduled loops.
     pub fn shutdown(&self) {
-        let mut handles = self.handles.lock().unwrap();
+        let mut handles = self.handles.lock().unwrap_or_else(|p| p.into_inner());
         for (_, handle) in handles.drain() {
             handle.handle.abort();
         }

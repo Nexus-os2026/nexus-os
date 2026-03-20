@@ -23,78 +23,78 @@ impl GitIntegration {
 
     pub fn git_status(&mut self) -> Result<Vec<String>, AgentError> {
         let changed = git_status(self.project_root.as_path())?;
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "tool": "git.status",
-                    "changed_files": changed.len(),
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "tool": "git.status",
+                "changed_files": changed.len(),
+            }),
+        ) {
+            tracing::error!("Audit append failed: {e}");
+        }
         Ok(changed)
     }
 
     pub fn git_diff(&mut self) -> Result<String, AgentError> {
         let diff = git_diff(self.project_root.as_path())?;
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "tool": "git.diff",
-                    "bytes": diff.len(),
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "tool": "git.diff",
+                "bytes": diff.len(),
+            }),
+        ) {
+            tracing::error!("Audit append failed: {e}");
+        }
         Ok(diff)
     }
 
     pub fn git_branch(&mut self, name: &str) -> Result<(), AgentError> {
         git_branch(self.project_root.as_path(), name)?;
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "tool": "git.branch",
-                    "name": name,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "tool": "git.branch",
+                "name": name,
+            }),
+        ) {
+            tracing::error!("Audit append failed: {e}");
+        }
         Ok(())
     }
 
     pub fn git_commit(&mut self, message: &str) -> Result<String, AgentError> {
         let hash = git_commit(self.project_root.as_path(), message)?;
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "tool": "git.commit",
-                    "message": message,
-                    "hash": hash,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "tool": "git.commit",
+                "message": message,
+                "hash": hash,
+            }),
+        ) {
+            tracing::error!("Audit append failed: {e}");
+        }
         Ok(hash)
     }
 
     pub fn auto_commit(&mut self, description: &str) -> Result<String, AgentError> {
         let hash = auto_commit(self.project_root.as_path(), description)?;
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "tool": "git.auto_commit",
-                    "description": description,
-                    "hash": hash,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "tool": "git.auto_commit",
+                "description": description,
+                "hash": hash,
+            }),
+        ) {
+            tracing::error!("Audit append failed: {e}");
+        }
         Ok(hash)
     }
 

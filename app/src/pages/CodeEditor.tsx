@@ -7,6 +7,12 @@ import {
   terminalExecuteApproved,
   type TerminalCommandResult,
 } from "../api/backend";
+import {
+  Save, Search, Menu, Columns2, TerminalSquare, GitBranch, Hexagon,
+  HelpCircle, RotateCcw, Stethoscope, TestTube2, FileText, Zap,
+  ArrowRight, ShieldCheck, Plus, Keyboard, ChevronDown, ChevronRight,
+  ArrowDown, ArrowUp, RefreshCw, Circle,
+} from "lucide-react";
 import "./code-editor.css";
 
 /* ================================================================== */
@@ -60,7 +66,7 @@ interface AgentAction {
   id: string;
   label: string;
   description: string;
-  icon: string;
+  icon: React.ReactNode;
 }
 
 interface AuditEntry {
@@ -162,14 +168,14 @@ function pathJoin(base: string, name: string): string {
 /* ================================================================== */
 
 const AGENT_ACTIONS: AgentAction[] = [
-  { id: "explain", label: "Explain", description: "Explain selected code", icon: "?" },
-  { id: "refactor", label: "Refactor", description: "Suggest improvements", icon: "↻" },
-  { id: "fix", label: "Fix Bugs", description: "Find and fix issues", icon: "⚕" },
-  { id: "test", label: "Gen Tests", description: "Generate unit tests", icon: "⊘" },
-  { id: "document", label: "Document", description: "Add documentation", icon: "≡" },
-  { id: "optimize", label: "Optimize", description: "Performance improvements", icon: "⚡" },
-  { id: "complete", label: "Complete", description: "Auto-complete code block", icon: "→" },
-  { id: "review", label: "Review", description: "Security & quality review", icon: "⛨" },
+  { id: "explain", label: "Explain", description: "Explain selected code", icon: <HelpCircle size={14} /> },
+  { id: "refactor", label: "Refactor", description: "Suggest improvements", icon: <RotateCcw size={14} /> },
+  { id: "fix", label: "Fix Bugs", description: "Find and fix issues", icon: <Stethoscope size={14} /> },
+  { id: "test", label: "Gen Tests", description: "Generate unit tests", icon: <TestTube2 size={14} /> },
+  { id: "document", label: "Document", description: "Add documentation", icon: <FileText size={14} /> },
+  { id: "optimize", label: "Optimize", description: "Performance improvements", icon: <Zap size={14} /> },
+  { id: "complete", label: "Complete", description: "Auto-complete code block", icon: <ArrowRight size={14} /> },
+  { id: "review", label: "Review", description: "Security & quality review", icon: <ShieldCheck size={14} /> },
 ];
 
 const DANGEROUS_COMMANDS = ["rm -rf", "sudo rm", "mkfs", "dd if=", ":(){:|:&};:", "chmod 777", "FORMAT", "shutdown", "reboot", "kill -9 1"];
@@ -232,6 +238,13 @@ export default function CodeEditor(): JSX.Element {
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const termRef = useRef<HTMLDivElement>(null);
   const termLineId = useRef(2);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    };
+  }, []);
 
   const activeFile = useMemo(() => files.find((f) => f.id === activeTab), [files, activeTab]);
   const fuelBudget = 10000;
@@ -451,7 +464,8 @@ export default function CodeEditor(): JSX.Element {
   function addTermLine(type: TerminalLine["type"], text: string): void {
     const id = termLineId.current++;
     setTerminalLines((prev) => [...prev, { id, type, text, ts: Date.now() }]);
-    setTimeout(() => termRef.current?.scrollTo(0, termRef.current.scrollHeight), 50);
+    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    scrollTimerRef.current = setTimeout(() => termRef.current?.scrollTo(0, termRef.current.scrollHeight), 50);
   }
 
   function applyTerminalResult(result: TerminalCommandResult): void {
@@ -728,7 +742,7 @@ export default function CodeEditor(): JSX.Element {
         return (
           <div key={node.path}>
             <button type="button" className="ce-tree-item ce-tree-dir" style={{ paddingLeft: `${depth * 14 + 8}px` }} onClick={() => toggleDir(node.path)}>
-              <span className="ce-tree-arrow">{expanded ? "▾" : "▸"}</span>
+              <span className="ce-tree-arrow">{expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
               <span className="ce-tree-name">{node.name}</span>
             </button>
             {expanded && node.children && renderTree(node.children, depth + 1)}
@@ -763,7 +777,7 @@ export default function CodeEditor(): JSX.Element {
         </div>
           <div className="ce-header-center">
           <div className="ce-branch-badge" title={gitRepo.root ?? "No git repo detected"}>
-            <span className="ce-branch-icon">⎇</span>
+            <span className="ce-branch-icon"><GitBranch size={14} /></span>
             <span className="ce-branch-name">{gitBranch}</span>
           </div>
         </div>
@@ -776,13 +790,13 @@ export default function CodeEditor(): JSX.Element {
             <span className="ce-fuel-value">{fuelRemaining.toLocaleString()}</span>
           </div>
           <div className="ce-toolbar-btns">
-            <button type="button" className="ce-tool-btn" onClick={() => void saveFile()} disabled={!activeFile?.dirty || saving} title="Save (Ctrl+S)">{saving ? "..." : "Save"}</button>
-            <button type="button" className={`ce-tool-btn ${showSearch ? "ce-tool-active" : ""}`} onClick={() => setShowSearch((p) => !p)} title="Search (Ctrl+F)">⌕</button>
-            <button type="button" className={`ce-tool-btn ${showExplorer ? "ce-tool-active" : ""}`} onClick={() => setShowExplorer((p) => !p)} title="Explorer (Ctrl+B)">☰</button>
-            <button type="button" className={`ce-tool-btn ${splitView !== "off" ? "ce-tool-active" : ""}`} onClick={() => setSplitView((p) => p === "off" ? "suggestion" : "off")} title="Split View (Ctrl+\)">⊞</button>
-            <button type="button" className={`ce-tool-btn ${bottomPanel === "terminal" ? "ce-tool-active" : ""}`} onClick={() => setBottomPanel((p) => p === "terminal" ? "none" : "terminal")} title="Terminal (Ctrl+`)">$</button>
-            <button type="button" className={`ce-tool-btn ${bottomPanel === "git" ? "ce-tool-active" : ""}`} onClick={() => setBottomPanel((p) => p === "git" ? "none" : "git")} title="Git">⎇</button>
-            <button type="button" className={`ce-tool-btn ${bottomPanel === "agents" ? "ce-tool-active" : ""}`} onClick={() => setBottomPanel((p) => p === "agents" ? "none" : "agents")} title="Agent Workers">⬢</button>
+            <button type="button" className="ce-tool-btn cursor-pointer" onClick={() => void saveFile()} disabled={!activeFile?.dirty || saving} title="Save (Ctrl+S)">{saving ? "..." : <Save size={14} />}</button>
+            <button type="button" className={`ce-tool-btn cursor-pointer ${showSearch ? "ce-tool-active" : ""}`} onClick={() => setShowSearch((p) => !p)} title="Search (Ctrl+F)"><Search size={14} /></button>
+            <button type="button" className={`ce-tool-btn cursor-pointer ${showExplorer ? "ce-tool-active" : ""}`} onClick={() => setShowExplorer((p) => !p)} title="Explorer (Ctrl+B)"><Menu size={14} /></button>
+            <button type="button" className={`ce-tool-btn cursor-pointer ${splitView !== "off" ? "ce-tool-active" : ""}`} onClick={() => setSplitView((p) => p === "off" ? "suggestion" : "off")} title="Split View (Ctrl+\)"><Columns2 size={14} /></button>
+            <button type="button" className={`ce-tool-btn cursor-pointer ${bottomPanel === "terminal" ? "ce-tool-active" : ""}`} onClick={() => setBottomPanel((p) => p === "terminal" ? "none" : "terminal")} title="Terminal (Ctrl+`)"><TerminalSquare size={14} /></button>
+            <button type="button" className={`ce-tool-btn cursor-pointer ${bottomPanel === "git" ? "ce-tool-active" : ""}`} onClick={() => setBottomPanel((p) => p === "git" ? "none" : "git")} title="Git"><GitBranch size={14} /></button>
+            <button type="button" className={`ce-tool-btn cursor-pointer ${bottomPanel === "agents" ? "ce-tool-active" : ""}`} onClick={() => setBottomPanel((p) => p === "agents" ? "none" : "agents")} title="Agent Workers"><Hexagon size={14} /></button>
             <button type="button" className={`ce-tool-btn ${showAgent ? "ce-tool-active" : ""}`} onClick={() => setShowAgent((p) => !p)} title="Agent Assist (Ctrl+J)">AI</button>
           </div>
         </div>
@@ -799,7 +813,7 @@ export default function CodeEditor(): JSX.Element {
       {/* ---- Search bar ---- */}
       {showSearch && (
         <div className="ce-search-bar">
-          <span className="ce-search-icon">⌕</span>
+          <span className="ce-search-icon"><Search size={14} /></span>
           <input className="ce-search-input" placeholder="Search across all files..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} autoFocus onKeyDown={(e) => { if (e.key === "Escape") { setShowSearch(false); setSearchQuery(""); } }} />
           {searchQuery && <span className="ce-search-count">{searchResults.reduce((a, r) => a + r.matches.length, 0)} matches</span>}
           <button type="button" className="ce-search-close" onClick={() => { setShowSearch(false); setSearchQuery(""); }}>×</button>
@@ -830,7 +844,7 @@ export default function CodeEditor(): JSX.Element {
           <aside className="ce-explorer">
             <div className="ce-explorer-header">
               <span className="ce-explorer-title">EXPLORER</span>
-              <button type="button" className="ce-icon-btn" onClick={() => setShowNewFile(true)} title="New File (Ctrl+N)">+</button>
+              <button type="button" className="ce-icon-btn cursor-pointer" onClick={() => setShowNewFile(true)} title="New File (Ctrl+N)"><Plus size={14} /></button>
             </div>
             {showNewFile && (
               <div className="ce-new-file-row">
@@ -870,7 +884,7 @@ export default function CodeEditor(): JSX.Element {
                     <button type="button" className="ce-tab-label" onClick={() => setActiveTab(tabId)}>
                       <span className="ce-tab-icon">{langIcon(f.language)}</span>
                       {f.name}
-                      {f.dirty && <span className="ce-tab-dirty">●</span>}
+                      {f.dirty && <span className="ce-tab-dirty"><Circle size={6} fill="currentColor" /></span>}
                     </button>
                     <button type="button" className="ce-tab-close" onClick={() => closeTab(tabId)}>×</button>
                   </div>
@@ -937,7 +951,7 @@ export default function CodeEditor(): JSX.Element {
                   />
                 ) : (
                   <div className="ce-empty">
-                    <div className="ce-empty-icon">⌨</div>
+                    <div className="ce-empty-icon"><Keyboard size={32} /></div>
                     <p className="ce-empty-text">No file open</p>
                     <p className="ce-empty-hint">Select a file from the explorer or press Ctrl+N to create one</p>
                     <div className="ce-empty-shortcuts">
@@ -1038,8 +1052,8 @@ export default function CodeEditor(): JSX.Element {
                     <div className="ce-git-section-header">
                       <span>Changes ({gitRepo.changes.length})</span>
                       <div className="ce-git-btns">
-                        <button type="button" className="ce-git-btn" onClick={handleGitPull} title="Pull">↓ Pull</button>
-                        <button type="button" className="ce-git-btn" onClick={handleGitPush} title="Push">↑ Push</button>
+                        <button type="button" className="ce-git-btn cursor-pointer" onClick={handleGitPull} title="Pull"><ArrowDown size={12} /> Pull</button>
+                        <button type="button" className="ce-git-btn cursor-pointer" onClick={handleGitPush} title="Push"><ArrowUp size={12} /> Push</button>
                       </div>
                     </div>
                     <div className="ce-git-changes">

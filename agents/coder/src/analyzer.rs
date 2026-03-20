@@ -1,6 +1,8 @@
 use crate::scanner::{cargo_manifests, Language, ProjectMap};
-use nexus_connectors_llm::gateway::{AgentRuntimeContext, GovernedLlmGateway};
-use nexus_connectors_llm::providers::{LlmProvider, MockProvider};
+use nexus_connectors_llm::gateway::{
+    select_provider, AgentRuntimeContext, GovernedLlmGateway, ProviderSelectionConfig,
+};
+use nexus_connectors_llm::providers::LlmProvider;
 use nexus_sdk::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -327,7 +329,9 @@ fn query_llm_summary(
     project_type: &ProjectType,
     test_frameworks: &[String],
 ) -> Option<String> {
-    let provider: Box<dyn LlmProvider> = Box::new(MockProvider::new());
+    let config = ProviderSelectionConfig::from_env();
+    let provider: Box<dyn LlmProvider> = select_provider(&config)
+        .unwrap_or_else(|_| Box::new(nexus_connectors_llm::providers::OllamaProvider::from_env()));
     let mut gateway = GovernedLlmGateway::new(provider);
     let capabilities = ["llm.query".to_string()]
         .into_iter()

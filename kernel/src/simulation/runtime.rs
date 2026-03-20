@@ -3,7 +3,7 @@ use super::persona::{
     PersonaActionEnvelope, PersonaMemory,
 };
 use super::report::{generate_prediction_report, PredictionReport};
-use super::seed::WorldSeed;
+use super::seed::{parse_seed, WorldSeed};
 use super::timeline::{WorldEvent, WorldTick};
 use super::world::{SimulatedWorld, WorldStatus};
 use crate::cognitive::algorithms::{EvolutionEngine as CognitiveEvolutionEngine, SwarmCoordinator};
@@ -92,7 +92,7 @@ pub struct PersistedSimulationState {
 }
 
 fn default_persona_decision_timeout_ms() -> u64 {
-    30_000
+    10_000
 }
 
 pub struct SimulationRuntime {
@@ -220,7 +220,20 @@ impl SimulationRuntime {
             }
         }
         self.world.status = WorldStatus::Completed;
-        let report = generate_prediction_report(&self.world, self.llm.as_ref())?;
+        // Generate report in a background thread with timeout to avoid blocking
+        let report_world = self.world.clone();
+        let report_llm = self.llm.clone();
+        let (report_tx, report_rx) = mpsc::channel();
+        thread::spawn(move || {
+            let result = generate_prediction_report(&report_world, report_llm.as_ref());
+            let _ = report_tx.send(result);
+        });
+        let report = report_rx
+            .recv_timeout(Duration::from_secs(30))
+            .map_err(|_| {
+                AgentError::SupervisorError("report generation timed out after 30s".to_string())
+            })?
+            .map_err(|e| AgentError::SupervisorError(format!("report generation failed: {e}")))?;
         let state = self.persisted_state();
         persist_world_snapshot(&self.db, &state, Some(&report))?;
         self.observer.on_complete(&self.world.id, &report);
@@ -354,24 +367,30 @@ impl SimulationRuntime {
         }
 
         if personas.len() == 1 {
+            // Single persona path: use thread + timeout to avoid blocking main thread
             let persona = personas[0].clone();
-            let nearby_refs = self
+            let nearby: Vec<Persona> = self
                 .world
                 .personas
                 .iter()
                 .filter(|other| other.id != persona.id)
                 .take(3)
-                .collect::<Vec<_>>();
-            return match persona_decide(
-                &persona,
-                &self.world.environment,
-                &nearby_refs,
-                self.llm.as_ref(),
-            ) {
-                Ok(decision) => HashMap::from([(persona.id.clone(), decision)]),
-                Err(_) => HashMap::from([(
-                    persona.id.clone(),
-                    fallback_persona_action(&persona, tick, "single-decision-error"),
+                .cloned()
+                .collect();
+            let environment = self.world.environment.clone();
+            let llm = self.llm.clone();
+            let (tx, rx) = mpsc::channel();
+            thread::spawn(move || {
+                let nearby_refs: Vec<&Persona> = nearby.iter().collect();
+                let result = persona_decide(&persona, &environment, &nearby_refs, llm.as_ref());
+                let _ = tx.send(result);
+            });
+
+            return match rx.recv_timeout(Duration::from_millis(self.persona_decision_timeout_ms)) {
+                Ok(Ok(decision)) => HashMap::from([(personas[0].id.clone(), decision)]),
+                Ok(Err(_)) | Err(_) => HashMap::from([(
+                    personas[0].id.clone(),
+                    fallback_persona_action(&personas[0], tick, "single-decision-timeout"),
                 )]),
             };
         }
@@ -407,7 +426,7 @@ pub fn run_parallel_simulations(
     llm: Arc<dyn PlannerLlm>,
     db: Arc<NexusDatabase>,
 ) -> Result<Vec<PredictionReport>, AgentError> {
-    let swarm = SwarmCoordinator;
+    let swarm = SwarmCoordinator::default();
     let parallel_batch_size = prepare_parallel_batch_size(seed, &swarm);
     thread::scope(|scope| {
         let mut handles = Vec::new();
@@ -494,7 +513,7 @@ pub fn evolve_simulation(
     llm: Arc<dyn PlannerLlm>,
     db: Arc<NexusDatabase>,
 ) -> Result<OptimalSimConfig, AgentError> {
-    let optimizer = CognitiveEvolutionEngine;
+    let mut optimizer = CognitiveEvolutionEngine::default();
     let mut population = vec![
         OptimalSimConfig {
             persona_count: 6,
@@ -540,7 +559,7 @@ pub fn evolve_simulation(
     let mut best = population[0].clone();
     for generation in 0..generations {
         for config in &mut population {
-            let _optimized_plan = optimizer.optimize_plan(simulation_config_steps(config));
+            let _optimized_plan = optimizer.optimize_plan_simple(simulation_config_steps(config));
             let personas = generate_personas(&seed.scenario, config.persona_count, llm.as_ref())?
                 .into_iter()
                 .enumerate()
@@ -894,6 +913,36 @@ fn build_live_events(personas: &[Persona], events: &[WorldEvent]) -> Vec<Simulat
             }
         })
         .collect()
+}
+
+/// Create a simulation world without blocking the caller thread.
+/// Returns a receiver that will receive the world once LLM calls complete.
+/// This avoids the 15-second hang caused by synchronous `parse_seed()` and
+/// `generate_personas()` calls.
+pub fn create_world_nonblocking(
+    seed_text: String,
+    world_id: String,
+    world_name: String,
+    persona_count: usize,
+    llm: Arc<dyn PlannerLlm>,
+) -> mpsc::Receiver<Result<SimulatedWorld, AgentError>> {
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let result = (|| {
+            let seed = parse_seed(&seed_text, llm.as_ref())?;
+            let personas = generate_personas(&seed.scenario, persona_count, llm.as_ref())?;
+            SimulatedWorld::from_seed(
+                world_id,
+                &world_name,
+                seed.scenario.clone(),
+                &seed,
+                personas,
+                llm.as_ref(),
+            )
+        })();
+        let _ = tx.send(result);
+    });
+    rx
 }
 
 fn persist_world_snapshot(

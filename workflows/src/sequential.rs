@@ -77,16 +77,16 @@ impl SequentialWorkflow {
         );
 
         if !review.approve(strategy_summary.as_str()) {
-            self.audit_trail
-                .append_event(
-                    uuid::Uuid::nil(),
-                    EventType::UserAction,
-                    json!({
-                        "event": "workflow_review_rejected",
-                        "topic": topic
-                    }),
-                )
-                .expect("audit: fail-closed");
+            if let Err(e) = self.audit_trail.append_event(
+                uuid::Uuid::nil(),
+                EventType::UserAction,
+                json!({
+                    "event": "workflow_review_rejected",
+                    "topic": topic
+                }),
+            ) {
+                eprintln!("[WARN] audit write failed: {e}");
+            }
             return WorkflowReport {
                 total_platforms: platforms.len(),
                 successes: 0,
@@ -102,17 +102,17 @@ impl SequentialWorkflow {
             let compliance = self.check_platform_compliance(*platform);
             if let ComplianceDecision::Blocked(reason) = compliance {
                 failures += 1;
-                self.audit_trail
-                    .append_event(
-                        uuid::Uuid::nil(),
-                        EventType::Error,
-                        json!({
-                            "event": "workflow_platform_blocked",
-                            "platform": format!("{platform:?}"),
-                            "reason": reason
-                        }),
-                    )
-                    .expect("audit: fail-closed");
+                if let Err(e) = self.audit_trail.append_event(
+                    uuid::Uuid::nil(),
+                    EventType::Error,
+                    json!({
+                        "event": "workflow_platform_blocked",
+                        "platform": format!("{platform:?}"),
+                        "reason": reason
+                    }),
+                ) {
+                    eprintln!("[WARN] audit write failed: {e}");
+                }
                 continue;
             }
 
@@ -145,18 +145,18 @@ impl SequentialWorkflow {
             outcomes,
         };
 
-        self.audit_trail
-            .append_event(
-                uuid::Uuid::nil(),
-                EventType::ToolCall,
-                json!({
-                    "event": "workflow_completed",
-                    "successes": report.successes,
-                    "failures": report.failures,
-                    "total": report.total_platforms
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            uuid::Uuid::nil(),
+            EventType::ToolCall,
+            json!({
+                "event": "workflow_completed",
+                "successes": report.successes,
+                "failures": report.failures,
+                "total": report.total_platforms
+            }),
+        ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
 
         report
     }

@@ -42,6 +42,11 @@ nexus-marketplace = { path = "../../marketplace" }
 nexus-cloud = { path = "../../cloud" }
 nexus-collaboration = { path = "../../agents/collaboration" }
 nexus-persistence = { path = "../../persistence" }
+nexus-auth = { path = "../../auth" }
+nexus-telemetry = { path = "../../telemetry" }
+nexus-tenancy = { path = "../../tenancy" }
+nexus-integrations = { path = "../../integrations" }
+nexus-metering = { path = "../../metering" }
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

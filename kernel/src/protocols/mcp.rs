@@ -381,18 +381,18 @@ impl McpServer {
 
         let fuel_remaining = manifest.fuel_budget;
 
-        self.audit_trail
-            .append_event(
-                agent_id,
-                EventType::StateChange,
-                json!({
-                    "event_kind": "mcp.agent_registered",
-                    "agent_name": manifest.name,
-                    "tool_count": tools.len(),
-                    "fuel_budget": fuel_remaining,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            agent_id,
+            EventType::StateChange,
+            json!({
+                "event_kind": "mcp.agent_registered",
+                "agent_name": manifest.name,
+                "tool_count": tools.len(),
+                "fuel_budget": fuel_remaining,
+            }),
+        ) {
+            eprintln!("audit write failed: {e}");
+        }
 
         // Register egress policy from manifest allowed_endpoints.
         let allowed = manifest.allowed_endpoints.clone().unwrap_or_default();
@@ -510,17 +510,18 @@ impl McpServer {
         // Step 2: Capability check — tool's required capabilities must be in manifest
         for required_cap in &tool.governance.required_capabilities {
             if !agent.manifest.capabilities.contains(required_cap) {
-                self.audit_trail
-                    .append_event(
-                        agent_id,
-                        EventType::Error,
-                        json!({
-                            "event_kind": "mcp.capability_denied",
-                            "tool": tool_name,
-                            "missing_capability": required_cap,
-                        }),
-                    )
-                    .expect("audit: fail-closed");
+                if let Err(e) = self.audit_trail.append_event(
+                    agent_id,
+                    EventType::Error,
+                    json!({
+                        "event_kind": "mcp.capability_denied",
+                        "tool": tool_name,
+                        "missing_capability": required_cap,
+                    }),
+                ) {
+                    eprintln!("audit write failed: {e}");
+                }
+
                 return Err(AgentError::CapabilityDenied(required_cap.clone()));
             }
         }
@@ -528,18 +529,19 @@ impl McpServer {
         // Step 3: Fuel check — must have enough before execution
         let fuel_cost = tool.governance.estimated_fuel_cost;
         if agent.fuel_remaining < fuel_cost {
-            self.audit_trail
-                .append_event(
-                    agent_id,
-                    EventType::Error,
-                    json!({
-                        "event_kind": "mcp.fuel_exhausted",
-                        "tool": tool_name,
-                        "fuel_remaining": agent.fuel_remaining,
-                        "fuel_required": fuel_cost,
-                    }),
-                )
-                .expect("audit: fail-closed");
+            if let Err(e) = self.audit_trail.append_event(
+                agent_id,
+                EventType::Error,
+                json!({
+                    "event_kind": "mcp.fuel_exhausted",
+                    "tool": tool_name,
+                    "fuel_remaining": agent.fuel_remaining,
+                    "fuel_required": fuel_cost,
+                }),
+            ) {
+                eprintln!("audit write failed: {e}");
+            }
+
             return Err(AgentError::FuelExhausted);
         }
 
@@ -563,7 +565,9 @@ impl McpServer {
         );
 
         // Step 5: Fuel deduction (must get mutable ref after immutable borrows)
-        let agent_mut = self.agents.get_mut(&agent_id).expect("agent verified");
+        let agent_mut = self.agents.get_mut(&agent_id).ok_or_else(|| {
+            AgentError::SupervisorError(format!("agent {agent_id} not found during fuel deduction"))
+        })?;
         agent_mut.fuel_remaining = agent_mut.fuel_remaining.saturating_sub(fuel_cost);
         let fuel_after = agent_mut.fuel_remaining;
 

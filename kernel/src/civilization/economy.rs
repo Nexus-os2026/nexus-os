@@ -90,7 +90,9 @@ impl CivilizationEconomy {
         }
 
         self.ensure_agent(agent_id);
-        let bal = self.balances.get_mut(agent_id).expect("just ensured");
+        let bal = self.balances.get_mut(agent_id).ok_or_else(|| {
+            EconomyError::AgentNotFound(format!("balance missing after ensure: {agent_id}"))
+        })?;
         bal.balance += amount;
         bal.earned_total += amount;
 
@@ -125,7 +127,9 @@ impl CivilizationEconomy {
         }
 
         self.ensure_agent(agent_id);
-        let bal = self.balances.get_mut(agent_id).expect("just ensured");
+        let bal = self.balances.get_mut(agent_id).ok_or_else(|| {
+            EconomyError::AgentNotFound(format!("balance missing after ensure: {agent_id}"))
+        })?;
 
         if bal.balance < amount {
             return Err(EconomyError::InsufficientBalance {
@@ -180,7 +184,13 @@ impl CivilizationEconomy {
         self.ensure_agent(from);
         self.ensure_agent(to);
 
-        let from_bal = self.balances.get(from).expect("just ensured").balance;
+        let from_bal = self
+            .balances
+            .get(from)
+            .ok_or_else(|| {
+                EconomyError::AgentNotFound(format!("balance missing after ensure: {from}"))
+            })?
+            .balance;
         if from_bal < amount {
             return Err(EconomyError::InsufficientBalance {
                 agent_id: from.to_string(),
@@ -190,12 +200,16 @@ impl CivilizationEconomy {
         }
 
         // Debit sender.
-        let sender = self.balances.get_mut(from).expect("just ensured");
+        let sender = self.balances.get_mut(from).ok_or_else(|| {
+            EconomyError::AgentNotFound(format!("balance missing after ensure: {from}"))
+        })?;
         sender.balance -= amount;
         sender.spent_total += amount;
 
         // Credit receiver.
-        let receiver = self.balances.get_mut(to).expect("just ensured");
+        let receiver = self.balances.get_mut(to).ok_or_else(|| {
+            EconomyError::AgentNotFound(format!("balance missing after ensure: {to}"))
+        })?;
         receiver.balance += amount;
         receiver.earned_total += amount;
 
@@ -213,7 +227,7 @@ impl CivilizationEconomy {
         );
 
         // Check sender bankruptcy.
-        let sender_balance = self.balances.get(from).expect("exists").balance;
+        let sender_balance = self.balances.get(from).map(|b| b.balance).unwrap_or(0.0);
         if sender_balance <= 0.0 {
             let _ = log.append_event(
                 GovernanceEventType::Bankruptcy,

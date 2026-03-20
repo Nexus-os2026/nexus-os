@@ -1,6 +1,8 @@
 use crate::stealth::{gaussian_action_delays_ms_seeded, StealthProfile};
-use nexus_connectors_llm::gateway::{AgentRuntimeContext, GovernedLlmGateway};
-use nexus_connectors_llm::providers::{LlmProvider, MockProvider};
+use nexus_connectors_llm::gateway::{
+    select_provider, AgentRuntimeContext, GovernedLlmGateway, ProviderSelectionConfig,
+};
+use nexus_connectors_llm::providers::LlmProvider;
 use nexus_sdk::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -68,7 +70,10 @@ impl Default for CommentInteractor {
 
 impl CommentInteractor {
     pub fn new() -> Self {
-        let provider: Box<dyn LlmProvider> = Box::new(MockProvider::new());
+        let config = ProviderSelectionConfig::from_env();
+        let provider: Box<dyn LlmProvider> = select_provider(&config).unwrap_or_else(|_| {
+            Box::new(nexus_connectors_llm::providers::OllamaProvider::from_env())
+        });
         let gateway = GovernedLlmGateway::new(provider);
         let capabilities = ["llm.query".to_string()]
             .into_iter()
