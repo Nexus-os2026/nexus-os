@@ -534,7 +534,7 @@ impl Default for A2aClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocols::a2a::{AgentCapabilities, AgentSkill, AuthScheme};
+    use crate::protocols::a2a::{AgentCapabilities, AgentSkill};
 
     fn make_test_card(name: &str, url: &str) -> AgentCard {
         AgentCard {

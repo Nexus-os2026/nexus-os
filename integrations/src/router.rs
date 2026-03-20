@@ -586,7 +586,7 @@ mod tests {
         let json = serde_json::to_string(&event).unwrap();
         let parsed: NexusEvent = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.kind(), "hitl_required");
-        assert_eq!(parsed.summary().contains("deploy_production"), true);
+        assert!(parsed.summary().contains("deploy_production"));
     }
 
     #[test]

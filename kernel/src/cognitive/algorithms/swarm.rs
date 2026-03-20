@@ -213,7 +213,7 @@ mod tests {
         assert_eq!(coord.best_solution().unwrap().fitness, 0.9);
         assert_eq!(coord.generation(), 1);
         // The returned step comes from the best solution
-        assert!(best.id.len() > 0);
+        assert!(!best.id.is_empty());
     }
 
     #[test]
