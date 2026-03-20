@@ -802,6 +802,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires Ollama with a deployed model"]
     fn test_conductor_run_code() {
         let out = test_output_dir("code");
         let mut conductor = Conductor::new(MockConductorProvider, "mock");

@@ -177,7 +177,7 @@ impl CodingAgent {
     }
 
     pub fn run(&mut self) -> Result<CodingAgentRunReport, AgentError> {
-        self.audit_trail
+        if let Err(e) = self.audit_trail
             .append_event(
                 self.agent_id,
                 EventType::StateChange,
@@ -192,8 +192,9 @@ impl CodingAgent {
                     "llm_model": self.manifest.llm_model,
                     "autonomy_level": self.autonomy_guard.level().as_str(),
                 }),
-            )
-            .expect("audit: fail-closed");
+            ) {
+            tracing::error!("Audit append failed: {e}");
+        }
 
         let mut last_test_output: Option<String> = None;
         let max_iterations = self.manifest.config.max_iterations.max(1);
@@ -211,7 +212,7 @@ impl CodingAgent {
                 target_files: self.manifest.config.target_files.clone(),
             })?;
 
-            self.audit_trail
+            if let Err(e) = self.audit_trail
                 .append_event(
                     self.agent_id,
                     EventType::LlmCall,
@@ -223,15 +224,16 @@ impl CodingAgent {
                         "writes": plan.writes.len(),
                         "run_tests": plan.run_tests,
                     }),
-                )
-                .expect("audit: fail-closed");
+                ) {
+                tracing::error!("Audit append failed: {e}");
+            }
 
             for path in &plan.read_paths {
                 self.require_operation(GovernedOperation::ToolCall, path.as_bytes())?;
                 self.ensure_capability(CAP_FS_READ)?;
                 self.charge_fuel(FUEL_COST_READ)?;
                 let content = self.dependencies.io.read_file(path.as_str())?;
-                self.audit_trail
+                if let Err(e) = self.audit_trail
                     .append_event(
                         self.agent_id,
                         EventType::ToolCall,
@@ -241,15 +243,16 @@ impl CodingAgent {
                             "path": path,
                             "bytes": content.len(),
                         }),
-                    )
-                    .expect("audit: fail-closed");
+                    ) {
+                    tracing::error!("Audit append failed: {e}");
+                }
             }
 
             for write in &plan.writes {
                 self.require_operation(GovernedOperation::ToolCall, write.path.as_bytes())?;
                 self.ensure_capability(CAP_FS_WRITE)?;
                 if !self.dependencies.approval.approve_write(write, iteration) {
-                    self.audit_trail
+                    if let Err(e) = self.audit_trail
                         .append_event(
                             self.agent_id,
                             EventType::UserAction,
@@ -259,8 +262,9 @@ impl CodingAgent {
                                 "type": "write",
                                 "path": write.path,
                             }),
-                        )
-                        .expect("audit: fail-closed");
+                        ) {
+                        tracing::error!("Audit append failed: {e}");
+                    }
                     return Err(AgentError::SupervisorError(
                         "write action denied by approval gate".to_string(),
                     ));
@@ -272,7 +276,7 @@ impl CodingAgent {
                     .write_file(write.path.as_str(), write.content.as_str())?;
                 self.modified_files.insert(write.path.clone());
 
-                self.audit_trail
+                if let Err(e) = self.audit_trail
                     .append_event(
                         self.agent_id,
                         EventType::ToolCall,
@@ -283,8 +287,9 @@ impl CodingAgent {
                             "summary": write.summary,
                             "bytes": write.content.len(),
                         }),
-                    )
-                    .expect("audit: fail-closed");
+                    ) {
+                    tracing::error!("Audit append failed: {e}");
+                }
             }
 
             if !plan.run_tests {
@@ -299,7 +304,7 @@ impl CodingAgent {
                 .approval
                 .approve_test_run(test_command.as_str(), iteration)
             {
-                self.audit_trail
+                if let Err(e) = self.audit_trail
                     .append_event(
                         self.agent_id,
                         EventType::UserAction,
@@ -309,8 +314,9 @@ impl CodingAgent {
                             "type": "test_run",
                             "command": test_command,
                         }),
-                    )
-                    .expect("audit: fail-closed");
+                    ) {
+                    tracing::error!("Audit append failed: {e}");
+                }
                 return Err(AgentError::SupervisorError(
                     "test run denied by approval gate".to_string(),
                 ));
@@ -318,7 +324,7 @@ impl CodingAgent {
 
             self.charge_fuel(FUEL_COST_TEST_RUN)?;
             let test_result = self.dependencies.io.run_tests(test_command.as_str())?;
-            self.audit_trail
+            if let Err(e) = self.audit_trail
                 .append_event(
                     self.agent_id,
                     EventType::ToolCall,
@@ -331,11 +337,12 @@ impl CodingAgent {
                         "stdout_bytes": test_result.stdout.len(),
                         "stderr_bytes": test_result.stderr.len(),
                     }),
-                )
-                .expect("audit: fail-closed");
+                ) {
+                tracing::error!("Audit append failed: {e}");
+            }
 
             if test_result.success {
-                self.audit_trail
+                if let Err(e) = self.audit_trail
                     .append_event(
                         self.agent_id,
                         EventType::StateChange,
@@ -344,8 +351,9 @@ impl CodingAgent {
                             "success": true,
                             "iteration": iteration,
                         }),
-                    )
-                    .expect("audit: fail-closed");
+                    ) {
+                    tracing::error!("Audit append failed: {e}");
+                }
                 return Ok(self.build_report(
                     true,
                     iteration,
@@ -357,7 +365,7 @@ impl CodingAgent {
             last_test_output = Some(combine_test_output(&test_result));
         }
 
-        self.audit_trail
+        if let Err(e) = self.audit_trail
             .append_event(
                 self.agent_id,
                 EventType::StateChange,
@@ -366,8 +374,9 @@ impl CodingAgent {
                     "success": false,
                     "iterations": max_iterations,
                 }),
-            )
-            .expect("audit: fail-closed");
+            ) {
+            tracing::error!("Audit append failed: {e}");
+        }
 
         Ok(self.build_report(
             false,

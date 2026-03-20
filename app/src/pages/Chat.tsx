@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Send, Mic, Trash2, Clock, Bot, User } from "lucide-react";
 import { History } from "../components/chat/History";
 import { Suggestions } from "../components/chat/Suggestions";
 import { VoiceVisualizer, type VoiceVisualizerState } from "../components/chat/VoiceVisualizer";
@@ -229,6 +230,10 @@ export function Chat({
     [messages]
   );
   const dropdownAgents = useMemo(() => dedupeDropdownAgents(agents), [agents]);
+  const activeSelectionLabel = useMemo(
+    () => dropdownAgents.find((agent) => agent.id === selectedAgent)?.name ?? "All agents",
+    [dropdownAgents, selectedAgent]
+  );
   const visualizerState = deriveVisualizerState(isRecording, isSending, assistantStreaming);
   const historyEntries = useMemo(() => deriveHistory(messages), [messages]);
   const showSuggestions = draft.trim().length === 0 && messages.length <= 1;
@@ -256,9 +261,18 @@ export function Chat({
       <header className="jarvis-chat-header">
         <div className="jarvis-chat-header__left">
           <span className="jarvis-status-dot" />
-          <h2 className="jarvis-title">NEXUS CORE // ACTIVE</h2>
+          <div>
+            <h2 className="jarvis-title">NEXUS CONVERSATION LAYER</h2>
+            <p className="jarvis-subtitle">
+              Directed through <span>{activeSelectionLabel}</span> with governed runtime routing.
+            </p>
+          </div>
         </div>
         <div className="jarvis-chat-header__right">
+          <span className="jarvis-signal-pill">
+            <span className="jarvis-signal-pill__dot" />
+            {assistantStreaming ? "streaming" : isSending ? "processing" : "ready"}
+          </span>
           <select
             className="jarvis-model-select"
             value={modelOptions.length > 0 ? selectedModel : ""}
@@ -301,6 +315,7 @@ export function Chat({
               onAgentChange("");
             }}
           >
+            <Trash2 size={12} aria-hidden="true" />
             Clear
           </button>
           <button
@@ -308,6 +323,7 @@ export function Chat({
             className="jarvis-history-button"
             onClick={() => setHistoryOpen((open) => !open)}
           >
+            <Clock size={12} aria-hidden="true" />
             HISTORY
           </button>
         </div>
@@ -317,7 +333,7 @@ export function Chat({
         {messages.length === 0 ? (
           <article className="jarvis-message jarvis-message-assistant">
             <div className="jarvis-msg-agent-header">
-              <span className="jarvis-msg-agent-icon">N</span>
+              <span className="jarvis-msg-agent-icon"><Bot size={12} aria-hidden="true" /></span>
               <span className="jarvis-msg-agent-name">NexusOS</span>
             </div>
             <p className="nexus-msg-typewriter">
@@ -326,16 +342,17 @@ export function Chat({
             <span className="jarvis-message-time">{formatMilitaryTime(Date.now())}</span>
           </article>
         ) : (
-          messages.map((message) => (
+          messages.map((message, index) => (
             <article
               key={message.id}
               className={`jarvis-message-wrap ${message.role === "user" ? "right" : "left"} fade-slide-up`}
+              style={{ "--jarvis-depth": String(messages.length - index) } as CSSProperties}
             >
               <div className={bubbleClass(message.role, message.variant)}>
                 {message.role === "assistant" && (
                   <div className="jarvis-msg-agent-header">
                     <span className="jarvis-msg-agent-icon">
-                      {message.variant === "approval" ? "!" : message.variant === "error" ? "✕" : "N"}
+                      <Bot size={12} aria-hidden="true" />
                     </span>
                     <span className="jarvis-msg-agent-name">
                       {message.variant === "approval"
@@ -388,7 +405,7 @@ export function Chat({
           <article className="jarvis-message-wrap left fade-slide-up">
             <div className="jarvis-message jarvis-message-assistant">
               <div className="jarvis-msg-agent-header">
-                <span className="jarvis-msg-agent-icon">N</span>
+                <span className="jarvis-msg-agent-icon"><Bot size={12} aria-hidden="true" /></span>
                 <span className="jarvis-msg-agent-name">NexusOS</span>
               </div>
               <div className="jarvis-typing-indicator">
@@ -422,7 +439,7 @@ export function Chat({
             >
               <span className="jarvis-mic-ring ring-one" />
               <span className="jarvis-mic-ring ring-two" />
-              <span className="jarvis-mic-core">{isRecording ? "REC" : "MIC"}</span>
+              <span className="jarvis-mic-core"><Mic size={16} aria-hidden="true" /></span>
             </button>
 
             <div className="jarvis-input-shell">
@@ -444,7 +461,7 @@ export function Chat({
             </div>
 
             <button type="submit" disabled={isSending} className="jarvis-send-button">
-              <span className="jarvis-send-arrow">&#x27A4;</span>
+              <Send size={14} aria-hidden="true" />
               <span>SEND</span>
             </button>
           </div>

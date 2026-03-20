@@ -85,6 +85,24 @@ pub fn render_approval(request: &ApprovalRequest) -> ApprovalDisplay {
                     .to_string(),
             );
         }
+        GovernedOperation::A2aDelegation => {
+            warnings.push(
+                "This operation will delegate a task to an external A2A agent — data leaves trust boundary"
+                    .to_string(),
+            );
+        }
+        GovernedOperation::McpExternalToolCall => {
+            warnings.push(
+                "This operation will call a tool on an external MCP server"
+                    .to_string(),
+            );
+        }
+        GovernedOperation::IntegrationSend => {
+            warnings.push(
+                "This operation will send data to an external integration (Slack, email, etc.)"
+                    .to_string(),
+            );
+        }
     }
     if let Some(min_review) = request.min_review_seconds {
         warnings.push(format!(

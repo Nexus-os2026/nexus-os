@@ -155,7 +155,7 @@ impl StrategyAdapter {
     }
 
     fn log_security_event(&mut self, change: &StrategyChange, policy: &str) {
-        self.audit_trail
+        if let Err(e) = self.audit_trail
             .append_event(
                 self.agent_id,
                 EventType::Error,
@@ -164,8 +164,9 @@ impl StrategyAdapter {
                     "policy": policy,
                     "change": change_description(change)
                 }),
-            )
-            .expect("audit: fail-closed");
+            ) {
+            tracing::error!("Audit append failed: {e}");
+        }
     }
 }
 
@@ -313,8 +314,18 @@ fn change_description(change: &StrategyChange) -> String {
 
 fn extract_preferred_time(report: &AnalyticsReport) -> Option<String> {
     static TIME_RE: OnceLock<Regex> = OnceLock::new();
-    let regex = TIME_RE
-        .get_or_init(|| Regex::new(r"(?i)\b([0-1]?\d|2[0-3])\s?(am|pm)\b").expect("valid regex"));
+    let regex = TIME_RE.get_or_init(|| {
+        match Regex::new(r"(?i)\b([0-1]?\d|2[0-3])\s?(am|pm)\b") {
+            Ok(re) => re,
+            Err(e) => {
+                eprintln!("Failed to compile time regex: {e}");
+                match Regex::new("^$") {
+                    Ok(re) => re,
+                    Err(_) => std::process::abort(),
+                }
+            }
+        }
+    });
 
     for source in report
         .recommendations
@@ -363,7 +374,18 @@ fn extract_preferred_style(report: &AnalyticsReport) -> Option<String> {
 
 fn extract_hashtags(report: &AnalyticsReport) -> Vec<String> {
     static HASHTAG_RE: OnceLock<Regex> = OnceLock::new();
-    let regex = HASHTAG_RE.get_or_init(|| Regex::new(r"#[A-Za-z0-9_]{2,32}").expect("valid regex"));
+    let regex = HASHTAG_RE.get_or_init(|| {
+        match Regex::new(r"#[A-Za-z0-9_]{2,32}") {
+            Ok(re) => re,
+            Err(e) => {
+                eprintln!("Failed to compile hashtag regex: {e}");
+                match Regex::new("^$") {
+                    Ok(re) => re,
+                    Err(_) => std::process::abort(),
+                }
+            }
+        }
+    });
 
     let mut hashtags = Vec::new();
     for source in report

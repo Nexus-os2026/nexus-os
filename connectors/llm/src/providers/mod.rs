@@ -577,7 +577,7 @@ mod tests {
 
     #[test]
     fn test_nvidia_model_list_not_empty() {
-        assert_eq!(super::nvidia::NVIDIA_MODELS.len(), 39);
+        assert_eq!(super::nvidia::NVIDIA_MODELS.len(), 93);
     }
 
     #[test]
@@ -590,7 +590,7 @@ mod tests {
 
     #[test]
     fn test_nvidia_vision_model_list() {
-        assert_eq!(super::nvidia::NVIDIA_VISION_MODELS.len(), 4);
+        assert_eq!(super::nvidia::NVIDIA_VISION_MODELS.len(), 8);
         assert!(super::nvidia::NVIDIA_VISION_MODELS.contains(&"meta/llama-3.2-90b-vision-instruct"));
     }
 }

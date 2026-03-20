@@ -8,6 +8,7 @@ import { NeuralGraph } from "../components/viz/NeuralGraph";
 import { PulseRing } from "../components/viz/PulseRing";
 import { getPreinstalledAgents, hasDesktopRuntime, listProviderModels } from "../api/backend";
 import type { AgentSummary, AuditEventRow, PreinstalledAgent, SlmStatus } from "../types";
+import { Play, Pause, Square, Trash2, Plus, Search, Shield, Settings, Users, Zap, Fuel, MemoryStick, ChevronDown, ChevronUp, Eye } from "lucide-react";
 import "./agents.css";
 
 /* ─── constants ─── */
@@ -246,7 +247,7 @@ export function Agents({
     if (onNavigate) {
       // Store agent ID in sessionStorage for the chat page to pick up
       sessionStorage.setItem("nexus-chat-agent", agentId);
-      onNavigate("ai-chat-hub");
+      onNavigate("chat");
     }
   }, [onNavigate]);
 
@@ -267,13 +268,13 @@ export function Agents({
             <span className="mission-active-hex">{activeCount}</span>
             <span className="mission-active-value">ACTIVE</span>
           </div>
-          <button type="button" className="create-btn" onClick={() => setShowCreate(true)}>
-            + CREATE AGENT
+          <button type="button" className="create-btn cursor-pointer" onClick={() => setShowCreate(true)}>
+            <Plus size={16} /> CREATE AGENT
           </button>
           {onClearAll && (
             <button
               type="button"
-              className="create-btn"
+              className="create-btn cursor-pointer"
               style={{ background: "#dc2626", borderColor: "#991b1b" }}
               onClick={() => {
                 if (window.confirm(`Delete all ${agents.length} agents? This cannot be undone.`)) onClearAll();
@@ -287,29 +288,29 @@ export function Agents({
 
       {/* ─── Stats Ribbon ─── */}
       <div className="mission-stats-ribbon">
-        <div className="mission-stat-card">
-          <span className="mission-stat-icon">&#x2B22;</span>
+        <div className="mission-stat-card glass-panel">
+          <span className="mission-stat-icon"><Users size={18} /></span>
           <div>
             <span className="mission-stat-value">{hasPreinstalled ? preinstalledAgents.length : agents.length}</span>
             <span className="mission-stat-label">Total Agents</span>
           </div>
         </div>
-        <div className="mission-stat-card">
-          <span className="mission-stat-icon" style={{ color: "var(--green)" }}>&#x25C9;</span>
+        <div className="mission-stat-card glass-panel">
+          <span className="mission-stat-icon" style={{ color: "var(--green)" }}><Zap size={18} /></span>
           <div>
             <span className="mission-stat-value">{activeCount}</span>
             <span className="mission-stat-label">Active</span>
           </div>
         </div>
-        <div className="mission-stat-card">
-          <span className="mission-stat-icon" style={{ color: "var(--blue)" }}>&#x2726;</span>
+        <div className="mission-stat-card glass-panel">
+          <span className="mission-stat-icon" style={{ color: "var(--blue)" }}><Eye size={18} /></span>
           <div>
             <span className="mission-stat-value">{totalTasks}</span>
             <span className="mission-stat-label">Events Today</span>
           </div>
         </div>
-        <div className="mission-stat-card">
-          <span className="mission-stat-icon" style={{ color: "var(--cyan, #06b6d4)" }}>&#x25C8;</span>
+        <div className="mission-stat-card glass-panel">
+          <span className="mission-stat-icon" style={{ color: "var(--cyan, #06b6d4)" }}><Settings size={18} /></span>
           <div>
             <span className="mission-stat-value">{modelCount}</span>
             <span className="mission-stat-label">Available Models</span>
@@ -333,7 +334,7 @@ export function Agents({
             {(["all", 1, 2, 3, 4, 5, 6] as AutonomyFilter[]).map(level => (
               <button
                 key={String(level)}
-                className={`mission-filter-btn ${autonomyFilter === level ? "active" : ""}`}
+                className={`mission-filter-btn cursor-pointer ${autonomyFilter === level ? "active" : ""}`}
                 style={level !== "all" ? { borderColor: `${AUTONOMY_COLORS[level as number]}66`, color: autonomyFilter === level ? "#fff" : AUTONOMY_COLORS[level as number] } : undefined}
                 onClick={() => setAutonomyFilter(level)}
               >
@@ -346,7 +347,7 @@ export function Agents({
             {(["all", "research", "code", "security", "creative", "system", "devops", "data", "communication"] as CategoryFilter[]).map(cat => (
               <button
                 key={cat}
-                className={`mission-filter-btn ${categoryFilter === cat ? "active" : ""}`}
+                className={`mission-filter-btn cursor-pointer ${categoryFilter === cat ? "active" : ""}`}
                 onClick={() => setCategoryFilter(cat)}
               >
                 {cat === "all" ? "All" : cat.charAt(0).toUpperCase() + cat.slice(1)}
@@ -359,7 +360,7 @@ export function Agents({
       {/* ─── Agent Cards Grid ─── */}
       <main className="mission-agent-grid">
         {filteredAgents.length === 0 ? (
-          <article className="mission-agent-card mission-agent-card--empty">
+          <article className="mission-agent-card mission-agent-card--empty glass-panel">
             <p className="mission-agent-card__empty-copy">
               {searchQuery || autonomyFilter !== "all" || categoryFilter !== "all"
                 ? "No agents match your filters."
@@ -380,11 +381,12 @@ export function Agents({
               <article
                 key={agentId}
                 className={[
-                  "mission-agent-card",
+                  "mission-agent-card glass-panel",
                   selectedAgentId === agentId ? "is-selected" : "",
                   isExpanded ? "is-expanded" : "",
                 ].filter(Boolean).join(" ")}
                 onClick={() => setSelectedAgentId(agentId)}
+                style={{ cursor: "pointer" }}
               >
                 <div className={`mission-agent-card__accent mission-agent-card__accent--${statusClass}`} />
 
@@ -428,33 +430,33 @@ export function Agents({
 
                 <div className="mission-agent-card__actions">
                   {(statusLabel === "Idle" || statusLabel === "Error") && (
-                    <button type="button" className="mission-agent-card__action mission-agent-card__action--start" onClick={e => { e.stopPropagation(); onStart(agentId); }}>
-                      Start
+                    <button type="button" className="mission-agent-card__action mission-agent-card__action--start cursor-pointer" onClick={e => { e.stopPropagation(); onStart(agentId); }}>
+                      <Play size={14} /> Start
                     </button>
                   )}
                   {statusLabel === "Running" && (
-                    <button type="button" className="mission-agent-card__action mission-agent-card__action--stop" onClick={e => { e.stopPropagation(); onStop(agentId); }}>
-                      Stop
+                    <button type="button" className="mission-agent-card__action mission-agent-card__action--stop cursor-pointer" onClick={e => { e.stopPropagation(); onStop(agentId); }}>
+                      <Square size={14} /> Stop
                     </button>
                   )}
                   {statusLabel === "Paused" && (
-                    <button type="button" className="mission-agent-card__action mission-agent-card__action--resume" onClick={e => { e.stopPropagation(); onStart(agentId); }}>
-                      Resume
+                    <button type="button" className="mission-agent-card__action mission-agent-card__action--resume cursor-pointer" onClick={e => { e.stopPropagation(); onStart(agentId); }}>
+                      <Play size={14} /> Resume
                     </button>
                   )}
-                  <button type="button" className="mission-agent-card__action mission-agent-card__action--chat" onClick={e => { e.stopPropagation(); navigateToChat(pa.agent_id); }}>
+                  <button type="button" className="mission-agent-card__action mission-agent-card__action--chat cursor-pointer" onClick={e => { e.stopPropagation(); navigateToChat(pa.agent_id); }}>
                     Chat
                   </button>
-                  <button type="button" className="mission-agent-card__action" onClick={e => { e.stopPropagation(); setExpandedCardId(isExpanded ? null : agentId); }}>
-                    {isExpanded ? "Less" : "Details"}
+                  <button type="button" className="mission-agent-card__action cursor-pointer" onClick={e => { e.stopPropagation(); setExpandedCardId(isExpanded ? null : agentId); }}>
+                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {isExpanded ? "Less" : "Details"}
                   </button>
                   {onPermissions && (
-                    <button type="button" className="mission-agent-card__action mission-agent-card__action--perms" onClick={e => { e.stopPropagation(); onPermissions(agentId); }}>
-                      Perms
+                    <button type="button" className="mission-agent-card__action mission-agent-card__action--perms cursor-pointer" onClick={e => { e.stopPropagation(); onPermissions(agentId); }}>
+                      <Shield size={14} /> Perms
                     </button>
                   )}
-                  <button type="button" className="mission-agent-card__action mission-agent-card__action--delete" onClick={e => { e.stopPropagation(); if (window.confirm(`Delete ${pa.name}?`)) onDelete(agentId); }}>
-                    Del
+                  <button type="button" className="mission-agent-card__action mission-agent-card__action--delete cursor-pointer" onClick={e => { e.stopPropagation(); if (window.confirm(`Delete ${pa.name}?`)) onDelete(agentId); }}>
+                    <Trash2 size={14} /> Del
                   </button>
                 </div>
 
@@ -502,17 +504,17 @@ export function Agents({
       <div className="mission-monitoring-toggle">
         <button
           type="button"
-          className="mission-monitoring-btn"
+          className="mission-monitoring-btn cursor-pointer"
           onClick={() => setShowMonitoring(!showMonitoring)}
         >
-          {showMonitoring ? "▲" : "▼"} Monitoring {activeCount > 0 && `(${activeCount} active)`}
+          {showMonitoring ? <ChevronUp size={16} /> : <ChevronDown size={16} />} Monitoring {activeCount > 0 && `(${activeCount} active)`}
         </button>
       </div>
 
       {showMonitoring && (
         <>
           <section className="mission-viz-strip">
-            <div className="mission-viz-card">
+            <div className="mission-viz-card glass-panel">
               <div className="mission-viz-card-head">
                 <p className="mission-viz-title">Agent Fuel Matrix</p>
                 <PulseRing active={activeCount > 0} />
@@ -533,11 +535,11 @@ export function Agents({
                 })}
               </div>
             </div>
-            <div className="mission-viz-card mission-viz-card-wide">
+            <div className="mission-viz-card mission-viz-card-wide glass-panel">
               <p className="mission-viz-title">Neural Agent Link Graph</p>
               <NeuralGraph nodes={graphNodes} edges={graphEdges} />
             </div>
-            <div className="mission-viz-card">
+            <div className="mission-viz-card glass-panel">
               <HeatMap values={heatmapValues} columns={8} title="Hourly Activity" />
             </div>
           </section>

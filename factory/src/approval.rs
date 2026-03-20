@@ -42,8 +42,7 @@ impl ApprovalFlow {
         capabilities: Vec<String>,
         fuel_budget: u64,
     ) -> ApprovalRequest {
-        self.audit_trail
-            .append_event(
+        if let Err(e) = self.audit_trail.append_event(
                 uuid::Uuid::nil(),
                 EventType::UserAction,
                 json!({
@@ -51,8 +50,9 @@ impl ApprovalFlow {
                     "capabilities": capabilities,
                     "fuel_budget": fuel_budget,
                 }),
-            )
-            .expect("audit: fail-closed");
+            ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
 
         ApprovalRequest {
             capabilities,

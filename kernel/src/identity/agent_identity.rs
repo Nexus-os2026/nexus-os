@@ -326,7 +326,7 @@ impl IdentityManager {
             self.persist(&identity)?;
             self.identities.insert(agent_id, identity);
         }
-        Ok(self.identities.get(&agent_id).expect("just inserted"))
+        self.identities.get(&agent_id).ok_or(IdentityError::NotFound(agent_id))
     }
 
     /// Look up an identity by agent UUID.

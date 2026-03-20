@@ -45,7 +45,7 @@ impl SecretsVault {
         let mut nonce = [0_u8; 12];
         OsRng.fill_bytes(&mut nonce);
         let ciphertext = cipher
-            .encrypt(Nonce::from_slice(&nonce), value.as_bytes())
+            .encrypt(&Nonce::from(nonce), value.as_bytes())
             .map_err(|_| AgentError::SupervisorError("failed to encrypt secret".to_string()))?;
 
         self.secrets.insert(
@@ -88,7 +88,7 @@ impl SecretsVault {
         let cipher = self.cipher_from_key(user_key)?;
         let plaintext = cipher
             .decrypt(
-                Nonce::from_slice(&encrypted.nonce),
+                &Nonce::from(encrypted.nonce),
                 encrypted.ciphertext.as_ref(),
             )
             .map_err(|_| AgentError::SupervisorError("failed to decrypt secret".to_string()))?;
@@ -110,16 +110,16 @@ impl SecretsVault {
 
     pub fn delete_secret(&mut self, name: &str) {
         self.secrets.remove(name);
-        self.audit_trail
-            .append_event(
-                Uuid::nil(),
-                EventType::UserAction,
-                json!({
-                    "event": "secret_deleted",
-                    "secret_name": name
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            Uuid::nil(),
+            EventType::UserAction,
+            json!({
+                "event": "secret_deleted",
+                "secret_name": name
+            }),
+        ) {
+            tracing::error!("Audit append failed: {e}");
+        }
     }
 
     pub fn list_secrets(&self) -> Vec<String> {

@@ -1,9 +1,11 @@
 use nexus_conductor::types::{AgentRole, UserRequest};
 use nexus_conductor::Conductor;
 use nexus_connectors_llm::providers::{LlmProvider, LlmResponse};
+use nexus_kernel::audit::AuditTrail;
 use nexus_kernel::errors::AgentError;
 use nexus_kernel::supervisor::Supervisor;
 use nexus_sdk::ManifestBuilder;
+use uuid::Uuid;
 
 /// Mock provider that returns invalid JSON so the planner falls back to rules.
 struct MockProvider;
@@ -101,18 +103,54 @@ fn conductor_dispatches_to_supervisor() {
 }
 
 #[test]
-#[ignore] // Requires Ollama running locally
 fn conductor_builds_website_e2e() {
-    // Full end-to-end test with real LLM
-    // 1. Create temp dir
+    // End-to-end test using MockProvider — exercises plan → dispatch → codegen
+    // without requiring a live LLM.  The rule-based planner produces a valid
+    // plan and the web-builder codegen emits real HTML/CSS/TS files.
     let output_dir = std::env::temp_dir().join("nexus-conductor-e2e");
-    let _ = std::fs::create_dir_all(&output_dir);
+    let _ = std::fs::remove_dir_all(&output_dir);
+    std::fs::create_dir_all(&output_dir).expect("output dir should be created");
 
-    // 2. Would need a real OllamaProvider here
-    // 3. Run "build a portfolio site with dark mode"
-    // 4. Assert index.html exists and contains <html
-    // 5. Print output dir for manual inspection
-    println!("E2E test output dir: {}", output_dir.display());
+    let mut conductor = Conductor::new(MockProvider, "mock");
+    let request = UserRequest::new(
+        "build a portfolio site with dark mode",
+        output_dir.to_string_lossy().as_ref(),
+    );
+
+    // Preview the plan — should succeed via rule-based fallback
+    let plan = conductor
+        .preview_plan(&request)
+        .expect("preview plan should succeed");
+    assert!(
+        !plan.tasks.is_empty(),
+        "plan should contain at least one task"
+    );
+
+    let web_task = plan
+        .tasks
+        .iter()
+        .find(|t| t.role == AgentRole::WebBuilder)
+        .expect("plan should include a WebBuilder task");
+
+    // Execute the web build — the MockProvider returns "not json" so the
+    // conductor falls through to rule-based codegen which still emits files.
+    let mut audit = AuditTrail::new();
+    let agent_id = Uuid::new_v4();
+    let created = conductor
+        .execute_web_build(web_task, &output_dir, &mut audit, agent_id)
+        .expect("web build should produce files via rule-based fallback");
+
+    assert!(
+        !created.is_empty(),
+        "web build should create at least one file"
+    );
+
+    let has_html = created.iter().any(|p| {
+        p.extension()
+            .map(|ext| ext == "html")
+            .unwrap_or(false)
+    });
+    assert!(has_html, "web build should create an HTML file");
 
     // Cleanup
     let _ = std::fs::remove_dir_all(&output_dir);

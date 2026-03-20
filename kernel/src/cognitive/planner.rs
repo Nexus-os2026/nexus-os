@@ -448,9 +448,19 @@ fn sanitize_llm_response(input: &str) -> String {
 }
 
 fn strip_markdown_fences(input: &str) -> String {
-    let fence_line_re =
-        Regex::new(r"(?m)^\s*```[a-zA-Z0-9_-]*\s*$").expect("valid markdown fence regex");
-    fence_line_re.replace_all(input, "").to_string()
+    static FENCE_LINE_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+        match Regex::new(r"(?m)^\s*```[a-zA-Z0-9_-]*\s*$") {
+            Ok(re) => re,
+            Err(e) => {
+                eprintln!("Failed to compile markdown fence regex: {e}");
+                match Regex::new("^$") {
+                    Ok(re) => re,
+                    Err(_) => std::process::abort(),
+                }
+            }
+        }
+    });
+    FENCE_LINE_RE.replace_all(input, "").to_string()
 }
 
 fn repair_common_json_issues(input: &str) -> String {
@@ -486,8 +496,10 @@ fn remove_duplicate_json_fields(input: &str) -> String {
             let pattern = format!(
                 r#",\s*"{key}"\s*:\s*(?:{value_pattern})\s*,\s*"{key}"\s*:\s*(?P<value>{value_pattern})"#
             );
-            let duplicate_field_re =
-                Regex::new(&pattern).expect("valid duplicate-field cleanup regex");
+            let duplicate_field_re = match Regex::new(&pattern) {
+                Ok(re) => re,
+                Err(_) => continue,
+            };
             let replacement = format!(r#","{key}": $value"#);
             updated = duplicate_field_re
                 .replace_all(&updated, replacement.as_str())

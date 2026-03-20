@@ -103,7 +103,7 @@ export default function CommandCenter(): JSX.Element {
 
               <div className="cc-card-autonomy">
                 <span className="cc-label">Autonomy</span>
-                <span className="cc-value">Not configured</span>
+                <span className="cc-value">L{agent.autonomy_level ?? 0}</span>
               </div>
 
               <div className="cc-card-fuel">

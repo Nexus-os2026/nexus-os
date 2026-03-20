@@ -4,5 +4,6 @@
 //! throughout the kernel and by downstream crates.
 
 pub mod a2a;
+pub mod a2a_client;
 pub mod bridge;
 pub mod mcp;

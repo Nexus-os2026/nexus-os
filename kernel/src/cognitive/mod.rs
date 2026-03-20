@@ -14,7 +14,9 @@ pub mod planner;
 pub mod scheduler;
 pub mod types;
 
-pub use algorithms::{AdversarialArena, EvolutionEngine, SwarmCoordinator, WorldModel};
+pub use algorithms::{
+    AdversarialArena, EvolutionEngine, PlanEvolutionEngine, SwarmCoordinator, WorldModel,
+};
 pub use evolution::{
     hash_strategy, EvolutionLlm, EvolutionMetrics, EvolutionTracker, StrategyInfo, StrategyScore,
     StrategyStore,

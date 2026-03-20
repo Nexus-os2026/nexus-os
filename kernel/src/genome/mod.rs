@@ -20,10 +20,15 @@
 //! - [`crossover`] — breed two parents into an offspring
 //! - [`tournament_select`] — fitness-based selection (top 50%)
 
+pub mod auto_evolve;
 pub mod converter;
 pub mod dna;
 pub mod operations;
 
+pub use auto_evolve::{
+    AgentPerformanceTracker, AutoEvolutionManager, AutoEvolveLlm, EvolutionConfig, EvolutionEvent,
+    EvolutionResult,
+};
 pub use converter::{genome_from_manifest, manifest_from_genome, JsonAgentManifest};
 pub use dna::{
     AgentGenome, AutonomyGenes, CapabilityGenes, EvolutionGenes, GeneSet, PersonalityGenes,

@@ -316,7 +316,7 @@ impl SoftwareTeeProvider {
 
     /// Sealed payload format: `meta_len(4 LE) || meta_json || seed(32)`
     fn encode_payload(meta: &TeeKeyMeta, seed: &[u8; 32]) -> Vec<u8> {
-        let meta_json = serde_json::to_vec(meta).expect("TeeKeyMeta serializable");
+        let meta_json = serde_json::to_vec(meta).unwrap_or_default();
         let meta_len = (meta_json.len() as u32).to_le_bytes();
         let mut buf = Vec::with_capacity(4 + meta_json.len() + 32);
         buf.extend_from_slice(&meta_len);
@@ -331,7 +331,11 @@ impl SoftwareTeeProvider {
                 "tee sealed payload too short".to_string(),
             ));
         }
-        let meta_len = u32::from_le_bytes(plaintext[..4].try_into().expect("4 bytes")) as usize;
+        let meta_len = u32::from_le_bytes(
+            plaintext[..4]
+                .try_into()
+                .map_err(|_| KeyError::InvalidKeyMaterial("tee payload: expected 4 bytes for length".to_string()))?,
+        ) as usize;
         if plaintext.len() < 4 + meta_len + 32 {
             return Err(KeyError::InvalidKeyMaterial(
                 "tee sealed payload truncated".to_string(),
@@ -340,11 +344,10 @@ impl SoftwareTeeProvider {
         let meta: TeeKeyMeta = serde_json::from_slice(&plaintext[4..4 + meta_len])
             .map_err(|e| KeyError::InvalidKeyMaterial(format!("tee metadata parse: {e}")))?;
         let seed_start = 4 + meta_len;
-        let signing_key = SigningKey::from_bytes(
-            plaintext[seed_start..seed_start + 32]
-                .try_into()
-                .expect("32 bytes"),
-        );
+        let seed: [u8; 32] = plaintext[seed_start..seed_start + 32]
+            .try_into()
+            .map_err(|_| KeyError::InvalidKeyMaterial("tee payload: expected 32 bytes for seed".to_string()))?;
+        let signing_key = SigningKey::from_bytes(&seed);
         let pub_key = signing_key.verifying_key().to_bytes().to_vec();
         Ok((meta, pub_key))
     }
@@ -372,18 +375,21 @@ impl SoftwareTeeProvider {
                 "tee sealed payload too short".to_string(),
             ));
         }
-        let meta_len = u32::from_le_bytes(plaintext[..4].try_into().expect("4 bytes")) as usize;
+        let meta_len = u32::from_le_bytes(
+            plaintext[..4]
+                .try_into()
+                .map_err(|_| KeyError::InvalidKeyMaterial("tee payload: expected 4 bytes for length".to_string()))?,
+        ) as usize;
         let seed_start = 4 + meta_len;
         if plaintext.len() < seed_start + 32 {
             return Err(KeyError::InvalidKeyMaterial(
                 "tee sealed payload truncated".to_string(),
             ));
         }
-        let signing_key = SigningKey::from_bytes(
-            plaintext[seed_start..seed_start + 32]
-                .try_into()
-                .expect("32 bytes"),
-        );
+        let seed: [u8; 32] = plaintext[seed_start..seed_start + 32]
+            .try_into()
+            .map_err(|_| KeyError::InvalidKeyMaterial("tee payload: expected 32 bytes for seed".to_string()))?;
+        let signing_key = SigningKey::from_bytes(&seed);
         // signing_key is dropped when this scope ends — private key leaves memory.
         f(&signing_key)
     }

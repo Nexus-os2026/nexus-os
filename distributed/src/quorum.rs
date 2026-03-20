@@ -99,19 +99,19 @@ impl QuorumEngine {
         let active = self.cluster.active_count();
         if active < required_votes {
             let outcome = QuorumOutcome::InsufficientNodes;
-            audit_trail
-                .append_event(
-                    agent_id,
-                    EventType::StateChange,
-                    serde_json::json!({
-                        "event": "quorum.propose_failed",
-                        "reason": "insufficient_nodes",
-                        "active_nodes": active,
-                        "required_votes": required_votes,
-                        "action": &action_description,
-                    }),
-                )
-                .expect("audit: fail-closed");
+            if let Err(e) = audit_trail.append_event(
+                agent_id,
+                EventType::StateChange,
+                serde_json::json!({
+                    "event": "quorum.propose_failed",
+                    "reason": "insufficient_nodes",
+                    "active_nodes": active,
+                    "required_votes": required_votes,
+                    "action": &action_description,
+                }),
+            ) {
+                eprintln!("[WARN] audit write failed: {e}");
+            }
             return Err(outcome);
         }
 
@@ -126,19 +126,19 @@ impl QuorumEngine {
             created_at: unix_now(),
         };
 
-        audit_trail
-            .append_event(
-                agent_id,
-                EventType::StateChange,
-                serde_json::json!({
-                    "event": "quorum.proposed",
-                    "request_id": request_id.to_string(),
-                    "action": &action_description,
-                    "required_votes": required_votes,
-                    "policy_hash": &policy_hash,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = audit_trail.append_event(
+            agent_id,
+            EventType::StateChange,
+            serde_json::json!({
+                "event": "quorum.proposed",
+                "request_id": request_id.to_string(),
+                "action": &action_description,
+                "required_votes": required_votes,
+                "policy_hash": &policy_hash,
+            }),
+        ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
 
         self.pending.insert(request_id, (request, Vec::new()));
         Ok(request_id)
@@ -168,18 +168,18 @@ impl QuorumEngine {
             QuorumVote::Abstain { .. } => "abstain",
         };
 
-        audit_trail
-            .append_event(
-                agent_id,
-                EventType::UserAction,
-                serde_json::json!({
-                    "event": "quorum.vote",
-                    "request_id": request_id.to_string(),
-                    "node_id": voter.to_string(),
-                    "vote": vote_label,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = audit_trail.append_event(
+            agent_id,
+            EventType::UserAction,
+            serde_json::json!({
+                "event": "quorum.vote",
+                "request_id": request_id.to_string(),
+                "node_id": voter.to_string(),
+                "vote": vote_label,
+            }),
+        ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
 
         votes.push(vote);
 
@@ -195,23 +195,23 @@ impl QuorumEngine {
 
         // Check if we have enough approvals
         if approvals >= required {
-            let (_, final_votes) = self.pending.remove(&request_id).unwrap();
+            let (_, final_votes) = self.pending.remove(&request_id)?;
             let outcome = QuorumOutcome::Approved {
                 votes: final_votes,
                 decided_at: unix_now(),
             };
-            audit_trail
-                .append_event(
-                    agent_id,
-                    EventType::StateChange,
-                    serde_json::json!({
-                        "event": "quorum.outcome",
-                        "request_id": request_id.to_string(),
-                        "result": "approved",
-                        "approvals": approvals,
-                    }),
-                )
-                .expect("audit: fail-closed");
+            if let Err(e) = audit_trail.append_event(
+                agent_id,
+                EventType::StateChange,
+                serde_json::json!({
+                    "event": "quorum.outcome",
+                    "request_id": request_id.to_string(),
+                    "result": "approved",
+                    "approvals": approvals,
+                }),
+            ) {
+                eprintln!("[WARN] audit write failed: {e}");
+            }
             self.decided.insert(request_id, outcome.clone());
             return Some(outcome);
         }
@@ -219,7 +219,7 @@ impl QuorumEngine {
         // Check if enough rejections make approval impossible
         let remaining = total_active.saturating_sub(votes.len());
         if approvals + remaining < required {
-            let (_, final_votes) = self.pending.remove(&request_id).unwrap();
+            let (_, final_votes) = self.pending.remove(&request_id)?;
             let outcome = QuorumOutcome::Rejected {
                 votes: final_votes,
                 reason: format!(
@@ -227,18 +227,18 @@ impl QuorumEngine {
                     approvals, rejections, remaining
                 ),
             };
-            audit_trail
-                .append_event(
-                    agent_id,
-                    EventType::StateChange,
-                    serde_json::json!({
-                        "event": "quorum.outcome",
-                        "request_id": request_id.to_string(),
-                        "result": "rejected",
-                        "rejections": rejections,
-                    }),
-                )
-                .expect("audit: fail-closed");
+            if let Err(e) = audit_trail.append_event(
+                agent_id,
+                EventType::StateChange,
+                serde_json::json!({
+                    "event": "quorum.outcome",
+                    "request_id": request_id.to_string(),
+                    "result": "rejected",
+                    "rejections": rejections,
+                }),
+            ) {
+                eprintln!("[WARN] audit write failed: {e}");
+            }
             self.decided.insert(request_id, outcome.clone());
             return Some(outcome);
         }
@@ -258,21 +258,23 @@ impl QuorumEngine {
 
         let mut results = Vec::new();
         for request_id in timed_out {
-            let (request, votes) = self.pending.remove(&request_id).unwrap();
+            let Some((request, votes)) = self.pending.remove(&request_id) else {
+                continue;
+            };
             let outcome = QuorumOutcome::TimedOut {
                 votes_received: votes,
             };
-            audit_trail
-                .append_event(
-                    request.agent_id,
-                    EventType::StateChange,
-                    serde_json::json!({
-                        "event": "quorum.outcome",
-                        "request_id": request_id.to_string(),
-                        "result": "timed_out",
-                    }),
-                )
-                .expect("audit: fail-closed");
+            if let Err(e) = audit_trail.append_event(
+                request.agent_id,
+                EventType::StateChange,
+                serde_json::json!({
+                    "event": "quorum.outcome",
+                    "request_id": request_id.to_string(),
+                    "result": "timed_out",
+                }),
+            ) {
+                eprintln!("[WARN] audit write failed: {e}");
+            }
             self.decided.insert(request_id, outcome.clone());
             results.push((request_id, outcome));
         }
@@ -300,8 +302,7 @@ impl QuorumEngine {
         let active = self.cluster.active_count();
         if active < required_votes {
             let outcome = QuorumOutcome::InsufficientNodes;
-            audit_trail
-                .append_event(
+            if let Err(e) = audit_trail.append_event(
                     agent_id,
                     EventType::StateChange,
                     serde_json::json!({
@@ -311,8 +312,9 @@ impl QuorumEngine {
                         "required_votes": required_votes,
                         "action": &action_description,
                     }),
-                )
-                .expect("audit: fail-closed");
+                ) {
+                eprintln!("[WARN] audit write failed: {e}");
+            }
             return Err(outcome);
         }
 
@@ -327,8 +329,7 @@ impl QuorumEngine {
             created_at,
         };
 
-        audit_trail
-            .append_event(
+        if let Err(e) = audit_trail.append_event(
                 agent_id,
                 EventType::StateChange,
                 serde_json::json!({
@@ -338,8 +339,9 @@ impl QuorumEngine {
                     "required_votes": required_votes,
                     "policy_hash": &policy_hash,
                 }),
-            )
-            .expect("audit: fail-closed");
+            ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
 
         self.pending.insert(request_id, (request, Vec::new()));
         Ok(request_id)

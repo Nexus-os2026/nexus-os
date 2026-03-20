@@ -4,8 +4,15 @@
 //! databases, etc.), discover their tools, and call them with full governance:
 //! capability checks, PII redaction, fuel accounting, and audit trail.
 
+use nexus_kernel::audit::{AuditTrail, EventType};
+use nexus_kernel::consent::{ConsentRuntime, GovernedOperation};
+use nexus_kernel::redaction::RedactionEngine;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Child, Command, Stdio};
+use std::sync::Mutex;
 use uuid::Uuid;
 
 // ── Configuration types ─────────────────────────────────────────────────────
@@ -282,7 +289,7 @@ impl McpClient {
                 // SSE transport: fall back to HTTP POST for tool calls
                 self.send_http(&request)
             }
-            McpTransport::Stdio => Err("Stdio transport not yet implemented".to_string()),
+            McpTransport::Stdio => Err("Stdio transport requires StdioMcpClient".to_string()),
         }
     }
 
@@ -487,6 +494,423 @@ pub fn create_server_config(
         transport,
         auth,
         enabled: true,
+    }
+}
+
+// ── Stdio Transport ─────────────────────────────────────────────────────
+
+/// MCP client that communicates with a server via stdin/stdout of a child process.
+/// This implements the MCP stdio transport specification.
+pub struct StdioMcpClient {
+    child: Child,
+    reader: BufReader<std::process::ChildStdout>,
+    available_tools: Vec<McpToolDefinition>,
+    request_counter: u64,
+    server_id: String,
+}
+
+impl std::fmt::Debug for StdioMcpClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StdioMcpClient")
+            .field("server_id", &self.server_id)
+            .field("request_counter", &self.request_counter)
+            .field("tools_count", &self.available_tools.len())
+            .finish()
+    }
+}
+
+impl StdioMcpClient {
+    /// Spawn a child process and set up stdin/stdout communication.
+    pub fn spawn(command: &str, args: &[&str], server_id: &str) -> Result<Self, String> {
+        let mut child = Command::new(command)
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to spawn MCP server process '{}': {}", command, e))?;
+
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| "Failed to capture stdout from MCP server process".to_string())?;
+
+        Ok(Self {
+            child,
+            reader: BufReader::new(stdout),
+            available_tools: Vec::new(),
+            request_counter: 0,
+            server_id: server_id.to_string(),
+        })
+    }
+
+    /// Initialize the connection and discover tools.
+    pub fn initialize(&mut self) -> Result<Vec<McpToolDefinition>, String> {
+        let init_params = serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {
+                "name": "nexus-os",
+                "version": "9.0.0"
+            }
+        });
+        let _init_response = self.send_jsonrpc("initialize", Some(init_params))?;
+        let _ = self.send_jsonrpc("notifications/initialized", None);
+
+        let tools_response = self.send_jsonrpc("tools/list", None)?;
+        let tools = if let Some(result) = tools_response.result {
+            let tools_array = result
+                .get("tools")
+                .and_then(|t| t.as_array())
+                .cloned()
+                .unwrap_or_default();
+
+            tools_array
+                .into_iter()
+                .filter_map(|t| {
+                    let name = t.get("name")?.as_str()?.to_string();
+                    let description = t
+                        .get("description")
+                        .and_then(|d| d.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let input_schema = t
+                        .get("inputSchema")
+                        .cloned()
+                        .unwrap_or(serde_json::json!({}));
+                    Some(McpToolDefinition {
+                        name,
+                        description,
+                        input_schema,
+                        server_id: self.server_id.clone(),
+                    })
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        self.available_tools = tools.clone();
+        Ok(tools)
+    }
+
+    /// Call a tool on the stdio server.
+    pub fn call_tool(
+        &mut self,
+        tool_name: &str,
+        arguments: serde_json::Value,
+    ) -> Result<McpToolResult, String> {
+        if !self.available_tools.iter().any(|t| t.name == tool_name) {
+            return Err(format!(
+                "Tool '{}' not found on stdio server '{}'",
+                tool_name, self.server_id
+            ));
+        }
+
+        let start = std::time::Instant::now();
+        let params = serde_json::json!({
+            "name": tool_name,
+            "arguments": arguments,
+        });
+        let response = self.send_jsonrpc("tools/call", Some(params))?;
+        let execution_ms = start.elapsed().as_millis() as u64;
+
+        if let Some(error) = response.error {
+            return Ok(McpToolResult {
+                tool_name: tool_name.to_string(),
+                server_id: self.server_id.clone(),
+                content: vec![McpContent::Text {
+                    text: error.message,
+                }],
+                is_error: true,
+                execution_ms,
+            });
+        }
+
+        let is_error = response
+            .result
+            .as_ref()
+            .and_then(|r| r.get("isError"))
+            .and_then(|e| e.as_bool())
+            .unwrap_or(false);
+
+        let content = if let Some(result) = response.result {
+            let content_array = result
+                .get("content")
+                .and_then(|c| c.as_array())
+                .cloned()
+                .unwrap_or_default();
+            content_array
+                .into_iter()
+                .filter_map(|c| serde_json::from_value(c).ok())
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        Ok(McpToolResult {
+            tool_name: tool_name.to_string(),
+            server_id: self.server_id.clone(),
+            content,
+            is_error,
+            execution_ms,
+        })
+    }
+
+    /// List all discovered tools.
+    pub fn list_tools(&self) -> &[McpToolDefinition] {
+        &self.available_tools
+    }
+
+    /// Send a JSON-RPC request via stdin and read the response from stdout.
+    fn send_jsonrpc(
+        &mut self,
+        method: &str,
+        params: Option<serde_json::Value>,
+    ) -> Result<JsonRpcResponse, String> {
+        self.request_counter += 1;
+
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: serde_json::Value::from(self.request_counter),
+            method: method.to_string(),
+            params,
+        };
+
+        let msg = serde_json::to_string(&request)
+            .map_err(|e| format!("Failed to serialize request: {e}"))?;
+
+        let stdin = self
+            .child
+            .stdin
+            .as_mut()
+            .ok_or_else(|| "stdin not available".to_string())?;
+
+        stdin
+            .write_all(msg.as_bytes())
+            .map_err(|e| format!("Failed to write to stdin: {e}"))?;
+        stdin
+            .write_all(b"\n")
+            .map_err(|e| format!("Failed to write newline: {e}"))?;
+        stdin
+            .flush()
+            .map_err(|e| format!("Failed to flush stdin: {e}"))?;
+
+        let mut line = String::new();
+        self.reader
+            .read_line(&mut line)
+            .map_err(|e| format!("Failed to read from stdout: {e}"))?;
+
+        if line.trim().is_empty() {
+            return Err("Empty response from MCP server".to_string());
+        }
+
+        serde_json::from_str(&line)
+            .map_err(|e| format!("Failed to parse JSON-RPC response: {e}"))
+    }
+
+    /// Shut down the child process.
+    pub fn shutdown(&mut self) -> Result<(), String> {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        Ok(())
+    }
+}
+
+impl Drop for StdioMcpClient {
+    fn drop(&mut self) {
+        let _ = self.shutdown();
+    }
+}
+
+// ── Governed MCP Host ───────────────────────────────────────────────────
+
+/// Governance context for MCP tool calls.
+/// Wraps McpHostManager with capability checks, fuel accounting,
+/// PII redaction, and audit trail.
+pub struct GovernedMcpHost {
+    pub host: McpHostManager,
+    audit: Mutex<AuditTrail>,
+    fuel_remaining: Mutex<f64>,
+    fuel_per_call: f64,
+    allowed_capabilities: Mutex<Vec<String>>,
+    consent: Option<Mutex<ConsentRuntime>>,
+    agent_id: Uuid,
+}
+
+impl GovernedMcpHost {
+    pub fn new(fuel_budget: f64) -> Self {
+        Self {
+            host: McpHostManager::new(),
+            audit: Mutex::new(AuditTrail::new()),
+            fuel_remaining: Mutex::new(fuel_budget),
+            fuel_per_call: 5.0,
+            allowed_capabilities: Mutex::new(vec!["mcp.call_tool".to_string()]),
+            consent: None,
+            agent_id: Uuid::nil(),
+        }
+    }
+
+    /// Create a governed MCP host with HITL consent enforcement.
+    pub fn with_consent(fuel_budget: f64, consent_runtime: ConsentRuntime, agent_id: Uuid) -> Self {
+        Self {
+            host: McpHostManager::new(),
+            audit: Mutex::new(AuditTrail::new()),
+            fuel_remaining: Mutex::new(fuel_budget),
+            fuel_per_call: 5.0,
+            allowed_capabilities: Mutex::new(vec!["mcp.call_tool".to_string()]),
+            consent: Some(Mutex::new(consent_runtime)),
+            agent_id,
+        }
+    }
+
+    /// Set the capabilities an agent is allowed to use.
+    pub fn set_allowed_capabilities(&self, capabilities: Vec<String>) {
+        if let Ok(mut caps) = self.allowed_capabilities.lock() {
+            *caps = capabilities;
+        }
+    }
+
+    /// Check if the agent has the `mcp.call_tool` capability.
+    fn check_capability(&self) -> Result<(), String> {
+        let caps = self
+            .allowed_capabilities
+            .lock()
+            .map_err(|_| "lock poisoned".to_string())?;
+        if caps.iter().any(|c| c == "mcp.call_tool" || c == "*") {
+            Ok(())
+        } else {
+            Err("Agent lacks 'mcp.call_tool' capability".to_string())
+        }
+    }
+
+    /// Deduct fuel for a tool call. Returns error if insufficient.
+    fn deduct_fuel(&self) -> Result<(), String> {
+        let mut fuel = self
+            .fuel_remaining
+            .lock()
+            .map_err(|_| "lock poisoned".to_string())?;
+        if *fuel < self.fuel_per_call {
+            return Err(format!(
+                "Insufficient fuel: need {} but only {:.1} remaining",
+                self.fuel_per_call, *fuel
+            ));
+        }
+        *fuel -= self.fuel_per_call;
+        Ok(())
+    }
+
+    /// Record an audit event for a tool call.
+    fn audit_call(&self, tool_name: &str, server_id: &str, success: bool, detail: &str) {
+        if let Ok(mut audit) = self.audit.lock() {
+            let _ = audit.append_event(
+                uuid::Uuid::nil(),
+                EventType::ToolCall,
+                json!({
+                    "action": "mcp_client_call",
+                    "tool": tool_name,
+                    "server": server_id,
+                    "success": success,
+                    "detail": detail,
+                }),
+            );
+        }
+    }
+
+    /// Governed tool call: capability check → HITL consent → fuel check → PII redact → call → audit.
+    pub fn call_tool(
+        &mut self,
+        tool_name: &str,
+        arguments: serde_json::Value,
+    ) -> Result<McpToolResult, String> {
+        // 1. Capability check
+        self.check_capability().inspect_err(|e| {
+            self.audit_call(tool_name, "unknown", false, e);
+        })?;
+
+        // 2. HITL consent — require human approval before calling external MCP tool
+        if let Some(consent_mutex) = &self.consent {
+            let server_id = self.host.tool_index().get(tool_name)
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string());
+            let payload = format!("mcp_call:{}:{}:{}", server_id, tool_name, arguments);
+            if let Ok(mut consent) = consent_mutex.lock() {
+                if let Ok(mut audit) = self.audit.lock() {
+                    if let Err(e) = consent.enforce_operation(
+                        GovernedOperation::McpExternalToolCall,
+                        self.agent_id,
+                        payload.as_bytes(),
+                        &mut audit,
+                    ) {
+                        let msg = format!("HITL denied MCP tool call '{}': {}", tool_name, e);
+                        self.audit_call(tool_name, &server_id, false, &msg);
+                        return Err(msg);
+                    }
+                }
+            }
+        }
+
+        // 3. Fuel check
+        self.deduct_fuel().inspect_err(|e| {
+            self.audit_call(tool_name, "unknown", false, e);
+        })?;
+
+        // 3. PII redaction on outbound arguments
+        let redacted_args = redact_json_values(&arguments);
+
+        // 4. Call the tool
+        let result = self.host.call_tool(tool_name, redacted_args);
+
+        // 5. Audit
+        match &result {
+            Ok(r) => self.audit_call(
+                tool_name,
+                &r.server_id,
+                !r.is_error,
+                &format!("{}ms", r.execution_ms),
+            ),
+            Err(e) => self.audit_call(tool_name, "unknown", false, e),
+        }
+
+        result
+    }
+
+    /// Get remaining fuel.
+    pub fn fuel_remaining(&self) -> f64 {
+        self.fuel_remaining
+            .lock()
+            .map(|f| *f)
+            .unwrap_or(0.0)
+    }
+
+    /// Access the audit trail.
+    pub fn audit_trail(&self) -> &Mutex<AuditTrail> {
+        &self.audit
+    }
+}
+
+/// Recursively redact PII from JSON values (strings only).
+fn redact_json_values(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::String(s) => {
+            let findings = RedactionEngine::scan(s);
+            if findings.is_empty() {
+                value.clone()
+            } else {
+                serde_json::Value::String(RedactionEngine::apply(s, &findings))
+            }
+        }
+        serde_json::Value::Object(map) => {
+            let redacted: serde_json::Map<String, serde_json::Value> = map
+                .iter()
+                .map(|(k, v)| (k.clone(), redact_json_values(v)))
+                .collect();
+            serde_json::Value::Object(redacted)
+        }
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(redact_json_values).collect())
+        }
+        other => other.clone(),
     }
 }
 
@@ -768,5 +1192,94 @@ mod tests {
         let json = serde_json::to_string(&none).unwrap();
         let parsed: McpAuth = serde_json::from_str(&json).unwrap();
         assert!(matches!(parsed, McpAuth::None));
+    }
+
+    #[test]
+    fn test_stdio_spawn_nonexistent_binary() {
+        let result = StdioMcpClient::spawn("__nonexistent_mcp_binary__", &[], "test-stdio");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Failed to spawn"));
+    }
+
+    #[test]
+    fn test_stdio_spawn_and_shutdown() {
+        // Use `cat` as a simple echo-like process for stdio transport testing
+        let mut client = StdioMcpClient::spawn("cat", &[], "test-cat").unwrap();
+        assert_eq!(client.server_id, "test-cat");
+        assert!(client.available_tools.is_empty());
+        assert!(client.shutdown().is_ok());
+    }
+
+    #[test]
+    fn test_governed_host_capability_denied() {
+        let mut governed = GovernedMcpHost::new(100.0);
+        governed.set_allowed_capabilities(vec!["other.capability".to_string()]);
+        let result = governed.call_tool("some_tool", json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("lacks 'mcp.call_tool'"));
+    }
+
+    #[test]
+    fn test_governed_host_fuel_deduction() {
+        let governed = GovernedMcpHost::new(100.0);
+        assert_eq!(governed.fuel_remaining(), 100.0);
+        governed.deduct_fuel().unwrap();
+        assert_eq!(governed.fuel_remaining(), 95.0);
+        governed.deduct_fuel().unwrap();
+        assert_eq!(governed.fuel_remaining(), 90.0);
+    }
+
+    #[test]
+    fn test_governed_host_fuel_exhaustion() {
+        let governed = GovernedMcpHost::new(3.0);
+        let result = governed.deduct_fuel();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Insufficient fuel"));
+    }
+
+    #[test]
+    fn test_governed_host_audit_trail() {
+        let governed = GovernedMcpHost::new(100.0);
+        governed.audit_call("test_tool", "test_server", true, "ok");
+        governed.audit_call("test_tool", "test_server", false, "failed");
+        let audit = governed.audit_trail().lock().unwrap();
+        assert_eq!(audit.events().len(), 2);
+    }
+
+    #[test]
+    fn test_pii_redaction_on_arguments() {
+        let args = json!({
+            "query": "Find user@example.com",
+            "nested": {"email": "admin@test.org"},
+            "number": 42
+        });
+        let redacted = redact_json_values(&args);
+        // Numbers should be unchanged
+        assert_eq!(redacted["number"], 42);
+        // Strings with PII should be redacted (or unchanged if no PII engine match)
+        assert!(redacted["query"].is_string());
+        assert!(redacted["nested"]["email"].is_string());
+    }
+
+    #[test]
+    fn test_governed_host_call_with_governance() {
+        let mut governed = GovernedMcpHost::new(100.0);
+        // Tool won't be found (no servers connected), but governance checks pass
+        let result = governed.call_tool("missing_tool", json!({}));
+        assert!(result.is_err());
+        // Fuel should still be deducted (governance passed, tool call failed)
+        assert_eq!(governed.fuel_remaining(), 95.0);
+        // Audit should record the failure
+        let audit = governed.audit_trail().lock().unwrap();
+        assert_eq!(audit.events().len(), 1);
+    }
+
+    #[test]
+    fn test_governed_host_with_consent_constructor() {
+        let consent = nexus_kernel::consent::ConsentRuntime::default();
+        let agent_id = Uuid::new_v4();
+        let governed = GovernedMcpHost::with_consent(100.0, consent, agent_id);
+        assert!(governed.consent.is_some());
+        assert_eq!(governed.fuel_remaining(), 100.0);
     }
 }

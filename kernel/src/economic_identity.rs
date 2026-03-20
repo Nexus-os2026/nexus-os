@@ -326,7 +326,10 @@ impl EconomicEngine {
         let now = now_secs();
 
         // Debit sender
-        let from_wallet = self.wallets.get_mut(from_agent).unwrap();
+        let from_wallet = self
+            .wallets
+            .get_mut(from_agent)
+            .ok_or_else(|| format!("sender wallet disappeared: {from_agent}"))?;
         from_wallet.balance -= amount;
         from_wallet.total_spent += amount;
         let debit_tx = Transaction {
@@ -342,7 +345,10 @@ impl EconomicEngine {
         from_wallet.transaction_history.push(debit_tx.clone());
 
         // Credit receiver
-        let to_wallet = self.wallets.get_mut(to_agent).unwrap();
+        let to_wallet = self
+            .wallets
+            .get_mut(to_agent)
+            .ok_or_else(|| format!("receiver wallet disappeared: {to_agent}"))?;
         to_wallet.balance += amount;
         to_wallet.total_earned += amount;
         let credit_tx = Transaction {
@@ -569,7 +575,7 @@ impl EconomicEngine {
             .contracts
             .iter_mut()
             .find(|c| c.id == contract_id)
-            .unwrap();
+            .ok_or_else(|| format!("contract disappeared: {contract_id}"))?;
         contract.status = ContractStatus::Completed { success };
         contract.completed_at = Some(now_secs());
         contract.evidence = evidence.clone();
@@ -595,11 +601,9 @@ impl EconomicEngine {
                 approved: true,
                 counterparty: Some(client_id),
             };
-            self.wallets
-                .get_mut(&tx.wallet_id)
-                .unwrap()
-                .transaction_history
-                .push(tx.clone());
+            if let Some(w) = self.wallets.get_mut(&tx.wallet_id) {
+                w.transaction_history.push(tx.clone());
+            }
             Ok(tx)
         } else if penalty > 0.0 {
             // Failure with penalty: return escrowed amount minus penalty to client.
@@ -625,11 +629,9 @@ impl EconomicEngine {
                 approved: true,
                 counterparty: Some(agent_id),
             };
-            self.wallets
-                .get_mut(&client_id)
-                .unwrap()
-                .transaction_history
-                .push(tx.clone());
+            if let Some(w) = self.wallets.get_mut(&client_id) {
+                w.transaction_history.push(tx.clone());
+            }
             Ok(tx)
         } else {
             // Failure with no penalty — return full escrow to client.
@@ -650,11 +652,9 @@ impl EconomicEngine {
                 approved: true,
                 counterparty: Some(agent_id),
             };
-            self.wallets
-                .get_mut(&client_id)
-                .unwrap()
-                .transaction_history
-                .push(tx.clone());
+            if let Some(w) = self.wallets.get_mut(&client_id) {
+                w.transaction_history.push(tx.clone());
+            }
             Ok(tx)
         }
     }

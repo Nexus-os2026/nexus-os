@@ -1,49 +1,74 @@
 :root {
   /* Backgrounds */
-  --bg-primary: #050a12;
-  --bg-secondary: #0a1628;
-  --bg-card: #0d1f3c;
-  --bg-elevated: #132744;
-  --bg-panel: rgba(13, 31, 60, 0.85);
-  --bg-glass: rgba(0, 255, 157, 0.03);
+  --bg-primary: #02050d;
+  --bg-secondary: #07111f;
+  --bg-card: #0b1526;
+  --bg-elevated: #101f35;
+  --bg-panel: rgba(10, 18, 32, 0.84);
+  --bg-glass: rgba(87, 255, 223, 0.045);
+  --bg-panel-strong: rgba(7, 14, 25, 0.92);
+  --bg-panel-soft: rgba(12, 20, 36, 0.62);
+  --bg-panel-highlight: rgba(20, 35, 56, 0.78);
 
   /* Canonical accent */
-  --nexus-accent: #00ff9d;
-  --nexus-accent-dim: rgba(0, 255, 157, 0.5);
-  --nexus-accent-glow: 0 0 20px rgba(0, 255, 157, 0.3);
+  --nexus-accent: #4af7d3;
+  --nexus-accent-dim: rgba(74, 247, 211, 0.52);
+  --nexus-accent-glow: 0 0 24px rgba(74, 247, 211, 0.28);
+  --nexus-purple: #8c7bff;
+  --nexus-purple-dim: rgba(140, 123, 255, 0.42);
+  --nexus-amber: #ffb85c;
+  --nexus-amber-dim: rgba(255, 184, 92, 0.36);
+  --nexus-danger: #ff6d7a;
+  --nexus-danger-dim: rgba(255, 109, 122, 0.34);
+  --nexus-info: #6cb9ff;
+  --nexus-surface-glow: 0 28px 70px -44px rgba(74, 247, 211, 0.36);
+  --nexus-purple-glow: 0 22px 58px -42px rgba(140, 123, 255, 0.48);
+  --nexus-amber-glow: 0 20px 52px -40px rgba(255, 184, 92, 0.42);
 
   /* Legacy aliases (point to canonical accent) */
   --cyan: var(--nexus-accent);
   --cyan-dim: var(--nexus-accent-dim);
   --cyan-glow: var(--nexus-accent-glow);
-  --blue: #3b82f6;
-  --green: #10b981;
-  --amber: #f59e0b;
-  --red: #ef4444;
-  --purple: #8b5cf6;
+  --blue: var(--nexus-info);
+  --green: #2ad39d;
+  --amber: var(--nexus-amber);
+  --red: var(--nexus-danger);
+  --purple: var(--nexus-purple);
 
   /* Text */
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #475569;
+  --text-primary: #eef7ff;
+  --text-secondary: #9cb1c9;
+  --text-muted: #5e7491;
   --text-accent: var(--nexus-accent);
+  --text-strong: #ffffff;
 
   /* Borders */
-  --border: rgba(0, 255, 157, 0.1);
-  --border-active: rgba(0, 255, 157, 0.4);
+  --border: rgba(90, 142, 190, 0.18);
+  --border-active: rgba(74, 247, 211, 0.44);
+  --border-strong: rgba(118, 190, 255, 0.28);
+  --panel-outline: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(74, 247, 211, 0.16) 40%, rgba(140, 123, 255, 0.18) 100%);
 
   /* Fonts */
   --font-display: "Orbitron", sans-serif;
   --font-body: "Exo 2", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
+
+  /* Radius / layout */
+  --radius-panel: 1.35rem;
+  --radius-panel-lg: 1.9rem;
+  --radius-pill: 999px;
+  --header-height: 104px;
 }
 
 body {
-  background: radial-gradient(circle at 20% 0%, rgba(0, 255, 157, 0.1), transparent 28%),
-    radial-gradient(circle at 78% 100%, rgba(59, 130, 246, 0.08), transparent 32%),
-    linear-gradient(150deg, var(--bg-primary) 0%, var(--bg-secondary) 48%, #030710 100%);
+  background:
+    radial-gradient(circle at 14% 16%, rgba(74, 247, 211, 0.14), transparent 24%),
+    radial-gradient(circle at 83% 18%, rgba(140, 123, 255, 0.14), transparent 24%),
+    radial-gradient(circle at 52% 100%, rgba(108, 185, 255, 0.08), transparent 38%),
+    linear-gradient(155deg, #01040b 0%, #040a14 28%, #08111e 58%, #02050d 100%);
   color: var(--text-primary);
   font-family: var(--font-body);
+  letter-spacing: 0.01em;
 }
 
 h1,

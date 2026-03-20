@@ -48,6 +48,12 @@ pub enum AuthError {
 
     #[error("HTTP error: {0}")]
     Http(String),
+
+    #[error("I/O error: {0}")]
+    Io(String),
+
+    #[error("serialization error: {0}")]
+    Serialization(String),
 }
 
 impl From<reqwest::Error> for AuthError {

@@ -218,7 +218,7 @@ impl KillGateRegistry {
             gate.frozen = true;
             status = GateStatus::Halted;
 
-            audit.append_event(
+            if let Err(e) = audit.append_event(
                 agent_id,
                 EventType::Error,
                 json!({
@@ -226,13 +226,17 @@ impl KillGateRegistry {
                     "subsystem": subsystem,
                     "reason": format!("metric {} exceeded halt threshold {}", metric_value, gate.halt_threshold),
                 }),
-            ).expect("audit: fail-closed");
+            )
+            {
+                eprintln!("audit write failed: {e}");
+            }
+
             self.escalate_to(subsystem, EscalationLevel::Incident, agent_id, audit);
         } else if !gate.frozen && metric_value >= gate.freeze_threshold {
             gate.frozen = true;
             status = GateStatus::Frozen;
 
-            audit.append_event(
+            if let Err(e) = audit.append_event(
                 agent_id,
                 EventType::UserAction,
                 json!({
@@ -241,13 +245,17 @@ impl KillGateRegistry {
                     "reason": format!("metric {} exceeded freeze threshold {}", metric_value, gate.freeze_threshold),
                     "by": "auto",
                 }),
-            ).expect("audit: fail-closed");
+            )
+            {
+                eprintln!("audit write failed: {e}");
+            }
+
             self.escalate_to(subsystem, EscalationLevel::Freeze, agent_id, audit);
         } else if metric_value > 0.0 && status == GateStatus::Open {
             let _ = self.escalate_once(subsystem, agent_id, audit);
         }
 
-        audit
+        if let Err(e) = audit
             .append_event(
                 agent_id,
                 EventType::StateChange,
@@ -262,7 +270,10 @@ impl KillGateRegistry {
                     },
                 }),
             )
-            .expect("audit: fail-closed");
+        {
+            eprintln!("audit write failed: {e}");
+        }
+
 
         status
     }
@@ -280,7 +291,7 @@ impl KillGateRegistry {
             .ok_or_else(|| KillGateError::UnknownSubsystem(subsystem.to_string()))?;
 
         gate.frozen = true;
-        audit
+        if let Err(e) = audit
             .append_event(
                 agent_id,
                 EventType::UserAction,
@@ -291,7 +302,10 @@ impl KillGateRegistry {
                     "by": operator_id,
                 }),
             )
-            .expect("audit: fail-closed");
+        {
+            eprintln!("audit write failed: {e}");
+        }
+
 
         self.escalate_to(subsystem, EscalationLevel::Freeze, agent_id, audit);
         Ok(GateStatus::Frozen)
@@ -312,7 +326,7 @@ impl KillGateRegistry {
         gate.halted = true;
         gate.frozen = true;
 
-        audit
+        if let Err(e) = audit
             .append_event(
                 agent_id,
                 EventType::Error,
@@ -322,7 +336,10 @@ impl KillGateRegistry {
                     "reason": format!("manual halt by {}", operator_id),
                 }),
             )
-            .expect("audit: fail-closed");
+        {
+            eprintln!("audit write failed: {e}");
+        }
+
 
         self.escalate_to(subsystem, EscalationLevel::Incident, agent_id, audit);
         Ok(GateStatus::Halted)
@@ -349,7 +366,7 @@ impl KillGateRegistry {
         gate.halted = false;
         self.escalation_levels.remove(subsystem);
 
-        audit
+        if let Err(e) = audit
             .append_event(
                 agent_id,
                 EventType::UserAction,
@@ -360,7 +377,10 @@ impl KillGateRegistry {
                     "hitl_tier": hitl_tier,
                 }),
             )
-            .expect("audit: fail-closed");
+        {
+            eprintln!("audit write failed: {e}");
+        }
+
         Ok(GateStatus::Open)
     }
 
@@ -392,7 +412,7 @@ impl KillGateRegistry {
         let next = current.next();
         self.escalation_levels.insert(subsystem.to_string(), next);
 
-        audit
+        if let Err(e) = audit
             .append_event(
                 agent_id,
                 EventType::UserAction,
@@ -403,10 +423,13 @@ impl KillGateRegistry {
                     "to_level": next.as_str(),
                 }),
             )
-            .expect("audit: fail-closed");
+        {
+            eprintln!("audit write failed: {e}");
+        }
+
 
         if next == EscalationLevel::Incident {
-            audit
+            if let Err(e) = audit
                 .append_event(
                     agent_id,
                     EventType::UserAction,
@@ -416,7 +439,10 @@ impl KillGateRegistry {
                         "via": "messaging_bridge",
                     }),
                 )
-                .expect("audit: fail-closed");
+            {
+                eprintln!("audit write failed: {e}");
+            }
+
         }
 
         next

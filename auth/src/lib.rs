@@ -111,4 +111,76 @@ mod tests {
         assert_eq!(cfg.session_duration_hours, 8);
         assert_eq!(cfg.redirect_uri, "http://localhost:1420/auth/callback");
     }
+
+    #[test]
+    fn user_role_ordering_all_pairs() {
+        // Admin > Operator > Auditor > Viewer (by privilege level)
+        assert!(UserRole::Admin.privilege_level() > UserRole::Operator.privilege_level());
+        assert!(UserRole::Operator.privilege_level() > UserRole::Auditor.privilege_level());
+        assert!(UserRole::Auditor.privilege_level() > UserRole::Viewer.privilege_level());
+
+        // Self-satisfaction
+        assert!(UserRole::Viewer.satisfies(&UserRole::Viewer));
+        assert!(UserRole::Auditor.satisfies(&UserRole::Auditor));
+    }
+
+    #[test]
+    fn role_mapping_from_string_unknown_returns_none() {
+        let mapping = std::collections::HashMap::new();
+        assert_eq!(UserRole::from_idp_group("anything", &mapping), None);
+    }
+
+    #[test]
+    fn auth_config_resolve_no_secret() {
+        let cfg = AuthConfig::default();
+        assert_eq!(cfg.resolve_client_secret(), None);
+    }
+
+    #[test]
+    fn auth_config_serde_roundtrip_preserves_all_fields() {
+        let mut mapping = std::collections::HashMap::new();
+        mapping.insert("admins".to_string(), UserRole::Admin);
+        mapping.insert("ops".to_string(), UserRole::Operator);
+        let cfg = AuthConfig {
+            provider: AuthProvider::Oidc,
+            issuer_url: "https://keycloak.test/realms/nexus".to_string(),
+            client_id: "nexus-client".to_string(),
+            client_secret: Some("secret123".to_string()),
+            role_mapping: mapping,
+            roles_claim: "realm_roles".to_string(),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        let parsed: AuthConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.issuer_url, "https://keycloak.test/realms/nexus");
+        assert_eq!(parsed.client_id, "nexus-client");
+        assert_eq!(parsed.role_mapping.len(), 2);
+        assert_eq!(parsed.roles_claim, "realm_roles");
+    }
+
+    #[tokio::test]
+    async fn session_not_found_returns_error() {
+        let mgr = SessionManager::new(8);
+        let result = mgr.get_session(uuid::Uuid::new_v4()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn multiple_sessions_same_user() {
+        let mgr = SessionManager::new(8);
+        let req = NewSessionRequest {
+            id: "user-multi".into(),
+            email: "multi@test.com".into(),
+            name: "Multi".into(),
+            role: UserRole::Operator,
+            provider: "oidc".into(),
+            refresh_token: None,
+            workspace_id: None,
+        };
+        let s1 = mgr.create_session(req.clone()).await;
+        let s2 = mgr.create_session(req).await;
+        // Different session IDs even for same user
+        assert_ne!(s1.session_id, s2.session_id);
+        assert_eq!(mgr.session_count().await, 2);
+    }
 }

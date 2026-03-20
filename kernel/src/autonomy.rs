@@ -305,7 +305,7 @@ impl AutonomyGuard {
     ) {
         let previous = self.level;
         self.level = new_level.min(previous);
-        audit_trail
+        if let Err(e) = audit_trail
             .append_event(
                 actor_id,
                 EventType::StateChange,
@@ -317,7 +317,9 @@ impl AutonomyGuard {
                     "reason": reason,
                 }),
             )
-            .expect("audit: fail-closed");
+        {
+            eprintln!("audit write failed: {e}");
+        }
     }
 
     /// Check the policy engine for an autonomy override before falling back

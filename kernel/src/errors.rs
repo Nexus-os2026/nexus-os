@@ -24,6 +24,8 @@ pub enum AgentError {
     SupervisorError(String),
     #[error("key '{0}' has been destroyed")]
     KeyDestroyed(String),
+    #[error("adversarial challenge failed: {0}")]
+    AdversarialBlock(String),
     #[error("audit failure: {0}")]
     AuditFailure(#[from] AuditError),
 }
@@ -40,6 +42,7 @@ pub fn on_error(error: &AgentError) -> ErrorStrategy {
         AgentError::FuelExhausted
         | AgentError::FuelViolation { .. }
         | AgentError::CapabilityDenied(_)
+        | AgentError::AdversarialBlock(_)
         | AgentError::ApprovalRequired { .. }
         | AgentError::KeyDestroyed(_)
         | AgentError::AuditFailure(_) => ErrorStrategy::Escalate,

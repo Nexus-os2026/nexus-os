@@ -369,9 +369,6 @@ impl SandboxRuntime for WasmtimeSandbox {
         };
 
         // Wrap AgentContext in Rc<RefCell> so host functions can borrow it.
-        // SAFETY: We take ctx by &mut, wrap it temporarily, and unwrap after execution.
-        // The Rc<RefCell<>> never escapes this function — it's dropped with the Store.
-        //
         // We need to move the AgentContext into the Rc temporarily. We swap it out,
         // run the wasm, then swap it back.
         let placeholder = AgentContext::new(ctx.agent_id(), Vec::new(), 0);

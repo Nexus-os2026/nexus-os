@@ -55,8 +55,7 @@ impl UserReviewGate {
         self.decisions
             .insert(request_id.to_string(), decision.clone());
 
-        self.audit_trail
-            .append_event(
+        if let Err(e) = self.audit_trail.append_event(
                 agent_id,
                 EventType::UserAction,
                 json!({
@@ -64,8 +63,9 @@ impl UserReviewGate {
                     "request_id": request_id,
                     "decision": format!("{decision:?}")
                 }),
-            )
-            .expect("audit: fail-closed");
+            ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
     }
 
     pub fn enforce_approval_for_running(

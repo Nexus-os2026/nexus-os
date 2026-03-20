@@ -3,7 +3,10 @@
 pub mod actuators;
 pub mod adaptive_policy;
 pub mod audit;
+pub mod autopilot;
+
 pub mod autonomy;
+pub mod backup;
 pub mod behavioral_profile;
 pub mod capabilities;
 pub mod civilization;
@@ -16,12 +19,15 @@ pub mod config;
 pub mod consciousness;
 pub mod consent;
 pub mod consent_display;
+pub mod crypto;
 pub mod delegation;
 pub mod distributed;
 pub mod dreams;
 pub mod drift_detector;
 pub mod economic_identity;
+pub mod economy;
 pub mod errors;
+pub mod experience;
 pub mod fairness;
 pub mod firewall;
 pub mod fuel_hardening;
@@ -44,17 +50,16 @@ pub mod policy_engine;
 pub mod privacy;
 pub mod protocols;
 pub mod provenance;
+pub mod rate_limit;
 pub mod redaction;
 pub mod release_signing;
 pub mod replay;
 pub mod reputation;
 pub mod sbom;
-// SAFETY EXCEPTION: resource_limiter uses `unsafe` for `pre_exec` + `setrlimit`
-// to impose OS-level limits on child processes.  This is the only unsafe code
-// in the workspace.  See module-level docs for full justification.
 #[allow(unsafe_code)]
 pub mod resource_limiter;
 pub mod safety_supervisor;
+pub mod self_improve;
 pub mod self_rewrite;
 pub mod simulation;
 pub mod speculative;

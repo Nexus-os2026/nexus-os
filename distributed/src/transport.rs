@@ -75,11 +75,11 @@ impl LocalTransport {
     }
 
     pub fn register_node(&self, node_id: Uuid) {
-        let mut reg = self.registered.lock().expect("lock poisoned");
+        let mut reg = self.registered.lock().unwrap_or_else(|p| p.into_inner());
         if !reg.contains(&node_id) {
             reg.push(node_id);
         }
-        let mut inboxes = self.inboxes.lock().expect("lock poisoned");
+        let mut inboxes = self.inboxes.lock().unwrap_or_else(|p| p.into_inner());
         inboxes.entry(node_id).or_default();
     }
 }
@@ -92,7 +92,7 @@ impl Default for LocalTransport {
 
 impl Transport for LocalTransport {
     fn send(&self, msg: Message) -> Result<(), TransportError> {
-        let mut inboxes = self.inboxes.lock().expect("lock poisoned");
+        let mut inboxes = self.inboxes.lock().unwrap_or_else(|p| p.into_inner());
         let inbox = inboxes
             .get_mut(&msg.to)
             .ok_or(TransportError::NodeNotFound(msg.to))?;
@@ -101,7 +101,7 @@ impl Transport for LocalTransport {
     }
 
     fn recv(&self, node_id: Uuid) -> Result<Vec<Message>, TransportError> {
-        let mut inboxes = self.inboxes.lock().expect("lock poisoned");
+        let mut inboxes = self.inboxes.lock().unwrap_or_else(|p| p.into_inner());
         let inbox = inboxes
             .get_mut(&node_id)
             .ok_or(TransportError::NodeNotFound(node_id))?;
@@ -114,7 +114,7 @@ impl Transport for LocalTransport {
         kind: MessageKind,
         payload: Vec<u8>,
     ) -> Result<(), TransportError> {
-        let registered = self.registered.lock().expect("lock poisoned").clone();
+        let registered = self.registered.lock().unwrap_or_else(|p| p.into_inner()).clone();
         for node_id in registered {
             if node_id != from {
                 self.send(Message {

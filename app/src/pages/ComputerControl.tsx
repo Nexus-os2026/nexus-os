@@ -6,6 +6,12 @@ import {
   computerControlStatus,
   computerControlToggle,
   getInputControlStatus,
+  omniscienceDisable,
+  omniscienceEnable,
+  omniscienceExecuteAction,
+  omniscienceGetAppContext,
+  omniscienceGetPredictions,
+  omniscienceGetScreenContext,
   startComputerAction,
   stopComputerAction,
 } from "../api/backend";
@@ -26,6 +32,16 @@ export default function ComputerControl(): JSX.Element {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("Open the target app and summarize the current state.");
   const [message, setMessage] = useState<string | null>(null);
+
+  // Omniscience state
+  const [omniEnabled, setOmniEnabled] = useState(false);
+  const [omniLoading, setOmniLoading] = useState(false);
+  const [omniScreenCtx, setOmniScreenCtx] = useState<string | null>(null);
+  const [omniPredictions, setOmniPredictions] = useState<string | null>(null);
+  const [omniAppName, setOmniAppName] = useState("");
+  const [omniAppCtx, setOmniAppCtx] = useState<string | null>(null);
+  const [omniActionInput, setOmniActionInput] = useState('{"type":"click","x":100,"y":200}');
+  const [omniActionResult, setOmniActionResult] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -114,6 +130,82 @@ export default function ComputerControl(): JSX.Element {
       setMessage(error instanceof Error ? error.message : String(error));
     }
   }, [prompt, refresh]);
+
+  // --- Omniscience callbacks ---
+
+  const toggleOmniscience = useCallback(async () => {
+    setOmniLoading(true);
+    try {
+      if (omniEnabled) {
+        await omniscienceDisable();
+        setOmniEnabled(false);
+        setOmniScreenCtx(null);
+        setOmniPredictions(null);
+        setMessage("Omniscience disabled.");
+      } else {
+        await omniscienceEnable(5000);
+        setOmniEnabled(true);
+        setMessage("Omniscience enabled.");
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setOmniLoading(false);
+    }
+  }, [omniEnabled]);
+
+  const fetchOmniScreenCtx = useCallback(async () => {
+    try {
+      const ctx = await omniscienceGetScreenContext();
+      setOmniScreenCtx(typeof ctx === "string" ? ctx : JSON.stringify(ctx, null, 2));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, []);
+
+  const fetchOmniPredictions = useCallback(async () => {
+    try {
+      const preds = await omniscienceGetPredictions();
+      setOmniPredictions(typeof preds === "string" ? preds : JSON.stringify(preds, null, 2));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, []);
+
+  const fetchOmniAppCtx = useCallback(async () => {
+    if (!omniAppName.trim()) {
+      setMessage("Enter an app name first.");
+      return;
+    }
+    try {
+      const ctx = await omniscienceGetAppContext(omniAppName.trim());
+      setOmniAppCtx(typeof ctx === "string" ? ctx : JSON.stringify(ctx, null, 2));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, [omniAppName]);
+
+  const executeOmniAction = useCallback(async () => {
+    try {
+      const parsed: unknown = JSON.parse(omniActionInput);
+      const result = await omniscienceExecuteAction(parsed);
+      setOmniActionResult(typeof result === "string" ? result : JSON.stringify(result, null, 2));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, [omniActionInput]);
+
+  // Auto-refresh omniscience data while enabled
+  useEffect(() => {
+    if (!omniEnabled) return;
+    void fetchOmniScreenCtx();
+    void fetchOmniPredictions();
+    const interval = window.setInterval(() => {
+      void fetchOmniScreenCtx();
+      void fetchOmniPredictions();
+    }, 6000);
+    return () => window.clearInterval(interval);
+  }, [omniEnabled, fetchOmniScreenCtx, fetchOmniPredictions]);
 
   return (
     <section className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6">
@@ -245,6 +337,119 @@ export default function ComputerControl(): JSX.Element {
           </div>
         </section>
       </div>
+
+      {/* ── Omniscience ──────────────────────────────────────────── */}
+      <section className="nexus-panel rounded-3xl p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-violet-300/70">Omniscience</p>
+            <h3 className="nexus-display mt-2 text-2xl text-cyan-50">
+              Omniscience: {omniEnabled ? "ON" : "OFF"}
+            </h3>
+            <p className="mt-2 text-sm text-cyan-100/65">
+              Screen-aware context engine. Captures screen context, predicts user intent, and executes actions.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={omniLoading}
+            onClick={() => void toggleOmniscience()}
+            className={`rounded-full border px-4 py-2 text-sm ${
+              omniEnabled
+                ? "border-rose-400/30 bg-rose-500/10 text-rose-100"
+                : "border-violet-400/30 bg-violet-500/10 text-violet-100"
+            }`}
+          >
+            {omniLoading ? "..." : omniEnabled ? "Disable" : "Enable"}
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-2">
+          {/* Screen Context */}
+          <div className="rounded-2xl border border-violet-500/15 bg-slate-950/50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs uppercase tracking-[0.18em] text-violet-300/50">Screen Context</p>
+              <button
+                type="button"
+                onClick={() => void fetchOmniScreenCtx()}
+                className="rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1 text-xs text-violet-200"
+              >
+                Refresh
+              </button>
+            </div>
+            <pre className="mt-3 max-h-[200px] overflow-auto whitespace-pre-wrap text-xs text-cyan-100/65">
+              {omniScreenCtx ?? "No screen context captured yet."}
+            </pre>
+          </div>
+
+          {/* Intent Predictions */}
+          <div className="rounded-2xl border border-violet-500/15 bg-slate-950/50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs uppercase tracking-[0.18em] text-violet-300/50">Intent Predictions</p>
+              <button
+                type="button"
+                onClick={() => void fetchOmniPredictions()}
+                className="rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1 text-xs text-violet-200"
+              >
+                Refresh
+              </button>
+            </div>
+            <pre className="mt-3 max-h-[200px] overflow-auto whitespace-pre-wrap text-xs text-cyan-100/65">
+              {omniPredictions ?? "No predictions available."}
+            </pre>
+          </div>
+
+          {/* App Context */}
+          <div className="rounded-2xl border border-violet-500/15 bg-slate-950/50 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-violet-300/50">App Context</p>
+            <div className="mt-3 flex gap-2">
+              <input
+                type="text"
+                value={omniAppName}
+                onChange={(e) => setOmniAppName(e.target.value)}
+                placeholder="App name (e.g. Firefox)"
+                className="flex-1 rounded-xl border border-violet-500/20 bg-slate-950/70 px-3 py-2 text-sm text-cyan-50 placeholder:text-cyan-100/30"
+              />
+              <button
+                type="button"
+                onClick={() => void fetchOmniAppCtx()}
+                className="rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-xs text-violet-200"
+              >
+                Get Context
+              </button>
+            </div>
+            <pre className="mt-3 max-h-[200px] overflow-auto whitespace-pre-wrap text-xs text-cyan-100/65">
+              {omniAppCtx ?? "Enter an app name and click Get Context."}
+            </pre>
+          </div>
+
+          {/* Execute Action */}
+          <div className="rounded-2xl border border-violet-500/15 bg-slate-950/50 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-violet-300/50">Execute Action</p>
+            <textarea
+              value={omniActionInput}
+              onChange={(e) => setOmniActionInput(e.target.value)}
+              rows={3}
+              className="mt-3 w-full rounded-xl border border-violet-500/20 bg-slate-950/70 px-3 py-2 text-sm text-cyan-50 font-mono"
+              placeholder='{"type":"click","x":100,"y":200}'
+            />
+            <div className="mt-2 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void executeOmniAction()}
+                className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100"
+              >
+                Execute
+              </button>
+            </div>
+            {omniActionResult ? (
+              <pre className="mt-3 max-h-[150px] overflow-auto whitespace-pre-wrap text-xs text-cyan-100/65">
+                {omniActionResult}
+              </pre>
+            ) : null}
+          </div>
+        </div>
+      </section>
     </section>
   );
 }

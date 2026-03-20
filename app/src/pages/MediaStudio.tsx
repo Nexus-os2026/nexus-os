@@ -1,4 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { Dot } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   analyzeMediaFile,
@@ -202,7 +203,7 @@ export default function MediaStudio(): JSX.Element {
                   >
                     <strong className="block text-sm text-cyan-50">{entry.name}</strong>
                     <span className="mt-1 block text-xs text-cyan-100/55">
-                      {detectMediaType(entry.path)} • {entry.size} bytes
+                      {detectMediaType(entry.path)} <Dot className="inline-block w-4 h-4 align-middle" /> {entry.size} bytes
                     </span>
                     <span className="mt-1 block text-xs text-cyan-100/45">
                       {new Date(entry.modified).toLocaleString()}

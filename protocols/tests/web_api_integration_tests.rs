@@ -38,7 +38,7 @@ fn test_manifest(name: &str, caps: Vec<&str>, fuel: u64) -> AgentManifest {
 }
 
 fn setup_gateway() -> (axum::Router, GatewayState) {
-    let state = GatewayState::new("integration-test").with_llm_provider(Box::new(
+    let state = GatewayState::new("integration-test").unwrap().with_llm_provider(Box::new(
         nexus_connectors_llm::providers::mock::MockProvider::new(),
     ));
     state.register_agent(
@@ -54,7 +54,7 @@ fn setup_gateway() -> (axum::Router, GatewayState) {
 }
 
 fn auth_header(state: &GatewayState) -> String {
-    let token = state.issue_token(&[], 3600);
+    let token = state.issue_token(&[], 3600).unwrap();
     format!("Bearer {token}")
 }
 
@@ -414,12 +414,12 @@ async fn all_rest_endpoints_require_jwt_auth() {
 
 #[tokio::test]
 async fn websocket_connects_and_receives_events() {
-    let state = GatewayState::new("ws-test");
+    let state = GatewayState::new("ws-test").unwrap();
     state.register_agent(
         test_manifest("ws-agent", vec!["web.search"], 10_000),
         "https://example.com",
     );
-    let token = state.issue_token(&[], 3600);
+    let token = state.issue_token(&[], 3600).unwrap();
     let broadcast_state = state.clone();
     let addr = start_server(state).await;
 
@@ -574,7 +574,7 @@ async fn metrics_endpoint_returns_prometheus_format() {
 
 #[tokio::test]
 async fn graceful_shutdown_completes_within_5_seconds() {
-    let state = GatewayState::new("shutdown-test");
+    let state = GatewayState::new("shutdown-test").unwrap();
 
     // Register multiple agents to make shutdown do real work
     for i in 0..5 {

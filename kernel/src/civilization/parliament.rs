@@ -230,7 +230,7 @@ impl Parliament {
             .proposals
             .iter_mut()
             .find(|p| p.id == proposal_id)
-            .expect("proposal exists");
+            .ok_or(ParliamentError::ProposalNotFound(proposal_id))?;
         proposal.status = new_status.clone();
 
         if new_status == ProposalStatus::Passed {

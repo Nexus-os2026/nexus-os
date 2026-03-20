@@ -1,0 +1,56 @@
+{{- if .Values.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "nexus-os.fullname" . }}-backup
+  labels:
+    {{- include "nexus-os.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ include "nexus-os.serviceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+                  BACKUP_FILE="/tmp/nexus-backup-${TIMESTAMP}.tar.gz"
+                  tar czf "${BACKUP_FILE}" -C /data .
+                  echo "Backup created: ${BACKUP_FILE}"
+                  {{- if .Values.backup.s3Bucket }}
+                  # Upload to S3 (requires AWS CLI or compatible tool in image)
+                  echo "Upload target: s3://{{ .Values.backup.s3Bucket }}/backups/${TIMESTAMP}/"
+                  {{- end }}
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: {{ include "nexus-os.fullname" . }}
+            - name: tmp
+              emptyDir: {}
+{{- end }}

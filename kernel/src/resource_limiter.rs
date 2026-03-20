@@ -6,13 +6,12 @@
 //! alone cannot address (fuel meters instruction count inside WASM, but
 //! native subprocesses bypass the WASM sandbox entirely).
 //!
-//! # Safety exception
+//! # Safety
 //!
-//! This module contains the **only** `unsafe` code in the workspace.
-//! `CommandExt::pre_exec` requires an `unsafe` block because the closure
-//! runs between `fork()` and `exec()` in the child process — a
-//! signal-unsafe context.  The closure only calls `libc::setrlimit` and
-//! `libc::setpgid`, both of which are async-signal-safe per POSIX.
+//! `CommandExt::pre_exec` is an inherently `unsafe` API because the
+//! closure runs between `fork()` and `exec()` in a signal-unsafe
+//! context.  The closure body uses only safe `nix` wrappers around
+//! async-signal-safe POSIX functions (`setrlimit`, `setpgid`).
 //! The parent process is never affected.
 
 use serde::{Deserialize, Serialize};
@@ -97,6 +96,8 @@ impl ResourceLimiter {
     /// On non-Linux platforms this is a no-op.
     #[cfg(target_os = "linux")]
     pub fn apply_to_command(&self, cmd: &mut std::process::Command) {
+        use nix::sys::resource::{setrlimit, Resource};
+        use nix::unistd::{setpgid, Pid};
         use std::os::unix::process::CommandExt;
 
         let mem = self.limits.max_memory_bytes;
@@ -104,53 +105,31 @@ impl ResourceLimiter {
         let nproc = self.limits.max_processes as u64;
         let fsize = self.limits.max_file_size_bytes;
 
-        // SAFETY: The closure runs in the child process between fork() and
-        // exec().  It only calls async-signal-safe POSIX functions:
-        // `setrlimit` and `setpgid`.  No heap allocation, no locks, no
-        // shared mutable state with the parent.
+        // This unsafe block is irreducible: CommandExt::pre_exec is an unsafe fn in Rust's stdlib.
+        // The closure body uses only safe nix wrappers (setrlimit, setpgid).
+        // See: https://doc.rust-lang.org/std/os/unix/process/trait.CommandExt.html#tymethod.pre_exec
         unsafe {
             cmd.pre_exec(move || {
                 // Put the child in its own process group so we can kill the
-                // entire tree later with kill(-pgid, SIGKILL).
-                if libc::setpgid(0, 0) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
+                // entire tree later with killpg.
+                setpgid(Pid::from_raw(0), Pid::from_raw(0))
+                    .map_err(std::io::Error::other)?;
 
                 // RLIMIT_AS — virtual address space (memory).
-                let rlim = libc::rlimit {
-                    rlim_cur: mem,
-                    rlim_max: mem,
-                };
-                if libc::setrlimit(libc::RLIMIT_AS, &rlim) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
+                setrlimit(Resource::RLIMIT_AS, mem, mem)
+                    .map_err(std::io::Error::other)?;
 
                 // RLIMIT_CPU — CPU time in seconds.
-                let rlim = libc::rlimit {
-                    rlim_cur: cpu,
-                    rlim_max: cpu,
-                };
-                if libc::setrlimit(libc::RLIMIT_CPU, &rlim) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
+                setrlimit(Resource::RLIMIT_CPU, cpu, cpu)
+                    .map_err(std::io::Error::other)?;
 
                 // RLIMIT_NPROC — max child processes (fork-bomb defense).
-                let rlim = libc::rlimit {
-                    rlim_cur: nproc,
-                    rlim_max: nproc,
-                };
-                if libc::setrlimit(libc::RLIMIT_NPROC, &rlim) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
+                setrlimit(Resource::RLIMIT_NPROC, nproc, nproc)
+                    .map_err(std::io::Error::other)?;
 
                 // RLIMIT_FSIZE — max file size a process can create.
-                let rlim = libc::rlimit {
-                    rlim_cur: fsize,
-                    rlim_max: fsize,
-                };
-                if libc::setrlimit(libc::RLIMIT_FSIZE, &rlim) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
+                setrlimit(Resource::RLIMIT_FSIZE, fsize, fsize)
+                    .map_err(std::io::Error::other)?;
 
                 Ok(())
             });
@@ -170,27 +149,19 @@ impl ResourceLimiter {
     /// On other platforms, kills only the direct process.
     #[cfg(target_os = "linux")]
     pub fn kill_process_tree(pid: u32) -> Result<(), ResourceLimitError> {
-        // SAFETY: `libc::kill` is a thin wrapper around the kill(2) syscall.
-        // Passing `-pid` targets the entire process group.  The pid is a
-        // non-zero value obtained from `Child::id()`.
-        let ret = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
-        if ret != 0 {
-            let err = std::io::Error::last_os_error();
-            // ESRCH means the process (group) already exited — not an error.
-            if err.raw_os_error() == Some(libc::ESRCH) {
-                return Ok(());
-            }
-            return Err(ResourceLimitError::ProcessGroupFailed(err.to_string()));
+        use nix::sys::signal::{killpg, Signal};
+        use nix::unistd::Pid;
+
+        match killpg(Pid::from_raw(pid as i32), Signal::SIGKILL) {
+            Ok(()) => Ok(()),
+            Err(nix::errno::Errno::ESRCH) => Ok(()), // already exited
+            Err(e) => Err(ResourceLimitError::ProcessGroupFailed(e.to_string())),
         }
-        Ok(())
     }
 
     /// Non-Linux fallback — kill direct process only.
     #[cfg(not(target_os = "linux"))]
     pub fn kill_process_tree(pid: u32) -> Result<(), ResourceLimitError> {
-        // Best-effort: send kill to the direct PID only.
-        // On Windows this would need TerminateProcess; on macOS, killpg.
-        // For now, use the standard library's Child::kill() from the caller.
         let _ = pid;
         Ok(())
     }
@@ -250,13 +221,10 @@ mod tests {
 
     #[test]
     fn apply_to_command_no_spawn_does_not_panic() {
-        // Verify apply_to_command completes without panicking even
-        // when the command is never spawned.
         let limiter = ResourceLimiter::default();
         let mut cmd = std::process::Command::new("echo");
         cmd.arg("test");
         limiter.apply_to_command(&mut cmd);
-        // No spawn — just verify no panic from applying limits.
     }
 
     #[cfg(target_os = "linux")]
@@ -265,15 +233,12 @@ mod tests {
         let limiter = ResourceLimiter::default();
         let mut cmd = std::process::Command::new("true");
         limiter.apply_to_command(&mut cmd);
-        // The pre_exec hook is installed; verify the command still spawns.
         let status = cmd.status().expect("failed to run `true`");
         assert!(status.success());
     }
 
     #[test]
     fn kill_process_tree_nonexistent_pid() {
-        // PID 999_999_999 almost certainly does not exist.
-        // On Linux ESRCH is treated as Ok; on other platforms this is a no-op.
         let result = ResourceLimiter::kill_process_tree(999_999_999);
         assert!(result.is_ok());
     }
@@ -281,9 +246,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn kill_nonexistent_process_group_is_ok() {
-        // PID 2_000_000_000 almost certainly does not exist.
         let result = ResourceLimiter::kill_process_tree(2_000_000_000);
-        // Should succeed because ESRCH is treated as Ok.
         assert!(result.is_ok());
     }
 
@@ -312,19 +275,14 @@ mod tests {
     #[test]
     fn limits_are_reasonable() {
         let limits = ResourceLimits::default();
-        // Memory: between 100 MB and 2 GB
         assert!(limits.max_memory_bytes >= 100 * 1024 * 1024);
         assert!(limits.max_memory_bytes <= 2 * 1024 * 1024 * 1024);
-        // CPU: between 10 and 300 seconds
         assert!(limits.max_cpu_seconds >= 10);
         assert!(limits.max_cpu_seconds <= 300);
-        // Processes: between 100 and 10_000 (per-UID, needs headroom)
         assert!(limits.max_processes >= 100);
         assert!(limits.max_processes <= 10_000);
-        // File size: between 10 MB and 1 GB
         assert!(limits.max_file_size_bytes >= 10 * 1024 * 1024);
         assert!(limits.max_file_size_bytes <= 1024 * 1024 * 1024);
-        // Timeout: between 10 and 300 seconds
         assert!(limits.timeout_seconds >= 10);
         assert!(limits.timeout_seconds <= 300);
     }
@@ -332,10 +290,8 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn memory_limit_enforced_on_child() {
-        // Spawn a child that tries to allocate more than the limit.
-        // With RLIMIT_AS = 32 MB, a 64 MB allocation should fail.
         let limits = ResourceLimits {
-            max_memory_bytes: 32 * 1024 * 1024, // 32 MB
+            max_memory_bytes: 32 * 1024 * 1024,
             max_cpu_seconds: 5,
             max_processes: 10,
             max_file_size_bytes: 100 * 1024 * 1024,
@@ -345,15 +301,10 @@ mod tests {
         let mut cmd = std::process::Command::new("sh");
         cmd.args([
             "-c",
-            // Try to allocate ~64 MB with dd reading from /dev/zero.
-            // Under a 32 MB RLIMIT_AS this should fail.
             "head -c 67108864 /dev/zero | cat > /dev/null",
         ]);
         limiter.apply_to_command(&mut cmd);
         let status = cmd.status().expect("failed to spawn");
-        // The child should fail (non-zero exit) due to memory limit.
-        // Note: this is best-effort — some shells handle the signal gracefully.
-        // We mainly verify it doesn't hang or panic.
         let _ = status;
     }
 
@@ -372,18 +323,17 @@ mod tests {
         let mut child = cmd.spawn().expect("failed to spawn sleep");
         let pid = child.id();
 
-        // Give the child a moment to start.
         std::thread::sleep(std::time::Duration::from_millis(50));
 
-        // Kill the process tree.
         let result = ResourceLimiter::kill_process_tree(pid);
         assert!(result.is_ok());
 
-        // Reap the child to avoid zombies.
         let _ = child.wait();
 
-        // Sending signal 0 checks if process exists.
-        let exists = unsafe { libc::kill(pid as i32, 0) };
-        assert_ne!(exists, 0, "process should be dead");
+        // Verify process is dead using safe nix API.
+        use nix::sys::signal::kill;
+        use nix::unistd::Pid;
+        let probe = kill(Pid::from_raw(pid as i32), None);
+        assert!(probe.is_err(), "process should be dead");
     }
 }

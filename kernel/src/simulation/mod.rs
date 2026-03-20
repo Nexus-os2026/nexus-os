@@ -13,9 +13,10 @@ pub use report::{
     generate_prediction_report, Coalition, Finding, OpinionShift, PredictionReport, TurningPoint,
 };
 pub use runtime::{
-    compare_reports, estimate_simulation_fuel, evolve_simulation, run_parallel_simulations,
-    MetaSimulationAnalysis, OptimalSimConfig, PersistedSimulationState, SimulationControl,
-    SimulationLiveEvent, SimulationObserver, SimulationProgress, SimulationRuntime,
+    compare_reports, create_world_nonblocking, estimate_simulation_fuel, evolve_simulation,
+    run_parallel_simulations, MetaSimulationAnalysis, OptimalSimConfig, PersistedSimulationState,
+    SimulationControl, SimulationLiveEvent, SimulationObserver, SimulationProgress,
+    SimulationRuntime,
 };
 pub use seed::{parse_seed, SeedEntity, SeedRelationship, SeedVariable, WorldSeed};
 pub use timeline::{Timeline, WorldEvent, WorldTick};

@@ -90,10 +90,10 @@ pub fn create_test_jwt(
     key_manager: &nexus_kernel::hardware_security::KeyManager,
     token_mgr: &TokenManager,
     ttl: u64,
-) -> String {
+) -> Result<String, String> {
     token_mgr
         .issue_token(identity, key_manager, &[], ttl, None)
-        .expect("test JWT signing should not fail")
+        .map_err(|e| format!("JWT signing failed: {e}"))
 }
 
 #[derive(Debug)]
@@ -329,6 +329,10 @@ struct GatewayInner {
     rate_limiter: RateLimiter,
     /// Map agent name → owner (JWT subject) for authorization checks.
     agent_owners: HashMap<String, String>,
+    /// Whether the server has completed initialization and is ready to serve.
+    ready: bool,
+    /// Instance identifier for HA deployments (defaults to random UUID).
+    instance_id: String,
 }
 
 impl std::fmt::Debug for GatewayInner {
@@ -359,7 +363,7 @@ impl GatewayState {
     /// A fresh Ed25519 keypair is generated for the gateway itself, used to
     /// sign and verify all JWTs. The old `jwt_secret` parameter is accepted
     /// for API compatibility but is **ignored** — signing is now asymmetric.
-    pub fn new(_jwt_secret: impl Into<String>) -> Self {
+    pub fn new(_jwt_secret: impl Into<String>) -> Result<Self, String> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -369,11 +373,11 @@ impl GatewayState {
         let gateway_id = Uuid::new_v4();
         let gateway_identity =
             AgentIdentity::generate(gateway_id, identity_manager.key_manager_mut())
-                .expect("gateway identity generation must succeed");
+                .map_err(|e| format!("gateway identity generation failed: {e}"))?;
         let token_manager = TokenManager::new("nexus-gateway", "nexus-agents");
         let (ws_tx, _) = broadcast::channel(WS_BROADCAST_CAPACITY);
 
-        Self {
+        Ok(Self {
             inner: Arc::new(Mutex::new(GatewayInner {
                 agent_cards: HashMap::new(),
                 mcp_server: McpServer::new(),
@@ -394,8 +398,29 @@ impl GatewayState {
                 llm_provider: None,
                 rate_limiter: RateLimiter::new(),
                 agent_owners: HashMap::new(),
+                ready: false,
+                instance_id: std::env::var("HOSTNAME")
+                    .unwrap_or_else(|_| Uuid::new_v4().to_string()),
             })),
-        }
+        })
+    }
+
+    /// Mark the gateway as ready to receive traffic (for readiness probes).
+    pub fn set_ready(&self) {
+        let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        inner.ready = true;
+    }
+
+    /// Returns true if the gateway has completed initialization.
+    pub fn is_ready(&self) -> bool {
+        let inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        inner.ready
+    }
+
+    /// Returns the instance identifier for this server node.
+    pub fn instance_id(&self) -> String {
+        let inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        inner.instance_id.clone()
     }
 
     /// Attach an LLM provider for real inference on Anthropic/OpenAI endpoints.
@@ -459,7 +484,7 @@ impl GatewayState {
     }
 
     /// Issue an EdDSA-signed JWT for testing or programmatic use.
-    pub fn issue_token(&self, scopes: &[String], ttl: u64) -> String {
+    pub fn issue_token(&self, scopes: &[String], ttl: u64) -> Result<String, String> {
         let inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         inner
             .token_manager
@@ -470,7 +495,7 @@ impl GatewayState {
                 ttl,
                 None,
             )
-            .expect("gateway token signing must succeed")
+            .map_err(|e| format!("gateway token signing failed: {e}"))
     }
 
     /// Return the JWKS JSON for OIDC discovery.
@@ -578,10 +603,18 @@ pub fn build_router(state: GatewayState) -> Router {
     //   - unset → default localhost origins for Tauri + dev servers
     let cors = {
         let default_origins: Vec<axum::http::HeaderValue> = vec![
-            "http://localhost:1420".parse().unwrap(),
-            "http://localhost:3000".parse().unwrap(),
-            "http://127.0.0.1:1420".parse().unwrap(),
-            "tauri://localhost".parse().unwrap(),
+            "http://localhost:1420"
+                .parse()
+                .unwrap_or_else(|_| axum::http::HeaderValue::from_static("http://localhost:1420")),
+            "http://localhost:3000"
+                .parse()
+                .unwrap_or_else(|_| axum::http::HeaderValue::from_static("http://localhost:3000")),
+            "http://127.0.0.1:1420"
+                .parse()
+                .unwrap_or_else(|_| axum::http::HeaderValue::from_static("http://127.0.0.1:1420")),
+            "tauri://localhost"
+                .parse()
+                .unwrap_or_else(|_| axum::http::HeaderValue::from_static("tauri://localhost")),
         ];
 
         let origin_layer = match std::env::var("NEXUS_CORS_ORIGINS").ok().as_deref() {
@@ -672,8 +705,9 @@ pub fn build_router(state: GatewayState) -> Router {
         .route("/mcp/tools/list", get(mcp_tool_list))
         // Auth / OIDC discovery
         .route("/auth/jwks", get(auth_jwks))
-        // Health & Metrics
+        // Health, readiness & Metrics
         .route("/health", get(health_check))
+        .route("/ready", get(readiness_check))
         .route("/metrics", get(metrics_endpoint))
         // WebSocket event stream (JWT via query param)
         .route("/ws", get(ws_upgrade))
@@ -892,9 +926,32 @@ async fn health_check(State(state): State<GatewayState>) -> impl IntoResponse {
         })
     })
     .await
-    .expect("spawn_blocking panicked");
+    .unwrap_or_else(|e| serde_json::json!({"error": format!("internal error: {e}")}));
 
     Json(result)
+}
+
+/// `GET /ready` — Kubernetes readiness probe.
+///
+/// Returns 200 when the server has completed initialization and can serve
+/// traffic.  Returns 503 while still starting up or during shutdown.
+async fn readiness_check(State(state): State<GatewayState>) -> impl IntoResponse {
+    let ready = {
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
+        inner.ready
+    };
+
+    if ready {
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({ "status": "ready" })),
+        )
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "status": "not_ready" })),
+        )
+    }
 }
 
 /// `GET /metrics` — Prometheus text exposition format.
@@ -917,7 +974,7 @@ async fn metrics_endpoint(State(state): State<GatewayState>) -> impl IntoRespons
         }
     })
     .await
-    .expect("spawn_blocking panicked");
+    .unwrap_or_else(|e| format!("# internal error: {e}\n"));
 
     (
         StatusCode::OK,
@@ -953,7 +1010,7 @@ async fn a2a_agent_card(
         }
     })
     .await
-    .expect("spawn_blocking panicked");
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?;
 
     result.map(Json)
 }
@@ -962,7 +1019,7 @@ async fn a2a_agent_card(
 async fn auth_jwks(State(state): State<GatewayState>) -> impl IntoResponse {
     let result = tokio::task::spawn_blocking(move || state.jwks())
         .await
-        .expect("spawn_blocking panicked");
+        .unwrap_or_else(|e| serde_json::json!({"error": format!("internal error: {e}")}));
     Json(result)
 }
 
@@ -1042,7 +1099,7 @@ async fn a2a_task_submit(
         }))
     })
     .await
-    .expect("spawn_blocking panicked");
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?;
 
     result.map(Json)
 }
@@ -1076,7 +1133,7 @@ async fn a2a_task_status(
         }
     })
     .await
-    .expect("spawn_blocking panicked");
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?;
 
     result.map(Json)
 }
@@ -1113,7 +1170,7 @@ async fn mcp_tool_list(
         }
     })
     .await
-    .expect("spawn_blocking panicked");
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?;
 
     result.map(Json)
 }
@@ -1178,7 +1235,7 @@ async fn mcp_tool_invoke(
         }
     })
     .await
-    .expect("spawn_blocking panicked");
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?;
 
     result.map(Json)
 }
@@ -1206,7 +1263,7 @@ async fn api_list_agents(State(state): State<GatewayState>) -> impl IntoResponse
         serde_json::json!({ "agents": rows })
     })
     .await
-    .expect("spawn_blocking panicked");
+    .unwrap_or_else(|e| serde_json::json!({"error": format!("internal error: {e}")}));
 
     Json(result)
 }
@@ -1275,7 +1332,7 @@ async fn api_create_agent(
         })))
     })
     .await
-    .expect("spawn_blocking panicked");
+    .unwrap_or_else(|e| Err(error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}"))));
 
     match result {
         Ok(v) => (StatusCode::CREATED, v).into_response(),
@@ -1312,7 +1369,7 @@ async fn api_start_agent(State(state): State<GatewayState>, Path(id): Path<Strin
         ))
     })
     .await
-    .expect("spawn_blocking panicked")
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
 }
 
 /// `POST /api/agents/:id/stop` — stop an agent.
@@ -1344,7 +1401,7 @@ async fn api_stop_agent(State(state): State<GatewayState>, Path(id): Path<String
         ))
     })
     .await
-    .expect("spawn_blocking panicked")
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
 }
 
 /// `GET /api/agents/:id/status` — get single agent status.
@@ -1368,7 +1425,7 @@ async fn api_agent_status(State(state): State<GatewayState>, Path(id): Path<Stri
         })))
     })
     .await
-    .expect("spawn_blocking panicked")
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
 }
 
 // ── Permissions ─────────────────────────────────────────────────────────────
@@ -1394,7 +1451,7 @@ async fn api_get_permissions(
             .map_err(|e| error_json(StatusCode::NOT_FOUND, e.to_string()))
     })
     .await
-    .expect("spawn_blocking panicked")
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
 }
 
 /// `PUT /api/agents/:id/permissions` — update a single permission.
@@ -1426,7 +1483,7 @@ async fn api_update_permission(
         Ok(Json(serde_json::json!({"status": "updated"})))
     })
     .await
-    .expect("spawn_blocking panicked")
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
 }
 
 /// `POST /api/agents/:id/permissions/bulk` — bulk update permissions.
@@ -1466,7 +1523,7 @@ async fn api_bulk_update_permissions(
         ))
     })
     .await
-    .expect("spawn_blocking panicked")
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
 }
 
 // ── Audit ───────────────────────────────────────────────────────────────────
@@ -1525,7 +1582,7 @@ async fn api_audit_events(
         })))
     })
     .await
-    .expect("spawn_blocking panicked")
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
 }
 
 /// `GET /api/audit/events/:id` — get a single audit event by ID.
@@ -1554,7 +1611,7 @@ async fn api_audit_event_by_id(
         })))
     })
     .await
-    .expect("spawn_blocking panicked")
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
 }
 
 // ── Compliance ──────────────────────────────────────────────────────────────
@@ -1606,7 +1663,7 @@ async fn api_compliance_status(State(state): State<GatewayState>) -> Json<serde_
             .unwrap_or_else(|e| serde_json::json!({"error": format!("serialization error: {e}")}))
     })
     .await
-    .expect("spawn_blocking panicked");
+    .unwrap_or_else(|e| serde_json::json!({"error": format!("internal error: {e}")}));
 
     Json(result)
 }
@@ -1641,7 +1698,7 @@ async fn api_compliance_report(
         Ok(Json(val))
     })
     .await
-    .expect("spawn_blocking panicked")
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
 }
 
 /// `POST /api/compliance/erase/:agent_id` — GDPR Article 17 cryptographic erasure.
@@ -1694,7 +1751,7 @@ async fn api_compliance_erase(
         Ok(Json(val))
     })
     .await
-    .expect("spawn_blocking panicked")
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
 }
 
 // ── Marketplace ─────────────────────────────────────────────────────────────
@@ -1734,7 +1791,7 @@ async fn api_marketplace_search(Query(query): Query<MarketplaceSearchQuery>) -> 
         Ok(Json(serde_json::json!({ "results": agents })))
     })
     .await
-    .expect("spawn_blocking panicked")
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
 }
 
 /// `GET /api/marketplace/agents/:id` — get marketplace agent detail.
@@ -1753,7 +1810,7 @@ async fn api_marketplace_agent(Path(id): Path<String>) -> ApiResult {
         Ok(Json(val))
     })
     .await
-    .expect("spawn_blocking panicked")
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
 }
 
 /// `POST /api/marketplace/install/:id` — install a marketplace agent.
@@ -1781,7 +1838,7 @@ async fn api_marketplace_install(
         })))
     })
     .await
-    .expect("spawn_blocking panicked");
+    .unwrap_or_else(|e| Err(error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}"))));
 
     match result {
         Ok(v) => (StatusCode::CREATED, v).into_response(),
@@ -1810,7 +1867,7 @@ async fn api_identity_list(State(state): State<GatewayState>) -> Json<serde_json
         serde_json::json!({ "identities": rows })
     })
     .await
-    .expect("spawn_blocking panicked");
+    .unwrap_or_else(|e| serde_json::json!({"error": format!("internal error: {e}")}));
 
     Json(result)
 }
@@ -1832,7 +1889,7 @@ async fn api_identity_get(State(state): State<GatewayState>, Path(id): Path<Stri
         })))
     })
     .await
-    .expect("spawn_blocking panicked")
+    .map_err(|e| error_json(StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {e}")))?
 }
 
 // ── Firewall ────────────────────────────────────────────────────────────────
@@ -1857,7 +1914,7 @@ async fn api_firewall_status() -> Json<serde_json::Value> {
         })
     })
     .await
-    .expect("spawn_blocking panicked");
+    .unwrap_or_else(|e| serde_json::json!({"error": format!("internal error: {e}")}));
 
     Json(result)
 }
@@ -2137,7 +2194,7 @@ async fn anthropic_messages(
         }
     })
     .await
-    .expect("spawn_blocking panicked");
+    .unwrap_or_else(|e| Err(format!("internal error: {e}")));
 
     // Return error if no provider or provider failed
     let result = match result {
@@ -2354,7 +2411,7 @@ async fn openai_chat_completions(
         }
     })
     .await
-    .expect("spawn_blocking panicked");
+    .unwrap_or_else(|e| Err(format!("internal error: {e}")));
 
     // Return error if no provider or provider failed
     let result = match result {
@@ -2587,7 +2644,7 @@ mod tests {
     }
 
     fn setup_gateway() -> (Router, GatewayState) {
-        let state = GatewayState::new("ignored").with_llm_provider(Box::new(
+        let state = GatewayState::new("ignored").unwrap().with_llm_provider(Box::new(
             nexus_connectors_llm::providers::mock::MockProvider::new(),
         ));
         state.register_agent(
@@ -2599,13 +2656,13 @@ mod tests {
     }
 
     fn auth_header_for(state: &GatewayState) -> String {
-        let token = state.issue_token(&[], 3600);
+        let token = state.issue_token(&[], 3600).unwrap();
         format!("Bearer {token}")
     }
 
     /// Return a valid x-api-key JWT for Anthropic/OpenAI endpoint tests.
     fn api_key_for(state: &GatewayState) -> String {
-        state.issue_token(&[], 3600)
+        state.issue_token(&[], 3600).unwrap()
     }
 
     async fn body_to_json(body: Body) -> serde_json::Value {
@@ -2802,7 +2859,7 @@ mod tests {
 
     #[tokio::test]
     async fn task_status_lookup() {
-        let state = GatewayState::new("ignored");
+        let state = GatewayState::new("ignored").unwrap();
         state.register_agent(
             test_manifest("test-agent", vec!["web.search"], 10_000),
             "https://example.com",
@@ -3365,7 +3422,7 @@ mod tests {
 
     #[tokio::test]
     async fn ws_broadcast_delivers_event() {
-        let state = GatewayState::new("ignored");
+        let state = GatewayState::new("ignored").unwrap();
         let mut rx = state.subscribe();
 
         let agent_id = Uuid::new_v4();
@@ -3383,7 +3440,7 @@ mod tests {
 
     #[tokio::test]
     async fn ws_broadcast_multiple_event_types() {
-        let state = GatewayState::new("ignored");
+        let state = GatewayState::new("ignored").unwrap();
         let mut rx = state.subscribe();
 
         let agent_id = Uuid::new_v4();
@@ -3464,7 +3521,7 @@ mod tests {
 
     #[tokio::test]
     async fn ws_invalid_token_rejected() {
-        let state = GatewayState::new("ignored");
+        let state = GatewayState::new("ignored").unwrap();
         state.register_agent(
             test_manifest("test-agent", vec!["web.search"], 10_000),
             "https://example.com",
@@ -3478,7 +3535,7 @@ mod tests {
 
     #[tokio::test]
     async fn ws_wrong_key_rejected() {
-        let state = GatewayState::new("ignored");
+        let state = GatewayState::new("ignored").unwrap();
         state.register_agent(
             test_manifest("test-agent", vec!["web.search"], 10_000),
             "https://example.com",
@@ -3506,12 +3563,12 @@ mod tests {
         use futures_util::StreamExt;
         use tokio_tungstenite::tungstenite::Message as TungsteniteMessage;
 
-        let state = GatewayState::new("ignored");
+        let state = GatewayState::new("ignored").unwrap();
         state.register_agent(
             test_manifest("test-agent", vec!["web.search"], 10_000),
             "https://example.com",
         );
-        let token = state.issue_token(&[], 3600);
+        let token = state.issue_token(&[], 3600).unwrap();
         let broadcast_state = state.clone();
         let addr = start_test_server(state).await;
 
@@ -3547,7 +3604,7 @@ mod tests {
 
     #[tokio::test]
     async fn graceful_shutdown_completes_cleanly() {
-        let state = GatewayState::new("test-secret");
+        let state = GatewayState::new("test-secret").unwrap();
 
         // Register an agent so shutdown has work to do
         let manifest = test_manifest("shutdown-test-agent", vec!["llm.query"], 500);

@@ -1,30 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Menu } from "lucide-react";
+import { terminalExecute, terminalExecuteApproved, type TerminalCommandResult } from "../api/backend";
 import "./terminal.css";
-
-/* ================================================================== */
-/*  Tauri invoke                                                       */
-/* ================================================================== */
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function invoke(cmd: string, args?: Record<string, unknown>): Promise<any> {
-  if (
-    typeof window !== "undefined" &&
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    typeof (window as any).__TAURI__?.invoke === "function"
-  ) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (window as any).__TAURI__.invoke(cmd, args);
-  }
-  return JSON.stringify({
-    stdout: "Tauri backend not available — running in browser mode.\n",
-    stderr: "",
-    exit_code: 0,
-    duration_ms: 0,
-    tool: "fallback",
-    needs_approval: false,
-    fuel_cost: 0,
-  });
-}
 
 /* ================================================================== */
 /*  Types                                                              */
@@ -63,15 +40,7 @@ interface AgentSuggestion {
   reason: string;
 }
 
-interface TerminalResult {
-  stdout: string;
-  stderr: string;
-  exit_code: number;
-  duration_ms: number;
-  tool: string;
-  needs_approval: boolean;
-  fuel_cost: number;
-}
+type TerminalResult = TerminalCommandResult;
 
 type ApprovalState = { cmd: string; reason: string } | null;
 
@@ -229,6 +198,7 @@ export default function Terminal(): JSX.Element {
   const lineId = useRef(6);
   const termRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fuelBudget = 10000;
   const fuelRemaining = fuelBudget - fuelUsed;
   const fuelPct = Math.round((fuelRemaining / fuelBudget) * 100);
@@ -259,7 +229,8 @@ export default function Terminal(): JSX.Element {
   }, [activePane]);
 
   const scrollToBottom = useCallback(() => {
-    setTimeout(() => termRef.current?.scrollTo(0, termRef.current.scrollHeight), 30);
+    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    scrollTimerRef.current = setTimeout(() => termRef.current?.scrollTo(0, termRef.current.scrollHeight), 30);
   }, []);
 
   /* ---- Handle cd locally ---- */
@@ -275,6 +246,12 @@ export default function Terminal(): JSX.Element {
     return `${cwd}/${target}`.replace(/\/+/g, "/");
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    };
+  }, []);
+
   /* ---- Update suggestions on input change ---- */
   useEffect(() => {
     const s = getSuggestions(input, commandHistory);
@@ -287,8 +264,7 @@ export default function Terminal(): JSX.Element {
   async function executeViaBackend(cmd: string, cwd: string): Promise<void> {
     setIsExecuting(true);
     try {
-      const raw: string = await invoke("terminal_execute", { command: cmd, cwd });
-      const result: TerminalResult = JSON.parse(raw);
+      const result: TerminalResult = await terminalExecute(cmd, cwd);
 
       // Backend says this command needs HITL approval
       if (result.needs_approval) {
@@ -491,8 +467,7 @@ export default function Terminal(): JSX.Element {
 
     setIsExecuting(true);
     try {
-      const raw: string = await invoke("terminal_execute_approved", { command: cmd, cwd });
-      const result: TerminalResult = JSON.parse(raw);
+      const result: TerminalResult = await terminalExecuteApproved(cmd, cwd);
 
       setFuelUsed((prev) => prev + result.fuel_cost);
 
@@ -576,8 +551,8 @@ export default function Terminal(): JSX.Element {
             <span className="tm-fuel-value">{fuelRemaining.toLocaleString()}</span>
           </div>
           <div className="tm-toolbar">
-            <button type="button" className="tm-tool-btn" onClick={addPane} title="New Tab (Ctrl+T)">+</button>
-            <button type="button" className={`tm-tool-btn ${showSidebar ? "tm-tool-active" : ""}`} onClick={() => setShowSidebar((p) => !p)} title="Toggle Sidebar (Ctrl+B)">☰</button>
+            <button type="button" className="tm-tool-btn cursor-pointer" onClick={addPane} title="New Tab (Ctrl+T)"><Plus size={14} /></button>
+            <button type="button" className={`tm-tool-btn cursor-pointer ${showSidebar ? "tm-tool-active" : ""}`} onClick={() => setShowSidebar((p) => !p)} title="Toggle Sidebar (Ctrl+B)"><Menu size={14} /></button>
           </div>
         </div>
       </header>

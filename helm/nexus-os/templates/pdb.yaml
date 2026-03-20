@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "nexus-os.fullname" . }}
+  labels:
+    {{- include "nexus-os.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.highAvailability.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "nexus-os.selectorLabels" . | nindent 6 }}

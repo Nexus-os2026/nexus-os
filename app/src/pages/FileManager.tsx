@@ -1,22 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  LayoutGrid, List, Search, RefreshCw, PanelRight, ArrowUp, ArrowDown,
+  FilePlus, FolderPlus, Folder, File, FileText, Image, Music,
+  Video, Archive, Key, FileSpreadsheet, Lock, Settings as Cog,
+} from "lucide-react";
+import {
+  fileManagerList, fileManagerRead, fileManagerWrite,
+  fileManagerCreateDir, fileManagerDelete, fileManagerRename, fileManagerHome,
+} from "../api/backend";
 import "./file-manager.css";
-
-/* ================================================================== */
-/*  Tauri invoke                                                       */
-/* ================================================================== */
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function invoke(cmd: string, args?: Record<string, unknown>): Promise<any> {
-  if (
-    typeof window !== "undefined" &&
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    typeof (window as any).__TAURI__?.invoke === "function"
-  ) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (window as any).__TAURI__.invoke(cmd, args);
-  }
-  return JSON.stringify([]);
-}
 
 /* ================================================================== */
 /*  Types                                                              */
@@ -54,19 +46,28 @@ function extOf(name: string): string {
   return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
 }
 
-function entryIcon(entry: FsEntry): string {
-  if (entry.is_dir) return "📁";
+function entryIcon(entry: FsEntry): React.ReactNode {
+  const s = 16;
+  if (entry.is_dir) return <Folder size={s} />;
   const ext = extOf(entry.name);
-  const map: Record<string, string> = {
-    rs: "🦀", ts: "TS", tsx: "TS", js: "JS", jsx: "JS", py: "🐍",
-    json: "{}", css: "#", html: "<>", md: "📝", toml: "⚙", yaml: "⚙",
-    yml: "⚙", sh: "$", sql: "⊞", go: "Go", lock: "🔒",
-    png: "🖼", jpg: "🖼", jpeg: "🖼", gif: "🖼", svg: "🖼", webp: "🖼",
-    mp3: "♫", wav: "♫", ogg: "♫", mp4: "🎬", webm: "🎬",
-    pdf: "📄", doc: "📄", docx: "📄", txt: "📄", csv: "📊",
-    zip: "📦", tar: "📦", gz: "📦", env: "🔑", pem: "🔑", key: "🔑",
+  const textMap: Record<string, string> = {
+    rs: "Rs", ts: "TS", tsx: "TS", js: "JS", jsx: "JS", py: "Py",
+    json: "{}", css: "#", html: "<>", sh: "$", go: "Go",
   };
-  return map[ext] ?? "📄";
+  if (textMap[ext]) return <span style={{ fontSize: 11, fontWeight: 600 }}>{textMap[ext]}</span>;
+  const iconMap: Record<string, React.ReactNode> = {
+    md: <FileText size={s} />, toml: <Cog size={s} />, yaml: <Cog size={s} />,
+    yml: <Cog size={s} />, sql: <LayoutGrid size={s} />, lock: <Lock size={s} />,
+    png: <Image size={s} />, jpg: <Image size={s} />, jpeg: <Image size={s} />,
+    gif: <Image size={s} />, svg: <Image size={s} />, webp: <Image size={s} />,
+    mp3: <Music size={s} />, wav: <Music size={s} />, ogg: <Music size={s} />,
+    mp4: <Video size={s} />, webm: <Video size={s} />,
+    pdf: <FileText size={s} />, doc: <FileText size={s} />, docx: <FileText size={s} />,
+    txt: <FileText size={s} />, csv: <FileSpreadsheet size={s} />,
+    zip: <Archive size={s} />, tar: <Archive size={s} />, gz: <Archive size={s} />,
+    env: <Key size={s} />, pem: <Key size={s} />, key: <Key size={s} />,
+  };
+  return iconMap[ext] ?? <File size={s} />;
 }
 
 function formatSize(bytes: number): string {
@@ -145,14 +146,13 @@ export default function FileManager(): JSX.Element {
     setSelectedEntry(null);
     setPreviewContent(null);
     try {
-      const raw: string = await invoke("file_manager_list", { path: dirPath });
-      const parsed: FsEntry[] = JSON.parse(raw);
+      const parsed: FsEntry[] = await fileManagerList<FsEntry>(dirPath);
       setEntries(parsed);
       setCurrentPath(dirPath);
       appendAudit("Navigate", dirPath);
       return true;
     } catch (e) {
-      console.error("[FileManager] failed to load directory", dirPath, e);
+      if (import.meta.env.DEV) console.error("[FileManager] failed to load directory", dirPath, e);
       setError(FILE_LOAD_ERROR);
       setEntries([]);
       return false;
@@ -165,7 +165,7 @@ export default function FileManager(): JSX.Element {
   useEffect(() => {
     (async () => {
       try {
-        const home: string = await invoke("file_manager_home");
+        const home: string = await fileManagerHome();
         const candidates = [pathJoin(home, ".nexus"), home];
         for (const candidate of candidates) {
           const loaded = await loadDir(candidate);
@@ -173,7 +173,7 @@ export default function FileManager(): JSX.Element {
         }
         setError(FILE_LOAD_ERROR);
       } catch (e) {
-        console.error("[FileManager] failed to resolve initial directory", e);
+        if (import.meta.env.DEV) console.error("[FileManager] failed to resolve initial directory", e);
         setError(FILE_LOAD_ERROR);
         setEntries([]);
       }
@@ -187,7 +187,7 @@ export default function FileManager(): JSX.Element {
     if (!isPreviewable(ext)) { setPreviewContent(null); return; }
     if (entry.size > 512 * 1024) { setPreviewContent("(file too large to preview)"); return; }
     try {
-      const content: string = await invoke("file_manager_read", { path: entry.path });
+      const content: string = await fileManagerRead(entry.path);
       setPreviewContent(content);
     } catch (e) {
       setPreviewContent(`Error reading file: ${e}`);
@@ -253,7 +253,7 @@ export default function FileManager(): JSX.Element {
   /* ---- File operations ---- */
   async function handleDelete(entry: FsEntry): Promise<void> {
     try {
-      await invoke("file_manager_delete", { path: entry.path });
+      await fileManagerDelete(entry.path);
       appendAudit("Delete", entry.path);
       setConfirmDelete(null);
       setSelectedEntry(null);
@@ -268,7 +268,7 @@ export default function FileManager(): JSX.Element {
     if (!renameValue.trim()) { setRenaming(null); return; }
     const newPath = pathJoin(parentPath(entry.path), renameValue.trim());
     try {
-      await invoke("file_manager_rename", { from: entry.path, to: newPath });
+      await fileManagerRename(entry.path, newPath);
       appendAudit("Rename", `${entry.name} → ${renameValue.trim()}`);
       setRenaming(null);
       setRenameValue("");
@@ -285,9 +285,9 @@ export default function FileManager(): JSX.Element {
     const fullPath = pathJoin(currentPath, name);
     try {
       if (newItemType === "dir") {
-        await invoke("file_manager_create_dir", { path: fullPath });
+        await fileManagerCreateDir(fullPath);
       } else {
-        await invoke("file_manager_write", { path: fullPath, content: "" });
+        await fileManagerWrite(fullPath, "");
       }
       appendAudit("Create", fullPath);
       setNewItemType(null);
@@ -330,11 +330,11 @@ export default function FileManager(): JSX.Element {
         </div>
         <div className="fm-header-right">
           <div className="fm-toolbar">
-            <button type="button" className={`fm-tool-btn ${viewMode === "grid" ? "fm-tool-active" : ""}`} onClick={() => setViewMode("grid")} title="Grid view">⊞</button>
-            <button type="button" className={`fm-tool-btn ${viewMode === "list" ? "fm-tool-active" : ""}`} onClick={() => setViewMode("list")} title="List view">☰</button>
-            <button type="button" className={`fm-tool-btn ${showSearch ? "fm-tool-active" : ""}`} onClick={() => setShowSearch((p) => !p)} title="Search (Ctrl+F)">⌕</button>
-            <button type="button" className="fm-tool-btn" onClick={refresh} title="Refresh (F5)">↻</button>
-            <button type="button" className={`fm-tool-btn ${showSidebar ? "fm-tool-active" : ""}`} onClick={() => setShowSidebar((p) => !p)} title="Sidebar (Ctrl+B)">◨</button>
+            <button type="button" className={`fm-tool-btn cursor-pointer ${viewMode === "grid" ? "fm-tool-active" : ""}`} onClick={() => setViewMode("grid")} title="Grid view"><LayoutGrid size={14} /></button>
+            <button type="button" className={`fm-tool-btn cursor-pointer ${viewMode === "list" ? "fm-tool-active" : ""}`} onClick={() => setViewMode("list")} title="List view"><List size={14} /></button>
+            <button type="button" className={`fm-tool-btn cursor-pointer ${showSearch ? "fm-tool-active" : ""}`} onClick={() => setShowSearch((p) => !p)} title="Search (Ctrl+F)"><Search size={14} /></button>
+            <button type="button" className="fm-tool-btn cursor-pointer" onClick={refresh} title="Refresh (F5)"><RefreshCw size={14} /></button>
+            <button type="button" className={`fm-tool-btn cursor-pointer ${showSidebar ? "fm-tool-active" : ""}`} onClick={() => setShowSidebar((p) => !p)} title="Sidebar (Ctrl+B)"><PanelRight size={14} /></button>
           </div>
         </div>
       </header>
@@ -350,7 +350,7 @@ export default function FileManager(): JSX.Element {
       {/* ---- Action bar ---- */}
       <div className="fm-action-bar">
         <div className="fm-breadcrumbs">
-          <button type="button" className="fm-nav-btn" onClick={goUp} disabled={!currentPath || currentPath === "/"} title="Go up">↑</button>
+          <button type="button" className="fm-nav-btn cursor-pointer" onClick={goUp} disabled={!currentPath || currentPath === "/"} title="Go up"><ArrowUp size={14} /></button>
           {breadcrumbs.map((bc, i) => (
             <span key={bc.path} className="fm-crumb-wrap">
               {i > 0 && <span className="fm-crumb-sep">/</span>}
@@ -361,15 +361,15 @@ export default function FileManager(): JSX.Element {
           ))}
         </div>
         <div className="fm-action-btns">
-          <button type="button" className="fm-action-btn" onClick={() => { setNewItemType("file"); setNewItemName(""); }} title="New file">+ File</button>
-          <button type="button" className="fm-action-btn" onClick={() => { setNewItemType("dir"); setNewItemName(""); }} title="New folder">+ Folder</button>
+          <button type="button" className="fm-action-btn cursor-pointer" onClick={() => { setNewItemType("file"); setNewItemName(""); }} title="New file"><FilePlus size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />File</button>
+          <button type="button" className="fm-action-btn cursor-pointer" onClick={() => { setNewItemType("dir"); setNewItemName(""); }} title="New folder"><FolderPlus size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Folder</button>
         </div>
       </div>
 
       {/* ---- Search bar ---- */}
       {showSearch && (
         <div className="fm-search-bar">
-          <span className="fm-search-icon">⌕</span>
+          <span className="fm-search-icon"><Search size={14} /></span>
           <input className="fm-search-input" placeholder="Filter files by name..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} autoFocus onKeyDown={(e) => { if (e.key === "Escape") { setShowSearch(false); setSearchQuery(""); } }} />
           {searchQuery && <span className="fm-search-count">{displayEntries.length} results</span>}
           <button type="button" className="fm-search-close" onClick={() => { setShowSearch(false); setSearchQuery(""); }}>×</button>
@@ -393,9 +393,9 @@ export default function FileManager(): JSX.Element {
           {/* List header */}
           {viewMode === "list" && (
             <div className="fm-list-header">
-              <button type="button" className="fm-list-col fm-col-name" onClick={() => toggleSort("name")}>Name {sortBy === "name" ? (sortDir === "asc" ? "↑" : "↓") : ""}</button>
-              <button type="button" className="fm-list-col fm-col-size" onClick={() => toggleSort("size")}>Size {sortBy === "size" ? (sortDir === "asc" ? "↑" : "↓") : ""}</button>
-              <button type="button" className="fm-list-col fm-col-modified" onClick={() => toggleSort("modified")}>Modified {sortBy === "modified" ? (sortDir === "asc" ? "↑" : "↓") : ""}</button>
+              <button type="button" className="fm-list-col fm-col-name cursor-pointer" onClick={() => toggleSort("name")}>Name {sortBy === "name" ? (sortDir === "asc" ? <ArrowUp size={10} style={{ display: "inline", verticalAlign: "middle" }} /> : <ArrowDown size={10} style={{ display: "inline", verticalAlign: "middle" }} />) : ""}</button>
+              <button type="button" className="fm-list-col fm-col-size cursor-pointer" onClick={() => toggleSort("size")}>Size {sortBy === "size" ? (sortDir === "asc" ? <ArrowUp size={10} style={{ display: "inline", verticalAlign: "middle" }} /> : <ArrowDown size={10} style={{ display: "inline", verticalAlign: "middle" }} />) : ""}</button>
+              <button type="button" className="fm-list-col fm-col-modified cursor-pointer" onClick={() => toggleSort("modified")}>Modified {sortBy === "modified" ? (sortDir === "asc" ? <ArrowUp size={10} style={{ display: "inline", verticalAlign: "middle" }} /> : <ArrowDown size={10} style={{ display: "inline", verticalAlign: "middle" }} />) : ""}</button>
             </div>
           )}
 
@@ -480,7 +480,7 @@ export default function FileManager(): JSX.Element {
                     {isImage(extOf(selectedEntry.name)) && (
                       <div className="fm-preview-image">
                         <div className="fm-preview-image-placeholder">
-                          🖼 {selectedEntry.name}
+                          <Image size={16} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />{selectedEntry.name}
                           <br /><span className="fm-preview-image-size">{formatSize(selectedEntry.size)}</span>
                         </div>
                       </div>
@@ -497,7 +497,7 @@ export default function FileManager(): JSX.Element {
                     )}
                     {selectedEntry.is_dir && (
                       <div className="fm-preview-nopreview">
-                        <span className="fm-preview-nopreview-icon">📁</span>
+                        <span className="fm-preview-nopreview-icon"><Folder size={24} /></span>
                         <p>Directory</p>
                         <p className="fm-preview-ext">Double-click to open</p>
                       </div>

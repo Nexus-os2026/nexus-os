@@ -84,7 +84,7 @@ export default function AppStore(): JSX.Element {
         ),
       );
     } catch (loadError) {
-      console.error("agent store load failed", loadError);
+      if (import.meta.env.DEV) console.error("agent store load failed", loadError);
       setError(String(loadError));
     } finally {
       setLoading(false);
@@ -142,7 +142,7 @@ export default function AppStore(): JSX.Element {
       await startAgent(agentId);
       await loadStore();
     } catch (startError) {
-      console.error("agent start failed", startError);
+      if (import.meta.env.DEV) console.error("agent start failed", startError);
       setError(String(startError));
     } finally {
       setStartingIds((current) => current.filter((id) => id !== agentId));
@@ -156,7 +156,7 @@ export default function AppStore(): JSX.Element {
       await marketplaceInstall(packageId);
       await loadStore();
     } catch (installError) {
-      console.error("marketplace install failed", installError);
+      if (import.meta.env.DEV) console.error("marketplace install failed", installError);
       setError(String(installError));
     } finally {
       setInstallingIds((current) => current.filter((id) => id !== packageId));

@@ -49,7 +49,7 @@ pub struct PairingCode {
 impl PairingCode {
     /// Encode the pairing code as a hex string for transfer.
     pub fn encode(&self) -> String {
-        let json = serde_json::to_vec(self).expect("PairingCode is always serializable");
+        let json = serde_json::to_vec(self).unwrap_or_default();
         hex::encode(&json)
     }
 
@@ -218,7 +218,8 @@ impl DevicePairingManager {
         self.pairings.insert(code.node_id, pairing);
         self.persist_pairing(code.node_id)?;
 
-        Ok(self.pairings.get(&code.node_id).unwrap())
+        self.pairings.get(&code.node_id)
+            .ok_or_else(|| "pairing lookup failed after insert".to_string())
     }
 
     /// List all active paired devices.

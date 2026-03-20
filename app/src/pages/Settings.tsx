@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Settings as SettingsIcon, Cpu, Volume2, VolumeX, Key, Save, RefreshCw, Trash2, Check, X, Server, Cloud, TestTube } from "lucide-react";
 import "./settings.css";
 import type { LlmProviderStatusEntry, LlmRecommendation, NexusConfig, OllamaModelInfo, RoutingStrategy, TestConnectionResult } from "../types";
-import { checkLlmStatus, getLlmRecommendations, testLlmConnection, hasDesktopRuntime } from "../api/backend";
+import { checkLlmStatus, getLlmRecommendations, testLlmConnection, hasDesktopRuntime, listTools, executeTool } from "../api/backend";
 
 interface SettingsProps {
   config: NexusConfig;
@@ -19,7 +20,7 @@ interface SettingsProps {
   onRefreshOllama?: () => Promise<void>;
 }
 
-type SettingsSection = "general" | "llm" | "api" | "privacy" | "voice" | "models" | "about";
+type SettingsSection = "general" | "llm" | "api" | "privacy" | "voice" | "models" | "tools" | "about";
 type ServiceStatus = "unknown" | "testing" | "ok" | "error";
 
 interface ApiKeyDef {
@@ -70,6 +71,13 @@ export function Settings({
   const [micTesting, setMicTesting] = useState(false);
   const [micLevel, setMicLevel] = useState(0.08);
   const [updateCheck, setUpdateCheck] = useState<"idle" | "checking" | "up-to-date">("idle");
+  const updateCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (updateCheckTimerRef.current) clearTimeout(updateCheckTimerRef.current);
+    };
+  }, []);
 
   // ── LLM Provider Management state ──
   const [llmProviders, setLlmProviders] = useState<LlmProviderStatusEntry[]>([]);
@@ -81,6 +89,14 @@ export function Settings({
   const [llmRecsCanLocal, setLlmRecsCanLocal] = useState(false);
   const [testResults, setTestResults] = useState<Record<string, TestConnectionResult>>({});
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
+
+  // ── Tools state ──
+  const [tools, setTools] = useState<{ name: string; description: string; schema?: string }[]>([]);
+  const [toolsLoading, setToolsLoading] = useState(false);
+  const [toolJson, setToolJson] = useState("");
+  const [toolResult, setToolResult] = useState<string | null>(null);
+  const [toolExecuting, setToolExecuting] = useState(false);
+
   const [routingStrategy, setRoutingStrategy] = useState<RoutingStrategy>(
     (config.llm.routing_strategy as RoutingStrategy) || "Priority"
   );
@@ -193,11 +209,11 @@ export function Settings({
     }
   }
 
-  function statusLabel(s: ServiceStatus): string {
-    if (s === "testing") return "Testing...";
-    if (s === "ok") return "Connected \u2713";
-    if (s === "error") return "Invalid \u2717";
-    return "Not Set";
+  function statusLabel(s: ServiceStatus): JSX.Element {
+    if (s === "testing") return <><RefreshCw size={12} className="inline-icon spin" /> Testing...</>;
+    if (s === "ok") return <><Check size={12} className="inline-icon" /> Connected</>;
+    if (s === "error") return <><X size={12} className="inline-icon" /> Invalid</>;
+    return <>Not Set</>;
   }
 
   function statusClass(s: ServiceStatus): string {
@@ -222,6 +238,33 @@ export function Settings({
       setLlmRecsCanLocal(recs.can_run_local);
     }).catch(() => {});
   }, [section]);
+
+  // Fetch tools when the tools section is active
+  useEffect(() => {
+    if (section !== "tools" || !hasDesktopRuntime()) return;
+    setToolsLoading(true);
+    listTools().then((raw) => {
+      try {
+        const parsed = JSON.parse(raw);
+        setTools(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        setTools([]);
+      }
+    }).catch(() => setTools([])).finally(() => setToolsLoading(false));
+  }, [section]);
+
+  function handleExecuteTool(): void {
+    if (!toolJson.trim()) return;
+    setToolExecuting(true);
+    setToolResult(null);
+    executeTool(toolJson).then((result) => {
+      setToolResult(result);
+      setToolExecuting(false);
+    }).catch((e) => {
+      setToolResult(`Error: ${e}`);
+      setToolExecuting(false);
+    });
+  }
 
   function handleTestConnection(providerName: string): void {
     setTestingProvider(providerName);
@@ -303,16 +346,16 @@ export function Settings({
   return (
     <section className="st-hub">
       <header className="st-header">
-        <h2 className="st-title">SYSTEM SETTINGS // CONTROL PANEL</h2>
+        <h2 className="st-title"><SettingsIcon size={20} className="inline-icon" /> SYSTEM SETTINGS // CONTROL PANEL</h2>
         <p className="st-subtitle">Security posture, runtime config, and identity controls</p>
       </header>
 
       <nav className="st-nav">
-        {(["general", "llm", "api", "privacy", "voice", "models", "about"] as SettingsSection[]).map((s) => (
+        {(["general", "llm", "api", "privacy", "voice", "models", "tools", "about"] as SettingsSection[]).map((s) => (
           <button
             key={s}
             type="button"
-            className={`st-nav-btn ${section === s ? "active" : ""}`}
+            className={`st-nav-btn cursor-pointer ${section === s ? "active" : ""}`}
             onClick={() => setSection(s)}
           >
             {s === "api" ? "API Keys" : s === "llm" ? "LLM Providers" : s.charAt(0).toUpperCase() + s.slice(1)}
@@ -359,7 +402,7 @@ export function Settings({
             </div>
             <div className="st-row">
               <div>
-                <p className="st-row-label">UI Sound Design</p>
+                <p className="st-row-label">{uiSoundEnabled ? <Volume2 size={14} className="inline-icon" /> : <VolumeX size={14} className="inline-icon" />} UI Sound Design</p>
                 <p className="st-row-hint">Interface audio feedback</p>
               </div>
               <div className="st-sound-controls">
@@ -434,7 +477,7 @@ export function Settings({
             </div>
 
             {/* Provider Status List */}
-            <h3 className="st-card-title" style={{ marginTop: "1rem" }}>Provider Status</h3>
+            <h3 className="st-card-title" style={{ marginTop: "1rem" }}><Server size={16} className="inline-icon" /> Provider Status</h3>
             {llmProviders.map((p) => {
               const tr = testResults[p.name];
               return (
@@ -461,12 +504,12 @@ export function Settings({
                     {!p.is_paid && p.name !== "mock" && <span className="st-badge st-badge-green" style={{ fontSize: "0.7rem", padding: "2px 6px" }}>Free</span>}
                     <button
                       type="button"
-                      className="st-btn st-btn-ghost"
+                      className="st-btn st-btn-ghost cursor-pointer"
                       style={{ fontSize: "0.75rem", padding: "3px 10px" }}
                       disabled={testingProvider === p.name}
                       onClick={() => handleTestConnection(p.name)}
                     >
-                      {testingProvider === p.name ? "Testing..." : "Test"}
+                      {testingProvider === p.name ? "Testing..." : <><TestTube size={12} className="inline-icon" /> Test</>}
                     </button>
                   </div>
                   {tr && (
@@ -482,7 +525,7 @@ export function Settings({
             })}
 
             {/* API Key Inputs */}
-            <h3 className="st-card-title" style={{ marginTop: "1rem" }}>API Keys</h3>
+            <h3 className="st-card-title" style={{ marginTop: "1rem" }}><Key size={16} className="inline-icon" /> API Keys</h3>
             {[
               { label: "DeepSeek", key: "deepseek_api_key" as const, hint: "~$0.14/M tokens (cheapest)" },
               { label: "NVIDIA NIM", key: "nvidia_api_key" as const, hint: "42 free models — DeepSeek V3.1, GLM-4.7, Nemotron, Llama 4, Qwen 3.5" },
@@ -506,11 +549,11 @@ export function Settings({
               </div>
             ))}
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button type="button" className="st-btn st-btn-ghost" onClick={() => setShowKeys((p) => !p)}>
-                {showKeys ? "Hide Keys" : "Show Keys"}
+              <button type="button" className="st-btn st-btn-ghost cursor-pointer" onClick={() => setShowKeys((p) => !p)}>
+                <Key size={14} className="inline-icon" /> {showKeys ? "Hide Keys" : "Show Keys"}
               </button>
-              <button type="button" className="st-btn st-btn-blue" onClick={onSave} disabled={saving}>
-                {saving ? "Saving..." : "Save Keys"}
+              <button type="button" className="st-btn st-btn-blue cursor-pointer" onClick={onSave} disabled={saving}>
+                {saving ? "Saving..." : <><Save size={14} className="inline-icon" /> Save Keys</>}
               </button>
             </div>
 
@@ -549,8 +592,8 @@ export function Settings({
         {section === "api" && (
           <div className="st-card">
             <div className="st-api-header">
-              <button type="button" className="st-show-keys-btn" onClick={() => setShowKeys((p) => !p)}>
-                {showKeys ? "Hide Keys" : "Show Keys"}
+              <button type="button" className="st-show-keys-btn cursor-pointer" onClick={() => setShowKeys((p) => !p)}>
+                <Key size={14} className="inline-icon" /> {showKeys ? "Hide Keys" : "Show Keys"}
               </button>
             </div>
             {apiKeys.map((key) => {
@@ -569,10 +612,10 @@ export function Settings({
                       onChange={(e) => key.update(e.target.value)}
                       placeholder={`Enter ${key.label} key`}
                     />
-                    <button type="button" className="st-api-save-btn" onClick={onSave} disabled={saving}>
+                    <button type="button" className="st-api-save-btn cursor-pointer" onClick={onSave} disabled={saving}>
                       Save
                     </button>
-                    <button type="button" className="st-api-test-btn" onClick={() => testKey(key.id, key.value)}>
+                    <button type="button" className="st-api-test-btn cursor-pointer" onClick={() => testKey(key.id, key.value)}>
                       Test Connection
                     </button>
                   </div>
@@ -600,10 +643,10 @@ export function Settings({
                     onChange={(e) => key.update(e.target.value)}
                     placeholder={`Enter ${key.label}`}
                   />
-                  <button type="button" className="st-api-save-btn" onClick={onSave} disabled={saving}>
+                  <button type="button" className="st-api-save-btn cursor-pointer" onClick={onSave} disabled={saving}>
                     Save
                   </button>
-                  <button type="button" className="st-api-test-btn" onClick={() => testKey(key.id, key.value)}>
+                  <button type="button" className="st-api-test-btn cursor-pointer" onClick={() => testKey(key.id, key.value)}>
                     Validate
                   </button>
                 </div>
@@ -656,7 +699,7 @@ export function Settings({
                 onChange={(e) => onChange({ ...config, privacy: { ...config.privacy, audit_retention_days: Number(e.target.value) } })} />
             </div>
             <div className="st-action-row">
-              <button type="button" className="st-btn st-btn-blue" onClick={() => {
+              <button type="button" className="st-btn st-btn-blue cursor-pointer" onClick={() => {
                 const data = JSON.stringify(config, null, 2);
                 const blob = new Blob([data], { type: "application/json" });
                 const url = URL.createObjectURL(blob);
@@ -667,13 +710,13 @@ export function Settings({
                 URL.revokeObjectURL(url);
               }}>Export My Data</button>
               {deletePhase === "idle" ? (
-                <button type="button" className="st-btn st-btn-red" onClick={() => setDeletePhase("confirm")}>Delete All My Data</button>
+                <button type="button" className="st-btn st-btn-red cursor-pointer" onClick={() => setDeletePhase("confirm")}><Trash2 size={14} className="inline-icon" /> Delete All My Data</button>
               ) : (
                 <div className="st-delete-confirm">
                   <p className="st-row-warn">Are you sure? This uses cryptographic erasure and is irreversible.</p>
                   <div className="st-delete-btns">
-                    <button type="button" className="st-btn st-btn-red" onClick={() => { setDeletePhase("idle"); onChange({ ...config, llm: { ...config.llm, anthropic_api_key: "", openai_api_key: "", nvidia_api_key: "" }, search: { ...config.search, brave_api_key: "" } }); }}>Confirm Delete</button>
-                    <button type="button" className="st-btn st-btn-ghost" onClick={() => setDeletePhase("idle")}>Cancel</button>
+                    <button type="button" className="st-btn st-btn-red cursor-pointer" onClick={() => { setDeletePhase("idle"); onChange({ ...config, llm: { ...config.llm, anthropic_api_key: "", openai_api_key: "", nvidia_api_key: "" }, search: { ...config.search, brave_api_key: "" } }); }}>Confirm Delete</button>
+                    <button type="button" className="st-btn st-btn-ghost cursor-pointer" onClick={() => setDeletePhase("idle")}>Cancel</button>
                   </div>
                 </div>
               )}
@@ -718,7 +761,7 @@ export function Settings({
             <div className="st-row">
               <div><p className="st-row-label">Mic Test</p></div>
               <div className="st-mic-test">
-                <button type="button" className="st-btn st-btn-ghost" onClick={() => setMicTesting((p) => !p)}>
+                <button type="button" className="st-btn st-btn-ghost cursor-pointer" onClick={() => setMicTesting((p) => !p)}>
                   {micTesting ? "Stop Test" : "Start Test"}
                 </button>
                 <div className="st-mic-bar">
@@ -731,7 +774,7 @@ export function Settings({
             </div>
             <div className="st-row">
               <div><p className="st-row-label">Test Voice</p></div>
-              <button type="button" className="st-btn st-btn-ghost" onClick={() => {
+              <button type="button" className="st-btn st-btn-ghost cursor-pointer" onClick={() => {
                 const utterance = new SpeechSynthesisUtterance("NexusOS voice system online. All agents nominal.");
                 utterance.rate = 0.95;
                 utterance.pitch = 0.9;
@@ -743,7 +786,7 @@ export function Settings({
 
         {section === "models" && (
           <div className="st-card">
-            <h3 className="st-card-title">Hardware Profile</h3>
+            <h3 className="st-card-title"><Cpu size={16} className="inline-icon" /> Hardware Profile</h3>
             <div className="st-models-hw-grid">
               <div className="st-models-hw-item">
                 <span className="st-models-hw-label">GPU</span>
@@ -797,10 +840,10 @@ export function Settings({
                       {onDeleteModel && (
                         <button
                           type="button"
-                          className="st-btn st-btn-red st-btn-sm"
+                          className="st-btn st-btn-red st-btn-sm cursor-pointer"
                           onClick={() => { void onDeleteModel(m.name); }}
                         >
-                          Remove
+                          <Trash2 size={12} className="inline-icon" /> Remove
                         </button>
                       )}
                     </div>
@@ -827,14 +870,89 @@ export function Settings({
 
             <div className="st-models-actions">
               {onRefreshOllama && (
-                <button type="button" className="st-btn st-btn-ghost" onClick={() => { void onRefreshOllama(); }}>
-                  Refresh Ollama
+                <button type="button" className="st-btn st-btn-ghost cursor-pointer" onClick={() => { void onRefreshOllama(); }}>
+                  <RefreshCw size={14} className="inline-icon" /> Refresh Ollama
                 </button>
               )}
-              <button type="button" className="st-btn st-btn-blue" onClick={onRerunSetup ?? onSave}>
+              <button type="button" className="st-btn st-btn-blue cursor-pointer" onClick={onRerunSetup ?? onSave}>
                 Re-run Setup Wizard
               </button>
             </div>
+          </div>
+        )}
+
+        {section === "tools" && (
+          <div className="st-card">
+            <h3 className="st-card-title">Registered Tools</h3>
+            <p className="st-row-hint" style={{ marginBottom: "0.75rem" }}>
+              MCP tools registered in the kernel. Execute tools by providing a JSON payload.
+            </p>
+
+            {toolsLoading ? (
+              <div className="st-row"><p className="st-row-hint">Loading tools...</p></div>
+            ) : tools.length === 0 ? (
+              <div className="st-row"><p className="st-row-hint">No tools registered yet.</p></div>
+            ) : (
+              <div style={{ maxHeight: 300, overflowY: "auto", marginBottom: "1rem" }}>
+                {tools.map((t) => (
+                  <div key={t.name} className="st-row" style={{ flexWrap: "wrap", gap: "0.25rem" }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <p className="st-row-label" style={{ fontFamily: "monospace" }}>{t.name}</p>
+                      <p className="st-row-hint">{t.description}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="st-btn st-btn-ghost cursor-pointer"
+                      style={{ fontSize: "0.75rem", padding: "3px 10px" }}
+                      onClick={() => setToolJson(JSON.stringify({ tool: t.name, args: {} }, null, 2))}
+                    >
+                      Use
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <h3 className="st-card-title" style={{ marginTop: "1rem" }}>Execute Tool</h3>
+            <div className="st-row" style={{ flexDirection: "column", alignItems: "stretch", gap: "0.5rem" }}>
+              <textarea
+                className="st-api-input"
+                style={{ minHeight: 120, fontFamily: "monospace", fontSize: "0.82rem", resize: "vertical", width: "100%" }}
+                value={toolJson}
+                onChange={(e) => setToolJson(e.target.value)}
+                placeholder={'{\n  "tool": "tool_name",\n  "args": {}\n}'}
+              />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  className="st-btn st-btn-blue cursor-pointer"
+                  onClick={handleExecuteTool}
+                  disabled={toolExecuting || !toolJson.trim()}
+                >
+                  {toolExecuting ? "Executing..." : "Execute Tool"}
+                </button>
+                <button
+                  type="button"
+                  className="st-btn st-btn-ghost cursor-pointer"
+                  onClick={() => { setToolJson(""); setToolResult(null); }}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            {toolResult && (
+              <div className="st-row" style={{ marginTop: "0.75rem", flexDirection: "column", alignItems: "stretch" }}>
+                <p className="st-row-label">Result</p>
+                <pre style={{
+                  background: "#0f172a", border: "1px solid #334155", borderRadius: 6,
+                  padding: "0.75rem", color: "#e2e8f0", fontFamily: "monospace",
+                  fontSize: "0.78rem", overflowX: "auto", maxHeight: 300, whiteSpace: "pre-wrap",
+                }}>
+                  {toolResult}
+                </pre>
+              </div>
+            )}
           </div>
         )}
 
@@ -845,11 +963,11 @@ export function Settings({
             <div className="st-about-grid">
               <div className="st-about-field">
                 <span className="st-about-label">Version</span>
-                <span className="st-about-value">v7.0.0</span>
+                <span className="st-about-value">v9.0.0</span>
               </div>
               <div className="st-about-field">
                 <span className="st-about-label">Build</span>
-                <span className="st-about-value">2026-03-05</span>
+                <span className="st-about-value">2026-03-17</span>
               </div>
               <div className="st-about-field">
                 <span className="st-about-label">Runtime</span>
@@ -861,12 +979,13 @@ export function Settings({
               </div>
             </div>
             <div className="st-about-actions">
-              <a className="st-btn st-btn-blue" href="https://gitlab.com/nexaiceo/nexus-os" target="_blank" rel="noreferrer">View on GitLab</a>
-              <button type="button" className="st-btn st-btn-ghost" onClick={() => {
+              <a className="st-btn st-btn-blue cursor-pointer" href="https://gitlab.com/nexaiceo/nexus-os" target="_blank" rel="noreferrer">View on GitLab</a>
+              <button type="button" className="st-btn st-btn-ghost cursor-pointer" onClick={() => {
                 setUpdateCheck("checking");
-                window.setTimeout(() => setUpdateCheck("up-to-date"), 800);
+                if (updateCheckTimerRef.current) clearTimeout(updateCheckTimerRef.current);
+                updateCheckTimerRef.current = window.setTimeout(() => setUpdateCheck("up-to-date"), 800);
               }}>
-                {updateCheck === "checking" ? "Checking..." : updateCheck === "up-to-date" ? "v7.0.0 \u2014 You are running the latest version." : "Check for Updates"}
+                {updateCheck === "checking" ? "Checking..." : updateCheck === "up-to-date" ? <><Check size={14} className="inline-icon" /> v9.0.0 — You are running the latest version.</> : <><Cloud size={14} className="inline-icon" /> Check for Updates</>}
               </button>
             </div>
           </div>
@@ -874,8 +993,8 @@ export function Settings({
       </div>
 
       <footer className="st-footer">
-        <button type="button" className="st-save-btn" onClick={onSave} disabled={saving}>
-          {saving ? "Saving..." : "Save Settings"}
+        <button type="button" className="st-save-btn cursor-pointer" onClick={onSave} disabled={saving}>
+          {saving ? "Saving..." : <><Save size={14} className="inline-icon" /> Save Settings</>}
         </button>
       </footer>
     </section>

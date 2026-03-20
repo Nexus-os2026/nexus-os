@@ -35,7 +35,7 @@ COPY --from=frontend-builder /build/app/dist ./app/dist
 
 VOLUME ["/data"]
 
-EXPOSE 8080
+EXPOSE 8080 9090
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1

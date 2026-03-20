@@ -756,6 +756,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "tracing",
  "uuid",
 ]
 
@@ -767,6 +768,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml 0.8.2",
+ "tracing",
  "uuid",
 ]
 
@@ -3930,6 +3932,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tracing",
  "uuid",
 ]
 
@@ -4029,6 +4032,7 @@ dependencies = [
  "nexus-sdk",
  "serde",
  "serde_json",
+ "tracing",
  "uuid",
 ]
 
@@ -4058,6 +4062,7 @@ dependencies = [
  "rand_distr 0.6.0",
  "serde",
  "serde_json",
+ "tracing",
  "uuid",
 ]
 
@@ -4079,6 +4084,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tokenizers",
+ "tracing",
  "uuid",
 ]
 
@@ -4149,6 +4155,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tracing",
  "uuid",
 ]
 
@@ -4315,9 +4322,9 @@ dependencies = [
  "getrandom 0.2.17",
  "governor",
  "hkdf",
- "libc",
  "nexus-kernel",
  "nexus-persistence",
+ "nix",
  "rand 0.8.5",
  "regex",
  "reqwest 0.12.28",
@@ -4429,6 +4436,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tracing",
  "uuid",
  "wasmtime",
  "wat",
@@ -4488,6 +4496,18 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
+]
+
+[[package]]
+name = "nix"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46"
+dependencies = [
+ "bitflags 2.11.0",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
 ]
 
 [[package]]
@@ -6395,6 +6415,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "tracing",
  "uuid",
 ]
 
@@ -6869,6 +6890,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml 0.8.2",
+ "tracing",
  "uuid",
 ]
 
@@ -8771,6 +8793,7 @@ dependencies = [
  "nexus-sdk",
  "serde",
  "serde_json",
+ "tracing",
  "uuid",
 ]
 

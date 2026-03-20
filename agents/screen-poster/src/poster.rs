@@ -202,17 +202,17 @@ where
         screenshots.push(self.runtime.screenshot("step-3-after-publish")?);
 
         let posted = self.vision.verify_posted()?;
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "step": "post_verification",
-                    "platform": platform.as_label(),
-                    "posted": posted,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "step": "post_verification",
+                "platform": platform.as_label(),
+                "posted": posted,
+            }),
+        ) {
+            tracing::error!("Audit append failed: {e}");
+        }
 
         Ok(PostResult {
             posted,
@@ -243,33 +243,33 @@ where
     }
 
     fn audit_navigation(&mut self, navigation: &NavigationResult) {
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "step": "navigate",
-                    "platform": navigation.platform.as_label(),
-                    "url": navigation.url,
-                    "logged_in": navigation.logged_in,
-                    "used_vision_fallback": navigation.used_vision_fallback,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "step": "navigate",
+                "platform": navigation.platform.as_label(),
+                "url": navigation.url,
+                "logged_in": navigation.logged_in,
+                "used_vision_fallback": navigation.used_vision_fallback,
+            }),
+        ) {
+            tracing::error!("Audit append failed: {e}");
+        }
     }
 
     fn audit_step(&mut self, step: &str, platform: SocialPlatform, ok: bool) {
-        self.audit_trail
-            .append_event(
-                self.agent_id,
-                EventType::ToolCall,
-                json!({
-                    "step": step,
-                    "platform": platform.as_label(),
-                    "ok": ok,
-                }),
-            )
-            .expect("audit: fail-closed");
+        if let Err(e) = self.audit_trail.append_event(
+            self.agent_id,
+            EventType::ToolCall,
+            json!({
+                "step": step,
+                "platform": platform.as_label(),
+                "ok": ok,
+            }),
+        ) {
+            tracing::error!("Audit append failed: {e}");
+        }
     }
 }
 

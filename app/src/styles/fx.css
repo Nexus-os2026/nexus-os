@@ -6,6 +6,50 @@
   overflow: hidden;
 }
 
+.living-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.living-background__aura,
+.living-background__grid,
+.living-background__canvas,
+.living-background__vignette {
+  position: absolute;
+  inset: 0;
+}
+
+.living-background__aura {
+  opacity: 0.95;
+  filter: blur(6px) saturate(120%);
+  transition: transform 240ms ease;
+}
+
+.living-background__grid {
+  inset: -8%;
+  background-image:
+    linear-gradient(rgba(108, 185, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(74, 247, 211, 0.035) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.92), transparent 88%);
+  opacity: 0.58;
+  transition: transform 240ms ease;
+}
+
+.living-background__canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.living-background__vignette {
+  background:
+    radial-gradient(circle at center, transparent 46%, rgba(1, 4, 11, 0.42) 100%),
+    linear-gradient(180deg, rgba(1, 4, 11, 0.04), rgba(1, 4, 11, 0.3));
+}
+
 .neural-layer {
   position: absolute;
   inset: 0;
@@ -28,19 +72,21 @@
   --holo-shift-y: 0px;
   --holo-tilt: 0deg;
   position: relative;
-  border: 1px solid rgba(103, 232, 249, 0.25);
-  background: linear-gradient(160deg, rgba(4, 10, 24, 0.78), rgba(12, 24, 40, 0.54));
-  border-radius: 1rem;
+  border: 1px solid rgba(118, 190, 255, 0.18);
+  background:
+    linear-gradient(160deg, rgba(4, 10, 24, 0.84), rgba(12, 24, 40, 0.62)),
+    linear-gradient(135deg, rgba(74, 247, 211, 0.04), rgba(140, 123, 255, 0.04));
+  border-radius: var(--radius-panel-lg);
   overflow: hidden;
   transform: translate3d(var(--holo-shift-x), var(--holo-shift-y), 0) rotateX(calc(var(--holo-tilt) * -0.18)) rotateY(var(--holo-tilt));
   transition: transform 260ms ease, border-color 220ms ease;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 24px 60px -36px rgba(31, 208, 255, 0.55);
+    0 32px 72px -42px rgba(31, 208, 255, 0.34);
 }
 
 .holo-panel:hover {
-  border-color: rgba(0, 255, 157, 0.45);
+  border-color: rgba(74, 247, 211, 0.32);
 }
 
 .holo-panel__refraction {

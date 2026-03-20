@@ -109,8 +109,10 @@ impl ReplayBundle {
             output_hash,
         };
 
-        let canonical =
-            serde_json::to_vec(&input).expect("replay bundle hash serialization must not fail");
+        let canonical = match serde_json::to_vec(&input) {
+            Ok(v) => v,
+            Err(_) => return String::new(),
+        };
 
         let mut hasher = Sha256::new();
         hasher.update(&canonical);

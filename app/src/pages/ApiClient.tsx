@@ -1,19 +1,7 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { Plus, LayoutGrid, Send, Trash2, ChevronRight, ChevronDown, Zap, CornerRightUp } from "lucide-react";
+import { apiClientRequest, apiClientListCollections, apiClientSaveCollections, hasDesktopRuntime } from "../api/backend";
 import "./api-client.css";
-
-/* ─── Tauri invoke ─── */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function invoke(cmd: string, args?: Record<string, unknown>): Promise<any> {
-  if (
-    typeof window !== "undefined" &&
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    typeof (window as any).__TAURI__?.invoke === "function"
-  ) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (window as any).__TAURI__.invoke(cmd, args);
-  }
-  return JSON.stringify({ error: "Tauri backend not available" });
-}
 
 /* ─── types ─── */
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
@@ -95,26 +83,7 @@ function newRequest(method: HttpMethod = "GET", name = "New Request", url = ""):
   };
 }
 
-const INITIAL_COLLECTIONS: Collection[] = [
-  {
-    id: "col-1", name: "Nexus OS API", icon: "⬢", collapsed: false,
-    requests: [
-      { ...newRequest("GET", "List Agents", "http://localhost:8080/api/v1/agents"), id: "req-1", headers: [{ key: "Authorization", value: "Bearer nxs-token", enabled: true }, { key: "Content-Type", value: "application/json", enabled: true }] },
-      { ...newRequest("GET", "Get Agent by ID", "http://localhost:8080/api/v1/agents/:id"), id: "req-2", params: [{ key: "id", value: "coder-001", enabled: true }] },
-      { ...newRequest("POST", "Create Agent", "http://localhost:8080/api/v1/agents"), id: "req-3", bodyType: "json", bodyRaw: '{\n  "name": "Test Agent",\n  "agent_type": "coder",\n  "autonomy_level": 2,\n  "fuel_budget": 1000\n}' },
-      { ...newRequest("GET", "Fuel Balance", "http://localhost:8080/api/v1/fuel/:agentId"), id: "req-4" },
-      { ...newRequest("GET", "Audit Trail", "http://localhost:8080/api/v1/audit?limit=50"), id: "req-5" },
-      { ...newRequest("DELETE", "Delete Agent", "http://localhost:8080/api/v1/agents/:id"), id: "req-6" },
-    ],
-  },
-  {
-    id: "col-2", name: "External APIs", icon: "◈", collapsed: true,
-    requests: [
-      { ...newRequest("POST", "Claude Chat", "https://api.anthropic.com/v1/messages"), id: "req-7", authType: "api-key", authKeyName: "x-api-key", authKeyValue: "", authKeyIn: "header", bodyType: "json", bodyRaw: '{\n  "model": "claude-sonnet-4-5-20250514",\n  "max_tokens": 1024,\n  "messages": [\n    {"role": "user", "content": "Hello"}\n  ]\n}' },
-      { ...newRequest("GET", "GitHub Repos", "https://api.github.com/user/repos"), id: "req-8", authType: "bearer", authToken: "" },
-    ],
-  },
-];
+/* Collections are loaded from backend on mount, not hardcoded */
 
 /* ─── JSON syntax highlight ─── */
 function highlightJson(json: string): string {
@@ -129,8 +98,8 @@ function highlightJson(json: string): string {
 
 /* ─── component ─── */
 export default function ApiClient() {
-  const [collections, setCollections] = useState<Collection[]>(INITIAL_COLLECTIONS);
-  const [activeReqId, setActiveReqId] = useState("req-1");
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [activeReqId, setActiveReqId] = useState("");
   const [response, setResponse] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [reqTab, setReqTab] = useState<ReqTab>("params");
@@ -140,24 +109,57 @@ export default function ApiClient() {
   const [fuelUsed, setFuelUsed] = useState(0);
   const [requestError, setRequestError] = useState<string | null>(null);
 
+  /* ─── load saved collections from backend on mount ─── */
+  useEffect(() => {
+    (async () => {
+      if (!hasDesktopRuntime()) return;
+      try {
+        const raw = await apiClientListCollections();
+        const saved: Collection[] = JSON.parse(raw);
+        if (saved.length > 0) {
+          setCollections(saved);
+          const firstReq = saved.flatMap(c => c.requests)[0];
+          if (firstReq) setActiveReqId(firstReq.id);
+        }
+      } catch {
+        // Backend command may not exist yet — start with empty state
+      }
+    })();
+  }, []);
+
+  /* ─── persist collections to backend on change ─── */
+  const persistCollections = useCallback((cols: Collection[]) => {
+    setCollections(cols);
+    if (hasDesktopRuntime()) {
+      apiClientSaveCollections(JSON.stringify(cols)).catch(() => {});
+    }
+  }, []);
+
   const activeReq = useMemo(() => {
     for (const col of collections) {
       const found = col.requests.find(r => r.id === activeReqId);
       if (found) return found;
     }
-    return collections[0].requests[0];
+    return collections[0]?.requests[0] ?? null;
   }, [collections, activeReqId]);
 
   /* ─── update request ─── */
   const updateReq = useCallback((updates: Partial<ApiRequest>) => {
-    setCollections(prev => prev.map(col => ({
-      ...col,
-      requests: col.requests.map(r => r.id === activeReqId ? { ...r, ...updates } : r),
-    })));
+    setCollections(prev => {
+      const next = prev.map(col => ({
+        ...col,
+        requests: col.requests.map(r => r.id === activeReqId ? { ...r, ...updates } : r),
+      }));
+      if (hasDesktopRuntime()) {
+        apiClientSaveCollections(JSON.stringify(next)).catch(() => {});
+      }
+      return next;
+    });
   }, [activeReqId]);
 
   /* ─── send request (real HTTP via Tauri/curl) ─── */
   const sendRequest = useCallback(async () => {
+    if (!activeReq) return;
     setLoading(true);
     setResTab("body");
     setRequestError(null);
@@ -199,12 +201,9 @@ export default function ApiClient() {
     }
 
     try {
-      const raw: string = await invoke("api_client_request", {
-        method: activeReq.method,
-        url: finalUrl,
-        headersJson: JSON.stringify(headers),
-        body,
-      });
+      const raw: string = await apiClientRequest(
+        activeReq.method, finalUrl, JSON.stringify(headers), body,
+      );
 
       const data = JSON.parse(raw);
 
@@ -244,17 +243,17 @@ export default function ApiClient() {
 
   /* ─── collection management ─── */
   const toggleCollection = (id: string) => {
-    setCollections(prev => prev.map(c => c.id === id ? { ...c, collapsed: !c.collapsed } : c));
+    persistCollections(collections.map(c => c.id === id ? { ...c, collapsed: !c.collapsed } : c));
   };
 
   const addRequest = (colId: string) => {
     const req = newRequest();
-    setCollections(prev => prev.map(c => c.id === colId ? { ...c, requests: [...c.requests, req] } : c));
+    persistCollections(collections.map(c => c.id === colId ? { ...c, requests: [...c.requests, req] } : c));
     setActiveReqId(req.id);
   };
 
   const deleteRequest = (colId: string, reqId: string) => {
-    setCollections(prev => prev.map(c => c.id === colId ? { ...c, requests: c.requests.filter(r => r.id !== reqId) } : c));
+    persistCollections(collections.map(c => c.id === colId ? { ...c, requests: c.requests.filter(r => r.id !== reqId) } : c));
     if (activeReqId === reqId) {
       const first = collections.flatMap(c => c.requests).find(r => r.id !== reqId);
       if (first) setActiveReqId(first.id);
@@ -262,8 +261,8 @@ export default function ApiClient() {
   };
 
   const addCollection = () => {
-    const col: Collection = { id: `col-${Date.now()}`, name: "New Collection", icon: "◇", requests: [], collapsed: false };
-    setCollections(prev => [...prev, col]);
+    const col: Collection = { id: `col-${Date.now()}`, name: "New Collection", icon: "", requests: [], collapsed: false };
+    persistCollections([...collections, col]);
   };
 
   /* ─── KV helpers ─── */
@@ -301,8 +300,8 @@ export default function ApiClient() {
         <div className="ac-sidebar-header">
           <h2 className="ac-sidebar-title">API Client</h2>
           <div className="ac-sidebar-actions">
-            <button className="ac-btn-icon" onClick={addCollection} title="New collection">+</button>
-            <button className={`ac-btn-icon ${showAudit ? "active" : ""}`} onClick={() => setShowAudit(!showAudit)} title="Audit">⧉</button>
+            <button className="ac-btn-icon cursor-pointer" onClick={addCollection} title="New collection"><Plus size={14} /></button>
+            <button className={`ac-btn-icon cursor-pointer ${showAudit ? "active" : ""}`} onClick={() => setShowAudit(!showAudit)} title="Audit"><LayoutGrid size={14} /></button>
           </div>
         </div>
 
@@ -319,7 +318,7 @@ export default function ApiClient() {
                   <span className="ac-audit-time">{formatTimestamp(entry.timestamp)}</span>
                 </div>
                 <div className="ac-audit-url">{entry.url.replace(/https?:\/\//, "").slice(0, 35)}...</div>
-                <div className="ac-audit-meta">{entry.duration}ms · ⚡{entry.fuelCost}</div>
+                <div className="ac-audit-meta">{entry.duration}ms · <Zap size={10} style={{ display: "inline", verticalAlign: "middle" }} />{entry.fuelCost}</div>
               </div>
             ))}
           </div>
@@ -328,14 +327,22 @@ export default function ApiClient() {
         {/* collections */}
         {!showAudit && (
           <div className="ac-collections">
+            {collections.length === 0 && (
+              <div style={{ padding: "24px 16px", textAlign: "center", color: "#64748b", fontSize: 13 }}>
+                <p style={{ marginBottom: 12 }}>No collections yet.</p>
+                <button className="ac-btn-send cursor-pointer" style={{ fontSize: 12, padding: "6px 16px" }} onClick={addCollection}>
+                  <Plus size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Create your first collection
+                </button>
+              </div>
+            )}
             {collections.map(col => (
               <div key={col.id} className="ac-collection">
                 <div className="ac-collection-header" onClick={() => toggleCollection(col.id)}>
-                  <span className="ac-collection-arrow">{col.collapsed ? "▸" : "▾"}</span>
+                  <span className="ac-collection-arrow">{col.collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}</span>
                   <span className="ac-collection-icon">{col.icon}</span>
                   <span className="ac-collection-name">{col.name}</span>
                   <span className="ac-collection-count">{col.requests.length}</span>
-                  <button className="ac-btn-tiny" onClick={e => { e.stopPropagation(); addRequest(col.id); }} title="Add request">+</button>
+                  <button className="ac-btn-tiny cursor-pointer" onClick={e => { e.stopPropagation(); addRequest(col.id); }} title="Add request"><Plus size={10} /></button>
                 </div>
                 {!col.collapsed && (
                   <div className="ac-collection-requests">
@@ -343,7 +350,7 @@ export default function ApiClient() {
                       <div key={req.id} className={`ac-req-item ${activeReqId === req.id ? "active" : ""}`} onClick={() => { setActiveReqId(req.id); setResponse(null); setRequestError(null); }}>
                         <span className="ac-req-method" style={{ color: METHOD_COLORS[req.method] }}>{req.method.slice(0, 3)}</span>
                         <span className="ac-req-name">{req.name}</span>
-                        <button className="ac-btn-del" onClick={e => { e.stopPropagation(); deleteRequest(col.id, req.id); }}>×</button>
+                        <button className="ac-btn-del cursor-pointer" onClick={e => { e.stopPropagation(); deleteRequest(col.id, req.id); }}><Trash2 size={10} /></button>
                       </div>
                     ))}
                   </div>
@@ -356,6 +363,11 @@ export default function ApiClient() {
 
       {/* ─── Main ─── */}
       <div className="ac-main">
+        {!activeReq ? (
+          <div className="ac-no-response" style={{ margin: "auto", textAlign: "center", padding: 40, color: "#64748b" }}>
+            <div style={{ fontSize: 14, marginBottom: 8 }}>Create a collection and add a request to get started.</div>
+          </div>
+        ) : (<>
         {/* URL bar */}
         <div className="ac-url-bar">
           <select className="ac-method-select" value={activeReq.method} onChange={e => updateReq({ method: e.target.value as HttpMethod })} style={{ color: METHOD_COLORS[activeReq.method] }}>
@@ -364,8 +376,8 @@ export default function ApiClient() {
             ))}
           </select>
           <input className="ac-url-input" value={activeReq.url} onChange={e => updateReq({ url: e.target.value })} placeholder="Enter request URL..." onKeyDown={e => e.key === "Enter" && sendRequest()} />
-          <button className="ac-btn-send" onClick={sendRequest} disabled={loading}>
-            {loading ? "Sending..." : "Send"}
+          <button className="ac-btn-send cursor-pointer" onClick={sendRequest} disabled={loading}>
+            {loading ? "Sending..." : <><Send size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Send</>}
           </button>
         </div>
 
@@ -540,7 +552,7 @@ export default function ApiClient() {
             )}
             {!loading && !response && !requestError && (
               <div className="ac-no-response">
-                <div className="ac-no-response-icon">⤴</div>
+                <div className="ac-no-response-icon"><CornerRightUp size={32} /></div>
                 <div>Click Send to make a request</div>
                 <div className="ac-no-response-hint">Or press Enter in the URL bar</div>
               </div>
@@ -563,14 +575,15 @@ export default function ApiClient() {
             )}
           </div>
         </div>
+      </>)}
       </div>
 
       {/* ─── Status Bar ─── */}
       <div className="ac-status-bar">
-        <span className="ac-status-item">{activeReq.method} {activeReq.url.replace(/https?:\/\//, "").slice(0, 40)}</span>
+        <span className="ac-status-item">{activeReq ? `${activeReq.method} ${activeReq.url.replace(/https?:\/\//, "").slice(0, 40)}` : "No request selected"}</span>
         {response && <span className="ac-status-item" style={{ color: statusColor(response.status) }}>{response.status} {response.statusText}</span>}
         {response && <span className="ac-status-item">{response.duration}ms</span>}
-        <span className="ac-status-item">⚡ {fuelUsed} fuel</span>
+        <span className="ac-status-item"><Zap size={10} style={{ display: "inline", verticalAlign: "middle" }} /> {fuelUsed} fuel</span>
         <span className="ac-status-item ac-status-right">{audit.length} requests logged</span>
         <span className="ac-status-item">{collections.reduce((s, c) => s + c.requests.length, 0)} saved requests</span>
       </div>

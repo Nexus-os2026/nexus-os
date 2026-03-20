@@ -1,11 +1,11 @@
 //! OS-level integration tests for `ResourceLimiter`.
 //!
-//! These tests spawn real subprocesses and manipulate process groups, so they
-//! are marked `#[ignore]` to avoid running in CI by default.  Run them
-//! explicitly with:
+//! These tests spawn real subprocesses and manipulate process groups.
+//! They rely on wall-clock timing so may be flaky under extreme CPU
+//! contention.  If they fail in CI, re-run on a quieter machine:
 //!
 //! ```sh
-//! cargo test -p nexus-kernel --test resource_limiter_integration_tests -- --ignored
+//! cargo test -p nexus-kernel --test resource_limiter_integration_tests
 //! ```
 
 use nexus_kernel::resource_limiter::{ResourceLimiter, ResourceLimits};
@@ -13,9 +13,8 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// Spawn `sleep 300` with a 2-second timeout.  Verify the process finishes
-/// (is killed) within 3 seconds.
+/// (is killed) within 5 seconds.
 #[test]
-#[ignore]
 fn test_subprocess_respects_timeout() {
     let limits = ResourceLimits {
         timeout_seconds: 2,
@@ -49,7 +48,6 @@ fn test_subprocess_respects_timeout() {
 /// Spawn a shell that itself spawns background children.  Kill the process
 /// group and verify no orphaned `sleep` processes remain.
 #[test]
-#[ignore]
 fn test_process_group_kill() {
     let limiter = ResourceLimiter::default();
 
@@ -77,15 +75,17 @@ fn test_process_group_kill() {
     std::thread::sleep(Duration::from_millis(100));
 
     // Verify the process group leader is dead.
-    // On Linux, kill(pid, 0) returns -1 / ESRCH when the process is gone.
     #[cfg(target_os = "linux")]
     {
-        let alive = unsafe { libc::kill(pid as i32, 0) };
-        assert_ne!(alive, 0, "parent process should be dead");
+        use nix::sys::signal::{kill, killpg};
+        use nix::unistd::Pid;
 
-        // Also check the negative PGID — the entire group should be gone.
-        let group_alive = unsafe { libc::kill(-(pid as i32), 0) };
-        assert_ne!(group_alive, 0, "process group should be dead");
+        let probe = kill(Pid::from_raw(pid as i32), None);
+        assert!(probe.is_err(), "parent process should be dead");
+
+        // Also check the process group — the entire group should be gone.
+        let group_probe = killpg(Pid::from_raw(pid as i32), None);
+        assert!(group_probe.is_err(), "process group should be dead");
     }
 }
 
@@ -94,7 +94,6 @@ fn test_process_group_kill() {
 /// forking.
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore]
 fn test_rlimit_nproc_prevents_fork_bomb() {
     let limits = ResourceLimits {
         max_processes: 5,

@@ -64,7 +64,10 @@ impl ModuleCache {
         wasm_bytes: &[u8],
     ) -> Result<(Module, bool), wasmtime::Error> {
         let hash = ContentHash::of(wasm_bytes);
-        let mut map = self.inner.lock().expect("cache lock poisoned");
+        let mut map = self.inner.lock().unwrap_or_else(|poisoned| {
+            eprintln!("Lock was poisoned, recovering inner data");
+            poisoned.into_inner()
+        });
 
         if let Some(module) = map.get(&hash) {
             self.hits.fetch_add(1, Ordering::Relaxed);
@@ -92,7 +95,10 @@ impl ModuleCache {
 
     /// Number of cached modules.
     pub fn len(&self) -> usize {
-        self.inner.lock().expect("cache lock poisoned").len()
+        self.inner.lock().unwrap_or_else(|poisoned| {
+            eprintln!("Lock was poisoned, recovering inner data");
+            poisoned.into_inner()
+        }).len()
     }
 
     /// Whether the cache is empty.
@@ -104,13 +110,19 @@ impl ModuleCache {
     pub fn contains(&self, hash: &ContentHash) -> bool {
         self.inner
             .lock()
-            .expect("cache lock poisoned")
+            .unwrap_or_else(|poisoned| {
+                eprintln!("Lock was poisoned, recovering inner data");
+                poisoned.into_inner()
+            })
             .contains_key(hash)
     }
 
     /// Clear all cached modules.
     pub fn clear(&self) {
-        self.inner.lock().expect("cache lock poisoned").clear();
+        self.inner.lock().unwrap_or_else(|poisoned| {
+            eprintln!("Lock was poisoned, recovering inner data");
+            poisoned.into_inner()
+        }).clear();
     }
 }
 

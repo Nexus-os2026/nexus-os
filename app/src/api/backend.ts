@@ -131,12 +131,70 @@ export function resumeAgent(agentId: string): Promise<void> {
   return invokeDesktop<void>("resume_agent", agentArgs(agentId));
 }
 
-export function sendChat(message: string, modelId?: string): Promise<ChatResponse> {
+export function sendChat(message: string, modelId?: string, agentName?: string): Promise<ChatResponse> {
   return invokeDesktop<ChatResponse>("send_chat", {
     message,
     modelId,
     model_id: modelId,
+    agent_name: agentName,
   });
+}
+
+// ── Auto-Evolution API ──
+
+export interface AgentPerformanceTracker {
+  agent_id: string;
+  recent_scores: number[];
+  running_average: number;
+  improvement_threshold: number;
+  evolution_cooldown_secs: number;
+  total_tasks: number;
+  total_evolutions: number;
+  successful_evolutions: number;
+  evolution_enabled: boolean;
+}
+
+export interface EvolutionEvent {
+  agent_id: string;
+  timestamp: number;
+  old_score: number;
+  new_score: number;
+  success: boolean;
+  prompt_diff_summary: string;
+}
+
+export interface EvolutionResult {
+  agent_id: string;
+  improved: boolean;
+  old_score: number;
+  new_score: number;
+  message: string;
+}
+
+export function getAgentPerformance(agentId: string): Promise<AgentPerformanceTracker> {
+  return invokeDesktop<AgentPerformanceTracker>("get_agent_performance", { agent_id: agentId });
+}
+
+export function getAutoEvolutionLog(agentId: string, limit: number = 20): Promise<EvolutionEvent[]> {
+  return invokeDesktop<EvolutionEvent[]>("get_auto_evolution_log", { agent_id: agentId, limit });
+}
+
+export function setAutoEvolutionConfig(
+  agentId: string,
+  enabled: boolean,
+  threshold: number,
+  cooldownSeconds: number,
+): Promise<void> {
+  return invokeDesktop<void>("set_auto_evolution_config", {
+    agent_id: agentId,
+    enabled,
+    threshold,
+    cooldown_seconds: cooldownSeconds,
+  });
+}
+
+export function forceEvolveAgent(agentId: string): Promise<EvolutionResult> {
+  return invokeDesktop<EvolutionResult>("force_evolve_agent", { agent_id: agentId });
 }
 
 export function getConfig(): Promise<NexusConfig> {
@@ -427,6 +485,32 @@ export function getAgentCards(): Promise<AgentCardSummary[]> {
 
 export function getScheduledAgents(): Promise<ScheduledAgent[]> {
   return invokeDesktop<ScheduledAgent[]>("get_scheduled_agents");
+}
+
+// ── A2A Client API ──
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function a2aDiscoverAgent(url: string): Promise<any> {
+  return invokeDesktop("a2a_discover_agent", { url });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function a2aSendTask(agentUrl: string, message: string): Promise<any> {
+  return invokeDesktop("a2a_send_task", { agentUrl: agentUrl, agent_url: agentUrl, message });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function a2aGetTaskStatus(agentUrl: string, taskId: string): Promise<any> {
+  return invokeDesktop("a2a_get_task_status", { agentUrl: agentUrl, agent_url: agentUrl, taskId: taskId, task_id: taskId });
+}
+
+export function a2aCancelTask(agentUrl: string, taskId: string): Promise<void> {
+  return invokeDesktop("a2a_cancel_task", { agentUrl: agentUrl, agent_url: agentUrl, taskId: taskId, task_id: taskId });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function a2aKnownAgents(): Promise<any> {
+  return invokeDesktop("a2a_known_agents");
 }
 
 // ── Identity API ──
@@ -1343,3 +1427,1477 @@ export function runParallelSimulations(
     variant_count: variantCount,
   });
 }
+
+// ── Self-Improving OS ───────────────────────────────────────────────────────
+
+export function getOsFitness(): Promise<string> {
+  return invokeDesktop<string>("get_os_fitness");
+}
+
+export function getFitnessHistory(days: number): Promise<string> {
+  return invokeDesktop<string>("get_fitness_history", { days });
+}
+
+export function getRoutingStats(): Promise<string> {
+  return invokeDesktop<string>("get_routing_stats");
+}
+
+export function getUiAdaptations(): Promise<string> {
+  return invokeDesktop<string>("get_ui_adaptations");
+}
+
+export function getUserProfile(): Promise<string> {
+  return invokeDesktop<string>("get_user_profile");
+}
+
+export function recordPageVisit(page: string): Promise<void> {
+  return invokeDesktop<void>("record_page_visit", { page });
+}
+
+export function recordFeatureUse(feature: string): Promise<void> {
+  return invokeDesktop<void>("record_feature_use", { feature });
+}
+
+export function overrideSecurityBlock(
+  eventId: string,
+  ruleId: string,
+): Promise<void> {
+  return invokeDesktop<void>("override_security_block", {
+    eventId,
+    event_id: eventId,
+    ruleId,
+    rule_id: ruleId,
+  });
+}
+
+export function getOsImprovementLog(limit: number): Promise<string> {
+  return invokeDesktop<string>("get_os_improvement_log", { limit });
+}
+
+export function getMorningOsBriefing(): Promise<string> {
+  return invokeDesktop<string>("get_morning_os_briefing");
+}
+
+export function recordRoutingOutcome(
+  category: string,
+  agentId: string,
+  score: number,
+): Promise<void> {
+  return invokeDesktop<void>("record_routing_outcome", {
+    category,
+    agentId,
+    agent_id: agentId,
+    score,
+  });
+}
+
+export function recordOperationTiming(
+  operation: string,
+  latencyMs: number,
+): Promise<void> {
+  return invokeDesktop<void>("record_operation_timing", {
+    operation,
+    latencyMs,
+    latency_ms: latencyMs,
+  });
+}
+
+export function getPerformanceReport(): Promise<string> {
+  return invokeDesktop<string>("get_performance_report");
+}
+
+export function getSecurityEvolutionReport(): Promise<string> {
+  return invokeDesktop<string>("get_security_evolution_report");
+}
+
+export function recordKnowledgeInteraction(
+  topic: string,
+  languages: string[],
+  score: number,
+): Promise<void> {
+  return invokeDesktop<void>("record_knowledge_interaction", {
+    topic,
+    languages,
+    score,
+  });
+}
+
+export function getOsDreamStatus(): Promise<string> {
+  return invokeDesktop<string>("get_os_dream_status");
+}
+
+export function setSelfImproveEnabled(enabled: boolean): Promise<void> {
+  return invokeDesktop<void>("set_self_improve_enabled", { enabled });
+}
+
+// ── Killer Features: Screenshot Clone ──
+
+export function screenshotAnalyze(imagePath: string): Promise<string> {
+  return invokeDesktop<string>("screenshot_analyze", { imagePath });
+}
+
+export function screenshotGenerateSpec(
+  analysisJson: string,
+  projectName: string,
+): Promise<string> {
+  return invokeDesktop<string>("screenshot_generate_spec", {
+    analysisJson,
+    projectName,
+  });
+}
+
+// ── Killer Features: Voice Project ──
+
+export function voiceProjectStart(): Promise<void> {
+  return invokeDesktop<void>("voice_project_start");
+}
+
+export function voiceProjectStop(): Promise<string> {
+  return invokeDesktop<string>("voice_project_stop");
+}
+
+export function voiceProjectAddChunk(
+  text: string,
+  timestamp: number,
+): Promise<void> {
+  return invokeDesktop<void>("voice_project_add_chunk", { text, timestamp });
+}
+
+export function voiceProjectGetStatus(): Promise<string> {
+  return invokeDesktop<string>("voice_project_get_status");
+}
+
+export function voiceProjectGetPrompt(): Promise<string> {
+  return invokeDesktop<string>("voice_project_get_prompt");
+}
+
+export function voiceProjectUpdateIntent(
+  response: string,
+  timestamp: number,
+): Promise<string> {
+  return invokeDesktop<string>("voice_project_update_intent", {
+    response,
+    timestamp,
+  });
+}
+
+// ── Killer Features: Stress Test ──
+
+export function stressGeneratePersonas(count: number): Promise<string> {
+  return invokeDesktop<string>("stress_generate_personas", { count });
+}
+
+export function stressGenerateActions(personaJson: string): Promise<string> {
+  return invokeDesktop<string>("stress_generate_actions", { personaJson });
+}
+
+export function stressEvaluateReport(reportJson: string): Promise<string> {
+  return invokeDesktop<string>("stress_evaluate_report", { reportJson });
+}
+
+// ── Killer Features: Deploy ──
+
+export function deployGenerateDockerfile(configJson: string): Promise<string> {
+  return invokeDesktop<string>("deploy_generate_dockerfile", { configJson });
+}
+
+export function deployValidateConfig(configJson: string): Promise<string> {
+  return invokeDesktop<string>("deploy_validate_config", { configJson });
+}
+
+export function deployGetCommands(configJson: string): Promise<string> {
+  return invokeDesktop<string>("deploy_get_commands", { configJson });
+}
+
+// ── Killer Features: Live Evolution ──
+
+export function evolverRegisterApp(appJson: string): Promise<void> {
+  return invokeDesktop<void>("evolver_register_app", { appJson });
+}
+
+export function evolverUnregisterApp(projectId: string): Promise<boolean> {
+  return invokeDesktop<boolean>("evolver_unregister_app", { projectId });
+}
+
+export function evolverListApps(): Promise<string> {
+  return invokeDesktop<string>("evolver_list_apps");
+}
+
+export function evolverDetectIssues(metricsJson: string): Promise<string> {
+  return invokeDesktop<string>("evolver_detect_issues", { metricsJson });
+}
+
+// ── Killer Features: Freelance Engine ──
+
+export function freelanceGetStatus(): Promise<string> {
+  return invokeDesktop<string>("freelance_get_status");
+}
+
+export function freelanceStartScanning(): Promise<void> {
+  return invokeDesktop<void>("freelance_start_scanning");
+}
+
+export function freelanceStopScanning(): Promise<void> {
+  return invokeDesktop<void>("freelance_stop_scanning");
+}
+
+export function freelanceEvaluateJob(jobJson: string): Promise<string> {
+  return invokeDesktop<string>("freelance_evaluate_job", { jobJson });
+}
+
+export function freelanceGetRevenue(): Promise<string> {
+  return invokeDesktop<string>("freelance_get_revenue");
+}
+
+// ── Experience Layer: Conversational Builder, Remix, Teach Mode ──
+
+export function startConversationalBuild(message: string): Promise<string> {
+  return invokeDesktop<string>("start_conversational_build", { message });
+}
+
+export function builderRespond(message: string): Promise<string> {
+  return invokeDesktop<string>("builder_respond", { message });
+}
+
+export function getLivePreview(projectId: string): Promise<string> {
+  return invokeDesktop<string>("get_live_preview", { projectId });
+}
+
+export function remixProject(projectId: string, change: string): Promise<string> {
+  return invokeDesktop<string>("remix_project", { projectId, change });
+}
+
+export function analyzeProblem(problem: string): Promise<string> {
+  return invokeDesktop<string>("analyze_problem", { problem });
+}
+
+export function publishToMarketplace(projectId: string, pricing: string): Promise<string> {
+  return invokeDesktop<string>("publish_to_marketplace", { projectId, pricing });
+}
+
+export function installFromMarketplace(listingId: string): Promise<string> {
+  return invokeDesktop<string>("install_from_marketplace", { listingId });
+}
+
+export function startTeachMode(projectId: string): Promise<string> {
+  return invokeDesktop<string>("start_teach_mode", { projectId });
+}
+
+export function teachModeRespond(projectId: string, response: string): Promise<string> {
+  return invokeDesktop<string>("teach_mode_respond", { projectId, response });
+}
+
+// ============ AIRGAP ============
+
+export function airgapCreateBundle(
+  targetOs: string,
+  targetArch: string,
+  outputPath: string,
+  components?: string,
+): Promise<string> {
+  return invokeDesktop<string>("airgap_create_bundle", {
+    targetOs, target_os: targetOs,
+    targetArch, target_arch: targetArch,
+    outputPath, output_path: outputPath,
+    components: components ?? null,
+  });
+}
+
+export function airgapGetSystemInfo(): Promise<string> {
+  return invokeDesktop<string>("airgap_get_system_info");
+}
+
+export function airgapInstallBundle(bundlePath: string, installDir: string): Promise<string> {
+  return invokeDesktop<string>("airgap_install_bundle", {
+    bundlePath, bundle_path: bundlePath,
+    installDir, install_dir: installDir,
+  });
+}
+
+export function airgapValidateBundle(bundlePath: string): Promise<string> {
+  return invokeDesktop<string>("airgap_validate_bundle", {
+    bundlePath, bundle_path: bundlePath,
+  });
+}
+
+// ============ CIVILIZATION (extra) ============
+
+export function civGetEconomyStatus(): Promise<string> {
+  return invokeJsonDesktop<string>("civ_get_economy_status");
+}
+
+export function civGetGovernanceLog(limit = 100): Promise<string> {
+  return invokeJsonDesktop<string>("civ_get_governance_log", { limit });
+}
+
+export function civGetParliamentStatus(): Promise<string> {
+  return invokeJsonDesktop<string>("civ_get_parliament_status");
+}
+
+export function civGetRoles(): Promise<string> {
+  return invokeJsonDesktop<string>("civ_get_roles");
+}
+
+export function civProposeRule(proposerId: string, ruleText: string): Promise<string> {
+  return invokeJsonDesktop<string>("civ_propose_rule", {
+    proposerId, proposer_id: proposerId,
+    ruleText, rule_text: ruleText,
+  });
+}
+
+export function civResolveDispute(agentA: string, agentB: string, issue: string): Promise<string> {
+  return invokeJsonDesktop<string>("civ_resolve_dispute", {
+    agentA, agent_a: agentA,
+    agentB, agent_b: agentB,
+    issue,
+  });
+}
+
+// ============ COGFS (extra) ============
+
+export function cogfsGetContext(topic: string): Promise<string> {
+  return invokeJsonDesktop<string>("cogfs_get_context", { topic });
+}
+
+export function cogfsGetEntities(filePath: string): Promise<string> {
+  return invokeJsonDesktop<string>("cogfs_get_entities", { filePath, file_path: filePath });
+}
+
+export function cogfsGetGraph(filePath: string): Promise<string> {
+  return invokeJsonDesktop<string>("cogfs_get_graph", { filePath, file_path: filePath });
+}
+
+// ============ ECONOMY ============
+
+export function economyCreateWallet(agentId: string): Promise<string> {
+  return invokeDesktop<string>("economy_create_wallet", agentArgs(agentId));
+}
+
+export function economyGetWallet(agentId: string): Promise<string> {
+  return invokeDesktop<string>("economy_get_wallet", agentArgs(agentId));
+}
+
+export function economyEarn(agentId: string, amount: number, description: string): Promise<string> {
+  return invokeDesktop<string>("economy_earn", {
+    agentId, agent_id: agentId, amount, description,
+  });
+}
+
+export function economySpend(
+  agentId: string, amount: number, txType: string, description: string,
+): Promise<string> {
+  return invokeDesktop<string>("economy_spend", {
+    agentId, agent_id: agentId, amount,
+    txType, tx_type: txType, description,
+  });
+}
+
+export function economyTransfer(
+  from: string, to: string, amount: number, description: string,
+): Promise<string> {
+  return invokeDesktop<string>("economy_transfer", { from, to, amount, description });
+}
+
+export function economyFreezeWallet(agentId: string): Promise<string> {
+  return invokeDesktop<string>("economy_freeze_wallet", agentArgs(agentId));
+}
+
+export function economyGetHistory(agentId: string): Promise<string> {
+  return invokeDesktop<string>("economy_get_history", agentArgs(agentId));
+}
+
+export function economyGetStats(): Promise<string> {
+  return invokeDesktop<string>("economy_get_stats");
+}
+
+export function economyCreateContract(
+  agentId: string, clientId: string, description: string,
+  criteriaJson: string, reward: number, penalty: number, deadline?: number,
+): Promise<string> {
+  return invokeDesktop<string>("economy_create_contract", {
+    agentId, agent_id: agentId,
+    clientId, client_id: clientId,
+    description, criteriaJson, criteria_json: criteriaJson,
+    reward, penalty, deadline: deadline ?? null,
+  });
+}
+
+export function economyCompleteContract(
+  contractId: string, success: boolean, evidence?: string,
+): Promise<string> {
+  return invokeDesktop<string>("economy_complete_contract", {
+    contractId, contract_id: contractId,
+    success, evidence: evidence ?? null,
+  });
+}
+
+export function economyListContracts(agentId: string): Promise<string> {
+  return invokeDesktop<string>("economy_list_contracts", agentArgs(agentId));
+}
+
+export function economyDisputeContract(contractId: string, reason: string): Promise<string> {
+  return invokeDesktop<string>("economy_dispute_contract", {
+    contractId, contract_id: contractId, reason,
+  });
+}
+
+export function economyAgentPerformance(agentId: string): Promise<string> {
+  return invokeDesktop<string>("economy_agent_performance", agentArgs(agentId));
+}
+
+// ============ EVOLUTION ============
+
+export function evolutionGetStatus(): Promise<string> {
+  return invokeDesktop<string>("evolution_get_status");
+}
+
+export function evolutionEvolveOnce(agentId: string): Promise<string> {
+  return invokeDesktop<string>("evolution_evolve_once", agentArgs(agentId));
+}
+
+export function evolutionGetHistory(agentId: string): Promise<string> {
+  return invokeDesktop<string>("evolution_get_history", agentArgs(agentId));
+}
+
+export function evolutionGetActiveStrategy(agentId: string): Promise<string> {
+  return invokeDesktop<string>("evolution_get_active_strategy", agentArgs(agentId));
+}
+
+export function evolutionRegisterStrategy(
+  agentId: string, name: string, parameters: string,
+): Promise<string> {
+  return invokeDesktop<string>("evolution_register_strategy", {
+    agentId, agent_id: agentId, name, parameters,
+  });
+}
+
+export function evolutionRollback(agentId: string): Promise<string> {
+  return invokeDesktop<string>("evolution_rollback", agentArgs(agentId));
+}
+
+export function evolvePopulation(
+  agentIds: string[], task: string, generations: number,
+): Promise<string> {
+  return invokeDesktop<string>("evolve_population", {
+    agentIds, agent_ids: agentIds, task, generations,
+  });
+}
+
+// ============ GENOME (extra) ============
+
+export function breedAgents(parentA: string, parentB: string): Promise<string> {
+  return invokeDesktop<string>("breed_agents", {
+    parentA, parent_a: parentA, parentB, parent_b: parentB,
+  });
+}
+
+export function getAgentGenome(agentId: string): Promise<string> {
+  return invokeDesktop<string>("get_agent_genome", agentArgs(agentId));
+}
+
+export function getAgentLineage(agentId: string): Promise<string> {
+  return invokeDesktop<string>("get_agent_lineage", agentArgs(agentId));
+}
+
+export function generateAllGenomes(): Promise<string> {
+  return invokeDesktop<string>("generate_all_genomes");
+}
+
+// ============ GENESIS ============
+
+export function genesisAnalyzeGap(userRequest: string): Promise<string> {
+  return invokeDesktop<string>("genesis_analyze_gap", {
+    userRequest, user_request: userRequest,
+  });
+}
+
+export function genesisPreviewAgent(userRequest: string, llmResponse: string): Promise<string> {
+  return invokeDesktop<string>("genesis_preview_agent", {
+    userRequest, user_request: userRequest,
+    llmResponse, llm_response: llmResponse,
+  });
+}
+
+export function genesisCreateAgent(specJson: string, systemPrompt: string): Promise<string> {
+  return invokeDesktop<string>("genesis_create_agent", {
+    specJson, spec_json: specJson,
+    systemPrompt, system_prompt: systemPrompt,
+  });
+}
+
+export function genesisDeleteAgent(agentName: string): Promise<string> {
+  return invokeDesktop<string>("genesis_delete_agent", {
+    agentName, agent_name: agentName,
+  });
+}
+
+export function genesisListGenerated(): Promise<string> {
+  return invokeDesktop<string>("genesis_list_generated");
+}
+
+export function genesisStorePattern(
+  specJson: string, missingCapabilities: string[], testScore: number,
+): Promise<string> {
+  return invokeDesktop<string>("genesis_store_pattern", {
+    specJson, spec_json: specJson,
+    missingCapabilities, missing_capabilities: missingCapabilities,
+    testScore, test_score: testScore,
+  });
+}
+
+// ============ CONSCIOUSNESS ============
+
+export function getAgentConsciousness(agentId: string): Promise<string> {
+  return invokeDesktop<string>("get_agent_consciousness", agentArgs(agentId));
+}
+
+export function getConsciousnessHeatmap(): Promise<string> {
+  return invokeJsonDesktop<string>("get_consciousness_heatmap");
+}
+
+export function getConsciousnessHistory(agentId: string, limit = 50): Promise<string> {
+  return invokeDesktop<string>("get_consciousness_history", {
+    agentId, agent_id: agentId, limit,
+  });
+}
+
+export function getUserBehaviorState(): Promise<string> {
+  return invokeDesktop<string>("get_user_behavior_state");
+}
+
+export function reportUserKeystroke(isDeletion: boolean, timestamp: number): Promise<void> {
+  return invokeDesktop<void>("report_user_keystroke", {
+    isDeletion, is_deletion: isDeletion, timestamp,
+  });
+}
+
+// ============ LLM PROVIDER ============
+
+export function getActiveLlmProvider(): Promise<string> {
+  return invokeDesktop<string>("get_active_llm_provider");
+}
+
+// ============ DREAMS ============
+
+export function getDreamStatus(): Promise<string> {
+  return invokeDesktop<string>("get_dream_status");
+}
+
+export function getDreamQueue(): Promise<string> {
+  return invokeDesktop<string>("get_dream_queue");
+}
+
+export function getDreamHistory(limit = 50): Promise<string> {
+  return invokeDesktop<string>("get_dream_history", { limit });
+}
+
+export function getMorningBriefing(): Promise<string> {
+  return invokeDesktop<string>("get_morning_briefing");
+}
+
+// ============ TEMPORAL (extra) ============
+
+export function getTemporalHistory(limit = 50): Promise<string> {
+  return invokeDesktop<string>("get_temporal_history", { limit });
+}
+
+export function setTemporalConfig(
+  maxForks: number, evalStrategy: string, budgetTokens: number,
+): Promise<void> {
+  return invokeDesktop<void>("set_temporal_config", {
+    maxForks, max_forks: maxForks,
+    evalStrategy, eval_strategy: evalStrategy,
+    budgetTokens, budget_tokens: budgetTokens,
+  });
+}
+
+// ============ IMMUNE (extra) ============
+
+export function getImmuneStatus(): Promise<string> {
+  return invokeJsonDesktop<string>("get_immune_status");
+}
+
+export function getImmuneMemory(): Promise<string> {
+  return invokeJsonDesktop<string>("get_immune_memory");
+}
+
+export function setPrivacyRules(rules: unknown): Promise<void> {
+  return invokeDesktop<void>("set_privacy_rules", { rules });
+}
+
+export function runAdversarialSession(
+  attackerId: string, defenderId: string, rounds: number,
+): Promise<string> {
+  return invokeJsonDesktop<string>("run_adversarial_session", {
+    attackerId, attacker_id: attackerId,
+    defenderId, defender_id: defenderId,
+    rounds,
+  });
+}
+
+// ============ GHOST PROTOCOL ============
+
+export function ghostProtocolToggle(enabled: boolean): Promise<string> {
+  return invokeDesktop<string>("ghost_protocol_toggle", { enabled });
+}
+
+export function ghostProtocolStatus(): Promise<string> {
+  return invokeDesktop<string>("ghost_protocol_status");
+}
+
+export function ghostProtocolGetState(): Promise<string> {
+  return invokeDesktop<string>("ghost_protocol_get_state");
+}
+
+export function ghostProtocolAddPeer(address: string, name: string): Promise<string> {
+  return invokeDesktop<string>("ghost_protocol_add_peer", { address, name });
+}
+
+export function ghostProtocolRemovePeer(deviceId: string): Promise<string> {
+  return invokeDesktop<string>("ghost_protocol_remove_peer", {
+    deviceId, device_id: deviceId,
+  });
+}
+
+export function ghostProtocolSyncNow(): Promise<string> {
+  return invokeDesktop<string>("ghost_protocol_sync_now");
+}
+
+// ============ IDENTITY (extra) ============
+
+export function identityGetAgentPassport(agentId: string): Promise<string> {
+  return invokeJsonDesktop<string>("identity_get_agent_passport", {
+    agentId, agent_id: agentId,
+  });
+}
+
+export function identityExportPassport(agentId: string): Promise<string> {
+  return invokeJsonDesktop<string>("identity_export_passport", {
+    agentId, agent_id: agentId,
+  });
+}
+
+export function identityGenerateProof(agentId: string, claim: string): Promise<string> {
+  return invokeJsonDesktop<string>("identity_generate_proof", {
+    agentId, agent_id: agentId, claim,
+  });
+}
+
+export function identityVerifyProof(proof: unknown): Promise<boolean> {
+  return invokeDesktop<boolean>("identity_verify_proof", { proof });
+}
+
+// ============ MCP HOST ============
+
+export function mcpHostAddServer(
+  name: string, url: string, transport: string, authToken?: string,
+): Promise<string> {
+  return invokeDesktop<string>("mcp_host_add_server", {
+    name, url, transport,
+    authToken: authToken ?? null, auth_token: authToken ?? null,
+  });
+}
+
+export function mcpHostRemoveServer(serverId: string): Promise<string> {
+  return invokeDesktop<string>("mcp_host_remove_server", {
+    serverId, server_id: serverId,
+  });
+}
+
+export function mcpHostListServers(): Promise<string> {
+  return invokeDesktop<string>("mcp_host_list_servers");
+}
+
+export function mcpHostConnect(serverId: string): Promise<string> {
+  return invokeDesktop<string>("mcp_host_connect", {
+    serverId, server_id: serverId,
+  });
+}
+
+export function mcpHostDisconnect(serverId: string): Promise<string> {
+  return invokeDesktop<string>("mcp_host_disconnect", {
+    serverId, server_id: serverId,
+  });
+}
+
+export function mcpHostListTools(): Promise<string> {
+  return invokeDesktop<string>("mcp_host_list_tools");
+}
+
+export function mcpHostCallTool(toolName: string, args: string): Promise<string> {
+  return invokeDesktop<string>("mcp_host_call_tool", {
+    toolName, tool_name: toolName,
+    arguments: args,
+  });
+}
+
+// ============ MESH (extra) ============
+
+export function meshDiscoverPeers(): Promise<string> {
+  return invokeJsonDesktop<string>("mesh_discover_peers");
+}
+
+export function meshGetPeers(): Promise<string> {
+  return invokeJsonDesktop<string>("mesh_get_peers");
+}
+
+export function meshGetSyncStatus(): Promise<string> {
+  return invokeJsonDesktop<string>("mesh_get_sync_status");
+}
+
+export function meshDistributeTask(task: string, agentIds: string[]): Promise<string> {
+  return invokeJsonDesktop<string>("mesh_distribute_task", {
+    task, agentIds, agent_ids: agentIds,
+  });
+}
+
+export function meshMigrateAgent(agentId: string, targetPeer: string): Promise<string> {
+  return invokeJsonDesktop<string>("mesh_migrate_agent", {
+    agentId, agent_id: agentId,
+    targetPeer, target_peer: targetPeer,
+  });
+}
+
+// ============ NEURAL BRIDGE ============
+
+export function neuralBridgeIngest(
+  sourceType: string, content: string, metadata: unknown,
+): Promise<string> {
+  return invokeDesktop<string>("neural_bridge_ingest", {
+    sourceType, source_type: sourceType, content, metadata,
+  });
+}
+
+export function neuralBridgeSearch(
+  query: string, timeRange?: [number, number],
+  sourceFilter?: string[], maxResults?: number,
+): Promise<string> {
+  return invokeDesktop<string>("neural_bridge_search", {
+    query,
+    timeRange: timeRange ?? null, time_range: timeRange ?? null,
+    sourceFilter: sourceFilter ?? null, source_filter: sourceFilter ?? null,
+    maxResults: maxResults ?? null, max_results: maxResults ?? null,
+  });
+}
+
+export function neuralBridgeStatus(): Promise<string> {
+  return invokeDesktop<string>("neural_bridge_status");
+}
+
+export function neuralBridgeToggle(enabled: boolean): Promise<string> {
+  return invokeDesktop<string>("neural_bridge_toggle", { enabled });
+}
+
+export function neuralBridgeDelete(id: string): Promise<string> {
+  return invokeDesktop<string>("neural_bridge_delete", { id });
+}
+
+export function neuralBridgeClearOld(beforeTimestamp: number): Promise<string> {
+  return invokeDesktop<string>("neural_bridge_clear_old", {
+    beforeTimestamp, before_timestamp: beforeTimestamp,
+  });
+}
+
+// ============ NEXUS LINK ============
+
+export function nexusLinkStatus(): Promise<string> {
+  return invokeDesktop<string>("nexus_link_status");
+}
+
+export function nexusLinkToggleSharing(enabled: boolean): Promise<string> {
+  return invokeDesktop<string>("nexus_link_toggle_sharing", { enabled });
+}
+
+export function nexusLinkAddPeer(address: string, name: string): Promise<string> {
+  return invokeDesktop<string>("nexus_link_add_peer", { address, name });
+}
+
+export function nexusLinkRemovePeer(deviceId: string): Promise<string> {
+  return invokeDesktop<string>("nexus_link_remove_peer", {
+    deviceId, device_id: deviceId,
+  });
+}
+
+export function nexusLinkListPeers(): Promise<string> {
+  return invokeDesktop<string>("nexus_link_list_peers");
+}
+
+export function nexusLinkSendModel(
+  peerAddress: string, modelId: string, filename: string,
+): Promise<string> {
+  return invokeDesktop<string>("nexus_link_send_model", {
+    peerAddress, peer_address: peerAddress,
+    modelId, model_id: modelId, filename,
+  });
+}
+
+// ============ NOTES (extra) ============
+
+export function notesGet(id: string): Promise<string> {
+  return invokeDesktop<string>("notes_get", { id });
+}
+
+// ============ OMNISCIENCE ============
+
+export function omniscienceEnable(intervalMs = 5000): Promise<void> {
+  return invokeDesktop<void>("omniscience_enable", {
+    intervalMs, interval_ms: intervalMs,
+  });
+}
+
+export function omniscienceDisable(): Promise<void> {
+  return invokeDesktop<void>("omniscience_disable");
+}
+
+export function omniscienceGetScreenContext(): Promise<string> {
+  return invokeJsonDesktop<string>("omniscience_get_screen_context");
+}
+
+export function omniscienceGetPredictions(): Promise<string> {
+  return invokeJsonDesktop<string>("omniscience_get_predictions");
+}
+
+export function omniscienceGetAppContext(appName: string): Promise<string> {
+  return invokeJsonDesktop<string>("omniscience_get_app_context", {
+    appName, app_name: appName,
+  });
+}
+
+export function omniscienceExecuteAction(action: unknown): Promise<string> {
+  return invokeJsonDesktop<string>("omniscience_execute_action", { action });
+}
+
+// ============ PAYMENT ============
+
+export function paymentCreatePlan(
+  name: string, priceCents: number, interval: string, features: string[],
+): Promise<string> {
+  return invokeDesktop<string>("payment_create_plan", {
+    name, priceCents, price_cents: priceCents,
+    interval, features,
+  });
+}
+
+export function paymentListPlans(): Promise<string> {
+  return invokeDesktop<string>("payment_list_plans");
+}
+
+export function paymentCreateInvoice(planId: string, buyerId: string): Promise<string> {
+  return invokeDesktop<string>("payment_create_invoice", {
+    planId, plan_id: planId, buyerId, buyer_id: buyerId,
+  });
+}
+
+export function paymentPayInvoice(invoiceId: string): Promise<string> {
+  return invokeDesktop<string>("payment_pay_invoice", {
+    invoiceId, invoice_id: invoiceId,
+  });
+}
+
+export function paymentGetRevenueStats(): Promise<string> {
+  return invokeDesktop<string>("payment_get_revenue_stats");
+}
+
+export function paymentCreatePayout(
+  developerId: string, agentId: string, amountCents: number, period: string,
+): Promise<string> {
+  return invokeDesktop<string>("payment_create_payout", {
+    developerId, developer_id: developerId,
+    agentId, agent_id: agentId,
+    amountCents, amount_cents: amountCents,
+    period,
+  });
+}
+
+// ============ REPLAY ============
+
+export function replayToggleRecording(enabled: boolean): Promise<string> {
+  return invokeDesktop<string>("replay_toggle_recording", { enabled });
+}
+
+export function replayListBundles(agentId?: string, limit?: number): Promise<string> {
+  return invokeDesktop<string>("replay_list_bundles", {
+    agentId: agentId ?? null, agent_id: agentId ?? null,
+    limit: limit ?? null,
+  });
+}
+
+export function replayGetBundle(bundleId: string): Promise<string> {
+  return invokeDesktop<string>("replay_get_bundle", {
+    bundleId, bundle_id: bundleId,
+  });
+}
+
+export function replayVerifyBundle(bundleId: string): Promise<string> {
+  return invokeDesktop<string>("replay_verify_bundle", {
+    bundleId, bundle_id: bundleId,
+  });
+}
+
+export function replayExportBundle(bundleId: string): Promise<string> {
+  return invokeDesktop<string>("replay_export_bundle", {
+    bundleId, bundle_id: bundleId,
+  });
+}
+
+// ============ REPUTATION ============
+
+export function reputationRegister(did: string, name: string): Promise<string> {
+  return invokeDesktop<string>("reputation_register", { did, name });
+}
+
+export function reputationGet(did: string): Promise<string> {
+  return invokeDesktop<string>("reputation_get", { did });
+}
+
+export function reputationTop(limit?: number): Promise<string> {
+  return invokeDesktop<string>("reputation_top", { limit: limit ?? null });
+}
+
+export function reputationRateAgent(
+  did: string, raterDid: string, score: number, comment?: string,
+): Promise<string> {
+  return invokeDesktop<string>("reputation_rate_agent", {
+    did, raterDid, rater_did: raterDid,
+    score, comment: comment ?? null,
+  });
+}
+
+export function reputationRecordTask(did: string, success: boolean): Promise<string> {
+  return invokeDesktop<string>("reputation_record_task", { did, success });
+}
+
+export function reputationExport(did: string): Promise<string> {
+  return invokeDesktop<string>("reputation_export", { did });
+}
+
+export function reputationImport(json: string): Promise<string> {
+  return invokeDesktop<string>("reputation_import", { json });
+}
+
+// ============ SELF-REWRITE (extra) ============
+
+export function selfRewriteGetHistory(): Promise<string> {
+  return invokeJsonDesktop<string>("self_rewrite_get_history");
+}
+
+export function selfRewritePreviewPatch(patchId: string): Promise<string> {
+  return invokeJsonDesktop<string>("self_rewrite_preview_patch", {
+    patchId, patch_id: patchId,
+  });
+}
+
+export function selfRewriteTestPatch(patchId: string): Promise<string> {
+  return invokeJsonDesktop<string>("self_rewrite_test_patch", {
+    patchId, patch_id: patchId,
+  });
+}
+
+// ============ TRACING ============
+
+export function tracingStartTrace(operationName: string, agentId?: string): Promise<string> {
+  return invokeDesktop<string>("tracing_start_trace", {
+    operationName, operation_name: operationName,
+    agentId: agentId ?? null, agent_id: agentId ?? null,
+  });
+}
+
+export function tracingEndTrace(traceId: string): Promise<string> {
+  return invokeDesktop<string>("tracing_end_trace", {
+    traceId, trace_id: traceId,
+  });
+}
+
+export function tracingStartSpan(
+  traceId: string, parentSpanId: string, operationName: string, agentId?: string,
+): Promise<string> {
+  return invokeDesktop<string>("tracing_start_span", {
+    traceId, trace_id: traceId,
+    parentSpanId, parent_span_id: parentSpanId,
+    operationName, operation_name: operationName,
+    agentId: agentId ?? null, agent_id: agentId ?? null,
+  });
+}
+
+export function tracingEndSpan(
+  spanId: string, status: string, errorMessage?: string,
+): Promise<string> {
+  return invokeDesktop<string>("tracing_end_span", {
+    spanId, span_id: spanId,
+    status,
+    errorMessage: errorMessage ?? null, error_message: errorMessage ?? null,
+  });
+}
+
+export function tracingGetTrace(traceId: string): Promise<string> {
+  return invokeDesktop<string>("tracing_get_trace", {
+    traceId, trace_id: traceId,
+  });
+}
+
+export function tracingListTraces(limit?: number): Promise<string> {
+  return invokeDesktop<string>("tracing_list_traces", { limit: limit ?? null });
+}
+
+// ============ TOOLS ============
+
+export function listTools(): Promise<string> {
+  return invokeDesktop<string>("list_tools");
+}
+
+export function executeTool(toolJson: string): Promise<string> {
+  return invokeDesktop<string>("execute_tool", {
+    toolJson, tool_json: toolJson,
+  });
+}
+
+// ============ GOVERNANCE ============
+
+export function verifyGovernanceInvariants(): Promise<string> {
+  return invokeDesktop<string>("verify_governance_invariants");
+}
+
+export function verifySpecificInvariant(invariantName: string): Promise<string> {
+  return invokeDesktop<string>("verify_specific_invariant", {
+    invariantName, invariant_name: invariantName,
+  });
+}
+
+export function exportComplianceReport(): Promise<string> {
+  return invokeDesktop<string>("export_compliance_report");
+}
+
+// ============ TRAY ============
+
+export function trayStatus(): Promise<string> {
+  return invokeJsonDesktop<string>("tray_status");
+}
+
+// ============ DILATED TIME / ADVERSARIAL ============
+
+export function runDilatedSession(
+  task: string, agentIds: string[], maxIterations: number,
+): Promise<string> {
+  return invokeDesktop<string>("run_dilated_session", {
+    task, agentIds, agent_ids: agentIds,
+    maxIterations, max_iterations: maxIterations,
+  });
+}
+
+// ============ LEARNING ============
+
+export function getLearningPaths(): Promise<string> {
+  return invokeDesktop<string>("get_learning_session");
+}
+
+export function completeLearningStep(pathId: string, stepId: string): Promise<void> {
+  return invokeDesktop<void>("learning_agent_action", {
+    pathId, path_id: pathId, stepId, step_id: stepId,
+  });
+}
+
+// ============ ADMIN CONSOLE ============
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function adminOverview(): Promise<any> {
+  return invokeJsonDesktop("admin_overview");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function adminUsersList(): Promise<any[]> {
+  return invokeJsonDesktop("admin_users_list");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function adminUserCreate(email: string, name: string, role: string): Promise<any> {
+  return invokeJsonDesktop("admin_user_create", { email, name, role });
+}
+
+export function adminUserUpdateRole(userId: string, role: string): Promise<void> {
+  return invokeDesktop<void>("admin_user_update_role", { user_id: userId, role });
+}
+
+export function adminUserDeactivate(userId: string): Promise<void> {
+  return invokeDesktop<void>("admin_user_deactivate", { user_id: userId });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function adminFleetStatus(): Promise<any> {
+  return invokeJsonDesktop("admin_fleet_status");
+}
+
+export function adminAgentStopAll(workspaceId: string): Promise<number> {
+  return invokeDesktop<number>("admin_agent_stop_all", { workspace_id: workspaceId });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function adminAgentBulkUpdate(agentDids: string[], update: Record<string, unknown>): Promise<any> {
+  return invokeJsonDesktop("admin_agent_bulk_update", { agent_dids: agentDids, update: JSON.stringify(update) });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function adminPolicyGet(scope: string): Promise<any> {
+  return invokeJsonDesktop("admin_policy_get", { scope });
+}
+
+export function adminPolicyUpdate(scope: string, policy: Record<string, unknown>): Promise<void> {
+  return invokeDesktop<void>("admin_policy_update", { scope, policy: JSON.stringify(policy) });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function adminPolicyHistory(scope: string): Promise<any[]> {
+  return invokeJsonDesktop("admin_policy_history", { scope });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function adminComplianceStatus(): Promise<any> {
+  return invokeJsonDesktop("admin_compliance_status");
+}
+
+export function adminComplianceExport(format: string): Promise<string> {
+  return invokeDesktop<string>("admin_compliance_export", { format });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function adminSystemHealth(): Promise<any> {
+  return invokeJsonDesktop("admin_system_health");
+}
+
+// ── Integration commands ──────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function integrationsList(): Promise<any> {
+  return invokeJsonDesktop("integrations_list");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function integrationTest(providerId: string): Promise<any> {
+  return invokeJsonDesktop("integration_test", { providerId });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function integrationConfigure(providerId: string, settings: Record<string, unknown>): Promise<any> {
+  return invokeJsonDesktop("integration_configure", { providerId, settings });
+}
+
+// ── Audit & Compliance Dashboard commands ───────────────────────
+
+export interface AuditSearchQuery {
+  text?: string;
+  agent_id?: string;
+  event_type?: string;
+  severity?: string;
+  time_range?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AuditSearchResult {
+  entries: AuditEventRow[];
+  total: number;
+  offset: number;
+  has_more: boolean;
+}
+
+export interface AuditStatistics {
+  total_entries: number;
+  entries_by_action: Record<string, number>;
+  entries_by_agent: Record<string, number>;
+  hitl_approvals: number;
+  hitl_denials: number;
+  hitl_timeouts: number;
+  capability_denials: number;
+  pii_redactions: number;
+  firewall_blocks: number;
+  total_fuel_consumed: number;
+  severity_counts: Record<string, number>;
+}
+
+export interface ChainVerifyResult {
+  verified: boolean;
+  chain_length: number;
+  verification_time_ms: number;
+  first_break_at: number | null;
+  last_verified_at: number;
+}
+
+export interface GovernanceMetrics {
+  hitl_approval_rate: number;
+  capability_denial_rate: number;
+  pii_redaction_count: number;
+  firewall_block_count: number;
+  total_fuel_consumed: number;
+  total_events: number;
+  autonomy_distribution: Record<string, number>;
+  events_per_hour: [number, number][];
+}
+
+export interface SecurityEvent {
+  timestamp: number;
+  event_type: string;
+  severity: string;
+  agent_id: string;
+  description: string;
+}
+
+export function auditSearch(query: AuditSearchQuery): Promise<AuditSearchResult> {
+  return invokeJsonDesktop<AuditSearchResult>("audit_search", { query });
+}
+
+export function auditStatistics(timeRange: string): Promise<AuditStatistics> {
+  return invokeJsonDesktop<AuditStatistics>("audit_statistics", { timeRange, time_range: timeRange });
+}
+
+export function auditVerifyChain(): Promise<ChainVerifyResult> {
+  return invokeJsonDesktop<ChainVerifyResult>("audit_verify_chain");
+}
+
+export function auditExportReport(format: string, timeRange: string): Promise<string> {
+  return invokeDesktop<string>("audit_export_report", { format, time_range: timeRange });
+}
+
+export function complianceGovernanceMetrics(timeRange: string): Promise<GovernanceMetrics> {
+  return invokeJsonDesktop<GovernanceMetrics>("compliance_governance_metrics", { timeRange, time_range: timeRange });
+}
+
+export function complianceSecurityEvents(timeRange: string): Promise<SecurityEvent[]> {
+  return invokeJsonDesktop<SecurityEvent[]>("compliance_security_events", { timeRange, time_range: timeRange });
+}
+
+// ── Auth commands (nexus-auth) ──────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function authLogin(): Promise<any> {
+  return invokeJsonDesktop("auth_login");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function authSessionInfo(sessionId: string): Promise<any> {
+  return invokeJsonDesktop("auth_session_info", { session_id: sessionId });
+}
+
+export function authLogout(sessionId: string): Promise<void> {
+  return invokeDesktop<void>("auth_logout", { session_id: sessionId });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function authConfigGet(): Promise<any> {
+  return invokeJsonDesktop("auth_config_get");
+}
+
+// ── Workspace commands (nexus-tenancy) ──────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function workspaceList(): Promise<any[]> {
+  return invokeJsonDesktop("workspace_list");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function workspaceCreate(name: string): Promise<any> {
+  return invokeJsonDesktop("workspace_create", { name });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function workspaceGet(workspaceId: string): Promise<any> {
+  return invokeJsonDesktop("workspace_get", { workspace_id: workspaceId });
+}
+
+export function workspaceAddMember(workspaceId: string, userId: string, role: string): Promise<void> {
+  return invokeDesktop<void>("workspace_add_member", { workspace_id: workspaceId, user_id: userId, role });
+}
+
+export function workspaceRemoveMember(workspaceId: string, userId: string): Promise<void> {
+  return invokeDesktop<void>("workspace_remove_member", { workspace_id: workspaceId, user_id: userId });
+}
+
+export function workspaceSetPolicy(workspaceId: string, policyJson: string): Promise<void> {
+  return invokeDesktop<void>("workspace_set_policy", { workspace_id: workspaceId, policy_json: policyJson });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function workspaceUsage(workspaceId: string): Promise<any> {
+  return invokeJsonDesktop("workspace_usage", { workspace_id: workspaceId });
+}
+
+// ── Telemetry commands (nexus-telemetry) ────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function telemetryStatus(): Promise<any> {
+  return invokeJsonDesktop("telemetry_status");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function telemetryHealth(): Promise<any> {
+  return invokeJsonDesktop("telemetry_health");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function telemetryConfigGet(): Promise<any> {
+  return invokeJsonDesktop("telemetry_config_get");
+}
+
+export function telemetryConfigUpdate(configJson: string): Promise<void> {
+  return invokeDesktop<void>("telemetry_config_update", { config_json: configJson });
+}
+
+// ── Metering commands (nexus-metering) ──────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function meteringUsageReport(workspaceId: string, period: string): Promise<any> {
+  return invokeJsonDesktop("metering_usage_report", { workspace_id: workspaceId, period });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function meteringCostBreakdown(workspaceId: string, period: string): Promise<any> {
+  return invokeJsonDesktop("metering_cost_breakdown", { workspace_id: workspaceId, period });
+}
+
+export function meteringExportCsv(workspaceId: string, period: string): Promise<string> {
+  return invokeDesktop<string>("metering_export_csv", { workspace_id: workspaceId, period });
+}
+
+export function meteringSetBudgetAlert(workspaceId: string, threshold: number): Promise<void> {
+  return invokeDesktop<void>("metering_set_budget_alert", { workspace_id: workspaceId, threshold });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function meteringBudgetAlerts(workspaceId: string): Promise<any[]> {
+  return invokeJsonDesktop("metering_budget_alerts", { workspace_id: workspaceId });
+}
+
+// ── Backup commands ─────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function backupList(): Promise<any[]> {
+  return invokeJsonDesktop("backup_list");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function backupCreate(): Promise<any> {
+  return invokeJsonDesktop("backup_create");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function backupVerify(id: string): Promise<any> {
+  return invokeJsonDesktop("backup_verify", { id });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function backupRestore(id: string): Promise<any> {
+  return invokeJsonDesktop("backup_restore", { id });
+}
+
+// ============ DATABASE MANAGER API ============
+
+export function dbConnect(connectionString: string): Promise<string> {
+  return invokeDesktop<string>("db_connect", { connectionString, connection_string: connectionString });
+}
+
+export function dbListTables(connectionString: string): Promise<string> {
+  return invokeDesktop<string>("db_list_tables", { connectionString, connection_string: connectionString });
+}
+
+export function dbExecuteQuery(connectionString: string, query: string): Promise<string> {
+  return invokeDesktop<string>("db_execute_query", { connectionString, connection_string: connectionString, query });
+}
+
+// ============ FILE MANAGER (extra) ============
+
+export function fileManagerHome(): Promise<string> {
+  return invokeDesktop<string>("file_manager_home");
+}
+
+export function fileManagerDelete(path: string): Promise<string> {
+  return invokeDesktop<string>("file_manager_delete", { path });
+}
+
+export function fileManagerRename(from: string, to: string): Promise<string> {
+  return invokeDesktop<string>("file_manager_rename", { from, to });
+}
+
+// ============ TIMELINE VIEWER API ============
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function temporalSelectFork(forkId: string): Promise<any> {
+  return invokeDesktop("temporal_select_fork", { forkId, fork_id: forkId });
+}
+
+// ============ API CLIENT API ============
+
+export function apiClientRequest(
+  method: string, url: string, headersJson: string, body: string,
+): Promise<string> {
+  return invokeDesktop<string>("api_client_request", { method, url, headersJson, headers_json: headersJson, body });
+}
+
+export function apiClientListCollections(): Promise<string> {
+  return invokeDesktop<string>("api_client_list_collections");
+}
+
+export function apiClientSaveCollections(dataJson: string): Promise<void> {
+  return invokeDesktop<void>("api_client_save_collections", { dataJson, data_json: dataJson });
+}
+
+// ============ LEARNING PROGRESS API ============
+
+export function learningSaveProgress(dataJson: string): Promise<void> {
+  return invokeDesktop<void>("learning_save_progress", { dataJson, data_json: dataJson });
+}
+
+export function learningGetProgress(): Promise<string> {
+  return invokeDesktop<string>("learning_get_progress");
+}
+
+export function learningExecuteChallenge(
+  challengeId: string, code: string, language: string,
+): Promise<string> {
+  return invokeDesktop<string>("learning_execute_challenge", {
+    challengeId, challenge_id: challengeId,
+    code,
+    language,
+  });
+}
+
+// ============ DATABASE EXPORT API ============
+
+export function dbDisconnect(dbPath: string): Promise<void> {
+  return invokeDesktop<void>("db_disconnect", { dbPath, db_path: dbPath });
+}
+
+export function dbExportTable(
+  connectionString: string, tableName: string, format: string,
+): Promise<string> {
+  return invokeDesktop<string>("db_export_table", {
+    connectionString, connection_string: connectionString,
+    tableName, table_name: tableName,
+    format,
+  });
+}
+
+// ============ DREAM ENGINE (extra) ============
+
+export function triggerDreamNow(): Promise<void> {
+  return invokeDesktop<void>("trigger_dream_now");
+}
+
+export function setDreamConfig(
+  enabled: boolean, idleTriggerMinutes: number, tokenBudget: number, apiCallBudget: number,
+): Promise<void> {
+  return invokeDesktop<void>("set_dream_config", {
+    enabled,
+    idleTriggerMinutes, idle_trigger_minutes: idleTriggerMinutes,
+    tokenBudget, token_budget: tokenBudget,
+    apiCallBudget, api_call_budget: apiCallBudget,
+  });
+}
+
+// ============ IMMUNE ENGINE (extra) ============
+
+export function triggerImmuneScan(): Promise<void> {
+  return invokeDesktop<void>("trigger_immune_scan");
+}
+
+export function getThreatLog(limit?: number): Promise<string> {
+  return invokeJsonDesktop<string>("get_threat_log", limit != null ? { limit } : undefined);
+}
+

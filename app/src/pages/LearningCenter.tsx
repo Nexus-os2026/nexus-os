@@ -1,8 +1,40 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { Check, X, Circle, BookOpen, Code, Braces, Library, BarChart } from "lucide-react";
 import "./learning-center.css";
+import {
+  getUserProfile,
+  getLearningPaths,
+  startTeachMode,
+  teachModeRespond,
+  completeLearningStep,
+  learningSaveProgress,
+  learningGetProgress,
+  learningExecuteChallenge,
+} from "../api/backend";
 
 /* ─── types ─── */
-type View = "courses" | "challenges" | "knowledge" | "progress";
+type View = "courses" | "challenges" | "knowledge" | "progress" | "build";
+
+interface SkillLevel {
+  name: string;
+  level: number;
+  maxLevel: number;
+}
+
+interface TeachModeMessage {
+  role: "system" | "user";
+  content: string;
+}
+
+interface BuildProject {
+  id: string;
+  title: string;
+  description: string;
+  difficulty: Difficulty;
+  category: string;
+  prompts: string[];
+  xp: number;
+}
 
 type Difficulty = "beginner" | "intermediate" | "advanced";
 
@@ -62,7 +94,121 @@ function loadProgress(): Record<string, number> {
 
 function saveProgress(progress: Record<string, number>) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  // Also persist to backend for cross-session durability
+  learningSaveProgress(JSON.stringify(progress)).catch(() => {});
 }
+
+async function loadBackendProgress(): Promise<Record<string, number> | null> {
+  try {
+    const raw = await learningGetProgress();
+    const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+    return data && typeof data === "object" ? data as Record<string, number> : null;
+  } catch {
+    return null;
+  }
+}
+
+/* ─── backend-first helpers ─── */
+async function fetchSkillLevels(): Promise<SkillLevel[]> {
+  try {
+    const raw = await getUserProfile();
+    const profile = typeof raw === "string" ? JSON.parse(raw) : raw;
+    const skills = profile?.skills ?? profile?.skill_levels ?? {};
+    return Object.entries(skills).map(([name, val]) => ({
+      name,
+      level: typeof val === "number" ? val : (val as { level?: number })?.level ?? 0,
+      maxLevel: 5,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchBackendPaths(): Promise<Record<string, number> | null> {
+  try {
+    const raw = await getLearningPaths();
+    const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+    const paths: Record<string, number> = {};
+    if (data && typeof data === "object") {
+      const items = Array.isArray(data) ? data : (data as { paths?: unknown[] }).paths ?? [];
+      for (const item of items as Array<{ id?: string; path_id?: string; step?: number; completed_steps?: number }>) {
+        const id = item.id ?? item.path_id ?? "";
+        if (id) paths[id] = item.step ?? item.completed_steps ?? 0;
+      }
+    }
+    return Object.keys(paths).length > 0 ? paths : null;
+  } catch {
+    return null;
+  }
+}
+
+async function syncStepToBackend(pathId: string, stepId: string): Promise<void> {
+  try {
+    await completeLearningStep(pathId, stepId);
+  } catch {
+    // offline — localStorage fallback already persisted
+  }
+}
+
+/* ─── LEARN BY BUILDING PROJECTS ─── */
+const BUILD_PROJECTS: BuildProject[] = [
+  {
+    id: "build-agent",
+    title: "Build a File-Reader Agent",
+    description: "Create an agent from scratch that reads files with proper governance. Follow the teach-mode prompts to build it step by step.",
+    difficulty: "beginner",
+    category: "Getting Started",
+    prompts: [
+      "Create a TOML manifest for a file-reader agent with fs.read capability, L1 autonomy, and 1000 fuel budget.",
+      "Register the agent with the kernel and verify it appears in the agent list.",
+      "Start the agent and ask it to read a file. Observe the audit trail entry.",
+      "Try asking it to write a file and confirm the capability denial is logged.",
+    ],
+    xp: 300,
+  },
+  {
+    id: "build-rag",
+    title: "Build a RAG Pipeline",
+    description: "Set up a complete retrieval-augmented generation pipeline: index documents, search, and chat with them.",
+    difficulty: "intermediate",
+    category: "RAG",
+    prompts: [
+      "Index a markdown document into the RAG pipeline using the Chat Hub.",
+      "Search the indexed documents with a semantic query and review the ranked results.",
+      "Enable document context mode and ask a question grounded in your indexed data.",
+      "Verify the sources section shows which document chunks were used.",
+    ],
+    xp: 400,
+  },
+  {
+    id: "build-security",
+    title: "Lock Down an Agent",
+    description: "Take an over-permissioned agent and reduce it to minimum viable capabilities using the Permission Dashboard.",
+    difficulty: "intermediate",
+    category: "Security",
+    prompts: [
+      "Open the Permission Dashboard and identify an agent with more capabilities than it needs.",
+      "Remove unnecessary capabilities (e.g., shell.exec from a read-only agent).",
+      "Set the HITL tier to Tier2 for any write operations.",
+      "Run the agent and confirm denied actions appear in the audit trail.",
+    ],
+    xp: 400,
+  },
+  {
+    id: "build-pipeline",
+    title: "Create a Multi-Agent Pipeline",
+    description: "Wire together multiple agents into a governed pipeline where output from one agent feeds into the next.",
+    difficulty: "advanced",
+    category: "Security",
+    prompts: [
+      "Create two agents: a researcher (llm.query + web.search) and a writer (llm.query + fs.write).",
+      "Configure the researcher at L2 autonomy and the writer at L1.",
+      "Set up delegation so the researcher can pass context to the writer.",
+      "Run the pipeline end-to-end and verify the audit trail shows the complete chain of actions.",
+    ],
+    xp: 600,
+  },
+];
 
 /* ─── REAL COURSES ─── */
 const COURSES: Course[] = [
@@ -387,7 +533,47 @@ export default function LearningCenter() {
   const [progress, setProgress] = useState<Record<string, number>>(loadProgress);
   const [currentStep, setCurrentStep] = useState(0);
 
-  // Persist progress
+  /* backend state */
+  const [skillLevels, setSkillLevels] = useState<SkillLevel[]>([]);
+  const [backendOnline, setBackendOnline] = useState(false);
+  const [selectedBuild, setSelectedBuild] = useState<string | null>(null);
+  const [teachMessages, setTeachMessages] = useState<TeachModeMessage[]>([]);
+  const [teachInput, setTeachInput] = useState("");
+  const [teachLoading, setTeachLoading] = useState(false);
+  const [buildStep, setBuildStep] = useState(0);
+  const teachEndRef = useRef<HTMLDivElement>(null);
+
+  /* ─── on-mount: fetch backend data ─── */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // 1. Skill levels from backend
+      const skills = await fetchSkillLevels();
+      if (!cancelled && skills.length > 0) {
+        setSkillLevels(skills);
+        setBackendOnline(true);
+      }
+
+      // 2. Learning paths from backend (merge with localStorage)
+      const backendProgress = await fetchBackendPaths();
+      const savedProgress = await loadBackendProgress();
+      const combined = { ...backendProgress, ...savedProgress };
+      if (!cancelled && Object.keys(combined).length > 0) {
+        setBackendOnline(true);
+        setProgress(prev => {
+          const merged = { ...prev };
+          for (const [id, step] of Object.entries(combined)) {
+            if (step != null) merged[id] = Math.max(merged[id] ?? 0, step);
+          }
+          saveProgress(merged);
+          return merged;
+        });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Persist progress to localStorage (always)
   useEffect(() => { saveProgress(progress); }, [progress]);
 
   const activeCourse = useMemo(() => COURSES.find(c => c.id === selectedCourse) ?? null, [selectedCourse]);
@@ -430,12 +616,57 @@ export default function LearningCenter() {
       return prev;
     });
     setCurrentStep(stepIndex + 1);
+    // sync to backend (fire-and-forget, localStorage is already saved)
+    syncStepToBackend(courseId, String(stepIndex));
   }, []);
 
-  const runChallenge = useCallback(() => {
+  /* ─── teach mode (Learn by Building) ─── */
+  const startBuildProject = useCallback(async (projectId: string) => {
+    setSelectedBuild(projectId);
+    setBuildStep(0);
+    setTeachMessages([]);
+    setTeachInput("");
+    try {
+      const response = await startTeachMode(projectId);
+      const parsed = typeof response === "string" ? response : JSON.stringify(response);
+      setTeachMessages([{ role: "system", content: parsed || "Teach mode started. Follow the prompts below to build step by step." }]);
+    } catch {
+      setTeachMessages([{ role: "system", content: "Teach mode started (offline). Follow the prompts below to build step by step." }]);
+    }
+  }, []);
+
+  const sendTeachResponse = useCallback(async (input: string) => {
+    if (!selectedBuild || !input.trim()) return;
+    const userMsg: TeachModeMessage = { role: "user", content: input.trim() };
+    setTeachMessages(prev => [...prev, userMsg]);
+    setTeachInput("");
+    setTeachLoading(true);
+    try {
+      const response = await teachModeRespond(selectedBuild, input.trim());
+      const parsed = typeof response === "string" ? response : JSON.stringify(response);
+      setTeachMessages(prev => [...prev, { role: "system", content: parsed || "Step completed. Continue to the next prompt." }]);
+    } catch {
+      setTeachMessages(prev => [...prev, { role: "system", content: "Response recorded (offline). Continue to the next prompt." }]);
+    }
+    setTeachLoading(false);
+  }, [selectedBuild]);
+
+  // auto-scroll teach mode chat
+  useEffect(() => {
+    teachEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [teachMessages]);
+
+  const runChallenge = useCallback(async () => {
     if (!activeChallenge) return;
-    const passed = challengeCode.trim().length > 20 && !challengeCode.includes("todo!()");
-    setChallengeResults(prev => ({ ...prev, [activeChallenge.id]: passed ? "pass" : "fail" }));
+    try {
+      const raw = await learningExecuteChallenge(activeChallenge.id, challengeCode, "rust");
+      const result = JSON.parse(raw);
+      setChallengeResults(prev => ({ ...prev, [activeChallenge.id]: result.passed ? "pass" : "fail" }));
+    } catch {
+      // Backend required — do not grant pass on client side
+      if (import.meta.env.DEV) console.error("Challenge execution requires the Nexus OS backend");
+      setChallengeResults(prev => ({ ...prev, [activeChallenge.id]: "fail" }));
+    }
   }, [activeChallenge, challengeCode]);
 
   const selectChallenge = useCallback((id: string) => {
@@ -456,9 +687,9 @@ export default function LearningCenter() {
         </div>
 
         <div className="lc-views">
-          {([["courses", "//", "Courses"], ["challenges", ">_", "Challenges"], ["knowledge", "KB", "Knowledge"], ["progress", "%%", "Progress"]] as const).map(([id, icon, label]) => (
-            <button key={id} className={`lc-view-btn ${view === id ? "active" : ""}`} onClick={() => { setView(id); setSelectedCourse(null); setSelectedChallenge(null); }}>
-              <span>{icon}</span> {label}
+          {([["courses", "courses", "Courses"], ["challenges", "challenges", "Challenges"], ["build", "build", "Build"], ["knowledge", "knowledge", "Knowledge"], ["progress", "progress", "Progress"]] as [View, string, string][]).map(([id, icon, label]) => (
+            <button key={id} className={`lc-view-btn cursor-pointer ${view === id ? "active" : ""}`} onClick={() => { setView(id); setSelectedCourse(null); setSelectedChallenge(null); setSelectedBuild(null); }}>
+              <span>{icon === "courses" ? <BookOpen size={14} aria-hidden="true" /> : icon === "challenges" ? <Code size={14} aria-hidden="true" /> : icon === "build" ? <Braces size={14} aria-hidden="true" /> : icon === "knowledge" ? <Library size={14} aria-hidden="true" /> : <BarChart size={14} aria-hidden="true" />}</span> {label}
             </button>
           ))}
         </div>
@@ -477,6 +708,24 @@ export default function LearningCenter() {
           </div>
         </div>
 
+        {/* skill levels from backend */}
+        {skillLevels.length > 0 && (
+          <div className="lc-progress-card">
+            <div className="lc-section-header">Skill Levels</div>
+            {skillLevels.map(sk => (
+              <div key={sk.name} style={{ marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", color: "#94a3b8", marginBottom: 2 }}>
+                  <span style={{ textTransform: "capitalize" }}>{sk.name.replace(/_/g, " ")}</span>
+                  <span>{sk.level}/{sk.maxLevel}</span>
+                </div>
+                <div className="lc-progress-bar-container" style={{ height: 4 }}>
+                  <div className="lc-progress-bar" style={{ width: `${(sk.level / sk.maxLevel) * 100}%`, background: sk.level >= 4 ? "#22c55e" : sk.level >= 2 ? "#f59e0b" : "#64748b" }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* filters */}
         <div className="lc-filters">
           <div className="lc-section-header">Filter</div>
@@ -492,7 +741,7 @@ export default function LearningCenter() {
             const done = (progress[c.id] ?? 0) >= c.steps.length;
             return (
               <div key={c.id} className="lc-audit-entry" style={{ color: done ? "#22c55e" : "#94a3b8" }}>
-                {done ? "✓" : "○"} {c.title.slice(0, 28)}
+                {done ? <Check size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} /> : <Circle size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />} {c.title.slice(0, 28)}
               </div>
             );
           })}
@@ -580,7 +829,7 @@ export default function LearningCenter() {
                       onClick={() => setCurrentStep(i)}
                       style={{ cursor: "pointer" }}
                     >
-                      <span className="lc-cd-lesson-num">{isDone ? "✓" : i + 1}</span>
+                      <span className="lc-cd-lesson-num">{isDone ? <Check size={14} aria-hidden="true" /> : i + 1}</span>
                       <span className="lc-cd-lesson-title">{step.title}</span>
                     </div>
 
@@ -639,9 +888,9 @@ export default function LearningCenter() {
                 {CHALLENGES.map(ch => (
                   <div key={ch.id} className={`lc-challenge-item ${selectedChallenge === ch.id ? "active" : ""}`} onClick={() => selectChallenge(ch.id)}>
                     <div className="lc-ch-status">
-                      {challengeResults[ch.id] === "pass" ? <span className="lc-ch-pass">✓</span> :
-                       challengeResults[ch.id] === "fail" ? <span className="lc-ch-fail">✗</span> :
-                       <span className="lc-ch-untried">○</span>}
+                      {challengeResults[ch.id] === "pass" ? <span className="lc-ch-pass"><Check size={14} aria-hidden="true" /></span> :
+                       challengeResults[ch.id] === "fail" ? <span className="lc-ch-fail"><X size={14} aria-hidden="true" /></span> :
+                       <span className="lc-ch-untried"><Circle size={14} aria-hidden="true" /></span>}
                     </div>
                     <div className="lc-ch-info">
                       <div className="lc-ch-title">{ch.title}</div>
@@ -728,6 +977,120 @@ export default function LearningCenter() {
           </div>
         )}
 
+        {/* ═══ LEARN BY BUILDING VIEW ═══ */}
+        {view === "build" && !selectedBuild && (
+          <div className="lc-courses">
+            <div className="lc-view-header">
+              <h3 className="lc-view-title">Learn by Building</h3>
+              <span className="lc-view-count">{BUILD_PROJECTS.length} projects</span>
+            </div>
+            <p style={{ color: "#94a3b8", marginBottom: "1rem", fontSize: "0.9rem" }}>
+              Hands-on projects using teach mode. The backend guides you step by step as you build real Nexus OS features.
+            </p>
+            <div className="lc-course-grid">
+              {BUILD_PROJECTS.map(proj => (
+                <div key={proj.id} className="lc-course-card" onClick={() => startBuildProject(proj.id)}>
+                  <div className="lc-course-thumb" style={{ background: "linear-gradient(135deg, #0f172a 0%, #6366f1 100%)" }}>
+                    <span className="lc-course-diff" style={{ color: DIFF_COLORS[proj.difficulty] }}>{proj.difficulty}</span>
+                  </div>
+                  <div className="lc-course-body">
+                    <div className="lc-course-title">{proj.title}</div>
+                    <div className="lc-course-desc">{proj.description}</div>
+                    <div className="lc-course-meta">
+                      <span>{proj.category}</span>
+                      <span>XP {proj.xp}</span>
+                      <span>{proj.prompts.length} steps</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ═══ BUILD PROJECT DETAIL ═══ */}
+        {view === "build" && selectedBuild && (() => {
+          const proj = BUILD_PROJECTS.find(p => p.id === selectedBuild);
+          if (!proj) return null;
+          return (
+            <div className="lc-course-detail">
+              <button className="lc-back-btn" onClick={() => setSelectedBuild(null)}>← Back to Projects</button>
+              <div className="lc-cd-header">
+                <div className="lc-cd-thumb" style={{ background: "linear-gradient(135deg, #0f172a 0%, #6366f1 100%)" }} />
+                <div className="lc-cd-info">
+                  <h3 className="lc-cd-title">{proj.title}</h3>
+                  <div className="lc-cd-desc">{proj.description}</div>
+                  <div className="lc-cd-meta">
+                    <span className="lc-cd-diff" style={{ color: DIFF_COLORS[proj.difficulty] }}>{proj.difficulty}</span>
+                    <span>{proj.category}</span>
+                    <span>XP {proj.xp}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step prompts */}
+              <div style={{ margin: "1rem 0" }}>
+                <h4 style={{ color: "#e2e8f0", marginBottom: "0.5rem" }}>Steps</h4>
+                {proj.prompts.map((prompt, i) => (
+                  <div key={i} className={`lc-cd-lesson ${i < buildStep ? "completed" : i === buildStep ? "current" : ""}`}
+                    style={{ cursor: i === buildStep ? "pointer" : "default" }}
+                    onClick={() => { if (i === buildStep) { setBuildStep(i + 1); sendTeachResponse(prompt); } }}
+                  >
+                    <span className="lc-cd-lesson-num">{i < buildStep ? <Check size={14} aria-hidden="true" /> : i + 1}</span>
+                    <span className="lc-cd-lesson-title">{prompt}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Teach mode chat */}
+              <div style={{
+                background: "#0f172a", border: "1px solid #1e293b", borderRadius: 8,
+                padding: "1rem", maxHeight: 320, overflowY: "auto", marginBottom: "1rem",
+              }}>
+                {teachMessages.length === 0 && (
+                  <div style={{ color: "#64748b", textAlign: "center", padding: "2rem 0" }}>
+                    Click a step above or type below to start the teach-mode conversation.
+                  </div>
+                )}
+                {teachMessages.map((msg, i) => (
+                  <div key={i} style={{
+                    marginBottom: 8, padding: "0.5rem 0.75rem", borderRadius: 6,
+                    background: msg.role === "user" ? "#1e293b" : "transparent",
+                    borderLeft: msg.role === "system" ? "2px solid var(--nexus-accent)" : "none",
+                  }}>
+                    <div style={{ fontSize: "0.7rem", color: "#64748b", marginBottom: 2 }}>
+                      {msg.role === "user" ? "You" : "Nexus Teach Mode"}
+                    </div>
+                    <div style={{ color: "#e2e8f0", fontSize: "0.85rem", whiteSpace: "pre-wrap" }}>{msg.content}</div>
+                  </div>
+                ))}
+                {teachLoading && (
+                  <div style={{ color: "#64748b", fontSize: "0.85rem", padding: "0.25rem 0.75rem" }}>Thinking...</div>
+                )}
+                <div ref={teachEndRef} />
+              </div>
+
+              {/* Input */}
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  style={{
+                    flex: 1, background: "#1e293b", border: "1px solid #334155", borderRadius: 6,
+                    padding: "0.5rem 0.75rem", color: "#e2e8f0", fontSize: "0.85rem", outline: "none",
+                  }}
+                  placeholder="Type your response or describe what you built..."
+                  value={teachInput}
+                  onChange={e => setTeachInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTeachResponse(teachInput); } }}
+                  disabled={teachLoading}
+                />
+                <button className="lc-start-course-btn" onClick={() => sendTeachResponse(teachInput)} disabled={teachLoading || !teachInput.trim()}>
+                  Send
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ═══ PROGRESS VIEW ═══ */}
         {view === "progress" && (
           <div className="lc-progress-view">
@@ -770,6 +1133,27 @@ export default function LearningCenter() {
               </div>
             </div>
 
+            {skillLevels.length > 0 && (
+              <>
+                <h4 className="lc-sub-title">Skill Levels</h4>
+                <div className="lc-pv-stats" style={{ marginBottom: "1.5rem" }}>
+                  {skillLevels.map(sk => (
+                    <div key={sk.name} className="lc-pv-stat-card">
+                      <div className="lc-pv-stat-value">{sk.level}/{sk.maxLevel}</div>
+                      <div className="lc-pv-stat-label" style={{ textTransform: "capitalize" }}>{sk.name.replace(/_/g, " ")}</div>
+                      <div className="lc-pv-stat-bar">
+                        <div style={{
+                          width: `${(sk.level / sk.maxLevel) * 100}%`,
+                          background: sk.level >= 4 ? "#22c55e" : sk.level >= 2 ? "#f59e0b" : "#6366f1",
+                          height: "100%", borderRadius: 2,
+                        }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
             <h4 className="lc-sub-title">Course Progress</h4>
             <div className="lc-pv-courses">
               {COURSES.map(c => {
@@ -802,7 +1186,9 @@ export default function LearningCenter() {
         <span className="lc-status-item">{completedCourses}/{COURSES.length} courses</span>
         <span className="lc-status-item">{Object.values(challengeResults).filter(r => r === "pass").length}/{CHALLENGES.length} challenges</span>
         <span className="lc-status-item">{overallProgress}% progress</span>
-        <span className="lc-status-item lc-status-right">localStorage persisted</span>
+        <span className="lc-status-item lc-status-right" style={{ color: backendOnline ? "#22c55e" : "#f59e0b" }}>
+          {backendOnline ? "backend synced" : "localStorage (offline)"}
+        </span>
       </div>
     </div>
   );

@@ -278,6 +278,11 @@ pub enum PlannedAction {
         medium_term: String,
         long_term: String,
     },
+    /// Delegate a task to an external agent via A2A protocol.
+    A2aDelegation {
+        agent_url: String,
+        message: String,
+    },
 }
 
 impl PlannedAction {
@@ -328,6 +333,7 @@ impl PlannedAction {
             PlannedAction::DesignAgentEcosystem { .. } => vec!["self.modify"],
             PlannedAction::RunCounterfactual { .. } => vec!["self.modify"],
             PlannedAction::TemporalPlan { .. } => vec!["self.modify"],
+            PlannedAction::A2aDelegation { .. } => vec!["a2a.delegate"],
         }
     }
 
@@ -377,6 +383,7 @@ impl PlannedAction {
             PlannedAction::DesignAgentEcosystem { .. } => "design_agent_ecosystem",
             PlannedAction::RunCounterfactual { .. } => "run_counterfactual",
             PlannedAction::TemporalPlan { .. } => "temporal_plan",
+            PlannedAction::A2aDelegation { .. } => "a2a_delegation",
         }
     }
 }

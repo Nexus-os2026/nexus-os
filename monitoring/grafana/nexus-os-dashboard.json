@@ -1,0 +1,292 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Prometheus data source for Nexus OS metrics",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Agent Execution Heatmap (by Autonomy Level)",
+      "type": "heatmap",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(nexus_agent_executions_total[5m])) by (autonomy_level)",
+          "legendFormat": "L{{autonomy_level}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "scheme", "schemeId": "Oranges" }
+        }
+      }
+    },
+    {
+      "title": "Fuel Consumption (Top 10 Agents)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "topk(10, nexus_agent_fuel_remaining)",
+          "legendFormat": "{{agent_did}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "fillOpacity": 10 }
+        }
+      }
+    },
+    {
+      "title": "HITL Approval Rates",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(nexus_hitl_requests_total) by (decision)",
+          "legendFormat": "{{decision}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right" }
+      }
+    },
+    {
+      "title": "LLM Provider Latency (p50/p95/p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(nexus_llm_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p50 {{provider}}/{{model}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(nexus_llm_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95 {{provider}}/{{model}}",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(nexus_llm_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p99 {{provider}}/{{model}}",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "fillOpacity": 5 }
+        }
+      }
+    },
+    {
+      "title": "Audit Trail Growth Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(nexus_audit_entries_total[5m])",
+          "legendFormat": "entries/sec",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(nexus_audit_blocks_created[5m])",
+          "legendFormat": "blocks/sec",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "fillOpacity": 15 }
+        }
+      }
+    },
+    {
+      "title": "PII Redaction Frequency",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(rate(nexus_pii_redactions_total[5m])) by (pii_type)",
+          "legendFormat": "{{pii_type}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" }
+        }
+      }
+    },
+    {
+      "title": "Capability Check Results",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(rate(nexus_capability_checks_total{result=\"granted\"}[5m]))",
+          "legendFormat": "granted",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(nexus_capability_checks_total{result=\"denied\"}[5m]))",
+          "legendFormat": "denied",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "fillOpacity": 20 }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "denied" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          }
+        ]
+      }
+    },
+    {
+      "title": "System Overview",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "targets": [
+        {
+          "expr": "nexus_uptime_seconds",
+          "legendFormat": "Uptime",
+          "refId": "A"
+        },
+        {
+          "expr": "nexus_agents_active",
+          "legendFormat": "Active Agents",
+          "refId": "B"
+        },
+        {
+          "expr": "nexus_active_sessions_count",
+          "legendFormat": "Active Sessions",
+          "refId": "C"
+        },
+        {
+          "expr": "nexus_sandbox_active_count",
+          "legendFormat": "Active Sandboxes",
+          "refId": "D"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "auto"
+      }
+    },
+    {
+      "title": "LLM Token Usage by Provider",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "sum(rate(nexus_llm_tokens_total[5m])) by (provider, direction)",
+          "legendFormat": "{{provider}} {{direction}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "fillOpacity": 10, "stacking": { "mode": "normal" } }
+        }
+      }
+    },
+    {
+      "title": "Sandbox Execution Duration (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(nexus_sandbox_execution_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95 {{agent_did}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "fillOpacity": 10 }
+        }
+      }
+    },
+    {
+      "title": "Output Firewall Blocks",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "targets": [
+        {
+          "expr": "sum(rate(nexus_output_firewall_blocks_total[5m])) by (reason)",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(nexus_firewall_blocks_total[5m])",
+          "legendFormat": "prompt firewall",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" }
+        }
+      }
+    },
+    {
+      "title": "Genome Evolution Events",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "targets": [
+        {
+          "expr": "sum(rate(nexus_genome_evolutions_total[5m])) by (result)",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "fillOpacity": 15 }
+        }
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["nexus-os", "governance", "observability"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Nexus OS - Governance Observability",
+  "uid": "nexus-os-governance",
+  "version": 1
+}

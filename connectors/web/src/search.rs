@@ -317,9 +317,15 @@ struct BraveWebResult {
 
 fn parse_duckduckgo_results(body: &str, max_results: usize) -> Vec<SearchResult> {
     let document = Html::parse_document(body);
-    let result_selector = Selector::parse(".result").expect("valid result selector");
-    let title_selector = Selector::parse("a.result__a").expect("valid title selector");
-    let snippet_selector = Selector::parse(".result__snippet").expect("valid snippet selector");
+    let Ok(result_selector) = Selector::parse(".result") else {
+        return Vec::new();
+    };
+    let Ok(title_selector) = Selector::parse("a.result__a") else {
+        return Vec::new();
+    };
+    let Ok(snippet_selector) = Selector::parse(".result__snippet") else {
+        return Vec::new();
+    };
 
     let mut results = Vec::new();
     for (index, result) in document.select(&result_selector).enumerate() {

@@ -43,7 +43,7 @@ pub async fn serve_frontend(method: Method, uri: Uri) -> Response {
         .method(method)
         .uri(uri)
         .body(Body::empty())
-        .expect("frontend request should build");
+        .unwrap_or_else(|_| Request::default());
 
     match service.oneshot(request).await {
         Ok(response) => response.into_response(),

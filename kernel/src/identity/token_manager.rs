@@ -32,6 +32,9 @@ pub enum TokenError {
     #[error("malformed token: {0}")]
     Malformed(String),
 
+    #[error("serialization error: {0}")]
+    Serialization(String),
+
     #[error("identity error: {0}")]
     Identity(#[from] crate::identity::IdentityError),
 }
@@ -219,8 +222,8 @@ impl TokenManager {
             kid: identity.did.clone(),
         };
 
-        let header_b64 = base64_url_encode(&serde_json::to_vec(&header).expect("serialize header"));
-        let payload_b64 = base64_url_encode(&serde_json::to_vec(claims).expect("serialize claims"));
+        let header_b64 = base64_url_encode(&serde_json::to_vec(&header).map_err(|e| TokenError::Serialization(e.to_string()))?);
+        let payload_b64 = base64_url_encode(&serde_json::to_vec(claims).map_err(|e| TokenError::Serialization(e.to_string()))?);
 
         let signing_input = format!("{header_b64}.{payload_b64}");
         let signature = identity

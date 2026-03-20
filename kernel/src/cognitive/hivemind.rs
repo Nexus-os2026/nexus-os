@@ -138,7 +138,7 @@ impl CollectingHivemindEmitter {
 
 impl HivemindEventEmitter for CollectingHivemindEmitter {
     fn emit(&self, event: HivemindEvent) {
-        self.events.lock().unwrap().push(event);
+        self.events.lock().unwrap_or_else(|p| p.into_inner()).push(event);
     }
 }
 
@@ -851,12 +851,12 @@ impl HivemindCoordinator {
 
     /// Get a session by ID.
     pub fn get_session(&self, session_id: &str) -> Option<HivemindSession> {
-        self.sessions.lock().unwrap().get(session_id).cloned()
+        self.sessions.lock().unwrap_or_else(|p| p.into_inner()).get(session_id).cloned()
     }
 
     /// Cancel a running session.
     pub fn cancel_session(&self, session_id: &str) -> Result<(), AgentError> {
-        let mut sessions = self.sessions.lock().unwrap();
+        let mut sessions = self.sessions.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(session) = sessions.get_mut(session_id) {
             match session.status {
                 HivemindStatus::Completed | HivemindStatus::Failed | HivemindStatus::Cancelled => {
@@ -881,18 +881,18 @@ impl HivemindCoordinator {
 
     /// List all sessions.
     pub fn list_sessions(&self) -> Vec<HivemindSession> {
-        self.sessions.lock().unwrap().values().cloned().collect()
+        self.sessions.lock().unwrap_or_else(|p| p.into_inner()).values().cloned().collect()
     }
 
     fn store_session(&self, session: &HivemindSession) {
         self.sessions
             .lock()
-            .unwrap()
+            .unwrap_or_else(|p| p.into_inner())
             .insert(session.id.clone(), session.clone());
     }
 
     fn log_audit(&self, event_name: &str, detail: serde_json::Value) -> Result<(), AgentError> {
-        self.audit.lock().unwrap().append_event(
+        self.audit.lock().unwrap_or_else(|p| p.into_inner()).append_event(
             uuid::Uuid::nil(),
             EventType::StateChange,
             json!({"hivemind": event_name, "detail": detail}),

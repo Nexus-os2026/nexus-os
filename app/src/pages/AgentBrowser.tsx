@@ -51,6 +51,13 @@ export function AgentBrowser(): JSX.Element {
   });
 
   const urlInputRef = useRef<HTMLInputElement>(null);
+  const delayTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (delayTimerRef.current) clearTimeout(delayTimerRef.current);
+    };
+  }, []);
 
   const addActivity = useCallback(
     (type: ActivityMessage["message_type"], content: string, agentName = "Browser") => {
@@ -106,7 +113,7 @@ export function AgentBrowser(): JSX.Element {
         }
       } else {
         addActivity("deciding", "Desktop runtime unavailable - recording local navigation only.", "Firewall");
-        await new Promise((r) => setTimeout(r, 300));
+        await new Promise((r) => { delayTimerRef.current = setTimeout(r, 300); });
         addActivity("info", `Loaded local preview: ${target}`);
       }
 

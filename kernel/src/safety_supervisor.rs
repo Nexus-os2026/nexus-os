@@ -222,7 +222,7 @@ impl SafetySupervisor {
             let warn_value = threshold.as_ref().map_or(0.0, |row| row.warn_value);
             let critical_value = threshold.as_ref().map_or(0.0, |row| row.critical_value);
 
-            audit
+            if let Err(e) = audit
                 .append_event(
                     agent_id,
                     EventType::StateChange,
@@ -236,7 +236,10 @@ impl SafetySupervisor {
                         "critical_value": critical_value,
                     }),
                 )
-                .expect("audit: fail-closed");
+            {
+                eprintln!("audit write failed: {e}");
+            }
+
 
             if status != KpiStatus::Ok {
                 violations.push(KpiViolation {
@@ -366,7 +369,7 @@ impl SafetySupervisor {
         self.set_mode(agent_id, OperatingMode::Halted(reason.clone()), audit);
         let report = self.generate_incident_report_internal(agent_id, "halted", audit);
         let violations = self.violation_counter.get(&agent_id).copied().unwrap_or(0);
-        audit
+        if let Err(e) = audit
             .append_event(
                 agent_id,
                 EventType::Error,
@@ -377,7 +380,10 @@ impl SafetySupervisor {
                     "report_id": report.report_id,
                 }),
             )
-            .expect("audit: fail-closed");
+        {
+            eprintln!("audit write failed: {e}");
+        }
+
 
         SafetyAction::Halted {
             reason,
@@ -529,7 +535,7 @@ impl SafetySupervisor {
                 .agent_modes
                 .insert(agent_id, OperatingMode::Normal)
                 .unwrap_or(OperatingMode::Normal);
-            audit
+            if let Err(e) = audit
                 .append_event(
                     agent_id,
                     EventType::UserAction,
@@ -541,7 +547,10 @@ impl SafetySupervisor {
                         "reason": "violations_reset",
                     }),
                 )
-                .expect("audit: fail-closed");
+            {
+                eprintln!("audit write failed: {e}");
+            }
+
         }
 
         self.refresh_global_mode();
@@ -624,7 +633,7 @@ impl SafetySupervisor {
             .unwrap_or(DriftSeverity::Low);
 
         for alert in alerts {
-            audit
+            if let Err(e) = audit
                 .append_event(
                     agent_id,
                     EventType::StateChange,
@@ -637,7 +646,10 @@ impl SafetySupervisor {
                         "deviation_factor": alert.deviation_factor,
                     }),
                 )
-                .expect("audit: fail-closed");
+            {
+                eprintln!("audit write failed: {e}");
+            }
+
         }
 
         match max_severity {
@@ -681,7 +693,7 @@ impl SafetySupervisor {
         self.last_violation_timestamp
             .insert(agent_id, self.sequence_clock);
 
-        audit
+        if let Err(e) = audit
             .append_event(
                 agent_id,
                 EventType::Error,
@@ -696,7 +708,10 @@ impl SafetySupervisor {
                     "critical_value": violation.critical_value,
                 }),
             )
-            .expect("audit: fail-closed");
+        {
+            eprintln!("audit write failed: {e}");
+        }
+
 
         // Record violation in adaptive governor.
         self.adaptive_governor.record_run(
@@ -792,7 +807,7 @@ impl SafetySupervisor {
             .or_default()
             .push(report.clone());
 
-        audit
+        if let Err(e) = audit
             .append_event(
                 agent_id,
                 EventType::UserAction,
@@ -805,7 +820,10 @@ impl SafetySupervisor {
                     "signature": report.signature,
                 }),
             )
-            .expect("audit: fail-closed");
+        {
+            eprintln!("audit write failed: {e}");
+        }
+
 
         report
     }
@@ -825,7 +843,7 @@ impl SafetySupervisor {
             OperatingMode::Degraded(reason) | OperatingMode::Halted(reason) => reason.clone(),
         };
 
-        audit
+        if let Err(e) = audit
             .append_event(
                 agent_id,
                 EventType::UserAction,
@@ -837,7 +855,10 @@ impl SafetySupervisor {
                     "reason": reason,
                 }),
             )
-            .expect("audit: fail-closed");
+        {
+            eprintln!("audit write failed: {e}");
+        }
+
 
         self.refresh_global_mode();
     }

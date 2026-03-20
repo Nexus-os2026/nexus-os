@@ -67,6 +67,12 @@ pub enum GovernedOperation {
     SovereignPromotion,
     /// L6 creation — hardcoded Tier3 with mandatory review delay.
     TranscendentCreation,
+    /// Delegating a task to an external A2A agent — Tier2 (high risk: data leaves trust boundary).
+    A2aDelegation,
+    /// Calling a tool on an external MCP server — Tier2 (medium-high risk: external code execution).
+    McpExternalToolCall,
+    /// Sending data via integration provider (Slack, email, etc.) — Tier1 for known channels, Tier2 for new.
+    IntegrationSend,
 }
 
 impl GovernedOperation {
@@ -85,6 +91,9 @@ impl GovernedOperation {
             GovernedOperation::EcosystemFuelAllocate => "ecosystem_fuel_allocate",
             GovernedOperation::SovereignPromotion => "sovereign_promotion",
             GovernedOperation::TranscendentCreation => "transcendent_creation",
+            GovernedOperation::A2aDelegation => "a2a_delegation",
+            GovernedOperation::McpExternalToolCall => "mcp_external_tool_call",
+            GovernedOperation::IntegrationSend => "integration_send",
         }
     }
 
@@ -104,6 +113,9 @@ impl GovernedOperation {
             GovernedOperation::EcosystemFuelAllocate => "Ecosystem fuel allocation",
             GovernedOperation::SovereignPromotion => "Sovereign promotion (L5)",
             GovernedOperation::TranscendentCreation => "Transcendent creation (L6)",
+            GovernedOperation::A2aDelegation => "A2A delegation to external agent",
+            GovernedOperation::McpExternalToolCall => "External MCP tool call",
+            GovernedOperation::IntegrationSend => "Integration send (Slack/email/etc.)",
         }
     }
 
@@ -122,6 +134,9 @@ impl GovernedOperation {
             "ecosystem_fuel_allocate" => Some(GovernedOperation::EcosystemFuelAllocate),
             "sovereign_promotion" => Some(GovernedOperation::SovereignPromotion),
             "transcendent_creation" => Some(GovernedOperation::TranscendentCreation),
+            "a2a_delegation" => Some(GovernedOperation::A2aDelegation),
+            "mcp_external_tool_call" => Some(GovernedOperation::McpExternalToolCall),
+            "integration_send" => Some(GovernedOperation::IntegrationSend),
             _ => None,
         }
     }
@@ -239,6 +254,30 @@ impl Default for ConsentPolicyEngine {
             GovernedOperation::TranscendentCreation,
             OperationConsentPolicy {
                 required_tier: HitlTier::Tier3,
+                allowed_approvers: Vec::new(),
+            },
+        );
+        // A2A delegation — Tier2: data crosses trust boundary to external agent.
+        policies.insert(
+            GovernedOperation::A2aDelegation,
+            OperationConsentPolicy {
+                required_tier: HitlTier::Tier2,
+                allowed_approvers: Vec::new(),
+            },
+        );
+        // MCP external tool call — Tier2: executing code on external server.
+        policies.insert(
+            GovernedOperation::McpExternalToolCall,
+            OperationConsentPolicy {
+                required_tier: HitlTier::Tier2,
+                allowed_approvers: Vec::new(),
+            },
+        );
+        // Integration send — Tier1: outbound notification to external service.
+        policies.insert(
+            GovernedOperation::IntegrationSend,
+            OperationConsentPolicy {
+                required_tier: HitlTier::Tier1,
                 allowed_approvers: Vec::new(),
             },
         );

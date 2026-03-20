@@ -233,7 +233,7 @@ pub(crate) fn sha256_bytes(input: &[u8]) -> [u8; 32] {
     hasher.update(input);
     let digest = hasher.finalize();
     let mut output = [0_u8; 32];
-    output.copy_from_slice(digest.as_slice());
+    output.copy_from_slice(digest.as_ref());
     output
 }
 

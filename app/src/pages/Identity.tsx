@@ -1,4 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  identityGetAgentPassport,
+  identityExportPassport,
+  identityGenerateProof,
+  identityVerifyProof,
+  ghostProtocolToggle,
+  ghostProtocolStatus,
+  ghostProtocolGetState,
+  ghostProtocolAddPeer,
+  ghostProtocolRemovePeer,
+  ghostProtocolSyncNow,
+} from "../api/backend";
 import { invoke } from "@tauri-apps/api/core";
 import {
   ActionButton,
@@ -6,7 +18,6 @@ import {
   EmptyState,
   Panel,
   StatusDot,
-  alpha,
   commandHeaderMetaStyle,
   commandInsetStyle,
   commandLabelStyle,
@@ -74,6 +85,20 @@ interface SyncStatus {
   synced_agents: number;
 }
 
+interface GhostPeer {
+  device_id: string;
+  address: string;
+  name: string;
+  status: string;
+  last_seen?: string;
+}
+
+interface GhostState {
+  enabled: boolean;
+  peers: GhostPeer[];
+  last_sync?: string;
+}
+
 const CLAIM_OPTIONS = [
   { label: "Has L3+ clearance", value: "MinimumAutonomyLevel" },
   { label: "Success rate > 80%", value: "MinimumSuccessRate" },
@@ -81,14 +106,19 @@ const CLAIM_OPTIONS = [
   { label: "Passed adversarial test", value: "HasCapability" },
 ] as const;
 
+type TabKey = "passports" | "zkproofs" | "ghost" | "mesh";
+
 function peerStatusColor(status: string): string {
   switch (String(status)) {
     case "Authenticated":
     case "Connected":
+    case "online":
       return "#22c55e";
     case "Discovered":
+    case "syncing":
       return "#eab308";
     case "Unreachable":
+    case "offline":
       return "#ef4444";
     default:
       return "#94a3b8";
@@ -116,8 +146,21 @@ function createManualPeer(address: string): PeerInfo {
   };
 }
 
+function safeParseJson<T>(value: unknown): T | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "object") return value as T;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export function Identity({ agents }: { agents: AgentOption[] }): JSX.Element {
-  const [activeTab, setActiveTab] = useState<"identity" | "mesh">("identity");
+  const [activeTab, setActiveTab] = useState<TabKey>("passports");
   const [selectedAgent, setSelectedAgent] = useState("");
   const [passport, setPassport] = useState<AgentPassport | null>(null);
   const [passportStatus, setPassportStatus] = useState("Select an agent to inspect its passport");
@@ -137,20 +180,32 @@ export function Identity({ agents }: { agents: AgentOption[] }): JSX.Element {
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Ghost Protocol state
+  const [ghostEnabled, setGhostEnabled] = useState(false);
+  const [ghostStatusText, setGhostStatusText] = useState<string>("Unknown");
+  const [ghostState, setGhostState] = useState<GhostState | null>(null);
+  const [ghostPeerAddress, setGhostPeerAddress] = useState("");
+  const [ghostPeerName, setGhostPeerName] = useState("");
+
   useEffect(() => {
     if (agents.length === 0) return;
     if (!selectedAgent) setSelectedAgent(agents[0].id);
     if (!migrationAgent) setMigrationAgent(agents[0].id);
   }, [agents, migrationAgent, selectedAgent]);
 
+  // ---------- Passport ----------
+
   const loadPassport = useCallback(async (agentId: string) => {
     if (!agentId) return;
     setWorking("passport");
     setError(null);
     try {
-      const result = await invoke<AgentPassport>("identity_get_agent_passport", { agentId });
-      setPassport(result);
-      setPassportStatus(`Passport loaded for ${agents.find((agent) => agent.id === agentId)?.name ?? agentId}`);
+      const result = await identityGetAgentPassport(agentId);
+      const parsed = safeParseJson<AgentPassport>(result);
+      setPassport(parsed);
+      setPassportStatus(parsed
+        ? `Passport loaded for ${agents.find((a) => a.id === agentId)?.name ?? agentId}`
+        : "Unable to parse passport");
     } catch (passportError) {
       setError(passportError instanceof Error ? passportError.message : String(passportError));
       setPassport(null);
@@ -159,6 +214,148 @@ export function Identity({ agents }: { agents: AgentOption[] }): JSX.Element {
       setWorking(null);
     }
   }, [agents]);
+
+  const handleExport = useCallback(async () => {
+    if (!selectedAgent) return;
+    setWorking("export");
+    setError(null);
+    try {
+      const exported = await identityExportPassport(selectedAgent);
+      const text = typeof exported === "string" ? exported : JSON.stringify(exported, null, 2);
+      await navigator.clipboard.writeText(text);
+      setPassportStatus("Passport JSON copied to clipboard");
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : String(exportError));
+    } finally {
+      setWorking(null);
+    }
+  }, [selectedAgent]);
+
+  // ---------- ZK Proofs ----------
+
+  const handleGenerateProof = useCallback(async () => {
+    if (!selectedAgent) return;
+    setWorking("proof");
+    setError(null);
+    try {
+      const result = await identityGenerateProof(selectedAgent, claim);
+      const generated = safeParseJson<ZkProof>(result);
+      if (generated) {
+        setProof(generated);
+        setProofStatus(`Proof generated ${formatRelative(generated.created_at)} for ${normalizeClaim(generated.claim)}`);
+        setVerifierInput(JSON.stringify(generated, null, 2));
+      } else {
+        setProofStatus("Proof generated (raw response)");
+        setVerifierInput(typeof result === "string" ? result : JSON.stringify(result, null, 2));
+      }
+    } catch (proofError) {
+      setError(proofError instanceof Error ? proofError.message : String(proofError));
+      setProofStatus("Proof generation failed");
+    } finally {
+      setWorking(null);
+    }
+  }, [claim, selectedAgent]);
+
+  const handleVerify = useCallback(async () => {
+    setWorking("verify");
+    setError(null);
+    try {
+      const parsed = JSON.parse(verifierInput);
+      const valid = await identityVerifyProof(parsed);
+      setVerifyStatus(valid ? "Valid proof" : "Proof failed verification");
+    } catch (verifyError) {
+      const message = verifyError instanceof Error ? verifyError.message : String(verifyError);
+      setError(message);
+      setVerifyStatus("Verifier expects proof JSON");
+    } finally {
+      setWorking(null);
+    }
+  }, [verifierInput]);
+
+  // ---------- Ghost Protocol ----------
+
+  const refreshGhost = useCallback(async () => {
+    setError(null);
+    try {
+      const [statusResult, stateResult] = await Promise.allSettled([
+        ghostProtocolStatus(),
+        ghostProtocolGetState(),
+      ]);
+      if (statusResult.status === "fulfilled") {
+        setGhostStatusText(String(statusResult.value));
+      }
+      if (stateResult.status === "fulfilled") {
+        const parsed = safeParseJson<GhostState>(stateResult.value);
+        if (parsed) {
+          setGhostState(parsed);
+          setGhostEnabled(parsed.enabled);
+        } else {
+          setGhostStatusText(String(stateResult.value));
+        }
+      }
+    } catch (ghostError) {
+      setError(ghostError instanceof Error ? ghostError.message : String(ghostError));
+    }
+  }, []);
+
+  const handleGhostToggle = useCallback(async () => {
+    setWorking("ghost-toggle");
+    setError(null);
+    try {
+      const newEnabled = !ghostEnabled;
+      await ghostProtocolToggle(newEnabled);
+      setGhostEnabled(newEnabled);
+      await refreshGhost();
+    } catch (toggleError) {
+      setError(toggleError instanceof Error ? toggleError.message : String(toggleError));
+    } finally {
+      setWorking(null);
+    }
+  }, [ghostEnabled, refreshGhost]);
+
+  const handleGhostAddPeer = useCallback(async () => {
+    if (!ghostPeerAddress.trim()) return;
+    setWorking("ghost-add-peer");
+    setError(null);
+    try {
+      await ghostProtocolAddPeer(ghostPeerAddress.trim(), ghostPeerName.trim() || ghostPeerAddress.trim());
+      setGhostPeerAddress("");
+      setGhostPeerName("");
+      await refreshGhost();
+    } catch (addError) {
+      setError(addError instanceof Error ? addError.message : String(addError));
+    } finally {
+      setWorking(null);
+    }
+  }, [ghostPeerAddress, ghostPeerName, refreshGhost]);
+
+  const handleGhostRemovePeer = useCallback(async (deviceId: string) => {
+    setWorking(`ghost-remove-${deviceId}`);
+    setError(null);
+    try {
+      await ghostProtocolRemovePeer(deviceId);
+      await refreshGhost();
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : String(removeError));
+    } finally {
+      setWorking(null);
+    }
+  }, [refreshGhost]);
+
+  const handleGhostSync = useCallback(async () => {
+    setWorking("ghost-sync");
+    setError(null);
+    try {
+      await ghostProtocolSyncNow();
+      await refreshGhost();
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : String(syncError));
+    } finally {
+      setWorking(null);
+    }
+  }, [refreshGhost]);
+
+  // ---------- Mesh ----------
 
   const refreshMesh = useCallback(async () => {
     setError(null);
@@ -176,67 +373,6 @@ export function Identity({ agents }: { agents: AgentOption[] }): JSX.Element {
       setError(meshError instanceof Error ? meshError.message : String(meshError));
     }
   }, []);
-
-  useEffect(() => {
-    if (selectedAgent) {
-      void loadPassport(selectedAgent);
-    }
-  }, [loadPassport, selectedAgent]);
-
-  useEffect(() => {
-    void refreshMesh();
-  }, [refreshMesh]);
-
-  const handleGenerateProof = useCallback(async () => {
-    if (!selectedAgent) return;
-    setWorking("proof");
-    setError(null);
-    try {
-      const generated = await invoke<ZkProof>("identity_generate_proof", {
-        agentId: selectedAgent,
-        claim,
-      });
-      setProof(generated);
-      setProofStatus(`Proof generated ${formatRelative(generated.created_at)} for ${normalizeClaim(generated.claim)}`);
-      setVerifierInput(JSON.stringify(generated, null, 2));
-    } catch (proofError) {
-      setError(proofError instanceof Error ? proofError.message : String(proofError));
-      setProofStatus("Proof generation failed");
-    } finally {
-      setWorking(null);
-    }
-  }, [claim, selectedAgent]);
-
-  const handleVerify = useCallback(async () => {
-    setWorking("verify");
-    setError(null);
-    try {
-      const parsed = JSON.parse(verifierInput);
-      const valid = await invoke<boolean>("identity_verify_proof", { proof: parsed });
-      setVerifyStatus(valid ? "Valid proof" : "Proof failed verification");
-    } catch (verifyError) {
-      const message = verifyError instanceof Error ? verifyError.message : String(verifyError);
-      setError(message);
-      setVerifyStatus("Verifier expects proof JSON");
-    } finally {
-      setWorking(null);
-    }
-  }, [verifierInput]);
-
-  const handleExport = useCallback(async () => {
-    if (!selectedAgent) return;
-    setWorking("export");
-    setError(null);
-    try {
-      const exported = await invoke<{ passport_json: string }>("identity_export_passport", { agentId: selectedAgent });
-      await navigator.clipboard.writeText(exported.passport_json);
-      setPassportStatus("Passport JSON copied to clipboard");
-    } catch (exportError) {
-      setError(exportError instanceof Error ? exportError.message : String(exportError));
-    } finally {
-      setWorking(null);
-    }
-  }, [selectedAgent]);
 
   const handleDiscoverPeers = useCallback(async () => {
     setWorking("discover");
@@ -291,6 +427,24 @@ export function Identity({ agents }: { agents: AgentOption[] }): JSX.Element {
     }
   }, [migrationAgent, migrationTarget]);
 
+  // ---------- Effects ----------
+
+  useEffect(() => {
+    if (selectedAgent) {
+      void loadPassport(selectedAgent);
+    }
+  }, [loadPassport, selectedAgent]);
+
+  useEffect(() => {
+    void refreshMesh();
+  }, [refreshMesh]);
+
+  useEffect(() => {
+    void refreshGhost();
+  }, [refreshGhost]);
+
+  // ---------- Derived ----------
+
   const selectedAgentName = agents.find((agent) => agent.id === selectedAgent)?.name ?? selectedAgent;
   const credentials = useMemo(() => {
     const explicitCredentials = normalizeArray<PassportCredential>(passport?.credentials).map((credential) => credential.credential_type ?? credential.type ?? "Credential");
@@ -308,36 +462,66 @@ export function Identity({ agents }: { agents: AgentOption[] }): JSX.Element {
     return Array.from(entries.values());
   }, [localPeers, peerList]);
 
+  const ghostPeers = useMemo(() => normalizeArray<GhostPeer>(ghostState?.peers), [ghostState?.peers]);
+
   useEffect(() => {
     if (meshPeers.length === 0) return;
     if (!migrationTarget) setMigrationTarget(meshPeers[0].peer_id);
   }, [meshPeers, migrationTarget]);
 
+  // ---------- Tab titles ----------
+
+  const TAB_CONFIG: { key: TabKey; label: string; accent: string }[] = [
+    { key: "passports", label: "Passports", accent: "#00ffcc" },
+    { key: "zkproofs", label: "ZK Proofs", accent: "#38bdf8" },
+    { key: "ghost", label: "Ghost Protocol", accent: "#a78bfa" },
+    { key: "mesh", label: "Mesh", accent: "#f59e0b" },
+  ];
+
+  const activeConfig = TAB_CONFIG.find((t) => t.key === activeTab) ?? TAB_CONFIG[0];
+
+  const headerSubtext = (): string => {
+    switch (activeTab) {
+      case "passports":
+        return passportStatus;
+      case "zkproofs":
+        return proofStatus;
+      case "ghost":
+        return ghostEnabled ? "Ghost Protocol ACTIVE" : "Ghost Protocol inactive";
+      case "mesh":
+        return `This instance: ${syncStatus?.local_peer_id ?? "local"}`;
+    }
+  };
+
   return (
     <div style={commandPageStyle}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-end", marginBottom: 20, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ margin: 0, fontFamily: "monospace", fontSize: "1.8rem", color: "#00ffcc", letterSpacing: "0.16em", textTransform: "uppercase" }}>
-            {activeTab === "identity" ? "Sovereign Identity" : "Distributed Mesh"}
+          <h1 style={{ margin: 0, fontFamily: "monospace", fontSize: "1.8rem", color: activeConfig.accent, letterSpacing: "0.16em", textTransform: "uppercase" }}>
+            {activeConfig.label}
           </h1>
           <div style={{ ...commandHeaderMetaStyle, marginTop: 10 }}>
-            <span>{activeTab === "identity" ? passportStatus : `This instance: ${syncStatus?.local_peer_id ?? "local"}`}</span>
+            <span>{headerSubtext()}</span>
             <span>Agents: {agents.length}</span>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <ActionButton accent={activeTab === "identity" ? "#00ffcc" : "#38bdf8"} onClick={() => setActiveTab("identity")}>
-            Identity
-          </ActionButton>
-          <ActionButton accent={activeTab === "mesh" ? "#00ffcc" : "#38bdf8"} onClick={() => setActiveTab("mesh")}>
-            Mesh
-          </ActionButton>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {TAB_CONFIG.map((tab) => (
+            <ActionButton
+              key={tab.key}
+              accent={activeTab === tab.key ? tab.accent : "#64748b"}
+              onClick={() => setActiveTab(tab.key)}
+            >
+              {tab.label}
+            </ActionButton>
+          ))}
         </div>
       </div>
 
       {error ? <div style={{ marginBottom: 16, color: "#fca5a5", fontSize: "0.82rem" }}>{error}</div> : null}
 
-      {activeTab === "identity" ? (
+      {/* ========== PASSPORTS TAB ========== */}
+      {activeTab === "passports" ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 18 }}>
           <Panel title="Agent Passport" accent="#00ffcc">
             <select value={selectedAgent} onChange={(event) => setSelectedAgent(event.target.value)} style={{ ...inputStyle, marginBottom: 14 }}>
@@ -356,6 +540,8 @@ export function Identity({ agents }: { agents: AgentOption[] }): JSX.Element {
                   <DataRow label="DID" value={passport.did || "Unavailable"} />
                   <DataRow label="Created" value={formatTimestamp(passport.creation_date)} />
                   <DataRow label="Hardware bound" value={passport.signature ? "YES" : "NO"} valueColor={passport.signature ? "#22c55e" : "#94a3b8"} />
+                  <DataRow label="Genome hash" value={passport.genome_hash || "N/A"} />
+                  <DataRow label="Lineage" value={passport.lineage?.length ? passport.lineage.join(" > ") : "Root"} />
                 </div>
 
                 <div style={{ ...commandLabelStyle, marginBottom: 8 }}>Credentials</div>
@@ -367,15 +553,26 @@ export function Identity({ agents }: { agents: AgentOption[] }): JSX.Element {
                   </div>
                 ))}
 
-                <ActionButton accent="#00ffcc" disabled={working === "export"} onClick={() => void handleExport()}>
-                  {working === "export" ? "Exporting..." : "Export Passport"}
-                </ActionButton>
+                <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                  <ActionButton accent="#00ffcc" disabled={working === "export"} onClick={() => void handleExport()}>
+                    {working === "export" ? "Exporting..." : "Export Passport"}
+                  </ActionButton>
+                  <ActionButton accent="#38bdf8" disabled={working === "passport"} onClick={() => void loadPassport(selectedAgent)}>
+                    {working === "passport" ? "Refreshing..." : "Refresh"}
+                  </ActionButton>
+                </div>
               </div>
             ) : null}
           </Panel>
+        </div>
+      ) : null}
 
-          <Panel title="ZK Proof Generator" accent="#38bdf8">
+      {/* ========== ZK PROOFS TAB ========== */}
+      {activeTab === "zkproofs" ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 18 }}>
+          <Panel title="Generate Proof" accent="#38bdf8">
             <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
+              <div style={commandLabelStyle}>Agent</div>
               <select value={selectedAgent} onChange={(event) => setSelectedAgent(event.target.value)} style={inputStyle}>
                 {agents.map((agent) => (
                   <option key={agent.id} value={agent.id}>
@@ -383,6 +580,7 @@ export function Identity({ agents }: { agents: AgentOption[] }): JSX.Element {
                   </option>
                 ))}
               </select>
+              <div style={commandLabelStyle}>Claim</div>
               <select value={claim} onChange={(event) => setClaim(event.target.value)} style={inputStyle}>
                 {CLAIM_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -399,7 +597,9 @@ export function Identity({ agents }: { agents: AgentOption[] }): JSX.Element {
               <div style={{ ...commandMutedStyle, marginBottom: 8 }}>{proofStatus}</div>
               {proof ? (
                 <>
+                  <DataRow label="Agent" value={proof.agent_id} />
                   <DataRow label="Claim" value={normalizeClaim(proof.claim)} />
+                  <DataRow label="Commitment" value={proof.commitment?.slice(0, 24) + "..."} />
                   <DataRow label="Valid" value="YES" valueColor="#22c55e" />
                   <DataRow label="Created" value={formatTimestamp(proof.created_at)} />
                   <div style={{ ...commandMutedStyle, marginTop: 10 }}>
@@ -408,24 +608,142 @@ export function Identity({ agents }: { agents: AgentOption[] }): JSX.Element {
                 </>
               ) : null}
             </div>
+          </Panel>
 
-            <Panel title="Signature Verifier" accent="#f59e0b" style={{ padding: 14 }}>
-              <textarea
-                value={verifierInput}
-                onChange={(event) => setVerifierInput(event.target.value)}
-                placeholder="Paste proof JSON to verify..."
-                style={{ ...textareaStyle, marginBottom: 10 }}
-              />
-              <ActionButton accent="#f59e0b" disabled={working === "verify"} onClick={() => void handleVerify()}>
-                {working === "verify" ? "Verifying..." : "Verify"}
-              </ActionButton>
-              {verifyStatus ? <div style={{ ...commandMutedStyle, marginTop: 10 }}>{verifyStatus}</div> : null}
-            </Panel>
+          <Panel title="Verify Proof" accent="#f59e0b">
+            <div style={commandLabelStyle}>Proof JSON</div>
+            <textarea
+              value={verifierInput}
+              onChange={(event) => setVerifierInput(event.target.value)}
+              placeholder='Paste proof JSON to verify...'
+              style={{ ...textareaStyle, marginBottom: 10, marginTop: 8, minHeight: 160 }}
+            />
+            <ActionButton accent="#f59e0b" disabled={working === "verify" || !verifierInput.trim()} onClick={() => void handleVerify()}>
+              {working === "verify" ? "Verifying..." : "Verify Proof"}
+            </ActionButton>
+            {verifyStatus ? (
+              <div style={{
+                ...commandInsetStyle,
+                marginTop: 12,
+                borderLeftColor: verifyStatus.startsWith("Valid") ? "#22c55e" : "#ef4444",
+                borderLeftWidth: 3,
+                borderLeftStyle: "solid",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <StatusDot color={verifyStatus.startsWith("Valid") ? "#22c55e" : "#ef4444"} />
+                  <span style={{ color: "#e2e8f0", fontSize: "0.85rem" }}>{verifyStatus}</span>
+                </div>
+              </div>
+            ) : null}
           </Panel>
         </div>
-      ) : (
+      ) : null}
+
+      {/* ========== GHOST PROTOCOL TAB ========== */}
+      {activeTab === "ghost" ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 18 }}>
-          <Panel title="Connected Peers" accent="#00ffcc">
+          <Panel title="Protocol Control" accent="#a78bfa">
+            <div style={{ ...commandInsetStyle, marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <span style={commandLabelStyle}>Status</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <StatusDot color={ghostEnabled ? "#22c55e" : "#ef4444"} />
+                  <span style={{ ...commandMonoValueStyle, color: ghostEnabled ? "#22c55e" : "#ef4444" }}>
+                    {ghostEnabled ? "ACTIVE" : "INACTIVE"}
+                  </span>
+                </div>
+              </div>
+              <DataRow label="Protocol status" value={ghostStatusText} />
+              {ghostState?.last_sync ? <DataRow label="Last sync" value={ghostState.last_sync} /> : null}
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <ActionButton
+                accent={ghostEnabled ? "#ef4444" : "#22c55e"}
+                disabled={working === "ghost-toggle"}
+                onClick={() => void handleGhostToggle()}
+              >
+                {working === "ghost-toggle" ? "Toggling..." : ghostEnabled ? "Disable Protocol" : "Enable Protocol"}
+              </ActionButton>
+              <ActionButton accent="#a78bfa" disabled={working === "ghost-sync"} onClick={() => void handleGhostSync()}>
+                {working === "ghost-sync" ? "Syncing..." : "Sync Now"}
+              </ActionButton>
+              <ActionButton accent="#38bdf8" disabled={Boolean(working)} onClick={() => void refreshGhost()}>
+                Refresh State
+              </ActionButton>
+            </div>
+
+            {ghostState ? (
+              <div style={{ ...commandInsetStyle, marginTop: 14 }}>
+                <div style={{ ...commandLabelStyle, marginBottom: 8 }}>Raw State</div>
+                <pre style={{ margin: 0, fontSize: "0.75rem", color: "#94a3b8", whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 160, overflow: "auto" }}>
+                  {JSON.stringify(ghostState, null, 2)}
+                </pre>
+              </div>
+            ) : null}
+          </Panel>
+
+          <Panel title="Ghost Peers" accent="#a78bfa">
+            {ghostPeers.length === 0 ? <EmptyState text="No ghost peers registered" compact /> : null}
+            <div style={{ ...commandScrollStyle, maxHeight: 260, paddingRight: 6 }}>
+              {ghostPeers.map((peer) => {
+                const color = peerStatusColor(peer.status);
+                return (
+                  <div key={peer.device_id} style={{ ...commandInsetStyle, marginBottom: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <StatusDot color={color} />
+                        <span style={{ ...commandMonoValueStyle, color }}>{peer.name || peer.device_id}</span>
+                      </div>
+                      <span style={{ ...commandLabelStyle, color }}>{toTitleCase(peer.status)}</span>
+                    </div>
+                    <DataRow label="Device ID" value={peer.device_id} />
+                    <DataRow label="Address" value={peer.address} />
+                    {peer.last_seen ? <DataRow label="Last seen" value={peer.last_seen} /> : null}
+                    <ActionButton
+                      accent="#ef4444"
+                      disabled={working === `ghost-remove-${peer.device_id}`}
+                      onClick={() => void handleGhostRemovePeer(peer.device_id)}
+                    >
+                      {working === `ghost-remove-${peer.device_id}` ? "Removing..." : "Remove"}
+                    </ActionButton>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <div style={{ ...commandLabelStyle, marginBottom: 8 }}>Add Peer</div>
+              <div style={{ display: "grid", gap: 8 }}>
+                <input
+                  value={ghostPeerAddress}
+                  onChange={(event) => setGhostPeerAddress(event.target.value)}
+                  placeholder="Peer address (e.g. 192.168.1.50:9090)"
+                  style={inputStyle}
+                />
+                <input
+                  value={ghostPeerName}
+                  onChange={(event) => setGhostPeerName(event.target.value)}
+                  placeholder="Peer name (optional)"
+                  style={inputStyle}
+                />
+                <ActionButton
+                  accent="#a78bfa"
+                  disabled={working === "ghost-add-peer" || !ghostPeerAddress.trim()}
+                  onClick={() => void handleGhostAddPeer()}
+                >
+                  {working === "ghost-add-peer" ? "Adding..." : "Add Peer"}
+                </ActionButton>
+              </div>
+            </div>
+          </Panel>
+        </div>
+      ) : null}
+
+      {/* ========== MESH TAB ========== */}
+      {activeTab === "mesh" ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 18 }}>
+          <Panel title="Connected Peers" accent="#f59e0b">
             <div style={{ ...commandInsetStyle, marginBottom: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                 <StatusDot color="#22c55e" />
@@ -457,7 +775,7 @@ export function Identity({ agents }: { agents: AgentOption[] }): JSX.Element {
             </div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
-              <ActionButton accent="#00ffcc" disabled={working === "discover"} onClick={() => void handleDiscoverPeers()}>
+              <ActionButton accent="#f59e0b" disabled={working === "discover"} onClick={() => void handleDiscoverPeers()}>
                 {working === "discover" ? "Discovering..." : "Discover Peers"}
               </ActionButton>
             </div>
@@ -513,7 +831,7 @@ export function Identity({ agents }: { agents: AgentOption[] }): JSX.Element {
             </div>
           </Panel>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

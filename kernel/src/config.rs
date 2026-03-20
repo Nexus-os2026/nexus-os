@@ -29,6 +29,14 @@ pub struct NexusConfig {
     pub agents: BTreeMap<String, AgentLlmConfig>,
     #[serde(default)]
     pub agent_llm_assignments: BTreeMap<String, AgentLlmAssignment>,
+    #[serde(default)]
+    pub security: crate::crypto::EncryptionConfig,
+    #[serde(default)]
+    pub backup: crate::backup::BackupScheduleConfig,
+    #[serde(default)]
+    pub rate_limiting: crate::rate_limit::RateLimitConfig,
+    #[serde(default)]
+    pub api: crate::rate_limit::ApiHardeningConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -259,6 +267,10 @@ impl Default for NexusConfig {
             models: ModelsConfig::default(),
             agents: BTreeMap::new(),
             agent_llm_assignments: BTreeMap::new(),
+            security: crate::crypto::EncryptionConfig::default(),
+            backup: crate::backup::BackupScheduleConfig::default(),
+            rate_limiting: crate::rate_limit::RateLimitConfig::default(),
+            api: crate::rate_limit::ApiHardeningConfig::default(),
         }
     }
 }

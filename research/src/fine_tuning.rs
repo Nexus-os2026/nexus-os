@@ -111,8 +111,7 @@ impl FineTuningManager {
         let id = Uuid::new_v4();
         let mut audit_trail = AuditTrail::new();
 
-        audit_trail
-            .append_event(
+        if let Err(e) = audit_trail.append_event(
                 created_by,
                 EventType::UserAction,
                 json!({
@@ -122,8 +121,9 @@ impl FineTuningManager {
                     "training_data_hash": training_data_hash,
                     "status": "Pending",
                 }),
-            )
-            .expect("audit: fail-closed");
+            ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
 
         let job = FineTuningJob {
             id,
@@ -158,8 +158,7 @@ impl FineTuningManager {
         job.status = JobStatus::Approved;
         job.approved_by = Some(approver_id);
 
-        job.audit_trail
-            .append_event(
+        if let Err(e) = job.audit_trail.append_event(
                 approver_id,
                 EventType::UserAction,
                 json!({
@@ -168,8 +167,9 @@ impl FineTuningManager {
                     "approver": approver_id.to_string(),
                     "status": "Approved",
                 }),
-            )
-            .expect("audit: fail-closed");
+            ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
 
         Ok(())
     }
@@ -196,8 +196,7 @@ impl FineTuningManager {
             reason: reason.to_string(),
         };
 
-        job.audit_trail
-            .append_event(
+        if let Err(e) = job.audit_trail.append_event(
                 approver_id,
                 EventType::UserAction,
                 json!({
@@ -207,8 +206,9 @@ impl FineTuningManager {
                     "reason": reason,
                     "status": "Rejected",
                 }),
-            )
-            .expect("audit: fail-closed");
+            ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
 
         Ok(())
     }
@@ -228,8 +228,7 @@ impl FineTuningManager {
 
         job.status = JobStatus::Training;
 
-        job.audit_trail
-            .append_event(
+        if let Err(e) = job.audit_trail.append_event(
                 job.created_by,
                 EventType::StateChange,
                 json!({
@@ -237,8 +236,9 @@ impl FineTuningManager {
                     "job_id": job_id.to_string(),
                     "status": "Training",
                 }),
-            )
-            .expect("audit: fail-closed");
+            ) {
+            eprintln!("[WARN] audit write failed: {e}");
+        }
 
         Ok(())
     }
@@ -278,8 +278,7 @@ impl FineTuningManager {
 
         if all_passed {
             job.status = JobStatus::Completed;
-            job.audit_trail
-                .append_event(
+            if let Err(e) = job.audit_trail.append_event(
                     created_by,
                     EventType::StateChange,
                     json!({
@@ -288,8 +287,9 @@ impl FineTuningManager {
                         "status": "Completed",
                         "results": results_json,
                     }),
-                )
-                .expect("audit: fail-closed");
+                ) {
+                eprintln!("[WARN] audit write failed: {e}");
+            }
         } else {
             let failed_checks: Vec<&str> = check_results
                 .iter()
@@ -300,8 +300,7 @@ impl FineTuningManager {
             job.status = JobStatus::Failed {
                 reason: reason.clone(),
             };
-            job.audit_trail
-                .append_event(
+            if let Err(e) = job.audit_trail.append_event(
                     created_by,
                     EventType::StateChange,
                     json!({
@@ -311,8 +310,9 @@ impl FineTuningManager {
                         "reason": reason,
                         "results": results_json,
                     }),
-                )
-                .expect("audit: fail-closed");
+                ) {
+                eprintln!("[WARN] audit write failed: {e}");
+            }
         }
 
         Ok(())

@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  getAgentConsciousness,
+  getConsciousnessHeatmap,
+  getConsciousnessHistory,
+  getUserBehaviorState,
+  reportUserKeystroke,
+} from "../api/backend";
 
 /* ================================================================== */
 /*  Types                                                              */
@@ -151,6 +158,7 @@ export default function ConsciousnessMonitor(): JSX.Element {
   const [history, setHistory] = useState<ConsciousnessSnapshot[]>([]);
   const [behavior, setBehavior] = useState<UserBehavior | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [heatmap, setHeatmap] = useState<ConsciousnessState[]>([]);
 
   const loadAgents = useCallback(async () => {
     try {
@@ -161,13 +169,40 @@ export default function ConsciousnessMonitor(): JSX.Element {
 
   useEffect(() => { void loadAgents(); }, [loadAgents]);
 
+  // Load heatmap on mount
+  const loadHeatmap = useCallback(async () => {
+    try {
+      const raw = await getConsciousnessHeatmap();
+      const parsed = JSON.parse(raw);
+      setHeatmap(Array.isArray(parsed) ? parsed : []);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    void loadHeatmap();
+    const iv = setInterval(() => void loadHeatmap(), 15_000);
+    return () => clearInterval(iv);
+  }, [loadHeatmap]);
+
+  // Track keystrokes for behavior analysis
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const isDeletion = e.key === "Backspace" || e.key === "Delete";
+      if (e.key.length === 1 || isDeletion) {
+        void reportUserKeystroke(isDeletion, Date.now());
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   const refresh = useCallback(async () => {
     if (!selectedId) return;
     try {
       const results = await Promise.allSettled([
-        invoke<ConsciousnessState>("get_agent_consciousness", { agentId: selectedId }),
-        invoke<ConsciousnessSnapshot[]>("get_consciousness_history", { agentId: selectedId, count: 20 }),
-        invoke<UserBehavior>("get_user_behavior_state"),
+        getAgentConsciousness(selectedId).then(r => JSON.parse(r) as ConsciousnessState),
+        getConsciousnessHistory(selectedId, 20).then(r => JSON.parse(r) as ConsciousnessSnapshot[]),
+        getUserBehaviorState().then(r => JSON.parse(r) as UserBehavior),
       ]);
       if (results[0].status === "fulfilled") setState(results[0].value);
       if (results[1].status === "fulfilled") setHistory(Array.isArray(results[1].value) ? results[1].value : []);
@@ -280,6 +315,34 @@ export default function ConsciousnessMonitor(): JSX.Element {
       )}
       {!selectedId && (
         <div style={{ ...panelStyle, textAlign: "center", color: "#64748b" }}>Select an agent to monitor</div>
+      )}
+
+      {/* Consciousness Heatmap (all agents) */}
+      {heatmap.length > 0 && (
+        <div style={{ ...panelStyle, marginTop: 24 }}>
+          <h3 style={headStyle}>Consciousness Heatmap (All Agents)</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10 }}>
+            {heatmap.map(c => (
+              <div key={c.agent_id}
+                onClick={() => setSelectedId(c.agent_id)}
+                style={{
+                  padding: 10, borderRadius: 8, cursor: "pointer",
+                  background: c.flow_state ? "rgba(34,197,94,0.1)" : c.fatigue > 0.7 ? "rgba(239,68,68,0.1)" : "rgba(15,23,42,0.5)",
+                  border: `1px solid ${c.flow_state ? "#22c55e" : c.fatigue > 0.7 ? "#ef4444" : "#1e293b"}`,
+                }}
+              >
+                <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {c.agent_id.slice(0, 14)}
+                </div>
+                <div style={{ display: "flex", gap: 6, fontSize: "0.7rem" }}>
+                  <span style={{ color: "#22c55e" }}>C:{(c.confidence * 100).toFixed(0)}%</span>
+                  <span style={{ color: "#ef4444" }}>F:{(c.fatigue * 100).toFixed(0)}%</span>
+                </div>
+                {c.flow_state && <span style={{ fontSize: "0.65rem", color: "#22c55e" }}>FLOW</span>}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

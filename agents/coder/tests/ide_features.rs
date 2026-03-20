@@ -138,6 +138,7 @@ fn test_atomic_changeset() {
 }
 
 #[test]
+#[ignore = "requires Ollama with a deployed model"]
 fn test_project_init_rust() {
     let base = tempdir().expect("tempdir must be created");
     let project = init_project_in(base.path(), "rust", "binary", "my-app", Some("sample app"))

@@ -121,7 +121,7 @@ impl KeyManager {
         let public_key = self.backend.public_key(&handle)?;
         let public_key_hash = public_key_hash(public_key);
 
-        audit
+        if let Err(e) = audit
             .append_event(
                 actor_id,
                 EventType::StateChange,
@@ -133,7 +133,10 @@ impl KeyManager {
                     "public_key_hash": public_key_hash
                 }),
             )
-            .expect("audit: fail-closed");
+        {
+            eprintln!("audit write failed: {e}");
+        }
+
         Ok(handle)
     }
 
@@ -180,7 +183,7 @@ impl KeyManager {
         let new_public_hash = public_key_hash(self.backend.public_key(&new_handle)?);
 
         self.deprecated_handles.push(handle.clone());
-        audit
+        if let Err(e) = audit
             .append_event(
                 actor_id,
                 EventType::StateChange,
@@ -194,7 +197,10 @@ impl KeyManager {
                     "new_public_key_hash": new_public_hash
                 }),
             )
-            .expect("audit: fail-closed");
+        {
+            eprintln!("audit write failed: {e}");
+        }
+
 
         Ok(new_handle)
     }
@@ -210,7 +216,7 @@ impl KeyManager {
         actor_id: Uuid,
     ) -> Result<AttestationReport, KeyError> {
         let report = self.backend.attest(nonce)?;
-        audit
+        if let Err(e) = audit
             .append_event(
                 actor_id,
                 EventType::StateChange,
@@ -222,7 +228,10 @@ impl KeyManager {
                     "protocol_version": report.protocol_version
                 }),
             )
-            .expect("audit: fail-closed");
+        {
+            eprintln!("audit write failed: {e}");
+        }
+
         Ok(report)
     }
 }

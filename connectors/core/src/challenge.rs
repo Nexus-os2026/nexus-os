@@ -69,18 +69,18 @@ pub fn handle_challenge(
         challenge_type
     );
 
-    audit_trail
-        .append_event(
-            agent_id,
-            EventType::Error,
-            json!({
-                "event": "challenge_detected",
-                "challenge_type": format!("{:?}", challenge_type),
-                "message": message,
-                "timestamp": timestamp
-            }),
-        )
-        .expect("audit: fail-closed");
+    if let Err(e) = audit_trail.append_event(
+        agent_id,
+        EventType::Error,
+        json!({
+            "event": "challenge_detected",
+            "challenge_type": format!("{:?}", challenge_type),
+            "message": message,
+            "timestamp": timestamp
+        }),
+    ) {
+        tracing::error!("Audit append failed: {e}");
+    }
 
     Some(EscalationEvent {
         agent_id,
@@ -105,17 +105,17 @@ pub fn resume_after_resolution(
 
     *state = transition_state(*state, AgentState::Running)?;
 
-    audit_trail
-        .append_event(
-            agent_id,
-            EventType::UserAction,
-            json!({
-                "event": "challenge_resolved",
-                "evidence": user_evidence,
-                "timestamp": current_unix_timestamp()
-            }),
-        )
-        .expect("audit: fail-closed");
+    if let Err(e) = audit_trail.append_event(
+        agent_id,
+        EventType::UserAction,
+        json!({
+            "event": "challenge_resolved",
+            "evidence": user_evidence,
+            "timestamp": current_unix_timestamp()
+        }),
+    ) {
+        tracing::error!("Audit append failed: {e}");
+    }
 
     Ok(())
 }

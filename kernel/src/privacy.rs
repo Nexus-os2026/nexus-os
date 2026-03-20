@@ -45,7 +45,7 @@ impl PrivacyManager {
         let mut nonce = [0_u8; 12];
         OsRng.fill_bytes(&mut nonce);
         let ciphertext = cipher
-            .encrypt(Nonce::from_slice(&nonce), plaintext)
+            .encrypt(&Nonce::from(nonce), plaintext)
             .map_err(|_| AgentError::SupervisorError("encryption failure".to_string()))?;
 
         Ok(EncryptedField {
@@ -71,7 +71,7 @@ impl PrivacyManager {
             .map_err(|_| AgentError::SupervisorError("invalid AES-256 key length".to_string()))?;
         cipher
             .decrypt(
-                Nonce::from_slice(&encrypted.nonce),
+                &Nonce::from(encrypted.nonce),
                 encrypted.ciphertext.as_ref(),
             )
             .map_err(|_| AgentError::SupervisorError("decryption failure".to_string()))

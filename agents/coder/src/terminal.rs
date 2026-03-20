@@ -308,7 +308,7 @@ impl TerminalExecutor {
             stderr: collected_stderr,
             duration_ms,
         };
-        self.audit_trail
+        if let Err(e) = self.audit_trail
             .append_event(
                 self.agent_id,
                 EventType::ToolCall,
@@ -321,8 +321,9 @@ impl TerminalExecutor {
                     "stdout": result.stdout,
                     "stderr": result.stderr,
                 }),
-            )
-            .expect("audit: fail-closed");
+            ) {
+            tracing::error!("Audit append failed: {e}");
+        }
         Ok(result)
     }
 
@@ -363,7 +364,7 @@ impl TerminalExecutor {
         stderr: &str,
         duration_ms: u128,
     ) {
-        self.audit_trail
+        if let Err(e) = self.audit_trail
             .append_event(
                 self.agent_id,
                 EventType::Error,
@@ -376,8 +377,9 @@ impl TerminalExecutor {
                     "stdout": stdout,
                     "stderr": stderr,
                 }),
-            )
-            .expect("audit: fail-closed");
+            ) {
+            tracing::error!("Audit append failed: {e}");
+        }
     }
 }
 

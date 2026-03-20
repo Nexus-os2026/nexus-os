@@ -275,7 +275,15 @@ fn read_shebang(path: &Path) -> Option<String> {
 fn is_ignored_dir(name: &str) -> bool {
     matches!(
         name,
-        ".git" | "node_modules" | "target" | "__pycache__" | ".venv"
+        ".git"
+            | ".claude"
+            | "node_modules"
+            | "target"
+            | "__pycache__"
+            | ".venv"
+            | "dist"
+            | ".next"
+            | "build"
     )
 }
 

@@ -132,7 +132,7 @@ impl GovernanceBridge {
         // Register with MCP server for tool discovery/invocation
         self.mcp_server.register_agent(agent_id, manifest.clone());
 
-        self.audit_trail
+        if let Err(e) = self.audit_trail
             .append_event(
                 agent_id,
                 EventType::StateChange,
@@ -143,7 +143,10 @@ impl GovernanceBridge {
                     "fuel_budget": fuel,
                 }),
             )
-            .expect("audit: fail-closed");
+        {
+            eprintln!("audit write failed: {e}");
+        }
+
 
         agent_id
     }
@@ -179,7 +182,7 @@ impl GovernanceBridge {
         // Step 3: Capability check — infer required capability from payload
         let required_capability = infer_capability_from_payload(&request.payload);
         if !agent.manifest.capabilities.contains(&required_capability) {
-            self.audit_trail
+            if let Err(e) = self.audit_trail
                 .append_event(
                     agent_id,
                     EventType::Error,
@@ -190,14 +193,17 @@ impl GovernanceBridge {
                         "required_capability": required_capability,
                     }),
                 )
-                .expect("audit: fail-closed");
+            {
+                eprintln!("audit write failed: {e}");
+            }
+
             return Err(AgentError::CapabilityDenied(required_capability));
         }
 
         // Step 4: Fuel check (1 fuel unit per A2A task)
         let fuel_cost = 1u64;
         if agent.fuel_remaining < fuel_cost {
-            self.audit_trail
+            if let Err(e) = self.audit_trail
                 .append_event(
                     agent_id,
                     EventType::Error,
@@ -208,7 +214,10 @@ impl GovernanceBridge {
                         "fuel_remaining": agent.fuel_remaining,
                     }),
                 )
-                .expect("audit: fail-closed");
+            {
+                eprintln!("audit write failed: {e}");
+            }
+
             return Err(AgentError::FuelExhausted);
         }
 
@@ -244,7 +253,9 @@ impl GovernanceBridge {
         };
 
         // Step 6: Create task, deduct fuel, audit
-        let agent_mut = self.agents.get_mut(&agent_id).expect("agent verified");
+        let agent_mut = self.agents.get_mut(&agent_id).ok_or_else(|| {
+            AgentError::SupervisorError(format!("agent {agent_id} not found during fuel deduction"))
+        })?;
         agent_mut.fuel_remaining = agent_mut.fuel_remaining.saturating_sub(fuel_cost);
         let fuel_after = agent_mut.fuel_remaining;
 
@@ -346,7 +357,7 @@ impl GovernanceBridge {
                 .get_tool_governance(agent_id, &request.tool_name),
         );
         if let Some(violation) = firewall_result {
-            self.audit_trail
+            if let Err(e) = self.audit_trail
                 .append_event(
                     agent_id,
                     EventType::Error,
@@ -358,7 +369,10 @@ impl GovernanceBridge {
                         "violation": violation,
                     }),
                 )
-                .expect("audit: fail-closed");
+            {
+                eprintln!("audit write failed: {e}");
+            }
+
             return Err(AgentError::CapabilityDenied(format!(
                 "prompt firewall: {violation}"
             )));
@@ -377,7 +391,7 @@ impl GovernanceBridge {
         }
 
         // Audit the bridge-level invocation
-        self.audit_trail
+        if let Err(e) = self.audit_trail
             .append_event(
                 agent_id,
                 EventType::ToolCall,
@@ -390,7 +404,10 @@ impl GovernanceBridge {
                     "simulated": simulation.is_some(),
                 }),
             )
-            .expect("audit: fail-closed");
+        {
+            eprintln!("audit write failed: {e}");
+        }
+
 
         Ok(McpInvokeResponse {
             result: tool_result,
@@ -421,7 +438,7 @@ impl GovernanceBridge {
         if !self.allowed_senders.is_empty()
             && !self.allowed_senders.contains(&sender_id.to_string())
         {
-            self.audit_trail
+            if let Err(e) = self.audit_trail
                 .append_event(
                     Uuid::nil(),
                     EventType::Error,
@@ -430,7 +447,10 @@ impl GovernanceBridge {
                         "sender": sender_id,
                     }),
                 )
-                .expect("audit: fail-closed");
+            {
+                eprintln!("audit write failed: {e}");
+            }
+
             return Err(AgentError::CapabilityDenied(format!(
                 "sender '{sender_id}' not authorized"
             )));

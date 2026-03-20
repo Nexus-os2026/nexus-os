@@ -206,32 +206,34 @@ impl SemanticIndexer {
         let mut seen = HashSet::new();
 
         // Capitalized sequences (potential names / proper nouns)
-        let name_re = Regex::new(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b").unwrap();
-        for cap in name_re.captures_iter(content) {
-            let name = cap[1].to_string();
-            if seen.insert(name.clone()) {
-                entities.push(name);
+        if let Ok(name_re) = Regex::new(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b") {
+            for cap in name_re.captures_iter(content) {
+                let name = cap[1].to_string();
+                if seen.insert(name.clone()) {
+                    entities.push(name);
+                }
             }
         }
 
         // ISO dates (YYYY-MM-DD)
-        let date_re = Regex::new(r"\b(\d{4}-\d{2}-\d{2})\b").unwrap();
-        for cap in date_re.captures_iter(content) {
-            let d = cap[1].to_string();
-            if seen.insert(d.clone()) {
-                entities.push(d);
+        if let Ok(date_re) = Regex::new(r"\b(\d{4}-\d{2}-\d{2})\b") {
+            for cap in date_re.captures_iter(content) {
+                let d = cap[1].to_string();
+                if seen.insert(d.clone()) {
+                    entities.push(d);
+                }
             }
         }
 
         // UUIDs
-        let uuid_re = Regex::new(
+        if let Ok(uuid_re) = Regex::new(
             r"\b([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\b",
-        )
-        .unwrap();
-        for cap in uuid_re.captures_iter(content) {
-            let u = cap[1].to_string();
-            if seen.insert(u.clone()) {
-                entities.push(u);
+        ) {
+            for cap in uuid_re.captures_iter(content) {
+                let u = cap[1].to_string();
+                if seen.insert(u.clone()) {
+                    entities.push(u);
+                }
             }
         }
 
@@ -254,20 +256,24 @@ impl SemanticIndexer {
         let mut refs = Vec::new();
         let mut seen = HashSet::new();
 
-        let path_re = Regex::new(r#"(?:^|[\s"'`(])(/[\w./-]+\.\w+)"#).unwrap();
-        for cap in path_re.captures_iter(content) {
-            let p = cap[1].to_string();
-            if seen.insert(p.clone()) {
-                refs.push(p);
+        if let Ok(path_re) = Regex::new(r#"(?:^|[\s"'`(])(/[\w./-]+\.\w+)"#) {
+            for cap in path_re.captures_iter(content) {
+                let p = cap[1].to_string();
+                if seen.insert(p.clone()) {
+                    refs.push(p);
+                }
             }
         }
 
         // Relative paths
-        let rel_re = Regex::new(r#"(?:^|[\s"'`(])((?:\.\./|\./)?[\w]+(?:/[\w.]+)+\.\w+)"#).unwrap();
-        for cap in rel_re.captures_iter(content) {
-            let p = cap[1].to_string();
-            if seen.insert(p.clone()) {
-                refs.push(p);
+        if let Ok(rel_re) =
+            Regex::new(r#"(?:^|[\s"'`(])((?:\.\./|\./)?[\w]+(?:/[\w.]+)+\.\w+)"#)
+        {
+            for cap in rel_re.captures_iter(content) {
+                let p = cap[1].to_string();
+                if seen.insert(p.clone()) {
+                    refs.push(p);
+                }
             }
         }
 

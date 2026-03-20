@@ -8,6 +8,13 @@ import {
   listProviderModels,
   deleteLocalModel,
   getSystemSpecs,
+  nexusLinkStatus,
+  nexusLinkToggleSharing,
+  nexusLinkAddPeer,
+  nexusLinkRemovePeer,
+  nexusLinkListPeers,
+  nexusLinkSendModel,
+  getActiveLlmProvider,
 } from "../api/backend";
 import type { ProviderModel } from "../types";
 
@@ -80,6 +87,25 @@ interface SystemSpecs {
   cpu_cores: number;
 }
 
+interface NexusLinkPeer {
+  device_id: string;
+  address: string;
+  name: string;
+  status?: string;
+}
+
+interface NexusLinkStatusInfo {
+  sharing_enabled: boolean;
+  peer_count: number;
+  status: string;
+}
+
+interface ActiveProviderInfo {
+  provider: string;
+  model?: string;
+  status?: string;
+}
+
 /* ── helpers ── */
 
 function formatBytes(bytes: number): string {
@@ -134,11 +160,36 @@ export default function ModelHub() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [localDiscoveryAttempted, setLocalDiscoveryAttempted] = useState(false);
 
+  /* Nexus Link state */
+  const [linkStatus, setLinkStatus] = useState<NexusLinkStatusInfo | null>(null);
+  const [linkPeers, setLinkPeers] = useState<NexusLinkPeer[]>([]);
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [addPeerAddress, setAddPeerAddress] = useState("");
+  const [addPeerName, setAddPeerName] = useState("");
+  const [sendModelPeerAddress, setSendModelPeerAddress] = useState("");
+  const [sendModelId, setSendModelId] = useState("");
+  const [sendModelFilename, setSendModelFilename] = useState("");
+  const [sendingModel, setSendingModel] = useState(false);
+
+  /* Active LLM Provider state */
+  const [activeProvider, setActiveProvider] = useState<ActiveProviderInfo | null>(null);
+  const [providerLoading, setProviderLoading] = useState(false);
+
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeout.current) clearTimeout(searchTimeout.current);
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    };
+  }, []);
 
   const showError = useCallback((msg: string) => {
     setError(msg);
-    setTimeout(() => setError(null), 5000);
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    errorTimerRef.current = setTimeout(() => setError(null), 5000);
   }, []);
 
   /* ── data loading ── */
@@ -158,7 +209,7 @@ export default function ModelHub() {
         ),
       );
     } catch (err) {
-      console.error("[ModelHub] failed to load installed models", err);
+      if (import.meta.env.DEV) console.error("[ModelHub] failed to load installed models", err);
       setLocalModels([]);
       setOllamaModels([]);
     }
@@ -177,6 +228,113 @@ export default function ModelHub() {
     loadLocalModels();
     loadSystemSpecs();
   }, [loadLocalModels, loadSystemSpecs]);
+
+  /* ── Nexus Link data loading ── */
+
+  const loadLinkStatus = useCallback(async () => {
+    try {
+      const raw = await nexusLinkStatus();
+      const parsed: NexusLinkStatusInfo = JSON.parse(raw);
+      setLinkStatus(parsed);
+    } catch {
+      setLinkStatus(null);
+    }
+  }, []);
+
+  const loadLinkPeers = useCallback(async () => {
+    try {
+      const raw = await nexusLinkListPeers();
+      const parsed: NexusLinkPeer[] = JSON.parse(raw);
+      setLinkPeers(parsed);
+    } catch {
+      setLinkPeers([]);
+    }
+  }, []);
+
+  const loadActiveProvider = useCallback(async () => {
+    setProviderLoading(true);
+    try {
+      const raw = await getActiveLlmProvider();
+      const parsed: ActiveProviderInfo = JSON.parse(raw);
+      setActiveProvider(parsed);
+    } catch {
+      setActiveProvider(null);
+    } finally {
+      setProviderLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadLinkStatus();
+    loadLinkPeers();
+    loadActiveProvider();
+  }, [loadLinkStatus, loadLinkPeers, loadActiveProvider]);
+
+  /* ── Nexus Link actions ── */
+
+  const handleToggleSharing = useCallback(async (enabled: boolean) => {
+    setLinkLoading(true);
+    setLinkError(null);
+    try {
+      await nexusLinkToggleSharing(enabled);
+      await loadLinkStatus();
+    } catch (e) {
+      setLinkError(String(e));
+    } finally {
+      setLinkLoading(false);
+    }
+  }, [loadLinkStatus]);
+
+  const handleAddPeer = useCallback(async () => {
+    if (!addPeerAddress.trim() || !addPeerName.trim()) return;
+    setLinkLoading(true);
+    setLinkError(null);
+    try {
+      await nexusLinkAddPeer(addPeerAddress.trim(), addPeerName.trim());
+      setAddPeerAddress("");
+      setAddPeerName("");
+      await loadLinkPeers();
+      await loadLinkStatus();
+    } catch (e) {
+      setLinkError(String(e));
+    } finally {
+      setLinkLoading(false);
+    }
+  }, [addPeerAddress, addPeerName, loadLinkPeers, loadLinkStatus]);
+
+  const handleRemovePeer = useCallback(async (deviceId: string) => {
+    setLinkLoading(true);
+    setLinkError(null);
+    try {
+      await nexusLinkRemovePeer(deviceId);
+      await loadLinkPeers();
+      await loadLinkStatus();
+    } catch (e) {
+      setLinkError(String(e));
+    } finally {
+      setLinkLoading(false);
+    }
+  }, [loadLinkPeers, loadLinkStatus]);
+
+  const handleSendModel = useCallback(async () => {
+    if (!sendModelPeerAddress.trim() || !sendModelId.trim() || !sendModelFilename.trim()) return;
+    setSendingModel(true);
+    setLinkError(null);
+    try {
+      await nexusLinkSendModel(
+        sendModelPeerAddress.trim(),
+        sendModelId.trim(),
+        sendModelFilename.trim(),
+      );
+      setSendModelPeerAddress("");
+      setSendModelId("");
+      setSendModelFilename("");
+    } catch (e) {
+      setLinkError(String(e));
+    } finally {
+      setSendingModel(false);
+    }
+  }, [sendModelPeerAddress, sendModelId, sendModelFilename]);
 
   /* ── event listeners ── */
 
@@ -1165,6 +1323,415 @@ export default function ModelHub() {
     </div>
   );
 
+  /* ── Nexus Link + Provider panels ── */
+
+  const renderNexusLinkPanel = () => (
+    <div
+      style={{
+        background: bgPanel,
+        borderRadius: 8,
+        border: `1px solid ${borderColor}`,
+        padding: 16,
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: textPrimary }}>
+          Nexus Link
+        </div>
+        {linkStatus && (
+          <span
+            style={{
+              fontSize: 10,
+              padding: "2px 10px",
+              borderRadius: 10,
+              background: linkStatus.sharing_enabled ? `${accent}22` : "#f8717122",
+              color: linkStatus.sharing_enabled ? accent : "#f87171",
+              fontWeight: 600,
+            }}
+          >
+            {linkStatus.sharing_enabled ? "Sharing On" : "Sharing Off"}
+          </span>
+        )}
+      </div>
+
+      {linkError && (
+        <div
+          style={{
+            padding: "6px 10px",
+            background: "#ff444422",
+            border: "1px solid #ff444466",
+            borderRadius: 4,
+            color: "#ff6666",
+            fontSize: 11,
+          }}
+        >
+          {linkError}
+        </div>
+      )}
+
+      {/* Status display */}
+      {linkStatus && (
+        <div
+          style={{
+            padding: "8px 12px",
+            background: bgCard,
+            border: `1px solid ${borderColor}`,
+            borderRadius: 6,
+            fontSize: 12,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ color: textSecondary }}>Status</span>
+            <span style={{ color: textPrimary, fontWeight: 500 }}>{linkStatus.status}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ color: textSecondary }}>Connected Peers</span>
+            <span style={{ color: accent, fontWeight: 600 }}>{linkStatus.peer_count}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Toggle sharing */}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          onClick={() => handleToggleSharing(true)}
+          disabled={linkLoading || linkStatus?.sharing_enabled === true}
+          style={{
+            flex: 1,
+            padding: "6px 0",
+            fontSize: 11,
+            fontWeight: 600,
+            border: `1px solid ${accent}44`,
+            borderRadius: 5,
+            background: linkStatus?.sharing_enabled ? `${accent}22` : bgCard,
+            color: linkStatus?.sharing_enabled ? accent : textSecondary,
+            cursor: linkLoading ? "wait" : "pointer",
+            opacity: linkLoading ? 0.6 : 1,
+          }}
+        >
+          Enable Sharing
+        </button>
+        <button
+          onClick={() => handleToggleSharing(false)}
+          disabled={linkLoading || linkStatus?.sharing_enabled === false}
+          style={{
+            flex: 1,
+            padding: "6px 0",
+            fontSize: 11,
+            fontWeight: 600,
+            border: `1px solid #f8717144`,
+            borderRadius: 5,
+            background: !linkStatus?.sharing_enabled ? "#f8717122" : bgCard,
+            color: !linkStatus?.sharing_enabled ? "#f87171" : textSecondary,
+            cursor: linkLoading ? "wait" : "pointer",
+            opacity: linkLoading ? 0.6 : 1,
+          }}
+        >
+          Disable Sharing
+        </button>
+      </div>
+
+      {/* Peer list */}
+      <div>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: textSecondary,
+            textTransform: "uppercase",
+            letterSpacing: 1,
+            marginBottom: 6,
+          }}
+        >
+          Peers ({linkPeers.length})
+        </div>
+        {linkPeers.length === 0 ? (
+          <div style={{ fontSize: 11, color: textSecondary, padding: "4px 0" }}>
+            No peers connected. Add one below.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {linkPeers.map((peer) => (
+              <div
+                key={peer.device_id}
+                style={{
+                  padding: "8px 10px",
+                  background: bgCard,
+                  border: `1px solid ${borderColor}`,
+                  borderRadius: 6,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: textPrimary }}>
+                    {peer.name}
+                  </div>
+                  <div style={{ fontSize: 10, color: textSecondary, marginTop: 1 }}>
+                    {peer.address}
+                  </div>
+                  {peer.status && (
+                    <div style={{ fontSize: 10, color: accent, marginTop: 1 }}>{peer.status}</div>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleRemovePeer(peer.device_id)}
+                  disabled={linkLoading}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#f87171",
+                    cursor: linkLoading ? "wait" : "pointer",
+                    fontSize: 13,
+                    padding: "2px 6px",
+                    borderRadius: 4,
+                    lineHeight: 1,
+                  }}
+                  title="Remove peer"
+                >
+                  {"\u2715"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add peer form */}
+      <div>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: textSecondary,
+            textTransform: "uppercase",
+            letterSpacing: 1,
+            marginBottom: 6,
+          }}
+        >
+          Add Peer
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <input
+            type="text"
+            value={addPeerAddress}
+            onChange={(e) => setAddPeerAddress(e.target.value)}
+            placeholder="Peer address (e.g. 192.168.1.100:9090)"
+            style={{
+              width: "100%",
+              padding: "7px 10px",
+              background: bgInput,
+              color: textPrimary,
+              border: `1px solid ${borderColor}`,
+              borderRadius: 5,
+              fontSize: 12,
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+          />
+          <input
+            type="text"
+            value={addPeerName}
+            onChange={(e) => setAddPeerName(e.target.value)}
+            placeholder="Peer name (e.g. Office Desktop)"
+            style={{
+              width: "100%",
+              padding: "7px 10px",
+              background: bgInput,
+              color: textPrimary,
+              border: `1px solid ${borderColor}`,
+              borderRadius: 5,
+              fontSize: 12,
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+          />
+          <button
+            onClick={handleAddPeer}
+            disabled={linkLoading || !addPeerAddress.trim() || !addPeerName.trim()}
+            style={{
+              padding: "7px 0",
+              fontSize: 12,
+              fontWeight: 600,
+              border: `1px solid ${accent}44`,
+              borderRadius: 5,
+              background: `${accent}18`,
+              color: accent,
+              cursor: linkLoading ? "wait" : "pointer",
+              opacity: !addPeerAddress.trim() || !addPeerName.trim() ? 0.5 : 1,
+            }}
+          >
+            {linkLoading ? "Adding..." : "Add Peer"}
+          </button>
+        </div>
+      </div>
+
+      {/* Send model form */}
+      <div>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: textSecondary,
+            textTransform: "uppercase",
+            letterSpacing: 1,
+            marginBottom: 6,
+          }}
+        >
+          Send Model to Peer
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <input
+            type="text"
+            value={sendModelPeerAddress}
+            onChange={(e) => setSendModelPeerAddress(e.target.value)}
+            placeholder="Peer address"
+            style={{
+              width: "100%",
+              padding: "7px 10px",
+              background: bgInput,
+              color: textPrimary,
+              border: `1px solid ${borderColor}`,
+              borderRadius: 5,
+              fontSize: 12,
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+          />
+          <input
+            type="text"
+            value={sendModelId}
+            onChange={(e) => setSendModelId(e.target.value)}
+            placeholder="Model ID (e.g. TheBloke/Llama-2-7B-GGUF)"
+            style={{
+              width: "100%",
+              padding: "7px 10px",
+              background: bgInput,
+              color: textPrimary,
+              border: `1px solid ${borderColor}`,
+              borderRadius: 5,
+              fontSize: 12,
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+          />
+          <input
+            type="text"
+            value={sendModelFilename}
+            onChange={(e) => setSendModelFilename(e.target.value)}
+            placeholder="Filename (e.g. llama-2-7b.Q4_K_M.gguf)"
+            style={{
+              width: "100%",
+              padding: "7px 10px",
+              background: bgInput,
+              color: textPrimary,
+              border: `1px solid ${borderColor}`,
+              borderRadius: 5,
+              fontSize: 12,
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+          />
+          <button
+            onClick={handleSendModel}
+            disabled={
+              sendingModel ||
+              !sendModelPeerAddress.trim() ||
+              !sendModelId.trim() ||
+              !sendModelFilename.trim()
+            }
+            style={{
+              padding: "7px 0",
+              fontSize: 12,
+              fontWeight: 600,
+              border: `1px solid #60a5fa44`,
+              borderRadius: 5,
+              background: "#60a5fa18",
+              color: "#60a5fa",
+              cursor: sendingModel ? "wait" : "pointer",
+              opacity:
+                !sendModelPeerAddress.trim() || !sendModelId.trim() || !sendModelFilename.trim()
+                  ? 0.5
+                  : 1,
+            }}
+          >
+            {sendingModel ? "Sending..." : "Send Model"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderActiveProviderPanel = () => (
+    <div
+      style={{
+        background: bgPanel,
+        borderRadius: 8,
+        border: `1px solid ${borderColor}`,
+        padding: 16,
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+      }}
+    >
+      <div style={{ fontWeight: 700, fontSize: 14, color: textPrimary }}>
+        Active Provider
+      </div>
+      {providerLoading ? (
+        <div style={{ fontSize: 12, color: textSecondary }}>Loading provider info...</div>
+      ) : activeProvider ? (
+        <div
+          style={{
+            padding: "10px 12px",
+            background: bgCard,
+            border: `1px solid ${borderColor}`,
+            borderRadius: 6,
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+            <span style={{ color: textSecondary }}>Provider</span>
+            <span style={{ color: accent, fontWeight: 600 }}>{activeProvider.provider}</span>
+          </div>
+          {activeProvider.model && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+              <span style={{ color: textSecondary }}>Model</span>
+              <span style={{ color: textPrimary, fontWeight: 500 }}>{activeProvider.model}</span>
+            </div>
+          )}
+          {activeProvider.status && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+              <span style={{ color: textSecondary }}>Status</span>
+              <span
+                style={{
+                  color: activeProvider.status === "active" || activeProvider.status === "connected"
+                    ? accent
+                    : "#fbbf24",
+                  fontWeight: 500,
+                }}
+              >
+                {activeProvider.status}
+              </span>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: textSecondary }}>
+          No active LLM provider detected. Configure one in Settings.
+        </div>
+      )}
+    </div>
+  );
+
   /* ── render ── */
 
   return (
@@ -1219,6 +1786,12 @@ export default function ModelHub() {
         {renderSearchPanel()}
         {renderDetailsPanel()}
         {renderLocalPanel()}
+      </div>
+
+      {/* Bottom row: Nexus Link + Active Provider */}
+      <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
+        <div style={{ flex: 2 }}>{renderNexusLinkPanel()}</div>
+        <div style={{ flex: 1 }}>{renderActiveProviderPanel()}</div>
       </div>
     </div>
   );

@@ -188,7 +188,7 @@ impl WebConductEngine {
         for allow in &rule.allows {
             if path.starts_with(allow.as_str()) {
                 let len = allow.len();
-                if best_allow.is_none() || len > best_allow.unwrap() {
+                if best_allow.is_none_or(|prev| len > prev) {
                     best_allow = Some(len);
                 }
             }
@@ -196,7 +196,7 @@ impl WebConductEngine {
         for disallow in &rule.disallows {
             if !disallow.is_empty() && path.starts_with(disallow.as_str()) {
                 let len = disallow.len();
-                if best_disallow.is_none() || len > best_disallow.unwrap() {
+                if best_disallow.is_none_or(|prev| len > prev) {
                     best_disallow = Some(len);
                 }
             }

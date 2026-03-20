@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { hasDesktopRuntime, emailList, emailSave, emailDelete } from "../api/backend";
+import {
+  Inbox, Star, Send, FileEdit, Mail, Archive, Trash2,
+  Pen, FileText, CornerDownLeft, Loader, MailOpen, StarOff,
+  AlertCircle, SendHorizonal,
+} from "lucide-react";
 import "./email-client.css";
 
 /* ─── types ─── */
@@ -33,14 +38,14 @@ interface EmailTemplate {
 }
 
 /* ─── constants ─── */
-const FOLDERS: { id: FolderId; label: string; icon: string }[] = [
-  { id: "inbox", label: "Inbox", icon: "📥" },
-  { id: "starred", label: "Starred", icon: "⭐" },
-  { id: "sent", label: "Sent", icon: "📤" },
-  { id: "drafts", label: "Drafts", icon: "📝" },
-  { id: "outbox", label: "Outbox", icon: "📮" },
-  { id: "archive", label: "Archive", icon: "📦" },
-  { id: "trash", label: "Trash", icon: "🗑" },
+const FOLDERS: { id: FolderId; label: string; icon: React.ReactNode }[] = [
+  { id: "inbox", label: "Inbox", icon: <Inbox size={14} /> },
+  { id: "starred", label: "Starred", icon: <Star size={14} /> },
+  { id: "sent", label: "Sent", icon: <Send size={14} /> },
+  { id: "drafts", label: "Drafts", icon: <FileEdit size={14} /> },
+  { id: "outbox", label: "Outbox", icon: <SendHorizonal size={14} /> },
+  { id: "archive", label: "Archive", icon: <Archive size={14} /> },
+  { id: "trash", label: "Trash", icon: <Trash2 size={14} /> },
 ];
 
 const CATEGORY_COLORS: Record<Category, string> = {
@@ -74,7 +79,7 @@ async function persistEmail(email: Email): Promise<void> {
   try {
     await emailSave(email.id, JSON.stringify(email));
   } catch (e) {
-    console.error("Failed to save email:", e);
+    if (import.meta.env.DEV) console.error("Failed to save email:", e);
   }
 }
 
@@ -83,7 +88,7 @@ async function removeEmail(id: string): Promise<void> {
   try {
     await emailDelete(id);
   } catch (e) {
-    console.error("Failed to delete email:", e);
+    if (import.meta.env.DEV) console.error("Failed to delete email:", e);
   }
 }
 
@@ -251,12 +256,12 @@ export default function EmailClient() {
       <aside className="ec-sidebar">
         <div className="ec-sidebar-header">
           <h2 className="ec-sidebar-title">Mail</h2>
-          <button className="ec-btn-compose" onClick={() => { setShowCompose(true); setShowTemplates(false); }}>✎ Compose</button>
+          <button className="ec-btn-compose cursor-pointer" onClick={() => { setShowCompose(true); setShowTemplates(false); }}><Pen size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Compose</button>
         </div>
 
         {/* SMTP notice */}
         <div className="ec-pii-notice" style={{ margin: "0 8px 8px", fontSize: 11 }}>
-          <span className="ec-pii-icon">📮</span>
+          <span className="ec-pii-icon"><SendHorizonal size={12} /></span>
           Local drafts mode. Connect SMTP in Settings to send externally.
         </div>
 
@@ -304,25 +309,25 @@ export default function EmailClient() {
         <div className="ec-list-items">
           {!loaded && (
             <div className="ec-empty">
-              <div className="ec-empty-icon">⏳</div>
+              <div className="ec-empty-icon"><Loader size={24} /></div>
               <div>Loading emails...</div>
             </div>
           )}
           {loaded && filteredEmails.length === 0 && (
             <div className="ec-empty">
-              <div className="ec-empty-icon">📭</div>
+              <div className="ec-empty-icon"><MailOpen size={24} /></div>
               <div>{emails.length === 0 ? "No emails yet — compose your first draft" : "No emails in this folder"}</div>
             </div>
           )}
           {filteredEmails.map(email => (
             <div key={email.id} className={`ec-email-item ${!email.read ? "unread" : ""} ${selectedEmailId === email.id ? "active" : ""}`} onClick={() => { setSelectedEmailId(email.id); markRead(email.id); }}>
               <div className="ec-email-item-left">
-                <button className="ec-star-btn" onClick={e => { e.stopPropagation(); toggleStar(email.id); }}>{email.starred ? "★" : "☆"}</button>
+                <button className="ec-star-btn cursor-pointer" onClick={e => { e.stopPropagation(); toggleStar(email.id); }}>{email.starred ? <Star size={14} fill="currentColor" /> : <StarOff size={14} />}</button>
               </div>
               <div className="ec-email-item-main">
                 <div className="ec-email-from">{email.from.name}</div>
                 <div className="ec-email-subject">
-                  {email.priority === "high" && <span className="ec-priority-mark">!</span>}
+                  {email.priority === "high" && <span className="ec-priority-mark"><AlertCircle size={12} /></span>}
                   {email.subject || "(no subject)"}
                 </div>
                 <div className="ec-email-snippet">{email.body.slice(0, 80).replace(/\n/g, " ")}...</div>
@@ -344,7 +349,7 @@ export default function EmailClient() {
             <div className="ec-compose-header">
               <span>New Email</span>
               <div className="ec-compose-actions">
-                <button className="ec-btn-template" onClick={() => setShowTemplates(!showTemplates)}>📄 Templates</button>
+                <button className="ec-btn-template cursor-pointer" onClick={() => setShowTemplates(!showTemplates)}><FileText size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Templates</button>
                 <button className="ec-compose-close" onClick={() => setShowCompose(false)}>×</button>
               </div>
             </div>
@@ -375,7 +380,7 @@ export default function EmailClient() {
             <div className="ec-compose-footer">
               <button className="ec-btn-send" onClick={sendEmail} disabled={!composeTo.trim() || !composeSubject.trim()} title="Moves to Outbox — connect SMTP in Settings to send externally">Send to Outbox</button>
               <button className="ec-btn-draft" onClick={saveDraft}>Save Draft</button>
-              <span className="ec-compose-fuel" style={{ opacity: 0.7 }}>📮 Outbox — connect SMTP in Settings to send</span>
+              <span className="ec-compose-fuel" style={{ opacity: 0.7 }}><SendHorizonal size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Outbox — connect SMTP in Settings to send</span>
             </div>
           </div>
         )}
@@ -389,10 +394,10 @@ export default function EmailClient() {
                 {selectedEmail.priority === "high" && <span className="ec-detail-priority">High Priority</span>}
               </div>
               <div className="ec-detail-actions">
-                <button className="ec-action-btn" onClick={() => moveToFolder(selectedEmail.id, "archive")} title="Archive">📦</button>
-                <button className="ec-action-btn" onClick={() => deleteEmailHandler(selectedEmail.id)} title="Delete">🗑</button>
-                <button className="ec-action-btn" onClick={() => toggleStar(selectedEmail.id)} title="Star">{selectedEmail.starred ? "★" : "☆"}</button>
-                <button className="ec-action-btn" onClick={() => { setShowCompose(true); setComposeTo(selectedEmail.from.email); setComposeSubject(`Re: ${selectedEmail.subject}`); }} title="Reply">↩</button>
+                <button className="ec-action-btn cursor-pointer" onClick={() => moveToFolder(selectedEmail.id, "archive")} title="Archive"><Archive size={14} /></button>
+                <button className="ec-action-btn cursor-pointer" onClick={() => deleteEmailHandler(selectedEmail.id)} title="Delete"><Trash2 size={14} /></button>
+                <button className="ec-action-btn cursor-pointer" onClick={() => toggleStar(selectedEmail.id)} title="Star">{selectedEmail.starred ? <Star size={14} fill="currentColor" /> : <StarOff size={14} />}</button>
+                <button className="ec-action-btn cursor-pointer" onClick={() => { setShowCompose(true); setComposeTo(selectedEmail.from.email); setComposeSubject(`Re: ${selectedEmail.subject}`); }} title="Reply"><CornerDownLeft size={14} /></button>
               </div>
             </div>
 
@@ -409,7 +414,7 @@ export default function EmailClient() {
             {/* outbox notice */}
             {selectedEmail.folder === "outbox" && (
               <div className="ec-pii-notice">
-                <span className="ec-pii-icon">📮</span>
+                <span className="ec-pii-icon"><SendHorizonal size={12} /></span>
                 Outbox — connect SMTP in Settings to send this email externally.
               </div>
             )}
@@ -444,7 +449,7 @@ export default function EmailClient() {
         {/* no email selected */}
         {!showCompose && !selectedEmail && (
           <div className="ec-no-email">
-            <div className="ec-no-email-icon">📧</div>
+            <div className="ec-no-email-icon"><Mail size={32} /></div>
             <div>Select an email to read, or compose a new draft</div>
           </div>
         )}
