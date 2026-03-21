@@ -59,6 +59,7 @@ pub mod reputation;
 pub mod resource_limiter;
 pub mod safety_supervisor;
 pub mod sbom;
+pub mod scheduler;
 pub mod self_improve;
 pub mod self_rewrite;
 pub mod simulation;

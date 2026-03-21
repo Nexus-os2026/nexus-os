@@ -676,6 +676,9 @@ pub struct AppState {
     metering_rates: Arc<nexus_metering::CostRates>,
     telemetry_config: Arc<Mutex<nexus_telemetry::TelemetryConfig>>,
     a2a_client: Arc<Mutex<A2aClient>>,
+    schedule_store: Arc<nexus_kernel::scheduler::ScheduleStore>,
+    adversarial_arena:
+        Arc<Mutex<nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena>>,
     #[cfg(all(
         feature = "tauri-runtime",
         any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -913,6 +916,14 @@ impl AppState {
             metering_rates: Arc::new(nexus_metering::CostRates::default()),
             telemetry_config: Arc::new(Mutex::new(nexus_telemetry::TelemetryConfig::desktop())),
             a2a_client: Arc::new(Mutex::new(A2aClient::new())),
+            schedule_store: Arc::new(nexus_kernel::scheduler::ScheduleStore::new(
+                &NexusDatabase::default_db_path()
+                    .parent()
+                    .unwrap_or(std::path::Path::new(".")),
+            )),
+            adversarial_arena: Arc::new(Mutex::new(
+                nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena::new(),
+            )),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1081,6 +1092,12 @@ impl AppState {
             rate_limiter: nexus_kernel::rate_limit::NexusRateLimiter::disabled(),
             api_config: nexus_kernel::rate_limit::ApiHardeningConfig::default(),
             a2a_client: Arc::new(Mutex::new(A2aClient::new())),
+            schedule_store: Arc::new(nexus_kernel::scheduler::ScheduleStore::new(
+                std::env::temp_dir().as_path(),
+            )),
+            adversarial_arena: Arc::new(Mutex::new(
+                nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena::new(),
+            )),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -18513,6 +18530,100 @@ fn parse_metering_period(period: &str) -> nexus_metering::types::TimePeriod {
     }
 }
 
+// ── Background Scheduler Commands ──
+
+#[tauri::command]
+async fn scheduler_create(
+    state: tauri::State<'_, AppState>,
+    entry: serde_json::Value,
+) -> Result<String, String> {
+    let parsed: nexus_kernel::scheduler::ScheduleEntry =
+        serde_json::from_value(entry).map_err(|e| format!("invalid schedule entry: {e}"))?;
+    let id = state
+        .schedule_store
+        .add(parsed)
+        .map_err(|e| e.to_string())?;
+    Ok(id.to_string())
+}
+
+#[tauri::command]
+async fn scheduler_list(state: tauri::State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let entries = state.schedule_store.list();
+    serde_json::to_value(entries).map_err(|e| format!("serialize: {e}"))
+}
+
+#[tauri::command]
+async fn scheduler_enable(state: tauri::State<'_, AppState>, id: String) -> Result<(), String> {
+    let uuid = uuid::Uuid::parse_str(&id).map_err(|e| format!("invalid id: {e}"))?;
+    state
+        .schedule_store
+        .enable(&uuid)
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn scheduler_disable(state: tauri::State<'_, AppState>, id: String) -> Result<(), String> {
+    let uuid = uuid::Uuid::parse_str(&id).map_err(|e| format!("invalid id: {e}"))?;
+    state
+        .schedule_store
+        .disable(&uuid)
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn scheduler_delete(state: tauri::State<'_, AppState>, id: String) -> Result<(), String> {
+    let uuid = uuid::Uuid::parse_str(&id).map_err(|e| format!("invalid id: {e}"))?;
+    state
+        .schedule_store
+        .remove(&uuid)
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn scheduler_history(
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<serde_json::Value, String> {
+    let uuid = uuid::Uuid::parse_str(&id).map_err(|e| format!("invalid id: {e}"))?;
+    let entry = state
+        .schedule_store
+        .get(&uuid)
+        .ok_or_else(|| format!("schedule {id} not found"))?;
+    serde_json::to_value(serde_json::json!({
+        "schedule_id": entry.id.to_string(),
+        "name": entry.name,
+        "run_count": entry.run_count,
+        "last_run": entry.last_run,
+        "next_run": entry.next_run,
+        "enabled": entry.enabled,
+    }))
+    .map_err(|e| format!("serialize: {e}"))
+}
+
+#[tauri::command]
+async fn scheduler_trigger_now(
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<serde_json::Value, String> {
+    let uuid = uuid::Uuid::parse_str(&id).map_err(|e| format!("invalid id: {e}"))?;
+    let entry = state
+        .schedule_store
+        .get(&uuid)
+        .ok_or_else(|| format!("schedule {id} not found"))?;
+    let executor = nexus_kernel::scheduler::ScheduledExecutor::new(
+        state.supervisor.clone(),
+        state.adversarial_arena.clone(),
+        state.audit.clone(),
+    );
+    let result = executor.execute(&entry, None).map_err(|e| e.to_string())?;
+    // Record the run
+    let _ = state.schedule_store.record_run(&uuid, None);
+    serde_json::to_value(result).map_err(|e| format!("serialize: {e}"))
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -23052,6 +23163,14 @@ mod runtime {
                 metering_export_csv,
                 metering_set_budget_alert,
                 metering_budget_alerts,
+                // Background Scheduler
+                scheduler_create,
+                scheduler_list,
+                scheduler_enable,
+                scheduler_disable,
+                scheduler_delete,
+                scheduler_history,
+                scheduler_trigger_now,
             ])
             .run(tauri::generate_context!())
             .unwrap_or_else(|e| {

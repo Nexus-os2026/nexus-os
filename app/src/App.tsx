@@ -60,6 +60,7 @@ const DeveloperPortal = React.lazy(() => import("./pages/DeveloperPortal"));
 const AgentBrowser = React.lazy(() => import("./pages/AgentBrowser").then(m => ({ default: m.AgentBrowser })));
 const CodeEditor = React.lazy(() => import("./pages/CodeEditor"));
 const Terminal = React.lazy(() => import("./pages/Terminal"));
+const SchedulerPage = React.lazy(() => import("./pages/Scheduler"));
 const FileManager = React.lazy(() => import("./pages/FileManager"));
 const SystemMonitor = React.lazy(() => import("./pages/SystemMonitor"));
 const NotesApp = React.lazy(() => import("./pages/NotesApp"));
@@ -119,7 +120,7 @@ import type {
 import { createDefaultConfig, normalizeConfig } from "./utils/config";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing";
+type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -150,6 +151,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "workflows", label: "Workflows", icon: "Workflow", shortcut: "", section: "WORKFLOWS" },
   { id: "marketplace", label: "Publish", icon: "Upload", shortcut: "", section: "WORKFLOWS" },
   { id: "marketplace-browser", label: "Browse Agents", icon: "Search", shortcut: "", section: "WORKFLOWS" },
+  { id: "scheduler", label: "Scheduler", icon: "Timer", shortcut: "", section: "WORKFLOWS" },
   // ── GOVERNANCE ──
   { id: "trust", label: "Trust", icon: "Award", shortcut: "", section: "GOVERNANCE" },
   { id: "compliance", label: "Compliance", icon: "ShieldCheck", shortcut: "", section: "GOVERNANCE" },
@@ -222,6 +224,7 @@ const PAGE_ROUTE_OVERRIDES: Partial<Record<Page, string>> = {
   "audit-timeline": "/timeline",
   "time-machine": "/time-machine",
   workflows: "/workflows",
+  scheduler: "/scheduler",
   marketplace: "/publish",
   trust: "/trust",
   "distributed-audit": "/chain",
@@ -1618,6 +1621,9 @@ export default function App(): JSX.Element {
     }
     if (page === "deploy-pipeline") {
       return <DeployPipeline />;
+    }
+    if (page === "scheduler") {
+      return <SchedulerPage />;
     }
     if (page === "learning-center") {
       return <LearningCenter />;

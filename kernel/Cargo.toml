@@ -35,7 +35,7 @@ base64 = "0.22"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 cron = "0.15"
 chrono = { version = "0.4", features = ["serde"] }
-tokio = { version = "1", features = ["rt", "time", "sync"] }
+tokio = { version = "1", features = ["rt", "time", "sync", "macros"] }
 rand = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 nexus-persistence = { path = "../persistence" }

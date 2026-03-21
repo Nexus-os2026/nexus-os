@@ -2901,3 +2901,37 @@ export function getThreatLog(limit?: number): Promise<string> {
   return invokeJsonDesktop<string>("get_threat_log", limit != null ? { limit } : undefined);
 }
 
+// ── Background Scheduler ────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function schedulerCreate(entry: any): Promise<string> {
+  return invokeDesktop<string>("scheduler_create", { entry });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function schedulerList(): Promise<any> {
+  return invokeDesktop("scheduler_list");
+}
+
+export function schedulerEnable(id: string): Promise<void> {
+  return invokeDesktop<void>("scheduler_enable", { id });
+}
+
+export function schedulerDisable(id: string): Promise<void> {
+  return invokeDesktop<void>("scheduler_disable", { id });
+}
+
+export function schedulerDelete(id: string): Promise<void> {
+  return invokeDesktop<void>("scheduler_delete", { id });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function schedulerHistory(id: string): Promise<any> {
+  return invokeDesktop("scheduler_history", { id });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function schedulerTriggerNow(id: string): Promise<any> {
+  return invokeDesktop("scheduler_trigger_now", { id });
+}
+
