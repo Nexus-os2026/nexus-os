@@ -169,7 +169,7 @@ mod tests {
         for (i, b) in padded_key.iter().enumerate() {
             ipad[i] ^= b;
         }
-        inner.update(&ipad);
+        inner.update(ipad);
         inner.update(&payload_bytes);
         let inner_hash = inner.finalize();
 
@@ -178,7 +178,7 @@ mod tests {
         for (i, b) in padded_key.iter().enumerate() {
             opad[i] ^= b;
         }
-        outer.update(&opad);
+        outer.update(opad);
         outer.update(inner_hash);
         let sig_bytes = outer.finalize();
         let sig_hex = sig_bytes
