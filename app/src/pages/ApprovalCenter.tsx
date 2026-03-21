@@ -17,9 +17,11 @@ import {
   denyConsentRequest,
   getConsentHistory,
   hasDesktopRuntime,
+  hitlStats,
   listPendingConsents,
   reviewConsentBatch,
 } from "../api/backend";
+import type { HitlStats } from "../api/backend";
 import type { ConsentNotification } from "../types";
 
 // ── Icon mapping by operation type ──
@@ -133,6 +135,7 @@ function PendingCard({
 
   return (
     <div
+      className="nexus-pending-card"
       style={{
         background: "var(--bg-secondary, #1e293b)",
         border: `1px solid ${risk.border}33`,
@@ -336,15 +339,71 @@ function PendingCard({
   );
 }
 
+// ── Pulse animation style (injected once) ──
+
+const PULSE_STYLE_ID = "nexus-approval-pulse";
+function ensurePulseStyle() {
+  if (document.getElementById(PULSE_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = PULSE_STYLE_ID;
+  style.textContent = `
+    @keyframes nexus-pending-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.25); }
+      50% { box-shadow: 0 0 12px 4px rgba(250, 204, 21, 0.15); }
+    }
+    .nexus-pending-card { animation: nexus-pending-pulse 2s ease-in-out infinite; }
+  `;
+  document.head.appendChild(style);
+}
+
+// ── Stats Bar ──
+
+function StatsBar({ stats }: { stats: HitlStats | null }) {
+  if (!stats) return null;
+  const items = [
+    { label: "Pending", value: String(stats.pending_count), color: stats.pending_count > 0 ? "#facc15" : "#4ade80" },
+    { label: "Approval Rate", value: `${Math.round(stats.approval_rate * 100)}%`, color: "#60a5fa" },
+    { label: "Avg Response", value: stats.avg_response_time_ms > 0 ? `${(stats.avg_response_time_ms / 1000).toFixed(1)}s` : "—", color: "#a78bfa" },
+    { label: "Today", value: String(stats.total_decisions_today), color: "#34d399" },
+  ];
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.75rem", marginBottom: "1.5rem" }}>
+      {items.map((item) => (
+        <div
+          key={item.label}
+          style={{
+            background: "var(--bg-secondary, #1e293b)",
+            border: "1px solid var(--border, #334155)",
+            borderRadius: 10,
+            padding: "0.75rem 1rem",
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: "1.5rem", fontWeight: 700, color: item.color, fontFamily: "var(--font-mono, monospace)" }}>
+            {item.value}
+          </div>
+          <div style={{ fontSize: "0.75rem", color: "var(--text-secondary, #94a3b8)", marginTop: "0.2rem" }}>
+            {item.label}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Main Component ──
 
 export default function ApprovalCenter(): JSX.Element {
   const [pending, setPending] = useState<ConsentNotification[]>([]);
   const [history, setHistory] = useState<ConsentNotification[]>([]);
+  const [stats, setStats] = useState<HitlStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const unlistenRef = useRef<(() => void)[]>([]);
   const isDesktop = hasDesktopRuntime();
+
+  // Inject pulse animation CSS
+  useEffect(() => { ensurePulseStyle(); }, []);
 
   const loadData = useCallback(async () => {
     if (!isDesktop) {
@@ -352,12 +411,14 @@ export default function ApprovalCenter(): JSX.Element {
       return;
     }
     try {
-      const [p, h] = await Promise.all([
+      const [p, h, s] = await Promise.all([
         listPendingConsents(),
-        getConsentHistory(20),
+        getConsentHistory(50),
+        hitlStats().catch(() => null),
       ]);
       setPending(p);
       setHistory(h);
+      if (s) setStats(s);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -368,6 +429,20 @@ export default function ApprovalCenter(): JSX.Element {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Polling fallback — refresh pending every 2 seconds
+  useEffect(() => {
+    if (!isDesktop) return;
+    const interval = setInterval(() => {
+      listPendingConsents()
+        .then((p) => setPending(p))
+        .catch(() => {});
+      hitlStats()
+        .then((s) => setStats(s))
+        .catch(() => {});
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [isDesktop]);
 
   // Listen for real-time consent events
   useEffect(() => {
@@ -505,6 +580,9 @@ export default function ApprovalCenter(): JSX.Element {
           </span>
         )}
       </div>
+
+      {/* Stats Bar */}
+      {isDesktop && <StatsBar stats={stats} />}
 
       {error && (
         <div

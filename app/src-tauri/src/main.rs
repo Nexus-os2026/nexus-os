@@ -917,7 +917,7 @@ impl AppState {
             telemetry_config: Arc::new(Mutex::new(nexus_telemetry::TelemetryConfig::desktop())),
             a2a_client: Arc::new(Mutex::new(A2aClient::new())),
             schedule_store: Arc::new(nexus_kernel::scheduler::ScheduleStore::new(
-                &NexusDatabase::default_db_path()
+                NexusDatabase::default_db_path()
                     .parent()
                     .unwrap_or(std::path::Path::new(".")),
             )),
@@ -15573,6 +15573,59 @@ fn get_consent_history(state: &AppState, limit: u32) -> Result<Vec<ConsentNotifi
     Ok(notifications)
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct HitlStats {
+    pub pending_count: usize,
+    pub approval_rate: f64,
+    pub avg_response_time_ms: i64,
+    pub total_decisions_today: usize,
+    pub total_approvals: usize,
+    pub total_denials: usize,
+}
+
+fn hitl_stats(state: &AppState) -> Result<HitlStats, String> {
+    let pending = state
+        .db
+        .load_pending_consent()
+        .map_err(|e| format!("db error: {e}"))?;
+    let pending_count = pending.len();
+
+    let approval_rate = state.db.hitl_approval_rate(None).unwrap_or(1.0);
+
+    // Load recent decisions for avg response time and today count
+    let decisions = state.db.load_hitl_decisions(None, 1000).unwrap_or_default();
+
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let today_decisions: Vec<&nexus_persistence::HitlDecisionRow> = decisions
+        .iter()
+        .filter(|d| d.decided_at.starts_with(&today))
+        .collect();
+
+    let total_decisions_today = today_decisions.len();
+
+    let avg_response_time_ms = if decisions.is_empty() {
+        0
+    } else {
+        let sum: i64 = decisions.iter().map(|d| d.response_time_ms).sum();
+        sum / decisions.len() as i64
+    };
+
+    let total_approvals = decisions
+        .iter()
+        .filter(|d| d.decision == "approved")
+        .count();
+    let total_denials = decisions.iter().filter(|d| d.decision == "denied").count();
+
+    Ok(HitlStats {
+        pending_count,
+        approval_rate,
+        avg_response_time_ms,
+        total_decisions_today,
+        total_approvals,
+        total_denials,
+    })
+}
+
 fn build_simulation_llm() -> Arc<dyn nexus_kernel::cognitive::PlannerLlm> {
     #[cfg(test)]
     {
@@ -21459,6 +21512,11 @@ mod runtime {
     }
 
     #[tauri::command]
+    fn hitl_stats(state: tauri::State<'_, AppState>) -> Result<super::HitlStats, String> {
+        super::hitl_stats(state.inner())
+    }
+
+    #[tauri::command]
     fn create_simulation(
         state: tauri::State<'_, AppState>,
         name: String,
@@ -22973,6 +23031,7 @@ mod runtime {
                 batch_deny_consents,
                 list_pending_consents,
                 get_consent_history,
+                hitl_stats,
                 create_simulation,
                 start_simulation,
                 pause_simulation,

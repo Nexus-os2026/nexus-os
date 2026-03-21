@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use chrono::Utc;
 use rusqlite::{params, Connection};
@@ -308,6 +309,121 @@ impl AgentEcosystemRow {
             created_at: row.get(6)?,
         })
     }
+}
+
+// ── Governance Persistence Row Types ─────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HitlDecisionRow {
+    pub id: String,
+    pub agent_id: String,
+    pub action: String,
+    pub context_json: Option<String>,
+    pub decision: String,
+    pub decided_by: Option<String>,
+    pub decided_at: String,
+    pub response_time_ms: i64,
+    pub metadata_json: Option<String>,
+}
+
+impl HitlDecisionRow {
+    pub fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            agent_id: row.get(1)?,
+            action: row.get(2)?,
+            context_json: row.get(3)?,
+            decision: row.get(4)?,
+            decided_by: row.get(5)?,
+            decided_at: row.get(6)?,
+            response_time_ms: row.get(7)?,
+            metadata_json: row.get(8)?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FuelTransactionRow {
+    pub id: String,
+    pub agent_id: String,
+    pub operation: String,
+    pub amount: i64,
+    pub balance_after: i64,
+    pub reservation_id: Option<String>,
+    pub metadata_json: Option<String>,
+    pub created_at: String,
+}
+
+impl FuelTransactionRow {
+    pub fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            agent_id: row.get(1)?,
+            operation: row.get(2)?,
+            amount: row.get(3)?,
+            balance_after: row.get(4)?,
+            reservation_id: row.get(5)?,
+            metadata_json: row.get(6)?,
+            created_at: row.get(7)?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FuelBalanceRow {
+    pub agent_id: String,
+    pub balance: i64,
+    pub total_allocated: i64,
+    pub total_consumed: i64,
+    pub last_updated: String,
+}
+
+impl FuelBalanceRow {
+    pub fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(Self {
+            agent_id: row.get(0)?,
+            balance: row.get(1)?,
+            total_allocated: row.get(2)?,
+            total_consumed: row.get(3)?,
+            last_updated: row.get(4)?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapabilityHistoryRow {
+    pub id: String,
+    pub agent_id: String,
+    pub capability: String,
+    pub action: String,
+    pub resource: Option<String>,
+    pub performed_by: Option<String>,
+    pub created_at: String,
+    pub metadata_json: Option<String>,
+}
+
+impl CapabilityHistoryRow {
+    pub fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            agent_id: row.get(1)?,
+            capability: row.get(2)?,
+            action: row.get(3)?,
+            resource: row.get(4)?,
+            performed_by: row.get(5)?,
+            created_at: row.get(6)?,
+            metadata_json: row.get(7)?,
+        })
+    }
+}
+
+/// Result of verifying the audit hash chain.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChainVerifyResult {
+    pub verified: bool,
+    pub chain_length: u64,
+    pub break_at_sequence: Option<i64>,
+    pub verification_time: Duration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -788,6 +904,42 @@ pub trait StateStore {
         limit: usize,
     ) -> Result<Vec<StrategyScoreRow>>;
     fn load_strategy_history(&self, agent_id: &str, limit: usize) -> Result<Vec<StrategyScoreRow>>;
+
+    // ── HITL Decision Methods ──────────────────────────────────────────
+    fn record_hitl_decision(&self, decision: &HitlDecisionRow) -> Result<()>;
+    fn load_hitl_decisions(
+        &self,
+        agent_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<HitlDecisionRow>>;
+    fn hitl_approval_rate(&self, agent_id: Option<&str>) -> Result<f64>;
+
+    // ── Fuel Transaction Methods ───────────────────────────────────────
+    fn append_fuel_transaction(&self, tx: &FuelTransactionRow) -> Result<()>;
+    fn load_fuel_transactions(
+        &self,
+        agent_id: &str,
+        limit: usize,
+    ) -> Result<Vec<FuelTransactionRow>>;
+    fn upsert_fuel_balance(
+        &self,
+        agent_id: &str,
+        balance: i64,
+        total_allocated: i64,
+        total_consumed: i64,
+    ) -> Result<()>;
+    fn load_fuel_balance(&self, agent_id: &str) -> Result<Option<FuelBalanceRow>>;
+
+    // ── Capability History Methods ─────────────────────────────────────
+    fn append_capability_history(&self, entry: &CapabilityHistoryRow) -> Result<()>;
+    fn load_capability_history(
+        &self,
+        agent_id: &str,
+        limit: usize,
+    ) -> Result<Vec<CapabilityHistoryRow>>;
+
+    // ── Audit Chain Verification ───────────────────────────────────────
+    fn verify_audit_chain(&self) -> Result<ChainVerifyResult>;
 }
 
 // ── NexusDatabase ───────────────────────────────────────────────────────────
@@ -808,6 +960,8 @@ impl NexusDatabase {
             std::fs::create_dir_all(parent)?;
         }
         let conn = Connection::open(path)?;
+        // WAL mode: concurrent reads + crash-safe writes
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         let db = Self {
             conn: Mutex::new(conn),
         };
@@ -1117,6 +1271,56 @@ impl NexusDatabase {
                 created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_event_world_tick ON simulation_events(world_id, tick);
+
+            -- Governance persistence tables (GAP 1 fix)
+
+            CREATE TABLE IF NOT EXISTS hitl_decisions (
+                id TEXT PRIMARY KEY,
+                agent_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                context_json TEXT,
+                decision TEXT NOT NULL,
+                decided_by TEXT,
+                decided_at TEXT NOT NULL,
+                response_time_ms INTEGER NOT NULL DEFAULT 0,
+                metadata_json TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_hitl_agent ON hitl_decisions(agent_id);
+            CREATE INDEX IF NOT EXISTS idx_hitl_time ON hitl_decisions(decided_at);
+
+            CREATE TABLE IF NOT EXISTS fuel_transactions (
+                id TEXT PRIMARY KEY,
+                agent_id TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                balance_after INTEGER NOT NULL,
+                reservation_id TEXT,
+                metadata_json TEXT,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_fuel_tx_agent ON fuel_transactions(agent_id);
+            CREATE INDEX IF NOT EXISTS idx_fuel_tx_time ON fuel_transactions(created_at);
+
+            CREATE TABLE IF NOT EXISTS fuel_balances (
+                agent_id TEXT PRIMARY KEY,
+                balance INTEGER NOT NULL DEFAULT 0,
+                total_allocated INTEGER NOT NULL DEFAULT 0,
+                total_consumed INTEGER NOT NULL DEFAULT 0,
+                last_updated TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS capability_history (
+                id TEXT PRIMARY KEY,
+                agent_id TEXT NOT NULL,
+                capability TEXT NOT NULL,
+                action TEXT NOT NULL,
+                resource TEXT,
+                performed_by TEXT,
+                created_at TEXT NOT NULL,
+                metadata_json TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_cap_hist_agent ON capability_history(agent_id);
+            CREATE INDEX IF NOT EXISTS idx_cap_hist_time ON capability_history(created_at);
 
             COMMIT;",
             )?;
@@ -2464,6 +2668,272 @@ impl StateStore for NexusDatabase {
             result.push(row?);
         }
         Ok(result)
+    }
+
+    // ── HITL Decision Methods ───────────────────────────────────────────
+
+    fn record_hitl_decision(&self, decision: &HitlDecisionRow) -> Result<()> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.execute(
+            "INSERT INTO hitl_decisions (id, agent_id, action, context_json, decision, decided_by, decided_at, response_time_ms, metadata_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                &decision.id,
+                &decision.agent_id,
+                &decision.action,
+                &decision.context_json,
+                &decision.decision,
+                &decision.decided_by,
+                &decision.decided_at,
+                decision.response_time_ms,
+                &decision.metadata_json,
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn load_hitl_decisions(
+        &self,
+        agent_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<HitlDecisionRow>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut result = Vec::new();
+        match agent_id {
+            Some(aid) => {
+                let mut stmt = conn.prepare(
+                    "SELECT id, agent_id, action, context_json, decision, decided_by, decided_at, response_time_ms, metadata_json
+                     FROM hitl_decisions WHERE agent_id = ?1
+                     ORDER BY decided_at DESC LIMIT ?2",
+                )?;
+                let rows = stmt.query_map(params![aid, limit as i64], HitlDecisionRow::from_row)?;
+                for row in rows {
+                    result.push(row?);
+                }
+            }
+            None => {
+                let mut stmt = conn.prepare(
+                    "SELECT id, agent_id, action, context_json, decision, decided_by, decided_at, response_time_ms, metadata_json
+                     FROM hitl_decisions ORDER BY decided_at DESC LIMIT ?1",
+                )?;
+                let rows = stmt.query_map(params![limit as i64], HitlDecisionRow::from_row)?;
+                for row in rows {
+                    result.push(row?);
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    fn hitl_approval_rate(&self, agent_id: Option<&str>) -> Result<f64> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let (total, approved): (i64, i64) = match agent_id {
+            Some(did) => {
+                let total: i64 = conn.query_row(
+                    "SELECT COUNT(*) FROM hitl_decisions WHERE agent_id = ?1",
+                    params![did],
+                    |r| r.get(0),
+                )?;
+                let approved: i64 = conn.query_row(
+                    "SELECT COUNT(*) FROM hitl_decisions WHERE agent_id = ?1 AND decision = 'approved'",
+                    params![did],
+                    |r| r.get(0),
+                )?;
+                (total, approved)
+            }
+            None => {
+                let total: i64 =
+                    conn.query_row("SELECT COUNT(*) FROM hitl_decisions", [], |r| r.get(0))?;
+                let approved: i64 = conn.query_row(
+                    "SELECT COUNT(*) FROM hitl_decisions WHERE decision = 'approved'",
+                    [],
+                    |r| r.get(0),
+                )?;
+                (total, approved)
+            }
+        };
+        if total == 0 {
+            return Ok(1.0);
+        }
+        Ok(approved as f64 / total as f64)
+    }
+
+    // ── Fuel Transaction Methods ────────────────────────────────────────
+
+    fn append_fuel_transaction(&self, tx: &FuelTransactionRow) -> Result<()> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.execute(
+            "INSERT INTO fuel_transactions (id, agent_id, operation, amount, balance_after, reservation_id, metadata_json, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                &tx.id,
+                &tx.agent_id,
+                &tx.operation,
+                tx.amount,
+                tx.balance_after,
+                &tx.reservation_id,
+                &tx.metadata_json,
+                &tx.created_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn load_fuel_transactions(
+        &self,
+        agent_id: &str,
+        limit: usize,
+    ) -> Result<Vec<FuelTransactionRow>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT id, agent_id, operation, amount, balance_after, reservation_id, metadata_json, created_at
+             FROM fuel_transactions WHERE agent_id = ?1
+             ORDER BY created_at DESC LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(
+            params![agent_id, limit as i64],
+            FuelTransactionRow::from_row,
+        )?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    fn upsert_fuel_balance(
+        &self,
+        agent_id: &str,
+        balance: i64,
+        total_allocated: i64,
+        total_consumed: i64,
+    ) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.execute(
+            "INSERT INTO fuel_balances (agent_id, balance, total_allocated, total_consumed, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(agent_id) DO UPDATE SET
+                balance = excluded.balance,
+                total_allocated = excluded.total_allocated,
+                total_consumed = excluded.total_consumed,
+                last_updated = excluded.last_updated",
+            params![agent_id, balance, total_allocated, total_consumed, &now],
+        )?;
+        Ok(())
+    }
+
+    fn load_fuel_balance(&self, agent_id: &str) -> Result<Option<FuelBalanceRow>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT agent_id, balance, total_allocated, total_consumed, last_updated
+             FROM fuel_balances WHERE agent_id = ?1",
+        )?;
+        let mut rows = stmt.query_map(params![agent_id], FuelBalanceRow::from_row)?;
+        match rows.next() {
+            Some(row) => Ok(Some(row?)),
+            None => Ok(None),
+        }
+    }
+
+    // ── Capability History Methods ──────────────────────────────────────
+
+    fn append_capability_history(&self, entry: &CapabilityHistoryRow) -> Result<()> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.execute(
+            "INSERT INTO capability_history (id, agent_id, capability, action, resource, performed_by, created_at, metadata_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                &entry.id,
+                &entry.agent_id,
+                &entry.capability,
+                &entry.action,
+                &entry.resource,
+                &entry.performed_by,
+                &entry.created_at,
+                &entry.metadata_json,
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn load_capability_history(
+        &self,
+        agent_id: &str,
+        limit: usize,
+    ) -> Result<Vec<CapabilityHistoryRow>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT id, agent_id, capability, action, resource, performed_by, created_at, metadata_json
+             FROM capability_history WHERE agent_id = ?1
+             ORDER BY created_at DESC LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(
+            params![agent_id, limit as i64],
+            CapabilityHistoryRow::from_row,
+        )?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    // ── Audit Chain Verification ────────────────────────────────────────
+
+    fn verify_audit_chain(&self) -> Result<ChainVerifyResult> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT sequence, previous_hash, current_hash FROM audit_events ORDER BY sequence ASC",
+        )?;
+
+        let start = std::time::Instant::now();
+        let mut expected_prev: Option<String> = None;
+        let mut count = 0u64;
+
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+
+        for row_result in rows {
+            let (seq, prev_hash, current_hash) = row_result?;
+
+            if let Some(ref expected) = expected_prev {
+                if prev_hash != *expected {
+                    return Ok(ChainVerifyResult {
+                        verified: false,
+                        chain_length: count,
+                        break_at_sequence: Some(seq),
+                        verification_time: start.elapsed(),
+                    });
+                }
+            }
+
+            expected_prev = Some(current_hash);
+            count += 1;
+        }
+
+        Ok(ChainVerifyResult {
+            verified: true,
+            chain_length: count,
+            break_at_sequence: None,
+            verification_time: start.elapsed(),
+        })
+    }
+}
+
+impl NexusDatabase {
+    /// Execute raw SQL — intended for testing purposes (e.g., simulating tampering).
+    ///
+    /// Production code should use `StateStore` trait methods instead.
+    pub fn execute_raw(&self, sql: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.execute(sql, [])?;
+        Ok(())
     }
 }
 

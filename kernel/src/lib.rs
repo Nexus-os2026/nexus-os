@@ -46,6 +46,7 @@ pub mod neural_bridge;
 pub mod omniscience;
 pub mod orchestration;
 pub mod permissions;
+pub mod persistence;
 pub mod policy_engine;
 pub mod privacy;
 pub mod protocols;

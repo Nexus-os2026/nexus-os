@@ -1337,6 +1337,19 @@ export function getConsentHistory(limit = 20): Promise<ConsentNotification[]> {
   return invokeDesktop<ConsentNotification[]>("get_consent_history", { limit });
 }
 
+export interface HitlStats {
+  pending_count: number;
+  approval_rate: number;
+  avg_response_time_ms: number;
+  total_decisions_today: number;
+  total_approvals: number;
+  total_denials: number;
+}
+
+export function hitlStats(): Promise<HitlStats> {
+  return invokeDesktop<HitlStats>("hitl_stats");
+}
+
 export function createSimulation(
   name: string,
   seedText: string,
