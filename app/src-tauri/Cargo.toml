@@ -15,7 +15,7 @@ nexus-connectors-core = { path = "../../connectors/core" }
 nexus-connectors-web = { path = "../../connectors/web" }
 nexus-connectors-social = { path = "../../connectors/social" }
 nexus-connectors-messaging = { path = "../../connectors/messaging" }
-nexus-connectors-llm = { path = "../../connectors/llm" }
+nexus-connectors-llm = { path = "../../connectors/llm", features = ["flash-infer"] }
 nexus-adaptation = { path = "../../adaptation" }
 nexus-protocols = { path = "../../protocols" }
 nexus-distributed = { path = "../../distributed" }
@@ -31,6 +31,7 @@ nexus-tenancy = { path = "../../tenancy" }
 nexus-telemetry = { path = "../../telemetry" }
 nexus-integrations = { path = "../../integrations" }
 nexus-metering = { path = "../../metering" }
+nexus-flash-infer = { path = "../../crates/nexus-flash-infer", features = ["download", "real-llama"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 base64 = "0.22"

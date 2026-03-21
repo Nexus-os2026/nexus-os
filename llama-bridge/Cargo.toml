@@ -1,0 +1,27 @@
+[package]
+name = "nexus-llama-bridge"
+version = "0.1.0"
+edition = "2021"
+description = "Safe Rust bindings to llama.cpp for local LLM inference"
+license = "MIT"
+
+[features]
+default = []
+real-llama = []  # Enable real llama.cpp linking (requires NEXUS_LLAMA_CPP_PATH)
+
+[dependencies]
+libc = "0.2"
+thiserror = "1"
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+cc = "1"
+
+# Override workspace-level unsafe_code = "forbid" — this crate is the FFI
+# boundary to llama.cpp and requires unsafe for extern "C" calls. All unsafe
+# is confined to ffi.rs, model.rs, context.rs, sampling.rs, batch.rs, and
+# tokenizer.rs with safe public wrappers.
+[lints.rust]
+unsafe_code = "allow"

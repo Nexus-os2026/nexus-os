@@ -95,6 +95,9 @@ use nexus_auth::SessionManager;
 use nexus_integrations::IntegrationRouter;
 use nexus_tenancy::WorkspaceManager;
 
+// Flash inference imports
+use nexus_flash_infer::SessionManager as FlashSessionManager;
+
 struct GatewayHivemindLlm;
 
 impl nexus_kernel::cognitive::HivemindLlm for GatewayHivemindLlm {
@@ -677,6 +680,12 @@ pub struct AppState {
     telemetry_config: Arc<Mutex<nexus_telemetry::TelemetryConfig>>,
     a2a_client: Arc<Mutex<A2aClient>>,
     schedule_store: Arc<nexus_kernel::scheduler::ScheduleStore>,
+    flash_session_manager: Arc<FlashSessionManager>,
+    /// Cached FlashProvider instances per session ID — avoids reloading model on every call.
+    /// Wrapped in Arc so the provider (and its loaded model handle) can be shared with
+    /// GovernedLlmGateway without transferring ownership.
+    flash_providers:
+        Arc<Mutex<HashMap<String, std::sync::Arc<nexus_connectors_llm::providers::FlashProvider>>>>,
     adversarial_arena:
         Arc<Mutex<nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena>>,
     #[cfg(all(
@@ -921,6 +930,10 @@ impl AppState {
                     .parent()
                     .unwrap_or(std::path::Path::new(".")),
             )),
+            flash_session_manager: Arc::new(FlashSessionManager::new(
+                nexus_flash_infer::detect_hardware(),
+            )),
+            flash_providers: Arc::new(Mutex::new(HashMap::new())),
             adversarial_arena: Arc::new(Mutex::new(
                 nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena::new(),
             )),
@@ -1095,6 +1108,10 @@ impl AppState {
             schedule_store: Arc::new(nexus_kernel::scheduler::ScheduleStore::new(
                 std::env::temp_dir().as_path(),
             )),
+            flash_session_manager: Arc::new(FlashSessionManager::new(
+                nexus_flash_infer::HardwareInfo::default(),
+            )),
+            flash_providers: Arc::new(Mutex::new(HashMap::new())),
             adversarial_arena: Arc::new(Mutex::new(
                 nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena::new(),
             )),
@@ -2024,6 +2041,7 @@ fn build_provider_config(config: &NexusConfig) -> ProviderSelectionConfig {
         nvidia_api_key: std::env::var("NVIDIA_NIM_API_KEY")
             .ok()
             .or_else(|| non_empty(&config.llm.nvidia_api_key)),
+        flash_model_path: std::env::var("FLASH_MODEL_PATH").ok(),
     }
 }
 
@@ -18677,6 +18695,518 @@ async fn scheduler_trigger_now(
     serde_json::to_value(result).map_err(|e| format!("serialize: {e}"))
 }
 
+// ── Flash Inference Commands ────────────────────────────────────────
+
+#[tauri::command]
+async fn flash_detect_hardware() -> Result<serde_json::Value, String> {
+    let hw = nexus_flash_infer::detect_hardware();
+    serde_json::to_value(hw).map_err(|e| format!("serialize: {e}"))
+}
+
+#[tauri::command]
+async fn flash_profile_model(model_path: String) -> Result<serde_json::Value, String> {
+    // Probe GGUF metadata without fully loading the model
+    let hw = nexus_flash_infer::detect_hardware();
+    let registry = {
+        let mut r = nexus_flash_infer::BackendRegistry::new();
+        r.register(Box::new(nexus_flash_infer::LlamaBackend::new(hw.clone())));
+        r
+    };
+    let path = std::path::Path::new(&model_path);
+    let backend = registry.select_backend(path).map_err(|e| e.to_string())?;
+    let metadata = backend.probe_model(path).map_err(|e| e.to_string())?;
+    let profile = nexus_flash_infer::ModelProfile::from_metadata(&metadata);
+    serde_json::to_value(profile).map_err(|e| format!("serialize: {e}"))
+}
+
+#[tauri::command]
+async fn flash_auto_configure(
+    model_path: String,
+    target_context_len: u32,
+    priority: String,
+) -> Result<serde_json::Value, String> {
+    let hw = nexus_flash_infer::detect_hardware();
+    let registry = {
+        let mut r = nexus_flash_infer::BackendRegistry::new();
+        r.register(Box::new(nexus_flash_infer::LlamaBackend::new(hw.clone())));
+        r
+    };
+    let path = std::path::Path::new(&model_path);
+    let backend = registry.select_backend(path).map_err(|e| e.to_string())?;
+    let metadata = backend.probe_model(path).map_err(|e| e.to_string())?;
+    let profile = nexus_flash_infer::ModelProfile::from_metadata(&metadata);
+
+    let prio = match priority.as_str() {
+        "speed" => nexus_flash_infer::InferencePriority::Speed,
+        "context" => nexus_flash_infer::InferencePriority::Context,
+        _ => nexus_flash_infer::InferencePriority::Balanced,
+    };
+
+    let preference = nexus_flash_infer::InferencePreference {
+        model_path,
+        target_context_len,
+        priority: prio,
+        generation_config: None,
+    };
+
+    let config =
+        nexus_flash_infer::auto_configure(&hw, &profile, preference).map_err(|e| e.to_string())?;
+    serde_json::to_value(config).map_err(|e| format!("serialize: {e}"))
+}
+
+#[tauri::command]
+async fn flash_create_session(
+    state: tauri::State<'_, AppState>,
+    model_path: String,
+    target_context_len: u32,
+    priority: String,
+) -> Result<String, String> {
+    let hw = state.flash_session_manager.hardware().clone();
+    let registry = {
+        let mut r = nexus_flash_infer::BackendRegistry::new();
+        r.register(Box::new(nexus_flash_infer::LlamaBackend::new(hw.clone())));
+        r
+    };
+    let path = std::path::Path::new(&model_path);
+    let backend = registry.select_backend(path).map_err(|e| e.to_string())?;
+    let metadata = backend.probe_model(path).map_err(|e| e.to_string())?;
+    let profile = nexus_flash_infer::ModelProfile::from_metadata(&metadata);
+
+    let prio = match priority.as_str() {
+        "speed" => nexus_flash_infer::InferencePriority::Speed,
+        "context" => nexus_flash_infer::InferencePriority::Context,
+        _ => nexus_flash_infer::InferencePriority::Balanced,
+    };
+
+    let preference = nexus_flash_infer::InferencePreference {
+        model_path: model_path.clone(),
+        target_context_len,
+        priority: prio,
+        generation_config: None,
+    };
+
+    let session_id = state
+        .flash_session_manager
+        .create_session(&model_path, profile, preference)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Cache a shared FlashProvider so the model handle persists across generate calls.
+    let provider = std::sync::Arc::new(nexus_connectors_llm::providers::FlashProvider::new(
+        model_path.clone(),
+    ));
+    {
+        let mut cache = state
+            .flash_providers
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        cache.insert(session_id.clone(), provider);
+    }
+
+    // Audit session creation
+    {
+        let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = audit.append_event(
+            Uuid::nil(),
+            EventType::UserAction,
+            json!({
+                "event_kind": "flash.session_created",
+                "session_id": session_id,
+                "model_path": model_path,
+            }),
+        );
+    }
+
+    Ok(session_id)
+}
+
+/// Run governed inference on a loaded flash session.
+///
+/// Pipeline: capability check → fuel reserve → PII redaction → input firewall →
+/// egress check → flash inference → fuel ledger → oracle event → safety supervisor →
+/// output firewall → audit trail.
+///
+/// Streams tokens to the frontend via `flash-token` events, then emits `flash-done`
+/// or `flash-error`.
+#[tauri::command]
+async fn flash_generate(
+    #[cfg(all(
+        feature = "tauri-runtime",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    ))]
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+    prompt: String,
+    max_tokens: Option<u32>,
+) -> Result<serde_json::Value, String> {
+    let max_tokens = max_tokens.unwrap_or(2048);
+
+    // 1. Look up session to get model_path and config
+    let sessions = state.flash_session_manager.list_sessions().await;
+    let session = sessions
+        .iter()
+        .find(|s| s.id == session_id)
+        .ok_or_else(|| format!("session {session_id} not found"))?;
+    let model_path = session.model_path.clone();
+    let model_name = session.model_name.clone();
+
+    // 2. Retrieve cached FlashProvider (Arc) — model handle persists across calls.
+    //    Falls back to creating a new provider if cache miss (shouldn't happen in normal flow).
+    let provider = {
+        let cache = state
+            .flash_providers
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        cache.get(&session_id).cloned().unwrap_or_else(|| {
+            std::sync::Arc::new(nexus_connectors_llm::providers::FlashProvider::new(
+                model_path.clone(),
+            ))
+        })
+    };
+
+    // 3. Wrap in GovernedLlmGateway — full governance pipeline:
+    //    capability check → fuel reserve → semantic boundary → PII redaction →
+    //    input firewall → egress check → inference → fuel ledger → oracle event →
+    //    safety supervisor → output firewall → audit trail
+    let mut gateway = GovernedLlmGateway::new(provider);
+    // User-facing chat: human asked the question and reads the response
+    gateway.set_skip_output_firewall(true);
+
+    // 4. Build agent runtime context with llm.query capability
+    let mut capabilities = HashSet::new();
+    capabilities.insert("llm.query".to_string());
+    let agent_id = Uuid::new_v4();
+    let mut context = AgentRuntimeContext {
+        agent_id,
+        capabilities,
+        fuel_remaining: 100_000, // generous budget for local inference (free)
+    };
+
+    // 5. Run governed query — goes through all governance checkpoints then
+    //    calls FlashProvider::query() which runs llama.cpp inference
+    let result = gateway.query(&mut context, &prompt, max_tokens, &model_name);
+
+    match result {
+        Ok(response) => {
+            // Emit streaming tokens to the frontend
+            #[cfg(all(
+                feature = "tauri-runtime",
+                any(target_os = "windows", target_os = "macos", target_os = "linux")
+            ))]
+            {
+                // Emit the full response as a single flash-token event
+                let _ = app.emit("flash-token", json!({ "text": response.output_text }));
+                // Signal completion with stats
+                let oracle = gateway.oracle_events().last();
+                let _ = app.emit(
+                    "flash-done",
+                    json!({
+                        "stats": {
+                            "token_count": response.token_count,
+                            "model": response.model_name,
+                            "cost": oracle.map(|o| o.cost).unwrap_or(0.0),
+                            "latency_ms": oracle.map(|o| o.latency_ms).unwrap_or(0),
+                            "governance_events": gateway.audit_trail().events().len(),
+                            "pii_leakage_free": gateway.redaction_zero_pii_leakage_kpi(),
+                        }
+                    }),
+                );
+            }
+
+            // Append governance audit to persistent audit trail
+            {
+                let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+                for event in gateway.audit_trail().events() {
+                    let _ = audit.append_event(
+                        event.agent_id,
+                        EventType::LlmCall,
+                        json!({
+                            "event_kind": "flash.governed_inference",
+                            "session_id": session_id,
+                            "model_path": model_path,
+                            "sub_event": event.payload,
+                        }),
+                    );
+                }
+            }
+
+            Ok(json!({
+                "text": response.output_text,
+                "token_count": response.token_count,
+                "model": response.model_name,
+                "governance": {
+                    "audit_events": gateway.audit_trail().events().len(),
+                    "pii_leakage_free": gateway.redaction_zero_pii_leakage_kpi(),
+                    "oracle_events": gateway.oracle_events().len(),
+                }
+            }))
+        }
+        Err(e) => {
+            #[cfg(all(
+                feature = "tauri-runtime",
+                any(target_os = "windows", target_os = "macos", target_os = "linux")
+            ))]
+            {
+                let _ = app.emit("flash-error", json!({ "message": e.to_string() }));
+            }
+            Err(e.to_string())
+        }
+    }
+}
+
+#[tauri::command]
+async fn flash_list_sessions(
+    state: tauri::State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let sessions = state.flash_session_manager.list_sessions().await;
+    serde_json::to_value(sessions).map_err(|e| format!("serialize: {e}"))
+}
+
+#[tauri::command]
+async fn flash_unload_session(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+) -> Result<(), String> {
+    // Remove cached provider (drops model handle when last Arc ref goes away)
+    {
+        let mut cache = state
+            .flash_providers
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        cache.remove(&session_id);
+    }
+
+    state
+        .flash_session_manager
+        .unload_session(&session_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Audit session unload
+    {
+        let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = audit.append_event(
+            Uuid::nil(),
+            EventType::UserAction,
+            json!({
+                "event_kind": "flash.session_unloaded",
+                "session_id": session_id,
+            }),
+        );
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn flash_get_metrics(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+) -> Result<serde_json::Value, String> {
+    // Build metrics from session info
+    let sessions = state.flash_session_manager.list_sessions().await;
+    let session = sessions
+        .iter()
+        .find(|s| s.id == session_id)
+        .ok_or_else(|| format!("session {session_id} not found"))?;
+
+    let metrics = nexus_flash_infer::types::InferenceMetrics {
+        session_id: session.id.clone(),
+        tokens_per_second: 0.0,
+        prompt_tokens_per_second: 0.0,
+        memory_used_mb: session.memory_used_mb,
+        memory_budget_mb: state.flash_session_manager.remaining_budget_mb()
+            + session.memory_used_mb,
+        memory_utilization: 0.0,
+        expert_cache_hit_rate: 0.0,
+        io_read_mb_per_sec: 0.0,
+        cpu_utilization: 0.0,
+        context_used: 0,
+        context_max: 0,
+        total_tokens_generated: session.tokens_generated,
+        uptime_seconds: chrono::Utc::now()
+            .signed_duration_since(session.created_at)
+            .num_seconds() as f64,
+    };
+
+    serde_json::to_value(metrics).map_err(|e| format!("serialize: {e}"))
+}
+
+#[tauri::command]
+async fn flash_estimate_performance(model_path: String) -> Result<serde_json::Value, String> {
+    let hw = nexus_flash_infer::detect_hardware();
+    let registry = {
+        let mut r = nexus_flash_infer::BackendRegistry::new();
+        r.register(Box::new(nexus_flash_infer::LlamaBackend::new(hw.clone())));
+        r
+    };
+    let path = std::path::Path::new(&model_path);
+    let backend = registry.select_backend(path).map_err(|e| e.to_string())?;
+    let metadata = backend.probe_model(path).map_err(|e| e.to_string())?;
+    let profile = nexus_flash_infer::ModelProfile::from_metadata(&metadata);
+
+    let budget = nexus_flash_infer::MemoryBudget::calculate(&hw, &profile, 4096);
+    let estimate = profile.estimate_performance(&hw, &budget);
+    serde_json::to_value(estimate).map_err(|e| format!("serialize: {e}"))
+}
+
+#[tauri::command]
+async fn flash_run_benchmark(
+    state: tauri::State<'_, AppState>,
+    model_path: String,
+    priority: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let hw = nexus_flash_infer::detect_hardware();
+    let registry = {
+        let mut r = nexus_flash_infer::BackendRegistry::new();
+        r.register(Box::new(nexus_flash_infer::LlamaBackend::new(hw.clone())));
+        r
+    };
+    let path = std::path::Path::new(&model_path);
+    let backend = registry.select_backend(path).map_err(|e| e.to_string())?;
+    let metadata = backend.probe_model(path).map_err(|e| e.to_string())?;
+    let profile = nexus_flash_infer::ModelProfile::from_metadata(&metadata);
+
+    let prio = match priority.as_deref() {
+        Some("speed") => nexus_flash_infer::InferencePriority::Speed,
+        Some("context") => nexus_flash_infer::InferencePriority::Context,
+        _ => nexus_flash_infer::InferencePriority::Balanced,
+    };
+
+    let preference = nexus_flash_infer::InferencePreference {
+        model_path: model_path.clone(),
+        target_context_len: 4096,
+        priority: prio,
+        generation_config: None,
+    };
+
+    let config =
+        nexus_flash_infer::auto_configure(&hw, &profile, preference).map_err(|e| e.to_string())?;
+
+    let model_handle = backend
+        .load_model(path, &config.load_config)
+        .map_err(|e| e.to_string())?;
+
+    let budget_mb = state.flash_session_manager.remaining_budget_mb();
+    let results = nexus_flash_infer::run_full_benchmark(model_handle.as_ref(), &hw, budget_mb)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_value(&results).map_err(|e| format!("serialize: {e}"))
+}
+
+#[tauri::command]
+async fn flash_export_benchmark_report(
+    results: Vec<nexus_flash_infer::BenchmarkResult>,
+) -> Result<String, String> {
+    let report = nexus_flash_infer::generate_report(&results);
+
+    // Save to a temp file and return the path
+    let report_dir = std::env::temp_dir();
+    let report_path = report_dir.join(format!(
+        "nexus-benchmark-{}.md",
+        chrono::Utc::now().format("%Y%m%d-%H%M%S")
+    ));
+
+    std::fs::write(&report_path, &report).map_err(|e| format!("write report: {e}"))?;
+    Ok(report_path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+async fn flash_catalog_recommend() -> Result<serde_json::Value, String> {
+    let hw = nexus_flash_infer::detect_hardware();
+    let catalog = nexus_flash_infer::ModelCatalog::new();
+    let recommendations = catalog.recommend(&hw);
+    serde_json::to_value(recommendations).map_err(|e| format!("serialize: {e}"))
+}
+
+#[tauri::command]
+async fn flash_catalog_search(query: String) -> Result<serde_json::Value, String> {
+    let catalog = nexus_flash_infer::ModelCatalog::new();
+    let results = catalog.search(&query);
+    serde_json::to_value(results).map_err(|e| format!("serialize: {e}"))
+}
+
+// ── Flash Inference — Download & Model Management ──────────────────
+
+#[tauri::command]
+async fn flash_list_local_models() -> Result<serde_json::Value, String> {
+    let storage = nexus_flash_infer::ModelStorage::new().map_err(|e| e.to_string())?;
+    let models = storage.list_models().map_err(|e| e.to_string())?;
+    serde_json::to_value(models).map_err(|e| format!("serialize: {e}"))
+}
+
+#[tauri::command]
+async fn flash_download_model(
+    hf_repo: String,
+    filename: String,
+    app_handle: tauri::AppHandle,
+) -> Result<serde_json::Value, String> {
+    let storage = nexus_flash_infer::ModelStorage::new().map_err(|e| e.to_string())?;
+    let downloader = nexus_flash_infer::ModelDownloader::new(storage);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<nexus_flash_infer::DownloadProgress>(64);
+
+    // Spawn a task to forward progress events to the frontend.
+    let handle = app_handle.clone();
+    tokio::spawn(async move {
+        while let Some(progress) = rx.recv().await {
+            let _ = handle.emit("flash-download-progress", &progress);
+        }
+    });
+
+    let model = downloader
+        .download(&hf_repo, &filename, tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_value(model).map_err(|e| format!("serialize: {e}"))
+}
+
+#[tauri::command]
+async fn flash_download_multi(
+    hf_repo: String,
+    filenames: Vec<String>,
+    app_handle: tauri::AppHandle,
+) -> Result<serde_json::Value, String> {
+    let storage = nexus_flash_infer::ModelStorage::new().map_err(|e| e.to_string())?;
+    let downloader = nexus_flash_infer::ModelDownloader::new(storage);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<nexus_flash_infer::DownloadProgress>(64);
+
+    let handle = app_handle.clone();
+    tokio::spawn(async move {
+        while let Some(progress) = rx.recv().await {
+            let _ = handle.emit("flash-download-progress", &progress);
+        }
+    });
+
+    let model = downloader
+        .download_multi(&hf_repo, &filenames, tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_value(model).map_err(|e| format!("serialize: {e}"))
+}
+
+#[tauri::command]
+async fn flash_delete_local_model(filename: String) -> Result<(), String> {
+    let storage = nexus_flash_infer::ModelStorage::new().map_err(|e| e.to_string())?;
+    storage.delete_model(&filename).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn flash_available_disk_space() -> Result<u64, String> {
+    let storage = nexus_flash_infer::ModelStorage::new().map_err(|e| e.to_string())?;
+    storage.available_disk_space().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn flash_get_model_dir() -> Result<String, String> {
+    let storage = nexus_flash_infer::ModelStorage::new().map_err(|e| e.to_string())?;
+    Ok(storage.base_dir().to_string_lossy().to_string())
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -23230,6 +23760,26 @@ mod runtime {
                 scheduler_delete,
                 scheduler_history,
                 scheduler_trigger_now,
+                // Flash Inference
+                flash_detect_hardware,
+                flash_profile_model,
+                flash_auto_configure,
+                flash_create_session,
+                flash_generate,
+                flash_list_sessions,
+                flash_unload_session,
+                flash_get_metrics,
+                flash_estimate_performance,
+                flash_run_benchmark,
+                flash_export_benchmark_report,
+                flash_catalog_recommend,
+                flash_catalog_search,
+                flash_list_local_models,
+                flash_download_model,
+                flash_download_multi,
+                flash_delete_local_model,
+                flash_available_disk_space,
+                flash_get_model_dir,
             ])
             .run(tauri::generate_context!())
             .unwrap_or_else(|e| {

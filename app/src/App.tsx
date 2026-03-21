@@ -104,6 +104,7 @@ const Login = React.lazy(() => import("./pages/Login"));
 const Workspaces = React.lazy(() => import("./pages/Workspaces"));
 const Telemetry = React.lazy(() => import("./pages/Telemetry"));
 const UsageBilling = React.lazy(() => import("./pages/UsageBilling"));
+const FlashInference = React.lazy(() => import("./pages/FlashInference"));
 import type {
   AgentStatusEvent,
   AgentSummary,
@@ -120,7 +121,7 @@ import type {
 import { createDefaultConfig, normalizeConfig } from "./utils/config";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler";
+type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler" | "flash-inference";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -179,6 +180,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "simulation", label: "World Sim", icon: "Globe2", shortcut: "", section: "TOOLS" },
   { id: "documents", label: "Documents", icon: "FileText", shortcut: "", section: "TOOLS" },
   { id: "model-hub", label: "Models", icon: "Cpu", shortcut: "", section: "TOOLS" },
+  { id: "flash-inference", label: "Flash Inference", icon: "Zap", shortcut: "", section: "TOOLS" },
   { id: "notes", label: "Notes", icon: "StickyNote", shortcut: "", section: "TOOLS" },
   { id: "project-manager", label: "Projects", icon: "Kanban", shortcut: "", section: "TOOLS" },
   { id: "system-monitor", label: "Monitor", icon: "Activity", shortcut: "", section: "TOOLS" },
@@ -246,6 +248,7 @@ const PAGE_ROUTE_OVERRIDES: Partial<Record<Page, string>> = {
   "system-monitor": "/monitor",
   documents: "/documents",
   "model-hub": "/models",
+  "flash-inference": "/flash-inference",
   notes: "/notes",
   "project-manager": "/projects",
   database: "/database",
@@ -281,6 +284,7 @@ const PAGE_SUMMARIES: Partial<Record<Page, string>> = {
   "audit-timeline": "Trace temporal events, decisions, and governance history across the mesh.",
   "command-center": "Run direct commands against the governed operating layer.",
   approvals: "Resolve human-in-the-loop requests before protected actions execute.",
+  "flash-inference": "Run AI models locally with automatic hardware-aware configuration and streaming chat.",
 };
 
 function agentStatusRank(status: AgentSummary["status"]): number {
@@ -1579,6 +1583,9 @@ export default function App(): JSX.Element {
     }
     if (page === "model-hub") {
       return <ModelHub />;
+    }
+    if (page === "flash-inference") {
+      return <FlashInference />;
     }
     if (page === "time-machine") {
       return <TimeMachine />;

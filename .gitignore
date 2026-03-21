@@ -28,3 +28,7 @@ node_modules/
 .claude/skills/
 .claude/projects/
 *.db
+
+# llama.cpp upstream source (cloned at build time)
+/llama-cpp/
+/llama-bridge/llama-cpp/

@@ -42,6 +42,8 @@ members = [
   "tenancy",
   "integrations",
   "metering",
+  "llama-bridge",
+  "crates/nexus-flash-infer",
 ]
 
 [workspace.package]

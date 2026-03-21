@@ -2948,3 +2948,126 @@ export function schedulerTriggerNow(id: string): Promise<any> {
   return invokeDesktop("scheduler_trigger_now", { id });
 }
 
+// ── Flash Inference API ────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function flashDetectHardware(): Promise<any> {
+  return invokeDesktop("flash_detect_hardware");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function flashProfileModel(modelPath: string): Promise<any> {
+  return invokeDesktop("flash_profile_model", { modelPath, model_path: modelPath });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function flashAutoConfigure(
+  modelPath: string,
+  targetContextLen: number,
+  priority: "speed" | "context" | "balanced",
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any> {
+  return invokeDesktop("flash_auto_configure", {
+    modelPath, model_path: modelPath,
+    targetContextLen, target_context_len: targetContextLen,
+    priority,
+  });
+}
+
+export function flashCreateSession(
+  modelPath: string,
+  targetContextLen: number,
+  priority: "speed" | "context" | "balanced",
+): Promise<string> {
+  return invokeDesktop<string>("flash_create_session", {
+    modelPath, model_path: modelPath,
+    targetContextLen, target_context_len: targetContextLen,
+    priority,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function flashListSessions(): Promise<any[]> {
+  return invokeDesktop("flash_list_sessions");
+}
+
+export function flashUnloadSession(sessionId: string): Promise<void> {
+  return invokeDesktop<void>("flash_unload_session", {
+    sessionId, session_id: sessionId,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function flashGetMetrics(sessionId: string): Promise<any> {
+  return invokeDesktop("flash_get_metrics", {
+    sessionId, session_id: sessionId,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function flashEstimatePerformance(modelPath: string): Promise<any> {
+  return invokeDesktop("flash_estimate_performance", {
+    modelPath, model_path: modelPath,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function flashCatalogRecommend(): Promise<any[]> {
+  return invokeDesktop("flash_catalog_recommend");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function flashCatalogSearch(query: string): Promise<any[]> {
+  return invokeDesktop("flash_catalog_search", { query });
+}
+
+// ── Flash Inference — Download & Model Management ─────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function flashListLocalModels(): Promise<any[]> {
+  return invokeDesktop("flash_list_local_models");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function flashDownloadModel(hfRepo: string, filename: string): Promise<any> {
+  return invokeDesktop("flash_download_model", {
+    hfRepo, hf_repo: hfRepo,
+    filename,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function flashDownloadMulti(hfRepo: string, filenames: string[]): Promise<any> {
+  return invokeDesktop("flash_download_multi", {
+    hfRepo, hf_repo: hfRepo,
+    filenames,
+  });
+}
+
+export function flashDeleteLocalModel(filename: string): Promise<void> {
+  return invokeDesktop<void>("flash_delete_local_model", { filename });
+}
+
+export function flashAvailableDiskSpace(): Promise<number> {
+  return invokeDesktop<number>("flash_available_disk_space");
+}
+
+export function flashGetModelDir(): Promise<string> {
+  return invokeDesktop<string>("flash_get_model_dir");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function flashGenerate(
+  sessionId: string,
+  prompt: string,
+  maxTokens?: number,
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any> {
+  return invokeDesktop("flash_generate", {
+    sessionId, session_id: sessionId,
+    prompt,
+    maxTokens: maxTokens ?? 2048,
+    max_tokens: maxTokens ?? 2048,
+  });
+}
+

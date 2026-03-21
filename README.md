@@ -106,6 +106,21 @@ Nexus OS is an **AI agent operating system** — not a framework, not a library,
 - **World Simulation** — Agent environment simulation for safe testing
 - **Voice Pipeline** — Multimodal speech interaction
 
+## Flash Inference — Run Any Open-Source Model Locally
+
+Nexus OS includes a built-in local inference engine powered by llama.cpp, supporting 60+ model architectures through the GGUF format. Run models from Qwen, DeepSeek, Llama, Mistral, Gemma, Phi, and more — all governed with the same security pipeline as cloud providers.
+
+**Verified Benchmarks (ASUS ROG Zephyrus Duo 16, 62GB RAM, CPU only):**
+
+| Model | Parameters | Type | tok/s |
+|-------|-----------|------|-------|
+| Gemma 2 2B | 2B | Dense | 9.93 |
+| Qwen3.5-35B-A3B | 35B (3B active) | MoE | 8.36 |
+
+Every inference call passes through: capability check → fuel reserve → adversarial arena → PII redaction → output firewall → hash-chained audit trail.
+
+No GPU required. Cross-platform: Linux, macOS, Windows.
+
 ## Agents
 
 **53 prebuilt agents** across 7 autonomy levels (L0–L6):

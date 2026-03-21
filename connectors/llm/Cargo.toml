@@ -11,6 +11,7 @@ path = "src/lib.rs"
 default = []
 real-claude = []
 real-api-tests = []
+flash-infer = ["dep:nexus-flash-infer", "dep:nexus-llama-bridge"]
 local-slm = [
     "dep:candle-core",
     "dep:candle-nn",
@@ -38,6 +39,10 @@ candle-transformers = { version = "0.8", optional = true }
 tokenizers = { version = "0.20", optional = true, default-features = false, features = ["onig"] }
 hf-hub = { version = "0.3", optional = true }
 safetensors = { version = "0.4", optional = true }
+
+# Flash inference (behind "flash-infer" feature flag)
+nexus-flash-infer = { path = "../../crates/nexus-flash-infer", features = ["real-llama"], optional = true }
+nexus-llama-bridge = { path = "../../llama-bridge", features = ["real-llama"], optional = true }
 
 [dev-dependencies]
 nexus-sdk = { path = "../../sdk" }

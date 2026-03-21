@@ -1,7 +1,7 @@
 use crate::providers::{
-    ClaudeProvider, CohereProvider, DeepSeekProvider, FireworksProvider, GeminiProvider,
-    GroqProvider, LlmProvider, LlmResponse, MistralProvider, NvidiaProvider, OllamaProvider,
-    OpenAiProvider, OpenRouterProvider, PerplexityProvider, TogetherProvider,
+    ClaudeProvider, CohereProvider, DeepSeekProvider, FireworksProvider, FlashProvider,
+    GeminiProvider, GroqProvider, LlmProvider, LlmResponse, MistralProvider, NvidiaProvider,
+    OllamaProvider, OpenAiProvider, OpenRouterProvider, PerplexityProvider, TogetherProvider,
 };
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::errors::AgentError;
@@ -60,6 +60,8 @@ pub struct ProviderSelectionConfig {
     pub cohere_api_key: Option<String>,
     pub openrouter_api_key: Option<String>,
     pub nvidia_api_key: Option<String>,
+    /// Path to a local GGUF model file for the flash provider.
+    pub flash_model_path: Option<String>,
 }
 
 impl ProviderSelectionConfig {
@@ -79,6 +81,7 @@ impl ProviderSelectionConfig {
             cohere_api_key: env::var("COHERE_API_KEY").ok(),
             openrouter_api_key: env::var("OPENROUTER_API_KEY").ok(),
             nvidia_api_key: env::var("NVIDIA_NIM_API_KEY").ok(),
+            flash_model_path: env::var("FLASH_MODEL_PATH").ok(),
         }
     }
 }
@@ -221,11 +224,18 @@ fn explicit_provider(
         "openai" => Ok(Box::new(OpenAiProvider::new(config.openai_api_key.clone()))),
         "gemini" | "google" => Ok(Box::new(GeminiProvider::new(config.gemini_api_key.clone()))),
         "claude" | "anthropic" => Ok(Box::new(ClaudeProvider::new(config.anthropic_api_key.clone()))),
+        "flash" | "flash-infer" | "local-gguf" => {
+            let model_path = config
+                .flash_model_path
+                .clone()
+                .unwrap_or_else(|| "flash-local".to_string());
+            Ok(Box::new(FlashProvider::new(model_path)))
+        }
         "mock" => Err(AgentError::SupervisorError(
-            "Mock provider is for testing only. Configure a real provider: ollama, openai, claude, gemini, nvidia, deepseek, groq, mistral, together, fireworks, perplexity, cohere, or openrouter.".to_string(),
+            "Mock provider is for testing only. Configure a real provider: ollama, openai, claude, gemini, nvidia, deepseek, groq, mistral, together, fireworks, perplexity, cohere, openrouter, or flash.".to_string(),
         )),
         _ => Err(AgentError::SupervisorError(
-            format!("Unknown LLM provider '{explicit}'. Supported: ollama, deepseek, groq, mistral, together, fireworks, perplexity, cohere, openrouter, nvidia, openai, gemini, claude"),
+            format!("Unknown LLM provider '{explicit}'. Supported: ollama, deepseek, groq, mistral, together, fireworks, perplexity, cohere, openrouter, nvidia, openai, gemini, claude, flash"),
         )),
     }
 }

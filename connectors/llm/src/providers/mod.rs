@@ -3,11 +3,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::process::Command;
+use std::sync::Arc;
 
 pub mod claude;
 pub mod cohere;
 pub mod deepseek;
 pub mod fireworks;
+pub mod flash;
 pub mod gemini;
 pub mod groq;
 #[cfg(feature = "local-slm")]
@@ -26,6 +28,7 @@ pub use claude::ClaudeProvider;
 pub use cohere::CohereProvider;
 pub use deepseek::DeepSeekProvider;
 pub use fireworks::FireworksProvider;
+pub use flash::FlashProvider;
 pub use gemini::GeminiProvider;
 pub use groq::GroqProvider;
 #[cfg(feature = "local-slm")]
@@ -92,6 +95,36 @@ pub trait LlmProvider: Send + Sync {
 }
 
 impl<T: LlmProvider + ?Sized> LlmProvider for Box<T> {
+    fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
+        (**self).query(prompt, max_tokens, model)
+    }
+
+    fn name(&self) -> &str {
+        (**self).name()
+    }
+
+    fn cost_per_token(&self) -> f64 {
+        (**self).cost_per_token()
+    }
+
+    fn is_paid(&self) -> bool {
+        (**self).is_paid()
+    }
+
+    fn estimate_input_tokens(&self, prompt: &str) -> u32 {
+        (**self).estimate_input_tokens(prompt)
+    }
+
+    fn endpoint_url(&self) -> String {
+        (**self).endpoint_url()
+    }
+
+    fn embed(&self, texts: &[&str], model: &str) -> Result<EmbeddingResponse, AgentError> {
+        (**self).embed(texts, model)
+    }
+}
+
+impl<T: LlmProvider + ?Sized> LlmProvider for Arc<T> {
     fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
         (**self).query(prompt, max_tokens, model)
     }

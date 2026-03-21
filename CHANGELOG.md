@@ -2,6 +2,26 @@
 
 All notable changes to NEXUS OS are documented here.
 
+## v9.4.0 — Flash Inference (March 21, 2026)
+
+### Flash Inference Engine
+- **nexus-llama-bridge**: Rust FFI to llama.cpp supporting 60+ model architectures via GGUF format
+- **nexus-flash-infer**: Memory budget manager, auto-config, model catalog with quantization selection
+- **FlashProvider**: Wired through full governance pipeline (capability check → fuel → adversarial arena → PII redaction → output firewall → audit trail)
+- **FlashInference UI**: Model browser, one-click download, inference playground, real-time token streaming, benchmark display
+
+### Verified Benchmarks (ASUS ROG Zephyrus Duo 16, 62GB RAM, CPU only)
+| Model | Parameters | Type | tok/s |
+|-------|-----------|------|-------|
+| Gemma 2 2B | 2B | Dense | 9.93 |
+| Qwen3.5-35B-A3B | 35B (3B active) | MoE | 8.36 |
+
+### Key Properties
+- CPU-only inference, zero GPU required
+- Cross-platform: Linux, macOS, Windows
+- No external runtime (Ollama not required)
+- Models: Qwen, DeepSeek, Llama, Mistral, Gemma, Phi, and more
+
 ## v9.0.0 — Gen-3 Living OS (March 17, 2026)
 
 12 new systems transforming Nexus OS from an agent framework into a living digital organism.

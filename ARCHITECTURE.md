@@ -375,6 +375,44 @@ frontend/
 
 ## Provider Layer
 
+### Flash Inference (nexus-llama-bridge + nexus-flash-infer)
+
+Local model inference powered by llama.cpp, supporting 60+ GGUF model architectures with zero external runtime dependencies.
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  Flash Inference                      │
+│                                                       │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────┐  │
+│  │ Model       │  │ Memory       │  │ Auto       │  │
+│  │ Catalog     │  │ Budget Mgr   │  │ Config     │  │
+│  └──────┬──────┘  └──────┬───────┘  └─────┬──────┘  │
+│         │                │                 │          │
+│  ┌──────▼────────────────▼─────────────────▼──────┐  │
+│  │            nexus-flash-infer                    │  │
+│  │   (quantization selection, context sizing,     │  │
+│  │    thread tuning, batch optimization)          │  │
+│  └────────────────────┬───────────────────────────┘  │
+│                       │                               │
+│  ┌────────────────────▼───────────────────────────┐  │
+│  │            nexus-llama-bridge                   │  │
+│  │   (Rust FFI → llama.cpp C API)                 │  │
+│  └─────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+```
+
+**Key design decisions:**
+- **llama.cpp over other runtimes**: Widest architecture support (60+ models), active development, pure C/C++ with no Python dependency
+- **Memory budget manager**: Automatically selects quantization level and context size based on available system RAM — prevents OOM on constrained machines
+- **No Ollama dependency**: Direct FFI to llama.cpp eliminates the need for an external runtime process
+- **Full governance pipeline**: FlashProvider implements the same LlmProvider trait as cloud providers — every inference call passes through capability check, fuel metering, adversarial arena, PII redaction, output firewall, and hash-chained audit
+
+**Verified performance (CPU only, 62GB RAM):**
+| Model | Parameters | Type | tok/s |
+|-------|-----------|------|-------|
+| Gemma 2 2B | 2B | Dense | 9.93 |
+| Qwen3.5-35B-A3B | 35B (3B active) | MoE | 8.36 |
+
 ### LLM Router
 
 The LLM Router manages model selection, fallback, and load balancing:
