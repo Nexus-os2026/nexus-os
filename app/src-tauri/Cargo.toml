@@ -8,6 +8,7 @@ license.workspace = true
 default = ["tauri-runtime"]
 tauri-runtime = ["dep:tauri"]
 real-claude = []
+real-llama = ["nexus-flash-infer/real-llama"]
 
 [dependencies]
 nexus-kernel = { path = "../../kernel" }
@@ -31,7 +32,7 @@ nexus-tenancy = { path = "../../tenancy" }
 nexus-telemetry = { path = "../../telemetry" }
 nexus-integrations = { path = "../../integrations" }
 nexus-metering = { path = "../../metering" }
-nexus-flash-infer = { path = "../../crates/nexus-flash-infer", features = ["download", "real-llama"] }
+nexus-flash-infer = { path = "../../crates/nexus-flash-infer", features = ["download"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 base64 = "0.22"
@@ -43,6 +44,9 @@ sha2 = "0.10"
 chrono = "0.4"
 ed25519-dalek = "2"
 tokio = { version = "1", features = ["rt", "sync", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+urlencoding = "2"
+open = "5"
 
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 tauri = { version = "2.5.5", optional = true, default-features = false, features = ["tray-icon", "wry"] }

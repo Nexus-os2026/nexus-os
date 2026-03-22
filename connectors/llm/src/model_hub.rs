@@ -566,6 +566,66 @@ fn read_available_ram_mb() -> Option<usize> {
     None
 }
 
+// ─── Ollama registration ──────────────────────────────────────────────────
+
+/// Register a downloaded GGUF model with Ollama so it appears in model lists.
+///
+/// Creates a Modelfile pointing at the downloaded GGUF and calls `POST /api/create`
+/// on the local Ollama server. This bridges ModelHub downloads to Chat.
+pub fn register_downloaded_model_with_ollama(
+    model_path: &std::path::Path,
+    model_name: &str,
+) -> Result<(), String> {
+    let modelfile_content = format!(
+        "FROM {}\n\nPARAMETER temperature 0.7\nPARAMETER top_p 0.9\n",
+        model_path.display()
+    );
+
+    // Write Modelfile next to the model
+    let modelfile_path = model_path.with_extension("Modelfile");
+    std::fs::write(&modelfile_path, &modelfile_content)
+        .map_err(|e| format!("failed to write Modelfile: {e}"))?;
+
+    // Sanitize model name for Ollama (lowercase, no special chars)
+    let ollama_name = model_name
+        .to_lowercase()
+        .replace(' ', "-")
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || *c == '.' || *c == ':')
+        .collect::<String>();
+
+    // Call Ollama API to create the model
+    let payload = serde_json::json!({
+        "name": ollama_name,
+        "modelfile": modelfile_content,
+    });
+
+    let result = Command::new("curl")
+        .args([
+            "-sS",
+            "-X",
+            "POST",
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            &payload.to_string(),
+            "http://localhost:11434/api/create",
+        ])
+        .output();
+
+    match result {
+        Ok(output) if output.status.success() => Ok(()),
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("Ollama registration failed: {stderr}"))
+        }
+        Err(_) => {
+            // Ollama not running — not an error, model is still saved locally
+            Ok(())
+        }
+    }
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
