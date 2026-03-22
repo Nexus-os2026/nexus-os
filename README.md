@@ -112,10 +112,13 @@ Nexus OS includes a built-in local inference engine powered by llama.cpp, suppor
 
 **Verified Benchmarks (ASUS ROG Zephyrus Duo 16, 62GB RAM, CPU only):**
 
-| Model | Parameters | Type | tok/s |
-|-------|-----------|------|-------|
-| Gemma 2 2B | 2B | Dense | 9.93 |
-| Qwen3.5-35B-A3B | 35B (3B active) | MoE | 8.36 |
+| Model | Parameters | Type | RAM Cage | tok/s |
+|-------|-----------|------|----------|-------|
+| Gemma 2 2B | 2B | Dense | — | 9.93 |
+| Qwen3.5-35B-A3B | 35B (3B active) | MoE | — | 8.36 |
+| Qwen3.5-397B-A17B | 397B (17B active) | MoE | 32 GB | 0.26 |
+
+> **397B model verified running in 32 GB systemd memory cage (`MemoryMax=32G`) via mmap SSD streaming. No GPU required.**
 
 Every inference call passes through: capability check → fuel reserve → adversarial arena → PII redaction → output firewall → hash-chained audit trail.
 
