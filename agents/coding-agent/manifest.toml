@@ -1,5 +1,6 @@
 name = "coding-agent"
 version = "2.0.0"
+description = "Reads code repositories, applies fixes, and iterates until tests pass — autonomous code repair agent"
 capabilities = ["fs.read", "fs.write", "process.exec", "audit.read"]
 fuel_budget = 50000
 autonomy_level = 1

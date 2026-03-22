@@ -1,5 +1,6 @@
 name = "social-poster"
 version = "1.0.0"
+description = "Generates and posts social media content on a daily schedule across configured platforms"
 capabilities = ["web.search", "web.read", "llm.query", "social.x.post"]
 fuel_budget = 10000
 autonomy_level = 1

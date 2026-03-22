@@ -30,6 +30,7 @@
 //! ```
 
 pub mod batch;
+pub mod chat_template;
 pub mod context;
 pub mod error;
 pub mod ffi;

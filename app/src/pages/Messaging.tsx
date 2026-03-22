@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getConfig,
   getMessagingStatus,
   listAgents,
+  messagingConnectPlatform,
+  messagingSend,
+  messagingPollMessages,
   saveConfig,
   setDefaultAgent,
 } from "../api/backend";
@@ -74,6 +77,55 @@ export default function Messaging(): JSX.Element {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [defaultAgentId, setDefaultAgentId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
+  const [connectionResults, setConnectionResults] = useState<Record<string, {connected: boolean; name?: string}>>({});
+  const [replyText, setReplyText] = useState("");
+  const [replyChannel, setReplyChannel] = useState("");
+  const [replyPlatform, setReplyPlatform] = useState("");
+  const [messages, setMessages] = useState<{platform: string; channel: string; from: string; text: string; time: string}[]>([]);
+  const [sendingReply, setSendingReply] = useState(false);
+
+  /* ─── Real-time message listener via Tauri events ─── */
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const eventMod = await import("@tauri-apps/api/event");
+        unlisten = await eventMod.listen<{ platform: string; channel: string; from: string; text: string }>("slack-message", (event) => {
+          const msg = event.payload;
+          setMessages(prev => [...prev, { platform: msg.platform || "slack", channel: msg.channel || "general", from: msg.from || "unknown", text: msg.text || "", time: new Date().toLocaleTimeString() }]);
+        });
+      } catch { /* not in desktop runtime */ }
+    })();
+    return () => { unlisten?.(); };
+  }, []);
+
+  /* ─── Poll for new messages every 15s for connected platforms ─── */
+  const lastPollId = useRef("0");
+  useEffect(() => {
+    const poll = async () => {
+      // Poll each connected platform
+      for (const [platform, result] of Object.entries(connectionResults)) {
+        if (!result.connected) continue;
+        try {
+          const raw = await messagingPollMessages(platform, "general", lastPollId.current);
+          const parsed = JSON.parse(raw);
+          const msgs = parsed.messages ?? parsed.result ?? (Array.isArray(parsed) ? parsed : []);
+          if (Array.isArray(msgs) && msgs.length > 0) {
+            setMessages(prev => [...prev, ...msgs.map((m: any) => ({
+              platform,
+              channel: m.channel || "general",
+              from: m.from || m.user || m.username || "unknown",
+              text: m.text || m.content || "",
+              time: new Date().toLocaleTimeString(),
+            }))]);
+          }
+        } catch { /* not connected or no messages */ }
+      }
+    };
+    const iv = setInterval(poll, 15_000);
+    return () => clearInterval(iv);
+  }, [connectionResults]);
 
   const load = useCallback(async () => {
     try {
@@ -126,6 +178,35 @@ export default function Messaging(): JSX.Element {
       setMessage(error instanceof Error ? error.message : String(error));
     }
   }, [config, load, tokens]);
+
+  const handleConnect = useCallback(async (platform: string, token: string) => {
+    if (!token.trim()) return;
+    setConnectingPlatform(platform);
+    try {
+      const result = await messagingConnectPlatform(platform, token);
+      const data = JSON.parse(result);
+      setConnectionResults(prev => ({ ...prev, [platform]: { connected: true, name: data.bot_name || data.team || platform } }));
+    } catch (e: any) {
+      setConnectionResults(prev => ({ ...prev, [platform]: { connected: false } }));
+      alert(`Connection failed: ${e?.message || e}`);
+    } finally {
+      setConnectingPlatform(null);
+    }
+  }, []);
+
+  const handleSendReply = useCallback(async () => {
+    if (!replyPlatform || !replyChannel || !replyText.trim()) return;
+    setSendingReply(true);
+    try {
+      await messagingSend(replyPlatform, replyChannel, replyText);
+      setMessages(prev => [...prev, { platform: replyPlatform, channel: replyChannel, from: "You", text: replyText, time: new Date().toLocaleTimeString() }]);
+      setReplyText("");
+    } catch (e: any) {
+      alert(`Send failed: ${e?.message || e}`);
+    } finally {
+      setSendingReply(false);
+    }
+  }, [replyPlatform, replyChannel, replyText]);
 
   const saveDefaultAgent = useCallback(async (agentId: string) => {
     setDefaultAgentId(agentId);
@@ -201,7 +282,7 @@ export default function Messaging(): JSX.Element {
                 placeholder={`${platform.label} token`}
                 className="mt-4 w-full rounded-xl border border-cyan-500/20 bg-slate-950/60 px-3 py-2 text-sm text-cyan-50"
               />
-              <div className="mt-4 flex gap-3">
+              <div className="mt-4 flex flex-wrap gap-3">
                 <button
                   type="button"
                   onClick={() => void connectPlatform(platform)}
@@ -216,11 +297,60 @@ export default function Messaging(): JSX.Element {
                 >
                   Test
                 </button>
+                <button
+                  type="button"
+                  className="cursor-pointer rounded-full px-4 py-2 text-xs"
+                  onClick={() => void handleConnect(platform.key, tokens[platform.key] ?? "")}
+                  disabled={connectingPlatform === platform.key}
+                  style={{
+                    background: connectionResults[platform.key]?.connected ? "rgba(34,197,94,0.2)" : "rgba(129,140,248,0.2)",
+                    border: `1px solid ${connectionResults[platform.key]?.connected ? "rgba(34,197,94,0.3)" : "rgba(129,140,248,0.3)"}`,
+                    color: connectionResults[platform.key]?.connected ? "#22c55e" : "#818cf8",
+                    fontFamily: "inherit",
+                    cursor: "pointer",
+                  }}
+                >
+                  {connectionResults[platform.key]?.connected ? "\u2713 Connected" : connectingPlatform === platform.key ? "Testing..." : "Test & Connect"}
+                </button>
               </div>
             </article>
           );
         })}
       </div>
+
+      {/* ── Live Messages ── */}
+      {Object.values(connectionResults).some(r => r.connected) && (
+        <div style={{ marginTop: 24, background: "var(--bg-secondary, #1e293b)", border: "1px solid var(--border, #334155)", borderRadius: 8, padding: 16 }}>
+          <h3 style={{ margin: "0 0 12px", fontSize: "1rem", fontWeight: 600 }}>
+            Live Messages
+            <span style={{ fontSize: "0.7rem", opacity: 0.5, marginLeft: 8 }}>
+              {Object.entries(connectionResults).filter(([,r]) => r.connected).map(([p, r]) => `${p}: ${r.name}`).join(" \u00b7 ")}
+            </span>
+          </h3>
+          <div style={{ maxHeight: 300, overflowY: "auto", marginBottom: 12 }}>
+            {messages.length === 0 ? (
+              <div style={{ opacity: 0.4, padding: 16, textAlign: "center", fontSize: "0.8rem" }}>No messages yet. Messages will appear here when received.</div>
+            ) : messages.map((msg, i) => (
+              <div key={i} style={{ padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: "0.8rem" }}>
+                <span style={{ opacity: 0.4, fontSize: "0.7rem" }}>[{msg.platform}] {msg.time}</span>
+                <span style={{ fontWeight: 600, marginLeft: 6 }}>{msg.from}:</span>
+                <span style={{ marginLeft: 4 }}>{msg.text}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <select value={replyPlatform} onChange={e => setReplyPlatform(e.target.value)} style={{ background: "var(--bg-primary, #0f172a)", border: "1px solid var(--border, #334155)", borderRadius: 4, color: "inherit", padding: "4px 8px", fontSize: "0.8rem", fontFamily: "inherit" }}>
+              <option value="">Platform</option>
+              {Object.entries(connectionResults).filter(([,r]) => r.connected).map(([p]) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+            <input value={replyChannel} onChange={e => setReplyChannel(e.target.value)} placeholder="Channel / Chat ID" style={{ flex: "0 0 140px", background: "var(--bg-primary, #0f172a)", border: "1px solid var(--border, #334155)", borderRadius: 4, color: "inherit", padding: "4px 8px", fontSize: "0.8rem", fontFamily: "inherit" }} />
+            <input value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Type a message..." style={{ flex: 1, background: "var(--bg-primary, #0f172a)", border: "1px solid var(--border, #334155)", borderRadius: 4, color: "inherit", padding: "4px 8px", fontSize: "0.8rem", fontFamily: "inherit" }} onKeyDown={e => e.key === 'Enter' && handleSendReply()} />
+            <button className="cursor-pointer" onClick={handleSendReply} disabled={sendingReply || !replyText.trim() || !replyPlatform || !replyChannel} style={{ padding: "4px 12px", background: "rgba(129,140,248,0.2)", border: "1px solid rgba(129,140,248,0.3)", borderRadius: 4, color: "#818cf8", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>{sendingReply ? "..." : "Send"}</button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

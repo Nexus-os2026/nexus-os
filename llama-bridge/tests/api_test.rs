@@ -3,12 +3,40 @@ use nexus_llama_bridge::*;
 #[test]
 fn test_default_generation_config() {
     let config = GenerationConfig::default();
-    assert!(config.temperature > 0.0);
+    // Defaults are speed-optimized: greedy sampling, small context, quantized KV
+    assert_eq!(config.temperature, 0.0); // Greedy
     assert!(config.max_tokens > 0);
-    assert!(config.top_p > 0.0 && config.top_p <= 1.0);
-    assert!(config.top_k > 0);
+    assert_eq!(config.top_p, 1.0); // Disabled
+    assert_eq!(config.top_k, 0); // Disabled
+    assert_eq!(config.repeat_penalty, 1.1); // Anti-repetition enabled
+    assert_eq!(config.n_ctx, 2048);
+    assert_eq!(config.n_batch, 2048);
+    assert_eq!(config.n_ubatch, 512);
+    assert!(config.flash_attn);
+    assert!(config.n_threads.is_none());
+    assert_eq!(config.type_k, Some(KvCacheType::Q8_0));
+    assert_eq!(config.type_v, Some(KvCacheType::Q8_0));
+}
+
+#[test]
+fn test_fast_generation_config() {
+    let config = GenerationConfig::fast();
+    assert_eq!(config.temperature, 0.0);
+    assert_eq!(config.top_k, 0);
+    assert_eq!(config.top_p, 1.0);
+    assert_eq!(config.min_p, 0.0);
+    assert_eq!(config.repeat_penalty, 1.1);
+    assert_eq!(config.n_ctx, 2048);
+    assert_eq!(config.type_k, Some(KvCacheType::Q8_0));
+}
+
+#[test]
+fn test_balanced_generation_config() {
+    let config = GenerationConfig::balanced();
+    assert!(config.temperature > 0.0);
+    assert!(config.top_p < 1.0);
     assert_eq!(config.n_ctx, 4096);
-    assert_eq!(config.n_batch, 512);
+    assert_eq!(config.type_k, Some(KvCacheType::Q8_0));
 }
 
 #[test]
@@ -250,6 +278,42 @@ fn test_hardware_info_serialization() {
 }
 
 #[test]
+fn test_chat_template_formats() {
+    use nexus_llama_bridge::chat_template::ChatTemplateFormat;
+
+    // DeepSeek
+    let fmt = ChatTemplateFormat::from_architecture("deepseek2");
+    assert_eq!(fmt, ChatTemplateFormat::DeepSeek);
+    let result = fmt.apply("What is 2+2?");
+    assert!(result.contains("<|User|>"));
+    assert!(result.contains("<|Assistant|>"));
+
+    // Qwen / ChatML
+    let fmt = ChatTemplateFormat::from_architecture("qwen");
+    assert_eq!(fmt, ChatTemplateFormat::ChatML);
+    let result = fmt.apply("Hello");
+    assert!(result.contains("<|im_start|>user"));
+    assert!(result.contains("<|im_start|>assistant"));
+
+    // Gemma
+    let fmt = ChatTemplateFormat::from_architecture("gemma2");
+    assert_eq!(fmt, ChatTemplateFormat::Gemma);
+    let result = fmt.apply("Hi");
+    assert!(result.contains("<start_of_turn>user"));
+    assert!(result.contains("<start_of_turn>model"));
+
+    // Llama / Mistral
+    let fmt = ChatTemplateFormat::from_architecture("llama");
+    assert_eq!(fmt, ChatTemplateFormat::Llama);
+    let result = fmt.apply("Test");
+    assert!(result.contains("[INST]"));
+
+    // Unknown defaults to Llama
+    let fmt = ChatTemplateFormat::from_architecture("totally_unknown");
+    assert_eq!(fmt, ChatTemplateFormat::Llama);
+}
+
+#[test]
 fn test_real_model_inference() {
     let model_path = match std::env::var("TEST_MODEL_PATH") {
         Ok(p) => p,
@@ -262,14 +326,14 @@ fn test_real_model_inference() {
     // Initialize backend
     nexus_llama_bridge::init();
 
-    // Load model with CPU-only settings
+    // Load model with CPU-only settings — all 16 cores
     let config = ModelLoadConfig {
         model_path: model_path.clone(),
         n_gpu_layers: 0,
         use_mmap: true,
         use_mlock: false,
         cpu_moe: true,
-        n_threads: Some(8),
+        n_threads: Some(16),
         numa_strategy: NumaStrategy::Disabled,
     };
 
@@ -277,11 +341,17 @@ fn test_real_model_inference() {
 
     println!("Model loaded: {:?}", model.metadata());
 
-    // Create context and generate
+    // Create context with maximum performance settings
     let gen_config = GenerationConfig {
         max_tokens: 50,
         temperature: 0.7,
         n_ctx: 2048,
+        n_batch: 512,
+        n_ubatch: 512,
+        flash_attn: true,
+        n_threads: Some(16),
+        type_k: Some(KvCacheType::Q8_0),
+        type_v: Some(KvCacheType::Q8_0),
         ..Default::default()
     };
 

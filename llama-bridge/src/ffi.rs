@@ -30,6 +30,10 @@ pub struct LlamaVocab {
 pub struct LlamaSampler {
     _opaque: [u8; 0],
 }
+#[repr(C)]
+pub struct LlamaMemory {
+    _opaque: [u8; 0],
+}
 
 /// Opaque model params — heap-allocated by `nexus_model_params_create()`.
 #[repr(C)]
@@ -55,6 +59,13 @@ pub struct LlamaBatch {
     pub n_seq_id: *mut i32,
     pub seq_id: *mut *mut i32, // llama_seq_id = i32
     pub logits: *mut i8,
+}
+
+/// Chat message for template application (mirrors `llama_chat_message`).
+#[repr(C)]
+pub struct LlamaChatMessage {
+    pub role: *const c_char,
+    pub content: *const c_char,
 }
 
 /// Sampler chain configuration (mirrors `llama_sampler_chain_params`).
@@ -102,6 +113,10 @@ extern "C" {
     pub fn llama_free(ctx: *mut LlamaContextRaw);
     pub fn llama_n_ctx(ctx: *const LlamaContextRaw) -> u32;
 
+    // ── Memory (KV cache) ───────────────────────────────────────
+    pub fn llama_get_memory(ctx: *const LlamaContextRaw) -> *mut LlamaMemory;
+    pub fn llama_memory_clear(mem: *mut LlamaMemory, data: bool);
+
     // ── Tokenization ───────────────────────────────────────────────
     pub fn llama_tokenize(
         vocab: *const LlamaVocab,
@@ -145,11 +160,32 @@ extern "C" {
     ) -> *mut LlamaSampler;
     pub fn llama_sampler_init_dist(seed: u32) -> *mut LlamaSampler;
     pub fn llama_sampler_init_greedy() -> *mut LlamaSampler;
+    pub fn llama_sampler_reset(smpl: *mut LlamaSampler);
     pub fn llama_sampler_sample(
         smpl: *mut LlamaSampler,
         ctx: *mut LlamaContextRaw,
         idx: i32,
     ) -> LlamaToken;
+
+    // ── Chat template ──────────────────────────────────────────────
+    /// Get the model's built-in chat template. Returns null if unavailable.
+    /// If `name` is null, returns the default template.
+    pub fn llama_model_chat_template(
+        model: *const LlamaModel,
+        name: *const c_char,
+    ) -> *const c_char;
+
+    /// Apply a chat template to format messages. Returns the number of bytes
+    /// written (or needed if buf is too small). `tmpl` can be null to use the
+    /// model's built-in template.
+    pub fn llama_chat_apply_template(
+        tmpl: *const c_char,
+        chat: *const LlamaChatMessage,
+        n_msg: usize,
+        add_ass: bool,
+        buf: *mut c_char,
+        length: i32,
+    ) -> i32;
 
     // ── Performance ────────────────────────────────────────────────
     pub fn llama_perf_context(ctx: *const LlamaContextRaw) -> LlamaPerfContextData;
@@ -183,6 +219,9 @@ extern "C" {
     pub fn nexus_ctx_params_set_n_threads_batch(params: *mut LlamaContextParams, n: i32);
     pub fn nexus_ctx_params_set_flash_attn(params: *mut LlamaContextParams, v: bool);
     pub fn nexus_ctx_params_set_no_perf(params: *mut LlamaContextParams, v: bool);
+    pub fn nexus_ctx_params_set_n_ubatch(params: *mut LlamaContextParams, n: u32);
+    pub fn nexus_ctx_params_set_type_k(params: *mut LlamaContextParams, t: i32);
+    pub fn nexus_ctx_params_set_type_v(params: *mut LlamaContextParams, t: i32);
 
     /// Size of real `llama_model_params` and `llama_context_params` structs.
     pub fn nexus_sizeof_model_params() -> usize;

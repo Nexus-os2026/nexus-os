@@ -1,4 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
+import RequiresLlm from "../components/RequiresLlm";
 import { Dot } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -136,6 +137,7 @@ export default function MediaStudio(): JSX.Element {
   }, [ffmpegArgs, outputName, selectedAgentId, selectedEntry, workspace]);
 
   return (
+    <RequiresLlm feature="Media Studio">
     <section className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6">
       <header className="nexus-panel rounded-3xl p-6">
         <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/70">Real Media Studio</p>
@@ -291,5 +293,6 @@ export default function MediaStudio(): JSX.Element {
         </section>
       </div>
     </section>
+    </RequiresLlm>
   );
 }

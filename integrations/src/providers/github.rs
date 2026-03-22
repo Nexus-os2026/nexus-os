@@ -173,3 +173,119 @@ impl Integration for GitHubIntegration {
         Ok(())
     }
 }
+
+// ── Extended actions beyond the Integration trait ──
+
+impl GitHubIntegration {
+    /// Create a comment on an issue or pull request.
+    pub fn create_comment(
+        &self,
+        owner: &str,
+        repo: &str,
+        issue_number: u64,
+        body: &str,
+    ) -> Result<serde_json::Value, IntegrationError> {
+        let url =
+            format!("https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/comments");
+        let payload = json!({ "body": body });
+
+        let response = self
+            .http
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.token))
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", "nexus-os/9.0.0")
+            .json(&payload)
+            .send()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "github".into(),
+                message: e.to_string(),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().unwrap_or_default();
+            return Err(IntegrationError::HttpError {
+                provider: "github".into(),
+                status,
+                body,
+            });
+        }
+
+        response
+            .json()
+            .map_err(|e| IntegrationError::Serialization(e.to_string()))
+    }
+
+    /// List repository events (webhook-like polling).
+    pub fn list_events(
+        &self,
+        owner: &str,
+        repo: &str,
+    ) -> Result<Vec<serde_json::Value>, IntegrationError> {
+        let url = format!("https://api.github.com/repos/{owner}/{repo}/events");
+
+        let response = self
+            .http
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.token))
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", "nexus-os/9.0.0")
+            .send()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "github".into(),
+                message: e.to_string(),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().unwrap_or_default();
+            return Err(IntegrationError::HttpError {
+                provider: "github".into(),
+                status,
+                body,
+            });
+        }
+
+        response
+            .json()
+            .map_err(|e| IntegrationError::Serialization(e.to_string()))
+    }
+
+    /// List open issues for a repository.
+    pub fn list_issues(
+        &self,
+        owner: &str,
+        repo: &str,
+        state: &str,
+    ) -> Result<Vec<serde_json::Value>, IntegrationError> {
+        let url =
+            format!("https://api.github.com/repos/{owner}/{repo}/issues?state={state}&per_page=30");
+
+        let response = self
+            .http
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.token))
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", "nexus-os/9.0.0")
+            .send()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "github".into(),
+                message: e.to_string(),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().unwrap_or_default();
+            return Err(IntegrationError::HttpError {
+                provider: "github".into(),
+                status,
+                body,
+            });
+        }
+
+        response
+            .json()
+            .map_err(|e| IntegrationError::Serialization(e.to_string()))
+    }
+}

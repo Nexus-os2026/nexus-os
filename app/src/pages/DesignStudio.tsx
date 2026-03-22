@@ -8,6 +8,7 @@ import {
   listAgents,
 } from "../api/backend";
 import type { AgentSummary } from "../types";
+import RequiresLlm from "../components/RequiresLlm";
 
 type WorkspaceEntry = {
   name: string;
@@ -155,6 +156,7 @@ export default function DesignStudio(): JSX.Element {
   }, [filename, format, prompt, refreshWorkspace, selectedAgentId, selectedAgentName, workspace]);
 
   return (
+    <RequiresLlm feature="Design Studio">
     <section className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6">
       <header className="nexus-panel rounded-3xl p-6">
         <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/70">Real Design Studio</p>
@@ -322,5 +324,6 @@ export default function DesignStudio(): JSX.Element {
         )}
       </section>
     </section>
+    </RequiresLlm>
   );
 }

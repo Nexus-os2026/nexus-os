@@ -140,3 +140,125 @@ impl Integration for GitLabIntegration {
         Ok(())
     }
 }
+
+// ── Extended actions beyond the Integration trait ──
+
+impl GitLabIntegration {
+    /// Add a note (comment) to an issue.
+    pub fn create_note(
+        &self,
+        project_id: &str,
+        issue_iid: u64,
+        body: &str,
+    ) -> Result<serde_json::Value, IntegrationError> {
+        let encoded = Self::encode_project_id(self.project_id(project_id));
+        let url = format!(
+            "{}/api/v4/projects/{encoded}/issues/{issue_iid}/notes",
+            self.base_url
+        );
+        let payload = json!({ "body": body });
+
+        let response = self
+            .http
+            .post(&url)
+            .header("PRIVATE-TOKEN", &self.token)
+            .header("Content-Type", "application/json")
+            .json(&payload)
+            .send()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "gitlab".into(),
+                message: e.to_string(),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().unwrap_or_default();
+            return Err(IntegrationError::HttpError {
+                provider: "gitlab".into(),
+                status,
+                body,
+            });
+        }
+
+        response
+            .json()
+            .map_err(|e| IntegrationError::Serialization(e.to_string()))
+    }
+
+    /// Add a note to a merge request.
+    pub fn create_merge_request_note(
+        &self,
+        project_id: &str,
+        mr_iid: u64,
+        body: &str,
+    ) -> Result<serde_json::Value, IntegrationError> {
+        let encoded = Self::encode_project_id(self.project_id(project_id));
+        let url = format!(
+            "{}/api/v4/projects/{encoded}/merge_requests/{mr_iid}/notes",
+            self.base_url
+        );
+        let payload = json!({ "body": body });
+
+        let response = self
+            .http
+            .post(&url)
+            .header("PRIVATE-TOKEN", &self.token)
+            .header("Content-Type", "application/json")
+            .json(&payload)
+            .send()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "gitlab".into(),
+                message: e.to_string(),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().unwrap_or_default();
+            return Err(IntegrationError::HttpError {
+                provider: "gitlab".into(),
+                status,
+                body,
+            });
+        }
+
+        response
+            .json()
+            .map_err(|e| IntegrationError::Serialization(e.to_string()))
+    }
+
+    /// List project events (activity feed).
+    pub fn list_events(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<serde_json::Value>, IntegrationError> {
+        let encoded = Self::encode_project_id(self.project_id(project_id));
+        let url = format!(
+            "{}/api/v4/projects/{encoded}/events?per_page=30",
+            self.base_url
+        );
+
+        let response = self
+            .http
+            .get(&url)
+            .header("PRIVATE-TOKEN", &self.token)
+            .send()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "gitlab".into(),
+                message: e.to_string(),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().unwrap_or_default();
+            return Err(IntegrationError::HttpError {
+                provider: "gitlab".into(),
+                status,
+                body,
+            });
+        }
+
+        response
+            .json()
+            .map_err(|e| IntegrationError::Serialization(e.to_string()))
+    }
+}

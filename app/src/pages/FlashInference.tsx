@@ -1,79 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  Zap, FolderOpen, Send, Square, Trash2, AlertTriangle, X, Cpu,
-  HardDrive, MemoryStick, Gauge, Download, Package, Search, Check,
-  Loader, ChevronDown, ChevronUp,
-} from "lucide-react";
-import {
+  flashListLocalModels,
   flashDetectHardware,
-  flashProfileModel,
-  flashEstimatePerformance,
   flashCreateSession,
   flashUnloadSession,
-  flashGetMetrics,
+  flashClearSessions,
   flashGenerate,
-  flashCatalogRecommend,
-  flashCatalogSearch,
-  flashListLocalModels,
-  flashDownloadModel,
-  flashDeleteLocalModel,
-  flashAvailableDiskSpace,
-  hasDesktopRuntime,
 } from "../api/backend";
+import { listen } from "@tauri-apps/api/event";
 import "./flash-inference.css";
-
-/* ── types ── */
-
-interface HwInfo {
-  total_ram_mb: number;
-  available_ram_mb: number;
-  cpu_cores: number;
-  cpu_model: string;
-  ssd_type: string;
-  ssd_read_mb_per_sec: number;
-}
-
-interface ModelProfile {
-  name: string;
-  parameters_b: number;
-  quantization: string;
-  file_size_mb: number;
-  is_moe: boolean;
-  num_experts: number;
-  active_experts: number;
-  active_parameters_b: number;
-  max_context_length: number;
-  architecture: string;
-}
-
-interface PerfEstimate {
-  tokens_per_second: number;
-  estimated_ram_mb: number;
-  cache_hit_rate: number;
-  needs_disk_streaming: boolean;
-  max_context_at_budget: number;
-}
-
-interface InferenceMetrics {
-  session_id: string;
-  tokens_per_second: number;
-  prompt_tokens_per_second: number;
-  memory_used_mb: number;
-  memory_budget_mb: number;
-  memory_utilization: number;
-  expert_cache_hit_rate: number;
-  io_read_mb_per_sec: number;
-  cpu_utilization: number;
-  context_used: number;
-  context_max: number;
-  total_tokens_generated: number;
-  uptime_seconds: number;
-}
-
-interface ChatMsg {
-  role: "user" | "assistant";
-  content: string;
-}
 
 interface LocalModel {
   name: string;
@@ -81,1024 +16,409 @@ interface LocalModel {
   file_size_bytes: number;
   file_size_display: string;
   quant_type: string;
-  downloaded_at: string;
-  sha256: string | null;
-  verified: boolean;
 }
 
-interface CatalogRec {
-  entry: {
-    name: string;
-    provider: string;
-    huggingface_id: string;
-    license: string;
-    total_params: number;
-    is_moe: boolean;
-    active_params: number | null;
-    num_experts: number | null;
-    specialization: string;
-    available_quants: Array<{
-      quant_type: string;
-      file_size_gb: number;
-      min_ram_gb: number;
-      quality_rating: number;
-    }>;
-  };
-  best_quant: {
-    quant_type: string;
-    file_size_gb: number;
-    min_ram_gb: number;
-    quality_rating: number;
-  };
-  fitness_score: number;
-  estimated_tok_per_sec: number;
-  reason: string;
+interface ChatMsg {
+  role: "user" | "assistant";
+  content: string;
+  model?: string;
 }
 
-interface DlProgress {
-  model_name: string;
-  file_index: number;
-  file_count: number;
-  bytes_downloaded: number;
-  total_bytes: number;
-  percent: number;
-  speed_mb_per_sec: number;
-  eta_seconds: number;
-  status: string | { Failed: string };
+type Tier = "fast" | "balanced" | "power";
+type RouteMode = "auto" | "fast" | "balanced" | "power";
+
+interface LoadedSlot {
+  tier: Tier;
+  sessionId: string;
+  name: string;
+  path: string;
 }
 
-type Priority = "speed" | "balanced" | "context";
-type ModelTab = "local" | "browse";
+const HISTORY_KEY = "flash-chat-history";
+const TIER_COLORS: Record<Tier, string> = { fast: "#34d399", balanced: "#5eead4", power: "#c084fc" };
+const TIER_LABELS: Record<Tier, string> = { fast: "Fast", balanced: "Balanced", power: "Max Power" };
+const MODE_LABELS: Record<RouteMode, string> = { auto: "Auto", fast: "Fast", balanced: "Balanced", power: "Max Power" };
 
-/* ── helpers ── */
-
-function fmtMb(mb: number): string {
-  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
-  return `${Math.round(mb)} MB`;
+function loadHistory(): ChatMsg[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return [];
 }
 
-function fmtNum(n: number, decimals = 1): string {
-  return n.toFixed(decimals);
+function saveHistory(msgs: ChatMsg[]) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(msgs.slice(-100)));
+  } catch {}
 }
 
-function fmtBytes(bytes: number): string {
-  if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
-  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
-  return `${(bytes / 1024).toFixed(0)} KB`;
+/** Simple heuristic to pick the best tier for a prompt. */
+function autoRoute(prompt: string, available: Tier[]): Tier {
+  if (available.length === 1) return available[0];
+  const lower = prompt.toLowerCase();
+  const words = lower.split(/\s+/).length;
+
+  const powerKeywords = /\b(prove|derive|analyze deeply|step by step|implement|debug|refactor|algorithm)\b/;
+  const hasCodeBlock = /```/.test(prompt);
+  const hasMath = /[=+\-*/^∑∫∂∇].*[=+\-*/^∑∫∂∇]/.test(prompt) || /\$.*\$/.test(prompt);
+
+  if ((powerKeywords.test(lower) || hasCodeBlock || hasMath) && available.includes("power")) {
+    return "power";
+  }
+
+  const balancedKeywords = /\b(explain|compare|write|summarize|describe|list|outline|review|translate)\b/;
+  if (balancedKeywords.test(lower) && available.includes("balanced")) {
+    return "balanced";
+  }
+
+  if (words < 20 && available.includes("fast")) {
+    return "fast";
+  }
+
+  // Default: best available in order balanced > fast > power
+  if (available.includes("balanced")) return "balanced";
+  if (available.includes("fast")) return "fast";
+  return available[0];
 }
 
-function fmtEta(secs: number): string {
-  if (secs < 60) return `${secs}s`;
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ${secs % 60}s`;
-  return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
-}
+export default function FlashInference() {
+  const [models, setModels] = useState<LocalModel[]>([]);
+  const [slots, setSlots] = useState<LoadedSlot[]>([]);
+  const [loadingTier, setLoadingTier] = useState<Tier | null>(null);
+  const [selectedPaths, setSelectedPaths] = useState<Record<Tier, string>>({ fast: "", balanced: "", power: "" });
+  const [mode, setMode] = useState<RouteMode>("auto");
+  const [messages, setMessages] = useState<ChatMsg[]>(loadHistory);
+  const [input, setInput] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [streamText, setStreamText] = useState("");
+  const [activeModel, setActiveModel] = useState("");
+  const [activeTier, setActiveTier] = useState<Tier | null>(null);
+  const [error, setError] = useState("");
+  const [hwRam, setHwRam] = useState(0);
+  const [hwCores, setHwCores] = useState(0);
+  const [tokenCount, setTokenCount] = useState(0);
+  const [genStartTime, setGenStartTime] = useState(0);
+  const [tokPerSec, setTokPerSec] = useState(0);
+  const [showLoader, setShowLoader] = useState(false);
+  const chatRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-function dlStatusLabel(status: DlProgress["status"]): string {
-  if (typeof status === "string") return status;
-  if (typeof status === "object" && "Failed" in status) return `Failed: ${status.Failed}`;
-  return "Unknown";
-}
+  // Init: load model list + hardware info
+  useEffect(() => {
+    flashListLocalModels().then((list: any[]) => {
+      const typed = list as LocalModel[];
+      setModels(typed);
+    }).catch(() => setModels([]));
+    flashDetectHardware().then((hw: any) => {
+      setHwRam(hw.total_ram_mb || 0);
+      setHwCores(hw.cpu_cores || 0);
+    }).catch(() => {});
+    // Clear stale sessions from previous navigation
+    flashClearSessions().catch(() => {});
+  }, []);
 
-/* ── component ── */
+  useEffect(() => { saveHistory(messages); }, [messages]);
 
-export default function FlashInference(): JSX.Element {
-  /* ─ hardware ─ */
-  const [hw, setHw] = useState<HwInfo | null>(null);
+  useEffect(() => {
+    const el = chatRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [streamText, messages]);
 
-  /* ─ model ─ */
-  const [modelPath, setModelPath] = useState("");
-  const [profile, setProfile] = useState<ModelProfile | null>(null);
-  const [estimate, setEstimate] = useState<PerfEstimate | null>(null);
-  const [priority, setPriority] = useState<Priority>("balanced");
-
-  /* ─ session ─ */
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  /* ─ chat ─ */
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const [draft, setDraft] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [streamingText, setStreamingText] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  /* ─ metrics ─ */
-  const [metrics, setMetrics] = useState<InferenceMetrics | null>(null);
-  const metricsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  /* ─ error ─ */
-  const [error, setError] = useState<string | null>(null);
-
-  /* ─ model library ─ */
-  const [modelTab, setModelTab] = useState<ModelTab>("browse");
-  const [localModels, setLocalModels] = useState<LocalModel[]>([]);
-  const [catalogRecs, setCatalogRecs] = useState<CatalogRec[]>([]);
-  const [catalogQuery, setCatalogQuery] = useState("");
-  const [diskSpace, setDiskSpace] = useState<number | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState<Record<string, DlProgress>>({});
-  const [expandedRec, setExpandedRec] = useState<string | null>(null);
-  const [deletingModel, setDeletingModel] = useState<string | null>(null);
-
-  /* ── detect hardware on mount ── */
+  // Token streaming listeners
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const info = await flashDetectHardware();
-        if (!cancelled) setHw(info);
-      } catch {
-        if (!cancelled) {
-          setHw({
-            total_ram_mb: 0,
-            available_ram_mb: 0,
-            cpu_cores: navigator.hardwareConcurrency || 0,
-            cpu_model: "Unknown",
-            ssd_type: "Unknown",
-            ssd_read_mb_per_sec: 0,
+    const unlisteners: (() => void)[] = [];
+
+    async function setup() {
+      const u1 = await listen("flash-token", (e: any) => {
+        if (cancelled) return;
+        const text = e.payload?.text || e.payload?.token || "";
+        if (text) {
+          setStreamText(prev => prev + text);
+          setTokenCount(c => {
+            const nc = c + 1;
+            setGenStartTime(start => {
+              if (start > 0) {
+                const el = (Date.now() - start) / 1000;
+                if (el > 0) setTokPerSec(Number((nc / el).toFixed(1)));
+              }
+              return start;
+            });
+            return nc;
           });
         }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+      });
+      if (cancelled) { u1(); return; }
+      unlisteners.push(u1);
 
-  /* ── load catalog recommendations ── */
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const recs = await flashCatalogRecommend();
-        if (!cancelled && Array.isArray(recs)) setCatalogRecs(recs);
-      } catch { /* non-critical */ }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  /* ── load local models + disk space ── */
-  const refreshLocalModels = useCallback(async () => {
-    try {
-      const [models, space] = await Promise.all([
-        flashListLocalModels(),
-        flashAvailableDiskSpace(),
-      ]);
-      if (Array.isArray(models)) setLocalModels(models);
-      if (typeof space === "number") setDiskSpace(space);
-    } catch { /* non-critical */ }
-  }, []);
-
-  useEffect(() => {
-    refreshLocalModels();
-  }, [refreshLocalModels]);
-
-  /* ── listen for download progress events ── */
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    (async () => {
-      try {
-        const eventMod = await import("@tauri-apps/api/event");
-        unlisten = await eventMod.listen<DlProgress>("flash-download-progress", (event) => {
-          const p = event.payload;
-          setDownloadProgress((prev) => ({ ...prev, [p.model_name]: p }));
-          // When complete, refresh local models list
-          const status = typeof p.status === "string" ? p.status : "";
-          if (status === "Complete") {
-            setTimeout(() => refreshLocalModels(), 500);
+      const u2 = await listen("flash-done", () => {
+        if (cancelled) return;
+        setStreamText(text => {
+          if (text) {
+            setActiveModel(name => {
+              setActiveTier(tier => {
+                setMessages(prev => [...prev, { role: "assistant", content: text, model: name || undefined }]);
+                return tier;
+              });
+              return name;
+            });
           }
+          return "";
         });
-      } catch { /* not in Tauri */ }
-    })();
-    return () => { unlisten?.(); };
-  }, [refreshLocalModels]);
+        setGenerating(false);
+      });
+      if (cancelled) { u2(); return; }
+      unlisteners.push(u2);
 
-  /* ── scroll chat to bottom ── */
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingText]);
-
-  /* ── metrics polling ── */
-  useEffect(() => {
-    if (metricsIntervalRef.current) {
-      clearInterval(metricsIntervalRef.current);
-      metricsIntervalRef.current = null;
+      const u3 = await listen("flash-error", (e: any) => {
+        if (cancelled) return;
+        setError(e.payload?.message || "Generation failed");
+        setGenerating(false);
+        setStreamText("");
+      });
+      if (cancelled) { u3(); return; }
+      unlisteners.push(u3);
     }
-    if (!sessionId) { setMetrics(null); return; }
-    const poll = async () => {
-      try { setMetrics(await flashGetMetrics(sessionId)); } catch { /* */ }
-    };
-    poll();
-    metricsIntervalRef.current = setInterval(poll, 2000);
+    setup();
+
     return () => {
-      if (metricsIntervalRef.current) {
-        clearInterval(metricsIntervalRef.current);
-        metricsIntervalRef.current = null;
-      }
+      cancelled = true;
+      unlisteners.forEach(fn => fn());
     };
-  }, [sessionId]);
-
-  /* ── streaming events ── */
-  useEffect(() => {
-    if (!sessionId) return;
-    let unlistenToken: (() => void) | undefined;
-    let unlistenDone: (() => void) | undefined;
-    let unlistenError: (() => void) | undefined;
-    (async () => {
-      try {
-        const eventMod = await import("@tauri-apps/api/event");
-        unlistenToken = await eventMod.listen<{ text: string }>("flash-token", (event) => {
-          setStreamingText((prev) => prev + event.payload.text);
-        });
-        unlistenDone = await eventMod.listen<{ stats?: Record<string, unknown> }>("flash-done", () => {
-          setIsGenerating(false);
-          setStreamingText((prev) => {
-            if (prev) setMessages((msgs) => [...msgs, { role: "assistant", content: prev }]);
-            return "";
-          });
-        });
-        unlistenError = await eventMod.listen<{ message: string }>("flash-error", (event) => {
-          setError(event.payload.message);
-          setIsGenerating(false);
-          setStreamingText((prev) => {
-            if (prev) setMessages((msgs) => [...msgs, { role: "assistant", content: prev }]);
-            return "";
-          });
-        });
-      } catch { /* not in Tauri */ }
-    })();
-    return () => { unlistenToken?.(); unlistenDone?.(); unlistenError?.(); };
-  }, [sessionId]);
-
-  /* ── profile model when path changes ── */
-  const profileModel = useCallback(async (path: string) => {
-    if (!path.trim()) { setProfile(null); setEstimate(null); return; }
-    try {
-      setError(null);
-      const [prof, est] = await Promise.all([
-        flashProfileModel(path),
-        flashEstimatePerformance(path),
-      ]);
-      setProfile(prof);
-      setEstimate(est);
-    } catch (err) {
-      setError(`Failed to profile model: ${err}`);
-      setProfile(null);
-      setEstimate(null);
-    }
   }, []);
 
-  /* ── browse for GGUF file ── */
-  const handleBrowse = useCallback(async () => {
+  const handleLoadSlot = useCallback(async (tier: Tier) => {
+    const path = selectedPaths[tier];
+    if (!path || loadingTier) return;
+    setLoadingTier(tier);
+    setError("");
     try {
-      const importer = new Function("specifier", "return import(specifier)") as (
-        specifier: string,
-      ) => Promise<{
-        open: (options: {
-          multiple?: boolean;
-          filters?: Array<{ name: string; extensions: string[] }>;
-        }) => Promise<string | string[] | null>;
-      }>;
-      const dialogMod = await importer("@tauri-apps/plugin-dialog");
-      const selected = await dialogMod.open({
-        multiple: false,
-        filters: [{ name: "GGUF Models", extensions: ["gguf"] }],
-      });
-      const path = Array.isArray(selected) ? selected[0] : selected;
-      if (path) { setModelPath(path); profileModel(path); }
-    } catch {
-      setError("File dialog unavailable — please type the model path manually");
-    }
-  }, [profileModel]);
-
-  /* ── select a local model ── */
-  const selectLocalModel = useCallback((model: LocalModel) => {
-    setModelPath(model.file_path);
-    profileModel(model.file_path);
-  }, [profileModel]);
-
-  /* ── download a model from catalog ── */
-  const handleDownload = useCallback(async (rec: CatalogRec) => {
-    const hfId = rec.entry.huggingface_id;
-    const quant = rec.best_quant.quant_type;
-    // Construct a plausible filename from the catalog data
-    const safeName = rec.entry.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-    const filename = `${safeName}-${quant}.gguf`;
-
-    setDownloadProgress((prev) => ({
-      ...prev,
-      [filename]: {
-        model_name: filename,
-        file_index: 1,
-        file_count: 1,
-        bytes_downloaded: 0,
-        total_bytes: Math.round(rec.best_quant.file_size_gb * 1_073_741_824),
-        percent: 0,
-        speed_mb_per_sec: 0,
-        eta_seconds: 0,
-        status: "Starting",
-      },
-    }));
-
-    try {
-      await flashDownloadModel(hfId, filename);
-      refreshLocalModels();
-    } catch (err) {
-      setError(`Download failed: ${err}`);
-      setDownloadProgress((prev) => {
-        const next = { ...prev };
-        if (next[filename]) {
-          next[filename] = { ...next[filename], status: { Failed: String(err) } };
-        }
-        return next;
-      });
-    }
-  }, [refreshLocalModels]);
-
-  /* ── delete a local model ── */
-  const handleDelete = useCallback(async (filename: string) => {
-    setDeletingModel(filename);
-    try {
-      await flashDeleteLocalModel(filename);
-      await refreshLocalModels();
-    } catch (err) {
-      setError(`Delete failed: ${err}`);
-    } finally {
-      setDeletingModel(null);
-    }
-  }, [refreshLocalModels]);
-
-  /* ── catalog search ── */
-  const handleCatalogSearch = useCallback(async () => {
-    if (!catalogQuery.trim()) {
-      try {
-        const recs = await flashCatalogRecommend();
-        if (Array.isArray(recs)) setCatalogRecs(recs);
-      } catch { /* */ }
-      return;
-    }
-    try {
-      const results = await flashCatalogSearch(catalogQuery);
-      if (Array.isArray(results)) {
-        // Wrap search results into recommendation-like shape
-        const asRecs: CatalogRec[] = results.map((entry) => ({
-          entry,
-          best_quant: entry.available_quants?.[0] ?? {
-            quant_type: "Q4_K_M",
-            file_size_gb: 0,
-            min_ram_gb: 0,
-            quality_rating: 0,
-          },
-          fitness_score: 0,
-          estimated_tok_per_sec: 0,
-          reason: "",
-        }));
-        setCatalogRecs(asRecs);
+      // If this tier already has a model, unload it first
+      const existing = slots.find(s => s.tier === tier);
+      if (existing) {
+        try { await flashUnloadSession(existing.sessionId); } catch {}
+        setSlots(prev => prev.filter(s => s.tier !== tier));
       }
-    } catch (err) {
-      setError(`Search failed: ${err}`);
-    }
-  }, [catalogQuery]);
+      const sid = await flashCreateSession(path, 2048, tier === "fast" ? "speed" : "balanced");
+      const model = models.find(m => m.file_path === path);
+      const name = model?.name || path.split("/").pop() || "Model";
+      setSlots(prev => [...prev.filter(s => s.tier !== tier), { tier, sessionId: sid, name, path }]);
+      inputRef.current?.focus();
+    } catch (e: any) { setError(typeof e === "string" ? e : e?.message || "Failed to load"); }
+    setLoadingTier(null);
+  }, [selectedPaths, loadingTier, models, slots]);
 
-  /* ── load model ── */
-  const handleLoad = useCallback(async () => {
-    if (!modelPath.trim()) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const contextLen = profile?.max_context_length ?? 4096;
-      const id = await flashCreateSession(modelPath, contextLen, priority);
-      setSessionId(id);
-    } catch (err) {
-      setError(`Failed to load model: ${err}`);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [modelPath, priority, profile]);
+  const handleUnloadSlot = useCallback(async (tier: Tier) => {
+    const slot = slots.find(s => s.tier === tier);
+    if (!slot) return;
+    try { await flashUnloadSession(slot.sessionId); } catch {}
+    setSlots(prev => prev.filter(s => s.tier !== tier));
+  }, [slots]);
 
-  /* ── unload model ── */
-  const handleUnload = useCallback(async () => {
-    if (!sessionId) return;
-    try {
-      await flashUnloadSession(sessionId);
-      setSessionId(null);
-      setMetrics(null);
-      setMessages([]);
-      setStreamingText("");
-    } catch (err) {
-      setError(`Failed to unload: ${err}`);
-    }
-  }, [sessionId]);
-
-  /* ── send message ── */
   const handleSend = useCallback(async () => {
-    const text = draft.trim();
-    if (!text || !sessionId || isGenerating) return;
-    setDraft("");
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
-    setIsGenerating(true);
-    setStreamingText("");
-    try {
-      const result = await flashGenerate(sessionId, text);
-      if (result && typeof result === "object" && result.text) {
-        setMessages((prev) => [...prev, { role: "assistant", content: result.text }]);
-        setIsGenerating(false);
-      } else if (typeof result === "string" && result) {
-        setMessages((prev) => [...prev, { role: "assistant", content: result }]);
-        setIsGenerating(false);
-      }
-    } catch (err) {
-      if (streamingText) {
-        setMessages((prev) => [...prev, { role: "assistant", content: streamingText }]);
-        setStreamingText("");
-      }
-      setError(`Generation failed: ${err}`);
-      setIsGenerating(false);
+    if (!input.trim() || slots.length === 0 || generating) return;
+    const userMsg = input.trim();
+
+    // Determine which model to use
+    const availableTiers = slots.map(s => s.tier);
+    let targetTier: Tier;
+    if (mode === "auto") {
+      targetTier = autoRoute(userMsg, availableTiers);
+    } else {
+      targetTier = availableTiers.includes(mode as Tier) ? (mode as Tier) : availableTiers[0];
     }
-  }, [draft, sessionId, isGenerating, streamingText]);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
-    },
-    [handleSend],
-  );
+    const slot = slots.find(s => s.tier === targetTier)!;
+    setActiveModel(slot.name);
+    setActiveTier(targetTier);
+    setInput("");
+    setMessages(prev => [...prev, { role: "user", content: userMsg }]);
+    setGenerating(true); setStreamText(""); setTokenCount(0); setGenStartTime(Date.now()); setTokPerSec(0); setError("");
+    try { await flashGenerate(slot.sessionId, userMsg, 19999); }
+    catch (e: any) { setError(typeof e === "string" ? e : e?.message || "Generation failed"); setGenerating(false); }
+  }, [input, slots, generating, mode]);
 
-  const isDesktop = hasDesktopRuntime();
+  const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } };
+  const clearHistory = () => { setMessages([]); localStorage.removeItem(HISTORY_KEY); };
 
-  // Active downloads
-  const activeDownloads = Object.values(downloadProgress).filter(
-    (p) => typeof p.status === "string" && (p.status === "Starting" || p.status === "Downloading" || p.status === "Verifying"),
-  );
+  /** Detect if the last assistant message looks cut off mid-sentence. */
+  const lastMsgIncomplete = (() => {
+    if (generating || messages.length === 0) return false;
+    const last = messages[messages.length - 1];
+    if (last.role !== "assistant") return false;
+    const t = last.content.trimEnd();
+    if (!t) return false;
+    const lastChar = t[t.length - 1];
+    // Ends mid-sentence: no terminal punctuation and not a code fence
+    return !/[.!?:;\n`")\]]$/.test(lastChar);
+  })();
 
-  /* ── render ── */
+  const handleContinue = useCallback(async () => {
+    if (slots.length === 0 || generating) return;
+    const availableTiers = slots.map(s => s.tier);
+    // Use the same tier as the last response, or fall back to auto
+    const targetTier = activeTier && availableTiers.includes(activeTier) ? activeTier : availableTiers[0];
+    const slot = slots.find(s => s.tier === targetTier)!;
+    setActiveModel(slot.name);
+    setActiveTier(targetTier);
+    setMessages(prev => [...prev, { role: "user", content: "Continue" }]);
+    setGenerating(true); setStreamText(""); setTokenCount(0); setGenStartTime(Date.now()); setTokPerSec(0); setError("");
+    try { await flashGenerate(slot.sessionId, "Continue", 19999); }
+    catch (e: any) { setError(typeof e === "string" ? e : e?.message || "Generation failed"); setGenerating(false); }
+  }, [slots, generating, activeTier]);
+  const ramGB = (hwRam / 1024).toFixed(1);
+  const hasAnyModel = slots.length > 0;
+
+  // Dropdown style shared across all selectors
+  const selectStyle = { background:"#0d1117", color:"#e5e7eb", border:"1px solid #1e3a5f", borderRadius:"6px", padding:"4px 8px", fontSize:"12px", outline:"none" };
+
   return (
-    <section className="flash-inference">
-      {/* Header */}
-      <div className="flash-inference__header">
-        <Zap size={28} />
-        <h1>Flash Inference</h1>
-      </div>
-      <p className="flash-inference__subtitle">
-        Run AI models locally with automatic hardware-aware configuration
-      </p>
+    <div style={{ display:"flex", flexDirection:"column", flex:"1 1 auto", minHeight:0, width:"100%", overflow:"hidden", background:"#080e1a" }}>
+      {/* Header bar */}
+      <div style={{ flexShrink:0, minHeight:"48px", display:"flex", alignItems:"center", gap:"10px", padding:"0 16px", background:"#0a1628", borderBottom:"1px solid #1e3a5f" }}>
+        <span style={{ color:"#5eead4", fontSize:"14px", fontWeight:600, whiteSpace:"nowrap" }}>⚡ Flash Inference</span>
 
-      {/* Error banner */}
+        {/* Loaded model pills */}
+        {slots.map(slot => (
+          <span key={slot.tier} style={{ display:"inline-flex", alignItems:"center", gap:"6px", background:"#0d1117", border:`1px solid ${TIER_COLORS[slot.tier]}`, borderRadius:"12px", padding:"3px 10px", fontSize:"11px", color: TIER_COLORS[slot.tier] }}>
+            <span style={{ fontWeight:600, textTransform:"uppercase", fontSize:"9px", opacity:0.7 }}>{TIER_LABELS[slot.tier]}</span>
+            <span style={{ color:"#e5e7eb", maxWidth:"140px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{slot.name}</span>
+            <button onClick={() => handleUnloadSlot(slot.tier)} style={{ background:"none", border:"none", color:"#f87171", cursor:"pointer", fontSize:"12px", padding:0, lineHeight:1 }}>✕</button>
+          </span>
+        ))}
+
+        {/* Load more button */}
+        {slots.length < 3 && (
+          <button onClick={() => setShowLoader(!showLoader)} style={{ background:"transparent", border:"1px solid #5eead4", color:"#5eead4", padding:"4px 12px", borderRadius:"6px", fontSize:"11px", cursor:"pointer", whiteSpace:"nowrap" }}>
+            {showLoader ? "Cancel" : "+ Load Model"}
+          </button>
+        )}
+
+        {/* Mode selector */}
+        {hasAnyModel && (
+          <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:"2px", background:"#0d1117", borderRadius:"6px", border:"1px solid #1e3a5f", padding:"2px" }}>
+            {(["auto", "fast", "balanced", "power"] as RouteMode[]).map(m => {
+              const isAvailable = m === "auto" || slots.some(s => s.tier === m);
+              const isActive = mode === m;
+              return (
+                <button key={m} onClick={() => isAvailable && setMode(m)} disabled={!isAvailable} style={{
+                  background: isActive ? "#1e3a5f" : "transparent",
+                  border: "none",
+                  color: !isAvailable ? "#374151" : isActive ? "#5eead4" : "#9ca3af",
+                  padding: "3px 10px",
+                  borderRadius: "4px",
+                  fontSize: "11px",
+                  fontWeight: isActive ? 600 : 400,
+                  cursor: isAvailable ? "pointer" : "default",
+                  whiteSpace: "nowrap",
+                }}>{MODE_LABELS[m]}</button>
+              );
+            })}
+          </div>
+        )}
+
+        {!hasAnyModel && <span style={{ marginLeft:"auto" }}/>}
+        <span style={{ fontSize:"11px", color:"#6b7280", whiteSpace:"nowrap" }}>{ramGB} GB | {hwCores} cores</span>
+      </div>
+
+      {/* Model loader panel */}
+      {showLoader && (
+        <div style={{ flexShrink:0, padding:"10px 16px", background:"#060d18", borderBottom:"1px solid #1e3a5f", display:"flex", gap:"12px", alignItems:"center", flexWrap:"wrap" }}>
+          {(["fast", "balanced", "power"] as Tier[]).filter(t => !slots.some(s => s.tier === t)).map(tier => (
+            <div key={tier} style={{ display:"flex", alignItems:"center", gap:"6px" }}>
+              <span style={{ color: TIER_COLORS[tier], fontSize:"11px", fontWeight:600, width:"60px" }}>{TIER_LABELS[tier]}</span>
+              <select value={selectedPaths[tier]} onChange={e => setSelectedPaths(prev => ({ ...prev, [tier]: e.target.value }))} style={{ ...selectStyle, width:"280px" }}>
+                <option value="">Select model...</option>
+                {models.map(m => <option key={m.file_path} value={m.file_path}>{m.name} ({m.file_size_display})</option>)}
+              </select>
+              <button onClick={() => handleLoadSlot(tier)} disabled={!selectedPaths[tier] || loadingTier !== null} style={{
+                background: "transparent",
+                border: `1px solid ${TIER_COLORS[tier]}`,
+                color: TIER_COLORS[tier],
+                padding: "4px 12px",
+                borderRadius: "6px",
+                fontSize: "11px",
+                cursor: (!selectedPaths[tier] || loadingTier) ? "not-allowed" : "pointer",
+                opacity: (!selectedPaths[tier] || loadingTier) ? 0.4 : 1,
+                whiteSpace: "nowrap",
+              }}>{loadingTier === tier ? "Loading..." : "Load"}</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Metrics bar */}
+      {hasAnyModel && (
+        <div style={{ flexShrink:0, height:"28px", display:"flex", alignItems:"center", gap:"20px", padding:"0 16px", background:"#060d18", borderBottom:"1px solid #1e3a5f", fontSize:"11px" }}>
+          <span style={{ color:"#6b7280" }}>tok/s <span style={{ color:"#5eead4", fontWeight:500 }}>{tokPerSec}</span></span>
+          <span style={{ color:"#6b7280" }}>tokens <span style={{ color:"#5eead4", fontWeight:500 }}>{tokenCount}</span></span>
+          {activeTier && activeModel && (
+            <span style={{ color:"#6b7280" }}>
+              <span style={{ color: TIER_COLORS[activeTier], fontWeight:500 }}>{TIER_LABELS[activeTier]}</span>
+              {" "}<span style={{ color:"#9ca3af" }}>{activeModel}</span>
+            </span>
+          )}
+          <span style={{ color:"#6b7280" }}>mode <span style={{ color:"#5eead4", fontWeight:500 }}>{MODE_LABELS[mode]}</span></span>
+          {messages.length > 0 && <button onClick={clearHistory} style={{ marginLeft:"auto", background:"none", border:"none", color:"#4b5563", fontSize:"10px", cursor:"pointer" }}>Clear history</button>}
+        </div>
+      )}
+
+      {/* Chat area */}
+      <div ref={chatRef} style={{ flex:1, minHeight:0, overflowY:"auto", padding:"16px", display:"flex", flexDirection:"column", gap:"12px" }}>
+        {!hasAnyModel && messages.length === 0 && (
+          <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", color:"#6b7280", fontSize:"14px", gap:"12px" }}>
+            <span style={{ fontSize:"40px", opacity:0.3 }}>⚡</span>
+            <span>Load models to start chatting.</span>
+            <span style={{ fontSize:"12px", color:"#4b5563" }}>Load a Fast model for quick answers, Balanced for medium tasks, Max Power for deep reasoning.</span>
+          </div>
+        )}
+        {hasAnyModel && messages.length === 0 && !generating && (
+          <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", color:"#6b7280", fontSize:"14px", gap:"12px" }}>
+            <span style={{ fontSize:"40px", opacity:0.3 }}>⚡</span>
+            <span>{slots.length === 1 ? "Model loaded." : `${slots.length} models loaded.`} Type a message to begin.</span>
+            {slots.length > 1 && mode === "auto" && <span style={{ fontSize:"12px", color:"#4b5563" }}>Auto mode routes to the best model for each question.</span>}
+          </div>
+        )}
+        {messages.map((msg, i) => (
+          <div key={i} style={{ alignSelf:msg.role==="user"?"flex-end":"flex-start", maxWidth:"80%", padding:"10px 14px", borderRadius:msg.role==="user"?"12px 12px 2px 12px":"12px 12px 12px 2px", background:msg.role==="user"?"#1e3a5f":"#1a1f2e", color:"#e5e7eb", fontSize:"13px", lineHeight:1.6, whiteSpace:"pre-wrap", wordBreak:"break-word" }}>
+            {msg.role === "assistant" && msg.model && <div style={{ fontSize:"10px", color:"#5eead4", marginBottom:"4px" }}>{msg.model}</div>}
+            {msg.content}
+          </div>
+        ))}
+        {generating && streamText && (
+          <div style={{ alignSelf:"flex-start", maxWidth:"80%", padding:"10px 14px", borderRadius:"12px 12px 12px 2px", background:"#1a1f2e", color:"#e5e7eb", fontSize:"13px", lineHeight:1.6, whiteSpace:"pre-wrap", wordBreak:"break-word" }}>
+            {activeTier && <div style={{ fontSize:"10px", color: TIER_COLORS[activeTier], marginBottom:"4px" }}>{TIER_LABELS[activeTier]} {activeModel}</div>}
+            {streamText}<span style={{ display:"inline-block", width:"6px", height:"14px", background:"#5eead4", marginLeft:"2px", animation:"blink 1s step-end infinite" }}/>
+          </div>
+        )}
+        {lastMsgIncomplete && (
+          <div style={{ alignSelf:"flex-start" }}>
+            <button onClick={handleContinue} style={{ background:"transparent", border:"1px solid #5eead4", color:"#5eead4", padding:"6px 16px", borderRadius:"8px", fontSize:"12px", cursor:"pointer" }}>Continue ▶</button>
+          </div>
+        )}
+        {generating && !streamText && (
+          <div style={{ alignSelf:"flex-start", padding:"10px 14px", borderRadius:"12px 12px 12px 2px", background:"#1a1f2e", color:"#6b7280", fontSize:"13px" }}>
+            {activeTier && <span style={{ color: TIER_COLORS[activeTier], marginRight:"6px" }}>{TIER_LABELS[activeTier]}</span>}
+            Thinking...
+          </div>
+        )}
+      </div>
+
+      {/* Error bar */}
       {error && (
-        <div className="flash-error">
-          <AlertTriangle size={16} />
+        <div style={{ flexShrink:0, padding:"8px 16px", background:"#2d1b1b", borderTop:"1px solid #5f2020", color:"#f87171", fontSize:"12px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <span>{error}</span>
-          <button className="flash-error__dismiss" onClick={() => setError(null)}>
-            <X size={14} />
-          </button>
+          <button onClick={() => setError("")} style={{ background:"none", border:"none", color:"#f87171", cursor:"pointer", fontSize:"14px" }}>✕</button>
         </div>
       )}
 
-      {/* Hardware panel */}
-      <div className="flash-hw">
-        <div className="flash-hw__item">
-          <span className="flash-hw__label">RAM</span>
-          <span className="flash-hw__value">
-            <MemoryStick size={14} style={{ marginRight: 4, verticalAlign: "middle" }} />
-            {hw ? fmtMb(hw.total_ram_mb) : "Detecting..."}
-          </span>
-        </div>
-        <div className="flash-hw__divider" />
-        <div className="flash-hw__item">
-          <span className="flash-hw__label">CPU</span>
-          <span className="flash-hw__value">
-            <Cpu size={14} style={{ marginRight: 4, verticalAlign: "middle" }} />
-            {hw ? `${hw.cpu_cores} cores` : "..."}
-          </span>
-        </div>
-        <div className="flash-hw__divider" />
-        <div className="flash-hw__item">
-          <span className="flash-hw__label">Storage</span>
-          <span className="flash-hw__value">
-            <HardDrive size={14} style={{ marginRight: 4, verticalAlign: "middle" }} />
-            {hw ? hw.ssd_type : "..."}
-          </span>
-        </div>
-        <div className="flash-hw__divider" />
-        <div className="flash-hw__item">
-          <span className="flash-hw__label">Available for inference</span>
-          <span className="flash-hw__value">
-            {hw ? fmtMb(hw.available_ram_mb) : "..."}
-          </span>
-        </div>
-        {diskSpace !== null && (
-          <>
-            <div className="flash-hw__divider" />
-            <div className="flash-hw__item">
-              <span className="flash-hw__label">Disk free</span>
-              <span className="flash-hw__value">{fmtBytes(diskSpace)}</span>
-            </div>
-          </>
-        )}
+      {/* Input bar */}
+      <div style={{ flexShrink:0, height:"56px", display:"flex", alignItems:"center", gap:"8px", padding:"0 16px", background:"#0a1628", borderTop:"1px solid #1e3a5f" }}>
+        <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} disabled={!hasAnyModel || generating} placeholder={!hasAnyModel ? "Load a model first..." : generating ? "Generating..." : mode === "auto" ? "Type a message (auto-routed)..." : `Type a message (${MODE_LABELS[mode]})...`} style={{ flex:1, background:"#0d1117", border:"1px solid #1e3a5f", borderRadius:"8px", color:"#e5e7eb", padding:"10px 14px", fontSize:"13px", outline:"none", opacity:!hasAnyModel?0.5:1 }}/>
+        <button onClick={handleSend} disabled={!hasAnyModel || generating || !input.trim()} style={{ background:(!hasAnyModel||generating||!input.trim())?"#1e3a5f":"#5eead4", color:(!hasAnyModel||generating||!input.trim())?"#6b7280":"#0d1117", border:"none", padding:"10px 20px", borderRadius:"8px", fontSize:"13px", fontWeight:500, cursor:(!hasAnyModel||generating||!input.trim())?"not-allowed":"pointer", whiteSpace:"nowrap" }}>{generating ? "Stop" : "Send"}</button>
       </div>
-
-      {/* Active Downloads */}
-      {activeDownloads.length > 0 && (
-        <div className="flash-dl-active">
-          {activeDownloads.map((dl) => (
-            <div key={dl.model_name} className="flash-dl-item">
-              <div className="flash-dl-item__header">
-                <Loader size={14} className="flash-dl-item__spinner" />
-                <span className="flash-dl-item__name">{dl.model_name}</span>
-                <span className="flash-dl-item__status">{dlStatusLabel(dl.status)}</span>
-                {dl.file_count > 1 && (
-                  <span className="flash-dl-item__shard">
-                    Part {dl.file_index}/{dl.file_count}
-                  </span>
-                )}
-              </div>
-              <div className="flash-dl-item__bar-bg">
-                <div
-                  className="flash-dl-item__bar-fill"
-                  style={{ width: `${Math.min(dl.percent, 100)}%` }}
-                />
-              </div>
-              <div className="flash-dl-item__stats">
-                <span>{dl.percent.toFixed(1)}%</span>
-                <span>{fmtBytes(dl.bytes_downloaded)} / {fmtBytes(dl.total_bytes)}</span>
-                <span>{dl.speed_mb_per_sec.toFixed(1)} MB/s</span>
-                {dl.eta_seconds > 0 && <span>ETA: {fmtEta(dl.eta_seconds)}</span>}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Model Library / Browser */}
-      <div className="flash-model">
-        <div className="flash-model__tabs">
-          <button
-            className={`flash-model__tab${modelTab === "browse" ? " flash-model__tab--active" : ""}`}
-            onClick={() => setModelTab("browse")}
-          >
-            <Search size={14} /> Browse Models
-          </button>
-          <button
-            className={`flash-model__tab${modelTab === "local" ? " flash-model__tab--active" : ""}`}
-            onClick={() => { setModelTab("local"); refreshLocalModels(); }}
-          >
-            <Package size={14} /> My Models
-            {localModels.length > 0 && (
-              <span className="flash-model__tab-badge">{localModels.length}</span>
-            )}
-          </button>
-        </div>
-
-        {/* Browse tab: catalog recommendations + search */}
-        {modelTab === "browse" && (
-          <div className="flash-model__browse">
-            <div className="flash-model__search-row">
-              <input
-                className="flash-model__path-input"
-                type="text"
-                placeholder="Search models (e.g. Llama, Qwen, code, vision)..."
-                value={catalogQuery}
-                onChange={(e) => setCatalogQuery(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleCatalogSearch(); }}
-              />
-              <button className="flash-model__browse-btn" onClick={handleCatalogSearch}>
-                <Search size={16} /> Search
-              </button>
-            </div>
-
-            {catalogRecs.length === 0 && (
-              <div className="flash-model__empty">No models found. Try a different search.</div>
-            )}
-
-            <div className="flash-catalog-list">
-              {catalogRecs.slice(0, 20).map((rec) => {
-                const key = `${rec.entry.huggingface_id}-${rec.best_quant.quant_type}`;
-                const isExpanded = expandedRec === key;
-                const dlState = Object.values(downloadProgress).find(
-                  (p) => p.model_name.includes(rec.entry.name.replace(/[^a-zA-Z0-9._-]/g, "-")),
-                );
-                const isDownloading = dlState && typeof dlState.status === "string" &&
-                  (dlState.status === "Starting" || dlState.status === "Downloading");
-                const isDownloaded = localModels.some((m) =>
-                  m.name.includes(rec.entry.name.replace(/[^a-zA-Z0-9._-]/g, "-")),
-                );
-
-                return (
-                  <div key={key} className="flash-catalog-card">
-                    <div
-                      className="flash-catalog-card__header"
-                      onClick={() => setExpandedRec(isExpanded ? null : key)}
-                    >
-                      <div className="flash-catalog-card__info">
-                        <span className="flash-catalog-card__name">{rec.entry.name}</span>
-                        <span className="flash-catalog-card__meta">
-                          {rec.entry.provider} &middot; {rec.best_quant.quant_type} &middot;{" "}
-                          {rec.best_quant.file_size_gb.toFixed(1)} GB &middot;{" "}
-                          {rec.entry.license}
-                        </span>
-                      </div>
-                      <div className="flash-catalog-card__actions">
-                        {rec.estimated_tok_per_sec > 0 && (
-                          <span className="flash-catalog-card__speed">
-                            ~{fmtNum(rec.estimated_tok_per_sec)} tok/s
-                          </span>
-                        )}
-                        {isDownloaded ? (
-                          <span className="flash-catalog-card__done">
-                            <Check size={14} /> Downloaded
-                          </span>
-                        ) : isDownloading ? (
-                          <span className="flash-catalog-card__downloading">
-                            <Loader size={14} className="flash-dl-item__spinner" /> Downloading...
-                          </span>
-                        ) : (
-                          <button
-                            className="flash-catalog-card__dl-btn"
-                            onClick={(e) => { e.stopPropagation(); handleDownload(rec); }}
-                          >
-                            <Download size={14} /> Download
-                          </button>
-                        )}
-                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                      </div>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="flash-catalog-card__details">
-                        <div className="flash-model__info">
-                          <div className="flash-model__info-item">
-                            <span className="flash-model__info-label">Parameters</span>
-                            <span className="flash-model__info-value">
-                              {(rec.entry.total_params / 1e9).toFixed(1)}B
-                            </span>
-                          </div>
-                          {rec.entry.is_moe && (
-                            <div className="flash-model__info-item">
-                              <span className="flash-model__info-label">MoE Experts</span>
-                              <span className="flash-model__info-value">
-                                {rec.entry.num_experts ?? "?"}
-                              </span>
-                            </div>
-                          )}
-                          {rec.entry.active_params && (
-                            <div className="flash-model__info-item">
-                              <span className="flash-model__info-label">Active Params</span>
-                              <span className="flash-model__info-value">
-                                {(rec.entry.active_params / 1e9).toFixed(1)}B
-                              </span>
-                            </div>
-                          )}
-                          <div className="flash-model__info-item">
-                            <span className="flash-model__info-label">Min RAM</span>
-                            <span className="flash-model__info-value">
-                              {rec.best_quant.min_ram_gb.toFixed(1)} GB
-                            </span>
-                          </div>
-                          <div className="flash-model__info-item">
-                            <span className="flash-model__info-label">Quality</span>
-                            <span className="flash-model__info-value">
-                              {(rec.best_quant.quality_rating * 100).toFixed(0)}%
-                            </span>
-                          </div>
-                          <div className="flash-model__info-item">
-                            <span className="flash-model__info-label">Specialization</span>
-                            <span className="flash-model__info-value">
-                              {rec.entry.specialization}
-                            </span>
-                          </div>
-                          <div className="flash-model__info-item">
-                            <span className="flash-model__info-label">HuggingFace</span>
-                            <span className="flash-model__info-value" style={{ fontSize: "0.75rem" }}>
-                              {rec.entry.huggingface_id}
-                            </span>
-                          </div>
-                        </div>
-                        {rec.reason && (
-                          <div className="flash-catalog-card__reason">{rec.reason}</div>
-                        )}
-                        {/* Quant variants */}
-                        {rec.entry.available_quants.length > 1 && (
-                          <div className="flash-catalog-card__quants">
-                            <span className="flash-model__info-label" style={{ marginBottom: 4 }}>
-                              Available quantizations:
-                            </span>
-                            <div className="flash-catalog-card__quant-list">
-                              {rec.entry.available_quants.map((q) => (
-                                <span
-                                  key={q.quant_type}
-                                  className={`flash-catalog-card__quant-chip${
-                                    q.quant_type === rec.best_quant.quant_type
-                                      ? " flash-catalog-card__quant-chip--best"
-                                      : ""
-                                  }`}
-                                >
-                                  {q.quant_type} ({q.file_size_gb.toFixed(1)}GB)
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Local tab: downloaded models */}
-        {modelTab === "local" && (
-          <div className="flash-model__local">
-            {localModels.length === 0 ? (
-              <div className="flash-model__empty">
-                No downloaded models. Browse the catalog to download one.
-              </div>
-            ) : (
-              <div className="flash-local-list">
-                {localModels.map((model) => (
-                  <div
-                    key={model.name}
-                    className={`flash-local-card${
-                      modelPath === model.file_path ? " flash-local-card--selected" : ""
-                    }`}
-                  >
-                    <div
-                      className="flash-local-card__info"
-                      onClick={() => selectLocalModel(model)}
-                    >
-                      <span className="flash-local-card__name">{model.name}</span>
-                      <span className="flash-local-card__meta">
-                        {model.file_size_display} &middot; {model.quant_type}
-                        {model.downloaded_at && (
-                          <> &middot; {new Date(model.downloaded_at).toLocaleDateString()}</>
-                        )}
-                      </span>
-                    </div>
-                    <div className="flash-local-card__actions">
-                      <button
-                        className="flash-local-card__select-btn"
-                        onClick={() => selectLocalModel(model)}
-                        disabled={!!sessionId}
-                      >
-                        <Zap size={14} /> Use
-                      </button>
-                      <button
-                        className="flash-local-card__delete-btn"
-                        onClick={() => handleDelete(model.name)}
-                        disabled={deletingModel === model.name || modelPath === model.file_path}
-                      >
-                        {deletingModel === model.name ? (
-                          <Loader size={14} className="flash-dl-item__spinner" />
-                        ) : (
-                          <Trash2 size={14} />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Model Selection & Config (when a model is selected) */}
-      {modelPath && (
-        <div className="flash-model">
-          <h3 className="flash-model__section-label">Selected Model</h3>
-
-          <div className="flash-model__input-row">
-            <input
-              className="flash-model__path-input"
-              type="text"
-              placeholder="Path to GGUF model file..."
-              value={modelPath}
-              onChange={(e) => setModelPath(e.target.value)}
-              onBlur={() => profileModel(modelPath)}
-              disabled={!!sessionId}
-            />
-            {isDesktop && !sessionId && (
-              <button className="flash-model__browse-btn" onClick={handleBrowse}>
-                <FolderOpen size={16} /> Browse
-              </button>
-            )}
-            {!sessionId && modelPath && !profile && (
-              <button className="flash-model__browse-btn" onClick={() => profileModel(modelPath)}>
-                <Gauge size={16} /> Profile
-              </button>
-            )}
-          </div>
-
-          {/* Model info */}
-          {profile && (
-            <div className="flash-model__info">
-              <div className="flash-model__info-item">
-                <span className="flash-model__info-label">Model</span>
-                <span className="flash-model__info-value">{profile.name}</span>
-              </div>
-              <div className="flash-model__info-item">
-                <span className="flash-model__info-label">Size</span>
-                <span className="flash-model__info-value">{fmtMb(profile.file_size_mb)}</span>
-              </div>
-              <div className="flash-model__info-item">
-                <span className="flash-model__info-label">Parameters</span>
-                <span className="flash-model__info-value">{fmtNum(profile.parameters_b)}B</span>
-              </div>
-              <div className="flash-model__info-item">
-                <span className="flash-model__info-label">Quantization</span>
-                <span className="flash-model__info-value">{profile.quantization}</span>
-              </div>
-              {profile.is_moe && (
-                <>
-                  <div className="flash-model__info-item">
-                    <span className="flash-model__info-label">Experts</span>
-                    <span className="flash-model__info-value">{profile.num_experts}</span>
-                  </div>
-                  <div className="flash-model__info-item">
-                    <span className="flash-model__info-label">Active</span>
-                    <span className="flash-model__info-value">{fmtNum(profile.active_parameters_b)}B</span>
-                  </div>
-                </>
-              )}
-              <div className="flash-model__info-item">
-                <span className="flash-model__info-label">Max Context</span>
-                <span className="flash-model__info-value">
-                  {(profile.max_context_length / 1024).toFixed(0)}K
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Performance estimate */}
-          {estimate && (
-            <div className="flash-estimate">
-              <div className="flash-estimate__title">
-                <Zap size={14} /> Performance Estimate
-              </div>
-              <div className="flash-estimate__row">
-                <div className="flash-estimate__stat">
-                  <span className="flash-estimate__stat-val">~{fmtNum(estimate.tokens_per_second)}</span>
-                  <span className="flash-estimate__stat-unit">tok/s</span>
-                </div>
-                <div className="flash-estimate__stat">
-                  <span className="flash-estimate__stat-val">{fmtMb(estimate.estimated_ram_mb)}</span>
-                  <span className="flash-estimate__stat-unit">RAM</span>
-                </div>
-                <div className="flash-estimate__stat">
-                  <span className="flash-estimate__stat-val">{(estimate.cache_hit_rate * 100).toFixed(0)}%</span>
-                  <span className="flash-estimate__stat-unit">cache</span>
-                </div>
-                <div className="flash-estimate__stat">
-                  <span className="flash-estimate__stat-val">{(estimate.max_context_at_budget / 1024).toFixed(0)}K</span>
-                  <span className="flash-estimate__stat-unit">ctx</span>
-                </div>
-              </div>
-              {estimate.needs_disk_streaming && (
-                <div className="flash-estimate__warning">
-                  <AlertTriangle size={14} /> Will use disk streaming (NVMe recommended)
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Priority selector */}
-          {profile && !sessionId && (
-            <div className="flash-priority">
-              <span className="flash-priority__label">Priority:</span>
-              {(["speed", "balanced", "context"] as Priority[]).map((p) => (
-                <button
-                  key={p}
-                  className={`flash-priority__btn${priority === p ? " flash-priority__btn--active" : ""}`}
-                  onClick={() => setPriority(p)}
-                >
-                  {p.charAt(0).toUpperCase() + p.slice(1)}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Load / Unload button */}
-          {!sessionId ? (
-            <button
-              className="flash-load-btn flash-load-btn--load"
-              disabled={!modelPath.trim() || isLoading}
-              onClick={handleLoad}
-            >
-              {isLoading && <span className="flash-load-btn__spinner" />}
-              {isLoading ? "Loading Model..." : "Load Model"}
-            </button>
-          ) : (
-            <button className="flash-load-btn flash-load-btn--unload" onClick={handleUnload}>
-              Unload Model
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Chat */}
-      <div className="flash-chat">
-        <div className="flash-chat__header">
-          <span className="flash-chat__header-label">Chat</span>
-          {messages.length > 0 && (
-            <button
-              className="flash-chat__clear-btn"
-              onClick={() => { setMessages([]); setStreamingText(""); }}
-            >
-              <Trash2 size={12} /> Clear
-            </button>
-          )}
-        </div>
-
-        <div className="flash-chat__messages">
-          {messages.length === 0 && !streamingText && (
-            <div className="flash-chat__empty">
-              <Zap size={40} />
-              <span className="flash-chat__empty-text">
-                {sessionId
-                  ? "Model loaded. Type a message to begin."
-                  : "Load a model to start chatting."}
-              </span>
-            </div>
-          )}
-          {messages.map((msg, i) => (
-            <div key={i} className={`flash-msg flash-msg--${msg.role}`}>
-              {msg.content}
-            </div>
-          ))}
-          {streamingText && (
-            <div className="flash-msg flash-msg--assistant">
-              {streamingText}
-              <span className="flash-msg__cursor" />
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        <div className="flash-chat__input-row">
-          <input
-            className="flash-chat__input"
-            type="text"
-            placeholder={sessionId ? "Type a message..." : "Load a model first..."}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={!sessionId || isGenerating}
-          />
-          {isGenerating ? (
-            <button className="flash-chat__stop-btn" onClick={() => setIsGenerating(false)}>
-              <Square size={14} /> Stop
-            </button>
-          ) : (
-            <button
-              className="flash-chat__send-btn"
-              disabled={!sessionId || !draft.trim()}
-              onClick={handleSend}
-            >
-              <Send size={14} /> Send
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Live Metrics */}
-      {sessionId && metrics && (
-        <div className="flash-metrics">
-          <div className="flash-metrics__item">
-            <span className="flash-metrics__label">Tokens/sec</span>
-            <span className="flash-metrics__value">{fmtNum(metrics.tokens_per_second)}</span>
-          </div>
-          <div className="flash-metrics__divider" />
-          <div className="flash-metrics__item">
-            <span className="flash-metrics__label">Memory</span>
-            <span className={`flash-metrics__value${metrics.memory_utilization > 0.9 ? " flash-metrics__value--danger" : ""}`}>
-              {fmtMb(metrics.memory_used_mb)} / {fmtMb(metrics.memory_budget_mb)}
-            </span>
-          </div>
-          <div className="flash-metrics__divider" />
-          <div className="flash-metrics__item">
-            <span className="flash-metrics__label">Cache Hit</span>
-            <span className="flash-metrics__value">{(metrics.expert_cache_hit_rate * 100).toFixed(1)}%</span>
-          </div>
-          <div className="flash-metrics__divider" />
-          <div className="flash-metrics__item">
-            <span className="flash-metrics__label">I/O</span>
-            <span className="flash-metrics__value">{fmtNum(metrics.io_read_mb_per_sec)} GB/s</span>
-          </div>
-          <div className="flash-metrics__divider" />
-          <div className="flash-metrics__item">
-            <span className="flash-metrics__label">Tokens</span>
-            <span className="flash-metrics__value">{metrics.total_tokens_generated}</span>
-          </div>
-          <div className="flash-metrics__divider" />
-          <div className="flash-metrics__item">
-            <span className="flash-metrics__label">Context</span>
-            <span className={`flash-metrics__value${
-              metrics.context_max > 0 && metrics.context_used / metrics.context_max > 0.85 ? " flash-metrics__value--warn" : ""
-            }`}>
-              {metrics.context_used.toLocaleString()}
-              {metrics.context_max > 0 ? ` / ${metrics.context_max.toLocaleString()}` : ""}
-            </span>
-          </div>
-        </div>
-      )}
-    </section>
+      <style>{`@keyframes blink { 50% { opacity: 0; } }`}</style>
+    </div>
   );
 }

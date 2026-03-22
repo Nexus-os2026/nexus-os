@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import RequiresLlm from "../components/RequiresLlm";
 import Editor, { type OnMount } from "@monaco-editor/react";
 import {
   hasDesktopRuntime,
@@ -768,6 +769,7 @@ export default function CodeEditor(): JSX.Element {
   /*  RENDER                                                           */
   /* ================================================================ */
   return (
+    <RequiresLlm feature="Code Editor">
     <section className="ce-root">
       {/* ---- Header ---- */}
       <header className="ce-header">
@@ -1188,5 +1190,6 @@ export default function CodeEditor(): JSX.Element {
         )}
       </div>
     </section>
+    </RequiresLlm>
   );
 }

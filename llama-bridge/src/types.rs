@@ -42,6 +42,28 @@ pub enum NumaStrategy {
     Mirror,
 }
 
+/// KV cache quantization type (maps to ggml_type values).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum KvCacheType {
+    /// f16 (default) — ggml_type 1
+    F16,
+    /// Q8_0 — ggml_type 8
+    Q8_0,
+    /// Q4_0 — ggml_type 2
+    Q4_0,
+}
+
+impl KvCacheType {
+    /// Returns the ggml_type integer value.
+    pub fn as_ggml_type(self) -> i32 {
+        match self {
+            Self::F16 => 1,
+            Self::Q8_0 => 8,
+            Self::Q4_0 => 2,
+        }
+    }
+}
+
 /// Configuration for text generation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerationConfig {
@@ -67,17 +89,76 @@ pub struct GenerationConfig {
     pub stop_sequences: Vec<String>,
     /// Context window size in tokens.
     pub n_ctx: u32,
-    /// Batch size for prompt processing.
+    /// Logical batch size for prompt processing.
     pub n_batch: u32,
+    /// Physical batch size (n_ubatch). 0 = use n_batch.
+    pub n_ubatch: u32,
+    /// Enable flash attention.
+    pub flash_attn: bool,
+    /// Override thread count for generation. None = auto-detect.
+    pub n_threads: Option<u32>,
+    /// KV cache quantization type for K. None = default (f16).
+    /// Use `KvCacheType::Q8_0` or `KvCacheType::Q4_0` to reduce memory.
+    pub type_k: Option<KvCacheType>,
+    /// KV cache quantization type for V. None = default (f16).
+    pub type_v: Option<KvCacheType>,
 }
 
 impl Default for GenerationConfig {
     fn default() -> Self {
         Self {
             max_tokens: 2048,
-            temperature: 0.7,
-            top_p: 0.95,
-            top_k: 40,
+            temperature: 0.0,    // Greedy — fastest (skips all stochastic samplers)
+            top_p: 1.0,          // Disabled — no filtering overhead
+            top_k: 0,            // Disabled
+            min_p: 0.0,          // Disabled
+            repeat_penalty: 1.1, // Prevent repetition loops (last 64 tokens)
+            presence_penalty: 0.0,
+            frequency_penalty: 0.0,
+            seed: None,
+            stop_sequences: Vec::new(),
+            n_ctx: 2048,   // Smaller KV cache = faster attention
+            n_batch: 2048, // Large batch for fast prompt processing
+            n_ubatch: 512, // Physical sub-batch
+            flash_attn: true,
+            n_threads: None,
+            type_k: Some(KvCacheType::Q8_0), // 2× KV memory savings
+            type_v: Some(KvCacheType::Q8_0),
+        }
+    }
+}
+
+impl GenerationConfig {
+    /// Speed-optimized config: greedy sampling, small context, quantized KV cache.
+    pub fn fast() -> Self {
+        Self {
+            max_tokens: 4096,
+            temperature: 0.0,
+            top_p: 1.0,
+            top_k: 0,
+            min_p: 0.0,
+            repeat_penalty: 1.1,
+            presence_penalty: 0.0,
+            frequency_penalty: 0.0,
+            seed: None,
+            stop_sequences: Vec::new(),
+            n_ctx: 2048,
+            n_batch: 2048,
+            n_ubatch: 512,
+            flash_attn: true,
+            n_threads: None,
+            type_k: Some(KvCacheType::Q8_0),
+            type_v: Some(KvCacheType::Q8_0),
+        }
+    }
+
+    /// Balanced config: light sampling with good quality, quantized KV cache.
+    pub fn balanced() -> Self {
+        Self {
+            max_tokens: 4096,
+            temperature: 0.6,
+            top_p: 0.9,
+            top_k: 0, // Disabled — top_p is sufficient
             min_p: 0.05,
             repeat_penalty: 1.1,
             presence_penalty: 0.0,
@@ -85,7 +166,12 @@ impl Default for GenerationConfig {
             seed: None,
             stop_sequences: Vec::new(),
             n_ctx: 4096,
-            n_batch: 512,
+            n_batch: 2048,
+            n_ubatch: 512,
+            flash_attn: true,
+            n_threads: None,
+            type_k: Some(KvCacheType::Q8_0),
+            type_v: Some(KvCacheType::Q8_0),
         }
     }
 }

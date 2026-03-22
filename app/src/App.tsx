@@ -125,85 +125,84 @@ type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketpla
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
-  // ── CORE ──
-  { id: "chat", label: "Chat", icon: "MessageSquare", shortcut: "Alt+1", section: "CORE" },
-  { id: "agents", label: "Agents", icon: "Users", shortcut: "Alt+2", section: "CORE" },
-  { id: "command-center", label: "Command", icon: "Terminal", shortcut: "", section: "CORE" },
-  { id: "audit", label: "Audit", icon: "Shield", shortcut: "", section: "CORE" },
-  { id: "audit-timeline", label: "Timeline", icon: "Clock", shortcut: "", section: "CORE" },
-  { id: "time-machine", label: "Time Machine", icon: "History", shortcut: "", section: "CORE" },
-  // ── INTELLIGENCE ──
-  { id: "mission-control", label: "Mission Control", icon: "LayoutDashboard", shortcut: "Alt+3", section: "INTELLIGENCE" },
-  { id: "dna-lab", label: "DNA Lab", icon: "Dna", shortcut: "", section: "INTELLIGENCE" },
-  { id: "consciousness", label: "Consciousness", icon: "Brain", shortcut: "", section: "INTELLIGENCE" },
-  { id: "dreams", label: "Dream Forge", icon: "Moon", shortcut: "", section: "INTELLIGENCE" },
-  { id: "temporal", label: "Temporal Engine", icon: "GitBranch", shortcut: "", section: "INTELLIGENCE" },
-  { id: "timeline-viewer", label: "Timeline", icon: "GitMerge", shortcut: "", section: "INTELLIGENCE" },
-  // ── SECURITY ──
-  { id: "immune-dashboard", label: "Immune System", icon: "ShieldCheck", shortcut: "", section: "SECURITY" },
-  { id: "identity", label: "Identity & Mesh", icon: "Fingerprint", shortcut: "", section: "SECURITY" },
-  { id: "firewall", label: "Firewall", icon: "Lock", shortcut: "", section: "SECURITY" },
-  { id: "computer-control", label: "Computer Control", icon: "Monitor", shortcut: "", section: "SECURITY" },
-  // ── KNOWLEDGE ──
-  { id: "knowledge-graph", label: "Knowledge Graph", icon: "Network", shortcut: "", section: "KNOWLEDGE" },
-  { id: "civilization", label: "Civilization", icon: "Landmark", shortcut: "", section: "KNOWLEDGE" },
-  { id: "self-rewrite", label: "Self-Rewrite Lab", icon: "Code2", shortcut: "", section: "KNOWLEDGE" },
-  // ── WORKFLOWS ──
-  { id: "workflows", label: "Workflows", icon: "Workflow", shortcut: "", section: "WORKFLOWS" },
-  { id: "marketplace", label: "Publish", icon: "Upload", shortcut: "", section: "WORKFLOWS" },
-  { id: "marketplace-browser", label: "Browse Agents", icon: "Search", shortcut: "", section: "WORKFLOWS" },
-  { id: "scheduler", label: "Scheduler", icon: "Timer", shortcut: "", section: "WORKFLOWS" },
-  // ── GOVERNANCE ──
-  { id: "trust", label: "Trust", icon: "Award", shortcut: "", section: "GOVERNANCE" },
-  { id: "compliance", label: "Compliance", icon: "ShieldCheck", shortcut: "", section: "GOVERNANCE" },
-  { id: "distributed-audit", label: "Chain", icon: "Link", shortcut: "", section: "GOVERNANCE" },
-  { id: "protocols", label: "Protocols", icon: "Layers", shortcut: "", section: "GOVERNANCE" },
-  { id: "permissions", label: "Permissions", icon: "Key", shortcut: "", section: "GOVERNANCE" },
-  { id: "approvals", label: "Approvals", icon: "CheckCircle", shortcut: "", section: "GOVERNANCE" },
-  { id: "policy-management", label: "Policies", icon: "Scale", shortcut: "", section: "GOVERNANCE" },
-  // ── TOOLS ──
-  { id: "api-client", label: "API Client", icon: "Zap", shortcut: "", section: "TOOLS" },
-  { id: "design-studio", label: "Design", icon: "Palette", shortcut: "", section: "TOOLS" },
-  { id: "email-client", label: "Email", icon: "Mail", shortcut: "", section: "TOOLS" },
-  { id: "media-studio", label: "Media", icon: "Play", shortcut: "", section: "TOOLS" },
-  { id: "app-store", label: "Agent Store", icon: "Store", shortcut: "", section: "TOOLS" },
-  { id: "ai-chat-hub", label: "AI Chat", icon: "Bot", shortcut: "", section: "TOOLS" },
-  { id: "voice-assistant", label: "Voice", icon: "Mic", shortcut: "", section: "TOOLS" },
-  { id: "deploy-pipeline", label: "Deploy", icon: "Rocket", shortcut: "", section: "TOOLS" },
-  { id: "learning-center", label: "Learn", icon: "BookOpen", shortcut: "", section: "TOOLS" },
-  { id: "code-editor", label: "Code", icon: "FileCode", shortcut: "", section: "TOOLS" },
-  { id: "terminal", label: "Terminal", icon: "TerminalSquare", shortcut: "", section: "TOOLS" },
-  { id: "file-manager", label: "Files", icon: "FolderOpen", shortcut: "", section: "TOOLS" },
-  { id: "database", label: "Database", icon: "Database", shortcut: "", section: "TOOLS" },
-  { id: "browser", label: "Browser", icon: "Globe", shortcut: "", section: "TOOLS" },
-  { id: "messaging", label: "Messaging", icon: "MessageCircle", shortcut: "", section: "TOOLS" },
-  { id: "simulation", label: "World Sim", icon: "Globe2", shortcut: "", section: "TOOLS" },
-  { id: "documents", label: "Documents", icon: "FileText", shortcut: "", section: "TOOLS" },
-  { id: "model-hub", label: "Models", icon: "Cpu", shortcut: "", section: "TOOLS" },
-  { id: "flash-inference", label: "Flash Inference", icon: "Zap", shortcut: "", section: "TOOLS" },
-  { id: "notes", label: "Notes", icon: "StickyNote", shortcut: "", section: "TOOLS" },
-  { id: "project-manager", label: "Projects", icon: "Kanban", shortcut: "", section: "TOOLS" },
-  { id: "system-monitor", label: "Monitor", icon: "Activity", shortcut: "", section: "TOOLS" },
-  // ── ADMIN ──
-  { id: "admin-console", label: "Admin", icon: "ShieldAlert", shortcut: "", section: "ADMIN" },
-  { id: "admin-users", label: "Users", icon: "UserCog", shortcut: "", section: "ADMIN" },
-  { id: "admin-fleet", label: "Fleet", icon: "Boxes", shortcut: "", section: "ADMIN" },
-  { id: "admin-policies", label: "Policies", icon: "ScrollText", shortcut: "", section: "ADMIN" },
-  { id: "admin-compliance", label: "Compliance", icon: "ClipboardCheck", shortcut: "", section: "ADMIN" },
-  { id: "admin-health", label: "Health", icon: "HeartPulse", shortcut: "", section: "ADMIN" },
-  { id: "cluster", label: "Cluster", icon: "Server", shortcut: "", section: "ADMIN" },
+  // ── CORE (always visible, 10 items) ──
+  { id: "dashboard", label: "Dashboard", icon: "LayoutDashboard", shortcut: "Alt+1" },
+  { id: "ai-chat-hub", label: "Chat", icon: "MessageSquare", shortcut: "Alt+2" },
+  { id: "agents", label: "Agents", icon: "Users", shortcut: "Alt+3" },
+  { id: "file-manager", label: "Files", icon: "FolderOpen", shortcut: "" },
+  { id: "model-hub", label: "Models", icon: "Cpu", shortcut: "" },
+  { id: "flash-inference", label: "Flash Inference", icon: "Zap", shortcut: "" },
+  { id: "documents", label: "Documents", icon: "FileText", shortcut: "" },
+  { id: "scheduler", label: "Scheduler", icon: "Timer", shortcut: "" },
+  { id: "approvals", label: "Approvals", icon: "CheckCircle", shortcut: "" },
+  { id: "terminal", label: "Terminal", icon: "TerminalSquare", shortcut: "" },
+  { id: "settings", label: "Settings", icon: "Settings", shortcut: "" },
+  // ── COMMUNICATION ──
+  { id: "email-client", label: "Email", icon: "Mail", shortcut: "", section: "COMMUNICATION" },
+  { id: "voice-assistant", label: "Voice", icon: "Mic", shortcut: "", section: "COMMUNICATION" },
+  { id: "messaging", label: "Messaging", icon: "MessageCircle", shortcut: "", section: "COMMUNICATION" },
+  { id: "integrations", label: "Integrations", icon: "PlugZap", shortcut: "", section: "COMMUNICATION" },
+  // ── MONITORING ──
+  { id: "system-monitor", label: "System Monitor", icon: "Activity", shortcut: "", section: "MONITORING" },
+  { id: "audit", label: "Audit", icon: "Shield", shortcut: "", section: "MONITORING" },
+  { id: "audit-timeline", label: "Audit Timeline", icon: "Clock", shortcut: "", section: "MONITORING" },
+  { id: "trust", label: "Trust Dashboard", icon: "Award", shortcut: "", section: "MONITORING" },
+  { id: "firewall", label: "Firewall", icon: "Lock", shortcut: "", section: "MONITORING" },
+  { id: "compliance", label: "Compliance", icon: "ShieldCheck", shortcut: "", section: "MONITORING" },
+  { id: "permissions", label: "Permissions", icon: "Key", shortcut: "", section: "MONITORING" },
+  // ── AGENT LAB ──
+  { id: "browser", label: "Agent Browser", icon: "Globe", shortcut: "", section: "AGENT LAB" },
+  { id: "dna-lab", label: "DNA Lab", icon: "Dna", shortcut: "", section: "AGENT LAB" },
+  { id: "self-rewrite", label: "Self-Rewrite Lab", icon: "Code2", shortcut: "", section: "AGENT LAB" },
+  { id: "consciousness", label: "Consciousness", icon: "Brain", shortcut: "", section: "AGENT LAB" },
+  // ── CREATIVE ──
+  { id: "design-studio", label: "Design Studio", icon: "Palette", shortcut: "", section: "CREATIVE" },
+  { id: "media-studio", label: "Media Studio", icon: "Play", shortcut: "", section: "CREATIVE" },
+  { id: "dreams", label: "DreamForge", icon: "Moon", shortcut: "", section: "CREATIVE" },
+  { id: "notes", label: "Notes", icon: "StickyNote", shortcut: "", section: "CREATIVE" },
   // ── DEVELOPER ──
-  { id: "developer-portal", label: "Developer", icon: "Code", shortcut: "", section: "DEVELOPER" },
-  // ── INTEGRATIONS ──
-  { id: "integrations", label: "Integrations", icon: "PlugZap", shortcut: "", section: "INTEGRATIONS" },
+  { id: "code-editor", label: "Code Editor", icon: "FileCode", shortcut: "", section: "DEVELOPER" },
+  { id: "api-client", label: "API Client", icon: "Zap", shortcut: "", section: "DEVELOPER" },
+  { id: "database", label: "Database", icon: "Database", shortcut: "", section: "DEVELOPER" },
+  { id: "developer-portal", label: "Developer Portal", icon: "Code", shortcut: "", section: "DEVELOPER" },
+  { id: "deploy-pipeline", label: "Deploy Pipeline", icon: "Rocket", shortcut: "", section: "DEVELOPER" },
+  { id: "protocols", label: "Protocols", icon: "Layers", shortcut: "", section: "DEVELOPER" },
+  // ── AUTOMATION ──
+  { id: "workflows", label: "Workflows", icon: "Workflow", shortcut: "", section: "AUTOMATION" },
+  { id: "time-machine", label: "Time Machine", icon: "History", shortcut: "", section: "AUTOMATION" },
+  { id: "timeline-viewer", label: "Timeline Viewer", icon: "GitMerge", shortcut: "", section: "AUTOMATION" },
+  { id: "temporal", label: "Temporal Engine", icon: "GitBranch", shortcut: "", section: "AUTOMATION" },
+  // ── SIMULATION ──
+  { id: "simulation", label: "World Simulation", icon: "Globe2", shortcut: "", section: "SIMULATION" },
+  { id: "civilization", label: "Civilization", icon: "Landmark", shortcut: "", section: "SIMULATION" },
+  { id: "computer-control", label: "Computer Control", icon: "Monitor", shortcut: "", section: "SIMULATION" },
   // ── ENTERPRISE ──
   { id: "login", label: "Auth / Sessions", icon: "LogIn", shortcut: "", section: "ENTERPRISE" },
   { id: "workspaces", label: "Workspaces", icon: "Building2", shortcut: "", section: "ENTERPRISE" },
-  { id: "telemetry", label: "Telemetry", icon: "BarChart3", shortcut: "", section: "ENTERPRISE" },
+  { id: "admin-console", label: "Admin Dashboard", icon: "ShieldAlert", shortcut: "", section: "ENTERPRISE" },
+  { id: "admin-users", label: "Admin Users", icon: "UserCog", shortcut: "", section: "ENTERPRISE" },
+  { id: "admin-fleet", label: "Admin Fleet", icon: "Boxes", shortcut: "", section: "ENTERPRISE" },
+  { id: "admin-compliance", label: "Admin Compliance", icon: "ClipboardCheck", shortcut: "", section: "ENTERPRISE" },
+  { id: "admin-policies", label: "Admin Policy", icon: "ScrollText", shortcut: "", section: "ENTERPRISE" },
+  { id: "admin-health", label: "Admin Health", icon: "HeartPulse", shortcut: "", section: "ENTERPRISE" },
   { id: "usage-billing", label: "Usage & Billing", icon: "Receipt", shortcut: "", section: "ENTERPRISE" },
-  // ── SYSTEM ──
-  { id: "dashboard", label: "System Dash", icon: "Gauge", shortcut: "", section: "SYSTEM" },
-  { id: "settings", label: "Settings", icon: "Settings", shortcut: "", section: "SYSTEM" },
+  { id: "telemetry", label: "Telemetry", icon: "BarChart3", shortcut: "", section: "ENTERPRISE" },
+  { id: "cluster", label: "Cluster Status", icon: "Server", shortcut: "", section: "ENTERPRISE" },
+  { id: "distributed-audit", label: "Distributed Audit", icon: "Link", shortcut: "", section: "ENTERPRISE" },
+  { id: "policy-management", label: "Policy Management", icon: "Scale", shortcut: "", section: "ENTERPRISE" },
+  // ── LEARN & DISCOVER ──
+  { id: "learning-center", label: "Learning Center", icon: "BookOpen", shortcut: "", section: "LEARN & DISCOVER" },
+  { id: "app-store", label: "App Store", icon: "Store", shortcut: "", section: "LEARN & DISCOVER" },
+  { id: "knowledge-graph", label: "Knowledge Graph", icon: "Network", shortcut: "", section: "LEARN & DISCOVER" },
+  { id: "project-manager", label: "Project Manager", icon: "Kanban", shortcut: "", section: "LEARN & DISCOVER" },
+  // ── OTHER ──
+  { id: "chat", label: "Chat (Legacy)", icon: "MessageSquare", shortcut: "", section: "OTHER" },
+  { id: "command-center", label: "Command Center", icon: "Terminal", shortcut: "", section: "OTHER" },
+  { id: "mission-control", label: "Mission Control", icon: "LayoutDashboard", shortcut: "", section: "OTHER" },
+  { id: "marketplace", label: "Publish Agent", icon: "Upload", shortcut: "", section: "OTHER" },
+  { id: "marketplace-browser", label: "Browse Agents", icon: "Search", shortcut: "", section: "OTHER" },
+  { id: "immune-dashboard", label: "Immune System", icon: "ShieldCheck", shortcut: "", section: "OTHER" },
+  { id: "identity", label: "Identity & Mesh", icon: "Fingerprint", shortcut: "", section: "OTHER" },
 ];
 
 const PAGE_ROUTE_OVERRIDES: Partial<Record<Page, string>> = {
@@ -1761,7 +1760,7 @@ export default function App(): JSX.Element {
         />
 
         <div className="nexus-main-column">
-          {runtimeMode !== "desktop" && (
+          {runtimeMode !== "desktop" && page !== "flash-inference" && page !== "chat" && (
             <div
               style={{
                 background: "linear-gradient(90deg, #b45309, #d97706, #b45309)",
@@ -1780,6 +1779,7 @@ export default function App(): JSX.Element {
               Demo Mode — Running without backend. Install Nexus OS desktop for full functionality.
             </div>
           )}
+          {page !== "flash-inference" && page !== "chat" && (
           <header className="nexus-shell-header px-4 py-2.5 sm:px-6">
             <div className="nexus-control-bar">
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1850,8 +1850,9 @@ export default function App(): JSX.Element {
               ) : null}
             </div>
           </header>
+          )}
 
-          <main className="nexus-shell-content px-4 py-4 sm:px-6 sm:py-6">
+          <main className={page === "flash-inference" ? "nexus-shell-content flash-inference-active" : page === "chat" ? "nexus-shell-content chat-active" : "nexus-shell-content px-4 py-4 sm:px-6 sm:py-6"}>
             <PageTransition pageKey={page}>
               <PageErrorBoundary
                 key={page}

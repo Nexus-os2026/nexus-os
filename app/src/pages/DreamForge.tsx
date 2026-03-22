@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import RequiresLlm from "../components/RequiresLlm";
 import { Check, Play, Circle, X } from "lucide-react";
 import {
   getDreamStatus as fetchDreamStatus,
@@ -7,6 +8,7 @@ import {
   getMorningBriefing as fetchMorningBriefing,
   triggerDreamNow,
   setDreamConfig,
+  checkLlmStatus,
 } from "../api/backend";
 
 /* ================================================================== */
@@ -125,6 +127,28 @@ export default function DreamForge(): JSX.Element {
     return () => clearInterval(iv);
   }, [refresh]);
 
+  /* ─── Auto-start a dream on mount when idle + LLM available ─── */
+  useEffect(() => {
+    let cancelled = false;
+    const autoStart = async () => {
+      try {
+        const raw = await fetchDreamStatus();
+        const s = JSON.parse(raw) as DreamStatus;
+        if (s.active_dreams === 0 && s.enabled) {
+          const llm = await checkLlmStatus();
+          const available = llm?.providers?.some((p: { available: boolean }) => p.available) ?? false;
+          if (available && !cancelled) {
+            await triggerDreamNow();
+            await refresh();
+          }
+        }
+      } catch { /* LLM not available or dream already running */ }
+    };
+    autoStart();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleTrigger = useCallback(async () => {
     setTriggering(true);
     try {
@@ -157,6 +181,7 @@ export default function DreamForge(): JSX.Element {
   const budgetPct = status ? Math.round((status.budget_remaining / Math.max(status.budget_total, 1)) * 100) : 0;
 
   return (
+    <RequiresLlm feature="DreamForge">
     <div style={{ padding: 24, color: "#e2e8f0", maxWidth: 1400, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
         <div>
@@ -313,6 +338,7 @@ export default function DreamForge(): JSX.Element {
         </div>
       </div>
     </div>
+    </RequiresLlm>
   );
 }
 

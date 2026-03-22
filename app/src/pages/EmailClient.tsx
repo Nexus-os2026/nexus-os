@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { hasDesktopRuntime, emailList, emailSave, emailDelete } from "../api/backend";
+import { hasDesktopRuntime, emailList, emailSave, emailDelete, emailStartOauth, emailOauthStatus, emailFetchMessages, emailSendMessage, emailDisconnect } from "../api/backend";
 import {
   Inbox, Star, Send, FileEdit, Mail, Archive, Trash2,
   Pen, FileText, CornerDownLeft, Loader, MailOpen, StarOff,
@@ -43,7 +43,7 @@ const FOLDERS: { id: FolderId; label: string; icon: React.ReactNode }[] = [
   { id: "starred", label: "Starred", icon: <Star size={14} /> },
   { id: "sent", label: "Sent", icon: <Send size={14} /> },
   { id: "drafts", label: "Drafts", icon: <FileEdit size={14} /> },
-  { id: "outbox", label: "Outbox", icon: <SendHorizonal size={14} /> },
+  { id: "outbox", label: "Queued", icon: <SendHorizonal size={14} /> },
   { id: "archive", label: "Archive", icon: <Archive size={14} /> },
   { id: "trash", label: "Trash", icon: <Trash2 size={14} /> },
 ];
@@ -104,6 +104,9 @@ export default function EmailClient() {
   const [filterCategory, setFilterCategory] = useState<Category | "all">("all");
   const [sortBy, setSortBy] = useState<"date" | "priority" | "unread">("date");
   const [auditLog, setAuditLog] = useState<string[]>([]);
+  const [oauthStatus, setOauthStatus] = useState<{provider: string; connected: boolean; token_valid: boolean}[]>([]);
+  const [connecting, setConnecting] = useState(false);
+  const [connectedProvider, setConnectedProvider] = useState<string | null>(null);
 
   // compose state
   const [composeTo, setComposeTo] = useState("");
@@ -119,6 +122,18 @@ export default function EmailClient() {
       setLoaded(true);
       if (loaded.length > 0) logAudit(`Loaded ${loaded.length} emails from disk`);
     });
+  }, []);
+
+  useEffect(() => {
+    if (!hasDesktopRuntime()) return;
+    emailOauthStatus().then(raw => {
+      try {
+        const statuses = JSON.parse(raw);
+        setOauthStatus(statuses);
+        const connected = statuses.find((s: any) => s.connected);
+        if (connected) setConnectedProvider(connected.provider);
+      } catch {}
+    }).catch(() => {});
   }, []);
 
   /* ─── filtered emails ─── */
@@ -213,22 +228,47 @@ export default function EmailClient() {
     logAudit("Draft saved to disk");
   }, [composeTo, composeSubject, composeBody]);
 
-  const sendEmail = useCallback(() => {
+  const sendEmail = useCallback(async () => {
     if (!composeTo.trim() || !composeSubject.trim()) return;
+
+    // Try to send via connected provider first
+    if (connectedProvider && hasDesktopRuntime()) {
+      try {
+        await emailSendMessage(connectedProvider, composeTo, composeSubject, composeBody);
+        const email: Email = {
+          id: `em-${Date.now()}`, threadId: `t-${Date.now()}`,
+          from: { name: "You", email: "you@nexus-os.local" },
+          to: [{ name: composeTo.split("@")[0], email: composeTo }],
+          subject: composeSubject, body: composeBody,
+          timestamp: Date.now(), read: true, starred: false, folder: "sent",
+          priority: "normal", category: "primary", labels: [],
+        };
+        setEmails(prev => [email, ...prev]);
+        persistEmail(email);
+        setComposeTo(""); setComposeSubject(""); setComposeBody("");
+        setShowCompose(false);
+        logAudit(`Email sent to ${composeTo} via ${connectedProvider}`);
+        return;
+      } catch (e) {
+        logAudit(`Send failed: ${e instanceof Error ? e.message : String(e)} — saved to drafts`);
+      }
+    }
+
+    // Fallback: save to sent folder locally
     const email: Email = {
       id: `em-${Date.now()}`, threadId: `t-${Date.now()}`,
       from: { name: "You", email: "you@nexus-os.local" },
       to: [{ name: composeTo.split("@")[0], email: composeTo }],
       subject: composeSubject, body: composeBody,
-      timestamp: Date.now(), read: true, starred: false, folder: "outbox",
+      timestamp: Date.now(), read: true, starred: false, folder: "sent",
       priority: "normal", category: "primary", labels: [],
     };
     setEmails(prev => [email, ...prev]);
     persistEmail(email);
     setComposeTo(""); setComposeSubject(""); setComposeBody("");
     setShowCompose(false);
-    logAudit(`Email queued in Outbox to ${composeTo}`);
-  }, [composeTo, composeSubject, composeBody]);
+    logAudit(connectedProvider ? `Email sent to ${composeTo}` : `Email saved (connect Gmail/Outlook to send externally)`);
+  }, [composeTo, composeSubject, composeBody, connectedProvider]);
 
   const applyTemplate = useCallback((tmpl: EmailTemplate) => {
     setComposeSubject(tmpl.subject);
@@ -238,6 +278,53 @@ export default function EmailClient() {
   }, []);
 
   const logAudit = (msg: string) => setAuditLog(prev => [msg, ...prev].slice(0, 20));
+
+  const handleOauthConnect = useCallback(async (provider: string) => {
+    setConnecting(true);
+    try {
+      const result = await emailStartOauth(provider);
+      const data = JSON.parse(result);
+      if (data.status === "connected") {
+        setConnectedProvider(provider);
+        logAudit(`Connected to ${provider} via OAuth2`);
+        // Fetch real emails
+        const messagesRaw = await emailFetchMessages(provider, "inbox", 0);
+        const messages = JSON.parse(messagesRaw);
+        setEmails(prev => [...messages, ...prev]);
+        logAudit(`Fetched ${messages.length} emails from ${provider}`);
+      }
+    } catch (e) {
+      logAudit(`OAuth failed: ${e}`);
+    } finally {
+      setConnecting(false);
+    }
+  }, []);
+
+  const handleOauthDisconnect = useCallback(async () => {
+    if (!connectedProvider) return;
+    try {
+      await emailDisconnect(connectedProvider);
+      setConnectedProvider(null);
+      logAudit(`Disconnected from ${connectedProvider}`);
+    } catch (e) {
+      logAudit(`Disconnect failed: ${e}`);
+    }
+  }, [connectedProvider]);
+
+  const handleRealSend = useCallback(async () => {
+    if (!connectedProvider || !composeTo.trim() || !composeSubject.trim()) return;
+    try {
+      const result = await emailSendMessage(connectedProvider, composeTo, composeSubject, composeBody);
+      const data = JSON.parse(result);
+      if (data.status === "sent") {
+        logAudit(`Email sent via ${connectedProvider} to ${composeTo}`);
+        setComposeTo(""); setComposeSubject(""); setComposeBody("");
+        setShowCompose(false);
+      }
+    } catch (e) {
+      logAudit(`Send failed: ${e}`);
+    }
+  }, [connectedProvider, composeTo, composeSubject, composeBody]);
 
   const formatTime = (ts: number) => {
     const diff = Date.now() - ts;
@@ -259,11 +346,24 @@ export default function EmailClient() {
           <button className="ec-btn-compose cursor-pointer" onClick={() => { setShowCompose(true); setShowTemplates(false); }}><Pen size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Compose</button>
         </div>
 
-        {/* SMTP notice */}
-        <div className="ec-pii-notice" style={{ margin: "0 8px 8px", fontSize: 11 }}>
-          <span className="ec-pii-icon"><SendHorizonal size={12} /></span>
-          Local drafts mode. Connect SMTP in Settings to send externally.
-        </div>
+        {/* OAuth connect / status */}
+        {connectedProvider ? (
+          <div className="ec-pii-notice" style={{ margin: "0 8px 8px", fontSize: 11, background: "rgba(34,197,94,0.1)", borderColor: "rgba(34,197,94,0.3)" }}>
+            <span className="ec-pii-icon" style={{ color: "#22c55e" }}>✓</span>
+            Connected: {connectedProvider}
+            <button onClick={handleOauthDisconnect} style={{ marginLeft: 8, fontSize: 10, background: "none", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 4, color: "inherit", cursor: "pointer", padding: "1px 6px" }}>Disconnect</button>
+          </div>
+        ) : (
+          <div style={{ margin: "0 8px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+            <button className="cursor-pointer" disabled={connecting} onClick={() => handleOauthConnect("gmail")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", background: "rgba(66,133,244,0.15)", border: "1px solid rgba(66,133,244,0.3)", borderRadius: 6, color: "#93c5fd", fontSize: 11, fontFamily: "inherit", cursor: "pointer" }}>
+              <Mail size={12} />{connecting ? "Connecting..." : "Sign in with Google"}
+            </button>
+            <button className="cursor-pointer" disabled={connecting} onClick={() => handleOauthConnect("outlook")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", background: "rgba(0,120,212,0.15)", border: "1px solid rgba(0,120,212,0.3)", borderRadius: 6, color: "#60a5fa", fontSize: 11, fontFamily: "inherit", cursor: "pointer" }}>
+              <Mail size={12} />{connecting ? "Connecting..." : "Sign in with Microsoft"}
+            </button>
+            <div style={{ fontSize: 9, opacity: 0.4, padding: "2px 4px" }}>Your emails stay on your device. We use OAuth2.</div>
+          </div>
+        )}
 
         {/* folders */}
         <div className="ec-folders">
@@ -378,9 +478,13 @@ export default function EmailClient() {
             </div>
             <textarea className="ec-compose-body" value={composeBody} onChange={e => setComposeBody(e.target.value)} placeholder="Write your email..." />
             <div className="ec-compose-footer">
-              <button className="ec-btn-send" onClick={sendEmail} disabled={!composeTo.trim() || !composeSubject.trim()} title="Moves to Outbox — connect SMTP in Settings to send externally">Send to Outbox</button>
+              {connectedProvider ? (
+                <button className="ec-btn-send" onClick={handleRealSend} disabled={!composeTo.trim() || !composeSubject.trim()}>Send via {connectedProvider}</button>
+              ) : (
+                <button className="ec-btn-send" onClick={sendEmail} disabled={!composeTo.trim() || !composeSubject.trim()} title="Send email via connected provider or save locally">Send</button>
+              )}
               <button className="ec-btn-draft" onClick={saveDraft}>Save Draft</button>
-              <span className="ec-compose-fuel" style={{ opacity: 0.7 }}><SendHorizonal size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Outbox — connect SMTP in Settings to send</span>
+              <span className="ec-compose-fuel" style={{ opacity: 0.7 }}><SendHorizonal size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Connect Gmail or Outlook in Settings to send emails</span>
             </div>
           </div>
         )}
@@ -415,7 +519,7 @@ export default function EmailClient() {
             {selectedEmail.folder === "outbox" && (
               <div className="ec-pii-notice">
                 <span className="ec-pii-icon"><SendHorizonal size={12} /></span>
-                Outbox — connect SMTP in Settings to send this email externally.
+                Connect Gmail or Outlook in Settings to send emails this email externally.
               </div>
             )}
 
@@ -461,7 +565,7 @@ export default function EmailClient() {
         <span className="ec-status-item">{filteredEmails.length} emails</span>
         <span className="ec-status-item">{emails.filter(e => !e.read).length} unread</span>
         <span className="ec-status-item">{emails.filter(e => e.folder === "outbox").length} in outbox</span>
-        <span className="ec-status-item ec-status-right">Local drafts mode</span>
+        <span className="ec-status-item ec-status-right">{connectedProvider ? `${connectedProvider} connected` : "Local drafts mode"}</span>
       </div>
     </div>
   );

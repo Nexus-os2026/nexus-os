@@ -43,6 +43,10 @@ export default function ComputerControl(): JSX.Element {
   const [omniActionInput, setOmniActionInput] = useState('{"type":"click","x":100,"y":200}');
   const [omniActionResult, setOmniActionResult] = useState<string | null>(null);
 
+  const [mode, setMode] = useState<'demo' | 'live'>('demo');
+  const [demoStep, setDemoStep] = useState(0);
+  const [demoRunning, setDemoRunning] = useState(false);
+
   const refresh = useCallback(async () => {
     try {
       const [statusRow, historyRows, inputRow] = await Promise.all([
@@ -195,6 +199,33 @@ export default function ComputerControl(): JSX.Element {
     }
   }, [omniActionInput]);
 
+  const DEMO_ACTIONS = [
+    { action: "observe", description: "Agent scans the screen for context", detail: "Analyzing visible windows, text content, and UI elements..." },
+    { action: "identify", description: "Found: Text editor with untitled document", detail: "Detected application: Code Editor, state: empty file, cursor at line 1" },
+    { action: "plan", description: "Planning action sequence", detail: "Goal: Create hello world program. Steps: 1) Click editor area, 2) Type code, 3) Save file" },
+    { action: "click", description: "Agent would click: Editor text area at (450, 320)", detail: "Mouse move to (450, 320) → Left click → Focus confirmed" },
+    { action: "type", description: "Agent would type: fn main() { println!(\"Hello, world!\"); }", detail: "Keystroke sequence: 45 characters, typing speed: 60 WPM simulated" },
+    { action: "shortcut", description: "Agent would press: Ctrl+S to save", detail: "Key combination: Ctrl+S → File save dialog detected → Confirmed save" },
+    { action: "verify", description: "Agent verifies: File saved successfully", detail: "Screen capture shows: saved indicator, file name visible, no error dialogs" },
+    { action: "complete", description: "Task complete: Hello world program created", detail: "Audit trail recorded. Fuel used: 12 units. All actions governed." },
+  ];
+
+  const runDemo = useCallback(() => {
+    setDemoRunning(true);
+    setDemoStep(0);
+    let step = 0;
+    const interval = setInterval(() => {
+      step++;
+      if (step >= DEMO_ACTIONS.length) {
+        clearInterval(interval);
+        setDemoRunning(false);
+      } else {
+        setDemoStep(step);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Auto-refresh omniscience data while enabled
   useEffect(() => {
     if (!omniEnabled) return;
@@ -244,6 +275,48 @@ export default function ComputerControl(): JSX.Element {
           {message}
         </div>
       ) : null}
+
+      {/* ── Mode Selector ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <button className="cursor-pointer" onClick={() => setMode('demo')} style={{ padding: "6px 16px", background: mode === 'demo' ? "rgba(129,140,248,0.2)" : "transparent", border: `1px solid ${mode === 'demo' ? "rgba(129,140,248,0.4)" : "var(--border, #334155)"}`, borderRadius: 6, color: "var(--text-primary, #e2e8f0)", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer", fontWeight: mode === 'demo' ? 600 : 400 }}>🛡️ Demo Mode</button>
+        <button className="cursor-pointer" onClick={() => setMode('live')} style={{ padding: "6px 16px", background: mode === 'live' ? "rgba(239,68,68,0.2)" : "transparent", border: `1px solid ${mode === 'live' ? "rgba(239,68,68,0.4)" : "var(--border, #334155)"}`, borderRadius: 6, color: "var(--text-primary, #e2e8f0)", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer", fontWeight: mode === 'live' ? 600 : 400 }}>⚡ Live Mode</button>
+        <span style={{ fontSize: "0.7rem", opacity: 0.5 }}>{mode === 'demo' ? "Safe preview — no real actions taken" : "⚠️ Agent controls your computer"}</span>
+      </div>
+
+      {/* ── Demo Mode Panel ── */}
+      {mode === 'demo' && (
+        <div style={{ background: "var(--bg-secondary, #1e293b)", border: "1px solid var(--border, #334155)", borderRadius: 8, padding: 16, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Demo: Watch What the Agent Would Do</h3>
+            <button className="cursor-pointer" onClick={runDemo} disabled={demoRunning} style={{ padding: "6px 14px", background: "rgba(129,140,248,0.2)", border: "1px solid rgba(129,140,248,0.3)", borderRadius: 6, color: "#818cf8", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>{demoRunning ? "Running..." : "▶ Run Demo"}</button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {DEMO_ACTIONS.slice(0, demoStep + 1).map((action, i) => (
+              <div key={i} style={{ padding: "8px 12px", background: i === demoStep && demoRunning ? "rgba(129,140,248,0.1)" : "rgba(255,255,255,0.02)", borderRadius: 6, border: i === demoStep && demoRunning ? "1px solid rgba(129,140,248,0.3)" : "1px solid transparent", transition: "all 0.3s" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.8rem" }}>
+                  <span style={{ background: "rgba(129,140,248,0.2)", padding: "2px 8px", borderRadius: 4, fontSize: "0.65rem", fontWeight: 600, color: "#818cf8", textTransform: "uppercase" }}>{action.action}</span>
+                  <span style={{ fontWeight: 500 }}>{action.description}</span>
+                </div>
+                <div style={{ fontSize: "0.7rem", opacity: 0.5, marginTop: 4, paddingLeft: 8 }}>{action.detail}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 12, padding: "8px 12px", background: "rgba(34,197,94,0.05)", borderRadius: 6, fontSize: "0.75rem", opacity: 0.7 }}>
+            🛡️ Demo mode shows what agents WOULD do without taking real actions. All actions are governed by fuel limits, HITL approval, and audit trails.
+          </div>
+        </div>
+      )}
+
+      {mode === 'live' && !enabled && (
+        <div style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, padding: 20, marginBottom: 16, textAlign: "center" }}>
+          <h3 style={{ margin: "0 0 8px", fontSize: "0.95rem" }}>⚠️ Live Mode</h3>
+          <p style={{ margin: "0 0 12px", fontSize: "0.8rem", opacity: 0.7, lineHeight: 1.5 }}>
+            Live mode lets agents control your mouse and keyboard. Everything is governed — fuel limits, HITL approval on dangerous actions, full audit trail.
+            Press ESC 3 times to force-stop.
+          </p>
+          <button className="cursor-pointer" onClick={() => computerControlToggle(true).then(() => setEnabled(true))} style={{ padding: "8px 20px", background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.4)", borderRadius: 6, color: "#ef4444", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer", fontWeight: 600 }}>I Understand — Enable Live Control</button>
+        </div>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <section className="nexus-panel rounded-2xl p-5">

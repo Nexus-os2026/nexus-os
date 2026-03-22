@@ -1,6 +1,7 @@
 [agent]
 name = "conductor"
 version = "0.1.0"
+description = "Orchestrates multi-agent workflows, delegating tasks and collecting results across agent teams"
 
 [capabilities]
 allowed = ["llm.query", "fs.read"]

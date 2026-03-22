@@ -15,7 +15,7 @@ import {
   Activity,
   PlugZap,
 } from "lucide-react";
-import { integrationsList, integrationTest, integrationConfigure } from "../api/backend";
+import { integrationsList, integrationTest, integrationConfigure, integrationStartOauth } from "../api/backend";
 import "./integrations.css";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -87,6 +87,8 @@ export default function Integrations() {
   const [configuring, setConfiguring] = useState<string | null>(null);
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [oauthLoading, setOauthLoading] = useState<string | null>(null);
+  const [oauthConnected, setOauthConnected] = useState<Record<string, boolean>>({});
 
   const load = useCallback(() => {
     setLoadError(null);
@@ -114,6 +116,21 @@ export default function Integrations() {
     }
     setTesting(null);
   };
+
+  const handleOauthConnect = useCallback(async (providerId: string) => {
+    setOauthLoading(providerId);
+    try {
+      const result = await integrationStartOauth(providerId);
+      const data = JSON.parse(result);
+      if (data.status === "connected") {
+        setOauthConnected(prev => ({ ...prev, [providerId]: true }));
+      }
+    } catch (e: any) {
+      alert(`OAuth failed: ${e?.message || e}`);
+    } finally {
+      setOauthLoading(null);
+    }
+  }, []);
 
   const handleConfigure = async (id: string) => {
     try {
@@ -152,7 +169,32 @@ export default function Integrations() {
           <span className={`intg-dot ${p.configured ? "intg-dot--green" : "intg-dot--red"}`} />
           {p.configured ? "Configured" : "Not configured"}
         </div>
-        <div style={{ display: "flex", gap: "0.4rem" }}>
+        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+          {["github", "gitlab", "slack", "jira"].includes(p.id) && !oauthConnected[p.id] && (
+            <button
+              className="cursor-pointer"
+              onClick={() => handleOauthConnect(p.id)}
+              disabled={oauthLoading === p.id}
+              style={{
+                padding: "4px 10px",
+                background: "rgba(129,140,248,0.15)",
+                border: "1px solid rgba(129,140,248,0.3)",
+                borderRadius: 4,
+                color: "#818cf8",
+                fontSize: "0.75rem",
+                fontFamily: "inherit",
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              {oauthLoading === p.id ? "Connecting..." : "Connect via OAuth \u2192"}
+            </button>
+          )}
+          {oauthConnected[p.id] && (
+            <span style={{ padding: "4px 10px", background: "rgba(34,197,94,0.1)", borderRadius: 4, color: "#22c55e", fontSize: "0.75rem", fontWeight: 600 }}>
+              \u2713 OAuth Connected
+            </span>
+          )}
           <button
             className="intg-btn intg-btn--sm"
             onClick={() => handleTest(p.id)}

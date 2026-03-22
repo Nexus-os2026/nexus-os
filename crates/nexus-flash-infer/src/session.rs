@@ -10,9 +10,6 @@ use crate::error::FlashError;
 use crate::profiler::ModelProfile;
 use crate::types::{HardwareInfo, InferencePreference, SessionInfo, SessionStatus};
 
-/// Maximum concurrent sessions.
-const MAX_SESSIONS: usize = 8;
-
 /// Manages inference sessions with a shared memory budget.
 pub struct SessionManager {
     hw: HardwareInfo,
@@ -64,6 +61,11 @@ impl SessionManager {
         }
     }
 
+    /// Memory footprint for a session (dense weights + KV cache).
+    fn session_footprint(config: &OptimalConfig) -> u64 {
+        config.budget.model_dense_mb + config.budget.kv_cache_mb
+    }
+
     /// Create a new inference session (validates memory budget).
     pub async fn create_session(
         &self,
@@ -71,23 +73,19 @@ impl SessionManager {
         profile: ModelProfile,
         preference: InferencePreference,
     ) -> Result<String, FlashError> {
-        let sessions = self.sessions.read().await;
-        if sessions.len() >= MAX_SESSIONS {
-            return Err(FlashError::SessionLimitReached { max: MAX_SESSIONS });
-        }
-        drop(sessions);
-
         let config = auto_configure(&self.hw, &profile, preference)?;
 
-        let needed_mb = config.budget.available_for_inference_mb;
-        let current = self.allocated_mb.load(Ordering::Relaxed);
+        let needed_mb = Self::session_footprint(&config);
         let remaining = self.remaining_budget_mb();
 
         if needed_mb > remaining {
-            return Err(FlashError::BudgetExceeded {
-                requested_mb: needed_mb,
-                remaining_mb: remaining,
-            });
+            // MoE models stream expert weights via mmap — the session footprint
+            // can exceed the RAM budget without causing OOM.  Warn, don't block.
+            tracing::warn!(
+                needed_mb,
+                remaining,
+                "session footprint exceeds RAM budget — mmap will stream from disk"
+            );
         }
 
         let id = uuid::Uuid::new_v4().to_string();
@@ -101,8 +99,7 @@ impl SessionManager {
             status: SessionStatus::Ready,
         };
 
-        self.allocated_mb
-            .store(current + needed_mb, Ordering::Relaxed);
+        self.allocated_mb.fetch_add(needed_mb, Ordering::Relaxed);
 
         let mut sessions = self.sessions.write().await;
         sessions.insert(id.clone(), session);
@@ -119,7 +116,7 @@ impl SessionManager {
                 id: s.id.clone(),
                 model_path: s.model_path.clone(),
                 model_name: s.profile.name.clone(),
-                memory_used_mb: s.config.budget.available_for_inference_mb,
+                memory_used_mb: Self::session_footprint(&s.config),
                 tokens_generated: s.tokens_generated,
                 status: s.status.clone(),
                 created_at: s.created_at,
@@ -134,7 +131,7 @@ impl SessionManager {
             .remove(id)
             .ok_or_else(|| FlashError::SessionNotFound(id.to_string()))?;
 
-        let freed = session.config.budget.available_for_inference_mb;
+        let freed = Self::session_footprint(&session.config);
         let current = self.allocated_mb.load(Ordering::Relaxed);
         self.allocated_mb
             .store(current.saturating_sub(freed), Ordering::Relaxed);
@@ -153,6 +150,13 @@ impl SessionManager {
 
         let allocated = self.allocated_mb.load(Ordering::Relaxed);
         total_available.saturating_sub(allocated)
+    }
+
+    /// Clear all sessions (used by frontend on page navigation).
+    pub async fn clear_all(&self) {
+        let mut sessions = self.sessions.write().await;
+        sessions.clear();
+        self.allocated_mb.store(0, Ordering::Relaxed);
     }
 
     /// Get the hardware info.

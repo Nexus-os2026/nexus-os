@@ -7,8 +7,10 @@ import { HeatMap } from "../components/viz/HeatMap";
 import { NeuralGraph } from "../components/viz/NeuralGraph";
 import { PulseRing } from "../components/viz/PulseRing";
 import { getPreinstalledAgents, hasDesktopRuntime, listProviderModels } from "../api/backend";
+import RequiresLlm from "../components/RequiresLlm";
 import type { AgentSummary, AuditEventRow, PreinstalledAgent, SlmStatus } from "../types";
 import { Play, Pause, Square, Trash2, Plus, Search, Shield, Settings, Users, Zap, Fuel, MemoryStick, ChevronDown, ChevronUp, Eye } from "lucide-react";
+import AgentOutputPanel from "../components/AgentOutputPanel";
 import "./agents.css";
 
 /* ─── constants ─── */
@@ -37,6 +39,32 @@ const CATEGORY_KEYWORDS: Record<Exclude<CategoryFilter, "all">, string[]> = {
   data: ["data", "database", "analytics", "etl", "migration", "sql"],
   communication: ["communicat", "email", "social", "poster", "message", "notify", "slack"],
 };
+
+const AGENT_EXAMPLES: Record<string, { description: string; tryIt: string }> = {
+  "research": { description: "Researches any topic and writes a comprehensive summary", tryIt: "Research the latest developments in quantum computing and write a 500-word summary" },
+  "coder": { description: "Writes, reviews, and debugs code in any language", tryIt: "Write a Python function that finds the longest palindrome in a string" },
+  "analyst": { description: "Analyzes data, finds patterns, and creates reports", tryIt: "Analyze the pros and cons of Rust vs Go for microservices" },
+  "writer": { description: "Writes articles, blog posts, emails, and creative content", tryIt: "Write a professional email declining a meeting request politely" },
+  "reviewer": { description: "Reviews code, documents, or proposals and provides feedback", tryIt: "Review this approach: using SQLite for a multi-user web application" },
+  "security": { description: "Audits code and infrastructure for security vulnerabilities", tryIt: "List the top 5 security checks for a new REST API deployment" },
+  "devops": { description: "Automates deployment, CI/CD, and infrastructure tasks", tryIt: "Write a GitHub Actions workflow that runs tests and deploys to staging" },
+  "architect": { description: "Designs system architecture and makes technical decisions", tryIt: "Design a microservices architecture for a real-time chat application" },
+  "debug": { description: "Diagnoses and fixes bugs in running applications", tryIt: "Debug why a React component re-renders infinitely on state change" },
+  "data": { description: "Processes, transforms, and analyzes data sets", tryIt: "Write a SQL query to find the top 10 customers by revenue in the last 90 days" },
+  "creative": { description: "Generates creative content, designs, and artistic ideas", tryIt: "Generate 5 unique name ideas for an AI-powered code review tool" },
+  "monitor": { description: "Monitors system health and alerts on anomalies", tryIt: "Set up monitoring rules for API latency exceeding 500ms" },
+  "social": { description: "Manages social media content and engagement", tryIt: "Draft a Twitter thread announcing a new open-source project" },
+  "email": { description: "Manages email workflows and automated responses", tryIt: "Draft an automated welcome email for new user signups" },
+  "deploy": { description: "Manages deployments across environments", tryIt: "Create a deployment checklist for a production release" },
+};
+
+function getAgentExample(name: string): { description: string; tryIt: string } | undefined {
+  const lower = name.toLowerCase();
+  for (const [key, val] of Object.entries(AGENT_EXAMPLES)) {
+    if (lower.includes(key)) return val;
+  }
+  return undefined;
+}
 
 function inferCategory(agent: PreinstalledAgent): string {
   const lower = `${agent.name} ${agent.description}`.toLowerCase();
@@ -254,6 +282,7 @@ export function Agents({
   const totalTasks = auditEvents.length;
 
   return (
+    <RequiresLlm feature="Agents">
     <section className="mission-control">
       <div className="mission-grid-overlay" />
 
@@ -447,6 +476,19 @@ export function Agents({
                   <button type="button" className="mission-agent-card__action mission-agent-card__action--chat cursor-pointer" onClick={e => { e.stopPropagation(); navigateToChat(pa.agent_id); }}>
                     Chat
                   </button>
+                  {getAgentExample(pa.name) && (
+                    <button type="button" className="mission-agent-card__action cursor-pointer" style={{ color: "#22d3ee" }} onClick={e => {
+                      e.stopPropagation();
+                      const ex = getAgentExample(pa.name);
+                      if (ex) {
+                        sessionStorage.setItem("nexus-chat-agent", pa.agent_id);
+                        sessionStorage.setItem("nexus-chat-prefill", ex.tryIt);
+                        if (onNavigate) onNavigate("ai-chat-hub");
+                      }
+                    }}>
+                      <Zap size={14} /> Try It
+                    </button>
+                  )}
                   <button type="button" className="mission-agent-card__action cursor-pointer" onClick={e => { e.stopPropagation(); setExpandedCardId(isExpanded ? null : agentId); }}>
                     {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {isExpanded ? "Less" : "Details"}
                   </button>
@@ -466,6 +508,14 @@ export function Agents({
                       <span className="mission-agent-card__detail-label">Full Description</span>
                       <p className="mission-agent-card__detail-value">{pa.description}</p>
                     </div>
+                    {getAgentExample(pa.name) && (
+                      <div className="mission-agent-card__detail-row">
+                        <span className="mission-agent-card__detail-label">Example Prompt</span>
+                        <p className="mission-agent-card__detail-value" style={{ fontStyle: "italic", color: "#94a3b8" }}>
+                          &ldquo;{getAgentExample(pa.name)!.tryIt}&rdquo;
+                        </p>
+                      </div>
+                    )}
                     <div className="mission-agent-card__detail-row">
                       <span className="mission-agent-card__detail-label">Autonomy Level</span>
                       <span className="mission-agent-card__detail-value" style={{ color: AUTONOMY_COLORS[level] }}>
@@ -562,6 +612,8 @@ export function Agents({
         onResume={onStart}
       />
 
+      {selectedAgentId && <AgentOutputPanel agentId={selectedAgentId} />}
+
       <CreateAgent
         open={showCreate}
         onClose={() => setShowCreate(false)}
@@ -571,5 +623,6 @@ export function Agents({
         }}
       />
     </section>
+    </RequiresLlm>
   );
 }

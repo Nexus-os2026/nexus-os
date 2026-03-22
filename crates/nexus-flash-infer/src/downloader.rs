@@ -54,29 +54,79 @@ pub struct LocalModel {
 /// Manages local model file storage.
 pub struct ModelStorage {
     base_dir: PathBuf,
+    /// When true, `list_models` also scans well-known directories like
+    /// `~/.nexus/models/` and `~/models/` in addition to `base_dir`.
+    scan_extra_dirs: bool,
 }
 
 impl ModelStorage {
     /// Create storage, ensuring the base directory exists.
+    /// Scans extra well-known directories when listing models.
     pub fn new() -> Result<Self, FlashError> {
         let base_dir = Self::default_model_dir()?;
         std::fs::create_dir_all(&base_dir)
             .map_err(|e| FlashError::DownloadError(format!("cannot create model dir: {e}")))?;
-        Ok(Self { base_dir })
+        Ok(Self {
+            base_dir,
+            scan_extra_dirs: true,
+        })
     }
 
     /// Create storage at a specific path (for testing).
+    /// Only scans the given directory — no extra dirs.
     pub fn with_dir(base_dir: PathBuf) -> Result<Self, FlashError> {
         std::fs::create_dir_all(&base_dir)
             .map_err(|e| FlashError::DownloadError(format!("cannot create model dir: {e}")))?;
-        Ok(Self { base_dir })
+        Ok(Self {
+            base_dir,
+            scan_extra_dirs: false,
+        })
     }
 
     /// List all downloaded `.gguf` models.
+    ///
+    /// Scans the primary model directory **and** common user directories
+    /// (`~/.nexus/models/`, `~/models/`) recursively so models inside
+    /// sub-folders (e.g. `bartowski__gemma-2-2b-it-GGUF/`) are discovered.
     pub fn list_models(&self) -> Result<Vec<LocalModel>, FlashError> {
         let mut models = Vec::new();
-        let entries = std::fs::read_dir(&self.base_dir)
-            .map_err(|e| FlashError::DownloadError(format!("cannot read model dir: {e}")))?;
+        let mut seen = std::collections::HashSet::new();
+
+        // Collect all directories to scan.
+        let mut scan_dirs: Vec<PathBuf> = vec![self.base_dir.clone()];
+
+        // Also scan ~/.nexus/models/ and ~/models/ if they exist.
+        if self.scan_extra_dirs {
+            if let Ok(home) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
+                let home = PathBuf::from(home);
+                for extra in &[home.join(".nexus").join("models"), home.join("models")] {
+                    if extra.is_dir() && !scan_dirs.contains(extra) {
+                        scan_dirs.push(extra.clone());
+                    }
+                }
+            }
+        }
+
+        for dir in &scan_dirs {
+            Self::scan_dir_recursive(dir, &mut models, &mut seen, 3);
+        }
+
+        // Newest first
+        models.sort_by(|a, b| b.downloaded_at.cmp(&a.downloaded_at));
+        Ok(models)
+    }
+
+    /// Recursively scan a directory for `.gguf` files up to `max_depth` levels.
+    fn scan_dir_recursive(
+        dir: &Path,
+        models: &mut Vec<LocalModel>,
+        seen: &mut std::collections::HashSet<String>,
+        max_depth: u8,
+    ) {
+        let entries = match std::fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => return,
+        };
 
         for entry in entries {
             let entry = match entry {
@@ -84,9 +134,31 @@ impl ModelStorage {
                 Err(_) => continue,
             };
             let path = entry.path();
+
+            if path.is_dir() && max_depth > 0 {
+                Self::scan_dir_recursive(&path, models, seen, max_depth - 1);
+                continue;
+            }
+
             if path.extension().and_then(|e| e.to_str()) != Some("gguf") {
                 continue;
             }
+            // Skip partial downloads.
+            let name_str = path.to_string_lossy().to_string();
+            if name_str.ends_with(".part.gguf") {
+                continue;
+            }
+
+            // Deduplicate by absolute path.
+            let canonical = path
+                .canonicalize()
+                .unwrap_or_else(|_| path.clone())
+                .to_string_lossy()
+                .to_string();
+            if !seen.insert(canonical) {
+                continue;
+            }
+
             let meta = match std::fs::metadata(&path) {
                 Ok(m) => m,
                 Err(_) => continue,
@@ -108,10 +180,6 @@ impl ModelStorage {
                 verified: false,
             });
         }
-
-        // Newest first
-        models.sort_by(|a, b| b.downloaded_at.cmp(&a.downloaded_at));
-        Ok(models)
     }
 
     /// Path where a model would be stored.

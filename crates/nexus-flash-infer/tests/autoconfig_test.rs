@@ -120,11 +120,13 @@ fn test_autoconfig_suggests_smaller_model() {
         generation_config: None,
     };
 
+    // Large models should still load — mmap streams from disk.
+    // auto_configure now warns instead of rejecting.
     let result = auto_configure(&hw, &profile, pref);
-    assert!(result.is_err());
-    if let Err(nexus_flash_infer::FlashError::ModelTooLarge { suggestion, .. }) = result {
-        assert!(!suggestion.is_empty());
-    }
+    assert!(
+        result.is_ok(),
+        "auto_configure should not reject large models"
+    );
 }
 
 #[test]
@@ -160,8 +162,8 @@ fn test_autoconfig_speed_priority_limits_context() {
     };
 
     let config = auto_configure(&hw, &profile, pref).unwrap();
-    // Speed priority should cap context at 4096
-    assert!(config.generation_config.n_ctx <= 4096);
+    // Speed priority should cap context at 2048
+    assert!(config.generation_config.n_ctx <= 2048);
 }
 
 #[test]
@@ -179,6 +181,6 @@ fn test_autoconfig_thread_cap() {
     };
 
     let config = auto_configure(&hw, &profile, pref).unwrap();
-    // Threads capped at 16
-    assert_eq!(config.load_config.n_threads, Some(16));
+    // Threads capped at 32
+    assert_eq!(config.load_config.n_threads, Some(32));
 }

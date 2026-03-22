@@ -410,11 +410,17 @@
 /* ─── Messages ─── */
 .ch-messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.ch-messages::before {
+  content: "";
+  flex: 1;
 }
 
 .ch-msg {
@@ -657,6 +663,7 @@
 
 /* ─── Input Bar ─── */
 .ch-input-bar {
+  flex-shrink: 0;
   border-top: 1px solid #1e293b;
   padding: 10px 16px;
   background: #0f172a;

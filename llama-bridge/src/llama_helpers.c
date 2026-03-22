@@ -182,6 +182,18 @@ void nexus_ctx_params_set_no_perf(CTX_PARAMS_T *p, bool v) {
     p->no_perf = v;
 }
 
+void nexus_ctx_params_set_n_ubatch(CTX_PARAMS_T *p, uint32_t n) {
+    p->n_ubatch = n;
+}
+
+void nexus_ctx_params_set_type_k(CTX_PARAMS_T *p, int32_t t) {
+    p->type_k = t;
+}
+
+void nexus_ctx_params_set_type_v(CTX_PARAMS_T *p, int32_t t) {
+    p->type_v = t;
+}
+
 // ── Sizeof queries ────────────────────────────────────────────────
 
 size_t nexus_sizeof_model_params(void) {

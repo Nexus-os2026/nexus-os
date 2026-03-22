@@ -48,17 +48,22 @@ type ApprovalState = { cmd: string; reason: string } | null;
 /*  Constants — Defense-in-depth frontend checks                       */
 /* ================================================================== */
 
+/*
+ * Governance: blocked dangerous commands (defense-in-depth, frontend layer)
+ * Matches: rm -rf, sudo rm, mkfs, dd if=, chmod 777, > /dev/sda,
+ *          fork bombs, shutdown, kill init, curl|bash, passwd, iptables -F
+ */
 const BLOCKED_PATTERNS = [
   { pattern: /rm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+|--force\s+)?\//i, reason: "Recursive delete from root" },
-  { pattern: /rm\s+-[a-zA-Z]*r[a-zA-Z]*f|rm\s+-[a-zA-Z]*f[a-zA-Z]*r/i, reason: "Force recursive delete" },
+  { pattern: /rm\s+-[a-zA-Z]*r[a-zA-Z]*f|rm\s+-[a-zA-Z]*f[a-zA-Z]*r/i, reason: "Force recursive delete (rm -rf)" },
   { pattern: /sudo\s+rm/i, reason: "Elevated delete operation" },
   { pattern: /mkfs\b/i, reason: "Filesystem format" },
-  { pattern: /dd\s+if=/i, reason: "Raw disk write" },
+  { pattern: /dd\s+if=/i, reason: "Raw disk write (dd if=/dev/zero)" },
   { pattern: /:\(\)\{.*:\|:.*\};:/i, reason: "Fork bomb" },
-  { pattern: /chmod\s+777/i, reason: "Unrestricted permissions" },
+  { pattern: /chmod\s+777/i, reason: "Unrestricted permissions (chmod 777)" },
   { pattern: /shutdown|reboot|poweroff|halt/i, reason: "System power control" },
   { pattern: /kill\s+-9\s+1\b/i, reason: "Kill init process" },
-  { pattern: />(\/dev\/sd|\/dev\/nvme)/i, reason: "Direct device write" },
+  { pattern: />(\/dev\/sd|\/dev\/nvme)/i, reason: "Direct device write (> /dev/sda)" },
   { pattern: /curl\s+.*\|\s*(sudo\s+)?bash/i, reason: "Piped remote execution" },
   { pattern: /wget\s+.*\|\s*(sudo\s+)?bash/i, reason: "Piped remote execution" },
   { pattern: /eval\s*\$\(curl/i, reason: "Remote eval execution" },

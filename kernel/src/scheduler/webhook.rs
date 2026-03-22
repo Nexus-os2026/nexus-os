@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn hmac_sha256_valid_signature() {
-        let secret = "my-secret-key";
+        let secret = "test-key"; // test hmac secret
         let payload = serde_json::json!({"event": "push", "ref": "refs/heads/main"});
         let payload_bytes = serde_json::to_vec(&payload).unwrap();
 

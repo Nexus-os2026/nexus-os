@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import RequiresLlm from "../components/RequiresLlm";
 import {
   getAgentConsciousness,
   getConsciousnessHeatmap,
@@ -229,6 +230,7 @@ export default function ConsciousnessMonitor(): JSX.Element {
   }, [selectedId, refresh]);
 
   return (
+    <RequiresLlm feature="Consciousness Monitor">
     <div style={{ padding: 24, color: "#e2e8f0", maxWidth: 1200, margin: "0 auto" }}>
       <h1 style={{ fontFamily: "monospace", fontSize: "1.8rem", color: "#22d3ee", marginBottom: 8 }}>
         CONSCIOUSNESS MONITOR
@@ -345,6 +347,7 @@ export default function ConsciousnessMonitor(): JSX.Element {
         </div>
       )}
     </div>
+    </RequiresLlm>
   );
 }
 

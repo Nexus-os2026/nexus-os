@@ -1,34 +1,34 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   MessageSquare, Users, Terminal, Shield, Clock, History,
-  LayoutDashboard, Dna, Brain, Moon, GitBranch,
+  LayoutDashboard, Dna, Brain, Moon, GitBranch, GitMerge,
   ShieldCheck, Fingerprint, Lock, Monitor,
-  Network, Landmark, Code2,
-  Workflow, Upload,
+  Network, Landmark, Code2, Code,
+  Workflow, Upload, Search,
   Award, Link, Layers, Key, CheckCircle, Scale,
   Palette, Mail, Play, Store, Bot, Mic, Rocket, BookOpen,
   FileCode, TerminalSquare, FolderOpen, Database, Globe, Globe2,
   MessageCircle, FileText, Cpu, StickyNote, Kanban, Activity,
   Settings, ChevronDown, ChevronRight,
   ShieldAlert, UserCog, Boxes, ScrollText, ClipboardCheck, HeartPulse,
-  PlugZap,
+  PlugZap, Timer, Gauge, LogIn, Building2, BarChart3, Receipt, Server, Zap,
   type LucideIcon
 } from "lucide-react";
 import "./sidebar.css";
 
 const ICON_MAP: Record<string, LucideIcon> = {
   MessageSquare, Users, Terminal, Shield, Clock, History,
-  LayoutDashboard, Dna, Brain, Moon, GitBranch,
+  LayoutDashboard, Dna, Brain, Moon, GitBranch, GitMerge,
   ShieldCheck, Fingerprint, Lock, Monitor,
-  Network, Landmark, Code2,
-  Workflow, Upload,
+  Network, Landmark, Code2, Code,
+  Workflow, Upload, Search,
   Award, Link, Layers, Key, CheckCircle, Scale,
   Palette, Mail, Play, Store, Bot, Mic, Rocket, BookOpen,
   FileCode, TerminalSquare, FolderOpen, Database, Globe, Globe2,
   MessageCircle, FileText, Cpu, StickyNote, Kanban, Activity,
   Settings,
   ShieldAlert, UserCog, Boxes, ScrollText, ClipboardCheck, HeartPulse,
-  PlugZap,
+  PlugZap, Timer, Gauge, LogIn, Building2, BarChart3, Receipt, Server, Zap,
 };
 
 export interface SidebarItem {
@@ -48,7 +48,20 @@ interface SidebarProps {
 }
 
 export function Sidebar({ items, activeId, onSelect, version }: SidebarProps): JSX.Element {
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  // All sections collapsed by default; persist expanded state to localStorage
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem("nexus-sidebar-expanded");
+      if (saved) return new Set(JSON.parse(saved) as string[]);
+    } catch { /* ignore */ }
+    return new Set<string>();
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("nexus-sidebar-expanded", JSON.stringify([...expandedSections]));
+    } catch { /* ignore */ }
+  }, [expandedSections]);
 
   const grouped = useMemo(() => {
     const sections: { section: string; items: SidebarItem[] }[] = [];
@@ -65,7 +78,7 @@ export function Sidebar({ items, activeId, onSelect, version }: SidebarProps): J
   }, [items]);
 
   function toggleSection(section: string): void {
-    setCollapsedSections((prev) => {
+    setExpandedSections((prev) => {
       const next = new Set(prev);
       if (next.has(section)) {
         next.delete(section);
@@ -100,7 +113,7 @@ export function Sidebar({ items, activeId, onSelect, version }: SidebarProps): J
 
       <nav className="nexus-sidebar-nav">
         {grouped.map((group) => {
-          const isCollapsed = group.section ? collapsedSections.has(group.section) : false;
+          const isCollapsed = group.section ? !expandedSections.has(group.section) : false;
           return (
             <div key={group.section || "_default"} className="nexus-sidebar-group">
               {group.section ? (

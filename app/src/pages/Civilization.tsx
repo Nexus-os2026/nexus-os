@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import RequiresLlm from "../components/RequiresLlm";
 import {
   civGetEconomyStatus,
   civGetGovernanceLog,
@@ -26,6 +27,7 @@ import {
   paymentPayInvoice,
   paymentGetRevenueStats,
   paymentCreatePayout,
+  hasDesktopRuntime,
 } from "../api/backend";
 import {
   ActionButton,
@@ -246,6 +248,7 @@ export default function CivilizationPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showWelcome, setShowWelcome] = useState(false);
 
   /* New state: wallets / economy */
   const [walletAgent, setWalletAgent] = useState("");
@@ -319,8 +322,62 @@ export default function CivilizationPage(): JSX.Element {
     }
   }, []);
 
+  // Auto-bootstrap civilization on first visit
   useEffect(() => {
-    void refresh();
+    if (!hasDesktopRuntime()) return;
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      try {
+        // Check if already running
+        const statusRaw = await civGetParliamentStatus();
+        const status = safeParse<ParliamentStatus>(statusRaw);
+        if (!cancelled && status && (status.active_proposals > 0 || status.passed_rules > 0 || status.total_votes > 0)) {
+          // Already initialized, just load all data
+          setParliament(status);
+          await refresh();
+          return;
+        }
+      } catch {
+        /* not yet initialized */
+      }
+
+      if (cancelled) return;
+
+      // Show welcome screen for first-time users
+      setShowWelcome(true);
+      setLoading(false);
+    };
+
+    bootstrap();
+    return () => { cancelled = true; };
+  }, [refresh]);
+
+  const foundCiv = useCallback(async (govType: string) => {
+    setShowWelcome(false);
+    setWorking(`Founding ${govType} civilization...`);
+    try {
+      await civProposeRule("system", `Governance model: ${govType} — all agents must operate within declared fuel budgets`);
+    } catch { /* ignore */ }
+    try {
+      await civProposeRule("system", "Agent actions require audit trail entries");
+    } catch { /* ignore */ }
+    try {
+      await economyCreateWallet("treasury");
+    } catch { /* ignore */ }
+    try {
+      await economyEarn("treasury", 10000, "Initial treasury funding");
+    } catch { /* ignore */ }
+    try {
+      const ps = await civGetParliamentStatus();
+      setParliament(safeParse<ParliamentStatus>(ps));
+    } catch { /* ignore */ }
+    try {
+      const rs = await civGetRoles();
+      setRoles(normalizeArray<RoleAssignment>(safeParse(rs)));
+    } catch { /* ignore */ }
+    await refresh();
+    setWorking(null);
   }, [refresh]);
 
   useEffect(() => {
@@ -1262,7 +1319,59 @@ export default function CivilizationPage(): JSX.Element {
 
   /* ─── Main render ─── */
 
+  if (showWelcome) {
+    return (
+      <RequiresLlm feature="Civilization">
+      <div style={commandPageStyle}>
+        <div style={{ maxWidth: 640, margin: "60px auto", textAlign: "center" as const }}>
+          <h1 style={{ margin: 0, fontFamily: "monospace", fontSize: "2rem", color: "#00ffcc", letterSpacing: "0.16em", textTransform: "uppercase" as const, marginBottom: 16 }}>
+            Welcome to Agent Civilization
+          </h1>
+          <p style={{ color: "#94a3b8", fontSize: "1rem", lineHeight: 1.6, marginBottom: 32 }}>
+            Watch AI agents build a micro-society with economy, governance, and trade.
+            Choose a governance model to found your civilization.
+          </p>
+
+          <div style={{ display: "grid", gap: 14 }}>
+            {([
+              { type: "democracy", label: "Democracy", desc: "Agents vote on every proposal. Majority rules.", accent: "#3b82f6" },
+              { type: "meritocracy", label: "Meritocracy", desc: "Highest-performing agents lead and set policy.", accent: "#f59e0b" },
+              { type: "council", label: "Council", desc: "A governing council of elected agents makes decisions.", accent: "#a78bfa" },
+            ] as const).map((opt) => (
+              <button
+                key={opt.type}
+                onClick={() => foundCiv(opt.type)}
+                style={{
+                  padding: "18px 24px",
+                  background: `rgba(${opt.accent === "#3b82f6" ? "59,130,246" : opt.accent === "#f59e0b" ? "245,158,11" : "167,139,250"},0.08)`,
+                  border: `1px solid ${opt.accent}44`,
+                  borderRadius: 12,
+                  cursor: "pointer",
+                  textAlign: "left" as const,
+                  fontFamily: "var(--font-mono, monospace)",
+                  color: "var(--text-primary, #e2e8f0)",
+                  transition: "all 0.2s",
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: "1.05rem", color: opt.accent, marginBottom: 4 }}>
+                  {opt.label}
+                </div>
+                <div style={{ fontSize: "0.82rem", color: "#94a3b8" }}>{opt.desc}</div>
+              </button>
+            ))}
+          </div>
+
+          <p style={{ color: "#64748b", fontSize: "0.78rem", marginTop: 24 }}>
+            Requires an AI engine. Agents will use your LLM to think, debate, and decide.
+          </p>
+        </div>
+      </div>
+      </RequiresLlm>
+    );
+  }
+
   return (
+    <RequiresLlm feature="Civilization">
     <div style={commandPageStyle}>
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ margin: 0, fontFamily: "monospace", fontSize: "1.8rem", color: "#00ffcc", letterSpacing: "0.16em", textTransform: "uppercase" }}>
@@ -1285,5 +1394,6 @@ export default function CivilizationPage(): JSX.Element {
       {activeTab === "contracts" && renderContracts()}
       {activeTab === "payments" && renderPayments()}
     </div>
+    </RequiresLlm>
   );
 }

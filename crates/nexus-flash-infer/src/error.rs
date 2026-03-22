@@ -3,21 +3,6 @@ use thiserror::Error;
 /// Errors from the flash inference engine.
 #[derive(Debug, Error)]
 pub enum FlashError {
-    #[error(
-        "model too large: needs {model_min_mb}MB, only {available_mb}MB available. {suggestion}"
-    )]
-    ModelTooLarge {
-        model_min_mb: u64,
-        available_mb: u64,
-        suggestion: String,
-    },
-
-    #[error("memory budget exceeded: requested {requested_mb}MB, remaining {remaining_mb}MB")]
-    BudgetExceeded {
-        requested_mb: u64,
-        remaining_mb: u64,
-    },
-
     #[error("backend not found for format {0:?}")]
     NoBackendForFormat(crate::backend::ModelFormat),
 

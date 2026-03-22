@@ -191,6 +191,129 @@ impl Integration for JiraIntegration {
     }
 }
 
+// ── Extended actions beyond the Integration trait ──
+
+impl JiraIntegration {
+    /// Add a comment to an existing issue.
+    pub fn add_comment(
+        &self,
+        issue_key: &str,
+        body: &str,
+    ) -> Result<serde_json::Value, IntegrationError> {
+        let url = format!("{}/rest/api/3/issue/{issue_key}/comment", self.base_url);
+        let payload = json!({
+            "body": {
+                "type": "doc",
+                "version": 1,
+                "content": [{
+                    "type": "paragraph",
+                    "content": [{ "type": "text", "text": body }]
+                }]
+            }
+        });
+
+        let response = self
+            .http
+            .post(&url)
+            .header("Authorization", self.auth_header())
+            .header("Content-Type", "application/json")
+            .json(&payload)
+            .send()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "jira".into(),
+                message: e.to_string(),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().unwrap_or_default();
+            return Err(IntegrationError::HttpError {
+                provider: "jira".into(),
+                status,
+                body,
+            });
+        }
+
+        response
+            .json()
+            .map_err(|e| IntegrationError::Serialization(e.to_string()))
+    }
+
+    /// Transition an issue to a new status (e.g. In Progress, Done).
+    pub fn transition_issue(
+        &self,
+        issue_key: &str,
+        transition_id: &str,
+    ) -> Result<(), IntegrationError> {
+        let url = format!("{}/rest/api/3/issue/{issue_key}/transitions", self.base_url);
+        let payload = json!({ "transition": { "id": transition_id } });
+
+        let response = self
+            .http
+            .post(&url)
+            .header("Authorization", self.auth_header())
+            .header("Content-Type", "application/json")
+            .json(&payload)
+            .send()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "jira".into(),
+                message: e.to_string(),
+            })?;
+
+        if response.status().is_success() || response.status().as_u16() == 204 {
+            Ok(())
+        } else {
+            let status = response.status().as_u16();
+            let body = response.text().unwrap_or_default();
+            Err(IntegrationError::HttpError {
+                provider: "jira".into(),
+                status,
+                body,
+            })
+        }
+    }
+
+    /// Search issues using JQL.
+    pub fn search_issues(
+        &self,
+        jql: &str,
+        max_results: u32,
+    ) -> Result<serde_json::Value, IntegrationError> {
+        let url = format!("{}/rest/api/3/search", self.base_url);
+        let payload = json!({
+            "jql": jql,
+            "maxResults": max_results,
+            "fields": ["summary", "status", "assignee", "priority", "created"]
+        });
+
+        let response = self
+            .http
+            .post(&url)
+            .header("Authorization", self.auth_header())
+            .header("Content-Type", "application/json")
+            .json(&payload)
+            .send()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "jira".into(),
+                message: e.to_string(),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().unwrap_or_default();
+            return Err(IntegrationError::HttpError {
+                provider: "jira".into(),
+                status,
+                body,
+            });
+        }
+
+        response
+            .json()
+            .map_err(|e| IntegrationError::Serialization(e.to_string()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -171,3 +171,105 @@ impl Integration for ServiceNowIntegration {
         }
     }
 }
+
+// ── Extended actions beyond the Integration trait ──
+
+impl ServiceNowIntegration {
+    /// Update an existing incident by sys_id.
+    pub fn update_incident(
+        &self,
+        sys_id: &str,
+        updates: serde_json::Value,
+    ) -> Result<serde_json::Value, IntegrationError> {
+        let url = format!("{}/api/now/table/incident/{sys_id}", self.instance_url);
+
+        let response = self
+            .http
+            .patch(&url)
+            .basic_auth(&self.username, Some(&self.password))
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .json(&updates)
+            .send()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "servicenow".into(),
+                message: e.to_string(),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().unwrap_or_default();
+            return Err(IntegrationError::HttpError {
+                provider: "servicenow".into(),
+                status,
+                body,
+            });
+        }
+
+        let body: serde_json::Value = response
+            .json()
+            .map_err(|e| IntegrationError::Serialization(e.to_string()))?;
+        Ok(body["result"].clone())
+    }
+
+    /// Add a work note to an incident.
+    pub fn add_work_note(&self, sys_id: &str, note: &str) -> Result<(), IntegrationError> {
+        self.update_incident(sys_id, json!({ "work_notes": note }))?;
+        Ok(())
+    }
+
+    /// Resolve an incident with a resolution note.
+    pub fn resolve_incident(
+        &self,
+        sys_id: &str,
+        close_notes: &str,
+    ) -> Result<(), IntegrationError> {
+        self.update_incident(
+            sys_id,
+            json!({
+                "state": "6",
+                "close_code": "Solved (Permanently)",
+                "close_notes": close_notes,
+            }),
+        )?;
+        Ok(())
+    }
+
+    /// Query incidents by filter.
+    pub fn query_incidents(
+        &self,
+        query: &str,
+        limit: u32,
+    ) -> Result<Vec<serde_json::Value>, IntegrationError> {
+        let url = format!(
+            "{}/api/now/table/incident?sysparm_query={}&sysparm_limit={limit}",
+            self.instance_url, query
+        );
+
+        let response = self
+            .http
+            .get(&url)
+            .basic_auth(&self.username, Some(&self.password))
+            .header("Accept", "application/json")
+            .send()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "servicenow".into(),
+                message: e.to_string(),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().unwrap_or_default();
+            return Err(IntegrationError::HttpError {
+                provider: "servicenow".into(),
+                status,
+                body,
+            });
+        }
+
+        let body: serde_json::Value = response
+            .json()
+            .map_err(|e| IntegrationError::Serialization(e.to_string()))?;
+        Ok(body["result"].as_array().cloned().unwrap_or_default())
+    }
+}

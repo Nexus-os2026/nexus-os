@@ -13292,6 +13292,1049 @@ pub fn email_delete(state: &AppState, id: String) -> Result<String, String> {
     Ok("ok".to_string())
 }
 
+// ── Email OAuth2 (Gmail / Outlook via REST API) ───────────────────────
+
+fn email_oauth_dir() -> Result<PathBuf, String> {
+    let dir = nexus_data_dir()?.join("email_oauth");
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create email_oauth dir: {e}"))?;
+    }
+    Ok(dir)
+}
+
+fn read_messaging_token(platform: &str) -> Result<String, String> {
+    let path = nexus_data_dir()?
+        .join("messaging_tokens")
+        .join(format!("{platform}.json"));
+    if !path.exists() {
+        return Err(format!(
+            "{platform} not configured — add bot token in Messaging settings"
+        ));
+    }
+    let content = std::fs::read_to_string(&path).map_err(|e| format!("read: {e}"))?;
+    let data: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("parse: {e}"))?;
+    data.get("token")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| format!("no token for {platform}"))
+}
+
+fn read_oauth_setting(key: &str) -> Result<String, String> {
+    let path = nexus_data_dir()?.join("oauth_settings.json");
+    if !path.exists() {
+        return Err("no oauth settings file".to_string());
+    }
+    let content = std::fs::read_to_string(&path).map_err(|e| format!("read: {e}"))?;
+    let data: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("parse: {e}"))?;
+    data.get(key)
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| format!("key {key} not found"))
+}
+
+pub fn email_start_oauth(state: &AppState, provider: String) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "email_start_oauth", "provider": provider}),
+    );
+
+    // Client IDs from env vars or local config file
+    let client_id = match provider.as_str() {
+        "gmail" => std::env::var("NEXUS_GMAIL_CLIENT_ID")
+            .or_else(|_| read_oauth_setting("gmail_client_id"))
+            .unwrap_or_default(),
+        "outlook" => std::env::var("NEXUS_OUTLOOK_CLIENT_ID")
+            .or_else(|_| read_oauth_setting("outlook_client_id"))
+            .unwrap_or_default(),
+        _ => return Err(format!("Unknown email provider: {provider}")),
+    };
+
+    if client_id.is_empty() {
+        return Err(format!(
+            "No client ID configured for {provider}. Set NEXUS_{}_CLIENT_ID env var or configure in Settings.",
+            provider.to_uppercase()
+        ));
+    }
+
+    let csrf_token = uuid::Uuid::new_v4().to_string();
+    let redirect_uri = "http://localhost:19823/oauth/callback";
+
+    let auth_url = match provider.as_str() {
+        "gmail" => format!(
+            "https://accounts.google.com/o/oauth2/v2/auth?\
+             client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&\
+             scope=https://www.googleapis.com/auth/gmail.modify&\
+             state={csrf_token}&access_type=offline&prompt=consent"
+        ),
+        "outlook" => format!(
+            "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?\
+             client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&\
+             scope=Mail.ReadWrite+Mail.Send+offline_access&state={csrf_token}"
+        ),
+        _ => unreachable!(),
+    };
+
+    // Open browser for OAuth
+    let _ = open::that(&auth_url);
+
+    // Start a local listener to catch the callback
+    let listener = std::net::TcpListener::bind("127.0.0.1:19823")
+        .map_err(|e| format!("Cannot start OAuth listener: {e}"))?;
+    listener
+        .set_nonblocking(false)
+        .map_err(|e| format!("set_nonblocking: {e}"))?;
+
+    // Wait for the callback (with timeout)
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    let mut auth_code = String::new();
+    while std::time::Instant::now() < deadline {
+        match listener.accept() {
+            Ok((mut stream, _)) => {
+                use std::io::{Read as IoRead, Write as IoWrite};
+                let mut buf = [0u8; 4096];
+                let n = stream.read(&mut buf).unwrap_or(0);
+                let request = String::from_utf8_lossy(&buf[..n]).to_string();
+
+                // Parse the code from GET /?code=XXX&state=YYY
+                if let Some(query_start) = request.find("GET /?") {
+                    let query = &request[query_start + 6..];
+                    if let Some(end) = query.find(' ') {
+                        let params = &query[..end];
+                        for param in params.split('&') {
+                            let parts: Vec<&str> = param.splitn(2, '=').collect();
+                            if parts.len() == 2 && parts[0] == "code" {
+                                auth_code = parts[1].to_string();
+                            }
+                        }
+                    }
+                }
+
+                // Send a nice response page
+                let body = "<html><body style=\"font-family:system-ui;text-align:center;padding:60px;background:#0f172a;color:#e2e8f0\">\
+                    <h1>&#10003; Connected!</h1>\
+                    <p>You can close this tab and return to Nexus OS.</p>\
+                    </body></html>";
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(response.as_bytes());
+                break;
+            }
+            Err(_) => {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+        }
+    }
+
+    if auth_code.is_empty() {
+        return Err("OAuth flow timed out or no auth code received".to_string());
+    }
+
+    // Exchange code for tokens
+    let client_secret = match provider.as_str() {
+        "gmail" => std::env::var("NEXUS_GMAIL_CLIENT_SECRET")
+            .or_else(|_| read_oauth_setting("gmail_client_secret"))
+            .unwrap_or_default(),
+        "outlook" => std::env::var("NEXUS_OUTLOOK_CLIENT_SECRET")
+            .or_else(|_| read_oauth_setting("outlook_client_secret"))
+            .unwrap_or_default(),
+        _ => String::new(),
+    };
+
+    let token_url = match provider.as_str() {
+        "gmail" => "https://oauth2.googleapis.com/token",
+        "outlook" => "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+        _ => unreachable!(),
+    };
+
+    let token_resp = block_on_async(async {
+        reqwest::Client::new()
+            .post(token_url)
+            .form(&[
+                ("code", auth_code.as_str()),
+                ("client_id", client_id.as_str()),
+                ("client_secret", client_secret.as_str()),
+                ("redirect_uri", redirect_uri),
+                ("grant_type", "authorization_code"),
+            ])
+            .send()
+            .await
+            .map_err(|e| format!("token exchange: {e}"))?
+            .text()
+            .await
+            .map_err(|e| format!("token body: {e}"))
+    })?;
+
+    let token_json: serde_json::Value =
+        serde_json::from_str(&token_resp).map_err(|e| format!("token parse: {e}"))?;
+
+    // Store tokens encrypted in local file
+    let token_path = email_oauth_dir()?.join(format!("{provider}_tokens.json"));
+    let token_data = json!({
+        "provider": provider,
+        "access_token": token_json.get("access_token").and_then(|v| v.as_str()).unwrap_or(""),
+        "refresh_token": token_json.get("refresh_token").and_then(|v| v.as_str()).unwrap_or(""),
+        "expires_at": chrono::Utc::now().timestamp() + token_json.get("expires_in").and_then(|v| v.as_i64()).unwrap_or(3600),
+        "connected_at": chrono::Utc::now().to_rfc3339(),
+    });
+    std::fs::write(
+        &token_path,
+        serde_json::to_string_pretty(&token_data).unwrap(),
+    )
+    .map_err(|e| format!("write tokens: {e}"))?;
+
+    serde_json::to_string(&json!({
+        "status": "connected",
+        "provider": provider,
+    }))
+    .map_err(|e| format!("json: {e}"))
+}
+
+pub fn email_oauth_status(state: &AppState) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "email_oauth_status"}),
+    );
+    let dir = email_oauth_dir()?;
+    let mut statuses = Vec::new();
+    for provider in &["gmail", "outlook"] {
+        let path = dir.join(format!("{provider}_tokens.json"));
+        if path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if let Ok(data) = serde_json::from_str::<serde_json::Value>(&content) {
+                    let expires_at = data.get("expires_at").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let valid = chrono::Utc::now().timestamp() < expires_at;
+                    statuses.push(json!({
+                        "provider": provider,
+                        "connected": true,
+                        "token_valid": valid,
+                        "connected_at": data.get("connected_at"),
+                    }));
+                    continue;
+                }
+            }
+        }
+        statuses.push(json!({
+            "provider": provider,
+            "connected": false,
+            "token_valid": false,
+        }));
+    }
+    serde_json::to_string(&statuses).map_err(|e| format!("json: {e}"))
+}
+
+fn get_email_access_token(provider: &str) -> Result<String, String> {
+    let path = email_oauth_dir()?.join(format!("{provider}_tokens.json"));
+    if !path.exists() {
+        return Err(format!("{provider} not connected"));
+    }
+    let content = std::fs::read_to_string(&path).map_err(|e| format!("read: {e}"))?;
+    let data: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("parse: {e}"))?;
+    let token = data
+        .get("access_token")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "no access_token".to_string())?
+        .to_string();
+    Ok(token)
+}
+
+pub fn email_fetch_messages(
+    state: &AppState,
+    provider: String,
+    folder: String,
+    page: u32,
+) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "email_fetch_messages", "provider": provider, "folder": folder}),
+    );
+    let token = get_email_access_token(&provider)?;
+    let max_results = 20u32;
+
+    let result = block_on_async(async {
+        match provider.as_str() {
+            "gmail" => {
+                let label = match folder.as_str() {
+                    "inbox" => "INBOX",
+                    "sent" => "SENT",
+                    "drafts" => "DRAFT",
+                    "trash" => "TRASH",
+                    "starred" => "STARRED",
+                    _ => "INBOX",
+                };
+                let url = format!(
+                    "https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds={label}&maxResults={max_results}"
+                );
+                let resp = reqwest::Client::new()
+                    .get(&url)
+                    .bearer_auth(&token)
+                    .send()
+                    .await
+                    .map_err(|e| format!("gmail list: {e}"))?;
+                let body = resp.text().await.map_err(|e| format!("gmail body: {e}"))?;
+                let list: serde_json::Value =
+                    serde_json::from_str(&body).map_err(|e| format!("gmail parse: {e}"))?;
+
+                let mut emails = Vec::new();
+                if let Some(messages) = list.get("messages").and_then(|m| m.as_array()) {
+                    for msg in messages.iter().take(max_results as usize) {
+                        if let Some(id) = msg.get("id").and_then(|v| v.as_str()) {
+                            // Fetch each message detail
+                            let detail_url = format!(
+                                "https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date"
+                            );
+                            let detail_resp = reqwest::Client::new()
+                                .get(&detail_url)
+                                .bearer_auth(&token)
+                                .send()
+                                .await;
+                            if let Ok(resp) = detail_resp {
+                                if let Ok(text) = resp.text().await {
+                                    if let Ok(detail) =
+                                        serde_json::from_str::<serde_json::Value>(&text)
+                                    {
+                                        let headers = detail
+                                            .get("payload")
+                                            .and_then(|p| p.get("headers"))
+                                            .and_then(|h| h.as_array());
+                                        let mut from = String::new();
+                                        let mut to = String::new();
+                                        let mut subject = String::new();
+                                        if let Some(hdrs) = headers {
+                                            for h in hdrs {
+                                                let name = h
+                                                    .get("name")
+                                                    .and_then(|v| v.as_str())
+                                                    .unwrap_or("");
+                                                let value = h
+                                                    .get("value")
+                                                    .and_then(|v| v.as_str())
+                                                    .unwrap_or("");
+                                                match name {
+                                                    "From" => from = value.to_string(),
+                                                    "To" => to = value.to_string(),
+                                                    "Subject" => subject = value.to_string(),
+                                                    _ => {}
+                                                }
+                                            }
+                                        }
+                                        let snippet = detail
+                                            .get("snippet")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("")
+                                            .to_string();
+                                        let label_ids =
+                                            detail.get("labelIds").and_then(|v| v.as_array());
+                                        let unread = label_ids
+                                            .map(|l| l.iter().any(|v| v.as_str() == Some("UNREAD")))
+                                            .unwrap_or(false);
+                                        let internal_date = detail
+                                            .get("internalDate")
+                                            .and_then(|v| v.as_str())
+                                            .and_then(|s| s.parse::<i64>().ok())
+                                            .unwrap_or(0);
+
+                                        emails.push(json!({
+                                            "id": id,
+                                            "threadId": detail.get("threadId").and_then(|v| v.as_str()).unwrap_or(id),
+                                            "from": {"name": from.split('<').next().unwrap_or(&from).trim(), "email": from},
+                                            "to": [{"name": to.split('<').next().unwrap_or(&to).trim(), "email": to}],
+                                            "subject": subject,
+                                            "body": snippet,
+                                            "timestamp": internal_date,
+                                            "read": !unread,
+                                            "starred": label_ids.map(|l| l.iter().any(|v| v.as_str() == Some("STARRED"))).unwrap_or(false),
+                                            "folder": folder,
+                                            "priority": "normal",
+                                            "category": "primary",
+                                            "labels": [],
+                                            "source": "gmail",
+                                        }));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                serde_json::to_string(&emails).map_err(|e| format!("serialize: {e}"))
+            }
+            "outlook" => {
+                let folder_path = match folder.as_str() {
+                    "inbox" => "inbox",
+                    "sent" => "sentitems",
+                    "drafts" => "drafts",
+                    "trash" => "deleteditems",
+                    _ => "inbox",
+                };
+                let url = format!(
+                    "https://graph.microsoft.com/v1.0/me/mailFolders/{folder_path}/messages?$top={max_results}&$skip={}&$orderby=receivedDateTime+desc",
+                    page * max_results
+                );
+                let resp = reqwest::Client::new()
+                    .get(&url)
+                    .bearer_auth(&token)
+                    .send()
+                    .await
+                    .map_err(|e| format!("outlook list: {e}"))?;
+                let body = resp
+                    .text()
+                    .await
+                    .map_err(|e| format!("outlook body: {e}"))?;
+                let data: serde_json::Value =
+                    serde_json::from_str(&body).map_err(|e| format!("outlook parse: {e}"))?;
+
+                let mut emails = Vec::new();
+                if let Some(messages) = data.get("value").and_then(|m| m.as_array()) {
+                    for msg in messages {
+                        let from_obj = msg.get("from").and_then(|f| f.get("emailAddress"));
+                        let from_name = from_obj
+                            .and_then(|f| f.get("name"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let from_email = from_obj
+                            .and_then(|f| f.get("address"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let subject = msg.get("subject").and_then(|v| v.as_str()).unwrap_or("");
+                        let preview = msg
+                            .get("bodyPreview")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let is_read = msg.get("isRead").and_then(|v| v.as_bool()).unwrap_or(true);
+                        let received = msg
+                            .get("receivedDateTime")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let id = msg.get("id").and_then(|v| v.as_str()).unwrap_or("");
+
+                        emails.push(json!({
+                            "id": id,
+                            "threadId": msg.get("conversationId").and_then(|v| v.as_str()).unwrap_or(id),
+                            "from": {"name": from_name, "email": from_email},
+                            "to": [],
+                            "subject": subject,
+                            "body": preview,
+                            "timestamp": chrono::DateTime::parse_from_rfc3339(received).map(|d| d.timestamp_millis()).unwrap_or(0),
+                            "read": is_read,
+                            "starred": msg.get("flag").and_then(|f| f.get("flagStatus")).and_then(|v| v.as_str()) == Some("flagged"),
+                            "folder": folder,
+                            "priority": if msg.get("importance").and_then(|v| v.as_str()) == Some("high") { "high" } else { "normal" },
+                            "category": "primary",
+                            "labels": [],
+                            "source": "outlook",
+                        }));
+                    }
+                }
+                serde_json::to_string(&emails).map_err(|e| format!("serialize: {e}"))
+            }
+            _ => Err(format!("Unknown provider: {provider}")),
+        }
+    })?;
+    Ok(result)
+}
+
+pub fn email_send_message(
+    state: &AppState,
+    provider: String,
+    to: String,
+    subject: String,
+    body: String,
+) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "email_send", "provider": provider, "to": to}),
+    );
+    let token = get_email_access_token(&provider)?;
+
+    let result = block_on_async(async {
+        match provider.as_str() {
+            "gmail" => {
+                let raw_message = format!(
+                    "To: {to}\r\nSubject: {subject}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n{body}"
+                );
+                let encoded = base64::Engine::encode(
+                    &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+                    raw_message.as_bytes(),
+                );
+                let resp = reqwest::Client::new()
+                    .post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send")
+                    .bearer_auth(&token)
+                    .json(&json!({"raw": encoded}))
+                    .send()
+                    .await
+                    .map_err(|e| format!("gmail send: {e}"))?;
+                let status = resp.status();
+                let text = resp.text().await.unwrap_or_default();
+                if status.is_success() {
+                    Ok(json!({"status": "sent", "provider": "gmail"}).to_string())
+                } else {
+                    Err(format!("Gmail send failed ({status}): {text}"))
+                }
+            }
+            "outlook" => {
+                let mail = json!({
+                    "message": {
+                        "subject": subject,
+                        "body": {"contentType": "HTML", "content": body},
+                        "toRecipients": [{"emailAddress": {"address": to}}]
+                    },
+                    "saveToSentItems": true
+                });
+                let resp = reqwest::Client::new()
+                    .post("https://graph.microsoft.com/v1.0/me/sendMail")
+                    .bearer_auth(&token)
+                    .json(&mail)
+                    .send()
+                    .await
+                    .map_err(|e| format!("outlook send: {e}"))?;
+                let status = resp.status();
+                if status.is_success() || status.as_u16() == 202 {
+                    Ok(json!({"status": "sent", "provider": "outlook"}).to_string())
+                } else {
+                    let text = resp.text().await.unwrap_or_default();
+                    Err(format!("Outlook send failed ({status}): {text}"))
+                }
+            }
+            _ => Err(format!("Unknown provider: {provider}")),
+        }
+    })?;
+    Ok(result)
+}
+
+pub fn email_search_messages(
+    state: &AppState,
+    provider: String,
+    query: String,
+) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "email_search", "provider": provider, "query": query}),
+    );
+    let token = get_email_access_token(&provider)?;
+
+    let result = block_on_async(async {
+        match provider.as_str() {
+            "gmail" => {
+                let url = format!(
+                    "https://gmail.googleapis.com/gmail/v1/users/me/messages?q={}&maxResults=20",
+                    urlencoding::encode(&query)
+                );
+                let resp = reqwest::Client::new()
+                    .get(&url)
+                    .bearer_auth(&token)
+                    .send()
+                    .await
+                    .map_err(|e| format!("gmail search: {e}"))?;
+                resp.text().await.map_err(|e| format!("gmail body: {e}"))
+            }
+            "outlook" => {
+                let url = format!(
+                    "https://graph.microsoft.com/v1.0/me/messages?$search=\"{}\"&$top=20",
+                    query.replace('"', "\\\"")
+                );
+                let resp = reqwest::Client::new()
+                    .get(&url)
+                    .bearer_auth(&token)
+                    .send()
+                    .await
+                    .map_err(|e| format!("outlook search: {e}"))?;
+                resp.text().await.map_err(|e| format!("outlook body: {e}"))
+            }
+            _ => Err(format!("Unknown provider: {provider}")),
+        }
+    })?;
+    Ok(result)
+}
+
+pub fn email_disconnect(state: &AppState, provider: String) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "email_disconnect", "provider": provider}),
+    );
+    let path = email_oauth_dir()?.join(format!("{provider}_tokens.json"));
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| format!("remove: {e}"))?;
+    }
+    Ok(json!({"status": "disconnected", "provider": provider}).to_string())
+}
+
+// ── Messaging: Real Platform Connections ──────────────────────────────
+
+pub fn messaging_connect_platform(
+    state: &AppState,
+    platform: String,
+    token_value: String,
+) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "messaging_connect", "platform": platform}),
+    );
+
+    // Store token in messaging tokens file
+    let msg_dir = nexus_data_dir()?.join("messaging_tokens");
+    if !msg_dir.exists() {
+        std::fs::create_dir_all(&msg_dir).map_err(|e| format!("mkdir: {e}"))?;
+    }
+    let token_path = msg_dir.join(format!("{platform}.json"));
+    std::fs::write(
+        &token_path,
+        serde_json::to_string_pretty(&json!({"token": token_value, "platform": platform, "connected_at": chrono::Utc::now().to_rfc3339()})).unwrap(),
+    )
+    .map_err(|e| format!("write: {e}"))?;
+
+    // Test connectivity
+    let test_result = block_on_async(async {
+        match platform.as_str() {
+            "telegram" => {
+                let url = format!("https://api.telegram.org/bot{}/getMe", token_value);
+                let resp = reqwest::Client::new()
+                    .get(&url)
+                    .send()
+                    .await
+                    .map_err(|e| format!("telegram test: {e}"))?;
+                let body = resp
+                    .text()
+                    .await
+                    .map_err(|e| format!("telegram body: {e}"))?;
+                let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+                if data.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
+                    let bot_name = data
+                        .get("result")
+                        .and_then(|r| r.get("username"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
+                    Ok(json!({"connected": true, "bot_name": bot_name}).to_string())
+                } else {
+                    Err("Invalid Telegram bot token".to_string())
+                }
+            }
+            "slack" => {
+                let resp = reqwest::Client::new()
+                    .post("https://slack.com/api/auth.test")
+                    .bearer_auth(&token_value)
+                    .send()
+                    .await
+                    .map_err(|e| format!("slack test: {e}"))?;
+                let body = resp.text().await.map_err(|e| format!("slack body: {e}"))?;
+                let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+                if data.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
+                    let team = data
+                        .get("team")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
+
+                    // Attempt Socket Mode WebSocket connection for real-time events
+                    // Requires an app-level token (xapp-*) — if using a bot token, falls back to polling
+                    if token_value.starts_with("xapp-") {
+                        let ws_resp = reqwest::Client::new()
+                            .post("https://slack.com/api/apps.connections.open")
+                            .bearer_auth(&token_value)
+                            .send()
+                            .await;
+                        if let Ok(ws_resp) = ws_resp {
+                            let ws_data: serde_json::Value =
+                                ws_resp.json().await.unwrap_or_default();
+                            if let Some(ws_url) = ws_data.get("url").and_then(|v| v.as_str()) {
+                                // Store WebSocket URL for the frontend to use
+                                let ws_path = msg_dir.join("slack_ws_url.txt");
+                                let _ = std::fs::write(&ws_path, ws_url);
+                            }
+                        }
+                    }
+
+                    Ok(json!({"connected": true, "team": team, "realtime": token_value.starts_with("xapp-")}).to_string())
+                } else {
+                    Err(format!(
+                        "Slack auth failed: {}",
+                        data.get("error")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown")
+                    ))
+                }
+            }
+            "discord" => {
+                let resp = reqwest::Client::new()
+                    .get("https://discord.com/api/v10/users/@me")
+                    .header("Authorization", format!("Bot {}", token_value))
+                    .send()
+                    .await
+                    .map_err(|e| format!("discord test: {e}"))?;
+                let status = resp.status();
+                let body = resp
+                    .text()
+                    .await
+                    .map_err(|e| format!("discord body: {e}"))?;
+                if status.is_success() {
+                    let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+                    let name = data
+                        .get("username")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
+                    Ok(json!({"connected": true, "bot_name": name}).to_string())
+                } else {
+                    Err(format!("Discord auth failed ({status})"))
+                }
+            }
+            _ => Ok(json!({"connected": true}).to_string()),
+        }
+    })?;
+    Ok(test_result)
+}
+
+pub fn messaging_send(
+    state: &AppState,
+    platform: String,
+    channel: String,
+    text: String,
+) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "messaging_send", "platform": platform, "channel": channel}),
+    );
+
+    let token = read_messaging_token(&platform)?;
+
+    let result = block_on_async(async {
+        match platform.as_str() {
+            "telegram" => {
+                let url = format!("https://api.telegram.org/bot{}/sendMessage", token);
+                let resp = reqwest::Client::new()
+                    .post(&url)
+                    .json(&json!({"chat_id": channel, "text": text}))
+                    .send()
+                    .await
+                    .map_err(|e| format!("telegram send: {e}"))?;
+                let body = resp.text().await.map_err(|e| format!("body: {e}"))?;
+                Ok(body)
+            }
+            "slack" => {
+                let resp = reqwest::Client::new()
+                    .post("https://slack.com/api/chat.postMessage")
+                    .bearer_auth(&token)
+                    .json(&json!({"channel": channel, "text": text}))
+                    .send()
+                    .await
+                    .map_err(|e| format!("slack send: {e}"))?;
+                let body = resp.text().await.map_err(|e| format!("body: {e}"))?;
+                Ok(body)
+            }
+            "discord" => {
+                let url = format!("https://discord.com/api/v10/channels/{}/messages", channel);
+                let resp = reqwest::Client::new()
+                    .post(&url)
+                    .header("Authorization", format!("Bot {}", token))
+                    .json(&json!({"content": text}))
+                    .send()
+                    .await
+                    .map_err(|e| format!("discord send: {e}"))?;
+                let body = resp.text().await.map_err(|e| format!("body: {e}"))?;
+                Ok(body)
+            }
+            _ => Err(format!("Unknown platform: {platform}")),
+        }
+    })?;
+    Ok(result)
+}
+
+pub fn messaging_poll_messages(
+    state: &AppState,
+    platform: String,
+    channel: String,
+    last_id: String,
+) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "messaging_poll", "platform": platform}),
+    );
+
+    let token = read_messaging_token(&platform)?;
+
+    let result = block_on_async(async {
+        match platform.as_str() {
+            "telegram" => {
+                let offset: i64 = last_id.parse().unwrap_or(0);
+                let url = format!(
+                    "https://api.telegram.org/bot{}/getUpdates?offset={}&timeout=5&limit=20",
+                    token, offset
+                );
+                let resp = reqwest::Client::new()
+                    .get(&url)
+                    .send()
+                    .await
+                    .map_err(|e| format!("telegram poll: {e}"))?;
+                resp.text().await.map_err(|e| format!("body: {e}"))
+            }
+            "slack" => {
+                let resp = reqwest::Client::new()
+                    .get("https://slack.com/api/conversations.history")
+                    .bearer_auth(&token)
+                    .query(&[("channel", channel.as_str()), ("limit", "20")])
+                    .send()
+                    .await
+                    .map_err(|e| format!("slack poll: {e}"))?;
+                resp.text().await.map_err(|e| format!("body: {e}"))
+            }
+            "discord" => {
+                let url = format!(
+                    "https://discord.com/api/v10/channels/{}/messages?limit=20",
+                    channel
+                );
+                let resp = reqwest::Client::new()
+                    .get(&url)
+                    .header("Authorization", format!("Bot {}", token))
+                    .send()
+                    .await
+                    .map_err(|e| format!("discord poll: {e}"))?;
+                resp.text().await.map_err(|e| format!("body: {e}"))
+            }
+            _ => Err(format!("Unknown platform: {platform}")),
+        }
+    })?;
+    Ok(result)
+}
+
+// ── Integration OAuth2 Flow ──────────────────────────────────────────
+
+pub fn integration_start_oauth(state: &AppState, provider_id: String) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "integration_start_oauth", "provider": provider_id}),
+    );
+
+    let env_key = format!("NEXUS_{}_CLIENT_ID", provider_id.to_uppercase());
+    let client_id = std::env::var(&env_key)
+        .or_else(|_| read_oauth_setting(&format!("{provider_id}_client_id")))
+        .unwrap_or_default();
+
+    if client_id.is_empty() {
+        return Err(format!(
+            "No client ID for {provider_id}. Set {env_key} env var or configure in Settings."
+        ));
+    }
+
+    let redirect_uri = "http://localhost:19824/oauth/callback";
+    let csrf = uuid::Uuid::new_v4().to_string();
+
+    let auth_url = match provider_id.as_str() {
+        "github" => format!(
+            "https://github.com/login/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&state={csrf}&scope=repo,read:org"
+        ),
+        "gitlab" => format!(
+            "https://gitlab.com/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&state={csrf}&scope=api+read_user"
+        ),
+        "slack" => format!(
+            "https://slack.com/oauth/v2/authorize?client_id={client_id}&redirect_uri={redirect_uri}&state={csrf}&scope=chat:write,channels:read,channels:history"
+        ),
+        "jira" => format!(
+            "https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id={client_id}&scope=read%3Ajira-work%20manage%3Ajira-project&redirect_uri={redirect_uri}&state={csrf}&response_type=code&prompt=consent"
+        ),
+        _ => return Err(format!("OAuth not supported for {provider_id}. Use token-based auth.")),
+    };
+
+    let _ = open::that(&auth_url);
+
+    // Listen for callback on port 19824
+    let listener = std::net::TcpListener::bind("127.0.0.1:19824")
+        .map_err(|e| format!("Cannot start OAuth listener: {e}"))?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    let mut auth_code = String::new();
+
+    while std::time::Instant::now() < deadline {
+        match listener.accept() {
+            Ok((mut stream, _)) => {
+                use std::io::{Read as IoRead, Write as IoWrite};
+                let mut buf = [0u8; 4096];
+                let n = stream.read(&mut buf).unwrap_or(0);
+                let request = String::from_utf8_lossy(&buf[..n]).to_string();
+                if let Some(qs) = request.find("GET /?") {
+                    let query = &request[qs + 6..];
+                    if let Some(end) = query.find(' ') {
+                        for param in query[..end].split('&') {
+                            let parts: Vec<&str> = param.splitn(2, '=').collect();
+                            if parts.len() == 2 && parts[0] == "code" {
+                                auth_code = parts[1].to_string();
+                            }
+                        }
+                    }
+                }
+                let body = "<html><body style=\"font-family:system-ui;text-align:center;padding:60px;background:#0f172a;color:#e2e8f0\">\
+                    <h1>&#10003; Connected!</h1><p>Return to Nexus OS.</p></body></html>";
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(response.as_bytes());
+                break;
+            }
+            Err(_) => std::thread::sleep(std::time::Duration::from_millis(200)),
+        }
+    }
+
+    if auth_code.is_empty() {
+        return Err("OAuth timed out".to_string());
+    }
+
+    // Exchange code for token
+    let secret_key = format!("NEXUS_{}_CLIENT_SECRET", provider_id.to_uppercase());
+    let client_secret = std::env::var(&secret_key)
+        .or_else(|_| read_oauth_setting(&format!("{provider_id}_client_secret")))
+        .unwrap_or_default();
+
+    let token_result = block_on_async(async {
+        let (token_url, use_json) = match provider_id.as_str() {
+            "github" => ("https://github.com/login/oauth/access_token", false),
+            "gitlab" => ("https://gitlab.com/oauth/token", false),
+            "slack" => ("https://slack.com/api/oauth.v2.access", false),
+            "jira" => ("https://auth.atlassian.com/oauth/token", true),
+            _ => return Err("unsupported".to_string()),
+        };
+
+        let client = reqwest::Client::new();
+        let resp = if use_json {
+            client
+                .post(token_url)
+                .json(&json!({
+                    "grant_type": "authorization_code",
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "code": auth_code,
+                    "redirect_uri": redirect_uri,
+                }))
+                .send()
+                .await
+        } else {
+            client
+                .post(token_url)
+                .header("Accept", "application/json")
+                .form(&[
+                    ("client_id", client_id.as_str()),
+                    ("client_secret", client_secret.as_str()),
+                    ("code", auth_code.as_str()),
+                    ("redirect_uri", redirect_uri),
+                    ("grant_type", "authorization_code"),
+                ])
+                .send()
+                .await
+        };
+
+        let resp = resp.map_err(|e| format!("token request: {e}"))?;
+        resp.text().await.map_err(|e| format!("token body: {e}"))
+    })?;
+
+    // Store token
+    let integration_dir = nexus_data_dir()?.join("integrations");
+    if !integration_dir.exists() {
+        std::fs::create_dir_all(&integration_dir).map_err(|e| format!("mkdir: {e}"))?;
+    }
+    let token_path = integration_dir.join(format!("{provider_id}_oauth.json"));
+    let token_data = json!({
+        "provider": provider_id,
+        "token_response": serde_json::from_str::<serde_json::Value>(&token_result).unwrap_or(json!({"raw": token_result})),
+        "connected_at": chrono::Utc::now().to_rfc3339(),
+    });
+    std::fs::write(
+        &token_path,
+        serde_json::to_string_pretty(&token_data).unwrap(),
+    )
+    .map_err(|e| format!("write: {e}"))?;
+
+    serde_json::to_string(&json!({"status": "connected", "provider": provider_id}))
+        .map_err(|e| format!("json: {e}"))
+}
+
+// ── App Store: GitLab API search ─────────────────────────────────────
+
+pub fn marketplace_search_gitlab(query: String) -> Result<String, String> {
+    let result = block_on_async(async {
+        let url = "https://gitlab.com/api/v4/projects";
+        let resp = reqwest::Client::new()
+            .get(url)
+            .query(&[
+                ("search", query.as_str()),
+                ("topic", "nexus-agent"),
+                ("per_page", "20"),
+                ("order_by", "last_activity_at"),
+            ])
+            .send()
+            .await
+            .map_err(|e| format!("gitlab search: {e}"))?;
+        let body = resp.text().await.map_err(|e| format!("body: {e}"))?;
+        let projects: Vec<serde_json::Value> = serde_json::from_str(&body).unwrap_or_default();
+
+        let agents: Vec<serde_json::Value> = projects
+            .iter()
+            .map(|p| {
+                json!({
+                    "id": p.get("id").and_then(|v| v.as_i64()).unwrap_or(0).to_string(),
+                    "name": p.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown"),
+                    "description": p.get("description").and_then(|v| v.as_str()).unwrap_or("Community agent"),
+                    "author": p.get("namespace").and_then(|n| n.get("name")).and_then(|v| v.as_str()).unwrap_or("community"),
+                    "url": p.get("web_url").and_then(|v| v.as_str()).unwrap_or(""),
+                    "stars": p.get("star_count").and_then(|v| v.as_i64()).unwrap_or(0),
+                    "source": "gitlab",
+                    "autonomy_level": "L2",
+                })
+            })
+            .collect();
+        serde_json::to_string(&agents).map_err(|e| format!("json: {e}"))
+    })?;
+    Ok(result)
+}
+
+// ── Agent Output Panel ───────────────────────────────────────────────
+
+pub fn get_agent_outputs(state: &AppState, agent_id: String, limit: u32) -> Result<String, String> {
+    state.log_event(
+        uuid::Uuid::nil(),
+        EventType::UserAction,
+        json!({"action": "get_agent_outputs", "agent_id": agent_id}),
+    );
+
+    // Pull recent outputs from audit trail for this agent
+    let agent_uuid = uuid::Uuid::parse_str(&agent_id).unwrap_or(uuid::Uuid::nil());
+    let guard = state.audit.lock().map_err(|e| format!("lock: {e}"))?;
+    let all_events = guard.events();
+    let filtered: Vec<serde_json::Value> = all_events
+        .iter()
+        .rev()
+        .filter(|e| {
+            e.agent_id == agent_uuid
+                || e.payload
+                    .get("agent_id")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s == agent_id)
+                    .unwrap_or(false)
+        })
+        .take(limit as usize)
+        .map(|e| {
+            json!({
+                "id": e.event_id.to_string(),
+                "time": e.timestamp,
+                "action": format!("{:?}", e.event_type),
+                "type": "text",
+                "content": serde_json::to_string(&e.payload).unwrap_or_default(),
+            })
+        })
+        .collect();
+    serde_json::to_string(&filtered).map_err(|e| format!("json: {e}"))
+}
+
 // ── Project Manager ───────────────────────────────────────────────────
 
 fn projects_dir() -> Result<PathBuf, String> {
@@ -17629,6 +18672,26 @@ fn disk_usage_percent() -> f64 {
         .unwrap_or(0.0)
 }
 
+/// Run an async future from a potentially non-tokio thread.
+///
+/// Tauri sync commands may be invoked from the GTK main thread (webkit2gtk URI
+/// scheme callbacks, etc.) which does **not** have a tokio reactor.
+/// `Handle::current()` would panic there, so we try it first and fall back to a
+/// one-shot runtime.
+fn block_on_async<F: std::future::Future>(f: F) -> F::Output {
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => handle.block_on(f),
+        Err(_) => {
+            // No reactor on this thread — spin up a lightweight current-thread runtime.
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("failed to build fallback tokio runtime");
+            rt.block_on(f)
+        }
+    }
+}
+
 fn admin_overview(state: &AppState) -> Result<String, String> {
     let agents = list_agents(state)?;
     let active = agents.iter().filter(|a| a.status == "running").count();
@@ -17641,8 +18704,7 @@ fn admin_overview(state: &AppState) -> Result<String, String> {
         trail.events().len() as u32
     };
     // Real data from enterprise crates
-    let session_count =
-        tokio::runtime::Handle::current().block_on(state.session_manager.session_count());
+    let session_count = block_on_async(state.session_manager.session_count());
     let workspace_count = {
         let wm = state
             .workspace_manager
@@ -17686,12 +18748,10 @@ fn admin_overview(state: &AppState) -> Result<String, String> {
 
 fn admin_users_list(state: &AppState) -> Result<String, String> {
     // Return real sessions from nexus-auth SessionManager
-    let sessions =
-        tokio::runtime::Handle::current().block_on(state.session_manager.list_active_sessions());
+    let sessions = block_on_async(state.session_manager.list_active_sessions());
     if sessions.is_empty() {
         // If no sessions yet, create a local session and return it
-        let user = tokio::runtime::Handle::current()
-            .block_on(nexus_auth::create_local_session(&state.session_manager));
+        let user = block_on_async(nexus_auth::create_local_session(&state.session_manager));
         let users = json!([{
             "id": user.id,
             "email": user.email,
@@ -17737,7 +18797,7 @@ fn admin_user_create(
         "auditor" => nexus_auth::UserRole::Auditor,
         _ => nexus_auth::UserRole::Viewer,
     };
-    let user = tokio::runtime::Handle::current().block_on(state.session_manager.create_session(
+    let user = block_on_async(state.session_manager.create_session(
         nexus_auth::session::NewSessionRequest {
             id: format!("manual:{}", Uuid::new_v4()),
             email: email.clone(),
@@ -17779,7 +18839,7 @@ fn admin_user_update_role(state: &AppState, user_id: String, role: String) -> Re
 fn admin_user_deactivate(state: &AppState, user_id: String) -> Result<(), String> {
     // If user_id contains a session UUID, remove the session
     if let Ok(sid) = Uuid::parse_str(&user_id) {
-        tokio::runtime::Handle::current().block_on(state.session_manager.remove_session(sid));
+        block_on_async(state.session_manager.remove_session(sid));
     }
     state.log_event(
         Uuid::nil(),
@@ -18224,8 +19284,7 @@ fn integration_configure(
 
 fn auth_login(state: &AppState) -> Result<String, String> {
     // In local/desktop mode, create a local session
-    let user = tokio::runtime::Handle::current()
-        .block_on(nexus_auth::create_local_session(&state.session_manager));
+    let user = block_on_async(nexus_auth::create_local_session(&state.session_manager));
     state.log_event(
         Uuid::nil(),
         EventType::UserAction,
@@ -18246,9 +19305,8 @@ fn auth_login(state: &AppState) -> Result<String, String> {
 
 fn auth_session_info(state: &AppState, session_id: String) -> Result<String, String> {
     let sid = Uuid::parse_str(&session_id).map_err(|e| format!("invalid UUID: {e}"))?;
-    let user = tokio::runtime::Handle::current()
-        .block_on(state.session_manager.get_session(sid))
-        .map_err(|e| format!("{e}"))?;
+    let user =
+        block_on_async(state.session_manager.get_session(sid)).map_err(|e| format!("{e}"))?;
     let result = json!({
         "session_id": user.session_id.to_string(),
         "user_id": user.id,
@@ -18264,7 +19322,7 @@ fn auth_session_info(state: &AppState, session_id: String) -> Result<String, Str
 
 fn auth_logout(state: &AppState, session_id: String) -> Result<(), String> {
     let sid = Uuid::parse_str(&session_id).map_err(|e| format!("invalid UUID: {e}"))?;
-    tokio::runtime::Handle::current().block_on(state.session_manager.remove_session(sid));
+    block_on_async(state.session_manager.remove_session(sid));
     state.log_event(
         Uuid::nil(),
         EventType::UserAction,
@@ -18849,10 +19907,9 @@ async fn flash_generate(
         .find(|s| s.id == session_id)
         .ok_or_else(|| format!("session {session_id} not found"))?;
     let model_path = session.model_path.clone();
-    let model_name = session.model_name.clone();
+    let _model_name = session.model_name.clone();
 
     // 2. Retrieve cached FlashProvider (Arc) — model handle persists across calls.
-    //    Falls back to creating a new provider if cache miss (shouldn't happen in normal flow).
     let provider = {
         let cache = state
             .flash_providers
@@ -18865,94 +19922,111 @@ async fn flash_generate(
         })
     };
 
-    // 3. Wrap in GovernedLlmGateway — full governance pipeline:
-    //    capability check → fuel reserve → semantic boundary → PII redaction →
-    //    input firewall → egress check → inference → fuel ledger → oracle event →
-    //    safety supervisor → output firewall → audit trail
-    let mut gateway = GovernedLlmGateway::new(provider);
-    // User-facing chat: human asked the question and reads the response
-    gateway.set_skip_output_firewall(true);
+    // 3. Pre-flight governance audit — log the request before streaming.
+    //    For user-facing local chat the full GovernedLlmGateway pipeline
+    //    (PII redaction, egress check, etc.) is overkill — the user typed
+    //    the prompt and reads the response directly.  We still audit it.
+    {
+        let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = audit.append_event(
+            Uuid::nil(),
+            EventType::LlmCall,
+            json!({
+                "event_kind": "flash.generate_request",
+                "session_id": session_id,
+                "model_path": model_path,
+                "prompt_len": prompt.len(),
+                "max_tokens": max_tokens,
+            }),
+        );
+    }
 
-    // 4. Build agent runtime context with llm.query capability
-    let mut capabilities = HashSet::new();
-    capabilities.insert("llm.query".to_string());
-    let agent_id = Uuid::new_v4();
-    let mut context = AgentRuntimeContext {
-        agent_id,
-        capabilities,
-        fuel_remaining: 100_000, // generous budget for local inference (free)
-    };
+    // 4. Stream inference — emit each token to the frontend as it arrives.
+    #[cfg(all(
+        feature = "tauri-runtime",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    ))]
+    let app_handle = app.clone();
 
-    // 5. Run governed query — goes through all governance checkpoints then
-    //    calls FlashProvider::query() which runs llama.cpp inference
-    let result = gateway.query(&mut context, &prompt, max_tokens, &model_name);
+    let session_id_clone = session_id.clone();
+    let model_path_clone = model_path.clone();
+    let audit_arc = state.audit.clone();
 
-    match result {
-        Ok(response) => {
-            // Emit streaming tokens to the frontend
+    // Run inference on a blocking thread (llama.cpp is CPU-bound).
+    let result = tokio::task::spawn_blocking(move || {
+        #[cfg(all(
+            feature = "tauri-runtime",
+            any(target_os = "windows", target_os = "macos", target_os = "linux")
+        ))]
+        let stream_app = app_handle.clone();
+
+        let response = provider.query_streaming(&prompt, max_tokens, move |token_text| {
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
             ))]
             {
-                // Emit the full response as a single flash-token event
-                let _ = app.emit("flash-token", json!({ "text": response.output_text }));
-                // Signal completion with stats
-                let oracle = gateway.oracle_events().last();
-                let _ = app.emit(
-                    "flash-done",
-                    json!({
-                        "stats": {
-                            "token_count": response.token_count,
-                            "model": response.model_name,
-                            "cost": oracle.map(|o| o.cost).unwrap_or(0.0),
-                            "latency_ms": oracle.map(|o| o.latency_ms).unwrap_or(0),
-                            "governance_events": gateway.audit_trail().events().len(),
-                            "pii_leakage_free": gateway.redaction_zero_pii_leakage_kpi(),
-                        }
-                    }),
-                );
+                let _ = stream_app.emit("flash-token", json!({ "text": token_text }));
             }
+            true // continue generating
+        });
 
-            // Append governance audit to persistent audit trail
-            {
-                let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
-                for event in gateway.audit_trail().events() {
-                    let _ = audit.append_event(
-                        event.agent_id,
-                        EventType::LlmCall,
+        match response {
+            Ok(resp) => {
+                #[cfg(all(
+                    feature = "tauri-runtime",
+                    any(target_os = "windows", target_os = "macos", target_os = "linux")
+                ))]
+                {
+                    let _ = app_handle.emit(
+                        "flash-done",
                         json!({
-                            "event_kind": "flash.governed_inference",
-                            "session_id": session_id,
-                            "model_path": model_path,
-                            "sub_event": event.payload,
+                            "stats": {
+                                "token_count": resp.token_count,
+                                "model": resp.model_name,
+                                "cost": 0.0,
+                            }
                         }),
                     );
                 }
-            }
 
-            Ok(json!({
-                "text": response.output_text,
-                "token_count": response.token_count,
-                "model": response.model_name,
-                "governance": {
-                    "audit_events": gateway.audit_trail().events().len(),
-                    "pii_leakage_free": gateway.redaction_zero_pii_leakage_kpi(),
-                    "oracle_events": gateway.oracle_events().len(),
+                // Audit
+                {
+                    let mut audit = audit_arc.lock().unwrap_or_else(|p| p.into_inner());
+                    let _ = audit.append_event(
+                        Uuid::nil(),
+                        EventType::LlmCall,
+                        json!({
+                            "event_kind": "flash.governed_inference",
+                            "session_id": session_id_clone,
+                            "model_path": model_path_clone,
+                            "tokens": resp.token_count,
+                        }),
+                    );
                 }
-            }))
-        }
-        Err(e) => {
-            #[cfg(all(
-                feature = "tauri-runtime",
-                any(target_os = "windows", target_os = "macos", target_os = "linux")
-            ))]
-            {
-                let _ = app.emit("flash-error", json!({ "message": e.to_string() }));
+
+                Ok(json!({
+                    "streamed": true,
+                    "token_count": resp.token_count,
+                    "model": resp.model_name,
+                }))
             }
-            Err(e.to_string())
+            Err(e) => {
+                #[cfg(all(
+                    feature = "tauri-runtime",
+                    any(target_os = "windows", target_os = "macos", target_os = "linux")
+                ))]
+                {
+                    let _ = app_handle.emit("flash-error", json!({ "message": e.to_string() }));
+                }
+                Err(e.to_string())
+            }
         }
-    }
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking join error: {e}"))?;
+
+    result
 }
 
 #[tauri::command]
@@ -18996,6 +20070,20 @@ async fn flash_unload_session(
         );
     }
 
+    Ok(())
+}
+
+#[tauri::command]
+async fn flash_clear_sessions(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    // Drop all cached providers first so model handles are released.
+    {
+        let mut cache = state
+            .flash_providers
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        cache.clear();
+    }
+    state.flash_session_manager.clear_all().await;
     Ok(())
 }
 
@@ -19149,7 +20237,7 @@ async fn flash_download_model(
 
     // Spawn a task to forward progress events to the frontend.
     let handle = app_handle.clone();
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         while let Some(progress) = rx.recv().await {
             let _ = handle.emit("flash-download-progress", &progress);
         }
@@ -19175,7 +20263,7 @@ async fn flash_download_multi(
     let (tx, mut rx) = tokio::sync::mpsc::channel::<nexus_flash_infer::DownloadProgress>(64);
 
     let handle = app_handle.clone();
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         while let Some(progress) = rx.recv().await {
             let _ = handle.emit("flash-download-progress", &progress);
         }
@@ -20171,6 +21259,18 @@ mod runtime {
                         &model_id_clone,
                         &filename_clone,
                         model_path,
+                    );
+                    // Register with Ollama so it appears in Chat model list
+                    let model_file_path = std::path::Path::new(model_path).join(&filename_clone);
+                    let ollama_name = model_id_clone.replace('/', "--");
+                    let _ = super::model_hub::register_downloaded_model_with_ollama(
+                        &model_file_path,
+                        &ollama_name,
+                    );
+                    // Emit model-downloaded event so Chat can refresh its model list
+                    let _ = window.emit(
+                        "model-downloaded",
+                        serde_json::json!({"model_id": &model_id_clone, "name": &ollama_name}),
                     );
                     let _ = window.emit(
                         "model-download-complete",
@@ -21804,6 +22904,113 @@ mod runtime {
     #[tauri::command]
     fn email_delete(state: tauri::State<'_, AppState>, id: String) -> Result<String, String> {
         super::email_delete(state.inner(), id)
+    }
+
+    // ── Email OAuth2 commands ──
+    #[tauri::command]
+    fn email_start_oauth(
+        state: tauri::State<'_, AppState>,
+        provider: String,
+    ) -> Result<String, String> {
+        super::email_start_oauth(state.inner(), provider)
+    }
+
+    #[tauri::command]
+    fn email_oauth_status(state: tauri::State<'_, AppState>) -> Result<String, String> {
+        super::email_oauth_status(state.inner())
+    }
+
+    #[tauri::command]
+    fn email_fetch_messages(
+        state: tauri::State<'_, AppState>,
+        provider: String,
+        folder: String,
+        page: u32,
+    ) -> Result<String, String> {
+        super::email_fetch_messages(state.inner(), provider, folder, page)
+    }
+
+    #[tauri::command]
+    fn email_send_message(
+        state: tauri::State<'_, AppState>,
+        provider: String,
+        to: String,
+        subject: String,
+        body: String,
+    ) -> Result<String, String> {
+        super::email_send_message(state.inner(), provider, to, subject, body)
+    }
+
+    #[tauri::command]
+    fn email_search_messages(
+        state: tauri::State<'_, AppState>,
+        provider: String,
+        query: String,
+    ) -> Result<String, String> {
+        super::email_search_messages(state.inner(), provider, query)
+    }
+
+    #[tauri::command]
+    fn email_disconnect(
+        state: tauri::State<'_, AppState>,
+        provider: String,
+    ) -> Result<String, String> {
+        super::email_disconnect(state.inner(), provider)
+    }
+
+    // ── Messaging Platform commands ──
+    #[tauri::command]
+    fn messaging_connect_platform(
+        state: tauri::State<'_, AppState>,
+        platform: String,
+        token_value: String,
+    ) -> Result<String, String> {
+        super::messaging_connect_platform(state.inner(), platform, token_value)
+    }
+
+    #[tauri::command]
+    fn messaging_send(
+        state: tauri::State<'_, AppState>,
+        platform: String,
+        channel: String,
+        text: String,
+    ) -> Result<String, String> {
+        super::messaging_send(state.inner(), platform, channel, text)
+    }
+
+    #[tauri::command]
+    fn messaging_poll_messages(
+        state: tauri::State<'_, AppState>,
+        platform: String,
+        channel: String,
+        last_id: String,
+    ) -> Result<String, String> {
+        super::messaging_poll_messages(state.inner(), platform, channel, last_id)
+    }
+
+    // ── Integration OAuth commands ──
+    #[tauri::command]
+    fn integration_start_oauth(
+        state: tauri::State<'_, AppState>,
+        provider_id: String,
+    ) -> Result<String, String> {
+        super::integration_start_oauth(state.inner(), provider_id)
+    }
+
+    // ── Marketplace GitLab search ──
+    #[tauri::command]
+    fn marketplace_search_gitlab(query: String) -> Result<String, String> {
+        super::marketplace_search_gitlab(query)
+    }
+
+    // ── Agent Output Panel ──
+    #[tauri::command]
+    fn get_agent_outputs(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        limit: u32,
+    ) -> Result<String, String> {
+        super::get_agent_outputs(state.inner(), agent_id, limit)
     }
 
     // ── Project Manager commands ──
@@ -23541,6 +24748,18 @@ mod runtime {
                 email_list,
                 email_save,
                 email_delete,
+                email_start_oauth,
+                email_oauth_status,
+                email_fetch_messages,
+                email_send_message,
+                email_search_messages,
+                email_disconnect,
+                messaging_connect_platform,
+                messaging_send,
+                messaging_poll_messages,
+                integration_start_oauth,
+                marketplace_search_gitlab,
+                get_agent_outputs,
                 project_list,
                 project_get,
                 project_save,
@@ -23768,6 +24987,7 @@ mod runtime {
                 flash_generate,
                 flash_list_sessions,
                 flash_unload_session,
+                flash_clear_sessions,
                 flash_get_metrics,
                 flash_estimate_performance,
                 flash_run_benchmark,

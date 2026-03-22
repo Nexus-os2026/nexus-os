@@ -5,6 +5,7 @@ use std::ptr;
 use tracing::{debug, warn};
 
 use crate::batch;
+use crate::chat_template;
 use crate::error::LlamaError;
 use crate::ffi;
 use crate::model::LlamaModel;
@@ -19,6 +20,8 @@ pub struct LlamaContext {
     ctx: *mut ffi::LlamaContextRaw,
     sampler: *mut ffi::LlamaSampler,
     vocab: *const ffi::LlamaVocab,
+    model_ptr: *const ffi::LlamaModel,
+    architecture: String,
     n_ctx: u32,
 }
 
@@ -36,18 +39,29 @@ impl LlamaContext {
             ));
         }
 
-        // Thread count: use config or let llama.cpp auto-detect
-        let n_threads = std::thread::available_parallelism()
-            .map(|p| p.get() as i32)
-            .unwrap_or(4);
+        // Thread count: use config override or auto-detect
+        let n_threads = config.n_threads.map(|n| n as i32).unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|p| p.get() as i32)
+                .unwrap_or(4)
+        });
 
         unsafe {
             ffi::nexus_ctx_params_set_n_ctx(params, config.n_ctx);
             ffi::nexus_ctx_params_set_n_batch(params, config.n_batch);
+            if config.n_ubatch > 0 {
+                ffi::nexus_ctx_params_set_n_ubatch(params, config.n_ubatch);
+            }
             ffi::nexus_ctx_params_set_n_threads(params, n_threads);
             ffi::nexus_ctx_params_set_n_threads_batch(params, n_threads);
-            ffi::nexus_ctx_params_set_flash_attn(params, true);
+            ffi::nexus_ctx_params_set_flash_attn(params, config.flash_attn);
             ffi::nexus_ctx_params_set_no_perf(params, false);
+            if let Some(type_k) = config.type_k {
+                ffi::nexus_ctx_params_set_type_k(params, type_k.as_ggml_type());
+            }
+            if let Some(type_v) = config.type_v {
+                ffi::nexus_ctx_params_set_type_v(params, type_v.as_ggml_type());
+            }
         }
 
         let ctx = unsafe { ffi::nexus_init_from_model(model.as_mut_ptr(), params) };
@@ -60,12 +74,16 @@ impl LlamaContext {
 
         let sampler = sampling::build_sampler_chain(config)?;
         let vocab = model.vocab();
+        let model_ptr = model.as_mut_ptr() as *const ffi::LlamaModel;
+        let architecture = model.metadata().architecture.clone();
         let n_ctx = unsafe { ffi::llama_n_ctx(ctx) };
 
         Ok(Self {
             ctx,
             sampler,
             vocab,
+            model_ptr,
+            architecture,
             n_ctx,
         })
     }
@@ -85,8 +103,15 @@ impl LlamaContext {
         config: &GenerationConfig,
         mut callback: impl FnMut(TokenEvent) -> ControlFlow,
     ) -> Result<PerfStats, LlamaError> {
-        // Tokenize the prompt
-        let prompt_tokens = tokenizer::tokenize(self.vocab, prompt, true)?;
+        // Apply chat template to format the prompt for the model's expected format.
+        // Without this, models like DeepSeek-R1 treat raw text as continuation
+        // and produce garbage repetition instead of following instructions.
+        let formatted_prompt =
+            chat_template::apply_chat_template(self.model_ptr, &self.architecture, prompt);
+
+        // Tokenize the formatted prompt (add_special=false since the template
+        // already includes BOS/special tokens)
+        let prompt_tokens = tokenizer::tokenize(self.vocab, &formatted_prompt, false)?;
         let prompt_token_count = prompt_tokens.len() as u32;
 
         if prompt_tokens.is_empty() {
@@ -108,6 +133,15 @@ impl LlamaContext {
             max_tokens = config.max_tokens,
             "starting generation"
         );
+
+        // Clear KV cache and reset sampler so each generation starts fresh.
+        // Without this, positions accumulate across multi-turn calls and
+        // eventually exceed the context window, causing decode to return -1.
+        let mem = unsafe { ffi::llama_get_memory(self.ctx) };
+        if !mem.is_null() {
+            unsafe { ffi::llama_memory_clear(mem, false) };
+        }
+        unsafe { ffi::llama_sampler_reset(self.sampler) };
 
         // Reset perf counters
         unsafe { ffi::llama_perf_context_reset(self.ctx) };
@@ -164,11 +198,27 @@ impl LlamaContext {
                 break;
             }
 
+            // Check context window boundary before decoding next token.
+            // pos is the next position we'd write to; n_ctx is the limit.
+            if (pos + 1) as u32 >= self.n_ctx {
+                debug!(
+                    pos,
+                    n_ctx = self.n_ctx,
+                    "context window full, stopping generation"
+                );
+                break;
+            }
+
             // Prepare next decode
             unsafe { batch::fill_batch_single(&mut gen_batch, token, pos) };
             let ret = unsafe { ffi::llama_decode(self.ctx, gen_batch) };
             if ret != 0 {
-                warn!(code = ret, "decode failed during generation");
+                warn!(
+                    code = ret,
+                    pos,
+                    n_ctx = self.n_ctx,
+                    "decode failed during generation"
+                );
                 callback(TokenEvent::Error {
                     message: format!("decode failed with code {ret}"),
                 });

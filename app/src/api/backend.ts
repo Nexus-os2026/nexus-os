@@ -971,6 +971,64 @@ export function emailDelete(id: string): Promise<string> {
   return invokeDesktop<string>("email_delete", { id });
 }
 
+// ── Email OAuth2 API ──
+
+export function emailStartOauth(provider: string): Promise<string> {
+  return invokeDesktop<string>("email_start_oauth", { provider });
+}
+
+export function emailOauthStatus(): Promise<string> {
+  return invokeDesktop<string>("email_oauth_status");
+}
+
+export function emailFetchMessages(provider: string, folder: string, page: number): Promise<string> {
+  return invokeDesktop<string>("email_fetch_messages", { provider, folder, page });
+}
+
+export function emailSendMessage(provider: string, to: string, subject: string, body: string): Promise<string> {
+  return invokeDesktop<string>("email_send_message", { provider, to, subject, body });
+}
+
+export function emailSearchMessages(provider: string, query: string): Promise<string> {
+  return invokeDesktop<string>("email_search_messages", { provider, query });
+}
+
+export function emailDisconnect(provider: string): Promise<string> {
+  return invokeDesktop<string>("email_disconnect", { provider });
+}
+
+// ── Messaging Platform API ──
+
+export function messagingConnectPlatform(platform: string, tokenValue: string): Promise<string> {
+  return invokeDesktop<string>("messaging_connect_platform", { platform, token_value: tokenValue });
+}
+
+export function messagingSend(platform: string, channel: string, text: string): Promise<string> {
+  return invokeDesktop<string>("messaging_send", { platform, channel, text });
+}
+
+export function messagingPollMessages(platform: string, channel: string, lastId: string): Promise<string> {
+  return invokeDesktop<string>("messaging_poll_messages", { platform, channel, last_id: lastId });
+}
+
+// ── Integration OAuth API ──
+
+export function integrationStartOauth(providerId: string): Promise<string> {
+  return invokeDesktop<string>("integration_start_oauth", { provider_id: providerId });
+}
+
+// ── Marketplace GitLab API ──
+
+export function marketplaceSearchGitlab(query: string): Promise<string> {
+  return invokeDesktop<string>("marketplace_search_gitlab", { query });
+}
+
+// ── Agent Output API ──
+
+export function getAgentOutputs(agentId: string, limit: number): Promise<string> {
+  return invokeDesktop<string>("get_agent_outputs", { agent_id: agentId, limit });
+}
+
 // ── Project Manager API ──
 
 export function projectList(): Promise<string> {
@@ -2995,6 +3053,10 @@ export function flashUnloadSession(sessionId: string): Promise<void> {
   return invokeDesktop<void>("flash_unload_session", {
     sessionId, session_id: sessionId,
   });
+}
+
+export function flashClearSessions(): Promise<void> {
+  return invokeDesktop<void>("flash_clear_sessions");
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

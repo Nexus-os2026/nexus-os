@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import RequiresLlm from "../components/RequiresLlm";
 import { Hammer, Clock, Lock, Pin, MapPin, StickyNote, Trash2, Mic, MicOff, ClipboardList, Image, Zap, GraduationCap, Rocket, Hexagon, Play, Pause, Square, X, AlertTriangle, Check, FolderOpen, ChevronUp, ChevronDown, RefreshCw } from "lucide-react";
 import {
   sendChat, chatWithOllama, conductBuild, listAgents, hasDesktopRuntime,
@@ -447,6 +448,21 @@ export default function AiChatHub() {
   useEffect(() => {
     loadModels();
   }, [loadModels]);
+
+  /* ─── refresh models when ModelHub downloads a new model ─── */
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const eventMod = await import("@tauri-apps/api/event");
+        unlisten = await eventMod.listen("model-downloaded", () => {
+          loadModels();
+          logAudit("New model downloaded — refreshing model list");
+        });
+      } catch { /* not in desktop runtime */ }
+    })();
+    return () => { unlisten?.(); };
+  }, [loadModels, logAudit]);
 
   /* ─── load prebuilt agents from backend ─── */
   const loadPreinstalledAgents = useCallback(async () => {
@@ -1040,6 +1056,7 @@ export default function AiChatHub() {
 
   /* ─── render ─── */
   return (
+    <RequiresLlm feature="Chat">
     <div className="ch-container">
       {/* ─── Sidebar ─── */}
       <aside className="ch-sidebar">
@@ -1762,5 +1779,6 @@ export default function AiChatHub() {
         </div>
       )}
     </div>
+    </RequiresLlm>
   );
 }

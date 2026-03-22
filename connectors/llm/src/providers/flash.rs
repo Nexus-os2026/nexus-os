@@ -58,6 +58,78 @@ impl FlashProvider {
     }
 }
 
+impl FlashProvider {
+    /// Run inference with per-token streaming callback.
+    ///
+    /// Unlike `LlmProvider::query()` which collects all tokens and returns them,
+    /// this method calls `on_token` for each generated token, enabling real-time
+    /// streaming to the UI.  Returns final output text + token count.
+    #[cfg(feature = "flash-infer")]
+    pub fn query_streaming<F>(
+        &self,
+        prompt: &str,
+        max_tokens: u32,
+        mut on_token: F,
+    ) -> Result<LlmResponse, AgentError>
+    where
+        F: FnMut(&str) -> bool + Send + 'static,
+    {
+        self.ensure_loaded()?;
+
+        let guard = self
+            .model_handle
+            .lock()
+            .map_err(|e| AgentError::SupervisorError(format!("flash lock poisoned: {e}")))?;
+
+        let handle = guard
+            .as_ref()
+            .ok_or_else(|| AgentError::SupervisorError("flash model not loaded".to_string()))?;
+
+        let gen_config = nexus_llama_bridge::GenerationConfig {
+            max_tokens,
+            ..nexus_llama_bridge::GenerationConfig::fast()
+        };
+
+        let output = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        let token_count = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+
+        let out_clone = output.clone();
+        let count_clone = token_count.clone();
+
+        let callback = Box::new(
+            move |event: nexus_llama_bridge::TokenEvent| -> nexus_llama_bridge::ControlFlow {
+                if let nexus_llama_bridge::TokenEvent::Token { text, .. } = &event {
+                    if let Ok(mut buf) = out_clone.lock() {
+                        buf.push_str(text);
+                    }
+                    count_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if !on_token(text) {
+                        return nexus_llama_bridge::ControlFlow::Stop;
+                    }
+                }
+                nexus_llama_bridge::ControlFlow::Continue
+            },
+        );
+
+        let _stats = handle
+            .generate(prompt, &gen_config, callback)
+            .map_err(|e| AgentError::SupervisorError(format!("flash inference failed: {e}")))?;
+
+        let output_text = output
+            .lock()
+            .map_err(|e| AgentError::SupervisorError(format!("flash output lock: {e}")))?
+            .clone();
+        let tokens = token_count.load(std::sync::atomic::Ordering::Relaxed);
+
+        Ok(LlmResponse {
+            output_text,
+            token_count: tokens,
+            model_name: self.model_path.clone(),
+            tool_calls: Vec::new(),
+        })
+    }
+}
+
 impl LlmProvider for FlashProvider {
     fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
         let model_display = if model.is_empty() {
@@ -81,7 +153,7 @@ impl LlmProvider for FlashProvider {
 
             let gen_config = nexus_llama_bridge::GenerationConfig {
                 max_tokens,
-                ..Default::default()
+                ..nexus_llama_bridge::GenerationConfig::fast()
             };
 
             let output = std::sync::Arc::new(std::sync::Mutex::new(String::new()));

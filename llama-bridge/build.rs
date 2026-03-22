@@ -3,6 +3,7 @@ fn main() {
     println!("cargo:rerun-if-changed=src/ffi.rs");
     println!("cargo:rerun-if-changed=src/llama_stub.c");
     println!("cargo:rerun-if-changed=src/llama_helpers.c");
+    println!("cargo:rerun-if-env-changed=NEXUS_LLAMA_CPP_PATH");
 
     // When real llama.cpp is available, compile it.
     // For now, build a stub C file that provides the same API surface

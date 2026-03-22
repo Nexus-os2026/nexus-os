@@ -1,9 +1,10 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
   getPreinstalledAgents,
   hasDesktopRuntime,
   marketplaceInstall,
   marketplaceSearch,
+  marketplaceSearchGitlab,
   startAgent,
 } from "../api/backend";
 import type { MarketplaceAgent, PreinstalledAgent } from "../types";
@@ -59,6 +60,9 @@ export default function AppStore(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [startingIds, setStartingIds] = useState<string[]>([]);
   const [installingIds, setInstallingIds] = useState<string[]>([]);
+  const [gitlabAgents, setGitlabAgents] = useState<any[]>([]);
+  const [gitlabSearching, setGitlabSearching] = useState(false);
+  const [activeTab, setActiveTab] = useState<'installed' | 'community'>('installed');
 
   const deferredQuery = useDeferredValue(normalize(searchQuery));
   const isDesktop = hasDesktopRuntime();
@@ -131,6 +135,20 @@ export default function AppStore(): JSX.Element {
         .filter((group) => group.agents.length > 0),
     [filteredPreinstalled, levelFilter],
   );
+
+  const handleGitlabSearch = useCallback(async (query: string) => {
+    if (!query.trim()) return;
+    setGitlabSearching(true);
+    try {
+      const raw = await marketplaceSearchGitlab(query);
+      const agents = JSON.parse(raw);
+      setGitlabAgents(agents);
+    } catch {
+      setGitlabAgents([]);
+    } finally {
+      setGitlabSearching(false);
+    }
+  }, []);
 
   async function handleStart(agentId: string): Promise<void> {
     if (!agentId) {
@@ -344,6 +362,45 @@ export default function AppStore(): JSX.Element {
             })}
           </div>
         </section>
+
+        {/* ── Community Agents from GitLab ── */}
+        <div style={{ marginTop: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+            <button className="cursor-pointer" onClick={() => setActiveTab('installed')} style={{ padding: "6px 16px", background: activeTab === 'installed' ? "rgba(129,140,248,0.2)" : "transparent", border: `1px solid ${activeTab === 'installed' ? "rgba(129,140,248,0.4)" : "var(--border, #334155)"}`, borderRadius: 6, color: "var(--text-primary, #e2e8f0)", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>Pre-installed</button>
+            <button className="cursor-pointer" onClick={() => setActiveTab('community')} style={{ padding: "6px 16px", background: activeTab === 'community' ? "rgba(129,140,248,0.2)" : "transparent", border: `1px solid ${activeTab === 'community' ? "rgba(129,140,248,0.4)" : "var(--border, #334155)"}`, borderRadius: 6, color: "var(--text-primary, #e2e8f0)", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>Community (GitLab)</button>
+          </div>
+
+          {activeTab === 'community' && (
+            <div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                <input
+                  placeholder="Search nexus-agent repos on GitLab..."
+                  style={{ flex: 1, background: "var(--bg-primary, #0f172a)", border: "1px solid var(--border, #334155)", borderRadius: 6, color: "var(--text-primary)", padding: "8px 12px", fontSize: "0.85rem", fontFamily: "inherit" }}
+                  onKeyDown={e => e.key === 'Enter' && handleGitlabSearch((e.target as HTMLInputElement).value)}
+                />
+                <button className="cursor-pointer" onClick={() => handleGitlabSearch("nexus agent")} disabled={gitlabSearching} style={{ padding: "8px 16px", background: "rgba(129,140,248,0.2)", border: "1px solid rgba(129,140,248,0.3)", borderRadius: 6, color: "#818cf8", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer" }}>{gitlabSearching ? "Searching..." : "Search GitLab"}</button>
+              </div>
+              {gitlabAgents.length === 0 && !gitlabSearching && (
+                <div style={{ padding: 24, textAlign: "center", opacity: 0.5, fontSize: "0.85rem" }}>Search GitLab for community agents tagged "nexus-agent". Or publish your own with `nexus publish`.</div>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+                {gitlabAgents.map((agent: any) => (
+                  <div key={agent.id} style={{ background: "var(--bg-secondary, #1e293b)", border: "1px solid var(--border, #334155)", borderRadius: 8, padding: 16 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>{agent.name}</div>
+                    <div style={{ fontSize: "0.75rem", opacity: 0.6, marginBottom: 8 }}>{agent.description?.slice(0, 120) || "Community agent"}</div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.7rem" }}>
+                      <span style={{ opacity: 0.5 }}>by {agent.author} · {agent.stars} stars</span>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button className="cursor-pointer" onClick={() => void handleInstall(agent.name)} style={{ padding: "4px 12px", background: "rgba(34,211,238,0.15)", border: "1px solid rgba(34,211,238,0.3)", borderRadius: 4, color: "#22d3ee", fontSize: "0.7rem", cursor: "pointer", fontFamily: "inherit" }}>Install</button>
+                        <a href={agent.url} target="_blank" rel="noopener noreferrer" style={{ color: "#818cf8", textDecoration: "none", padding: "4px 0" }}>View</a>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );

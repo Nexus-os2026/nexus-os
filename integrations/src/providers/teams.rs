@@ -126,6 +126,172 @@ impl Integration for TeamsIntegration {
     }
 }
 
+/// Microsoft Teams Graph API integration for interactive messaging.
+///
+/// While `TeamsIntegration` above uses incoming webhooks (notification-only),
+/// this struct uses the Microsoft Graph API with an OAuth2 access token
+/// to send channel messages, chat messages, and list channels.
+pub struct TeamsGraphIntegration {
+    access_token: String,
+    http: Client,
+}
+
+impl TeamsGraphIntegration {
+    pub fn new(access_token: String) -> Result<Self, IntegrationError> {
+        if access_token.is_empty() {
+            return Err(IntegrationError::MissingCredential {
+                env_var: "NEXUS_TEAMS_ACCESS_TOKEN".into(),
+            });
+        }
+        let http = Client::builder()
+            .timeout(std::time::Duration::from_secs(15))
+            .build()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "teams-graph".into(),
+                message: e.to_string(),
+            })?;
+        Ok(Self { access_token, http })
+    }
+
+    pub fn from_env() -> Result<Self, IntegrationError> {
+        let token = std::env::var("NEXUS_TEAMS_ACCESS_TOKEN").map_err(|_| {
+            IntegrationError::MissingCredential {
+                env_var: "NEXUS_TEAMS_ACCESS_TOKEN".into(),
+            }
+        })?;
+        Self::new(token)
+    }
+
+    /// Send a message to a Teams channel via Graph API.
+    pub fn send_channel_message(
+        &self,
+        team_id: &str,
+        channel_id: &str,
+        content: &str,
+    ) -> Result<serde_json::Value, IntegrationError> {
+        let url = format!(
+            "https://graph.microsoft.com/v1.0/teams/{team_id}/channels/{channel_id}/messages"
+        );
+        let payload = json!({
+            "body": { "content": content, "contentType": "html" }
+        });
+
+        let response = self
+            .http
+            .post(&url)
+            .bearer_auth(&self.access_token)
+            .json(&payload)
+            .send()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "teams-graph".into(),
+                message: e.to_string(),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().unwrap_or_default();
+            return Err(IntegrationError::HttpError {
+                provider: "teams-graph".into(),
+                status,
+                body,
+            });
+        }
+
+        response
+            .json()
+            .map_err(|e| IntegrationError::Serialization(e.to_string()))
+    }
+
+    /// Send a direct chat message via Graph API.
+    pub fn send_chat_message(
+        &self,
+        chat_id: &str,
+        content: &str,
+    ) -> Result<serde_json::Value, IntegrationError> {
+        let url = format!("https://graph.microsoft.com/v1.0/chats/{chat_id}/messages");
+        let payload = json!({
+            "body": { "content": content, "contentType": "text" }
+        });
+
+        let response = self
+            .http
+            .post(&url)
+            .bearer_auth(&self.access_token)
+            .json(&payload)
+            .send()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "teams-graph".into(),
+                message: e.to_string(),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().unwrap_or_default();
+            return Err(IntegrationError::HttpError {
+                provider: "teams-graph".into(),
+                status,
+                body,
+            });
+        }
+
+        response
+            .json()
+            .map_err(|e| IntegrationError::Serialization(e.to_string()))
+    }
+
+    /// List channels in a team.
+    pub fn list_channels(&self, team_id: &str) -> Result<Vec<serde_json::Value>, IntegrationError> {
+        let url = format!("https://graph.microsoft.com/v1.0/teams/{team_id}/channels");
+
+        let response = self
+            .http
+            .get(&url)
+            .bearer_auth(&self.access_token)
+            .send()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "teams-graph".into(),
+                message: e.to_string(),
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let body = response.text().unwrap_or_default();
+            return Err(IntegrationError::HttpError {
+                provider: "teams-graph".into(),
+                status,
+                body,
+            });
+        }
+
+        let data: serde_json::Value = response
+            .json()
+            .map_err(|e| IntegrationError::Serialization(e.to_string()))?;
+        Ok(data["value"].as_array().cloned().unwrap_or_default())
+    }
+
+    /// Verify the access token is valid.
+    pub fn health_check(&self) -> Result<(), IntegrationError> {
+        let response = self
+            .http
+            .get("https://graph.microsoft.com/v1.0/me")
+            .bearer_auth(&self.access_token)
+            .send()
+            .map_err(|e| IntegrationError::ConnectionError {
+                provider: "teams-graph".into(),
+                message: e.to_string(),
+            })?;
+
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            Err(IntegrationError::AuthError {
+                provider: "teams-graph".into(),
+                message: format!("HTTP {}", response.status()),
+            })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

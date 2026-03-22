@@ -11,6 +11,8 @@ typedef struct llama_model llama_model;
 typedef struct llama_context llama_context;
 typedef struct llama_vocab llama_vocab;
 typedef struct llama_sampler llama_sampler;
+typedef struct llama_memory_i llama_memory_i;
+typedef llama_memory_i *llama_memory_t;
 typedef int32_t llama_token;
 
 // --- Model params ---
@@ -290,6 +292,19 @@ int32_t llama_decode(llama_context *ctx, llama_batch batch) {
 }
 
 
+// ===== Memory (KV cache) =====
+
+llama_memory_t llama_get_memory(const llama_context *ctx) {
+    (void)ctx;
+    return NULL;
+}
+
+void llama_memory_clear(llama_memory_t mem, bool data) {
+    (void)mem;
+    (void)data;
+}
+
+
 // ===== Sampling =====
 
 llama_sampler_chain_params llama_sampler_chain_default_params(void) {
@@ -309,6 +324,10 @@ void llama_sampler_chain_add(llama_sampler *chain, llama_sampler *smpl) {
 }
 
 void llama_sampler_free(llama_sampler *smpl) {
+    (void)smpl;
+}
+
+void llama_sampler_reset(llama_sampler *smpl) {
     (void)smpl;
 }
 
@@ -357,6 +376,35 @@ llama_token llama_sampler_sample(llama_sampler *smpl, llama_context *ctx, int32_
     (void)ctx;
     (void)idx;
     return -1;  // stub: invalid token
+}
+
+
+// ===== Chat template =====
+
+typedef struct {
+    const char *role;
+    const char *content;
+} llama_chat_message;
+
+const char *llama_model_chat_template(const llama_model *model, const char *name) {
+    (void)model;
+    (void)name;
+    return NULL;  // stub: no template
+}
+
+int32_t llama_chat_apply_template(const char *tmpl,
+                                   const llama_chat_message *chat,
+                                   size_t n_msg,
+                                   bool add_ass,
+                                   char *buf,
+                                   int32_t length) {
+    (void)tmpl;
+    (void)chat;
+    (void)n_msg;
+    (void)add_ass;
+    (void)buf;
+    (void)length;
+    return -1;  // stub: template not available
 }
 
 

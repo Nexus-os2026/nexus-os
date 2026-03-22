@@ -27,14 +27,19 @@ pub fn auto_configure(
     let budget = MemoryBudget::calculate(hw, profile, target_ctx);
 
     if !budget.is_feasible() {
-        return Err(FlashError::ModelTooLarge {
-            model_min_mb: profile.dense_weight_size_mb + 512,
-            available_mb: hw.total_ram_mb,
-            suggestion: suggest_smaller_model(profile, hw),
-        });
+        // MoE models use mmap to stream expert weights from SSD — only dense
+        // weights need to fit in RAM.  llama.cpp handles this internally, so we
+        // warn but never block loading.
+        tracing::warn!(
+            model_min_mb = profile.dense_weight_size_mb + 512,
+            available_mb = hw.total_ram_mb,
+            "model may be large for available RAM — mmap will stream from disk"
+        );
     }
 
-    let n_threads = hw.cpu_cores.min(16); // Diminishing returns above 16
+    // Use all available cores — modern llama.cpp scales well on high-core CPUs.
+    // Cap at 32 to avoid scheduler overhead on extreme NUMA systems.
+    let n_threads = hw.cpu_cores.min(32);
     let n_batch = if profile.is_moe { 512 } else { 2048 }; // Smaller batches for MoE
     let ctx_size = budget
         .max_context_length(profile)
@@ -46,7 +51,14 @@ pub fn auto_configure(
         NumaStrategy::Disabled
     };
 
-    let gen_config = preference.generation_config.unwrap_or_default();
+    // Pick a speed-optimized or balanced generation config based on priority,
+    // unless the caller provided an explicit override.
+    let gen_config = preference
+        .generation_config
+        .unwrap_or_else(|| match preference.priority {
+            InferencePriority::Speed => GenerationConfig::fast(),
+            _ => GenerationConfig::balanced(),
+        });
 
     let load_config = LoadConfig {
         model_path: preference.model_path,
@@ -63,6 +75,7 @@ pub fn auto_configure(
     let generation_config = GenerationConfig {
         n_ctx: ctx_size,
         n_batch,
+        n_threads: Some(n_threads),
         ..gen_config
     };
 
@@ -76,42 +89,10 @@ pub fn auto_configure(
     })
 }
 
-/// Suggest a smaller model when the requested one doesn't fit.
-pub fn suggest_smaller_model(profile: &ModelProfile, hw: &HardwareInfo) -> String {
-    let available_gb = hw.total_ram_mb as f64 / 1024.0;
-
-    if available_gb < 4.0 {
-        format!(
-            "With {:.0}GB RAM, try a 1-3B parameter model (e.g., Qwen3-1.7B, Gemma-3-1B)",
-            available_gb
-        )
-    } else if available_gb < 8.0 {
-        format!(
-            "With {:.0}GB RAM, try a 3-7B parameter model (e.g., Qwen3-4B, Llama-3.1-8B Q4)",
-            available_gb
-        )
-    } else if available_gb < 16.0 {
-        format!(
-            "With {:.0}GB RAM, try a 7-14B parameter model (e.g., Qwen3-8B, Phi-4-14B)",
-            available_gb
-        )
-    } else if available_gb < 32.0 {
-        format!(
-            "With {:.0}GB RAM, try a 14-32B parameter model or MoE (e.g., Qwen3-32B Q4, Qwen3.5-35B-A3B)",
-            available_gb
-        )
-    } else {
-        format!(
-            "Model {} ({:.0}GB) is too large. With {:.0}GB RAM, try a smaller quantization or model variant",
-            profile.name, profile.file_size_mb as f64 / 1024.0, available_gb
-        )
-    }
-}
-
 fn adjust_context_for_priority(target: u32, priority: &InferencePriority) -> u32 {
     match priority {
-        InferencePriority::Speed => target.min(4096),
+        InferencePriority::Speed => target.min(2048), // Smaller KV cache = faster
         InferencePriority::Context => target,
-        InferencePriority::Balanced => target,
+        InferencePriority::Balanced => target.min(4096),
     }
 }

@@ -1,3 +1,11 @@
+/* ================================================================== */
+/*  Voice Assistant — SpeechRecognition is the PRIMARY engine           */
+/*  Browser-native SpeechRecognition / webkitSpeechRecognition          */
+/*  works instantly with zero setup and no model download.              */
+/*  Whisper model (candle-whisper or python-server) is the ENHANCED     */
+/*  option for better accuracy and offline use — requires download.     */
+/* ================================================================== */
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   hasDesktopRuntime,
@@ -357,12 +365,76 @@ export default function VoiceAssistant() {
     whisperModel: null,
   });
   const [modelLoading, setModelLoading] = useState(false);
+  const [webSpeechAvailable] = useState(() =>
+    typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
+  );
+  const [useWebSpeech, setUseWebSpeech] = useState(true); // Web Speech API is PRIMARY — instant, no setup
+  const [speaking, setSpeaking] = useState(false);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nextId = useRef(2);
   const scrollRef = useRef<HTMLDivElement>(null);
   const captureSessionRef = useRef<AudioCaptureSession | null>(null);
   const desktopRuntimeAvailable = hasDesktopRuntime();
+
+  const recognitionRef = useRef<any>(null);
+
+  const startWebSpeechListening = useCallback(() => {
+    if (!webSpeechAvailable) return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: any) => {
+      const results = Array.from(event.results) as any[];
+      const transcript = results.map((r: any) => r[0].transcript).join('');
+      const isFinal = results[results.length - 1]?.isFinal;
+
+      if (isFinal && transcript.trim()) {
+        setTranscripts(prev => [...prev, { id: Date.now(), text: transcript, source: 'user', ts: Date.now() }]);
+        // Send to LLM
+        if (hasDesktopRuntime()) {
+          sendChat("voice-assistant", transcript).then(resp => {
+            const response = typeof resp === 'string' ? resp : JSON.stringify(resp);
+            setTranscripts(prev => [...prev, { id: Date.now() + 1, text: response, source: 'agent', ts: Date.now() }]);
+            // Speak the response
+            if ('speechSynthesis' in window) {
+              setSpeaking(true);
+              const utterance = new SpeechSynthesisUtterance(response.replace(/[#*_`]/g, ''));
+              utterance.rate = 1.0;
+              utterance.pitch = 1.0;
+              const voices = speechSynthesis.getVoices();
+              const preferred = voices.find(v => v.name.includes('Google') || v.name.includes('Samantha') || v.lang === 'en-US');
+              if (preferred) utterance.voice = preferred;
+              utterance.onend = () => setSpeaking(false);
+              speechSynthesis.speak(utterance);
+            }
+          }).catch(() => {});
+        }
+      }
+    };
+
+    recognition.onerror = () => setStatus('error');
+    recognition.onend = () => {
+      if (status === 'listening') recognition.start(); // auto-restart
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setStatus('listening');
+  }, [webSpeechAvailable, status]);
+
+  const stopWebSpeechListening = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setStatus('ready');
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    setSpeaking(false);
+  }, []);
 
   useEffect(() => {
     ensurePulseAnimation();
@@ -776,9 +848,46 @@ export default function VoiceAssistant() {
             </div>
           )}
 
-          <button onClick={handleToggle} style={S.toggleBtn(status === "listening")}>
-            {status === "listening" ? "Stop Listening" : "Start Listening"}
-          </button>
+          {/* Web Speech API — browser-native, ZERO setup required */}
+          {webSpeechAvailable && useWebSpeech && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, marginBottom: 16 }}>
+              <button
+                className="cursor-pointer"
+                onClick={status === 'listening' ? stopWebSpeechListening : startWebSpeechListening}
+                style={{
+                  padding: "16px 40px",
+                  background: status === 'listening' ? "rgba(239,68,68,0.25)" : "rgba(129,140,248,0.25)",
+                  border: `2px solid ${status === 'listening' ? "rgba(239,68,68,0.5)" : "rgba(129,140,248,0.5)"}`,
+                  borderRadius: 16,
+                  color: "var(--text-primary, #e2e8f0)",
+                  fontSize: "1rem",
+                  fontFamily: "inherit",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                {status === 'listening' ? (speaking ? 'Speaking...' : 'Listening... (click to stop)') : 'Click to Talk'}
+              </button>
+              <div style={{ fontSize: "0.7rem", opacity: 0.4 }}>
+                Works instantly in your browser — no setup needed
+              </div>
+            </div>
+          )}
+          {webSpeechAvailable && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <label style={{ fontSize: "0.7rem", opacity: 0.5 }}>
+                <input type="checkbox" checked={!useWebSpeech} onChange={e => setUseWebSpeech(!e.target.checked)} style={{ marginRight: 4 }} />
+                Prefer Whisper model for better accuracy (requires download)
+              </label>
+            </div>
+          )}
+
+          {!useWebSpeech && (
+            <button onClick={handleToggle} style={S.toggleBtn(status === "listening")}>
+              {status === "listening" ? "Stop Listening" : "Start Listening (Whisper)"}
+            </button>
+          )}
         </div>
 
         {/* Right: Transcripts + settings */}

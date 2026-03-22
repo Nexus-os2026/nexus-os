@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Send, Mic, Trash2, Clock, Bot, User } from "lucide-react";
+import { Send, Mic, Trash2, Clock, Bot, User, Activity } from "lucide-react";
 import { History } from "../components/chat/History";
 import { Suggestions } from "../components/chat/Suggestions";
 import { VoiceVisualizer, type VoiceVisualizerState } from "../components/chat/VoiceVisualizer";
 import { hasDesktopRuntime, listProviderModels } from "../api/backend";
+import RequiresLlm from "../components/RequiresLlm";
 import "./chat.css";
 import type { AgentSummary, ChatMessage, ProviderModel } from "../types";
 
@@ -254,6 +255,7 @@ export function Chat({
   }, [messages]);
 
   return (
+    <RequiresLlm feature="Chat">
     <section className="jarvis-chat-shell">
       <div className="jarvis-hud-grid" />
       <div className="jarvis-hud-corners" />
@@ -328,6 +330,36 @@ export function Chat({
           </button>
         </div>
       </header>
+
+      {/* Metrics bar */}
+      <div className="jarvis-metrics-bar">
+        <span className="jarvis-metric">
+          <Activity size={10} />
+          {assistantStreaming ? "streaming" : isSending ? "processing" : "ready"}
+        </span>
+        <span className="jarvis-metric-sep" />
+        <span className="jarvis-metric">
+          model <span className="jarvis-metric-val">{selectedModel ? (selectedModel.includes("/") ? selectedModel.split("/").pop() : selectedModel) : "none"}</span>
+        </span>
+        <span className="jarvis-metric-sep" />
+        <span className="jarvis-metric">
+          agent <span className="jarvis-metric-val">{activeSelectionLabel}</span>
+        </span>
+        <span className="jarvis-metric-sep" />
+        <span className="jarvis-metric">
+          messages <span className="jarvis-metric-val">{messages.length}</span>
+        </span>
+        {messages.length > 0 && (
+          <>
+            <span className="jarvis-metric-sep" />
+            <span className="jarvis-metric">
+              tokens <span className="jarvis-metric-val">
+                {messages.reduce((sum, m) => sum + (m.content?.length ?? 0), 0)}
+              </span>
+            </span>
+          </>
+        )}
+      </div>
 
       <main className="jarvis-chat-stream" ref={streamRef}>
         {messages.length === 0 ? (
@@ -485,5 +517,6 @@ export function Chat({
         }}
       />
     </section>
+    </RequiresLlm>
   );
 }

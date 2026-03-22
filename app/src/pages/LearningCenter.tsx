@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { Check, X, Circle, BookOpen, Code, Braces, Library, BarChart } from "lucide-react";
+import RequiresLlm from "../components/RequiresLlm";
 import "./learning-center.css";
 import {
   getUserProfile,
@@ -527,7 +528,7 @@ export default function LearningCenter() {
   const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
   const [selectedChallenge, setSelectedChallenge] = useState<string | null>(null);
   const [challengeCode, setChallengeCode] = useState("");
-  const [challengeResults, setChallengeResults] = useState<Record<string, "pass" | "fail">>({});
+  const [challengeResults, setChallengeResults] = useState<Record<string, { status: "pass" | "fail"; issues?: string[]; feedback?: string }>>({});
   const [showHint, setShowHint] = useState(-1);
   const [filterCategory, setFilterCategory] = useState("All");
   const [progress, setProgress] = useState<Record<string, number>>(loadProgress);
@@ -590,7 +591,7 @@ export default function LearningCenter() {
       if ((progress[c.id] ?? 0) >= c.steps.length) xp += c.xp;
     }
     for (const ch of CHALLENGES) {
-      if (challengeResults[ch.id] === "pass") xp += ch.xp;
+      if (challengeResults[ch.id]?.status === "pass") xp += ch.xp;
     }
     return xp;
   }, [progress, challengeResults]);
@@ -661,11 +662,24 @@ export default function LearningCenter() {
     try {
       const raw = await learningExecuteChallenge(activeChallenge.id, challengeCode, "rust");
       const result = JSON.parse(raw);
-      setChallengeResults(prev => ({ ...prev, [activeChallenge.id]: result.passed ? "pass" : "fail" }));
-    } catch {
+      setChallengeResults(prev => ({
+        ...prev,
+        [activeChallenge.id]: {
+          status: result.passed ? "pass" : "fail",
+          issues: result.issues ?? result.errors ?? undefined,
+          feedback: result.feedback ?? (result.passed ? `Great work! You earned ${activeChallenge.xp} XP.` : undefined),
+        },
+      }));
+    } catch (err) {
       // Backend required — do not grant pass on client side
-      if (import.meta.env.DEV) console.error("Challenge execution requires the Nexus OS backend");
-      setChallengeResults(prev => ({ ...prev, [activeChallenge.id]: "fail" }));
+      if (import.meta.env.DEV) console.error("Challenge execution requires the Nexus OS backend", err);
+      setChallengeResults(prev => ({
+        ...prev,
+        [activeChallenge.id]: {
+          status: "fail",
+          issues: ["Could not reach the Nexus OS backend. Make sure the backend is running."],
+        },
+      }));
     }
   }, [activeChallenge, challengeCode]);
 
@@ -704,7 +718,7 @@ export default function LearningCenter() {
           <div className="lc-progress-stats">
             <div className="lc-stat"><span>{completedCourses}</span><span>Completed</span></div>
             <div className="lc-stat"><span>{COURSES.length - completedCourses}</span><span>Remaining</span></div>
-            <div className="lc-stat"><span>{Object.values(challengeResults).filter(r => r === "pass").length}/{CHALLENGES.length}</span><span>Challenges</span></div>
+            <div className="lc-stat"><span>{Object.values(challengeResults).filter(r => r.status === "pass").length}/{CHALLENGES.length}</span><span>Challenges</span></div>
           </div>
         </div>
 
@@ -880,7 +894,7 @@ export default function LearningCenter() {
             <div className="lc-view-header">
               <h3 className="lc-view-title">Code Challenges</h3>
               <span className="lc-view-count">
-                {Object.values(challengeResults).filter(r => r === "pass").length}/{CHALLENGES.length} solved
+                {Object.values(challengeResults).filter(r => r.status === "pass").length}/{CHALLENGES.length} solved
               </span>
             </div>
             <div className="lc-challenges-grid">
@@ -888,8 +902,8 @@ export default function LearningCenter() {
                 {CHALLENGES.map(ch => (
                   <div key={ch.id} className={`lc-challenge-item ${selectedChallenge === ch.id ? "active" : ""}`} onClick={() => selectChallenge(ch.id)}>
                     <div className="lc-ch-status">
-                      {challengeResults[ch.id] === "pass" ? <span className="lc-ch-pass"><Check size={14} aria-hidden="true" /></span> :
-                       challengeResults[ch.id] === "fail" ? <span className="lc-ch-fail"><X size={14} aria-hidden="true" /></span> :
+                      {challengeResults[ch.id]?.status === "pass" ? <span className="lc-ch-pass"><Check size={14} aria-hidden="true" /></span> :
+                       challengeResults[ch.id]?.status === "fail" ? <span className="lc-ch-fail"><X size={14} aria-hidden="true" /></span> :
                        <span className="lc-ch-untried"><Circle size={14} aria-hidden="true" /></span>}
                     </div>
                     <div className="lc-ch-info">
@@ -920,8 +934,27 @@ export default function LearningCenter() {
                     <div className="lc-ce-code-header">
                       <span>Solution</span>
                       <span className="lc-ce-lang">rust</span>
+                      <span style={{ marginLeft: "auto", fontSize: "0.7rem", color: "#64748b" }}>
+                        {challengeCode.split("\n").length} lines
+                      </span>
                     </div>
-                    <textarea className="lc-ce-textarea" value={challengeCode} onChange={e => setChallengeCode(e.target.value)} spellCheck={false} />
+                    <div style={{ display: "flex", position: "relative" }}>
+                      <div style={{
+                        padding: "0.75rem 0.5rem 0.75rem 0.25rem", fontFamily: "monospace", fontSize: "0.8rem",
+                        lineHeight: "1.5", color: "#475569", textAlign: "right", userSelect: "none",
+                        borderRight: "1px solid #1e293b", background: "rgba(15,23,42,0.5)", minWidth: 32,
+                        whiteSpace: "pre-wrap",
+                      }}>
+                        {challengeCode.split("\n").map((_, i) => `${i + 1}\n`).join("")}
+                      </div>
+                      <textarea
+                        className="lc-ce-textarea"
+                        style={{ flex: 1, borderRadius: "0 0 6px 0" }}
+                        value={challengeCode}
+                        onChange={e => setChallengeCode(e.target.value)}
+                        spellCheck={false}
+                      />
+                    </div>
                   </div>
                   <div className="lc-ce-actions">
                     <button className="lc-ce-run" onClick={runChallenge}>Run & Check</button>
@@ -934,11 +967,27 @@ export default function LearningCenter() {
                   {showHint >= 0 && showHint < activeChallenge.hints.length && (
                     <div className="lc-ce-hint-box">{activeChallenge.hints[showHint]}</div>
                   )}
-                  {challengeResults[activeChallenge.id] === "pass" && (
+                  {challengeResults[activeChallenge.id]?.status === "pass" && (
                     <div className="lc-ce-result lc-ce-result-pass">All tests passed! +{activeChallenge.xp} XP</div>
                   )}
-                  {challengeResults[activeChallenge.id] === "fail" && (
+                  {challengeResults[activeChallenge.id]?.status === "fail" && (
                     <div className="lc-ce-result lc-ce-result-fail">Tests failed — check your logic and try again.</div>
+                  )}
+                  {/* Challenge hints on failure */}
+                  {challengeResults[activeChallenge.id]?.status === "fail" && (
+                    <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(251,191,36,0.05)", border: "1px solid rgba(251,191,36,0.2)", borderRadius: 6, fontSize: "0.75rem" }}>
+                      <div style={{ fontWeight: 600, marginBottom: 4, color: "#fbbf24" }}>Hints:</div>
+                      {challengeResults[activeChallenge.id]?.issues?.map((issue: string, i: number) => (
+                        <div key={i} style={{ opacity: 0.7, paddingLeft: 8, marginBottom: 2 }}>&#8226; {issue}</div>
+                      )) || <div style={{ opacity: 0.7 }}>Review the requirements and try again.</div>}
+                    </div>
+                  )}
+                  {/* Challenge success feedback */}
+                  {challengeResults[activeChallenge.id]?.status === "pass" && (
+                    <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 6, fontSize: "0.75rem" }}>
+                      <div style={{ fontWeight: 600, color: "#22c55e" }}>Challenge Passed!</div>
+                      <div style={{ opacity: 0.7, marginTop: 2 }}>{challengeResults[activeChallenge.id]?.feedback ?? "Well done!"}</div>
+                    </div>
                   )}
                 </div>
               ) : (
@@ -1042,7 +1091,8 @@ export default function LearningCenter() {
                 ))}
               </div>
 
-              {/* Teach mode chat */}
+              {/* Teach mode chat — requires LLM */}
+              <RequiresLlm feature="AI Teach Mode">
               <div style={{
                 background: "#0f172a", border: "1px solid #1e293b", borderRadius: 8,
                 padding: "1rem", maxHeight: 320, overflowY: "auto", marginBottom: "1rem",
@@ -1087,6 +1137,7 @@ export default function LearningCenter() {
                   Send
                 </button>
               </div>
+              </RequiresLlm>
             </div>
           );
         })()}
@@ -1127,9 +1178,9 @@ export default function LearningCenter() {
                 <div className="lc-pv-stat-bar"><div style={{ width: `${(completedCourses / COURSES.length) * 100}%`, background: "#22c55e", height: "100%", borderRadius: 2 }} /></div>
               </div>
               <div className="lc-pv-stat-card">
-                <div className="lc-pv-stat-value">{Object.values(challengeResults).filter(r => r === "pass").length}/{CHALLENGES.length}</div>
+                <div className="lc-pv-stat-value">{Object.values(challengeResults).filter(r => r.status === "pass").length}/{CHALLENGES.length}</div>
                 <div className="lc-pv-stat-label">Challenges Solved</div>
-                <div className="lc-pv-stat-bar"><div style={{ width: `${(Object.values(challengeResults).filter(r => r === "pass").length / CHALLENGES.length) * 100}%`, background: "#f59e0b", height: "100%", borderRadius: 2 }} /></div>
+                <div className="lc-pv-stat-bar"><div style={{ width: `${(Object.values(challengeResults).filter(r => r.status === "pass").length / CHALLENGES.length) * 100}%`, background: "#f59e0b", height: "100%", borderRadius: 2 }} /></div>
               </div>
             </div>
 
@@ -1184,7 +1235,7 @@ export default function LearningCenter() {
         <span className="lc-status-item">XP {totalXp}</span>
         <span className="lc-status-item">Level {Math.floor(totalXp / 500) + 1}</span>
         <span className="lc-status-item">{completedCourses}/{COURSES.length} courses</span>
-        <span className="lc-status-item">{Object.values(challengeResults).filter(r => r === "pass").length}/{CHALLENGES.length} challenges</span>
+        <span className="lc-status-item">{Object.values(challengeResults).filter(r => r.status === "pass").length}/{CHALLENGES.length} challenges</span>
         <span className="lc-status-item">{overallProgress}% progress</span>
         <span className="lc-status-item lc-status-right" style={{ color: backendOnline ? "#22c55e" : "#f59e0b" }}>
           {backendOnline ? "backend synced" : "localStorage (offline)"}

@@ -20,6 +20,7 @@ import type {
   SimulationSummary,
   SimulationTickEvent,
 } from "../types";
+import RequiresLlm from "../components/RequiresLlm";
 import "./world-simulation.css";
 
 type ChatLine = {
@@ -280,7 +281,26 @@ export default function WorldSimulation(): JSX.Element {
   }
 
   useEffect(() => {
-    void refreshSummaries();
+    async function bootstrap(): Promise<void> {
+      if (!hasDesktopRuntime()) return;
+      const rows = await listSimulations();
+      setSummaries(rows);
+      if (rows.length === 0) {
+        const id = await createSimulation(
+          "Starter World",
+          SEED_PRESETS[0].text,
+          12,
+          20,
+          1000,
+        );
+        setWorldId(id);
+        const refreshed = await listSimulations();
+        setSummaries(refreshed);
+      } else if (!worldId) {
+        setWorldId(rows[0].id);
+      }
+    }
+    void bootstrap();
   }, []);
 
   useEffect(() => {
@@ -526,6 +546,7 @@ export default function WorldSimulation(): JSX.Element {
   }
 
   return (
+    <RequiresLlm feature="World Simulation">
     <section className="world-sim-page">
       <header className="world-sim-hero">
         <div>
@@ -1126,5 +1147,6 @@ export default function WorldSimulation(): JSX.Element {
         </div>
       ) : null}
     </section>
+    </RequiresLlm>
   );
 }
