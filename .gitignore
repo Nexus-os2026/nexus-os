@@ -25,7 +25,10 @@ node_modules/
 .nexus/
 # Claude Code auto-generated directories (worktrees can be 1.3GB+)
 .claude/worktrees/
-.claude/skills/
+.claude/skills/*
+!.claude/skills/claude-mem/
+!.claude/skills/security-audit/
+!.claude/skills/ui-ux-pro-max/
 .claude/projects/
 *.db
 
@@ -34,3 +37,4 @@ node_modules/
 /llama-bridge/llama-cpp/
 .claude/skills/*/node_modules/
 .claude/skills/*/dist/
+app/dist/
