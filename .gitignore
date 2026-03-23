@@ -32,3 +32,5 @@ node_modules/
 # llama.cpp upstream source (cloned at build time)
 /llama-cpp/
 /llama-bridge/llama-cpp/
+.claude/skills/*/node_modules/
+.claude/skills/*/dist/
