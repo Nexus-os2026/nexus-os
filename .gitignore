@@ -38,3 +38,5 @@ node_modules/
 .claude/skills/*/node_modules/
 .claude/skills/*/dist/
 app/dist/
+app/node_modules/
+node_modules/
