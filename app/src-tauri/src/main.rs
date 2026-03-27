@@ -131,6 +131,9 @@ use nexus_external_tools::tauri_commands as tools_cmds;
 // Collaboration protocol imports
 use nexus_collab_protocol::tauri_commands as collab_cmds;
 
+// Software factory imports
+use nexus_software_factory::tauri_commands as factory_cmds;
+
 struct GatewayHivemindLlm;
 
 impl nexus_kernel::cognitive::HivemindLlm for GatewayHivemindLlm {
@@ -927,6 +930,7 @@ pub struct AppState {
     persistent_memory: Arc<memory_cmds::MemoryState>,
     external_tools: Arc<tools_cmds::ToolState>,
     collab_protocol: Arc<collab_cmds::CollabState>,
+    software_factory: Arc<factory_cmds::FactoryState>,
     #[cfg(all(
         feature = "tauri-runtime",
         any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1211,6 +1215,7 @@ impl AppState {
             persistent_memory: Arc::new(memory_cmds::MemoryState::default()),
             external_tools: Arc::new(tools_cmds::ToolState::default()),
             collab_protocol: Arc::new(collab_cmds::CollabState::default()),
+            software_factory: Arc::new(factory_cmds::FactoryState::default()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1412,6 +1417,7 @@ impl AppState {
             persistent_memory: Arc::new(memory_cmds::MemoryState::default()),
             external_tools: Arc::new(tools_cmds::ToolState::default()),
             collab_protocol: Arc::new(collab_cmds::CollabState::default()),
+            software_factory: Arc::new(factory_cmds::FactoryState::default()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -22687,6 +22693,74 @@ fn collab_get_patterns() -> Vec<collab_cmds::PatternInfo> {
     collab_cmds::collab_get_patterns()
 }
 
+// ── Software Factory Commands ─────────────────────────────────────────────────
+
+#[tauri::command]
+fn swf_create_project(
+    state: tauri::State<'_, AppState>, title: String, user_request: String,
+) -> Result<String, String> {
+    factory_cmds::factory_create_project(&state.software_factory, &title, &user_request)
+}
+
+#[tauri::command]
+fn swf_assign_member(
+    state: tauri::State<'_, AppState>,
+    project_id: String, agent_id: String, agent_name: String,
+    role: String, autonomy: u8, score: Option<f64>,
+) -> Result<(), String> {
+    factory_cmds::factory_assign_member(&state.software_factory, &project_id, &agent_id, &agent_name, &role, autonomy, score)
+}
+
+#[tauri::command]
+fn swf_start_pipeline(
+    state: tauri::State<'_, AppState>, project_id: String,
+) -> Result<(), String> {
+    factory_cmds::factory_start_pipeline(&state.software_factory, &project_id)
+}
+
+#[tauri::command]
+fn swf_submit_artifact(
+    state: tauri::State<'_, AppState>, project_id: String, artifact_json: String,
+) -> Result<nexus_software_factory::QualityGateResult, String> {
+    factory_cmds::factory_submit_artifact(&state.software_factory, &project_id, &artifact_json)
+}
+
+#[tauri::command]
+fn swf_get_project(
+    state: tauri::State<'_, AppState>, project_id: String,
+) -> Result<nexus_software_factory::Project, String> {
+    factory_cmds::factory_get_project(&state.software_factory, &project_id)
+}
+
+#[tauri::command]
+fn swf_list_projects(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<nexus_software_factory::Project>, String> {
+    factory_cmds::factory_list_projects(&state.software_factory)
+}
+
+#[tauri::command]
+fn swf_get_cost(
+    state: tauri::State<'_, AppState>, project_id: String,
+) -> Result<factory_cmds::CostBreakdown, String> {
+    factory_cmds::factory_get_cost(&state.software_factory, &project_id)
+}
+
+#[tauri::command]
+fn swf_get_policy(state: tauri::State<'_, AppState>) -> nexus_software_factory::FactoryPolicy {
+    factory_cmds::factory_get_policy(&state.software_factory)
+}
+
+#[tauri::command]
+fn swf_get_pipeline_stages() -> Vec<factory_cmds::StageInfo> {
+    factory_cmds::factory_get_pipeline_stages()
+}
+
+#[tauri::command]
+fn swf_estimate_cost() -> u64 {
+    factory_cmds::factory_estimate_cost()
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -27594,6 +27668,16 @@ mod runtime {
                 collab_list_active,
                 collab_get_policy,
                 collab_get_patterns,
+                swf_create_project,
+                swf_assign_member,
+                swf_start_pipeline,
+                swf_submit_artifact,
+                swf_get_project,
+                swf_list_projects,
+                swf_get_cost,
+                swf_get_policy,
+                swf_get_pipeline_stages,
+                swf_estimate_cost,
             ])
             .run(tauri::generate_context!())
             .unwrap_or_else(|e| {

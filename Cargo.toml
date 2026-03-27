@@ -58,6 +58,7 @@ members = [
   "crates/nexus-agent-memory",
   "crates/nexus-external-tools",
   "crates/nexus-collab-protocol",
+  "crates/nexus-software-factory",
 ]
 
 [workspace.package]

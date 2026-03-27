@@ -4310,6 +4310,7 @@ dependencies = [
  "nexus-predictive-router",
  "nexus-protocols",
  "nexus-sdk",
+ "nexus-software-factory",
  "nexus-telemetry",
  "nexus-tenancy",
  "nexus-token-economy",
@@ -4485,6 +4486,7 @@ dependencies = [
  "nexus-protocols",
  "nexus-research",
  "nexus-sdk",
+ "nexus-software-factory",
  "nexus-telemetry",
  "nexus-tenancy",
  "nexus-token-economy",
@@ -4710,6 +4712,18 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "uuid",
+]
+
+[[package]]
+name = "nexus-software-factory"
+version = "9.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+ "tracing",
  "uuid",
 ]
 

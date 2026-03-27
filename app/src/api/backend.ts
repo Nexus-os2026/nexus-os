@@ -3858,3 +3858,58 @@ export function collabGetPatterns(): Promise<any[]> {
   return invokeDesktop("collab_get_patterns");
 }
 
+// ── Software Factory ─────────────────────────────────────────────────────────
+
+export function swfCreateProject(title: string, userRequest: string): Promise<string> {
+  return invokeDesktop<string>("swf_create_project", {
+    title, userRequest, user_request: userRequest,
+  });
+}
+
+export function swfAssignMember(
+  projectId: string, agentId: string, agentName: string,
+  role: string, autonomy: number, score?: number
+): Promise<void> {
+  return invokeDesktop("swf_assign_member", {
+    projectId, project_id: projectId,
+    agentId, agent_id: agentId,
+    agentName, agent_name: agentName,
+    role, autonomy, score,
+  });
+}
+
+export function swfStartPipeline(projectId: string): Promise<void> {
+  return invokeDesktop("swf_start_pipeline", { projectId, project_id: projectId });
+}
+
+export function swfSubmitArtifact(projectId: string, artifactJson: string): Promise<any> {
+  return invokeDesktop("swf_submit_artifact", {
+    projectId, project_id: projectId,
+    artifactJson, artifact_json: artifactJson,
+  });
+}
+
+export function swfGetProject(projectId: string): Promise<any> {
+  return invokeDesktop("swf_get_project", { projectId, project_id: projectId });
+}
+
+export function swfListProjects(): Promise<any[]> {
+  return invokeDesktop("swf_list_projects");
+}
+
+export function swfGetCost(projectId: string): Promise<any> {
+  return invokeDesktop("swf_get_cost", { projectId, project_id: projectId });
+}
+
+export function swfGetPolicy(): Promise<any> {
+  return invokeDesktop("swf_get_policy");
+}
+
+export function swfGetPipelineStages(): Promise<any[]> {
+  return invokeDesktop("swf_get_pipeline_stages");
+}
+
+export function swfEstimateCost(): Promise<number> {
+  return invokeDesktop<number>("swf_estimate_cost");
+}
+
