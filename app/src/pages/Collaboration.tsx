@@ -72,7 +72,7 @@ const inputStyle: React.CSSProperties = {
 
 const MSG_TYPES = [
   "ShareReasoning", "Propose", "Agree", "Disagree", "Question",
-  "Answer", "RaiseRisk", "AddContext",
+  "Answer", "RaiseRisk", "AddContext", "CallVote",
 ];
 
 export default function Collaboration() {
@@ -99,6 +99,8 @@ export default function Collaboration() {
   const [msgConfidence, setMsgConfidence] = useState(0.8);
 
   const [status, setStatus] = useState("");
+  const [voteError, setVoteError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
@@ -109,7 +111,7 @@ export default function Collaboration() {
       setSessions(Array.isArray(s) ? s : []);
       setPatterns(Array.isArray(p) ? p : []);
       setPolicy(pol);
-    });
+    }).finally(() => setLoading(false));
   }, []);
 
   const refresh = useCallback(async () => {
@@ -173,6 +175,12 @@ export default function Collaboration() {
     const c = await collabDetectConsensus(s.id).catch(() => null);
     setConsensus(c);
   }, []);
+
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+      Loading...
+    </div>
+  );
 
   return (
     <div style={{ ...commandPageStyle, padding: 24, color: "#e0e0e0" }}>
@@ -325,9 +333,29 @@ export default function Collaboration() {
                       <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                         <button onClick={handleSendMessage} style={{ ...btnStyle, background: ACCENT, color: "#000", flex: 1 }}>Send</button>
                         <button onClick={handleDeclareConsensus} style={{ ...btnStyle, background: GREEN, color: "#000" }}>Declare Consensus</button>
+                        {(selectedSession.messages || []).some((m: any) => m.message_type === "Propose") && (
+                          <button onClick={async () => {
+                            setVoteError(null);
+                            try {
+                              const proposalMsg = (selectedSession.messages || []).find((m: any) => m.message_type === "Propose");
+                              if (proposalMsg) {
+                                await collabCallVote(selectedSession.id, proposalMsg.id, 0.5, 300);
+                                refresh();
+                              }
+                            } catch (err) {
+                              setVoteError(String(err));
+                            }
+                          }} style={{ ...btnStyle, background: YELLOW, color: "#000" }}>Call Vote</button>
+                        )}
                       </div>
                     </>
                   )}
+                </div>
+              )}
+
+              {voteError && (
+                <div style={{ fontSize: 12, color: RED, padding: "6px 10px", background: "rgba(239,68,68,0.08)", borderRadius: 6 }}>
+                  {voteError}
                 </div>
               )}
 

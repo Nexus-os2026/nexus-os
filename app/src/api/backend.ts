@@ -4014,3 +4014,35 @@ export function cogfsIndexFile(path: string): Promise<any> {
   return invokeDesktop("cogfs_index_file", { path });
 }
 
+// ── Governance Engine ─────────────────────────────────────────────────────────
+
+export function governanceEngineGetRules(): Promise<any> {
+  return invokeDesktop("governance_engine_get_rules");
+}
+
+export function governanceEngineEvaluate(
+  agentId: string,
+  capability: string,
+  action: string
+): Promise<any> {
+  return invokeDesktop("governance_engine_evaluate", {
+    agent_id: agentId,
+    capability,
+    action,
+  });
+}
+
+export function governanceEngineGetAuditLog(limit?: number): Promise<any> {
+  return invokeDesktop("governance_engine_get_audit_log", { limit });
+}
+
+// ── Governance Evolution ──────────────────────────────────────────────────────
+
+export function governanceEvolutionGetThreatModel(): Promise<any> {
+  return invokeDesktop("governance_evolution_get_threat_model");
+}
+
+export function governanceEvolutionRunAttackCycle(): Promise<any> {
+  return invokeDesktop("governance_evolution_run_attack_cycle");
+}
+

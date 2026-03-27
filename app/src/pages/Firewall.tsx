@@ -6,12 +6,21 @@ export function Firewall() {
   const [status, setStatus] = useState<FirewallStatus | null>(null);
   const [patterns, setPatterns] = useState<FirewallPatterns | null>(null);
   const [tab, setTab] = useState<"overview" | "patterns">("overview");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!hasDesktopRuntime()) return;
-    getFirewallStatus().then(setStatus).catch(() => {});
-    getFirewallPatterns().then(setPatterns).catch(() => {});
+    if (!hasDesktopRuntime()) { setLoading(false); return; }
+    Promise.all([
+      getFirewallStatus().then(setStatus).catch(() => {}),
+      getFirewallPatterns().then(setPatterns).catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, []);
+
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+      Loading...
+    </div>
+  );
 
   return (
     <div style={{ padding: "1.5rem", maxWidth: 960, margin: "0 auto" }}>

@@ -111,13 +111,19 @@ export default function WorldSimulation2() {
         </div>
         <textarea placeholder='Actions JSON array' value={actionsJson} onChange={(e) => setActionsJson(e.target.value)} rows={3} style={{ width: "100%", padding: 8, borderRadius: 6, background: "#2a2a3e", color: "#e0e0e0", border: "1px solid #444", fontFamily: "monospace", fontSize: 12, boxSizing: "border-box", resize: "vertical", marginBottom: 8 }} />
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => {
+          <button onClick={async () => {
             if (!selectedAgent || !scenarioDesc.trim()) return;
             setError(null);
-            simSubmit(selectedAgent, scenarioDesc, actionsJson)
-              .then((id) => { setRunningId(id); return simRun(id); })
-              .then((result) => { setSimResult(result); if (runningId) simGetRisk(runningId).then(setSimRisk).catch(() => {}); })
-              .catch((e) => setError(String(e)));
+            try {
+              const id = await simSubmit(selectedAgent, scenarioDesc, actionsJson);
+              setRunningId(id);
+              const result = await simRun(id);
+              setSimResult(result);
+              const risk = await simGetRisk(id);
+              setSimRisk(risk);
+            } catch (e) {
+              setError(String(e));
+            }
           }} disabled={!selectedAgent || !scenarioDesc.trim()} style={{ padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontWeight: 600, fontSize: 12, background: selectedAgent && scenarioDesc.trim() ? ACCENT : "#444", color: "#fff" }}>
             Submit & Run
           </button>

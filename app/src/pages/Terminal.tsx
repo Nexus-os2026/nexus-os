@@ -199,6 +199,9 @@ export default function Terminal(): JSX.Element {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestion, setSelectedSuggestion] = useState(0);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { setLoading(false); }, []);
 
   const lineId = useRef(6);
   const termRef = useRef<HTMLDivElement>(null);
@@ -530,6 +533,12 @@ export default function Terminal(): JSX.Element {
   /* ================================================================ */
   /*  RENDER                                                           */
   /* ================================================================ */
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+      Loading...
+    </div>
+  );
+
   return (
     <section className="tm-root">
       {/* ---- Header ---- */}

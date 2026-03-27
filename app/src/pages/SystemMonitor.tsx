@@ -135,6 +135,7 @@ export default function SystemMonitor(): JSX.Element {
   const [alerts, setAlerts] = useState<AlertEntry[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const appendAudit = useCallback((event: string, detail: string) => {
     setAuditLog((prev) => [{ ts: Date.now(), event, detail }, ...prev].slice(0, 100));
@@ -202,6 +203,8 @@ export default function SystemMonitor(): JSX.Element {
       } catch (err) {
         if (!mounted) return;
         setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
       }
     }
 
@@ -300,6 +303,12 @@ export default function SystemMonitor(): JSX.Element {
   /* ================================================================ */
   /*  RENDER                                                           */
   /* ================================================================ */
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+      Loading...
+    </div>
+  );
+
   return (
     <section className="sm-root">
       {/* ---- Header ---- */}

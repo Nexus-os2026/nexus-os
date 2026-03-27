@@ -99,6 +99,7 @@ export default function DreamForge(): JSX.Element {
   const [saving, setSaving] = useState(false);
   const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
@@ -118,6 +119,8 @@ export default function DreamForge(): JSX.Element {
       if (results[3].status === "fulfilled") setHistory(Array.isArray(results[3].value) ? results[3].value : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -179,6 +182,12 @@ export default function DreamForge(): JSX.Element {
   }, [config, refresh]);
 
   const budgetPct = status ? Math.round((status.budget_remaining / Math.max(status.budget_total, 1)) * 100) : 0;
+
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+      Loading...
+    </div>
+  );
 
   return (
     <RequiresLlm feature="DreamForge">

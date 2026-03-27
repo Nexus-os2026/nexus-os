@@ -278,17 +278,17 @@ export default function ComputerControl(): JSX.Element {
 
       {/* ── Mode Selector ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <button className="cursor-pointer" onClick={() => setMode('demo')} style={{ padding: "6px 16px", background: mode === 'demo' ? "rgba(129,140,248,0.2)" : "transparent", border: `1px solid ${mode === 'demo' ? "rgba(129,140,248,0.4)" : "var(--border, #334155)"}`, borderRadius: 6, color: "var(--text-primary, #e2e8f0)", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer", fontWeight: mode === 'demo' ? 600 : 400 }}>🛡️ Demo Mode</button>
-        <button className="cursor-pointer" onClick={() => setMode('live')} style={{ padding: "6px 16px", background: mode === 'live' ? "rgba(239,68,68,0.2)" : "transparent", border: `1px solid ${mode === 'live' ? "rgba(239,68,68,0.4)" : "var(--border, #334155)"}`, borderRadius: 6, color: "var(--text-primary, #e2e8f0)", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer", fontWeight: mode === 'live' ? 600 : 400 }}>⚡ Live Mode</button>
-        <span style={{ fontSize: "0.7rem", opacity: 0.5 }}>{mode === 'demo' ? "Safe preview — no real actions taken" : "⚠️ Agent controls your computer"}</span>
+        <button className="cursor-pointer" onClick={() => setMode('demo')} style={{ padding: "6px 16px", background: mode === 'demo' ? "rgba(129,140,248,0.2)" : "transparent", border: `1px solid ${mode === 'demo' ? "rgba(129,140,248,0.4)" : "#334155"}`, borderRadius: 6, color: "#e2e8f0", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer", fontWeight: mode === 'demo' ? 600 : 400 }}>Preview Mode</button>
+        <button className="cursor-pointer" onClick={() => setMode('live')} style={{ padding: "6px 16px", background: mode === 'live' ? "rgba(239,68,68,0.2)" : "transparent", border: `1px solid ${mode === 'live' ? "rgba(239,68,68,0.4)" : "#334155"}`, borderRadius: 6, color: "#e2e8f0", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer", fontWeight: mode === 'live' ? 600 : 400 }}>Live Mode</button>
+        <span style={{ fontSize: "0.7rem", opacity: 0.5 }}>{mode === 'demo' ? "Safe preview — shows governed action sequence without executing" : "Agent controls your computer"}</span>
       </div>
 
       {/* ── Demo Mode Panel ── */}
       {mode === 'demo' && (
-        <div style={{ background: "var(--bg-secondary, #1e293b)", border: "1px solid var(--border, #334155)", borderRadius: 8, padding: 16, marginBottom: 16 }}>
+        <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: 16, marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Demo: Watch What the Agent Would Do</h3>
-            <button className="cursor-pointer" onClick={runDemo} disabled={demoRunning} style={{ padding: "6px 14px", background: "rgba(129,140,248,0.2)", border: "1px solid rgba(129,140,248,0.3)", borderRadius: 6, color: "#818cf8", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>{demoRunning ? "Running..." : "▶ Run Demo"}</button>
+            <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Preview: Watch What the Agent Would Do</h3>
+            <button className="cursor-pointer" onClick={runDemo} disabled={demoRunning} style={{ padding: "6px 14px", background: "rgba(129,140,248,0.2)", border: "1px solid rgba(129,140,248,0.3)", borderRadius: 6, color: "#818cf8", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>{demoRunning ? "Running..." : "Run Preview"}</button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {DEMO_ACTIONS.slice(0, demoStep + 1).map((action, i) => (
@@ -302,7 +302,7 @@ export default function ComputerControl(): JSX.Element {
             ))}
           </div>
           <div style={{ marginTop: 12, padding: "8px 12px", background: "rgba(34,197,94,0.05)", borderRadius: 6, fontSize: "0.75rem", opacity: 0.7 }}>
-            🛡️ Demo mode shows what agents WOULD do without taking real actions. All actions are governed by fuel limits, HITL approval, and audit trails.
+            Preview mode shows what agents WOULD do without taking real actions. All actions are governed by fuel limits, HITL approval, and audit trails. No system changes are made during preview.
           </div>
         </div>
       )}

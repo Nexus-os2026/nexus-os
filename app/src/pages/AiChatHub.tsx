@@ -738,6 +738,25 @@ export default function AiChatHub() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* ─── event delegation for code-block Run buttons (rendered via dangerouslySetInnerHTML) ─── */
+  useEffect(() => {
+    const container = document.querySelector('.ch-messages') || document.body;
+    const handleClick = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target.classList.contains('ch-code-run')) {
+        const codeBlock = target.closest('.ch-code-block');
+        const codeEl = codeBlock?.querySelector('code');
+        if (codeEl?.textContent) {
+          navigator.clipboard.writeText(codeEl.textContent)
+            .then(() => { target.textContent = 'Copied!'; setTimeout(() => { target.textContent = '\u25B6 Run'; }, 2000); })
+            .catch(() => {});
+        }
+      }
+    };
+    container.addEventListener('click', handleClick);
+    return () => container.removeEventListener('click', handleClick);
+  }, []);
+
   /* ─── filtered conversations ─── */
   const filteredConversations = useMemo(() => {
     if (!historySearch.trim()) return conversations;

@@ -207,7 +207,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "timeline-viewer", label: "Timeline Viewer", icon: "GitMerge", shortcut: "", section: "AUTOMATION" },
   { id: "temporal", label: "Temporal Engine", icon: "GitBranch", shortcut: "", section: "AUTOMATION" },
   // ── SIMULATION ──
-  { id: "simulation", label: "World Simulation", icon: "Globe2", shortcut: "", section: "SIMULATION" },
+  { id: "simulation", label: "Scenario Sandbox", icon: "Globe2", shortcut: "", section: "SIMULATION" },
   { id: "civilization", label: "Civilization", icon: "Landmark", shortcut: "", section: "SIMULATION" },
   { id: "computer-control", label: "Computer Control", icon: "Monitor", shortcut: "", section: "SIMULATION" },
   // ── ENTERPRISE ──
@@ -383,103 +383,8 @@ const DEMO_AGENT_IDS = {
 
 const DEMO_AGENT_ID_SET = new Set(Object.values(DEMO_AGENT_IDS));
 
-function demoAgents(): AgentSummary[] {
-  return [
-    {
-      id: DEMO_AGENT_IDS.coder,
-      name: "Coder (demo)",
-      status: "Running",
-      autonomy_level: 3,
-      fuel_remaining: 9200,
-      fuel_budget: 10000,
-      last_action: "demo — no backend connected",
-      isSystem: true,
-      sandbox_runtime: "wasmtime",
-      memory_usage_bytes: 131072,
-      capabilities: ["llm.query", "fs.read", "fs.write"]
-    },
-    {
-      id: DEMO_AGENT_IDS.designer,
-      name: "Designer (demo)",
-      status: "Running",
-      autonomy_level: 2,
-      fuel_remaining: 6500,
-      fuel_budget: 10000,
-      last_action: "demo — no backend connected",
-      isSystem: true,
-      sandbox_runtime: "wasmtime",
-      memory_usage_bytes: 98304,
-      capabilities: ["llm.query", "fs.read"]
-    },
-    {
-      id: DEMO_AGENT_IDS.screenPoster,
-      name: "Screen Poster (demo)",
-      status: "Paused",
-      autonomy_level: 2,
-      fuel_remaining: 4100,
-      fuel_budget: 10000,
-      last_action: "demo — awaiting HITL approval",
-      isSystem: true,
-      sandbox_runtime: "wasmtime",
-      memory_usage_bytes: 65536,
-      capabilities: ["llm.query", "fs.read", "request_approval"]
-    },
-    {
-      id: DEMO_AGENT_IDS.webBuilder,
-      name: "Web Builder (demo)",
-      status: "Running",
-      autonomy_level: 3,
-      fuel_remaining: 7800,
-      fuel_budget: 10000,
-      last_action: "demo — no backend connected",
-      isSystem: true,
-      sandbox_runtime: "wasmtime",
-      memory_usage_bytes: 196608,
-      capabilities: ["llm.query", "fs.read", "fs.write"]
-    },
-    {
-      id: DEMO_AGENT_IDS.workflowStudio,
-      name: "Workflow Studio (demo)",
-      status: "Stopped",
-      autonomy_level: 3,
-      fuel_remaining: 2300,
-      fuel_budget: 10000,
-      last_action: "demo — pipeline idle",
-      isSystem: true,
-      sandbox_runtime: "wasmtime",
-      memory_usage_bytes: 0,
-      capabilities: ["llm.query", "fs.read"]
-    },
-    {
-      id: DEMO_AGENT_IDS.selfImprove,
-      name: "Self-Improve (demo)",
-      status: "Running",
-      autonomy_level: 4,
-      fuel_remaining: 8400,
-      fuel_budget: 10000,
-      last_action: "demo — no backend connected",
-      isSystem: true,
-      sandbox_runtime: "wasmtime",
-      memory_usage_bytes: 114688,
-      capabilities: ["llm.query", "fs.read", "fs.write", "request_approval"]
-    }
-  ];
-}
-
-function demoChatReply(message: string): ChatResponse {
-  const lowered = message.toLowerCase();
-  let text: string;
-  if (lowered.includes("status")) {
-    text = "[DEMO] 6 demo agents shown. 4 running, 1 paused, 1 stopped. Install the Nexus OS desktop app for real agent data.";
-  } else if (lowered.includes("hello") || lowered.includes("hi") || lowered.includes("hey")) {
-    text = "[DEMO] Hello! This is the Nexus OS demo preview. You are seeing placeholder data — install the desktop app for full governed chat, agent management, and all runtime features.";
-  } else if (lowered.includes("help") || lowered.includes("what can you")) {
-    text = "[DEMO] Nexus OS capabilities include: governed chat, agent management, code execution, web search, social posting, file system access, and workflow orchestration. All features require the desktop backend — install it for full functionality.";
-  } else {
-    text = "[DEMO] This is a demo preview. Chat responses, agent data, and all actions are simulated. Install the Nexus OS desktop app to connect to the governed runtime.";
-  }
-  return { text, model: "demo", token_count: text.split(" ").length, cost: 0, latency_ms: 10 };
-}
+// Demo agent/chat functions removed — no fake data is served when desktop runtime
+// is absent. The app shows empty states with clear "Desktop Runtime Required" messages.
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -598,13 +503,14 @@ export default function App(): JSX.Element {
   useEffect(() => {
     if (!hasDesktopRuntime()) {
       setRuntimeMode("mock");
-      setAgents(demoAgents());
+      setAgents([]);
       setAuditEvents(emptyAudit());
       setConfig(createDefaultConfig());
+      setRuntimeError("Desktop runtime required — launch Nexus OS from the Tauri app for full functionality.");
       setMessages([
         makeMessage(
           "assistant",
-          "[DEMO MODE] You are viewing a demo preview of Nexus OS. Agent data is simulated and actions are disabled. Install the desktop app for full functionality."
+          "Nexus OS requires the desktop application. No demo data is shown — launch from the Tauri app to access governed agents, chat, audit trails, and all runtime features."
         )
       ]);
       bumpActivity();
@@ -662,12 +568,12 @@ export default function App(): JSX.Element {
           return;
         }
         setRuntimeMode("mock");
-        setRuntimeError(`Desktop backend unavailable: ${formatError(error)}`);
-        setAgents(demoAgents());
+        setRuntimeError(`Desktop backend unavailable: ${formatError(error)}. Restart the desktop app and refresh to reconnect.`);
+        setAgents([]);
         setAuditEvents(emptyAudit());
         setConfig(createDefaultConfig());
         setMessages([
-          makeMessage("assistant", "[DEMO MODE] Backend connection failed. Showing demo data. Restart the desktop app and refresh to reconnect.")
+          makeMessage("assistant", "Backend connection failed. No demo data is shown — restart the desktop app and refresh to reconnect.")
         ]);
         play("error");
         setAppReady(true);
@@ -1318,9 +1224,9 @@ export default function App(): JSX.Element {
         }
       }
     } else {
-      // Demo mode — simulated reply
+      // No desktop runtime — show clear message instead of fake responses
       try {
-        const response = demoChatReply(input);
+        const response: ChatResponse = { text: "Chat requires the desktop runtime. No simulated responses are provided — launch the Nexus OS desktop app to connect to governed LLM providers.", model: "none", token_count: 0, cost: 0, latency_ms: 0 };
         const chunks = response.text.split(" ");
         let current = "";
         for (let index = 0; index < chunks.length; index += 1) {

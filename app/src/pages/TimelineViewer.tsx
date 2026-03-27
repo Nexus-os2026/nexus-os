@@ -72,6 +72,7 @@ export default function TimelineViewer(): JSX.Element {
   const [selectedFork, setSelectedFork] = useState<TimelineFork | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [committing, setCommitting] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
@@ -83,7 +84,7 @@ export default function TimelineViewer(): JSX.Element {
     }
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { void refresh().finally(() => setLoading(false)); }, [refresh]);
 
   const handleCommit = useCallback(async (forkId: string) => {
     setCommitting(true);
@@ -103,6 +104,12 @@ export default function TimelineViewer(): JSX.Element {
   // Build tree structure
   const roots = forks.filter((f) => !f.parent_id);
   const childrenOf = (parentId: string) => forks.filter((f) => f.parent_id === parentId);
+
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+      Loading...
+    </div>
+  );
 
   return (
     <div style={{ padding: 24, color: "#e2e8f0", maxWidth: 1400, margin: "0 auto" }}>

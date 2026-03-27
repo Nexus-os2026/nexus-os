@@ -1,0 +1,43 @@
+replicaCount: 1
+
+image:
+  repository: nexus-os
+  tag: latest
+  pullPolicy: IfNotPresent
+
+server:
+  port: 3000
+  mcpPort: 3001
+  a2aPort: 3002
+  logLevel: info
+
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: ""
+
+ollama:
+  enabled: true
+  image: ollama/ollama:latest
+  persistence:
+    size: 50Gi
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+  limits:
+    memory: "2Gi"
+    cpu: "2000m"
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+
+env: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

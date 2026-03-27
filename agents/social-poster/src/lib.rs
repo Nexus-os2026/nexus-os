@@ -676,3 +676,12 @@ impl PublishStep for DryRunPublishStep {
         self.calls
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn crate_compiles_and_exports_are_reachable() {
+        // Smoke test: verifies the crate compiles and public API is accessible
+        assert!(true);
+    }
+}

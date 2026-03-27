@@ -151,6 +151,7 @@ export default function SelfRewriteLab(): JSX.Element {
   const [applyTarget, setApplyTarget] = useState<PatchCard | null>(null);
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const appendSessionHistory = useCallback((entry: Omit<SessionHistoryEntry, "id" | "timestamp">) => {
     setSessionHistory((current) => [
@@ -217,7 +218,7 @@ export default function SelfRewriteLab(): JSX.Element {
   }, [bottlenecks]);
 
   useEffect(() => {
-    void loadHistory();
+    void loadHistory().finally(() => setLoading(false));
   }, [loadHistory]);
 
   const handleAnalyze = useCallback(async () => {
@@ -348,6 +349,12 @@ export default function SelfRewriteLab(): JSX.Element {
     }));
     return [...sessionHistory, ...remoteEntries].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
   }, [remoteHistory, sessionHistory]);
+
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+      Loading...
+    </div>
+  );
 
   return (
     <div style={commandPageStyle}>

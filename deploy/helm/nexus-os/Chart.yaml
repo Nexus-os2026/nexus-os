@@ -1,0 +1,15 @@
+apiVersion: v2
+name: nexus-os
+description: Nexus OS - Governed AI Agent Operating System
+type: application
+version: 0.1.0
+appVersion: "9.6.0"
+keywords:
+  - ai-agents
+  - governance
+  - rust
+  - llm
+  - mcp
+maintainers:
+  - name: Suresh
+    url: https://gitlab.com/nexaiceo/nexus-os

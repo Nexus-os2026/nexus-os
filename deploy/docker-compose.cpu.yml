@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  nexus-server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: nexus-os
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+      - "3002:3002"
+    volumes:
+      - nexus-data:/app/nexus-data
+    environment:
+      - RUST_LOG=info
+      - OLLAMA_HOST=http://ollama:11434
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: nexus-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  nexus-data:
+  ollama-data:

@@ -1,4 +1,4 @@
-#[allow(clippy::all, dead_code, unused_imports)]
+#[allow(clippy::all, dead_code, unused_imports, unexpected_cfgs)]
 mod desktop_backend {
     use nexus_kernel::cognitive::{
         AgentMemoryManager, CognitivePhase, CognitivePlanner, PlannerLlm,

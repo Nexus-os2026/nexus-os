@@ -4732,6 +4732,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-server"
+version = "9.0.0"
+dependencies = [
+ "axum",
+ "clap",
+ "nexus-kernel",
+ "nexus-mcp",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "nexus-software-factory"
 version = "9.0.0"
 dependencies = [

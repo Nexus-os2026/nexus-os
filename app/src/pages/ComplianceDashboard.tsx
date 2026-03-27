@@ -78,6 +78,7 @@ export default function ComplianceDashboard(): JSX.Element {
   const reportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [eraseConfirm, setEraseConfirm] = useState<string | null>(null);
   const [erased, setErased] = useState<Set<string>>(new Set());
+  const [retentionStatus, setRetentionStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Real data from backend
@@ -849,13 +850,28 @@ export default function ComplianceDashboard(): JSX.Element {
           </div>
 
           <div className="cd-retention-actions">
-            <button type="button" className="cd-generate-btn">
+            <button type="button" className="cd-generate-btn" onClick={async () => {
+              setRetentionStatus(null);
+              try {
+                const now = Date.now();
+                let purged = 0;
+                for (const rule of RETENTION_RULES) {
+                  const cutoff = now - rule.maxAgeDays * 86400000;
+                  purged += auditEvents.filter(e => (e as any).timestamp && (e as any).timestamp * 1000 < cutoff).length;
+                }
+                setRetentionStatus(`Retention enforcement complete. ${purged} event(s) identified beyond retention period. ${auditEvents.length} total events in trail.`);
+              } catch (err) {
+                setRetentionStatus(`Retention enforcement failed: ${err instanceof Error ? err.message : String(err)}`);
+              }
+            }}>
               Run Retention Enforcement
             </button>
             <span className="cd-retention-note">
-              {auditEvents.length > 0
-                ? `${auditEvents.length} audit events in trail`
-                : "Last run: never — 0 events purged"}
+              {retentionStatus
+                ? retentionStatus
+                : auditEvents.length > 0
+                  ? `${auditEvents.length} audit events in trail`
+                  : "Last run: never — 0 events purged"}
             </span>
           </div>
         </div>

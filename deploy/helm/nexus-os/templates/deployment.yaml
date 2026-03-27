@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nexus-os.fullname" . }}
+  labels:
+    {{- include "nexus-os.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "nexus-os.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nexus-os.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: nexus-server
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - name: http
+              containerPort: {{ .Values.server.port }}
+            - name: mcp
+              containerPort: {{ .Values.server.mcpPort }}
+            - name: a2a
+              containerPort: {{ .Values.server.a2aPort }}
+          args:
+            - "--port"
+            - "{{ .Values.server.port }}"
+            - "--mcp-port"
+            - "{{ .Values.server.mcpPort }}"
+            - "--a2a-port"
+            - "{{ .Values.server.a2aPort }}"
+            - "--data-dir"
+            - "/app/nexus-data"
+            - "--log-level"
+            - "{{ .Values.server.logLevel }}"
+          env:
+            - name: RUST_LOG
+              value: "{{ .Values.server.logLevel }}"
+            {{- if .Values.ollama.enabled }}
+            - name: OLLAMA_HOST
+              value: "http://{{ include "nexus-os.fullname" . }}-ollama:11434"
+            {{- end }}
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /app/nexus-data
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "nexus-os.fullname" . }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

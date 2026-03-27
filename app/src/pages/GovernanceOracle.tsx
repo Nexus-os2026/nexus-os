@@ -85,16 +85,16 @@ export default function GovernanceOracle() {
         )}
       </Panel>
 
-      {/* Security Properties */}
+      {/* Security Properties — derived from live oracle status */}
       <Panel title="Security Properties" style={{ marginTop: 16 }}>
         <div style={{ display: "grid", gap: 8, fontSize: 13 }}>
           {[
-            ["Timing Normalization", "All requests return in exactly 200ms + jitter — no timing side channels", "#22c55e"],
-            ["Ed25519 Sealed Tokens", "Every decision is cryptographically signed — untamperable", "#22c55e"],
-            ["Deny-by-Default", "No rule match = denied. Explicit allow required", "#22c55e"],
-            ["Zero-Knowledge Denial", "Denied responses contain no reason — governance logic is invisible", "#22c55e"],
-            ["Hash-Chained Audit", "Every decision links to previous via SHA-256 — tamper-evident", "#22c55e"],
-            ["Adversarial Evolution", "Synthetic attacks continuously probe the ruleset for gaps", "#22c55e"],
+            ["Deny-by-Default", "No rule match = denied. Explicit allow required", status ? "#22c55e" : "#64748b"],
+            ["Hash-Chained Audit", `${status?.requests_processed ?? 0} decisions recorded with SHA-256 chain`, status && status.requests_processed > 0 ? "#22c55e" : "#64748b"],
+            ["Ed25519 Token Verification", "Token structure validated for Ed25519 signatures (64-byte hex/base64)", status ? "#22c55e" : "#64748b"],
+            ["Response Ceiling", `Worst-case: ${status?.response_ceiling_ms ?? "—"}ms observed`, status && status.response_ceiling_ms < 500 ? "#22c55e" : status ? "#f59e0b" : "#64748b"],
+            ["Active Rules", `${status?.queue_depth ?? 0} governance rules + denied evaluations tracked`, status && status.queue_depth > 0 ? "#22c55e" : "#64748b"],
+            ["Uptime", `${status?.uptime_seconds ?? 0}s since oracle start`, status && status.uptime_seconds > 0 ? "#22c55e" : "#64748b"],
           ].map(([label, desc, color]) => (
             <div key={label} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
               <StatusDot color={color as string} />

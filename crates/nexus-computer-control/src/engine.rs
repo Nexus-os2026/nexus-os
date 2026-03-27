@@ -165,7 +165,7 @@ impl GovernedControlEngine {
                     Err(e) => format!("Execution failed: {e}"),
                 }
             }
-            _ => format!("Executed: {}", action.label()),
+            _ => format!("[simulated — requires display server] {}", action.label()),
         };
 
         // 5. Audit

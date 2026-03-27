@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import {
   Play, Keyboard, LayoutGrid, Hexagon, PieChart as PieChartIcon,
@@ -88,6 +88,10 @@ export default function DatabaseManager() {
   const [vizType, setVizType] = useState<"bar" | "pie" | "line">("bar");
   const [vizXCol, setVizXCol] = useState("");
   const [vizYCol, setVizYCol] = useState("");
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { setLoading(false); }, []);
 
   const selectedConn = connections[selectedConnIdx] ?? null;
   const tableObj = useMemo(() => selectedConn?.tables.find(t => t.name === selectedTable), [selectedConn, selectedTable]);
@@ -295,6 +299,12 @@ export default function DatabaseManager() {
   const TOOLTIP_STYLE = { background: "#0f172a", border: "1px solid rgba(56,189,248,0.2)", borderRadius: 6, fontSize: 12 };
 
   /* ─── render ─── */
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+      Loading...
+    </div>
+  );
+
   return (
     <div className="db-container">
       {/* ─── Sidebar ─── */}

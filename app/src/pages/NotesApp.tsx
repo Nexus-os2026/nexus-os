@@ -387,6 +387,12 @@ export default function NotesApp() {
   }, [createNote]);
 
   /* ─── render ─── */
+  if (!loaded) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+      Loading...
+    </div>
+  );
+
   return (
     <div className="na-container">
       {lastError && (

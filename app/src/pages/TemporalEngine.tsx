@@ -89,6 +89,7 @@ export default function TemporalEngine(): JSX.Element {
   const [agents, setAgents] = useState<AgentEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"timelines" | "fork" | "dilated">("timelines");
+  const [loading, setLoading] = useState(true);
 
   // Fork creation
   const [forkRequest, setForkRequest] = useState("");
@@ -119,7 +120,7 @@ export default function TemporalEngine(): JSX.Element {
     }
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { void refresh().finally(() => setLoading(false)); }, [refresh]);
 
   const handleFork = useCallback(async () => {
     if (!forkRequest.trim()) return;
@@ -181,6 +182,12 @@ export default function TemporalEngine(): JSX.Element {
   // Group forks by decision (parent_id)
   const rootForks = forks.filter((f) => !f.parent_id);
   const childrenOf = (parentId: string) => forks.filter((f) => f.parent_id === parentId);
+
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+      Loading...
+    </div>
+  );
 
   return (
     <div style={{ padding: 24, color: "#e2e8f0", maxWidth: 1400, margin: "0 auto" }}>

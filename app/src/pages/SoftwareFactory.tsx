@@ -79,6 +79,7 @@ export default function SoftwareFactory() {
   const [role, setRole] = useState("Developer");
   const [autonomy, setAutonomy] = useState(4);
   const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
@@ -91,7 +92,7 @@ export default function SoftwareFactory() {
       setStages(Array.isArray(s) ? s : []);
       setPolicy(pol);
       setEstimatedCost(typeof est === "number" ? est : 0);
-    });
+    }).finally(() => setLoading(false));
   }, []);
 
   const refresh = useCallback(async () => {
@@ -136,6 +137,12 @@ export default function SoftwareFactory() {
     const c = await swfGetCost(p.id).catch(() => null);
     setCost(c);
   }, []);
+
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+      Loading...
+    </div>
+  );
 
   return (
     <div style={{ ...commandPageStyle, padding: 24, color: "#e0e0e0" }}>

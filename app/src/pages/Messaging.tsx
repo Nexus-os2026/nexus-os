@@ -85,6 +85,7 @@ export default function Messaging(): JSX.Element {
   const [messages, setMessages] = useState<{platform: string; channel: string; from: string; text: string; time: string}[]>([]);
   const [sendingReply, setSendingReply] = useState(false);
   const [msgError, setMsgError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   /* ─── Real-time message listener via Tauri events ─── */
   useEffect(() => {
@@ -147,6 +148,8 @@ export default function Messaging(): JSX.Element {
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -218,6 +221,12 @@ export default function Messaging(): JSX.Element {
       setMessage(error instanceof Error ? error.message : String(error));
     }
   }, []);
+
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+      Loading...
+    </div>
+  );
 
   return (
     <section className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6">

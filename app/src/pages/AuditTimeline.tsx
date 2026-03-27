@@ -45,6 +45,7 @@ export default function AuditTimeline({ events }: AuditTimelineProps): JSX.Eleme
   const [liveEvents, setLiveEvents] = useState<AuditEventRow[]>(events);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLiveEvents(events);
@@ -53,6 +54,7 @@ export default function AuditTimeline({ events }: AuditTimelineProps): JSX.Eleme
   // Load live audit data on mount when the desktop runtime is available.
   useEffect(() => {
     if (!hasDesktopRuntime()) {
+      setLoading(false);
       return;
     }
     Promise.all([getAuditLog(undefined, 500), getAuditChainStatus()])
@@ -60,7 +62,8 @@ export default function AuditTimeline({ events }: AuditTimelineProps): JSX.Eleme
         setLiveEvents(freshEvents);
         setChainStatus(status);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   // Auto-refresh every 10 seconds
@@ -99,6 +102,12 @@ export default function AuditTimeline({ events }: AuditTimelineProps): JSX.Eleme
     }
     setRefreshing(false);
   }
+
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+      Loading...
+    </div>
+  );
 
   return (
     <section className="at-hub">

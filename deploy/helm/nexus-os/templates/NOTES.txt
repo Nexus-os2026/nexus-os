@@ -1,0 +1,11 @@
+Nexus OS has been deployed!
+
+HTTP API:    http://{{ include "nexus-os.fullname" . }}:{{ .Values.server.port }}
+MCP Server:  http://{{ include "nexus-os.fullname" . }}:{{ .Values.server.mcpPort }}
+A2A Server:  http://{{ include "nexus-os.fullname" . }}:{{ .Values.server.a2aPort }}
+
+Health check:
+  kubectl port-forward svc/{{ include "nexus-os.fullname" . }} {{ .Values.server.port }}:{{ .Values.server.port }}
+  curl http://localhost:{{ .Values.server.port }}/health
+
+Documentation: https://gitlab.com/nexaiceo/nexus-os

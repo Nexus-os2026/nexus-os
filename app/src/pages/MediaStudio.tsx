@@ -55,6 +55,7 @@ export default function MediaStudio(): JSX.Element {
   const [outputName, setOutputName] = useState("processed-output.mp3");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const refreshFiles = useCallback(async () => {
     await fileManagerCreateDir(workspace);
@@ -75,6 +76,8 @@ export default function MediaStudio(): JSX.Element {
         await refreshFiles();
       } catch (error) {
         setMessage(error instanceof Error ? error.message : String(error));
+      } finally {
+        setLoading(false);
       }
     }
 
@@ -135,6 +138,12 @@ export default function MediaStudio(): JSX.Element {
       setBusy(false);
     }
   }, [ffmpegArgs, outputName, selectedAgentId, selectedEntry, workspace]);
+
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+      Loading...
+    </div>
+  );
 
   return (
     <RequiresLlm feature="Media Studio">

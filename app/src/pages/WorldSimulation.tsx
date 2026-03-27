@@ -222,6 +222,7 @@ export default function WorldSimulation(): JSX.Element {
   const [injectValue, setInjectValue] = useState("passed");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [liveTick, setLiveTick] = useState<SimulationTickEvent | null>(null);
   const [eventFeed, setEventFeed] = useState<SimulationLiveEvent[]>([]);
 
@@ -282,22 +283,26 @@ export default function WorldSimulation(): JSX.Element {
 
   useEffect(() => {
     async function bootstrap(): Promise<void> {
-      if (!hasDesktopRuntime()) return;
-      const rows = await listSimulations();
-      setSummaries(rows);
-      if (rows.length === 0) {
-        const id = await createSimulation(
-          "Starter World",
-          SEED_PRESETS[0].text,
-          12,
-          20,
-          1000,
-        );
-        setWorldId(id);
-        const refreshed = await listSimulations();
-        setSummaries(refreshed);
-      } else if (!worldId) {
-        setWorldId(rows[0].id);
+      try {
+        if (!hasDesktopRuntime()) return;
+        const rows = await listSimulations();
+        setSummaries(rows);
+        if (rows.length === 0) {
+          const id = await createSimulation(
+            "Starter World",
+            SEED_PRESETS[0].text,
+            12,
+            20,
+            1000,
+          );
+          setWorldId(id);
+          const refreshed = await listSimulations();
+          setSummaries(refreshed);
+        } else if (!worldId) {
+          setWorldId(rows[0].id);
+        }
+      } finally {
+        setLoading(false);
       }
     }
     void bootstrap();
@@ -530,6 +535,12 @@ export default function WorldSimulation(): JSX.Element {
     link.click();
     URL.revokeObjectURL(url);
   }
+
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+      Loading...
+    </div>
+  );
 
   if (!hasDesktopRuntime()) {
     return (

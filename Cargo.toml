@@ -60,6 +60,7 @@ members = [
   "crates/nexus-collab-protocol",
   "crates/nexus-software-factory",
   "crates/nexus-mcp",
+  "crates/nexus-server",
 ]
 
 [workspace.package]

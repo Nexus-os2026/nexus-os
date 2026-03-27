@@ -1,3 +1,13 @@
+#![allow(
+    dead_code,
+    clippy::single_char_add_str,
+    clippy::manual_is_multiple_of,
+    clippy::needless_borrow,
+    clippy::unnecessary_map_or,
+    clippy::too_many_arguments,
+    clippy::doc_overindented_list_items,
+    clippy::unnecessary_unwrap
+)]
 //! Nexus Inference Consistency Stress Test — Distributed Determinism Validation
 //!
 //! Tests inference reproducibility, latency scaling, and determinism under load
