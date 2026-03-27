@@ -3,6 +3,7 @@ pub mod agent_adapter;
 pub mod batch;
 pub mod comparator;
 pub mod nim_client;
+pub mod openrouter_client;
 pub mod repeatability;
 pub mod runner;
 pub mod three_way;

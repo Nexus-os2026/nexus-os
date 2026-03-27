@@ -6,13 +6,17 @@
 //!
 //! External MCP clients cannot bypass governance.
 
+use crate::actuators::{ActionResult, ActuatorContext, ActuatorRegistry};
 use crate::audit::{AuditTrail, EventType};
+use crate::autonomy::AutonomyLevel;
+use crate::cognitive::types::PlannedAction;
 use crate::errors::AgentError;
 use crate::firewall::{EgressDecision, EgressGovernor};
 use crate::manifest::AgentManifest;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use uuid::Uuid;
 
 // ── Tool definition types ───────────────────────────────────────────────────
@@ -26,6 +30,7 @@ pub struct GovernedTool {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// JSON Schema for the tool's input parameters.
+    #[serde(rename = "inputSchema")]
     pub input_schema: serde_json::Value,
     /// Governance constraints on this tool.
     pub governance: ToolGovernance,
@@ -332,15 +337,17 @@ pub struct McpServer {
     audit_trail: AuditTrail,
     resources: Vec<GovernedResource>,
     egress_governor: EgressGovernor,
+    actuator_registry: ActuatorRegistry,
 }
 
 impl McpServer {
-    /// Create a new MCP server with an empty agent registry.
+    /// Create a new MCP server with an empty agent registry and default actuators.
     pub fn new() -> Self {
         Self {
             agents: HashMap::new(),
             audit_trail: AuditTrail::new(),
             egress_governor: EgressGovernor::new(),
+            actuator_registry: ActuatorRegistry::with_defaults(),
             resources: vec![
                 GovernedResource {
                     uri: "nexus://agents/status".to_string(),
@@ -557,12 +564,113 @@ impl McpServer {
             }
         }
 
-        // Step 4: Execute (mock — real execution routes to agent runtime)
-        let output_text = format!(
-            "Tool '{}' executed with params: {}",
-            tool_name,
-            serde_json::to_string(&params).unwrap_or_default()
-        );
+        // Step 4: Execute — dispatch to actuator registry for real execution
+        let output_text = match tool_to_planned_action(tool_name, &params) {
+            Ok(PlannedAction::Noop) if tool_name == "audit_read" => {
+                // Special case: audit_read uses the resource system
+                let agent_id_str = params
+                    .get("agent_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let limit = params
+                    .get("limit")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(50) as usize;
+                let events: Vec<serde_json::Value> = self
+                    .audit_trail
+                    .events()
+                    .iter()
+                    .filter(|e| agent_id_str.is_empty() || e.agent_id.to_string() == agent_id_str)
+                    .rev()
+                    .take(limit)
+                    .map(|e| {
+                        json!({
+                            "event_id": e.event_id.to_string(),
+                            "agent_id": e.agent_id.to_string(),
+                            "event_type": e.event_type,
+                            "timestamp": e.timestamp,
+                        })
+                    })
+                    .collect();
+                serde_json::to_string(&events).unwrap_or_else(|_| "[]".to_string())
+            }
+            Ok(action) => {
+                let autonomy_u8 = agent.manifest.autonomy_level.unwrap_or(2).min(6);
+                let autonomy_level = format!("L{autonomy_u8}")
+                    .parse::<AutonomyLevel>()
+                    .unwrap_or(AutonomyLevel::L2);
+                let context = ActuatorContext {
+                    agent_id: agent_id.to_string(),
+                    agent_name: agent.manifest.name.clone(),
+                    working_dir: PathBuf::from(
+                        std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string()),
+                    )
+                    .join(".nexus")
+                    .join("mcp-sandbox"),
+                    autonomy_level,
+                    capabilities: agent
+                        .manifest
+                        .capabilities
+                        .iter()
+                        .cloned()
+                        .collect::<HashSet<String>>(),
+                    fuel_remaining: agent.fuel_remaining as f64,
+                    egress_allowlist: agent
+                        .manifest
+                        .allowed_endpoints
+                        .clone()
+                        .unwrap_or_default(),
+                    action_review_engine: None,
+                };
+
+                match self
+                    .actuator_registry
+                    .execute_action(&action, &context, &mut self.audit_trail)
+                {
+                    Ok(ActionResult {
+                        success: true,
+                        output,
+                        ..
+                    }) => output,
+                    Ok(ActionResult {
+                        success: false,
+                        output,
+                        ..
+                    }) => {
+                        return Ok(GovernedToolResult {
+                            content: vec![ToolContent::Text {
+                                text: format!("Tool execution failed: {output}"),
+                            }],
+                            is_error: true,
+                            fuel_consumed: fuel_cost,
+                            audit_hash: None,
+                        });
+                    }
+                    Err(e) => {
+                        return Ok(GovernedToolResult {
+                            content: vec![ToolContent::Text {
+                                text: format!("Actuator error: {e}"),
+                            }],
+                            is_error: true,
+                            fuel_consumed: 0,
+                            audit_hash: None,
+                        });
+                    }
+                }
+            }
+            Err(e) => {
+                // Tool requires agent runtime context (LLM, social, messaging)
+                // — return the error as a tool result so the caller knows
+                return Ok(GovernedToolResult {
+                    content: vec![ToolContent::Text {
+                        text: format!("{e}"),
+                    }],
+                    is_error: true,
+                    fuel_consumed: 0,
+                    audit_hash: None,
+                });
+            }
+        };
 
         // Step 5: Fuel deduction (must get mutable ref after immutable borrows)
         let agent_mut = self.agents.get_mut(&agent_id).ok_or_else(|| {
@@ -611,6 +719,80 @@ impl McpServer {
 impl Default for McpServer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Convert an MCP tool name and parameters into a `PlannedAction` for actuator dispatch.
+fn tool_to_planned_action(
+    tool_name: &str,
+    params: &serde_json::Value,
+) -> Result<PlannedAction, AgentError> {
+    match tool_name {
+        "web_search" => Ok(PlannedAction::WebSearch {
+            query: params
+                .get("query")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        }),
+        "web_read" => Ok(PlannedAction::WebFetch {
+            url: params
+                .get("url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        }),
+        "fs_read" => Ok(PlannedAction::FileRead {
+            path: params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        }),
+        "fs_write" => Ok(PlannedAction::FileWrite {
+            path: params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            content: params
+                .get("content")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        }),
+        "process_exec" => Ok(PlannedAction::ShellCommand {
+            command: params
+                .get("command")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            args: params
+                .get("args")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        }),
+        "audit_read" => {
+            // audit_read is handled by read_resource, not by actuators
+            Ok(PlannedAction::Noop)
+        }
+        "llm_query" | "social_post" | "social_x_post" | "social_x_read" | "messaging_send" => {
+            // These tools require external service integrations (LLM providers,
+            // social media APIs, messaging channels) that live outside the actuator
+            // layer. Return a descriptive error so callers know to use the agent
+            // execution pipeline for these.
+            Err(AgentError::SupervisorError(format!(
+                "Tool '{tool_name}' requires agent runtime context — invoke via agent execution pipeline"
+            )))
+        }
+        _ => Err(AgentError::CapabilityDenied(format!(
+            "unknown tool: {tool_name}"
+        ))),
     }
 }
 

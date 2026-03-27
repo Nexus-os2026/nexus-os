@@ -295,8 +295,9 @@ pub fn run_batch_evaluation(
 ) -> Result<crate::evaluation::batch::BatchResult, String> {
     let api_key = std::env::var("GROQ_API_KEY")
         .or_else(|_| std::env::var("NVIDIA_NIM_API_KEY"))
+        .or_else(|_| std::env::var("OPENROUTER_API_KEY"))
         .map_err(|_| {
-            "Real inference requires GROQ_API_KEY or NVIDIA_NIM_API_KEY. \
+            "Real inference requires GROQ_API_KEY, NVIDIA_NIM_API_KEY, or OPENROUTER_API_KEY. \
              Configure one to run real validation."
                 .to_string()
         })?;
@@ -400,8 +401,9 @@ pub fn run_ab_validation(
 ) -> Result<crate::evaluation::ab_validation::ABComparisonResult, String> {
     let api_key = std::env::var("GROQ_API_KEY")
         .or_else(|_| std::env::var("NVIDIA_NIM_API_KEY"))
+        .or_else(|_| std::env::var("OPENROUTER_API_KEY"))
         .map_err(|_| {
-            "Real A/B validation requires GROQ_API_KEY or NVIDIA_NIM_API_KEY. \
+            "Real A/B validation requires GROQ_API_KEY, NVIDIA_NIM_API_KEY, or OPENROUTER_API_KEY. \
              Configure one to compare real LLM performance."
                 .to_string()
         })?;

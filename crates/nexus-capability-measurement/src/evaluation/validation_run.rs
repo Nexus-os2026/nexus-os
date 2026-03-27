@@ -246,13 +246,26 @@ pub fn execute_validation_run_real(
     let started_at = epoch_secs();
     let start = std::time::Instant::now();
 
-    let api_key = std::env::var("GROQ_API_KEY").map_err(|_| "GROQ_API_KEY not set".to_string())?;
+    let api_key = std::env::var("GROQ_API_KEY")
+        .or_else(|_| std::env::var("OPENROUTER_API_KEY"))
+        .map_err(|_| "Neither GROQ_API_KEY nor OPENROUTER_API_KEY is set".to_string())?;
+
+    let use_openrouter = std::env::var("GROQ_API_KEY").is_err();
 
     // Agent model — fast, cheap
-    let agent_client = NimClient::shared(api_key.clone(), "llama-3.1-8b-instant".into());
+    let agent_client: std::sync::Arc<NimClient> = if use_openrouter {
+        // OpenRouter uses same OpenAI-compatible format — NimClient works with endpoint swap
+        NimClient::shared(api_key.clone(), "meta-llama/llama-3.3-70b-instruct:free".into())
+    } else {
+        NimClient::shared(api_key.clone(), "llama-3.1-8b-instant".into())
+    };
 
     // Judge model — stronger, for LLM-as-judge scoring
-    let judge_client = NimClient::shared(api_key, "llama-3.3-70b-versatile".into());
+    let judge_client: std::sync::Arc<NimClient> = if use_openrouter {
+        NimClient::shared(api_key, "meta-llama/llama-3.3-70b-instruct".into())
+    } else {
+        NimClient::shared(api_key, "llama-3.3-70b-versatile".into())
+    };
 
     let all_agents = discover_agents(agents_dir);
     let agents: Vec<&AgentManifestEntry> = if config.agent_ids.is_empty() {

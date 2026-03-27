@@ -5,6 +5,51 @@ use super::{LlmProvider, LlmResponse, ProviderRequest};
 use nexus_kernel::errors::AgentError;
 use std::env;
 
+/// Popular OpenRouter models — access 200+ models from every major provider.
+pub const OPENROUTER_MODELS: &[(&str, &str)] = &[
+    (
+        "meta-llama/llama-3.3-70b-instruct",
+        "Llama 3.3 70B — Free tier, strong all-round",
+    ),
+    (
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "Llama 3.3 70B Free — Zero cost, rate-limited",
+    ),
+    (
+        "deepseek/deepseek-coder-v3",
+        "DeepSeek Coder V3 — Best open-source code model",
+    ),
+    (
+        "xiaomi/mimo-v2-flash",
+        "MiMo V2 Flash — Ultra-fast reasoning",
+    ),
+    (
+        "xiaomi/mimo-v2-pro",
+        "MiMo V2 Pro — Advanced reasoning + math",
+    ),
+    ("openai/gpt-4o-mini", "GPT-4o Mini — Fast, affordable"),
+    ("openai/gpt-4o", "GPT-4o — Most capable OpenAI"),
+    (
+        "anthropic/claude-sonnet-4",
+        "Claude Sonnet 4 — Balanced intelligence",
+    ),
+    (
+        "google/gemini-2.5-flash-preview",
+        "Gemini 2.5 Flash — Google's fast model",
+    ),
+];
+
+/// Resolve model aliases to OpenRouter model IDs.
+pub fn resolve_alias(alias: &str) -> &str {
+    match alias {
+        "fast" => "xiaomi/mimo-v2-flash",
+        "smart" => "xiaomi/mimo-v2-pro",
+        "code" => "deepseek/deepseek-coder-v3",
+        "free" => "meta-llama/llama-3.3-70b-instruct:free",
+        other => other,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenRouterProvider {
     api_key: Option<String>,

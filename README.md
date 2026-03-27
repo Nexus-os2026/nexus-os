@@ -50,7 +50,7 @@ Nexus OS is an **AI agent operating system** — not a framework, not a library,
 │  ┌────────────────────────▼──────────────────────────────┐      │
 │  │                    LLM Providers                       │      │
 │  │  Ollama (local) · NVIDIA NIM · OpenAI · Anthropic     │      │
-│  │  Google · DeepSeek · + 42 models via NIM               │      │
+│  │  Google · DeepSeek · OpenRouter · + 200 models         │      │
 │  └───────────────────────────────────────────────────────┘      │
 │                                                                  │
 │  ┌──────────────────────────────────────────────────────────┐   │
@@ -71,7 +71,7 @@ Nexus OS is an **AI agent operating system** — not a framework, not a library,
 | **Agent evolution** | Static prompts forever | Darwinian evolution: agents mutate, compete, improve |
 | **Compliance** | "We're working on it" | EU AI Act conformity built in |
 | **Performance** | Python + Electron | Rust kernel + Tauri 2.0 (5MB binary vs 100MB+) |
-| **Vendor lock-in** | Pick one cloud provider | 6 LLM providers, swap freely, or go fully offline |
+| **Vendor lock-in** | Pick one cloud provider | 8 LLM providers (200+ models), swap freely, or go fully offline |
 
 ## Architecture
 
