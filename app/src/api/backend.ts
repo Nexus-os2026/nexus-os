@@ -3771,3 +3771,90 @@ export function toolsGetPolicy(): Promise<any> {
   return invokeDesktop("tools_get_policy");
 }
 
+// ── Collaboration Protocol ───────────────────────────────────────────────────
+
+export function collabCreateSession(
+  title: string, goal: string, pattern: string, leadAgentId: string, leadAutonomy: number
+): Promise<string> {
+  return invokeDesktop<string>("collab_create_session", {
+    title, goal, pattern,
+    leadAgentId, lead_agent_id: leadAgentId,
+    leadAutonomy, lead_autonomy: leadAutonomy,
+  });
+}
+
+export function collabAddParticipant(
+  sessionId: string, agentId: string, autonomy: number, role: string
+): Promise<void> {
+  return invokeDesktop("collab_add_participant", {
+    sessionId, session_id: sessionId,
+    agentId, agent_id: agentId, autonomy, role,
+  });
+}
+
+export function collabStart(sessionId: string): Promise<void> {
+  return invokeDesktop("collab_start", { sessionId, session_id: sessionId });
+}
+
+export function collabSendMessage(
+  sessionId: string, fromAgent: string, toAgent: string | null,
+  messageType: string, text: string, confidence: number
+): Promise<string> {
+  return invokeDesktop<string>("collab_send_message", {
+    sessionId, session_id: sessionId,
+    fromAgent, from_agent: fromAgent,
+    toAgent, to_agent: toAgent,
+    messageType, message_type: messageType,
+    text, confidence,
+  });
+}
+
+export function collabCallVote(
+  sessionId: string, proposalMsgId: string, majority: number, deadlineSecs: number
+): Promise<void> {
+  return invokeDesktop("collab_call_vote", {
+    sessionId, session_id: sessionId,
+    proposalMsgId, proposal_msg_id: proposalMsgId,
+    majority, deadlineSecs, deadline_secs: deadlineSecs,
+  });
+}
+
+export function collabCastVote(
+  sessionId: string, agentId: string, vote: string, reason?: string
+): Promise<void> {
+  return invokeDesktop("collab_cast_vote", {
+    sessionId, session_id: sessionId,
+    agentId, agent_id: agentId, vote, reason,
+  });
+}
+
+export function collabDeclareConsensus(
+  sessionId: string, agentId: string, decision: string, keyPoints: string[]
+): Promise<void> {
+  return invokeDesktop("collab_declare_consensus", {
+    sessionId, session_id: sessionId,
+    agentId, agent_id: agentId,
+    decision, keyPoints, key_points: keyPoints,
+  });
+}
+
+export function collabDetectConsensus(sessionId: string): Promise<any> {
+  return invokeDesktop("collab_detect_consensus", { sessionId, session_id: sessionId });
+}
+
+export function collabGetSession(sessionId: string): Promise<any> {
+  return invokeDesktop("collab_get_session", { sessionId, session_id: sessionId });
+}
+
+export function collabListActive(): Promise<any[]> {
+  return invokeDesktop("collab_list_active");
+}
+
+export function collabGetPolicy(): Promise<any> {
+  return invokeDesktop("collab_get_policy");
+}
+
+export function collabGetPatterns(): Promise<any[]> {
+  return invokeDesktop("collab_get_patterns");
+}
+

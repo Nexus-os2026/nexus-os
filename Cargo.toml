@@ -57,6 +57,7 @@ members = [
   "crates/nexus-perception",
   "crates/nexus-agent-memory",
   "crates/nexus-external-tools",
+  "crates/nexus-collab-protocol",
 ]
 
 [workspace.package]

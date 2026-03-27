@@ -4102,6 +4102,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-collab-protocol"
+version = "9.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "nexus-collaboration"
 version = "9.0.0"
 dependencies = [
@@ -4274,6 +4286,7 @@ dependencies = [
  "nexus-auth",
  "nexus-browser-agent",
  "nexus-capability-measurement",
+ "nexus-collab-protocol",
  "nexus-computer-control",
  "nexus-conductor",
  "nexus-connectors-core",
@@ -4445,6 +4458,7 @@ dependencies = [
  "nexus-browser-agent",
  "nexus-capability-measurement",
  "nexus-cloud",
+ "nexus-collab-protocol",
  "nexus-collaboration",
  "nexus-computer-control",
  "nexus-conductor",

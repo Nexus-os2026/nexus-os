@@ -58,6 +58,7 @@ nexus-world-simulation = { path = "../../crates/nexus-world-simulation" }
 nexus-perception = { path = "../../crates/nexus-perception" }
 nexus-agent-memory = { path = "../../crates/nexus-agent-memory" }
 nexus-external-tools = { path = "../../crates/nexus-external-tools" }
+nexus-collab-protocol = { path = "../../crates/nexus-collab-protocol" }
 nexus-metering = { path = "../../metering" }
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 serde = { version = "1.0", features = ["derive"] }

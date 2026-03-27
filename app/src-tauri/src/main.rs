@@ -128,6 +128,9 @@ use nexus_agent_memory::tauri_commands as memory_cmds;
 // External tools imports
 use nexus_external_tools::tauri_commands as tools_cmds;
 
+// Collaboration protocol imports
+use nexus_collab_protocol::tauri_commands as collab_cmds;
+
 struct GatewayHivemindLlm;
 
 impl nexus_kernel::cognitive::HivemindLlm for GatewayHivemindLlm {
@@ -923,6 +926,7 @@ pub struct AppState {
     perception: Arc<perception_cmds::PerceptionState>,
     persistent_memory: Arc<memory_cmds::MemoryState>,
     external_tools: Arc<tools_cmds::ToolState>,
+    collab_protocol: Arc<collab_cmds::CollabState>,
     #[cfg(all(
         feature = "tauri-runtime",
         any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1206,6 +1210,7 @@ impl AppState {
             perception: Arc::new(perception_cmds::PerceptionState::default()),
             persistent_memory: Arc::new(memory_cmds::MemoryState::default()),
             external_tools: Arc::new(tools_cmds::ToolState::default()),
+            collab_protocol: Arc::new(collab_cmds::CollabState::default()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1406,6 +1411,7 @@ impl AppState {
             perception: Arc::new(perception_cmds::PerceptionState::default()),
             persistent_memory: Arc::new(memory_cmds::MemoryState::default()),
             external_tools: Arc::new(tools_cmds::ToolState::default()),
+            collab_protocol: Arc::new(collab_cmds::CollabState::default()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -22591,6 +22597,96 @@ fn tools_get_policy(
     tools_cmds::tools_get_policy(&state.external_tools)
 }
 
+// ── Collaboration Protocol Commands ───────────────────────────────────────────
+
+#[tauri::command]
+fn collab_create_session(
+    state: tauri::State<'_, AppState>,
+    title: String, goal: String, pattern: String,
+    lead_agent_id: String, lead_autonomy: u8,
+) -> Result<String, String> {
+    collab_cmds::collab_create_session(&state.collab_protocol, &title, &goal, &pattern, &lead_agent_id, lead_autonomy)
+}
+
+#[tauri::command]
+fn collab_add_participant(
+    state: tauri::State<'_, AppState>,
+    session_id: String, agent_id: String, autonomy: u8, role: String,
+) -> Result<(), String> {
+    collab_cmds::collab_add_participant(&state.collab_protocol, &session_id, &agent_id, autonomy, &role)
+}
+
+#[tauri::command]
+fn collab_start(state: tauri::State<'_, AppState>, session_id: String) -> Result<(), String> {
+    collab_cmds::collab_start(&state.collab_protocol, &session_id)
+}
+
+#[tauri::command]
+fn collab_send_message(
+    state: tauri::State<'_, AppState>,
+    session_id: String, from_agent: String, to_agent: Option<String>,
+    message_type: String, text: String, confidence: f64,
+) -> Result<String, String> {
+    collab_cmds::collab_send_message(&state.collab_protocol, &session_id, &from_agent, to_agent, &message_type, &text, confidence)
+}
+
+#[tauri::command]
+fn collab_call_vote(
+    state: tauri::State<'_, AppState>,
+    session_id: String, proposal_msg_id: String, majority: f64, deadline_secs: u64,
+) -> Result<(), String> {
+    collab_cmds::collab_call_vote(&state.collab_protocol, &session_id, &proposal_msg_id, majority, deadline_secs)
+}
+
+#[tauri::command]
+fn collab_cast_vote(
+    state: tauri::State<'_, AppState>,
+    session_id: String, agent_id: String, vote: String, reason: Option<String>,
+) -> Result<(), String> {
+    collab_cmds::collab_cast_vote(&state.collab_protocol, &session_id, &agent_id, &vote, reason)
+}
+
+#[tauri::command]
+fn collab_declare_consensus(
+    state: tauri::State<'_, AppState>,
+    session_id: String, agent_id: String, decision: String, key_points: Vec<String>,
+) -> Result<(), String> {
+    collab_cmds::collab_declare_consensus(&state.collab_protocol, &session_id, &agent_id, &decision, key_points)
+}
+
+#[tauri::command]
+fn collab_detect_consensus(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+) -> Result<nexus_collab_protocol::ConsensusState, String> {
+    collab_cmds::collab_detect_consensus(&state.collab_protocol, &session_id)
+}
+
+#[tauri::command]
+fn collab_get_session(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+) -> Result<nexus_collab_protocol::CollaborationSession, String> {
+    collab_cmds::collab_get_session(&state.collab_protocol, &session_id)
+}
+
+#[tauri::command]
+fn collab_list_active(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<nexus_collab_protocol::CollaborationSession>, String> {
+    collab_cmds::collab_list_active(&state.collab_protocol)
+}
+
+#[tauri::command]
+fn collab_get_policy(state: tauri::State<'_, AppState>) -> nexus_collab_protocol::CollaborationPolicy {
+    collab_cmds::collab_get_policy(&state.collab_protocol)
+}
+
+#[tauri::command]
+fn collab_get_patterns() -> Vec<collab_cmds::PatternInfo> {
+    collab_cmds::collab_get_patterns()
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -27486,6 +27582,18 @@ mod runtime {
                 tools_get_audit,
                 tools_verify_audit,
                 tools_get_policy,
+                collab_create_session,
+                collab_add_participant,
+                collab_start,
+                collab_send_message,
+                collab_call_vote,
+                collab_cast_vote,
+                collab_declare_consensus,
+                collab_detect_consensus,
+                collab_get_session,
+                collab_list_active,
+                collab_get_policy,
+                collab_get_patterns,
             ])
             .run(tauri::generate_context!())
             .unwrap_or_else(|e| {

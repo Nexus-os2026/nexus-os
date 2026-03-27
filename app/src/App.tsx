@@ -119,6 +119,7 @@ const MeasurementCompare = React.lazy(() => import("./pages/MeasurementCompare")
 const PerceptionPage = React.lazy(() => import("./pages/Perception"));
 const AgentMemoryPage = React.lazy(() => import("./pages/AgentMemory"));
 const ExternalToolsPage = React.lazy(() => import("./pages/ExternalTools"));
+const CollaborationPage = React.lazy(() => import("./pages/Collaboration"));
 const MeasurementBatteries = React.lazy(() => import("./pages/MeasurementBatteries"));
 import type {
   AgentStatusEvent,
@@ -136,7 +137,7 @@ import type {
 import { createDefaultConfig, normalizeConfig } from "./utils/config";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler" | "flash-inference" | "measurement" | "measurement-session" | "measurement-compare" | "measurement-batteries" | "capability-boundaries" | "model-routing" | "ab-validation" | "browser-agent" | "governance-oracle" | "token-economy" | "governed-control" | "world-sim" | "perception" | "agent-memory" | "external-tools";
+type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler" | "flash-inference" | "measurement" | "measurement-session" | "measurement-compare" | "measurement-batteries" | "capability-boundaries" | "model-routing" | "ab-validation" | "browser-agent" | "governance-oracle" | "token-economy" | "governed-control" | "world-sim" | "perception" | "agent-memory" | "external-tools" | "collab-protocol";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -182,6 +183,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "perception", label: "Perception", icon: "Eye", shortcut: "", section: "AGENT LAB" },
   { id: "agent-memory", label: "Agent Memory", icon: "BookOpen", shortcut: "", section: "AGENT LAB" },
   { id: "external-tools", label: "External Tools", icon: "Wrench", shortcut: "", section: "AGENT LAB" },
+  { id: "collab-protocol", label: "Collaboration", icon: "Users", shortcut: "", section: "AGENT LAB" },
   { id: "self-rewrite", label: "Self-Rewrite Lab", icon: "Code2", shortcut: "", section: "AGENT LAB" },
   { id: "consciousness", label: "Consciousness", icon: "Brain", shortcut: "", section: "AGENT LAB" },
   // ── CREATIVE ──
@@ -327,6 +329,7 @@ const PAGE_SUMMARIES: Partial<Record<Page, string>> = {
   "perception": "Multi-modal perception — process screenshots, documents, and images through vision models.",
   "agent-memory": "Persistent agent memory — episodic, semantic, procedural, relational memory across sessions.",
   "external-tools": "Governed external tool integrations — GitHub, Slack, Jira, search, webhooks, databases.",
+  "collab-protocol": "Multi-agent collaboration — debate, review, brainstorm, vote, and converge on decisions.",
 };
 
 function agentStatusRank(status: AgentSummary["status"]): number {
@@ -1741,6 +1744,9 @@ export default function App(): JSX.Element {
     }
     if (page === "external-tools") {
       return <ExternalToolsPage />;
+    }
+    if (page === "collab-protocol") {
+      return <CollaborationPage />;
     }
     if (page === "world-sim") {
       return <WorldSimulation2Page />;
