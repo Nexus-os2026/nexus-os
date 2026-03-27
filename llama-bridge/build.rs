@@ -37,6 +37,19 @@ fn compile_real_llama(llama_path: &str) {
     let build_dir = format!("{}/build-nexus", llama_path);
     std::fs::create_dir_all(&build_dir).expect("failed to create build dir");
 
+    // Enable CUDA if nvcc is available on the system.
+    let has_cuda = std::process::Command::new("nvcc")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    let cuda_flag = if has_cuda {
+        "-DGGML_CUDA=ON"
+    } else {
+        "-DGGML_CUDA=OFF"
+    };
+
     let cmake_status = std::process::Command::new("cmake")
         .current_dir(&build_dir)
         .args([
@@ -46,16 +59,27 @@ fn compile_real_llama(llama_path: &str) {
             "-DLLAMA_BUILD_TESTS=OFF",
             "-DLLAMA_BUILD_EXAMPLES=OFF",
             "-DLLAMA_BUILD_SERVER=OFF",
-            "-DGGML_CUDA=OFF", // CPU only for now
+            cuda_flag,
         ])
         .status()
         .expect("cmake not found — install cmake to build real llama.cpp");
 
     assert!(cmake_status.success(), "cmake configuration failed");
 
-    let nproc = std::thread::available_parallelism()
-        .map(|p| p.get().to_string())
-        .unwrap_or_else(|_| "4".to_string());
+    // Limit parallelism when compiling CUDA kernels — nvcc spawns many
+    // sub-processes per .cu file and high parallelism causes getcwd() failures
+    // on Linux when /proc/self/cwd races with assembler temp files.
+    let nproc = if has_cuda {
+        let cores = std::thread::available_parallelism()
+            .map(|p| p.get())
+            .unwrap_or(4);
+        // Cap at 4 parallel CUDA compilations to avoid nvcc race conditions
+        cores.min(4).to_string()
+    } else {
+        std::thread::available_parallelism()
+            .map(|p| p.get().to_string())
+            .unwrap_or_else(|_| "4".to_string())
+    };
 
     let build_status = std::process::Command::new("cmake")
         .current_dir(&build_dir)
@@ -79,6 +103,7 @@ fn compile_real_llama(llama_path: &str) {
     for search_dir in &[
         format!("{}/src", build_dir),
         format!("{}/ggml/src", build_dir),
+        format!("{}/ggml/src/ggml-cuda", build_dir),
         build_dir.clone(),
     ] {
         println!("cargo:rustc-link-search=native={}", search_dir);
@@ -88,6 +113,17 @@ fn compile_real_llama(llama_path: &str) {
     println!("cargo:rustc-link-lib=static=ggml");
     println!("cargo:rustc-link-lib=static=ggml-base");
     println!("cargo:rustc-link-lib=static=ggml-cpu");
+
+    if has_cuda {
+        println!("cargo:rustc-link-lib=static=ggml-cuda");
+        println!("cargo:rustc-link-lib=cuda");
+        println!("cargo:rustc-link-lib=cublas");
+        println!("cargo:rustc-link-lib=cublasLt");
+        println!("cargo:rustc-link-lib=cudart");
+        // Common CUDA library paths
+        println!("cargo:rustc-link-search=native=/usr/local/cuda/lib64");
+        println!("cargo:rustc-link-search=native=/usr/lib/x86_64-linux-gnu");
+    }
 
     #[cfg(target_os = "macos")]
     {

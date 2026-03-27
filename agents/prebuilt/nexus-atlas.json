@@ -5,5 +5,5 @@
   "capabilities": ["fs.read", "fs.write", "process.exec", "web.search"],
   "autonomy_level": 2,
   "fuel_budget": 10000,
-  "llm_model": "qwen3.5:9b"
+  "llm_model": "auto"
 }

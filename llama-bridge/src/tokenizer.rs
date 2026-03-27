@@ -95,11 +95,23 @@ pub(crate) fn token_to_text(vocab: *const ffi::LlamaVocab, token: ffi::LlamaToke
 }
 
 /// Get the end-of-sequence token ID.
+#[allow(dead_code)]
 pub(crate) fn eos_token(vocab: *const ffi::LlamaVocab) -> ffi::LlamaToken {
     if vocab.is_null() {
         return 2; // common default
     }
     unsafe { ffi::llama_token_eos(vocab) }
+}
+
+/// Check if a token is an end-of-generation token.
+///
+/// This covers EOS, EOT, and any other model-specific end-of-generation tokens
+/// (e.g. Gemma's `<end_of_turn>` token 107).
+pub(crate) fn is_eog(vocab: *const ffi::LlamaVocab, token: ffi::LlamaToken) -> bool {
+    if vocab.is_null() {
+        return token == 2; // common default
+    }
+    unsafe { ffi::llama_vocab_is_eog(vocab, token) }
 }
 
 /// Get the beginning-of-sequence token ID.

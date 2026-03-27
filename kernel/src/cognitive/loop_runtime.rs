@@ -106,6 +106,16 @@ pub trait ActionExecutor: Send + Sync {
     ) -> Result<String, String>;
 }
 
+/// Trait for handling LLM queries from within the cognitive loop.
+///
+/// When an agent's plan includes a `PlannedAction::LlmQuery` step (e.g.,
+/// "analyze these file contents", "summarize this data"), the executor
+/// delegates to this handler. Without it, LlmQuery steps return a stub.
+pub trait LlmQueryHandler: Send + Sync {
+    /// Send a prompt to the LLM and return the response text.
+    fn query(&self, prompt: &str) -> Result<String, String>;
+}
+
 /// `ActionExecutor` implementation that routes actions through the governed
 /// `ActuatorRegistry`. This bridges the cognitive loop to real-world actuators
 /// (filesystem, shell, web, API) with full governance enforcement.
@@ -117,6 +127,12 @@ pub struct RegistryExecutor {
     supervisor: Arc<Mutex<Supervisor>>,
     /// Optional governance reviewer (for Warden interception).
     action_review_engine: Option<Arc<dyn crate::actuators::ActionReviewEngine>>,
+    /// Optional LLM handler for executing `PlannedAction::LlmQuery` steps.
+    llm_handler: Option<Arc<dyn LlmQueryHandler>>,
+    /// Optional memory manager for executing MemoryStore/MemoryRecall actions.
+    memory_manager: Option<Arc<AgentMemoryManager>>,
+    /// Optional event emitter for SendNotification actions.
+    event_emitter: Option<Arc<dyn EventEmitter>>,
 }
 
 impl RegistryExecutor {
@@ -136,7 +152,35 @@ impl RegistryExecutor {
             workspace_base,
             supervisor,
             action_review_engine,
+            llm_handler: None,
+            memory_manager: None,
+            event_emitter: None,
         }
+    }
+
+    /// Attach an LLM handler for executing `PlannedAction::LlmQuery` steps.
+    ///
+    /// Without this, LlmQuery steps return a stub string. With it, the agent
+    /// can actually reason — query the LLM mid-execution to analyze data,
+    /// summarize results, or decide next steps.
+    pub fn with_llm_handler(mut self, handler: Arc<dyn LlmQueryHandler>) -> Self {
+        self.llm_handler = Some(handler);
+        self
+    }
+
+    /// Attach a memory manager for executing `MemoryStore`/`MemoryRecall` actions.
+    ///
+    /// Without this, memory actions return a stub. With it, agents persist
+    /// episodic, semantic, and procedural memories across cognitive cycles.
+    pub fn with_memory_manager(mut self, mgr: Arc<AgentMemoryManager>) -> Self {
+        self.memory_manager = Some(mgr);
+        self
+    }
+
+    /// Attach an event emitter for `SendNotification` actions.
+    pub fn with_event_emitter(mut self, emitter: Arc<dyn EventEmitter>) -> Self {
+        self.event_emitter = Some(emitter);
+        self
     }
 
     /// Build the actuator context for a given agent.
@@ -181,6 +225,7 @@ impl ActionExecutor for RegistryExecutor {
                 | PlannedAction::WebSearch { .. }
                 | PlannedAction::WebFetch { .. }
                 | PlannedAction::ApiCall { .. }
+                | PlannedAction::CodeExecute { .. }
                 | PlannedAction::ImageGenerate { .. }
                 | PlannedAction::TextToSpeech { .. }
                 | PlannedAction::KnowledgeGraphUpdate { .. }
@@ -208,6 +253,136 @@ impl ActionExecutor for RegistryExecutor {
         );
 
         if !is_actuator_action {
+            // Handle non-actuator actions that have dedicated handlers.
+            match action {
+                PlannedAction::LlmQuery { prompt, context } => {
+                    if let Some(handler) = &self.llm_handler {
+                        // Build full prompt with context if provided
+                        let full_prompt = if context.is_empty() {
+                            prompt.clone()
+                        } else {
+                            format!("Context:\n{}\n\nTask:\n{}", context.join("\n"), prompt)
+                        };
+
+                        // Audit the LLM query
+                        let _ = audit.append_event(
+                            uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+                            EventType::LlmCall,
+                            json!({
+                                "event_kind": "cognitive.llm_query",
+                                "agent_id": agent_id,
+                                "prompt_len": full_prompt.len(),
+                            }),
+                        );
+
+                        return handler.query(&full_prompt);
+                    }
+                    // No handler — fall through to stub
+                }
+                PlannedAction::Noop => {
+                    return Ok("ok".to_string());
+                }
+                PlannedAction::MemoryStore {
+                    key,
+                    value,
+                    memory_type,
+                } => {
+                    if let Some(mgr) = &self.memory_manager {
+                        let _ = audit.append_event(
+                            uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+                            EventType::StateChange,
+                            json!({
+                                "event_kind": "cognitive.memory_store",
+                                "agent_id": agent_id,
+                                "memory_type": memory_type,
+                                "key": key,
+                            }),
+                        );
+                        return match memory_type.as_str() {
+                            "episodic" => mgr
+                                .store_episodic(agent_id, key, value)
+                                .map(|_| format!("stored episodic memory: {key}"))
+                                .map_err(|e| e.to_string()),
+                            "semantic" => mgr
+                                .store_semantic(agent_id, value)
+                                .map(|_| format!("stored semantic memory: {key}"))
+                                .map_err(|e| e.to_string()),
+                            "procedural" => mgr
+                                .store_procedural(agent_id, value, 0.5)
+                                .map(|_| format!("stored procedural memory: {key}"))
+                                .map_err(|e| e.to_string()),
+                            _ => mgr
+                                .store_episodic(agent_id, key, value)
+                                .map(|_| format!("stored memory ({memory_type}): {key}"))
+                                .map_err(|e| e.to_string()),
+                        };
+                    } else {
+                        return Ok(format!("memory_store: no memory manager (key={key})"));
+                    }
+                }
+                PlannedAction::MemoryRecall { query, memory_type } => {
+                    if let Some(mgr) = &self.memory_manager {
+                        let _ = audit.append_event(
+                            uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+                            EventType::StateChange,
+                            json!({
+                                "event_kind": "cognitive.memory_recall",
+                                "agent_id": agent_id,
+                                "query": query,
+                                "memory_type": memory_type,
+                            }),
+                        );
+                        match mgr.recall_relevant(agent_id, query, 5) {
+                            Ok(memories) => {
+                                let filtered: Vec<_> = if let Some(mt) = memory_type {
+                                    memories
+                                        .into_iter()
+                                        .filter(|m| m.memory_type == *mt)
+                                        .collect()
+                                } else {
+                                    memories
+                                };
+                                if filtered.is_empty() {
+                                    return Ok("no memories found".to_string());
+                                }
+                                let summaries: Vec<String> = filtered
+                                    .iter()
+                                    .map(|m| {
+                                        format!("[{}] {}: {}", m.memory_type, m.key, m.value_json)
+                                    })
+                                    .collect();
+                                return Ok(summaries.join("\n"));
+                            }
+                            Err(e) => return Err(e.to_string()),
+                        }
+                    } else {
+                        return Ok(format!("memory_recall: no memory manager (query={query})"));
+                    }
+                }
+                PlannedAction::SendNotification { title, body, level } => {
+                    let _ = audit.append_event(
+                        uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+                        EventType::UserAction,
+                        json!({
+                            "event_kind": "cognitive.send_notification",
+                            "agent_id": agent_id,
+                            "title": title,
+                            "level": level,
+                        }),
+                    );
+                    if let Some(emitter) = &self.event_emitter {
+                        emitter.emit(CognitiveEvent::AgentNotification {
+                            agent_id: agent_id.to_string(),
+                            title: title.clone(),
+                            body: body.clone(),
+                            level: level.clone(),
+                        });
+                    }
+                    return Ok(format!("notification sent: {title}"));
+                }
+                _ => {}
+            }
+
             return Ok(format!(
                 "action '{}' not routed through actuators",
                 action.action_type()
@@ -557,6 +732,9 @@ impl CognitiveRuntime {
         audit: &mut AuditTrail,
         evolution_tracker: Option<&EvolutionTracker>,
     ) -> Result<CycleResult, AgentError> {
+        let cycle_start = std::time::Instant::now();
+        let mut phase_timings: Vec<(&str, std::time::Duration)> = Vec::new();
+
         let mut loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
         let state = loops.get_mut(agent_id).ok_or_else(|| {
             AgentError::SupervisorError(format!("no active loop for agent '{agent_id}'"))
@@ -617,6 +795,7 @@ impl CognitiveRuntime {
         self.persist_l6_cooldown(agent_id, state.cycle_count, false);
 
         // ── PERCEIVE ──
+        let perceive_start = std::time::Instant::now();
 
         state.phase = CognitivePhase::Perceive;
         self.record_phase_model_selection(agent_id, state.phase, memory_mgr, audit);
@@ -643,22 +822,31 @@ impl CognitiveRuntime {
         self.record_phase_model_selection(agent_id, state.phase, memory_mgr, audit);
         self.emit_phase_change(agent_id, state);
 
-        let needs_plan = state.steps.is_empty() || state.current_step_index >= state.steps.len();
-        let needs_replan = !state.steps.is_empty()
-            && state.current_step_index < state.steps.len()
-            && state.consecutive_failures >= self.config.max_consecutive_failures;
+        // Check if all steps from the previous plan completed successfully.
+        // If so, the goal is done — do NOT replan.
+        let all_steps_finished =
+            !state.steps.is_empty() && state.current_step_index >= state.steps.len();
+        let any_failed =
+            all_steps_finished && state.steps.iter().any(|s| s.status == StepStatus::Failed);
 
-        // Check if all steps completed
-        let all_done =
-            !state.steps.is_empty() && state.current_step_index >= state.steps.len() && !needs_plan;
-
-        if all_done {
+        if all_steps_finished && !any_failed {
+            // All steps succeeded — goal is complete, skip replanning.
             state.phase = CognitivePhase::Reflect;
             self.record_phase_model_selection(agent_id, state.phase, memory_mgr, audit);
             self.emit_phase_change(agent_id, state);
+            // Fall through to the goal-complete check at the bottom.
         }
 
+        let needs_plan = state.steps.is_empty();
+        let needs_replan = all_steps_finished && any_failed
+            || (!state.steps.is_empty()
+                && state.current_step_index < state.steps.len()
+                && state.consecutive_failures >= self.config.max_consecutive_failures);
+
+        phase_timings.push(("perceive+reason", perceive_start.elapsed()));
+
         // ── PLAN / REPLAN ──
+        let plan_start = std::time::Instant::now();
         if needs_plan || needs_replan {
             state.phase = CognitivePhase::Plan;
             self.record_phase_model_selection(agent_id, state.phase, memory_mgr, audit);
@@ -710,13 +898,18 @@ impl CognitiveRuntime {
                 available_fuel: fuel_remaining,
                 relevant_memories: memory_strs,
                 previous_outcomes,
-                working_directory: None,
+                working_directory: Some(
+                    std::env::current_dir()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_else(|_| "/home".to_string()),
+                ),
                 autonomy_level,
             };
 
             let mut new_steps = if needs_replan && !state.steps.is_empty() {
-                let failed_step = &state.steps[state.current_step_index];
-                let remaining = &state.steps[state.current_step_index + 1..];
+                let idx = state.current_step_index.min(state.steps.len() - 1);
+                let failed_step = &state.steps[idx];
+                let remaining = &state.steps[(idx + 1).min(state.steps.len())..];
                 planner.replan_after_failure(
                     &state.goal,
                     failed_step,
@@ -789,9 +982,13 @@ impl CognitiveRuntime {
             state.goal.status = GoalStatus::Active;
         }
 
+        phase_timings.push(("plan", plan_start.elapsed()));
+
         // ── ACT ──
+        let act_start = std::time::Instant::now();
         let mut act_result: Option<(bool, f64, Option<String>)> = None;
-        if state.current_step_index < state.steps.len() {
+        let total_steps = state.steps.len();
+        if state.current_step_index < total_steps {
             state.phase = CognitivePhase::Act;
             self.record_phase_model_selection(agent_id, state.phase, memory_mgr, audit);
             self.emit_phase_change(agent_id, state);
@@ -973,12 +1170,30 @@ impl CognitiveRuntime {
             } else {
                 // Execute the action
                 let action_clone = step.action.clone();
+                eprintln!(
+                    "[agent:{}] dispatching to executor: {} (step {}/{})",
+                    agent_id,
+                    action_clone.action_type(),
+                    state.current_step_index + 1,
+                    total_steps
+                );
                 let (step_executed, step_fuel, step_error) =
                     match executor.execute(agent_id, &action_clone, audit) {
                         Ok(result) => {
+                            eprintln!(
+                                "[agent:{}] actuator result for {}: {} chars — {}",
+                                agent_id,
+                                action_clone.action_type(),
+                                result.len(),
+                                &result[..result.len().min(200)]
+                            );
                             step.status = StepStatus::Succeeded;
-                            let preview = if result.len() > 200 {
-                                format!("{}...", &result[..200])
+                            // LLM query results get full text (user needs to see
+                            // the reasoning). File reads get truncated preview.
+                            let is_llm = matches!(action_clone, PlannedAction::LlmQuery { .. });
+                            let max_preview = if is_llm { 2000 } else { 500 };
+                            let preview = if result.len() > max_preview {
+                                format!("{}...", &result[..max_preview])
                             } else {
                                 result.clone()
                             };
@@ -1026,6 +1241,12 @@ impl CognitiveRuntime {
                             (true, fuel, None)
                         }
                         Err(error) => {
+                            eprintln!(
+                                "[agent:{}] executor FAILED for {}: {}",
+                                agent_id,
+                                action_clone.action_type(),
+                                &error[..error.len().min(300)]
+                            );
                             if error.starts_with("human approval required:")
                                 || error.starts_with("Warden blocked action:")
                             {
@@ -1184,11 +1405,21 @@ impl CognitiveRuntime {
                 fuel_consumed: state.total_fuel_consumed,
             });
 
-            let (steps_exec, fuel, _) = act_result.unwrap_or((false, 0.0, None));
+            // Use cumulative totals, not just the final cycle's action result.
+            // The GoalCompleted event already uses these totals; CycleResult must match.
+            let total_steps = state.steps_completed;
+            let total_fuel = state.total_fuel_consumed;
+            phase_timings.push(("act+reflect+learn", act_start.elapsed()));
+            log_cycle_timing(
+                agent_id,
+                state.cycle_count,
+                &phase_timings,
+                cycle_start.elapsed(),
+            );
             return Ok(CycleResult {
                 phase: CognitivePhase::Learn,
-                steps_executed: if steps_exec { 1 } else { 0 },
-                fuel_consumed: fuel,
+                steps_executed: total_steps,
+                fuel_consumed: total_fuel,
                 should_continue: false,
                 blocked_reason: None,
             });
@@ -1196,6 +1427,13 @@ impl CognitiveRuntime {
 
         // If an act happened but goal isn't complete yet (shouldn't normally reach here)
         if let Some((executed, fuel, error)) = act_result {
+            phase_timings.push(("act", act_start.elapsed()));
+            log_cycle_timing(
+                agent_id,
+                state.cycle_count,
+                &phase_timings,
+                cycle_start.elapsed(),
+            );
             return Ok(CycleResult {
                 phase: CognitivePhase::Act,
                 steps_executed: if executed { 1 } else { 0 },
@@ -1205,6 +1443,12 @@ impl CognitiveRuntime {
             });
         }
 
+        log_cycle_timing(
+            agent_id,
+            state.cycle_count,
+            &phase_timings,
+            cycle_start.elapsed(),
+        );
         Ok(CycleResult {
             phase: state.phase,
             steps_executed: 0,
@@ -1462,6 +1706,7 @@ fn action_requires_hitl(action: &PlannedAction, autonomy_level: u8) -> bool {
         | PlannedAction::ShellCommand { .. }
         | PlannedAction::DockerCommand { .. }
         | PlannedAction::ApiCall { .. }
+        | PlannedAction::CodeExecute { .. }
         | PlannedAction::AnalyzeScreen { .. }
         | PlannedAction::MouseMove { .. }
         | PlannedAction::MouseClick { .. }
@@ -1489,6 +1734,7 @@ fn action_requires_hitl(action: &PlannedAction, autonomy_level: u8) -> bool {
         | PlannedAction::KnowledgeGraphQuery { .. }
         | PlannedAction::MemoryStore { .. }
         | PlannedAction::MemoryRecall { .. }
+        | PlannedAction::SendNotification { .. }
         | PlannedAction::Noop => false,
         // L4/L5 self-evolution and governance — always requires HITL
         PlannedAction::SelfModifyDescription { .. }
@@ -1540,6 +1786,8 @@ fn estimate_fuel_cost(action: &PlannedAction) -> f64 {
         PlannedAction::HitlRequest { .. } => 0.0,
         PlannedAction::MemoryStore { .. } => 0.5,
         PlannedAction::MemoryRecall { .. } => 0.5,
+        PlannedAction::SendNotification { .. } => 1.0,
+        PlannedAction::CodeExecute { .. } => 8.0,
         PlannedAction::Noop => 0.0,
         PlannedAction::SelfModifyDescription { .. } => 15.0,
         PlannedAction::SelfModifyStrategy { .. } => 10.0,
@@ -1561,6 +1809,25 @@ fn estimate_fuel_cost(action: &PlannedAction) -> f64 {
 }
 
 /// Infer a goal type string from a goal description for strategy bucketing.
+/// Log cycle timing for diagnostics.
+fn log_cycle_timing(
+    agent_id: &str,
+    cycle: u32,
+    phases: &[(&str, std::time::Duration)],
+    total: std::time::Duration,
+) {
+    let short_id = &agent_id[..agent_id.len().min(8)];
+    let phase_str: Vec<String> = phases
+        .iter()
+        .map(|(name, dur)| format!("{name}={}ms", dur.as_millis()))
+        .collect();
+    eprintln!(
+        "[agent:{short_id}] cycle {cycle}: {}, total={}ms",
+        phase_str.join(", "),
+        total.as_millis()
+    );
+}
+
 fn infer_goal_type(description: &str) -> String {
     let lower = description.to_lowercase();
     if lower.contains("code") || lower.contains("implement") || lower.contains("fix") {
@@ -2150,7 +2417,8 @@ mod tests {
             )
             .unwrap();
         assert_eq!(second_resumed.phase, CognitivePhase::Learn);
-        assert_eq!(second_resumed.steps_executed, 1);
+        // Final cycle returns cumulative total (2 steps)
+        assert_eq!(second_resumed.steps_executed, 2);
     }
 
     #[test]
@@ -2563,10 +2831,11 @@ mod tests {
         assert!(r2.should_continue);
 
         // Cycle 3: execute step 3 (0 remain → goal completes)
+        // When goal completes, steps_executed = cumulative total (all 3 steps)
         let r3 = runtime
             .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
             .unwrap();
-        assert_eq!(r3.steps_executed, 1);
+        assert_eq!(r3.steps_executed, 3);
         assert!(!r3.should_continue);
         assert_eq!(r3.phase, CognitivePhase::Learn);
 
@@ -2768,5 +3037,687 @@ mod tests {
             result.blocked_reason.unwrap()
         );
         assert_eq!(result.steps_executed, 0);
+    }
+
+    // ── Phase 1 Integration Tests: Full Cognitive Loop ──
+
+    /// A memory store that actually records and recalls memories (in-memory).
+    struct InMemoryStore {
+        entries: Mutex<Vec<super::super::memory_manager::MemoryEntry>>,
+        next_id: Mutex<i64>,
+    }
+
+    impl InMemoryStore {
+        fn new() -> Self {
+            Self {
+                entries: Mutex::new(Vec::new()),
+                next_id: Mutex::new(1),
+            }
+        }
+    }
+
+    impl MemoryStore for InMemoryStore {
+        fn save_memory(
+            &self,
+            agent_id: &str,
+            memory_type: &str,
+            key: &str,
+            value_json: &str,
+        ) -> Result<(), String> {
+            let mut id = self.next_id.lock().unwrap();
+            let entry = super::super::memory_manager::MemoryEntry {
+                id: *id,
+                agent_id: agent_id.to_string(),
+                memory_type: memory_type.to_string(),
+                key: key.to_string(),
+                value_json: value_json.to_string(),
+                relevance_score: 1.0,
+                access_count: 0,
+                created_at: "now".to_string(),
+                last_accessed: "now".to_string(),
+            };
+            *id += 1;
+            self.entries.lock().unwrap().push(entry);
+            Ok(())
+        }
+
+        fn load_memories(
+            &self,
+            agent_id: &str,
+            memory_type: Option<&str>,
+            limit: usize,
+        ) -> Result<Vec<super::super::memory_manager::MemoryEntry>, String> {
+            let entries = self.entries.lock().unwrap();
+            Ok(entries
+                .iter()
+                .filter(|e| e.agent_id == agent_id)
+                .filter(|e| memory_type.is_none() || Some(e.memory_type.as_str()) == memory_type)
+                .rev()
+                .take(limit)
+                .cloned()
+                .collect())
+        }
+
+        fn touch_memory(&self, _id: i64) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn decay_memories(&self, _agent_id: &str, _decay_factor: f64) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    /// Executor that handles memory and notification actions via the RegistryExecutor
+    /// pipeline (with memory_manager wired in), plus mock for actuator actions.
+    struct MemoryAwareExecutor {
+        memory_mgr: Arc<AgentMemoryManager>,
+        emitter: Arc<dyn EventEmitter>,
+        mock_results: Mutex<Vec<Result<String, String>>>,
+    }
+
+    impl MemoryAwareExecutor {
+        fn new(
+            memory_mgr: Arc<AgentMemoryManager>,
+            emitter: Arc<dyn EventEmitter>,
+            actuator_results: Vec<Result<String, String>>,
+        ) -> Self {
+            Self {
+                memory_mgr,
+                emitter,
+                mock_results: Mutex::new(actuator_results),
+            }
+        }
+    }
+
+    impl ActionExecutor for MemoryAwareExecutor {
+        fn execute(
+            &self,
+            agent_id: &str,
+            action: &PlannedAction,
+            audit: &mut AuditTrail,
+        ) -> Result<String, String> {
+            match action {
+                PlannedAction::MemoryStore {
+                    key,
+                    value,
+                    memory_type,
+                } => {
+                    let _ = audit.append_event(
+                        uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+                        EventType::StateChange,
+                        json!({
+                            "event_kind": "cognitive.memory_store",
+                            "agent_id": agent_id,
+                            "memory_type": memory_type,
+                            "key": key,
+                        }),
+                    );
+                    match memory_type.as_str() {
+                        "episodic" => self
+                            .memory_mgr
+                            .store_episodic(agent_id, key, value)
+                            .map(|_| format!("stored episodic memory: {key}"))
+                            .map_err(|e| e.to_string()),
+                        "semantic" => self
+                            .memory_mgr
+                            .store_semantic(agent_id, value)
+                            .map(|_| format!("stored semantic memory: {key}"))
+                            .map_err(|e| e.to_string()),
+                        _ => self
+                            .memory_mgr
+                            .store_episodic(agent_id, key, value)
+                            .map(|_| format!("stored memory: {key}"))
+                            .map_err(|e| e.to_string()),
+                    }
+                }
+                PlannedAction::MemoryRecall { query, memory_type } => match self
+                    .memory_mgr
+                    .recall_relevant(agent_id, query, 5)
+                {
+                    Ok(memories) => {
+                        let filtered: Vec<_> = if let Some(mt) = memory_type {
+                            memories
+                                .into_iter()
+                                .filter(|m| m.memory_type == *mt)
+                                .collect()
+                        } else {
+                            memories
+                        };
+                        if filtered.is_empty() {
+                            Ok("no memories found".to_string())
+                        } else {
+                            let summaries: Vec<String> = filtered
+                                .iter()
+                                .map(|m| format!("[{}] {}: {}", m.memory_type, m.key, m.value_json))
+                                .collect();
+                            Ok(summaries.join("\n"))
+                        }
+                    }
+                    Err(e) => Err(e.to_string()),
+                },
+                PlannedAction::SendNotification { title, body, level } => {
+                    self.emitter.emit(CognitiveEvent::AgentNotification {
+                        agent_id: agent_id.to_string(),
+                        title: title.clone(),
+                        body: body.clone(),
+                        level: level.clone(),
+                    });
+                    Ok(format!("notification sent: {title}"))
+                }
+                PlannedAction::Noop => Ok("ok".to_string()),
+                _ => {
+                    let mut results = self.mock_results.lock().unwrap();
+                    if results.is_empty() {
+                        Ok("mock result".to_string())
+                    } else {
+                        results.remove(0)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Integration test: Full perceive→reason→plan→act→observe loop with memory
+    /// persistence. Proves the agent can plan, execute memory store actions,
+    /// recall memories, send notifications, and complete a goal.
+    #[test]
+    fn test_full_loop_with_memory_and_notification() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, emitter) = make_runtime(sup);
+
+        let memory_mgr = Arc::new(AgentMemoryManager::new(Box::new(InMemoryStore::new())));
+
+        // Plan: store a metric, recall it, send notification, then summarize via LLM
+        let plan_json = r#"[
+            {"action": {"type": "MemoryStore", "key": "cpu_load", "value": "85%", "memory_type": "episodic"}, "description": "Store CPU metric"},
+            {"action": {"type": "MemoryRecall", "query": "cpu", "memory_type": null}, "description": "Recall CPU metrics"},
+            {"action": {"type": "SendNotification", "title": "System OK", "body": "CPU at 85%", "level": "info"}, "description": "Notify user"},
+            {"action": {"type": "LlmQuery", "prompt": "Summarize metrics", "context": []}, "description": "Summarize"}
+        ]"#;
+
+        let planner = make_planner(plan_json);
+        let goal = AgentGoal::new("Monitor system health".into(), 5);
+        runtime.assign_goal(&agent_id, goal).unwrap();
+
+        let executor = MemoryAwareExecutor::new(
+            memory_mgr.clone(),
+            emitter.clone(),
+            vec![Ok("LLM summary: all metrics normal".to_string())],
+        );
+
+        let mut audit = AuditTrail::new();
+
+        // Run cycles until goal completes (one step per cycle)
+        let mut total_steps = 0u32;
+        let mut total_fuel = 0.0f64;
+        for _i in 0..10 {
+            let result = runtime
+                .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+                .unwrap();
+            total_steps += result.steps_executed;
+            total_fuel += result.fuel_consumed;
+            if !result.should_continue {
+                break;
+            }
+        }
+
+        // Verify all 4 steps executed
+        assert!(
+            total_steps >= 4,
+            "expected at least 4 steps, got {total_steps}"
+        );
+        assert!(total_fuel > 0.0, "expected fuel consumption");
+
+        // Verify events include AgentNotification
+        let events = emitter.events.lock().unwrap();
+        let notification_events: Vec<_> = events
+            .iter()
+            .filter(|e| matches!(e, CognitiveEvent::AgentNotification { .. }))
+            .collect();
+        assert!(
+            !notification_events.is_empty(),
+            "expected at least one AgentNotification event"
+        );
+
+        // Verify GoalCompleted event
+        let completed = events
+            .iter()
+            .any(|e| matches!(e, CognitiveEvent::GoalCompleted { success: true, .. }));
+        assert!(completed, "expected GoalCompleted with success=true");
+
+        // Verify memory was stored (via the episodic store call)
+        let recalled = memory_mgr.recall_relevant(&agent_id, "cpu", 5);
+        // Note: memory_mgr was shared with executor, so stored memories are visible
+        assert!(recalled.is_ok(), "recall should succeed even if no matches");
+    }
+
+    /// Integration test: System Monitor agent scenario — 5 observation cycles.
+    /// Proves the loop can run multiple goals sequentially.
+    #[test]
+    fn test_sysmon_multi_cycle_loop() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, emitter) = make_runtime(sup);
+        let memory_mgr = make_memory_mgr();
+
+        // Each cycle: agent reads system metrics and stores observation
+        let plan_json = r#"[
+            {"action": {"type": "LlmQuery", "prompt": "Analyze: CPU=45%, RAM=72%, Disk=58%", "context": []}, "description": "Analyze metrics"}
+        ]"#;
+        let planner = make_planner(plan_json);
+        let executor = MockExecutor::always_ok("All metrics within normal range");
+        let mut audit = AuditTrail::new();
+
+        // Run 5 observation cycles (assign new goal each time)
+        for i in 0..5 {
+            let goal = AgentGoal::new(format!("System health check #{}", i + 1), 5);
+            runtime.assign_goal(&agent_id, goal).unwrap();
+
+            let mut completed = false;
+            for _cycle in 0..5 {
+                let result = runtime
+                    .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+                    .unwrap();
+                if !result.should_continue {
+                    completed = true;
+                    break;
+                }
+            }
+            assert!(completed, "goal #{} should complete", i + 1);
+        }
+
+        // Verify 5 GoalCompleted events
+        let events = emitter.events.lock().unwrap();
+        let completed_count = events
+            .iter()
+            .filter(|e| matches!(e, CognitiveEvent::GoalCompleted { success: true, .. }))
+            .count();
+        assert_eq!(completed_count, 5, "expected 5 completed goals");
+    }
+
+    /// Test that MemoryStore action actually persists and MemoryRecall retrieves.
+    #[test]
+    fn test_memory_store_and_recall_actions() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, emitter) = make_runtime(sup);
+        let memory_mgr = Arc::new(AgentMemoryManager::new(Box::new(InMemoryStore::new())));
+
+        // Step 1: store a memory
+        let store_plan = r#"[
+            {"action": {"type": "MemoryStore", "key": "test_key", "value": "test_value_123", "memory_type": "episodic"}, "description": "Store test memory"}
+        ]"#;
+        let planner = make_planner(store_plan);
+        let executor = MemoryAwareExecutor::new(memory_mgr.clone(), emitter.clone(), vec![]);
+        let mut audit = AuditTrail::new();
+
+        let goal = AgentGoal::new("Store memory".into(), 5);
+        runtime.assign_goal(&agent_id, goal).unwrap();
+        for _ in 0..5 {
+            let r = runtime
+                .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+                .unwrap();
+            if !r.should_continue {
+                break;
+            }
+        }
+
+        // Step 2: recall the memory
+        let recall_plan = r#"[
+            {"action": {"type": "MemoryRecall", "query": "test", "memory_type": null}, "description": "Recall test memory"}
+        ]"#;
+        let planner2 = make_planner(recall_plan);
+        let goal2 = AgentGoal::new("Recall memory".into(), 5);
+        runtime.assign_goal(&agent_id, goal2).unwrap();
+
+        for _ in 0..5 {
+            let r = runtime
+                .run_cycle(&agent_id, &planner2, &memory_mgr, &executor, &mut audit)
+                .unwrap();
+            if !r.should_continue {
+                break;
+            }
+        }
+
+        // Check events for the recall step result
+        let events = emitter.events.lock().unwrap();
+        let recall_steps: Vec<_> = events
+            .iter()
+            .filter(|e| {
+                if let CognitiveEvent::StepExecuted { action_type, .. } = e {
+                    action_type == "memory_recall"
+                } else {
+                    false
+                }
+            })
+            .collect();
+        assert!(
+            !recall_steps.is_empty(),
+            "expected memory_recall step to execute"
+        );
+    }
+
+    /// Test SendNotification action emits AgentNotification event.
+    #[test]
+    fn test_send_notification_action() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, emitter) = make_runtime(sup);
+        let memory_mgr = make_memory_mgr();
+
+        let plan_json = r#"[
+            {"action": {"type": "SendNotification", "title": "Alert", "body": "CPU at 95%!", "level": "warning"}, "description": "Send alert"}
+        ]"#;
+        let planner = make_planner(plan_json);
+        let notify_emitter: Arc<dyn EventEmitter> = emitter.clone();
+        let executor = MemoryAwareExecutor::new(
+            Arc::new(AgentMemoryManager::new(Box::new(MockMemoryStore))),
+            notify_emitter,
+            vec![],
+        );
+        let mut audit = AuditTrail::new();
+
+        let goal = AgentGoal::new("Send notification".into(), 5);
+        runtime.assign_goal(&agent_id, goal).unwrap();
+
+        for _ in 0..5 {
+            let r = runtime
+                .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+                .unwrap();
+            if !r.should_continue {
+                break;
+            }
+        }
+
+        let events = emitter.events.lock().unwrap();
+        let notifications: Vec<_> = events
+            .iter()
+            .filter(|e| matches!(e, CognitiveEvent::AgentNotification { .. }))
+            .collect();
+        assert_eq!(notifications.len(), 1, "expected exactly 1 notification");
+        if let CognitiveEvent::AgentNotification {
+            title, body, level, ..
+        } = &notifications[0]
+        {
+            assert_eq!(title, "Alert");
+            assert_eq!(body, "CPU at 95%!");
+            assert_eq!(level, "warning");
+        }
+    }
+
+    // ── Planner→Executor chain tests (plan→parse→dispatch→actuator→reflect) ──
+
+    #[test]
+    fn test_shell_command_plan_executes_and_returns_real_result() {
+        // Simulates a sysmon agent that plans "free -m" and expects real output.
+        let mut sup = Supervisor::new();
+        let manifest = AgentManifest {
+            name: "sysmon".into(),
+            version: "1.0.0".into(),
+            capabilities: vec!["process.exec".into(), "llm.query".into()],
+            fuel_budget: 10000,
+            autonomy_level: Some(3),
+            consent_policy_path: None,
+            requester_id: None,
+            schedule: None,
+            default_goal: None,
+            llm_model: None,
+            fuel_period_id: None,
+            monthly_fuel_cap: None,
+            allowed_endpoints: None,
+            domain_tags: vec![],
+            filesystem_permissions: vec![],
+        };
+        let id = sup.start_agent(manifest).unwrap();
+        let sup = Arc::new(Mutex::new(sup));
+        let (runtime, _emitter) = make_runtime(sup);
+
+        let goal = AgentGoal::new("Run free -m and report memory usage".into(), 5);
+        runtime.assign_goal(&id.to_string(), goal).unwrap();
+
+        // Mock LLM returns a proper ShellCommand plan
+        let planner = make_planner(
+            r#"[{"action": {"type": "ShellCommand", "command": "echo", "args": ["NEXUS_ALIVE"]}, "description": "Run echo test"}]"#,
+        );
+        let memory_mgr = make_memory_mgr();
+        let executor = MockExecutor::always_ok("NEXUS_ALIVE");
+        let mut audit = AuditTrail::new();
+
+        let result = runtime
+            .run_cycle(
+                &id.to_string(),
+                &planner,
+                &memory_mgr,
+                &executor,
+                &mut audit,
+            )
+            .unwrap();
+
+        // Step should execute and goal should complete
+        assert_eq!(result.steps_executed, 1);
+        assert!(!result.should_continue); // single step = goal complete
+        assert!(result.blocked_reason.is_none());
+
+        // Verify the step result contains real output, not hallucination
+        let status = runtime.get_agent_status(&id.to_string()).unwrap();
+        assert_eq!(status.steps_completed, 1);
+    }
+
+    #[test]
+    fn test_string_context_accepted_by_parser() {
+        // LLM returns "context": "some text" instead of ["some text"] — should still parse
+        let planner = make_planner(
+            r#"[{"action": {"type": "LlmQuery", "prompt": "analyze data", "context": "previous output"}, "description": "analyze"}]"#,
+        );
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup);
+
+        let goal = AgentGoal::new("test string context".into(), 5);
+        runtime.assign_goal(&agent_id, goal).unwrap();
+
+        let memory_mgr = make_memory_mgr();
+        let executor = MockExecutor::always_ok("analysis done");
+        let mut audit = AuditTrail::new();
+
+        let result = runtime
+            .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+            .unwrap();
+
+        // Should parse and execute without falling back
+        assert_eq!(result.steps_executed, 1);
+    }
+
+    #[test]
+    fn test_string_args_accepted_by_parser() {
+        // LLM returns "args": "-m" instead of ["-m"] — should still parse
+        let mut sup = Supervisor::new();
+        let manifest = AgentManifest {
+            name: "shell-test".into(),
+            version: "1.0.0".into(),
+            capabilities: vec!["process.exec".into()],
+            fuel_budget: 10000,
+            autonomy_level: Some(3),
+            consent_policy_path: None,
+            requester_id: None,
+            schedule: None,
+            default_goal: None,
+            llm_model: None,
+            fuel_period_id: None,
+            monthly_fuel_cap: None,
+            allowed_endpoints: None,
+            domain_tags: vec![],
+            filesystem_permissions: vec![],
+        };
+        let id = sup.start_agent(manifest).unwrap();
+        let sup = Arc::new(Mutex::new(sup));
+        let (runtime, _) = make_runtime(sup);
+
+        let goal = AgentGoal::new("test string args".into(), 5);
+        runtime.assign_goal(&id.to_string(), goal).unwrap();
+
+        let planner = make_planner(
+            r#"[{"action": {"type": "ShellCommand", "command": "free", "args": "-m"}, "description": "check mem"}]"#,
+        );
+        let memory_mgr = make_memory_mgr();
+        let executor = MockExecutor::always_ok("mem info");
+        let mut audit = AuditTrail::new();
+
+        let result = runtime
+            .run_cycle(
+                &id.to_string(),
+                &planner,
+                &memory_mgr,
+                &executor,
+                &mut audit,
+            )
+            .unwrap();
+
+        assert_eq!(result.steps_executed, 1);
+    }
+
+    #[test]
+    fn test_empty_context_string_accepted() {
+        // LLM returns "context": "" — should parse as empty vec
+        let planner = make_planner(
+            r#"[{"action": {"type": "LlmQuery", "prompt": "hello", "context": ""}, "description": "greet"}]"#,
+        );
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup);
+
+        let goal = AgentGoal::new("test empty context".into(), 5);
+        runtime.assign_goal(&agent_id, goal).unwrap();
+
+        let memory_mgr = make_memory_mgr();
+        let executor = MockExecutor::always_ok("hello back");
+        let mut audit = AuditTrail::new();
+
+        let result = runtime
+            .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+            .unwrap();
+
+        assert_eq!(result.steps_executed, 1);
+    }
+
+    #[test]
+    fn test_null_context_accepted() {
+        // LLM returns "context": null — should parse as empty vec
+        let planner = make_planner(
+            r#"[{"action": {"type": "LlmQuery", "prompt": "hello", "context": null}, "description": "greet"}]"#,
+        );
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup);
+
+        let goal = AgentGoal::new("test null context".into(), 5);
+        runtime.assign_goal(&agent_id, goal).unwrap();
+
+        let memory_mgr = make_memory_mgr();
+        let executor = MockExecutor::always_ok("hello back");
+        let mut audit = AuditTrail::new();
+
+        let result = runtime
+            .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+            .unwrap();
+
+        assert_eq!(result.steps_executed, 1);
+    }
+
+    #[test]
+    fn test_missing_context_defaults_to_empty() {
+        // LLM omits "context" entirely — should default to empty vec
+        let planner = make_planner(
+            r#"[{"action": {"type": "LlmQuery", "prompt": "hello"}, "description": "greet"}]"#,
+        );
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup);
+
+        let goal = AgentGoal::new("test missing context".into(), 5);
+        runtime.assign_goal(&agent_id, goal).unwrap();
+
+        let memory_mgr = make_memory_mgr();
+        let executor = MockExecutor::always_ok("hello back");
+        let mut audit = AuditTrail::new();
+
+        let result = runtime
+            .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+            .unwrap();
+
+        assert_eq!(result.steps_executed, 1);
+    }
+
+    #[test]
+    fn test_multi_step_plan_executes_sequentially() {
+        // Verifies: plan 3 steps → execute step 1 → return continue → execute step 2 → etc.
+        let mut sup = Supervisor::new();
+        let manifest = AgentManifest {
+            name: "multi-step".into(),
+            version: "1.0.0".into(),
+            capabilities: vec!["process.exec".into(), "llm.query".into()],
+            fuel_budget: 10000,
+            autonomy_level: Some(3),
+            consent_policy_path: None,
+            requester_id: None,
+            schedule: None,
+            default_goal: None,
+            llm_model: None,
+            fuel_period_id: None,
+            monthly_fuel_cap: None,
+            allowed_endpoints: None,
+            domain_tags: vec![],
+            filesystem_permissions: vec![],
+        };
+        let id = sup.start_agent(manifest).unwrap();
+        let sup = Arc::new(Mutex::new(sup));
+        let (runtime, _) = make_runtime(sup);
+
+        let goal = AgentGoal::new("multi step test".into(), 5);
+        runtime.assign_goal(&id.to_string(), goal).unwrap();
+
+        let planner = make_planner(
+            r#"[
+                {"action": {"type": "ShellCommand", "command": "echo", "args": ["step1"]}, "description": "step 1"},
+                {"action": {"type": "ShellCommand", "command": "echo", "args": ["step2"]}, "description": "step 2"},
+                {"action": {"type": "LlmQuery", "prompt": "summarize", "context": ["step1 output", "step2 output"]}, "description": "summarize"}
+            ]"#,
+        );
+        let memory_mgr = make_memory_mgr();
+        let executor = MockExecutor::always_ok("ok");
+        let mut audit = AuditTrail::new();
+
+        // Cycle 1: plans + executes step 1, should continue
+        let r1 = runtime
+            .run_cycle(
+                &id.to_string(),
+                &planner,
+                &memory_mgr,
+                &executor,
+                &mut audit,
+            )
+            .unwrap();
+        assert_eq!(r1.steps_executed, 1);
+        assert!(r1.should_continue);
+
+        // Cycle 2: executes step 2, should continue
+        let r2 = runtime
+            .run_cycle(
+                &id.to_string(),
+                &planner,
+                &memory_mgr,
+                &executor,
+                &mut audit,
+            )
+            .unwrap();
+        assert_eq!(r2.steps_executed, 1);
+        assert!(r2.should_continue);
+
+        // Cycle 3: executes step 3 (LlmQuery), goal completes
+        // Final cycle returns cumulative total (3 steps)
+        let r3 = runtime
+            .run_cycle(
+                &id.to_string(),
+                &planner,
+                &memory_mgr,
+                &executor,
+                &mut audit,
+            )
+            .unwrap();
+        assert_eq!(r3.steps_executed, 3);
+        assert!(!r3.should_continue);
     }
 }

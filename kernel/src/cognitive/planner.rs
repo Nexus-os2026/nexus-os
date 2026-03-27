@@ -76,6 +76,7 @@ impl CognitivePlanner {
         };
 
         let allowed_actions = self.allowed_actions_description(&context.agent_capabilities);
+        let workspace = context.working_directory.as_deref().unwrap_or("/home/user");
 
         format!(
             r#"You are the planning subsystem for Nexus OS. Create a step-by-step plan to achieve the goal below.
@@ -86,6 +87,9 @@ AGENT DESCRIPTION:
 
 GOAL: {goal_desc}
 PRIORITY: {priority}
+
+WORKSPACE DIRECTORY: {workspace}
+(Use ABSOLUTE paths starting from this directory when reading/writing files. Example: "{workspace}/README.md")
 
 AGENT CAPABILITIES: [{capabilities}]
 AVAILABLE FUEL: {fuel}
@@ -100,29 +104,43 @@ PREVIOUS OUTCOMES:
 ALLOWED ACTIONS (you MUST only use these):
 {allowed_actions}
 
-Respond with ONLY a JSON array. Do not include markdown, prose, comments, or explanations.
+RULES:
+1. Respond with ONLY a JSON array. No markdown, no prose, no explanations.
+2. Use ABSOLUTE file paths based on the workspace directory above.
+3. Keep the plan minimal — use the fewest steps possible.
+4. Always end with an LlmQuery step that synthesizes the final answer from gathered data.
+5. Do NOT repeat steps. Do NOT add unnecessary file reads.
+6. NEVER hallucinate or fabricate data. Use tools to get REAL data. If you need system info, use ShellCommand. If you need web data, use WebSearch/WebFetch. NEVER make up numbers or pretend you executed something.
+7. Do NOT include <think> tags or reasoning blocks. Output ONLY the JSON array.
+
 Each step object MUST have exactly these top-level fields:
 - "action": an object with a required "type" field plus action-specific fields
 - "description": a short human-readable description of what the step does
 
 EXACT JSON SCHEMA EXAMPLE:
 [
-  {{"action": {{"type": "FileRead", "path": "/workspace/file.txt"}}, "description": "Read the source file"}},
-  {{"action": {{"type": "FileWrite", "path": "/workspace/output.txt", "content": "hello"}}, "description": "Write the output file"}},
-  {{"action": {{"type": "ShellCommand", "command": "ls", "args": ["-la"]}}, "description": "Inspect the workspace"}}
+  {{"action": {{"type": "ShellCommand", "command": "free", "args": ["-m"]}}, "description": "Check memory usage"}},
+  {{"action": {{"type": "LlmQuery", "prompt": "Summarize the data above", "context": ["previous step output"]}}, "description": "Summarize the content"}}
 ]
+
+IMPORTANT:
+- "context" in LlmQuery MUST be an array of strings, e.g. ["some text"]. Never a bare string.
+- "args" in ShellCommand MUST be an array of strings, e.g. ["-m", "-h"]. Never a bare string.
+- "options" in HitlRequest MUST be an array, e.g. ["yes", "no"].
 
 Valid action types for this agent: {action_types}
 For each action type, use ONLY these fields:
-- LlmQuery: type, prompt, context
+- LlmQuery: type, prompt, context (array of strings)
 - FileRead: type, path
 - FileWrite: type, path, content
-- ShellCommand: type, command, args
+- ShellCommand: type, command, args (array of strings)
+- CodeExecute: type, language, code, timeout_secs (optional)
 - WebSearch: type, query
 - WebFetch: type, url
-- ApiCall: type, method, url, body
+- ApiCall: type, method, url, body, headers (optional object e.g. {{"Authorization": "Bearer xxx"}})
 - MemoryStore: type, key, value, memory_type
 - MemoryRecall: type, query, memory_type
+- SendNotification: type, title, body, level
 - HitlRequest: type, question, options
 - Noop: type
 Do NOT include duplicate fields.
@@ -131,6 +149,7 @@ Do NOT include any text outside the JSON array."#,
             agent_description = agent_description,
             goal_desc = goal.description,
             priority = goal.priority,
+            workspace = workspace,
             capabilities = capabilities_str,
             fuel = context.available_fuel,
             autonomy = context.autonomy_level,
@@ -214,13 +233,14 @@ Do not include markdown fences.
 Do not include commentary before or after the array.
 Your response must start with `[` and end with `]`.
 Do not repeat keys or include duplicate fields anywhere in the JSON.
+CRITICAL: "args", "context", and "options" fields MUST be arrays of strings like ["a","b"], NEVER a bare string.
 
 Goal: {goal}
 Agent name: {agent_name}
 Agent description: {agent_description}
 Allowed action types: {action_types}
 Each item must be:
-{{"action": {{"type": "..." }}, "description": "..."}}"#,
+{{"action": {{"type": "ShellCommand", "command": "free", "args": ["-m"]}}, "description": "Check memory"}}"#,
             goal = goal.description,
             agent_name = context.agent_name.as_deref().unwrap_or("unknown-agent"),
             agent_description = context
@@ -240,6 +260,7 @@ Each item must be:
             r#"- MemoryStore: {"type": "MemoryStore", "key": "...", "value": "...", "memory_type": "episodic|semantic|procedural"}"#.to_string(),
             r#"- MemoryRecall: {"type": "MemoryRecall", "query": "...", "memory_type": null}"#.to_string(),
             r#"- HitlRequest: {"type": "HitlRequest", "question": "...", "options": ["yes","no"]}"#.to_string(),
+            r#"- SendNotification: {"type": "SendNotification", "title": "...", "body": "...", "level": "info|warning|error|success"}"#.to_string(),
             r#"- Noop: {"type": "Noop"}"#.to_string(),
         ];
 
@@ -264,6 +285,10 @@ Each item must be:
                 r#"- ShellCommand: {"type": "ShellCommand", "command": "...", "args": ["..."]}"#
                     .to_string(),
             );
+            actions.push(
+                r#"- CodeExecute: {"type": "CodeExecute", "language": "python3|node|bash", "code": "...", "timeout_secs": 10}"#
+                    .to_string(),
+            );
         }
         if has("web.search") {
             actions.push(r#"- WebSearch: {"type": "WebSearch", "query": "..."}"#.to_string());
@@ -273,7 +298,7 @@ Each item must be:
         }
         if has("mcp.call") {
             actions.push(
-                r#"- ApiCall: {"type": "ApiCall", "method": "GET", "url": "...", "body": null}"#
+                r#"- ApiCall: {"type": "ApiCall", "method": "GET|POST|PUT|DELETE|PATCH|HEAD", "url": "...", "body": null, "headers": null}"#
                     .to_string(),
             );
         }
@@ -288,7 +313,13 @@ Each item must be:
         let has =
             |required: &str| has_capability(capabilities.iter().map(String::as_str), required);
 
-        let mut actions = vec!["MemoryStore", "MemoryRecall", "HitlRequest", "Noop"];
+        let mut actions = vec![
+            "MemoryStore",
+            "MemoryRecall",
+            "SendNotification",
+            "HitlRequest",
+            "Noop",
+        ];
         if has("llm.query") {
             actions.push("LlmQuery");
         }
@@ -300,6 +331,7 @@ Each item must be:
         }
         if has("process.exec") {
             actions.push("ShellCommand");
+            actions.push("CodeExecute");
         }
         if has("web.search") {
             actions.push("WebSearch");
@@ -326,22 +358,68 @@ Each item must be:
         capabilities: &[String],
     ) -> Result<Vec<AgentStep>, AgentError> {
         let first_response = self.llm.plan_query(primary_prompt)?;
+        eprintln!(
+            "[planner:{}] raw LLM response ({} chars): {}",
+            goal_id,
+            first_response.len(),
+            &first_response[..first_response.len().min(500)]
+        );
         match self.parse_plan_response(&first_response, goal_id, capabilities) {
-            Ok(steps) => Ok(steps),
+            Ok(steps) => {
+                eprintln!(
+                    "[planner:{}] parsed {} steps: {}",
+                    goal_id,
+                    steps.len(),
+                    steps
+                        .iter()
+                        .map(|s| s.action.action_type())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                Ok(steps)
+            }
             Err(first_error) => {
+                eprintln!(
+                    "[planner:{}] parse FAILED (attempt 1): {}",
+                    goal_id, first_error
+                );
                 if !is_retriable_parse_error(&first_error) {
                     return Err(first_error);
                 }
                 let retry_response = self.llm.plan_query(retry_prompt)?;
+                eprintln!(
+                    "[planner:{}] retry raw LLM response ({} chars): {}",
+                    goal_id,
+                    retry_response.len(),
+                    &retry_response[..retry_response.len().min(500)]
+                );
                 match self.parse_plan_response(&retry_response, goal_id, capabilities) {
-                    Ok(steps) => Ok(steps),
-                    Err(second_error) => Ok(vec![self.llm_query_fallback_step(
-                        goal_id,
-                        goal_description,
-                        format!(
-                            "Planner returned invalid JSON twice. First error: {first_error}. Second error: {second_error}"
-                        ),
-                    )]),
+                    Ok(steps) => {
+                        eprintln!(
+                            "[planner:{}] retry parsed {} steps: {}",
+                            goal_id,
+                            steps.len(),
+                            steps
+                                .iter()
+                                .map(|s| s.action.action_type())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        );
+                        Ok(steps)
+                    }
+                    Err(second_error) => {
+                        eprintln!(
+                            "[planner:{}] parse FAILED (attempt 2): {} — falling back to direct LLM query",
+                            goal_id, second_error
+                        );
+                        Ok(vec![self.llm_query_fallback_step(
+                            goal_id,
+                            goal_description,
+                            format!(
+                                "Planner returned invalid JSON twice. First error: {first_error}. Second error: {second_error}"
+                            ),
+                        )])
+                    }
                 }
             }
         }
@@ -355,14 +433,28 @@ Each item must be:
     ) -> Result<Vec<AgentStep>, AgentError> {
         let json_str = extract_json_array(response).ok_or_else(|| {
             AgentError::SupervisorError(format!(
-                "planner response did not contain a valid JSON array: {response}"
+                "planner response did not contain a valid JSON array (response: {} chars)",
+                response.len()
             ))
         })?;
 
+        eprintln!(
+            "[planner:{}] extracted {} chars of JSON from {} chars of response",
+            goal_id,
+            json_str.len(),
+            response.len()
+        );
+
         let repaired = repair_common_json_issues(&json_str);
         let raw_steps = parse_raw_steps(&json_str)
-            .or_else(|_| parse_raw_steps(&remove_trailing_commas(&json_str)))
-            .or_else(|_| parse_raw_steps(&repaired))
+            .or_else(|e| {
+                eprintln!("[planner:{}] parse attempt 1 failed: {e}", goal_id);
+                parse_raw_steps(&remove_trailing_commas(&json_str))
+            })
+            .or_else(|e| {
+                eprintln!("[planner:{}] parse attempt 2 failed: {e}", goal_id);
+                parse_raw_steps(&repaired)
+            })
             .map_err(|e| AgentError::SupervisorError(format!("failed to parse plan JSON: {e}")))?;
 
         let mut steps = Vec::new();
@@ -390,20 +482,21 @@ Each item must be:
         goal_description: &str,
         message: String,
     ) -> AgentStep {
-        let mut step = AgentStep::new(
+        AgentStep::new(
             goal_id.to_string(),
             PlannedAction::LlmQuery {
                 prompt: format!(
-                    "Answer the user's request directly and succinctly: {goal_description}"
+                    "IMPORTANT: The structured planner failed to produce a valid action plan. \
+                     You MUST NOT hallucinate or fabricate data. If the goal requires running a command, \
+                     reading a file, or fetching data, say exactly: \
+                     'I was unable to create an execution plan. The goal was: {goal_description}. \
+                     Error: {message}'. \
+                     Only answer if you can do so from your training data alone, and clearly state \
+                     that this is from general knowledge, not from executing any command."
                 ),
                 context: vec![message],
             },
-        );
-        step.result = Some(
-            "Planner degraded to a direct LLM response because structured JSON planning failed."
-                .to_string(),
-        );
-        step
+        )
     }
 }
 
@@ -424,27 +517,105 @@ fn parse_raw_steps(json_str: &str) -> Result<Vec<RawStep>, String> {
 
     items
         .iter()
-        .cloned()
         .map(|item| {
-            serde_json::from_value::<RawStep>(item)
+            // Try nested format first: {"action": {...}, "description": "..."}
+            serde_json::from_value::<RawStep>(item.clone())
+                .or_else(|_| {
+                    // Try flat format: {"type": "ShellCommand", ...}
+                    // Wrap it into a RawStep
+                    serde_json::from_value::<PlannedAction>(item.clone()).map(|action| RawStep {
+                        action,
+                        description: None,
+                    })
+                })
                 .map_err(|error| format!("invalid planner step: {error}"))
         })
         .collect()
 }
 
-/// Extract a JSON array from text that may contain markdown fences.
+/// Extract a JSON array (or single object) from LLM text that may contain
+/// preamble, trailing explanation, markdown fences, or chat template markers.
+///
+/// Uses bracket-depth tracking with string escape awareness so it finds the
+/// correct closing `]` even when the JSON contains nested arrays like `"args": ["-m"]`.
 fn extract_json_array(text: &str) -> Option<String> {
     let sanitized = sanitize_llm_response(text);
-    if let (Some(start), Some(end)) = (sanitized.find('['), sanitized.rfind(']')) {
-        if start < end {
-            return Some(sanitized[start..=end].trim().to_string());
+    let bytes = sanitized.as_bytes();
+
+    // Strategy 1: Find the first `[` and its matching `]` via depth tracking
+    if let Some(start) = sanitized.find('[') {
+        if let Some(end) = find_matching_bracket(bytes, start, b'[', b']') {
+            let candidate = sanitized[start..=end].trim().to_string();
+            // Quick sanity: must contain at least one `{`
+            if candidate.contains('{') {
+                return Some(candidate);
+            }
+        }
+    }
+
+    // Strategy 2: Find the first `{` and its matching `}` (single action, wrap in array)
+    if let Some(start) = sanitized.find('{') {
+        if let Some(end) = find_matching_bracket(bytes, start, b'{', b'}') {
+            let obj = &sanitized[start..=end];
+            // Only wrap if it looks like a planner action (has "type" key)
+            if obj.contains("\"type\"") {
+                return Some(format!("[{obj}]"));
+            }
+        }
+    }
+
+    None
+}
+
+/// Find the index of the closing bracket that matches the opening bracket at `start`.
+/// Tracks string escaping so brackets inside JSON strings are ignored.
+fn find_matching_bracket(bytes: &[u8], start: usize, open: u8, close: u8) -> Option<usize> {
+    let mut depth = 0i32;
+    let mut in_string = false;
+    let mut escape_next = false;
+
+    for (i, &byte) in bytes.iter().enumerate().skip(start) {
+        if escape_next {
+            escape_next = false;
+            continue;
+        }
+        match byte {
+            b'\\' if in_string => escape_next = true,
+            b'"' => in_string = !in_string,
+            b if b == open && !in_string => depth += 1,
+            b if b == close && !in_string => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
         }
     }
     None
 }
 
 fn sanitize_llm_response(input: &str) -> String {
-    strip_markdown_fences(input).trim().to_string()
+    let no_think = strip_think_tags(input);
+    strip_markdown_fences(&no_think).trim().to_string()
+}
+
+/// Strip `<think>...</think>` reasoning blocks emitted by Qwen3 and similar models.
+/// These blocks contain the model's internal reasoning and must be removed before
+/// parsing the actual JSON output.
+fn strip_think_tags(input: &str) -> String {
+    let mut result = input.to_string();
+    // Remove all <think>...</think> blocks (may span multiple lines)
+    while let Some(start) = result.find("<think>") {
+        if let Some(end) = result[start..].find("</think>") {
+            result = format!("{}{}", &result[..start], &result[start + end + 8..]);
+        } else {
+            // Unclosed <think> tag — remove everything from <think> to end
+            result.truncate(start);
+            break;
+        }
+    }
+    result
 }
 
 fn strip_markdown_fences(input: &str) -> String {
@@ -721,15 +892,40 @@ Done."#;
 
     #[test]
     fn test_extract_json_array() {
-        assert!(extract_json_array("[1,2,3]").is_some());
+        // Basic valid JSON arrays with objects
+        assert!(extract_json_array(r#"[{"type":"Noop"}]"#).is_some());
         assert!(extract_json_array("no json here").is_none());
-        assert!(extract_json_array("```json\n[1]\n```").is_some());
-        assert!(extract_json_array("```\n[1]\n```").is_some());
-        assert!(extract_json_array("before text\n[1]\nafter text").is_some());
+
+        // Markdown fences
+        assert!(extract_json_array("```json\n[{\"type\":\"Noop\"}]\n```").is_some());
+        assert!(extract_json_array("```\n[{\"type\":\"Noop\"}]\n```").is_some());
+
+        // Preamble and trailing text
+        assert!(extract_json_array("Here is the plan:\n[{\"type\":\"Noop\"}]\nDone.").is_some());
         assert_eq!(
-            extract_json_array("preface\n```json\n[1, 2]\n```\ntrailer").as_deref(),
-            Some("[1, 2]")
+            extract_json_array("preface\n```json\n[{\"type\":\"Noop\"}]\n```\ntrailer").as_deref(),
+            Some(r#"[{"type":"Noop"}]"#)
         );
+
+        // Trailing chat template markers (the real-world failure case)
+        let with_trailing = r#"[{"action":{"type":"ShellCommand","command":"free","args":["-m"]},"description":"check"}]
+
+<|im_start|>user
+Your previous response had invalid JSON."#;
+        let extracted = extract_json_array(with_trailing).unwrap();
+        assert!(extracted.starts_with('['));
+        assert!(extracted.ends_with(']'));
+        assert!(!extracted.contains("<|im_start|>"));
+
+        // Nested arrays in args don't confuse the bracket matcher
+        let nested = r#"[{"type":"ShellCommand","command":"ls","args":["-la","/tmp"]}]"#;
+        assert_eq!(extract_json_array(nested).as_deref(), Some(nested));
+
+        // Single object → wrapped in array
+        let single = r#"{"type":"ShellCommand","command":"free","args":["-m"]}"#;
+        let wrapped = extract_json_array(single).unwrap();
+        assert!(wrapped.starts_with('['));
+        assert!(wrapped.ends_with(']'));
     }
 
     #[test]
@@ -820,11 +1016,14 @@ Done."#;
         let steps = planner.plan_goal(&goal, &ctx).unwrap();
         assert_eq!(steps.len(), 1);
         assert_eq!(steps[0].action.action_type(), "llm_query");
-        assert!(steps[0]
-            .result
-            .as_deref()
-            .unwrap_or_default()
-            .contains("Planner degraded"));
+        // Fallback step should NOT pre-populate result (that caused hallucination).
+        // Instead, the prompt itself warns the LLM not to fabricate data.
+        assert!(steps[0].result.is_none());
+        if let PlannedAction::LlmQuery { ref prompt, .. } = steps[0].action {
+            assert!(prompt.contains("structured planner failed"));
+        } else {
+            panic!("expected LlmQuery fallback action");
+        }
     }
 
     #[test]
@@ -836,5 +1035,40 @@ Done."#;
             .collect::<Vec<_>>()
             .join("\n");
         assert_eq!(normalized, "before\n[{\"a\":1}]\nafter");
+    }
+
+    #[test]
+    fn test_strip_think_tags() {
+        // Basic think block removal
+        let input = "<think>I need to check memory</think>[{\"action\":{\"type\":\"Noop\"},\"description\":\"test\"}]";
+        let result = strip_think_tags(input);
+        assert!(
+            result.starts_with('['),
+            "should start with JSON array, got: {result}"
+        );
+        assert!(!result.contains("<think>"));
+
+        // Multi-line think block
+        let input = "<think>\nLet me reason about this.\nI should use free -m.\n</think>\n[{\"action\":{\"type\":\"Noop\"},\"description\":\"x\"}]";
+        let result = strip_think_tags(input);
+        assert!(!result.contains("<think>"));
+        assert!(result.contains("Noop"));
+
+        // No think tags — passthrough
+        let input = "[{\"action\":{\"type\":\"Noop\"},\"description\":\"x\"}]";
+        assert_eq!(strip_think_tags(input), input);
+
+        // Unclosed think tag — remove to end
+        let input = "some text<think>endless reasoning";
+        let result = strip_think_tags(input);
+        assert_eq!(result, "some text");
+    }
+
+    #[test]
+    fn test_sanitize_strips_think_before_extracting_json() {
+        let input = "<think>reasoning here</think>\n```json\n[{\"action\":{\"type\":\"Noop\"},\"description\":\"ok\"}]\n```";
+        let sanitized = sanitize_llm_response(input);
+        assert!(!sanitized.contains("<think>"));
+        assert!(sanitized.contains("Noop"));
     }
 }

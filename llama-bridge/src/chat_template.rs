@@ -94,7 +94,11 @@ pub fn apply_chat_template(
 ) -> String {
     // First, try llama.cpp's built-in chat template support
     if let Some(formatted) = try_builtin_template(model_ptr, prompt) {
-        debug!(len = formatted.len(), "applied built-in chat template");
+        debug!(
+            len = formatted.len(),
+            formatted = %formatted,
+            "applied built-in chat template"
+        );
         return formatted;
     }
 
@@ -104,6 +108,7 @@ pub fn apply_chat_template(
     debug!(
         ?format,
         len = formatted.len(),
+        formatted = %formatted,
         "applied fallback chat template"
     );
     formatted

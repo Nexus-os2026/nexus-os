@@ -33,6 +33,12 @@ nexus-telemetry = { path = "../../telemetry" }
 nexus-integrations = { path = "../../integrations" }
 nexus-metering = { path = "../../metering" }
 nexus-flash-infer = { path = "../../crates/nexus-flash-infer", features = ["download"] }
+nexus-capability-measurement = { path = "../../crates/nexus-capability-measurement" }
+nexus-governance-oracle = { path = "../../crates/nexus-governance-oracle" }
+nexus-governance-evolution = { path = "../../crates/nexus-governance-evolution" }
+nexus-predictive-router = { path = "../../crates/nexus-predictive-router" }
+nexus-browser-agent = { path = "../../crates/nexus-browser-agent" }
+nexus-token-economy = { path = "../../crates/nexus-token-economy" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 base64 = "0.22"

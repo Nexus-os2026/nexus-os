@@ -7,5 +7,5 @@
   "fuel_budget": 100000,
   "schedule": "0 */3 * * *",
   "default_goal": "Run an adversarial security tournament, update the attack-surface world model, and report the highest-leverage hardening actions.",
-  "llm_model": "qwen3.5:35b"
+  "llm_model": "auto"
 }

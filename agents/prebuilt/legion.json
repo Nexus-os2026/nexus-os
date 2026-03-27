@@ -6,5 +6,5 @@
   "autonomy_level": 6,
   "fuel_budget": 200000,
   "default_goal": "Design and command a hierarchical swarm that solves a complex task while remaining fuel-efficient, auditable, and fault-tolerant.",
-  "llm_model": "qwen3.5:35b"
+  "llm_model": "auto"
 }

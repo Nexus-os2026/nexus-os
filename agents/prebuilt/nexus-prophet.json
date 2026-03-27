@@ -12,5 +12,5 @@
   ],
   "autonomy_level": 4,
   "fuel_budget": 50000,
-  "llm_model": "claude-sonnet-4-5"
+  "llm_model": "auto"
 }

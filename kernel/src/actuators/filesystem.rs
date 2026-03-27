@@ -27,10 +27,28 @@ pub struct GovernedFilesystem;
 impl GovernedFilesystem {
     /// Resolve a user-provided path relative to the agent's workspace,
     /// rejecting any attempt to escape the sandbox.
+    /// System paths that agents can read (but never write).
+    /// These are safe because they're read-only virtual filesystems.
+    const READABLE_SYSTEM_PREFIXES: &'static [&'static str] =
+        &["/proc/", "/sys/class/", "/sys/devices/", "/etc/os-release"];
+
     pub(crate) fn resolve_safe_path(
         workspace: &Path,
         user_path: &str,
     ) -> Result<std::path::PathBuf, ActuatorError> {
+        // Allow absolute paths to safe system directories (read-only).
+        // These are virtual filesystems that expose system info.
+        // NOTE: Only callers doing reads should reach this — writes must use
+        // resolve_safe_write_path() instead.
+        if user_path.starts_with('/') {
+            let abs = std::path::PathBuf::from(user_path);
+            for prefix in Self::READABLE_SYSTEM_PREFIXES {
+                if user_path.starts_with(prefix) && abs.exists() {
+                    return Ok(abs);
+                }
+            }
+        }
+
         // Ensure workspace exists
         if !workspace.exists() {
             std::fs::create_dir_all(workspace)

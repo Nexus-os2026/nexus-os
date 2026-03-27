@@ -6,5 +6,5 @@
   "autonomy_level": 1,
   "fuel_budget": 2000,
   "default_goal": "Scan the workspace, run safe lint checks, and produce a severity-ranked Code Health Report without modifying files.",
-  "llm_model": "qwen3.5:4b"
+  "llm_model": "auto"
 }

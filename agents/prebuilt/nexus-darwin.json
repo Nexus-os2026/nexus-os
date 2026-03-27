@@ -7,5 +7,5 @@
   "fuel_budget": 50000,
   "schedule": "0 3 * * 0",
   "default_goal": "Run a weekly governed evolution tournament across active agent lineages and report any emergent capabilities.",
-  "llm_model": "qwen3.5:35b"
+  "llm_model": "auto"
 }

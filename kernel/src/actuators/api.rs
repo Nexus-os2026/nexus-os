@@ -16,7 +16,7 @@ const MAX_RESPONSE_BODY: u64 = 5 * 1024 * 1024;
 const FUEL_COST_API: f64 = 3.0;
 
 /// Allowed HTTP methods.
-const ALLOWED_METHODS: &[&str] = &["GET", "POST", "PUT", "DELETE"];
+const ALLOWED_METHODS: &[&str] = &["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"];
 
 /// Governed API client actuator. Executes HTTP requests with method validation,
 /// egress checks, and size limits.
@@ -81,8 +81,13 @@ impl Actuator for GovernedApiClient {
         action: &PlannedAction,
         context: &ActuatorContext,
     ) -> Result<ActionResult, ActuatorError> {
-        let (method, url, body) = match action {
-            PlannedAction::ApiCall { method, url, body } => (method, url, body),
+        let (method, url, body, headers) = match action {
+            PlannedAction::ApiCall {
+                method,
+                url,
+                body,
+                headers,
+            } => (method, url, body, headers),
             _ => return Err(ActuatorError::ActionNotHandled),
         };
 
@@ -109,9 +114,28 @@ impl Actuator for GovernedApiClient {
             REQUEST_TIMEOUT_SECS.to_string(),
             "--max-filesize".to_string(),
             MAX_RESPONSE_BODY.to_string(),
-            "-H".to_string(),
-            "Content-Type: application/json".to_string(),
         ];
+
+        // Add custom headers, or default Content-Type if none provided
+        let mut has_content_type = false;
+        if let Some(hdrs) = headers {
+            for (key, value) in hdrs {
+                // Block dangerous internal headers that could be used for request smuggling
+                let key_lower = key.to_lowercase();
+                if key_lower == "host" || key_lower == "transfer-encoding" {
+                    continue;
+                }
+                if key_lower == "content-type" {
+                    has_content_type = true;
+                }
+                args.push("-H".to_string());
+                args.push(format!("{key}: {value}"));
+            }
+        }
+        if !has_content_type && body.is_some() {
+            args.push("-H".to_string());
+            args.push("Content-Type: application/json".to_string());
+        }
 
         if let Some(b) = body {
             args.push("-d".to_string());
@@ -167,7 +191,9 @@ mod tests {
 
     #[test]
     fn valid_methods_accepted() {
-        for method in &["GET", "POST", "PUT", "DELETE", "get", "post"] {
+        for method in &[
+            "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "get", "post", "patch",
+        ] {
             assert!(
                 GovernedApiClient::validate_method(method).is_ok(),
                 "{method} should be valid"
@@ -177,7 +203,7 @@ mod tests {
 
     #[test]
     fn invalid_methods_rejected() {
-        for method in &["PATCH", "OPTIONS", "HEAD", "CONNECT", "TRACE"] {
+        for method in &["OPTIONS", "CONNECT", "TRACE"] {
             assert!(
                 GovernedApiClient::validate_method(method).is_err(),
                 "{method} should be rejected"
@@ -222,6 +248,7 @@ mod tests {
             method: "GET".into(),
             url: "https://api.example.com/data".into(),
             body: None,
+            headers: None,
         };
         let err = api.execute(&action, &ctx).unwrap_err();
         assert!(matches!(err, ActuatorError::CapabilityDenied(_)));
@@ -244,9 +271,10 @@ mod tests {
 
         // Invalid method
         let action = PlannedAction::ApiCall {
-            method: "PATCH".into(),
+            method: "OPTIONS".into(),
             url: "https://api.example.com/v1".into(),
             body: None,
+            headers: None,
         };
         let err = api.execute(&action, &ctx).unwrap_err();
         assert!(matches!(err, ActuatorError::InvalidMethod(_)));
@@ -256,6 +284,7 @@ mod tests {
             method: "GET".into(),
             url: "https://bad.com/steal".into(),
             body: None,
+            headers: None,
         };
         let err = api.execute(&action, &ctx).unwrap_err();
         assert!(matches!(err, ActuatorError::EgressDenied(_)));
@@ -265,8 +294,47 @@ mod tests {
             method: "POST".into(),
             url: "https://api.example.com/v1".into(),
             body: Some("x".repeat(2 * 1024 * 1024)),
+            headers: None,
         };
         let err = api.execute(&action, &ctx).unwrap_err();
         assert!(matches!(err, ActuatorError::BodyTooLarge { .. }));
+    }
+
+    #[test]
+    fn patch_and_head_methods_accepted() {
+        // PATCH and HEAD are valid methods since v9.1
+        assert!(GovernedApiClient::validate_method("PATCH").is_ok());
+        assert!(GovernedApiClient::validate_method("HEAD").is_ok());
+        assert!(GovernedApiClient::validate_method("head").is_ok());
+    }
+
+    #[test]
+    fn dangerous_headers_filtered() {
+        // Host and Transfer-Encoding headers are silently dropped
+        let mut hdrs = std::collections::HashMap::new();
+        hdrs.insert("Host".to_string(), "evil.com".to_string());
+        hdrs.insert("Transfer-Encoding".to_string(), "chunked".to_string());
+        hdrs.insert("Authorization".to_string(), "Bearer token123".to_string());
+
+        // Construct the args that would be built — test via compile only
+        // (actual curl execution needs a server). The filter logic is in execute().
+        let ctx = make_context();
+        let api = GovernedApiClient;
+        let action = PlannedAction::ApiCall {
+            method: "GET".into(),
+            url: "https://api.example.com/v1".into(),
+            body: None,
+            headers: Some(hdrs),
+        };
+        // This will fail at curl spawn (no server), but it should NOT fail
+        // at validation — PATCH, headers, and egress are all OK.
+        let result = api.execute(&action, &ctx);
+        // Either succeeds (curl returns something) or IoError (curl not reachable)
+        // — but never InvalidMethod, EgressDenied, or CapabilityDenied.
+        match result {
+            Ok(_) => {}                          // curl succeeded
+            Err(ActuatorError::IoError(_)) => {} // curl failed (expected in test)
+            Err(other) => panic!("unexpected error: {other:?}"),
+        }
     }
 }

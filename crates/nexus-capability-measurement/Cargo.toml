@@ -1,0 +1,16 @@
+[package]
+name = "nexus-capability-measurement"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Formal capability measurement framework for Nexus OS agents — four-vector evaluation with asymmetric scoring, gaming detection, and repeatability guarantees."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+sha2 = "0.10"
+thiserror = "1"
+
+[lints]
+workspace = true

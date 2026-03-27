@@ -101,25 +101,95 @@ impl Default for AgentFuelBudgetConfig {
     }
 }
 
+// ── Recommended NVIDIA NIM models (benchmark-validated, March 2026) ──────
+//
+// NIM Cloud Stress Test across 88 models, 50 concurrent agents each:
+//
+//   PRIMARY:   mistralai/mistral-7b-instruct-v0.3
+//              224ms P50, 100% determinism, 5/5 agentic, 51.8 req/s
+//
+//   SECONDARY: mistralai/mamba-codestral-7b-v0.1
+//              219ms P50, 100% determinism, 5/5 agentic, 24.4 req/s
+//              (code-heavy tasks)
+//
+//   FALLBACK:  google/gemma-2-9b-it
+//              229ms P50, 100% determinism, 5/5 agentic, 61.1 req/s
+//              (highest throughput of all tested models)
+
+/// Primary cloud model for agent tasks (benchmark winner).
+pub const NIM_PRIMARY_MODEL: &str = "mistralai/mistral-7b-instruct-v0.3";
+
+/// Secondary cloud model for code-heavy agent tasks.
+pub const NIM_SECONDARY_MODEL: &str = "mistralai/mamba-codestral-7b-v0.1";
+
+/// Fallback cloud model — highest throughput (61.1 req/s at 50 concurrent agents).
+pub const NIM_FALLBACK_MODEL: &str = "google/gemma-2-9b-it";
+
 pub fn select_provider(
     config: &ProviderSelectionConfig,
 ) -> Result<Box<dyn LlmProvider>, AgentError> {
+    // 0. Explicit provider override — always wins.
     if let Some(explicit) = config.provider.as_deref() {
         return explicit_provider(explicit, config);
     }
 
+    // ── Priority 1: Local Ollama (free, no API key, private) ────────────
     if let Some(url) = config.ollama_url.as_deref() {
         return Ok(Box::new(OllamaProvider::new(url.to_string())));
     }
 
+    // Flash Inference: local GGUF model (free, private, often smarter than small Ollama models)
+    #[cfg(feature = "flash-infer")]
+    if let Some(ref model_path) = config.flash_model_path {
+        if !model_path.trim().is_empty() && std::path::Path::new(model_path).exists() {
+            eprintln!("[nexus-llm] using Flash Inference: {model_path}");
+            return Ok(Box::new(crate::providers::FlashProvider::new(
+                model_path.clone(),
+                nexus_flash_infer::LoadConfig {
+                    model_path: model_path.clone(),
+                    n_threads: Some(8),
+                    n_ctx: 2048,
+                    n_batch: 512,
+                    ..Default::default()
+                },
+                nexus_flash_infer::GenerationConfig {
+                    n_ctx: 2048,
+                    n_batch: 512,
+                    n_threads: Some(8),
+                    ..nexus_flash_infer::GenerationConfig::fast()
+                },
+            )));
+        }
+    }
+
+    // Auto-detect Ollama on default port (before cloud providers)
+    let ollama_default = OllamaProvider::from_env();
+    if ollama_default.health_check().is_ok() {
+        eprintln!("[nexus-llm] auto-detected Ollama at localhost:11434, using as default provider");
+        return Ok(Box::new(ollama_default));
+    }
+
+    // ── Priority 2: Groq (free tier, ultra-fast inference) ──────────────
+    if has_key(&config.groq_api_key) {
+        eprintln!("[nexus-llm] using Groq (free tier, fast inference)");
+        return Ok(Box::new(GroqProvider::new(config.groq_api_key.clone())));
+    }
+
+    // ── Priority 3: NVIDIA NIM (free tier, benchmark-validated) ───────
+    // Mistral 7B: 224ms P50, 100% determinism, 5/5 agentic, 51.8 req/s
+    if has_key(&config.nvidia_api_key) {
+        eprintln!(
+            "[nexus-llm] using NVIDIA NIM (primary: {}, secondary: {}, fallback: {})",
+            NIM_PRIMARY_MODEL, NIM_SECONDARY_MODEL, NIM_FALLBACK_MODEL,
+        );
+        return Ok(Box::new(NvidiaProvider::new(config.nvidia_api_key.clone())));
+    }
+
+    // ── Priority 4: Other cloud providers ───────────────────────────────
     if has_key(&config.deepseek_api_key) {
         return Ok(Box::new(DeepSeekProvider::new(
             config.deepseek_api_key.clone(),
         )));
-    }
-
-    if has_key(&config.groq_api_key) {
-        return Ok(Box::new(GroqProvider::new(config.groq_api_key.clone())));
     }
 
     if has_key(&config.mistral_api_key) {
@@ -156,10 +226,6 @@ pub fn select_provider(
         )));
     }
 
-    if has_key(&config.nvidia_api_key) {
-        return Ok(Box::new(NvidiaProvider::new(config.nvidia_api_key.clone())));
-    }
-
     if has_key(&config.openai_api_key) {
         return Ok(Box::new(OpenAiProvider::new(config.openai_api_key.clone())));
     }
@@ -175,20 +241,14 @@ pub fn select_provider(
         )));
     }
 
-    // Auto-detect Ollama on default port
-    let ollama_default = OllamaProvider::from_env();
-    if ollama_default.health_check().is_ok() {
-        eprintln!("[nexus-llm] auto-detected Ollama at localhost:11434, using as default provider");
-        return Ok(Box::new(ollama_default));
-    }
-
     Err(AgentError::SupervisorError(
         "No LLM provider configured. Please either:\n\
          1. Install and start Ollama (ollama serve)\n\
-         2. Set OPENAI_API_KEY in Settings\n\
-         3. Set ANTHROPIC_API_KEY in Settings\n\
-         4. Set any supported provider API key in Settings\n\
-         5. Set LLM_PROVIDER=mock to explicitly use mock responses"
+         2. Set NVIDIA_NIM_API_KEY (free at build.nvidia.com)\n\
+         3. Set OPENAI_API_KEY in Settings\n\
+         4. Set ANTHROPIC_API_KEY in Settings\n\
+         5. Set any supported provider API key in Settings\n\
+         6. Set LLM_PROVIDER=mock to explicitly use mock responses"
             .to_string(),
     ))
 }
@@ -229,7 +289,29 @@ fn explicit_provider(
                 .flash_model_path
                 .clone()
                 .unwrap_or_else(|| "flash-local".to_string());
-            Ok(Box::new(FlashProvider::new(model_path)))
+            #[cfg(feature = "flash-infer")]
+            {
+                Ok(Box::new(FlashProvider::new(
+                    model_path.clone(),
+                    nexus_flash_infer::LoadConfig {
+                        model_path,
+                        n_threads: Some(8),
+                        n_ctx: 2048,
+                        n_batch: 512,
+                        ..Default::default()
+                    },
+                    nexus_flash_infer::GenerationConfig {
+                        n_ctx: 2048,
+                        n_batch: 512,
+                        n_threads: Some(8),
+                        ..nexus_flash_infer::GenerationConfig::fast()
+                    },
+                )))
+            }
+            #[cfg(not(feature = "flash-infer"))]
+            {
+                Ok(Box::new(FlashProvider::new(model_path)))
+            }
         }
         "mock" => Err(AgentError::SupervisorError(
             "Mock provider is for testing only. Configure a real provider: ollama, openai, claude, gemini, nvidia, deepseek, groq, mistral, together, fireworks, perplexity, cohere, openrouter, or flash.".to_string(),

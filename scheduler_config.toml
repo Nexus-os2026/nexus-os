@@ -1,0 +1,30 @@
+# Nexus OS Scheduler Configuration
+# Defines agents that run autonomously on schedule.
+# Each [[agents]] entry maps to a ScheduleEntry in the background scheduler.
+
+[[agents]]
+name = "system-monitor"
+agent = "nexus-sysmon"
+trigger = { type = "interval", seconds = 60 }
+goal = "Check system health: read CPU load, RAM usage, and disk usage. If any metric exceeds 90%, send a warning notification. Store metrics in memory."
+enabled = true
+fuel_budget = 200
+autonomy_level = 3
+
+[[agents]]
+name = "hn-reader"
+agent = "nexus-oracle"
+trigger = { type = "cron", expression = "0 * * * *" }  # Every hour
+goal = "Read the top 5 stories from Hacker News. Summarize each story in one sentence. Save the summary to ~/agent-output/hn-summary.md with today's date. Send a notification with the summary."
+enabled = true
+fuel_budget = 500
+autonomy_level = 3
+
+[[agents]]
+name = "file-watcher"
+agent = "nexus-sentinel"
+trigger = { type = "event", event_kind = "FileChanged", path = "~/Documents" }
+goal = "A new file was detected in ~/Documents. Read it, determine its type and purpose, and store a summary as a semantic memory for future reference."
+enabled = true
+fuel_budget = 300
+autonomy_level = 2

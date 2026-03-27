@@ -10,6 +10,103 @@ use crate::backend::{InferenceBackend, LoadConfig, MemoryUsage, ModelFormat, Mod
 use crate::error::FlashError;
 use crate::types::HardwareInfo;
 
+/// Pre-warm the page cache by reading model files with MADV_SEQUENTIAL.
+///
+/// For MoE models, the model is mmap'd and expert weights are loaded on
+/// demand. This causes cold page faults that hit NVMe (~3.5 GB/s) instead
+/// of RAM (~11 GB/s DDR5). By sequentially reading the files once, we
+/// populate the page cache so subsequent random expert access hits RAM.
+///
+/// Spawns a background thread so it doesn't block model loading.
+fn warm_page_cache(model_path: &Path) {
+    let path = model_path.to_path_buf();
+    std::thread::Builder::new()
+        .name("page-cache-warm".into())
+        .spawn(move || {
+            let paths = collect_model_files(&path);
+            let total_bytes: u64 = paths
+                .iter()
+                .filter_map(|p| std::fs::metadata(p).ok())
+                .map(|m| m.len())
+                .sum();
+
+            tracing::info!(
+                files = paths.len(),
+                total_gb = format_args!("{:.1}", total_bytes as f64 / 1024.0 / 1024.0 / 1024.0),
+                "starting page cache warmup"
+            );
+
+            for file_path in &paths {
+                if let Err(e) = warm_single_file(file_path) {
+                    tracing::warn!(path = %file_path.display(), error = %e, "warmup failed");
+                }
+            }
+
+            tracing::info!("page cache warmup complete");
+        })
+        .ok();
+}
+
+/// Collect all GGUF split files for a model path.
+///
+/// For split models like `model-00001-of-00004.gguf`, returns all 4 files.
+/// For single files, returns just that file.
+fn collect_model_files(path: &Path) -> Vec<std::path::PathBuf> {
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+
+    // Check for split pattern: *-NNNNN-of-NNNNN.gguf
+    if let Some(of_pos) = name.find("-of-") {
+        if let Some(dash_pos) = name[..of_pos].rfind('-') {
+            let prefix = &name[..dash_pos + 1];
+            let suffix_part = &name[of_pos + 4..];
+            if let Some(total_str) = suffix_part.strip_suffix(".gguf") {
+                if let Ok(total) = total_str.parse::<u32>() {
+                    let parent = path.parent().unwrap_or(Path::new("."));
+                    let mut files = Vec::with_capacity(total as usize);
+                    for i in 1..=total {
+                        let split_name = format!("{prefix}{i:05}-of-{total:05}.gguf");
+                        let split_path = parent.join(&split_name);
+                        if split_path.exists() {
+                            files.push(split_path);
+                        }
+                    }
+                    if !files.is_empty() {
+                        return files;
+                    }
+                }
+            }
+        }
+    }
+
+    vec![path.to_path_buf()]
+}
+
+/// Hint the OS to start pre-reading a file into the page cache.
+///
+/// Uses `posix_fadvise(POSIX_FADV_WILLNEED)` which is **non-blocking** —
+/// the kernel starts async readahead in the background without consuming
+/// user CPU or blocking the calling thread. This is much gentler than
+/// sequentially reading the file ourselves, which would saturate NVMe
+/// bandwidth and freeze the system.
+fn warm_single_file(path: &Path) -> Result<(), std::io::Error> {
+    let file = std::fs::File::open(path)?;
+    let len = file.metadata()?.len() as usize;
+    if len == 0 {
+        return Ok(());
+    }
+
+    // POSIX_FADV_WILLNEED: async kernel readahead — non-blocking, gentle on I/O
+    nexus_llama_bridge::fadvise_willneed(&file, len);
+
+    tracing::debug!(
+        path = %path.display(),
+        size_gb = format_args!("{:.1}", len as f64 / 1024.0 / 1024.0 / 1024.0),
+        "hinted page cache warmup (fadvise WILLNEED)"
+    );
+
+    Ok(())
+}
+
 /// llama.cpp backend implementation via nexus-llama-bridge.
 pub struct LlamaBackend {
     hw: HardwareInfo,
@@ -62,9 +159,28 @@ impl InferenceBackend for LlamaBackend {
 
         let model = LlamaModel::load(&load_config).map_err(FlashError::LlamaBridge)?;
 
+        // Start background page cache warmup for MoE models.
+        // This pre-reads model files into the page cache so expert page faults
+        // hit RAM (~11 GB/s DDR5) instead of NVMe (~3.5 GB/s).
+        if config.cpu_moe {
+            warm_page_cache(path);
+        }
+
+        // Compute n_ubatch from n_batch: for MoE, use smaller ubatch to reduce
+        // peak memory pressure. The autoconfig sets n_batch=512 for MoE and we
+        // want n_ubatch <= n_batch. Default::default() would use 512 which is
+        // too large for huge MoE models.
+        let n_ubatch = if config.cpu_moe {
+            (config.n_batch / 2).clamp(64, 256) // MoE: half of batch, clamped
+        } else {
+            config.n_batch.min(512)
+        };
         let gen_config = GenerationConfig {
             n_ctx: config.n_ctx,
             n_batch: config.n_batch,
+            n_ubatch,
+            n_threads: config.n_threads,
+            flash_attn: true, // Always enable — reduces KV memory and speeds attention
             ..Default::default()
         };
 

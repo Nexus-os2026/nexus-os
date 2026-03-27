@@ -105,6 +105,16 @@ const Workspaces = React.lazy(() => import("./pages/Workspaces"));
 const Telemetry = React.lazy(() => import("./pages/Telemetry"));
 const UsageBilling = React.lazy(() => import("./pages/UsageBilling"));
 const FlashInference = React.lazy(() => import("./pages/FlashInference"));
+const MeasurementDashboard = React.lazy(() => import("./pages/MeasurementDashboard"));
+const CapabilityBoundaryMap = React.lazy(() => import("./pages/CapabilityBoundaryMap"));
+const ModelRouting = React.lazy(() => import("./pages/ModelRouting"));
+const ABValidation = React.lazy(() => import("./pages/ABValidation"));
+const BrowserAgentPage = React.lazy(() => import("./pages/BrowserAgent"));
+const GovernanceOraclePage = React.lazy(() => import("./pages/GovernanceOracle"));
+const TokenEconomyPage = React.lazy(() => import("./pages/TokenEconomy"));
+const MeasurementSessionPage = React.lazy(() => import("./pages/MeasurementSession"));
+const MeasurementCompare = React.lazy(() => import("./pages/MeasurementCompare"));
+const MeasurementBatteries = React.lazy(() => import("./pages/MeasurementBatteries"));
 import type {
   AgentStatusEvent,
   AgentSummary,
@@ -121,7 +131,7 @@ import type {
 import { createDefaultConfig, normalizeConfig } from "./utils/config";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler" | "flash-inference";
+type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler" | "flash-inference" | "measurement" | "measurement-session" | "measurement-compare" | "measurement-batteries" | "capability-boundaries" | "model-routing" | "ab-validation" | "browser-agent" | "governance-oracle" | "token-economy";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -153,6 +163,15 @@ const NAV_ITEMS: SidebarItem[] = [
   // ── AGENT LAB ──
   { id: "browser", label: "Agent Browser", icon: "Globe", shortcut: "", section: "AGENT LAB" },
   { id: "dna-lab", label: "DNA Lab", icon: "Dna", shortcut: "", section: "AGENT LAB" },
+  { id: "measurement", label: "Measurement", icon: "Target", shortcut: "", section: "AGENT LAB" },
+  { id: "measurement-compare", label: "Compare Agents", icon: "GitCompare", shortcut: "", section: "AGENT LAB" },
+  { id: "measurement-batteries", label: "Test Batteries", icon: "FlaskConical", shortcut: "", section: "AGENT LAB" },
+  { id: "capability-boundaries", label: "Boundary Map", icon: "Map", shortcut: "", section: "AGENT LAB" },
+  { id: "model-routing", label: "Model Routing", icon: "Route", shortcut: "", section: "AGENT LAB" },
+  { id: "ab-validation", label: "A/B Validation", icon: "GitCompareArrows", shortcut: "", section: "AGENT LAB" },
+  { id: "browser-agent", label: "Browser Agent", icon: "Globe2", shortcut: "", section: "AGENT LAB" },
+  { id: "governance-oracle", label: "Governance Oracle", icon: "ShieldCheck", shortcut: "", section: "AGENT LAB" },
+  { id: "token-economy", label: "Token Economy", icon: "Coins", shortcut: "", section: "AGENT LAB" },
   { id: "self-rewrite", label: "Self-Rewrite Lab", icon: "Code2", shortcut: "", section: "AGENT LAB" },
   { id: "consciousness", label: "Consciousness", icon: "Brain", shortcut: "", section: "AGENT LAB" },
   // ── CREATIVE ──
@@ -284,6 +303,15 @@ const PAGE_SUMMARIES: Partial<Record<Page, string>> = {
   "command-center": "Run direct commands against the governed operating layer.",
   approvals: "Resolve human-in-the-loop requests before protected actions execute.",
   "flash-inference": "Run AI models locally with automatic hardware-aware configuration and streaming chat.",
+  measurement: "Capability measurement framework — evaluate agents across reasoning, planning, adaptation, and tool use.",
+  "measurement-compare": "Side-by-side comparison of agent capability profiles and scorecards.",
+  "measurement-batteries": "View locked test batteries, problem sets, and scoring rubrics.",
+  "capability-boundaries": "Empirical capability boundary heatmap, calibration status, and gaming detection.",
+  "model-routing": "Predictive model routing — selects the optimal LLM based on task difficulty and capability boundaries.",
+  "ab-validation": "A/B comparison of fixed vs predictive routing across all agents.",
+  "browser-agent": "Governed browser automation via browser-use — capability-gated, economically-metered.",
+  "governance-oracle": "Three-layer governance with sealed tokens, timing normalization, and adversarial evolution.",
+  "token-economy": "NXC coin economy — agents earn, burn, delegate, and get gated by balance.",
 };
 
 function agentStatusRank(status: AgentSummary["status"]): number {
@@ -1024,9 +1052,9 @@ export default function App(): JSX.Element {
     ]);
 
     if (runtimeMode === "desktop") {
-      // Cognitive loop disabled — route all messages through LLM chat for now.
-      // To re-enable agent goal execution, uncomment and restore the isRealAgent block.
-      const isRealAgent = false;
+      // Enable cognitive loop for real registered agents (UUID-format IDs).
+      // Non-agent chat (empty selectedAgent or non-UUID) uses direct LLM.
+      const isRealAgent = selectedAgent.length > 30 && /^[0-9a-f-]{36}$/.test(selectedAgent);
       if (isRealAgent) {
         try {
           const eventMod = await import("@tauri-apps/api/event");
@@ -1038,10 +1066,11 @@ export default function App(): JSX.Element {
             steps_executed: number; fuel_consumed: number;
             should_continue: boolean; blocked_reason: string | null;
           }>("agent-cognitive-cycle", (event) => {
-            const p = event.payload;
-            if (p.agent_id !== selectedAgent) return;
+            const p = event?.payload;
+            if (!p || p.agent_id !== selectedAgent) return;
             if (p.phase === "Blocked") return; // handled by agent-blocked event
-            const phaseMsg = `Phase: ${p.phase}${p.steps_executed > 0 ? ` (${p.steps_executed} step, ${p.fuel_consumed.toFixed(1)} fuel)` : ""}`;
+            const fuel = typeof p.fuel_consumed === "number" ? p.fuel_consumed.toFixed(1) : "0";
+            const phaseMsg = `Phase: ${p.phase}${p.steps_executed > 0 ? ` (${p.steps_executed} step, ${fuel} fuel)` : ""}`;
             stepMessages.push(phaseMsg);
             setMessages((prev) =>
               prev.map((m) =>
@@ -1057,8 +1086,8 @@ export default function App(): JSX.Element {
             agent_id: string; goal_id: string; message: string;
             action: string; agent_name: string;
           }>("agent-blocked", (event) => {
-            const p = event.payload;
-            if (p.agent_id !== selectedAgent) return;
+            const p = event?.payload;
+            if (!p || p.agent_id !== selectedAgent) return;
             const approvalMsgId = makeId();
             setMessages((prev) => [
               ...prev,
@@ -1077,8 +1106,8 @@ export default function App(): JSX.Element {
           const unlistenResumed = await eventMod.listen<{
             agent_id: string; goal_id: string; message: string;
           }>("agent-resumed", (event) => {
-            const p = event.payload;
-            if (p.agent_id !== selectedAgent) return;
+            const p = event?.payload;
+            if (!p || p.agent_id !== selectedAgent) return;
             const resumedMsgId = makeId();
             setMessages((prev) => [
               ...prev,
@@ -1098,8 +1127,9 @@ export default function App(): JSX.Element {
             eventMod.listen<{
               agent_id: string; goal_id: string; success: boolean; reason?: string; result_summary?: string;
             }>("agent-goal-completed", (event) => {
-              if (event.payload.agent_id === selectedAgent) {
-                resolve(event.payload);
+              const p = event?.payload;
+              if (p && p.agent_id === selectedAgent) {
+                resolve(p);
               }
             });
           });
@@ -1654,6 +1684,36 @@ export default function App(): JSX.Element {
     }
     if (page === "dna-lab") {
       return <AgentDnaLab />;
+    }
+    if (page === "measurement") {
+      return <MeasurementDashboard />;
+    }
+    if (page === "measurement-session") {
+      return <MeasurementSessionPage sessionId="" />;
+    }
+    if (page === "measurement-compare") {
+      return <MeasurementCompare />;
+    }
+    if (page === "measurement-batteries") {
+      return <MeasurementBatteries />;
+    }
+    if (page === "capability-boundaries") {
+      return <CapabilityBoundaryMap />;
+    }
+    if (page === "model-routing") {
+      return <ModelRouting />;
+    }
+    if (page === "ab-validation") {
+      return <ABValidation />;
+    }
+    if (page === "browser-agent") {
+      return <BrowserAgentPage />;
+    }
+    if (page === "governance-oracle") {
+      return <GovernanceOraclePage />;
+    }
+    if (page === "token-economy") {
+      return <TokenEconomyPage />;
     }
     if (page === "timeline-viewer") {
       return <TimelineViewer />;

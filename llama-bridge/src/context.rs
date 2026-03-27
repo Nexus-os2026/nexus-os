@@ -13,6 +13,18 @@ use crate::sampling;
 use crate::tokenizer;
 use crate::types::{ControlFlow, GenerationConfig, PerfStats, TokenEvent};
 
+/// Template end-of-turn tags that signal the model wants to stop generating.
+/// When the model emits these as text (not caught by `is_eog`), we halt.
+const END_OF_TURN_TAGS: &[&str] = &[
+    "<end_of_turn>",
+    "</end_of_turn>",
+    "<|im_end|>",
+    "<|end|>",
+    "<|eot_id|>",
+    "<|end_of_text|>",
+    "[/INST]",
+];
+
 /// An inference context bound to a loaded model.
 ///
 /// Owns the underlying `llama_context` and sampler chain. Freed on drop.
@@ -23,6 +35,7 @@ pub struct LlamaContext {
     model_ptr: *const ffi::LlamaModel,
     architecture: String,
     n_ctx: u32,
+    n_batch: u32,
 }
 
 // The context is not thread-safe (single decode stream), but can be moved
@@ -77,6 +90,7 @@ impl LlamaContext {
         let model_ptr = model.as_mut_ptr() as *const ffi::LlamaModel;
         let architecture = model.metadata().architecture.clone();
         let n_ctx = unsafe { ffi::llama_n_ctx(ctx) };
+        let n_batch = config.n_batch.max(1);
 
         Ok(Self {
             ctx,
@@ -85,6 +99,7 @@ impl LlamaContext {
             model_ptr,
             architecture,
             n_ctx,
+            n_batch,
         })
     }
 
@@ -103,15 +118,32 @@ impl LlamaContext {
         config: &GenerationConfig,
         mut callback: impl FnMut(TokenEvent) -> ControlFlow,
     ) -> Result<PerfStats, LlamaError> {
-        // Apply chat template to format the prompt for the model's expected format.
-        // Without this, models like DeepSeek-R1 treat raw text as continuation
-        // and produce garbage repetition instead of following instructions.
-        let formatted_prompt =
-            chat_template::apply_chat_template(self.model_ptr, &self.architecture, prompt);
+        // Only apply chat templates for architectures that are known to need them.
+        // DeepSeek and Qwen produce garbage without templates. Gemma and most other
+        // models work correctly with raw prompts and break WITH templates.
+        let arch_lower = self.architecture.to_lowercase();
+        let needs_template = arch_lower.contains("deepseek") || arch_lower.contains("qwen");
 
-        // Tokenize the formatted prompt (add_special=false since the template
-        // already includes BOS/special tokens)
-        let prompt_tokens = tokenizer::tokenize(self.vocab, &formatted_prompt, false)?;
+        let (final_prompt, add_special) = if needs_template {
+            let formatted =
+                chat_template::apply_chat_template(self.model_ptr, &self.architecture, prompt);
+            debug!(
+                arch = %self.architecture,
+                len = formatted.len(),
+                "applied chat template"
+            );
+            // Template already includes BOS/special tokens
+            (formatted, false)
+        } else {
+            debug!(
+                arch = %self.architecture,
+                "skipping chat template — model works with raw prompts"
+            );
+            // Raw prompt — let the tokenizer add BOS/special tokens
+            (prompt.to_string(), true)
+        };
+
+        let prompt_tokens = tokenizer::tokenize(self.vocab, &final_prompt, add_special)?;
         let prompt_token_count = prompt_tokens.len() as u32;
 
         if prompt_tokens.is_empty() {
@@ -146,22 +178,30 @@ impl LlamaContext {
         // Reset perf counters
         unsafe { ffi::llama_perf_context_reset(self.ctx) };
 
-        // Process prompt
-        let mut prompt_batch = batch::create_batch(prompt_tokens.len() as i32);
-        unsafe { batch::fill_batch_prompt(&mut prompt_batch, &prompt_tokens) };
+        // Process prompt in chunks of n_batch to avoid the llama.cpp assertion
+        // `n_tokens_all <= cparams.n_batch`. Large agent planner prompts can
+        // easily exceed 2000 tokens while n_batch is typically 512.
+        let batch_size = self.n_batch as usize;
+        let n_chunks = prompt_tokens.len().div_ceil(batch_size);
+        let mut pos_offset: i32 = 0;
+        for (chunk_idx, chunk) in prompt_tokens.chunks(batch_size).enumerate() {
+            let is_last_chunk = chunk_idx == n_chunks - 1;
+            let mut prompt_batch = batch::create_batch(chunk.len() as i32);
+            // Only compute logits on the very last token of the very last chunk
+            unsafe {
+                batch::fill_batch_prompt_at(&mut prompt_batch, chunk, pos_offset, is_last_chunk)
+            };
 
-        let ret = unsafe { ffi::llama_decode(self.ctx, prompt_batch) };
-        // Do not free prompt_batch here — llama_decode consumed it.
-        // The batch memory was allocated by llama_batch_init and the
-        // C side manages it. We call free after we're done.
-        if ret != 0 {
+            let ret = unsafe { ffi::llama_decode(self.ctx, prompt_batch) };
             batch::free_batch(prompt_batch);
-            return Err(LlamaError::DecodeFailed(ret));
+            if ret != 0 {
+                return Err(LlamaError::DecodeFailed(ret));
+            }
+            pos_offset += chunk.len() as i32;
         }
-        batch::free_batch(prompt_batch);
 
-        // Generation loop
-        let eos = tokenizer::eos_token(self.vocab);
+        // Generation loop — emit every token directly. Template tag filtering
+        // is handled in the frontend so we never accidentally swallow real content.
         let mut generated_text = String::new();
         let mut tokens_generated = 0u32;
         let mut pos = prompt_tokens.len() as i32;
@@ -171,27 +211,35 @@ impl LlamaContext {
             // Sample next token
             let token = unsafe { ffi::llama_sampler_sample(self.sampler, self.ctx, -1) };
 
-            // Check for EOS
-            if token == eos || token < 0 {
+            // Check for end-of-generation (EOS, EOT, and model-specific EOG tokens).
+            // This uses llama_vocab_is_eog() which knows about all EOG tokens for
+            // the model, e.g. Gemma's <end_of_turn> (token 107).
+            if token < 0 || tokenizer::is_eog(self.vocab, token) {
                 break;
             }
 
             // Decode token to text
             let piece = tokenizer::token_to_text(self.vocab, token);
 
-            // Check for stop sequences
+            // Track all generated text for stop sequence and end-of-turn detection
             generated_text.push_str(&piece);
             let should_stop = config
                 .stop_sequences
                 .iter()
                 .any(|s| generated_text.ends_with(s.as_str()));
 
-            // Emit token event
+            // Check if accumulated text contains an end-of-turn tag.
+            // These signal the model wants to stop, equivalent to EOS.
+            if is_end_of_turn(&generated_text) {
+                debug!("end-of-turn tag detected, stopping generation");
+                break;
+            }
+
+            // Emit token directly — no filtering
             let flow = callback(TokenEvent::Token {
                 text: piece,
                 token_id: token,
             });
-
             tokens_generated += 1;
 
             if should_stop || flow == ControlFlow::Stop {
@@ -199,7 +247,6 @@ impl LlamaContext {
             }
 
             // Check context window boundary before decoding next token.
-            // pos is the next position we'd write to; n_ctx is the limit.
             if (pos + 1) as u32 >= self.n_ctx {
                 debug!(
                     pos,
@@ -256,6 +303,27 @@ impl LlamaContext {
 
         Ok(stats)
     }
+}
+
+/// Check if the generated text has reached an end-of-turn tag.
+///
+/// We check the **tail** of the text (last 64 chars) rather than `ends_with`
+/// because the model may emit whitespace or the start of a new turn marker
+/// (`\n`, `<|im_start|>`) after the EOT tag within the same decode window.
+/// Once any EOT tag appears near the end, the model's response is complete.
+fn is_end_of_turn(text: &str) -> bool {
+    // Check the last 64 bytes for any end-of-turn tag.
+    // This catches cases like "<|im_end|>\n" or "<|im_end|>\n<|im_start|>"
+    // without false-positiving on tags in the middle of long generated text
+    // (e.g. the model explaining what <|im_end|> means in a code example).
+    // Safe substring: find a char boundary near the last 64 bytes.
+    // Walk forward from the target offset to find a valid UTF-8 boundary.
+    let mut tail_start = text.len().saturating_sub(64);
+    while tail_start < text.len() && !text.is_char_boundary(tail_start) {
+        tail_start += 1;
+    }
+    let tail = &text[tail_start..];
+    END_OF_TURN_TAGS.iter().any(|tag| tail.contains(tag))
 }
 
 impl Drop for LlamaContext {

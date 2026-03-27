@@ -1,6 +1,6 @@
 use nexus_flash_infer::budget::MemoryBudget;
 use nexus_flash_infer::profiler::ModelProfile;
-use nexus_flash_infer::types::{HardwareInfo, SsdType};
+use nexus_flash_infer::types::{HardwareInfo, RamType, SsdType};
 use nexus_llama_bridge::ModelMetadata;
 
 fn test_hw() -> HardwareInfo {
@@ -14,6 +14,8 @@ fn test_hw() -> HardwareInfo {
         ssd_type: SsdType::NVMe,
         ssd_read_speed_mb_s: 3500,
         numa_nodes: 1,
+        ram_type: RamType::DDR5,
+        mem_bandwidth_gbps: 11.0,
     }
 }
 

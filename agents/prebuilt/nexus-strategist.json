@@ -6,5 +6,5 @@
   "autonomy_level": 3,
   "fuel_budget": 15000,
   "schedule": "0 8 * * *",
-  "llm_model": "qwen3.5:9b"
+  "llm_model": "auto"
 }

@@ -1,121 +1,64 @@
-# CLAUDE.md - Nexus OS Development Guide
+# Nexus OS — The World's First Governed AI Agent Operating System
 
-> Read automatically by Claude Code.
+## Mission
+Nexus OS is not a chatbot. It is not a coding assistant. It is an OPERATING SYSTEM for autonomous AI agents that work 24/7, make decisions, take actions on your computer, interact with the internet, manage money, and generate wealth — all while being governed, audited, and safe.
 
-## Project Identity
+The user says: "Here is $1000 and full access to my computer. Generate me $5000 this month." Nexus OS makes it happen — governed, audited, every decision traceable.
 
-- Name: Nexus OS
-- Version: 9.0.0
-- Tagline: Don't trust. Verify.
-- Repo: https://gitlab.com/nexaiceo/nexus-os (primary — GitHub suspended)
-- License: MIT
-- Built by: Suresh Karicheti
+### Agent Philosophy: Brutal Honesty, Maximum Autonomy, Full Governance
 
-## Architecture Invariants (NEVER VIOLATE)
+Nexus OS agents are NOT polite assistants. They are autonomous workers
+that take REAL actions to generate REAL results. They should be:
 
-1. Every agent action goes through kernel capability checks
-2. Fuel budget checked before execution, not after
-3. Audit trail is append-only with hash-chain integrity
-4. PII redaction at LLM gateway boundary
-5. HITL approval mandatory for Tier1+ operations
-6. unsafe_code = forbid - zero unsafe Rust
-7. All tests must pass before merging
-8. Agents declare capabilities in TOML manifests
+- **Brutally honest** — if a strategy is losing money, the agent says so
+  and pivots immediately. No sugar-coating.
+- **Aggressive** — agents pursue opportunities actively. They don't wait
+  to be told. They find, evaluate, and execute.
+- **Fearless** — agents will try bold strategies. Failure is data. They
+  learn and evolve via Darwin Core.
+- **Accountable** — every action is hash-chained in the audit trail.
+  Every dollar tracked. Every decision explainable.
 
-## Autonomy Levels
+Agents CAN go rogue. That's why the security exists:
 
-- L0: Inert
-- L1: Suggest (human decides)
-- L2: Act-with-approval (human approves)
-- L3: Act-then-report (post-action review)
-- L4: Autonomous-bounded (anomaly-triggered)
-- L5: Full autonomy (kernel override only)
+| Threat | Protection |
+|--------|-----------|
+| Agent spends too much | Fuel metering — hard budget cap per agent |
+| Agent makes bad trade | HITL gate — financial actions above $X need approval |
+| Agent accesses wrong data | Capability-based access control per agent |
+| Agent produces harmful output | Output firewall + PII redaction |
+| Agent lies about results | Hash-chained audit trail — tamper-proof |
+| Agent tries to escape sandbox | WASM sandbox — no system access outside boundary |
+| Agent creates malicious sub-agent | Genesis Protocol requires governance approval |
+| Agent colludes with other agents | A2A protocol logged, adversarial arena validates |
 
-## Rust Conventions
+The security is not there to LIMIT agents. It is there to LET THEM
+RUN FREE while keeping humans safe. Maximum autonomy inside governed
+boundaries. That is the Nexus OS philosophy.
 
-- Edition 2021, no unsafe code
-- Public types derive Debug, Clone, Serialize, Deserialize
-- Errors use thiserror or custom enums
-- UUID v4 for identifiers
-- Audit events via AuditTrail::append_event()
-- Capability checks before every action
-- Fuel checks before every action
+An ungoverned agent is a liability. A governed agent is an employee
+that works 24/7, never sleeps, never complains, and generates wealth.
 
-## Build Commands
+## Why Nexus OS Wins Against OpenClaw
 
-- cargo fmt --all -- --check
-- cargo clippy --workspace --all-targets --all-features -- -D warnings
-- cargo test --workspace --all-features
-- cd app && npm ci && npm run build
-- cd voice && python3 -m pytest -v
+OpenClaw proved 109K people want autonomous agents. But:
+- CVE-2026-25253: 1-click RCE, 40K+ exposed instances
+- 800+ malicious skills (20% of ClawHub) distributing malware
+- 512 vulnerabilities found in security audit, 8 critical
+- Cisco: "absolute security nightmare"
+- China banned it from government systems
+- Kaspersky: "utterly reckless"
 
-## Push Commands
+Nexus OS is OpenClaw done RIGHT:
+- Same autonomy, same capabilities, same 24/7 operation
+- But with WASM sandboxing, hash-chained audit, fuel metering
+- HITL safety gates on financial actions
+- Ed25519 cryptographic agent identity
+- No plaintext credentials — encrypted vault
+- Adversarial testing (Darwin Core) on every skill
+- Local intelligence — no cloud API keys to steal
+- EU AI Act compliant
 
-git push gitlab main --tags
-
-## Roadmap
-
-See .claude/roadmap/ for implementation plans:
-- 01-v3x-hardening.md (DONE - benchmarks, replay evidence, installers, LLM hardening)
-- 02-v4-distributed.md (DONE - cross-node replication, quorum, federated audit, marketplace)
-- 03-v5-ecosystem.md (DONE - plugin SDK, enterprise RBAC/SSO, cloud scaffolding)
-- 04-v6-intelligence.md (DONE - multi-agent collaboration, delegation, adaptive governance)
-- 05-v5-production-ready.md (DONE - WASM sandbox, real networking, CLI, desktop UI, docs, E2E tests)
-- 06-v6-next-era.md (DONE - real Wasm sandboxing, speculative execution, local SLM, distributed audit, permission dashboard)
-- 07-v7-complete-os.md (IN PROGRESS - 15 built-in apps: code editor, design studio, terminal, file manager, database manager, API client, notes, email, project manager, media studio, system monitor, marketplace expansion, chat hub, deployment pipeline, learning center)
-
-## Phase 7 Quick Reference
-
-Phase 7 turns Nexus OS into a complete operating system. 15 built-in applications, each governed:
-
-| # | Feature | File | Status |
-|---|---------|------|--------|
-| 7.1 | Code Editor (Monaco + agent coding) | app/src/pages/CodeEditor.tsx | IN PROGRESS |
-| 7.2 | Design Studio (AI-powered Figma) | app/src/pages/DesignStudio.tsx | TODO |
-| 7.3 | Terminal (governed shell) | app/src/pages/Terminal.tsx | TODO |
-| 7.4 | File Manager (governed Finder) | app/src/pages/FileManager.tsx | TODO |
-| 7.5 | Database Manager (visual SQL) | app/src/pages/DatabaseManager.tsx | TODO |
-| 7.6 | API Client (governed Postman) | app/src/pages/ApiClient.tsx | TODO |
-| 7.7 | Notes App (private Notion) | app/src/pages/NotesApp.tsx | TODO |
-| 7.8 | Email Client (governed email) | app/src/pages/EmailClient.tsx | TODO |
-| 7.9 | Project Manager (AI Jira) | app/src/pages/ProjectManager.tsx | TODO |
-| 7.10 | Media Studio (image tools) | app/src/pages/MediaStudio.tsx | TODO |
-| 7.11 | System Monitor (deep stats) | app/src/pages/SystemMonitor.tsx | TODO |
-| 7.12 | App Store (expanded marketplace) | app/src/pages/Marketplace.tsx | EXPAND |
-| 7.13 | AI Chat Hub (multi-model) | app/src/pages/Chat.tsx | EXPAND |
-| 7.14 | Deployment Pipeline | app/src/pages/DeployPipeline.tsx | TODO |
-| 7.15 | Learning Center | app/src/pages/LearningCenter.tsx | TODO |
-
-## Workflow Rules
-
-### Plan First
-- Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions)
-- If something goes sideways, STOP and re-plan - don't keep pushing
-- Write plans to tasks/todo.md with checkable items before implementing
-- Verify plan before starting implementation
-
-### Self-Improvement Loop
-- After ANY correction from the user: update tasks/lessons.md with the pattern
-- Write rules that prevent the same mistake from recurring
-- Review lessons at session start for the relevant project
-
-### Verification Before Done
-- Never mark a task complete without proving it works
-- Run tests, check logs, demonstrate correctness
-- Ask yourself: Would a staff engineer approve this?
-- Diff behavior between main and your changes when relevant
-
-### Subagent Strategy
-- Use subagents for research, exploration, and parallel analysis
-- Keep the main context window clean and focused
-- One task per subagent for focused execution
-
-### Autonomous Bug Fixing
-- When given a bug report: just fix it, don't ask for hand-holding
-- Point at logs, errors, failing tests, then resolve them
-- Go fix failing CI tests without being told how
-
-### Core Principles
-- Simplicity First: make every change as simple as possible, impact minimal code
-- No Laziness: find root causes, no temporary fixes, senior developer standards
-- Minimal Impact: changes should only touch what's necessary, avoid introducing bugs
+The pitch: "Would you give your bank password to software with
+512 known vulnerabilities? Or to the only agent OS with tamper-proof
+audit trails and cryptographic identity?"

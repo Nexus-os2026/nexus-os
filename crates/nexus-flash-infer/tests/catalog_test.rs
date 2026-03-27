@@ -1,5 +1,5 @@
 use nexus_flash_infer::catalog::ModelCatalog;
-use nexus_flash_infer::types::{HardwareInfo, ModelSpecialization, SsdType};
+use nexus_flash_infer::types::{HardwareInfo, ModelSpecialization, RamType, SsdType};
 
 fn test_hw() -> HardwareInfo {
     HardwareInfo {
@@ -12,6 +12,8 @@ fn test_hw() -> HardwareInfo {
         ssd_type: SsdType::NVMe,
         ssd_read_speed_mb_s: 3500,
         numa_nodes: 1,
+        ram_type: RamType::DDR5,
+        mem_bandwidth_gbps: 11.0,
     }
 }
 

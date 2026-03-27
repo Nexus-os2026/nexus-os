@@ -7,5 +7,5 @@
   "fuel_budget": 100000,
   "schedule": "0 9 * * 1",
   "default_goal": "Produce the weekly executive briefing and rebalance ecosystem fuel toward the highest-performing governed agents.",
-  "llm_model": "qwen3.5:35b"
+  "llm_model": "auto"
 }

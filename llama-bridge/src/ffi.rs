@@ -137,6 +137,7 @@ extern "C" {
     ) -> i32;
     pub fn llama_token_eos(vocab: *const LlamaVocab) -> LlamaToken;
     pub fn llama_token_bos(vocab: *const LlamaVocab) -> LlamaToken;
+    pub fn llama_vocab_is_eog(vocab: *const LlamaVocab, token: LlamaToken) -> bool;
 
     // ── Batch ──────────────────────────────────────────────────────
     pub fn llama_batch_init(n_tokens: i32, embd: i32, n_seq_max: i32) -> LlamaBatch;
@@ -226,4 +227,11 @@ extern "C" {
     /// Size of real `llama_model_params` and `llama_context_params` structs.
     pub fn nexus_sizeof_model_params() -> usize;
     pub fn nexus_sizeof_context_params() -> usize;
+}
+
+// ── System memory management ──────────────────────────────────────
+extern "C" {
+    /// Force glibc to return freed memory to the OS.
+    /// `pad` bytes are retained; pass 0 to release everything possible.
+    pub fn malloc_trim(pad: usize) -> i32;
 }

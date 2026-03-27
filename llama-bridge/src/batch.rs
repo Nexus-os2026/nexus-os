@@ -23,13 +23,27 @@ pub fn free_batch(batch: ffi::LlamaBatch) {
 /// # Safety
 /// `batch` must be a valid batch allocated with capacity >= `tokens.len()`.
 pub unsafe fn fill_batch_prompt(batch: &mut ffi::LlamaBatch, tokens: &[ffi::LlamaToken]) {
+    fill_batch_prompt_at(batch, tokens, 0, true);
+}
+
+/// Fill a batch with prompt tokens starting at a given position offset.
+/// `compute_last_logits`: if true, only the last token gets logits computed.
+///
+/// # Safety
+/// `batch` must be a valid batch with capacity >= `tokens.len()`.
+pub unsafe fn fill_batch_prompt_at(
+    batch: &mut ffi::LlamaBatch,
+    tokens: &[ffi::LlamaToken],
+    pos_offset: i32,
+    compute_last_logits: bool,
+) {
     batch.n_tokens = tokens.len() as i32;
     for (i, &tok) in tokens.iter().enumerate() {
         if !batch.token.is_null() {
             *batch.token.add(i) = tok;
         }
         if !batch.pos.is_null() {
-            *batch.pos.add(i) = i as i32;
+            *batch.pos.add(i) = pos_offset + i as i32;
         }
         if !batch.n_seq_id.is_null() {
             *batch.n_seq_id.add(i) = 1;
@@ -41,8 +55,11 @@ pub unsafe fn fill_batch_prompt(batch: &mut ffi::LlamaBatch, tokens: &[ffi::Llam
             }
         }
         if !batch.logits.is_null() {
-            // Only compute logits for the last token
-            *batch.logits.add(i) = if i == tokens.len() - 1 { 1 } else { 0 };
+            *batch.logits.add(i) = if compute_last_logits && i == tokens.len() - 1 {
+                1
+            } else {
+                0
+            };
         }
     }
 }

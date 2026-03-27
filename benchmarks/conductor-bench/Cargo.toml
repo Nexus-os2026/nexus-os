@@ -1,0 +1,66 @@
+[package]
+name = "nexus-conductor-benchmark"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "conductor-bench"
+path = "src/main.rs"
+
+[[bin]]
+name = "memory-profile"
+path = "src/memory_profile.rs"
+
+[[bin]]
+name = "audit-retention-bench"
+path = "src/audit_retention_bench.rs"
+
+[[bin]]
+name = "inference-consistency-bench"
+path = "src/inference_consistency_bench.rs"
+
+[[bin]]
+name = "cloud-models-bench"
+path = "src/cloud_models_bench.rs"
+
+[[bin]]
+name = "local-vs-cloud-battle"
+path = "src/local_vs_cloud_battle.rs"
+
+[[bin]]
+name = "nim-cloud-bench"
+path = "src/nim_cloud_bench.rs"
+
+[[bin]]
+name = "darwin-drift-bench"
+path = "src/darwin_drift_bench.rs"
+
+[[bin]]
+name = "audit-throughput-bench"
+path = "src/audit_throughput_bench.rs"
+
+[[bin]]
+name = "multiagent-coordination-bench"
+path = "src/multiagent_coordination_bench.rs"
+
+[[bin]]
+name = "genesis-protocol-bench"
+path = "src/genesis_protocol_bench.rs"
+
+[[bin]]
+name = "real-battery-validation"
+path = "src/real_battery_validation.rs"
+
+[[bin]]
+name = "real-agent-validation"
+path = "src/real_agent_validation.rs"
+
+[dependencies]
+nexus-kernel = { path = "../../kernel" }
+nexus-capability-measurement = { path = "../../crates/nexus-capability-measurement" }
+tokio = { version = "1", features = ["full"] }
+crossbeam = "0.8"
+uuid = { version = "1.10", features = ["v4"] }
+serde_json = "1.0"

@@ -7,6 +7,7 @@
 pub mod agent_lifecycle;
 pub mod api;
 pub mod browser;
+pub mod code_exec;
 pub mod cognitive_param;
 pub mod computer_use;
 pub mod docker;
@@ -25,6 +26,7 @@ pub mod web;
 pub use agent_lifecycle::AgentLifecycleActuator;
 pub use api::GovernedApiClient;
 pub use browser::BrowserActuator;
+pub use code_exec::CodeExecuteActuator;
 pub use cognitive_param::{
     AlgorithmSelectionActuator, CognitiveParamActuator, CounterfactualActuator,
     EcosystemDesignActuator, ModelOrchestrationActuator, TemporalPlanActuator,
@@ -105,6 +107,7 @@ impl ActuatorRegistry {
         registry.register(Box::new(EcosystemDesignActuator));
         registry.register(Box::new(CounterfactualActuator));
         registry.register(Box::new(TemporalPlanActuator));
+        registry.register(Box::new(CodeExecuteActuator));
         registry
     }
 
@@ -276,6 +279,7 @@ impl ActuatorRegistry {
             PlannedAction::DesignAgentEcosystem { .. } => "ecosystem_design",
             PlannedAction::RunCounterfactual { .. } => "counterfactual",
             PlannedAction::TemporalPlan { .. } => "temporal_plan",
+            PlannedAction::CodeExecute { .. } => "code_execute",
             _ => return Err(ActuatorError::ActionNotHandled),
         };
 
@@ -372,6 +376,7 @@ fn estimate_action_cost(action: &PlannedAction) -> f64 {
         PlannedAction::DesignAgentEcosystem { .. } => 20.0,
         PlannedAction::RunCounterfactual { alternatives, .. } => 2.0 + alternatives.len() as f64,
         PlannedAction::TemporalPlan { .. } => 4.0,
+        PlannedAction::CodeExecute { .. } => 8.0,
         _ => 0.0,
     }
 }
@@ -412,7 +417,7 @@ mod tests {
     #[test]
     fn registry_with_defaults() {
         let registry = ActuatorRegistry::with_defaults();
-        assert_eq!(registry.actuators.len(), 21);
+        assert_eq!(registry.actuators.len(), 22);
         assert!(registry.actuators.contains_key("governed_filesystem"));
         assert!(registry.actuators.contains_key("governed_shell"));
         assert!(registry.actuators.contains_key("docker_actuator"));
@@ -434,6 +439,7 @@ mod tests {
         assert!(registry.actuators.contains_key("ecosystem_design"));
         assert!(registry.actuators.contains_key("counterfactual"));
         assert!(registry.actuators.contains_key("temporal_plan"));
+        assert!(registry.actuators.contains_key("code_execute"));
     }
 
     #[test]
@@ -617,5 +623,144 @@ mod tests {
                 action.action_type()
             );
         }
+    }
+
+    #[test]
+    fn code_execute_routed_and_runs() {
+        let tmp = TempDir::new().unwrap();
+        let ctx = make_context(tmp.path());
+        let registry = ActuatorRegistry::with_defaults();
+        let mut audit = AuditTrail::new();
+
+        let action = PlannedAction::CodeExecute {
+            language: "bash".into(),
+            code: "echo 'tool system works'".into(),
+            timeout_secs: Some(5),
+        };
+        let result = registry.execute_action(&action, &ctx, &mut audit).unwrap();
+        assert!(result.success);
+        assert!(result.output.contains("tool system works"));
+        assert_eq!(result.fuel_cost, 8.0);
+    }
+
+    /// Full-chain integration: write file → read file → run code → verify output.
+    /// This exercises the entire tool pipeline through the ActuatorRegistry with
+    /// governance checks, fuel tracking, and audit trail.
+    #[test]
+    fn full_tool_chain_write_code_read() {
+        let tmp = TempDir::new().unwrap();
+        let ctx = make_context(tmp.path());
+        let registry = ActuatorRegistry::with_defaults();
+        let mut audit = AuditTrail::new();
+
+        // Step 1: Write data file
+        let write_action = PlannedAction::FileWrite {
+            path: "data.json".into(),
+            content: r#"{"stories": ["AI breakthrough", "Rust 2.0", "Quantum computing"]}"#.into(),
+        };
+        let r = registry
+            .execute_action(&write_action, &ctx, &mut audit)
+            .unwrap();
+        assert!(r.success, "file write failed: {}", r.output);
+
+        // Step 2: Execute Python code that reads and processes the file
+        let python_code = [
+            "import json, os",
+            "data = json.load(open(os.path.join(os.getcwd(), 'data.json')))",
+            "stories = data['stories']",
+            "print('Found ' + str(len(stories)) + ' stories')",
+            "for i, story in enumerate(stories, 1):",
+            "    print(str(i) + '. ' + story)",
+            "summary = 'Summary: ' + str(len(stories)) + ' trending topics identified'",
+            "out = open(os.path.join(os.getcwd(), 'summary.md'), 'w')",
+            "out.write('# Daily Summary\\n\\n' + summary + '\\n')",
+            "out.close()",
+            "print(summary)",
+        ]
+        .join("\n");
+        let code_action = PlannedAction::CodeExecute {
+            language: "python3".into(),
+            code: python_code,
+            timeout_secs: Some(10),
+        };
+        let r = registry.execute_action(&code_action, &ctx, &mut audit);
+        match r {
+            Ok(result) => {
+                assert!(result.success, "code exec failed: {}", result.output);
+                assert!(result.output.contains("Found 3 stories"));
+                assert!(result.output.contains("Summary: 3 trending topics"));
+            }
+            Err(ActuatorError::IoError(e)) if e.contains("spawn python3") => {
+                // python3 not available — skip rest of test
+                return;
+            }
+            Err(e) => panic!("unexpected error: {e:?}"),
+        }
+
+        // Step 3: Read back the generated summary
+        let read_action = PlannedAction::FileRead {
+            path: "summary.md".into(),
+        };
+        let r = registry
+            .execute_action(&read_action, &ctx, &mut audit)
+            .unwrap();
+        assert!(r.success);
+        assert!(r.output.contains("Daily Summary"));
+        assert!(r.output.contains("3 trending topics"));
+
+        // Step 4: Run shell command to verify file exists
+        let shell_action = PlannedAction::ShellCommand {
+            command: "cat".into(),
+            args: vec!["summary.md".into()],
+        };
+        let r = registry
+            .execute_action(&shell_action, &ctx, &mut audit)
+            .unwrap();
+        assert!(r.success);
+        assert!(r.output.contains("Daily Summary"));
+
+        // Verify audit trail has events for all 4 steps
+        assert!(
+            audit.events().len() >= 4,
+            "expected at least 4 audit events, got {}",
+            audit.events().len()
+        );
+    }
+
+    /// Test that CodeExecute is properly governed — blocks dangerous code.
+    #[test]
+    fn code_execute_blocks_dangerous_patterns() {
+        let tmp = TempDir::new().unwrap();
+        let ctx = make_context(tmp.path());
+        let registry = ActuatorRegistry::with_defaults();
+        let mut audit = AuditTrail::new();
+
+        // Network access attempt
+        let action = PlannedAction::CodeExecute {
+            language: "python3".into(),
+            code: "import requests; requests.get('http://evil.com')".into(),
+            timeout_secs: None,
+        };
+        let err = registry
+            .execute_action(&action, &ctx, &mut audit)
+            .unwrap_err();
+        assert!(
+            matches!(err, ActuatorError::CommandBlocked(_)),
+            "expected CommandBlocked, got {err:?}"
+        );
+
+        // Shell escape attempt
+        let action = PlannedAction::CodeExecute {
+            language: "node".into(),
+            code: "require('child_process').execSync('rm -rf /')".into(),
+            timeout_secs: None,
+        };
+        let err = registry
+            .execute_action(&action, &ctx, &mut audit)
+            .unwrap_err();
+        assert!(
+            matches!(err, ActuatorError::CommandBlocked(_)),
+            "expected CommandBlocked, got {err:?}"
+        );
     }
 }

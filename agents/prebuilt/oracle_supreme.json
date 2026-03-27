@@ -6,5 +6,5 @@
   "autonomy_level": 6,
   "fuel_budget": 150000,
   "default_goal": "Run a governed multi-method research investigation, then attack your own conclusions until the surviving result is robust.",
-  "llm_model": "qwen3.5:35b"
+  "llm_model": "auto"
 }

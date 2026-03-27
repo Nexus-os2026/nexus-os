@@ -3,7 +3,7 @@ use std::path::Path;
 use nexus_flash_infer::backend::ModelFormat;
 use nexus_flash_infer::llama_backend::LlamaBackend;
 use nexus_flash_infer::registry::{detect_format, BackendRegistry};
-use nexus_flash_infer::types::{HardwareInfo, SsdType};
+use nexus_flash_infer::types::{HardwareInfo, RamType, SsdType};
 
 fn test_hw() -> HardwareInfo {
     HardwareInfo {
@@ -16,6 +16,8 @@ fn test_hw() -> HardwareInfo {
         ssd_type: SsdType::NVMe,
         ssd_read_speed_mb_s: 3500,
         numa_nodes: 1,
+        ram_type: RamType::DDR5,
+        mem_bandwidth_gbps: 11.0,
     }
 }
 

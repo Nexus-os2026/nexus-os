@@ -368,6 +368,7 @@ export default function AiChatHub() {
   const [teachModeActive, setTeachModeActive] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const streamingMsgIdRef = useRef<string | null>(null);
 
@@ -377,8 +378,16 @@ export default function AiChatHub() {
   const logAudit = useCallback((msg: string) => setAuditLog(prev => [msg, ...prev].slice(0, 30)), []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeConv?.messages.length, activeConv?.messages[activeConv?.messages.length - 1]?.content]);
+    // Scroll the messages container to the bottom. Using scrollTop on the
+    // container itself is more reliable than scrollIntoView when the
+    // container uses flexbox with a ::before spacer.
+    const el = messagesContainerRef.current;
+    if (el) {
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+    }
+  }, [activeConv?.messages.length, activeConv?.messages[activeConv?.messages.length - 1]?.content, activeConvId]);
 
   /* ─── persist conversations to localStorage ─── */
   useEffect(() => {
@@ -1388,7 +1397,7 @@ export default function AiChatHub() {
             )}
 
             {/* messages */}
-            <div className="ch-messages">
+            <div className="ch-messages" ref={messagesContainerRef}>
               {models.length === 0 && (
                 <div className="ch-empty-chat">
                   <div className="ch-empty-icon">◈</div>

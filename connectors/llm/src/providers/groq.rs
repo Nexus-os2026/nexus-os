@@ -5,6 +5,27 @@ use super::{LlmProvider, LlmResponse, ProviderRequest};
 use nexus_kernel::errors::AgentError;
 use std::env;
 
+/// Available Groq models — free tier with generous rate limits.
+pub const GROQ_MODELS: &[(&str, &str)] = &[
+    (
+        "llama-3.3-70b-versatile",
+        "Llama 3.3 70B Versatile — Best all-round, 128K ctx",
+    ),
+    (
+        "llama-3.1-70b-versatile",
+        "Llama 3.1 70B Versatile — Stable workhorse, 128K ctx",
+    ),
+    (
+        "llama-3.1-8b-instant",
+        "Llama 3.1 8B Instant — Ultra-fast small model, 128K ctx",
+    ),
+    (
+        "gemma2-9b-it",
+        "Gemma 2 9B IT — Google's efficient instruction-tuned",
+    ),
+    ("mistral-7b", "Mistral 7B — Fast general-purpose"),
+];
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GroqProvider {
     api_key: Option<String>,

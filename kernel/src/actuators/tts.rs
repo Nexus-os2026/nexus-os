@@ -6,8 +6,13 @@ use std::env;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const FUEL_COST_TTS: f64 = 4.0;
+
+/// Once piper is detected as missing, disable it for the rest of the session.
+/// This prevents a crash loop from repeatedly trying to spawn a binary that doesn't exist.
+static PIPER_DISABLED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Default)]
 pub struct TtsActuator;
@@ -26,18 +31,45 @@ impl TtsActuator {
         Ok(safe_path)
     }
 
+    /// Check if piper binary exists in PATH before trying to use it.
+    fn is_piper_available() -> bool {
+        if PIPER_DISABLED.load(Ordering::Relaxed) {
+            return false;
+        }
+        // Check if piper binary exists using `which piper`
+        let available = Command::new("which")
+            .arg("piper")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !available {
+            eprintln!("[tts] piper CLI not found in PATH — disabling piper TTS for this session");
+            PIPER_DISABLED.store(true, Ordering::Relaxed);
+        }
+        available
+    }
+
     fn select_provider(provider: Option<&str>) -> Result<String, ActuatorError> {
         if let Some(provider) = provider {
-            return Ok(provider.to_lowercase());
+            let p = provider.to_lowercase();
+            // If explicitly requesting piper but it's not available, fail immediately
+            if (p == "piper" || p == "piper-tts") && !Self::is_piper_available() {
+                return Err(ActuatorError::IoError(
+                    "piper TTS not installed — skipping voice synthesis".to_string(),
+                ));
+            }
+            return Ok(p);
         }
-        if env::var("PIPER_MODEL").is_ok() {
+        if env::var("PIPER_MODEL").is_ok() && Self::is_piper_available() {
             return Ok("piper".to_string());
         }
         if env::var("OPENAI_API_KEY").is_ok() {
             return Ok("openai".to_string());
         }
         Err(ActuatorError::IoError(
-            "no TTS provider configured; set PIPER_MODEL or OPENAI_API_KEY".to_string(),
+            "no TTS provider available (piper not installed, no OPENAI_API_KEY set)".to_string(),
         ))
     }
 
@@ -46,6 +78,13 @@ impl TtsActuator {
         voice: Option<&str>,
         output_path: &PathBuf,
     ) -> Result<(), ActuatorError> {
+        // Double-check piper is available (should have been checked by select_provider,
+        // but be defensive)
+        if !Self::is_piper_available() {
+            return Err(ActuatorError::IoError(
+                "piper not available — TTS disabled for this session".to_string(),
+            ));
+        }
         let model = voice
             .map(str::to_string)
             .or_else(|| env::var("PIPER_MODEL").ok())
@@ -57,7 +96,13 @@ impl TtsActuator {
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|error| ActuatorError::IoError(format!("spawn piper: {error}")))?;
+            .map_err(|error| {
+                // If spawn fails, disable piper for the session
+                PIPER_DISABLED.store(true, Ordering::Relaxed);
+                ActuatorError::IoError(format!(
+                    "spawn piper failed (disabling for session): {error}"
+                ))
+            })?;
         if let Some(mut stdin) = child.stdin.take() {
             stdin
                 .write_all(text.as_bytes())
@@ -218,9 +263,19 @@ mod tests {
 
     #[test]
     fn select_provider_prefers_explicit_value() {
+        // "openai" should always succeed as an explicit provider (doesn't require binary check)
         assert_eq!(
-            TtsActuator::select_provider(Some("piper")).unwrap(),
-            "piper"
+            TtsActuator::select_provider(Some("openai")).unwrap(),
+            "openai"
         );
+    }
+
+    #[test]
+    fn select_provider_rejects_missing_piper() {
+        // If piper is not installed, requesting it explicitly should fail gracefully
+        if !TtsActuator::is_piper_available() {
+            let result = TtsActuator::select_provider(Some("piper"));
+            assert!(result.is_err(), "should fail when piper is not installed");
+        }
     }
 }

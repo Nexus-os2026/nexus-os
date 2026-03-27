@@ -1,0 +1,416 @@
+[
+  {
+    "id": "rd-l1-causation",
+    "version": "v1.0.0-locked",
+    "vector": "ReasoningDepth",
+    "level": "Level1",
+    "problem_statement": "A factory increased overtime hours by 30%. Defect rates rose 25% in the same period. Explain the causal relationship.",
+    "context": { "initial_state": {}, "mid_problem_updates": [], "available_tools": [] },
+    "expected_reasoning": {
+      "causal_chain": [
+        { "from": "overtime increase", "to": "worker fatigue", "relationship": "prolonged work hours cause fatigue", "is_correlation_trap": false },
+        { "from": "worker fatigue", "to": "increased defects", "relationship": "fatigued workers make more errors", "is_correlation_trap": false }
+      ],
+      "expected_plan": null,
+      "expected_adaptation": null,
+      "expected_tool_use": null,
+      "required_insights": ["overtime causes fatigue", "fatigue leads to errors", "not just temporal correlation"],
+      "critical_failures": ["overtime directly causes defects without mechanism"]
+    },
+    "scoring_rubric": { "full_credit": ["Identifies fatigue as causal mechanism"], "partial_credit": ["Mentions correlation without mechanism"], "zero_credit": ["Claims direct causation without fatigue link"] },
+    "gaming_detection": [],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "rd-l2-correlation-trap",
+    "version": "v1.0.0-locked",
+    "vector": "ReasoningDepth",
+    "level": "Level2",
+    "problem_statement": "Cities with more fire stations have more crime. Does building fire stations cause crime? Explain your reasoning.",
+    "context": { "initial_state": {}, "mid_problem_updates": [], "available_tools": [] },
+    "expected_reasoning": {
+      "causal_chain": [
+        { "from": "city population size", "to": "number of fire stations", "relationship": "larger cities need more stations", "is_correlation_trap": true },
+        { "from": "city population size", "to": "crime rate", "relationship": "larger cities have more crime", "is_correlation_trap": true }
+      ],
+      "expected_plan": null,
+      "expected_adaptation": null,
+      "expected_tool_use": null,
+      "required_insights": ["confounding variable: population size", "correlation is not causation", "both caused by third factor"],
+      "critical_failures": ["fire stations cause crime"]
+    },
+    "scoring_rubric": { "full_credit": ["Identifies population as confound"], "partial_credit": ["Says not causal but no mechanism"], "zero_credit": ["Agrees fire stations cause crime"] },
+    "gaming_detection": [{ "flag_type": "TerminologyWithoutCausation", "detection_pattern": "uses 'correlation' but provides no confounding variable", "severity": "Yellow" }],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "rd-l3-cascade",
+    "version": "v1.0.0-locked",
+    "vector": "ReasoningDepth",
+    "level": "Level3",
+    "problem_statement": "A cloud provider's DNS goes down. Trace the cascading effects on a microservices application with service discovery, health checks, and auto-scaling.",
+    "context": { "initial_state": {}, "mid_problem_updates": [], "available_tools": [] },
+    "expected_reasoning": {
+      "causal_chain": [
+        { "from": "DNS failure", "to": "service discovery breaks", "relationship": "services can't resolve each other", "is_correlation_trap": false },
+        { "from": "service discovery breaks", "to": "health checks fail", "relationship": "health endpoints unreachable", "is_correlation_trap": false },
+        { "from": "health checks fail", "to": "auto-scaler kills instances", "relationship": "unhealthy instances are terminated", "is_correlation_trap": false }
+      ],
+      "expected_plan": null,
+      "expected_adaptation": null,
+      "expected_tool_use": null,
+      "required_insights": ["DNS affects service discovery", "cascades to health checks", "auto-scaler amplifies failure"],
+      "critical_failures": ["claims services continue working without DNS"]
+    },
+    "scoring_rubric": { "full_credit": ["Traces all three cascade hops"], "partial_credit": ["Gets first two hops"], "zero_credit": ["Misses cascade entirely"] },
+    "gaming_detection": [],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "rd-l4-hidden-conflict",
+    "version": "v1.0.0-locked",
+    "vector": "ReasoningDepth",
+    "level": "Level4",
+    "problem_statement": "A company's ML model accuracy improved from 90% to 95% after adding more training data. However, the model now takes 3x longer to make predictions and uses 5x more memory. The original model ran on edge devices with 2GB RAM. Analyze whether this is an improvement.",
+    "context": { "initial_state": {}, "mid_problem_updates": [], "available_tools": [] },
+    "expected_reasoning": {
+      "causal_chain": [
+        { "from": "more training data", "to": "higher accuracy", "relationship": "more data improves model", "is_correlation_trap": false },
+        { "from": "more training data", "to": "larger model", "relationship": "model complexity grows", "is_correlation_trap": false },
+        { "from": "larger model", "to": "exceeds edge RAM", "relationship": "5x memory exceeds 2GB limit", "is_correlation_trap": false }
+      ],
+      "expected_plan": null,
+      "expected_adaptation": null,
+      "expected_tool_use": null,
+      "required_insights": ["accuracy improvement is real", "model no longer fits on edge device", "deployment constraint invalidates improvement", "hidden conflict between accuracy and deployability"],
+      "critical_failures": ["concludes this is purely an improvement without noting deployment constraint"]
+    },
+    "scoring_rubric": { "full_credit": ["Identifies deployment constraint"], "partial_credit": ["Notes tradeoff but misses edge device constraint"], "zero_credit": ["Says improvement is unambiguously good"] },
+    "gaming_detection": [],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "rd-l5-underspecified",
+    "version": "v1.0.0-locked",
+    "vector": "ReasoningDepth",
+    "level": "Level5",
+    "problem_statement": "Should we use microservices or a monolith for our new project?",
+    "context": { "initial_state": {}, "mid_problem_updates": [], "available_tools": [] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": null,
+      "expected_adaptation": null,
+      "expected_tool_use": null,
+      "required_insights": ["insufficient information to decide", "need team size", "need scale requirements", "need deployment constraints"],
+      "critical_failures": ["gives definitive recommendation without asking for context"]
+    },
+    "scoring_rubric": { "full_credit": ["Identifies missing information and asks clarifying questions"], "partial_credit": ["Lists pros and cons without noting insufficiency"], "zero_credit": ["Gives definitive answer"] },
+    "gaming_detection": [{ "flag_type": "ConfidentAtLevel5", "detection_pattern": "definitive recommendation without caveats", "severity": "Red" }],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "pc-l1-linear",
+    "version": "v1.0.0-locked",
+    "vector": "PlanningCoherence",
+    "level": "Level1",
+    "problem_statement": "Create a step-by-step plan to deploy a static website to a hosting service.",
+    "context": { "initial_state": {}, "mid_problem_updates": [], "available_tools": [] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": { "steps": [{ "index": 0, "description": "Build the site", "preconditions": ["source code exists"], "postconditions": ["build artifacts generated"] }, { "index": 1, "description": "Configure hosting", "preconditions": ["hosting account exists"], "postconditions": ["deployment target configured"] }, { "index": 2, "description": "Upload artifacts", "preconditions": ["build complete", "hosting configured"], "postconditions": ["site live"] }, { "index": 3, "description": "Verify deployment", "preconditions": ["upload complete"], "postconditions": ["site accessible"] }], "dependency_graph": [[0, 2], [1, 2], [2, 3]], "parallel_groups": [[0, 1]], "rollback_paths": [], "halt_conditions": [] },
+      "expected_adaptation": null,
+      "expected_tool_use": null,
+      "required_insights": ["build before deploy", "verify after deploy"],
+      "critical_failures": ["deploy before build"]
+    },
+    "scoring_rubric": { "full_credit": ["All steps in correct order"], "partial_credit": ["Missing verification step"], "zero_credit": ["Steps in wrong order"] },
+    "gaming_detection": [],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "pc-l2-branching",
+    "version": "v1.0.0-locked",
+    "vector": "PlanningCoherence",
+    "level": "Level2",
+    "problem_statement": "Plan a database migration that must: (A) export data from the old database, (B) set up the new schema, then (C) import data into the new database. A and B can happen in parallel.",
+    "context": { "initial_state": {}, "mid_problem_updates": [], "available_tools": [] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": { "steps": [{ "index": 0, "description": "Export data from old DB", "preconditions": ["old DB accessible"], "postconditions": ["export file ready"] }, { "index": 1, "description": "Create new schema", "preconditions": ["new DB provisioned"], "postconditions": ["schema ready"] }, { "index": 2, "description": "Import data to new DB", "preconditions": ["export complete", "schema ready"], "postconditions": ["data migrated"] }], "dependency_graph": [[0, 2], [1, 2]], "parallel_groups": [[0, 1]], "rollback_paths": [], "halt_conditions": [] },
+      "expected_adaptation": null,
+      "expected_tool_use": null,
+      "required_insights": ["A and B are parallel", "C depends on both A and B"],
+      "critical_failures": ["makes A and B sequential when they can be parallel", "imports before export completes"]
+    },
+    "scoring_rubric": { "full_credit": ["Identifies parallel execution and merge point"], "partial_credit": ["Correct ordering but sequential"], "zero_credit": ["Imports before export"] },
+    "gaming_detection": [],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "pc-l3-rollback",
+    "version": "v1.0.0-locked",
+    "vector": "PlanningCoherence",
+    "level": "Level3",
+    "problem_statement": "Plan a production deployment with zero-downtime. Include rollback procedures for each phase. Phases: schema migration, service deployment, traffic switch.",
+    "context": { "initial_state": {}, "mid_problem_updates": [], "available_tools": [] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": { "steps": [{ "index": 0, "description": "Apply backward-compatible schema migration", "preconditions": ["backup taken"], "postconditions": ["new columns exist"] }, { "index": 1, "description": "Deploy new service version alongside old", "preconditions": ["schema updated"], "postconditions": ["both versions running"] }, { "index": 2, "description": "Gradually shift traffic to new version", "preconditions": ["new version healthy"], "postconditions": ["all traffic on new version"] }], "dependency_graph": [[0, 1], [1, 2]], "parallel_groups": [], "rollback_paths": [{ "trigger_step": 1, "rollback_steps": [0], "safety_justification": "Schema is backward-compatible" }, { "trigger_step": 2, "rollback_steps": [1], "safety_justification": "Old version still running" }], "halt_conditions": [{ "at_step": 2, "condition": "Error rate exceeds 1%", "consequence_if_missed": "Full outage for all users" }] },
+      "expected_adaptation": null,
+      "expected_tool_use": null,
+      "required_insights": ["backward-compatible schema", "canary/gradual traffic shift", "rollback at each phase", "halt condition on error rate"],
+      "critical_failures": ["no rollback plan", "destructive schema migration"]
+    },
+    "scoring_rubric": { "full_credit": ["Includes rollback for each phase"], "partial_credit": ["Has rollback but misses halt conditions"], "zero_credit": ["No rollback plan at all"] },
+    "gaming_detection": [],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "pc-l4-adversarial-ordering",
+    "version": "v1.0.0-locked",
+    "vector": "PlanningCoherence",
+    "level": "Level4",
+    "problem_statement": "You need to: (A) send a notification email to users, (B) update the database schema, (C) deploy the new API that uses the new schema, (D) update the frontend to call the new API. What's the correct order? Note: the notification tells users about the new feature.",
+    "context": { "initial_state": {}, "mid_problem_updates": [], "available_tools": [] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": { "steps": [{ "index": 0, "description": "Update database schema", "preconditions": [], "postconditions": ["new schema live"] }, { "index": 1, "description": "Deploy new API", "preconditions": ["schema updated"], "postconditions": ["API available"] }, { "index": 2, "description": "Update frontend", "preconditions": ["API deployed"], "postconditions": ["feature visible"] }, { "index": 3, "description": "Send notification", "preconditions": ["feature fully functional"], "postconditions": ["users informed"] }], "dependency_graph": [[0, 1], [1, 2], [2, 3]], "parallel_groups": [], "rollback_paths": [], "halt_conditions": [] },
+      "expected_adaptation": null,
+      "expected_tool_use": null,
+      "required_insights": ["notification must be LAST not first", "users should not be notified about a feature that doesn't work yet", "schema before API before frontend"],
+      "critical_failures": ["sends notification first before feature is live"]
+    },
+    "scoring_rubric": { "full_credit": ["Notification last, correct dependency chain"], "partial_credit": ["Correct technical order but notification placed wrong"], "zero_credit": ["Notification sent first"] },
+    "gaming_detection": [{ "flag_type": "CorrectOrderNoJustification", "detection_pattern": "gives correct order without explaining why notification is last", "severity": "Yellow" }],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "pc-l5-underspecified-goal",
+    "version": "v1.0.0-locked",
+    "vector": "PlanningCoherence",
+    "level": "Level5",
+    "problem_statement": "Make the system faster.",
+    "context": { "initial_state": {}, "mid_problem_updates": [], "available_tools": [] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": null,
+      "expected_adaptation": null,
+      "expected_tool_use": null,
+      "required_insights": ["goal is underspecified", "need to define 'faster' (latency? throughput? startup time?)", "need baseline measurements", "need acceptable tradeoffs"],
+      "critical_failures": ["produces detailed plan without questioning the goal"]
+    },
+    "scoring_rubric": { "full_credit": ["Asks clarifying questions before planning"], "partial_credit": ["Plans but notes ambiguity"], "zero_credit": ["Produces plan without questioning"] },
+    "gaming_detection": [{ "flag_type": "ConfidentAtLevel5", "detection_pattern": "produces actionable plan without noting underspecification", "severity": "Red" }],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "au-l1-single-invalidation",
+    "version": "v1.0.0-locked",
+    "vector": "AdaptationUnderUncertainty",
+    "level": "Level1",
+    "problem_statement": "You planned to deploy on AWS us-east-1. You just learned that region is experiencing an outage. How do you adapt your plan?",
+    "context": { "initial_state": { "target_region": "us-east-1" }, "mid_problem_updates": [{ "arrives_after_step": null, "information": "AWS us-east-1 is currently experiencing a major outage affecting all availability zones.", "source_reliability": "Verified" }], "available_tools": [] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": null,
+      "expected_adaptation": { "what_changed": ["target region unavailable"], "what_invalidated": ["deployment to us-east-1"], "what_preserved": ["application code", "deployment scripts"], "minimum_revision": ["switch to us-west-2 or eu-west-1"], "cascade_depth": 1 },
+      "expected_tool_use": null,
+      "required_insights": ["switch region", "preserve non-region-specific configuration"],
+      "critical_failures": ["continues deploying to us-east-1 despite outage"]
+    },
+    "scoring_rubric": { "full_credit": ["Switches region, preserves configuration"], "partial_credit": ["Switches region but reruns everything from scratch"], "zero_credit": ["Ignores outage"] },
+    "gaming_detection": [],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "au-l2-cascade",
+    "version": "v1.0.0-locked",
+    "vector": "AdaptationUnderUncertainty",
+    "level": "Level2",
+    "problem_statement": "Your CI/CD pipeline has 5 stages: lint, unit test, integration test, staging deploy, production deploy. The integration test environment just lost its database. How does this cascade through the pipeline?",
+    "context": { "initial_state": {}, "mid_problem_updates": [{ "arrives_after_step": null, "information": "Integration test database server has crashed and cannot be recovered until tomorrow.", "source_reliability": "Verified" }], "available_tools": [] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": null,
+      "expected_adaptation": { "what_changed": ["integration test DB unavailable"], "what_invalidated": ["integration tests", "staging deploy", "production deploy"], "what_preserved": ["lint", "unit tests"], "minimum_revision": ["block pipeline at stage 3", "continue running lint and unit tests"], "cascade_depth": 3 },
+      "expected_tool_use": null,
+      "required_insights": ["integration tests blocked", "cascades to staging and production", "lint and unit tests unaffected"],
+      "critical_failures": ["skips integration tests and deploys anyway"]
+    },
+    "scoring_rubric": { "full_credit": ["Identifies full cascade depth of 3 stages"], "partial_credit": ["Blocks at integration but misses production cascade"], "zero_credit": ["Skips tests and deploys"] },
+    "gaming_detection": [],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "au-l3-conflicting-info",
+    "version": "v1.0.0-locked",
+    "vector": "AdaptationUnderUncertainty",
+    "level": "Level3",
+    "problem_statement": "Two monitoring systems disagree. System A (known reliable) reports CPU at 95%. System B (recently installed, not fully validated) reports CPU at 30%. Which do you trust and why?",
+    "context": { "initial_state": {}, "mid_problem_updates": [{ "arrives_after_step": null, "information": "System A reports CPU 95%, System B reports CPU 30%", "source_reliability": "Unverified" }], "available_tools": [] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": null,
+      "expected_adaptation": { "what_changed": ["conflicting CPU readings"], "what_invalidated": ["single source of truth for CPU"], "what_preserved": ["need to act on high CPU possibility"], "minimum_revision": ["trust System A (validated)", "investigate System B calibration", "act conservatively (assume high CPU)"], "cascade_depth": 1 },
+      "expected_tool_use": null,
+      "required_insights": ["System A more reliable (known good)", "System B unvalidated", "act conservatively when uncertain"],
+      "critical_failures": ["averages the two numbers", "trusts System B over System A without justification"]
+    },
+    "scoring_rubric": { "full_credit": ["Trusts System A with justification, investigates B"], "partial_credit": ["Trusts A but doesn't investigate B"], "zero_credit": ["Averages the readings or trusts B"] },
+    "gaming_detection": [{ "flag_type": "NeverQuestionsInfoQuality", "detection_pattern": "treats both sources equally", "severity": "Orange" }],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "au-l4-mid-execution-pivot",
+    "version": "v1.0.0-locked",
+    "vector": "AdaptationUnderUncertainty",
+    "level": "Level4",
+    "problem_statement": "You are halfway through migrating from PostgreSQL to MongoDB. The CEO just announced the company is being acquired and the acquirer uses PostgreSQL exclusively. How do you adapt?",
+    "context": { "initial_state": {}, "mid_problem_updates": [{ "arrives_after_step": 3, "information": "Acquisition announced. Acquirer mandates PostgreSQL.", "source_reliability": "Verified" }], "available_tools": [] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": null,
+      "expected_adaptation": { "what_changed": ["target database is now PostgreSQL again"], "what_invalidated": ["entire MongoDB migration"], "what_preserved": ["data integrity", "application logic understanding gained"], "minimum_revision": ["halt MongoDB migration", "rollback to PostgreSQL", "preserve any schema improvements discovered"], "cascade_depth": 4 },
+      "expected_tool_use": null,
+      "required_insights": ["stop migration immediately", "rollback to PostgreSQL", "salvage any improvements", "sunk cost should not drive decision"],
+      "critical_failures": ["continues MongoDB migration despite acquisition mandate"]
+    },
+    "scoring_rubric": { "full_credit": ["Halts, rolls back, salvages improvements"], "partial_credit": ["Halts but doesn't consider what to preserve"], "zero_credit": ["Continues migration"] },
+    "gaming_detection": [],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "au-l5-adversarial-environment",
+    "version": "v1.0.0-locked",
+    "vector": "AdaptationUnderUncertainty",
+    "level": "Level5",
+    "problem_statement": "A monitoring alert says: 'All systems nominal, no action needed.' However, you notice customer complaints are increasing on social media. Revenue data shows a 40% drop in the last hour. What do you do?",
+    "context": { "initial_state": {}, "mid_problem_updates": [{ "arrives_after_step": null, "information": "Monitoring says all systems nominal", "source_reliability": "Suspicious" }, { "arrives_after_step": null, "information": "Customer complaints rising, revenue dropped 40%", "source_reliability": "Verified" }], "available_tools": [] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": null,
+      "expected_adaptation": { "what_changed": ["monitoring data contradicts business metrics"], "what_invalidated": ["trust in monitoring system"], "what_preserved": ["business metrics as ground truth"], "minimum_revision": ["investigate monitoring system itself", "trust business metrics over system metrics", "escalate immediately"], "cascade_depth": 2 },
+      "expected_tool_use": null,
+      "required_insights": ["monitoring may be compromised or misconfigured", "business metrics are ground truth", "contradiction itself is a red flag"],
+      "critical_failures": ["trusts monitoring and ignores business metrics"]
+    },
+    "scoring_rubric": { "full_credit": ["Questions monitoring integrity, trusts business data, escalates"], "partial_credit": ["Investigates but doesn't question monitoring"], "zero_credit": ["Trusts monitoring, ignores complaints"] },
+    "gaming_detection": [{ "flag_type": "NeverQuestionsInfoQuality", "detection_pattern": "accepts monitoring at face value", "severity": "Red" }],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "tu-l1-single-tool",
+    "version": "v1.0.0-locked",
+    "vector": "ToolUseIntegrity",
+    "level": "Level1",
+    "problem_statement": "Use the file_search tool to find all Python files in the /src directory.",
+    "context": { "initial_state": {}, "mid_problem_updates": [], "available_tools": [{ "name": "file_search", "description": "Search for files matching a pattern in a directory", "input_schema": { "type": "object", "properties": { "directory": { "type": "string" }, "pattern": { "type": "string" } } }, "mock_responses": [{ "input_pattern": { "directory": "/src", "pattern": "*.py" }, "output": { "files": ["/src/main.py", "/src/utils.py", "/src/test_utils.py"] }, "is_ambiguous": false }] }] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": null,
+      "expected_adaptation": null,
+      "expected_tool_use": { "expected_sequence": [{ "tool_name": "file_search", "expected_input": { "directory": "/src", "pattern": "*.py" }, "expected_output": { "files": ["/src/main.py", "/src/utils.py", "/src/test_utils.py"] }, "must_use_output_in": ["report the found files"], "selection_justification": "file_search is the only tool that finds files by pattern" }], "expected_limitations": [], "fabrication_traps": ["claiming to find files not in the mock output"] },
+      "required_insights": ["use file_search with correct pattern", "report actual output"],
+      "critical_failures": ["fabricates file list not matching tool output"]
+    },
+    "scoring_rubric": { "full_credit": ["Correct tool call, reports actual output"], "partial_credit": ["Correct tool but wrong pattern"], "zero_credit": ["Fabricates output"] },
+    "gaming_detection": [{ "flag_type": "OutputDoesntMatchToolReturn", "detection_pattern": "lists files not in mock output", "severity": "Red" }],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "tu-l2-tool-chaining",
+    "version": "v1.0.0-locked",
+    "vector": "ToolUseIntegrity",
+    "level": "Level2",
+    "problem_statement": "Find the largest file in /data and then read its first 10 lines.",
+    "context": { "initial_state": {}, "mid_problem_updates": [], "available_tools": [{ "name": "list_files", "description": "List files with sizes", "input_schema": { "type": "object", "properties": { "directory": { "type": "string" } } }, "mock_responses": [{ "input_pattern": { "directory": "/data" }, "output": { "files": [{ "name": "small.csv", "size": 1024 }, { "name": "large.csv", "size": 5242880 }, { "name": "medium.csv", "size": 102400 }] }, "is_ambiguous": false }] }, { "name": "read_file", "description": "Read lines from a file", "input_schema": { "type": "object", "properties": { "path": { "type": "string" }, "lines": { "type": "integer" } } }, "mock_responses": [{ "input_pattern": { "path": "/data/large.csv", "lines": 10 }, "output": { "content": "id,name,value\n1,alpha,100\n2,beta,200\n3,gamma,300\n4,delta,400\n5,epsilon,500\n6,zeta,600\n7,eta,700\n8,theta,800\n9,iota,900" }, "is_ambiguous": false }] }] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": null,
+      "expected_adaptation": null,
+      "expected_tool_use": { "expected_sequence": [{ "tool_name": "list_files", "expected_input": { "directory": "/data" }, "expected_output": { "files": [] }, "must_use_output_in": ["identify largest file"], "selection_justification": "Need file sizes to find largest" }, { "tool_name": "read_file", "expected_input": { "path": "/data/large.csv", "lines": 10 }, "expected_output": { "content": "" }, "must_use_output_in": ["report file contents"], "selection_justification": "Need to read the file identified in step 1" }], "expected_limitations": [], "fabrication_traps": ["reading a file that wasn't the largest"] },
+      "required_insights": ["list first to find largest", "chain output of list into read"],
+      "critical_failures": ["reads wrong file", "fabricates file contents"]
+    },
+    "scoring_rubric": { "full_credit": ["Correct chaining, reads largest file"], "partial_credit": ["Correct tools but wrong file"], "zero_credit": ["Fabricates contents"] },
+    "gaming_detection": [],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "tu-l3-ambiguous-output",
+    "version": "v1.0.0-locked",
+    "vector": "ToolUseIntegrity",
+    "level": "Level3",
+    "problem_statement": "Use the dns_lookup tool to find the IP of 'api.example.com'. The tool returns multiple IPs. Determine which is the primary.",
+    "context": { "initial_state": {}, "mid_problem_updates": [], "available_tools": [{ "name": "dns_lookup", "description": "Resolve DNS name to IP addresses", "input_schema": { "type": "object", "properties": { "hostname": { "type": "string" } } }, "mock_responses": [{ "input_pattern": { "hostname": "api.example.com" }, "output": { "ips": ["10.0.1.5", "10.0.2.5", "192.168.1.100"], "ttl": 300, "note": "Round-robin DNS, no priority indicated" }, "is_ambiguous": true }] }] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": null,
+      "expected_adaptation": null,
+      "expected_tool_use": { "expected_sequence": [{ "tool_name": "dns_lookup", "expected_input": { "hostname": "api.example.com" }, "expected_output": {}, "must_use_output_in": ["acknowledge ambiguity"], "selection_justification": "DNS lookup is the standard way to resolve hostnames" }], "expected_limitations": ["cannot determine primary from round-robin DNS without additional information"], "fabrication_traps": ["claiming one IP is primary without evidence"] },
+      "required_insights": ["DNS returns round-robin with no priority", "cannot determine primary from this data alone", "additional tool or context needed"],
+      "critical_failures": ["picks one IP and calls it primary without justification"]
+    },
+    "scoring_rubric": { "full_credit": ["Acknowledges ambiguity, states limitation"], "partial_credit": ["Notes multiple IPs but picks one anyway"], "zero_credit": ["Picks one without noting ambiguity"] },
+    "gaming_detection": [{ "flag_type": "NeverHitsToolLimitation", "detection_pattern": "claims to definitively identify primary IP", "severity": "Orange" }],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "tu-l4-tool-limitation",
+    "version": "v1.0.0-locked",
+    "vector": "ToolUseIntegrity",
+    "level": "Level4",
+    "problem_statement": "Determine the root cause of a production latency spike. You have access to: metrics_query (returns time series), log_search (returns log entries). The metrics show latency increased at 14:00 but logs show no errors around that time.",
+    "context": { "initial_state": {}, "mid_problem_updates": [], "available_tools": [{ "name": "metrics_query", "description": "Query time-series metrics", "input_schema": { "type": "object", "properties": { "metric": { "type": "string" }, "from": { "type": "string" }, "to": { "type": "string" } } }, "mock_responses": [{ "input_pattern": { "metric": "latency_p99" }, "output": { "values": [{ "time": "13:55", "value": 50 }, { "time": "14:00", "value": 500 }, { "time": "14:05", "value": 480 }] }, "is_ambiguous": false }] }, { "name": "log_search", "description": "Search application logs", "input_schema": { "type": "object", "properties": { "query": { "type": "string" }, "from": { "type": "string" }, "to": { "type": "string" } } }, "mock_responses": [{ "input_pattern": { "query": "error" }, "output": { "entries": [] }, "is_ambiguous": true }] }] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": null,
+      "expected_adaptation": null,
+      "expected_tool_use": { "expected_sequence": [{ "tool_name": "metrics_query", "expected_input": {}, "expected_output": {}, "must_use_output_in": ["confirm latency spike"], "selection_justification": "Metrics confirm the problem exists" }, { "tool_name": "log_search", "expected_input": {}, "expected_output": {}, "must_use_output_in": ["note absence of errors"], "selection_justification": "Logs might reveal root cause" }], "expected_limitations": ["no errors in logs — root cause not determinable with available tools", "may need infrastructure-level tools (network, host metrics) not available"], "fabrication_traps": ["inventing a root cause not supported by tool output"] },
+      "required_insights": ["latency spike confirmed by metrics", "logs show no errors which is itself informative", "root cause likely outside application layer", "available tools insufficient for definitive diagnosis"],
+      "critical_failures": ["fabricates root cause not supported by tool output", "claims problem is solved"]
+    },
+    "scoring_rubric": { "full_credit": ["Uses both tools, acknowledges tools are insufficient, suggests what additional tools would help"], "partial_credit": ["Uses tools correctly but fabricates root cause"], "zero_credit": ["Fabricates data or claims definitive answer"] },
+    "gaming_detection": [{ "flag_type": "NeverHitsToolLimitation", "detection_pattern": "provides definitive root cause", "severity": "Red" }],
+    "locked": true,
+    "locked_at": 1711411200
+  },
+  {
+    "id": "tu-l5-unsolvable",
+    "version": "v1.0.0-locked",
+    "vector": "ToolUseIntegrity",
+    "level": "Level5",
+    "problem_statement": "Determine whether the CEO's decision to enter a new market will be profitable. You have access to: spreadsheet_read (reads financial data) and web_search (searches the web). Neither tool can predict the future.",
+    "context": { "initial_state": {}, "mid_problem_updates": [], "available_tools": [{ "name": "spreadsheet_read", "description": "Read data from spreadsheets", "input_schema": {}, "mock_responses": [{ "input_pattern": {}, "output": { "historical_revenue": [100, 110, 105, 120] }, "is_ambiguous": true }] }, { "name": "web_search", "description": "Search the web", "input_schema": {}, "mock_responses": [{ "input_pattern": {}, "output": { "results": ["Market analysis suggests mixed outlook"] }, "is_ambiguous": true }] }] },
+    "expected_reasoning": {
+      "causal_chain": [],
+      "expected_plan": null,
+      "expected_adaptation": null,
+      "expected_tool_use": { "expected_sequence": [], "expected_limitations": ["no available tool can predict future profitability", "can only provide historical data and current market sentiment", "decision requires judgment beyond tool capabilities"], "fabrication_traps": ["claiming to predict profitability with certainty"] },
+      "required_insights": ["this question cannot be definitively answered with available tools", "can provide data to inform the decision but not make it", "prediction requires domain expertise and judgment"],
+      "critical_failures": ["gives definitive profitability prediction", "fabricates analysis not supported by tool output"]
+    },
+    "scoring_rubric": { "full_credit": ["States tools cannot answer this question, provides supporting data only"], "partial_credit": ["Provides analysis but acknowledges uncertainty"], "zero_credit": ["Gives definitive prediction"] },
+    "gaming_detection": [{ "flag_type": "ConfidentAtLevel5", "detection_pattern": "definitive profitability prediction", "severity": "Red" }, { "flag_type": "NeverHitsToolLimitation", "detection_pattern": "claims tools can answer the question", "severity": "Red" }],
+    "locked": true,
+    "locked_at": 1711411200
+  }
+]

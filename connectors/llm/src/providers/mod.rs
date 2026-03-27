@@ -615,10 +615,15 @@ mod tests {
 
     #[test]
     fn test_nvidia_default_model_in_list() {
-        let default = "deepseek-ai/deepseek-v3_1-terminus";
-        assert!(super::nvidia::NVIDIA_MODELS
-            .iter()
-            .any(|(id, _)| *id == default));
+        use crate::gateway::{NIM_FALLBACK_MODEL, NIM_PRIMARY_MODEL, NIM_SECONDARY_MODEL};
+        for model in [NIM_PRIMARY_MODEL, NIM_SECONDARY_MODEL, NIM_FALLBACK_MODEL] {
+            assert!(
+                super::nvidia::NVIDIA_MODELS
+                    .iter()
+                    .any(|(id, _)| *id == model),
+                "recommended NIM model {model} not in NVIDIA_MODELS catalog"
+            );
+        }
     }
 
     #[test]

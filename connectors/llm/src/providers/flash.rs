@@ -18,22 +18,42 @@ use super::{LlmProvider, LlmResponse};
 pub struct FlashProvider {
     model_path: String,
     #[cfg(feature = "flash-infer")]
+    load_config: nexus_flash_infer::LoadConfig,
+    #[cfg(feature = "flash-infer")]
+    gen_config: nexus_llama_bridge::GenerationConfig,
+    #[cfg(feature = "flash-infer")]
     model_handle: std::sync::Mutex<Option<Box<dyn nexus_flash_infer::ModelHandle>>>,
 }
 
 impl FlashProvider {
-    /// Create a provider for a specific model path.
-    pub fn new(model_path: String) -> Self {
+    /// Create a provider for a specific model path with auto-configured settings.
+    ///
+    /// Pass the `LoadConfig` and `GenerationConfig` from the session's
+    /// `OptimalConfig` so that thread count, context size, and batch size
+    /// match what `auto_configure()` computed for this hardware + model.
+    #[cfg(feature = "flash-infer")]
+    pub fn new(
+        model_path: String,
+        load_config: nexus_flash_infer::LoadConfig,
+        gen_config: nexus_llama_bridge::GenerationConfig,
+    ) -> Self {
         Self {
             model_path,
-            #[cfg(feature = "flash-infer")]
+            load_config,
+            gen_config,
             model_handle: std::sync::Mutex::new(None),
         }
     }
 
+    /// Create a provider (stub — no inference engine).
+    #[cfg(not(feature = "flash-infer"))]
+    pub fn new(model_path: String) -> Self {
+        Self { model_path }
+    }
+
     /// Load the model into memory if not already loaded.
     #[cfg(feature = "flash-infer")]
-    fn ensure_loaded(&self) -> Result<(), AgentError> {
+    pub fn ensure_loaded(&self) -> Result<(), AgentError> {
         let mut guard = self
             .model_handle
             .lock()
@@ -47,10 +67,9 @@ impl FlashProvider {
         let backend = nexus_flash_infer::LlamaBackend::new(hw);
 
         let path = std::path::Path::new(&self.model_path);
-        let config = nexus_flash_infer::LoadConfig::default();
 
         let handle = backend
-            .load_model(path, &config)
+            .load_model(path, &self.load_config)
             .map_err(|e| AgentError::SupervisorError(format!("flash model load failed: {e}")))?;
 
         *guard = Some(handle);
@@ -87,7 +106,7 @@ impl FlashProvider {
 
         let gen_config = nexus_llama_bridge::GenerationConfig {
             max_tokens,
-            ..nexus_llama_bridge::GenerationConfig::fast()
+            ..self.gen_config.clone()
         };
 
         let output = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
@@ -130,6 +149,74 @@ impl FlashProvider {
     }
 }
 
+impl FlashProvider {
+    /// Non-blocking query: returns `Err` immediately if the model is busy (locked by another thread).
+    /// This prevents the agent loop from blocking on Flash Inference when the UI is using it.
+    #[allow(unused_variables)]
+    pub fn try_query(
+        &self,
+        prompt: &str,
+        max_tokens: u32,
+        _model: &str,
+    ) -> Result<LlmResponse, AgentError> {
+        #[cfg(feature = "flash-infer")]
+        {
+            self.ensure_loaded()?;
+
+            let guard = self.model_handle.try_lock().map_err(|_| {
+                AgentError::SupervisorError("flash model busy (locked by another thread)".into())
+            })?;
+
+            let handle = guard
+                .as_ref()
+                .ok_or_else(|| AgentError::SupervisorError("flash model not loaded".into()))?;
+
+            let gen_config = nexus_llama_bridge::GenerationConfig {
+                max_tokens,
+                ..self.gen_config.clone()
+            };
+
+            let output = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+            let token_count = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+            let out_clone = output.clone();
+            let count_clone = token_count.clone();
+
+            let callback = Box::new(
+                move |event: nexus_llama_bridge::TokenEvent| -> nexus_llama_bridge::ControlFlow {
+                    if let nexus_llama_bridge::TokenEvent::Token { text, .. } = &event {
+                        if let Ok(mut buf) = out_clone.lock() {
+                            buf.push_str(text);
+                        }
+                        count_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    nexus_llama_bridge::ControlFlow::Continue
+                },
+            );
+
+            let _stats = handle
+                .generate(prompt, &gen_config, callback)
+                .map_err(|e| AgentError::SupervisorError(format!("flash inference failed: {e}")))?;
+
+            let output_text = output
+                .lock()
+                .map_err(|e| AgentError::SupervisorError(format!("flash output lock: {e}")))?
+                .clone();
+            let tokens = token_count.load(std::sync::atomic::Ordering::Relaxed);
+
+            return Ok(LlmResponse {
+                output_text,
+                token_count: tokens,
+                model_name: self.model_path.clone(),
+                tool_calls: Vec::new(),
+            });
+        }
+        #[cfg(not(feature = "flash-infer"))]
+        Err(AgentError::SupervisorError(
+            "flash-infer feature not enabled".into(),
+        ))
+    }
+}
+
 impl LlmProvider for FlashProvider {
     fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
         let model_display = if model.is_empty() {
@@ -153,7 +240,7 @@ impl LlmProvider for FlashProvider {
 
             let gen_config = nexus_llama_bridge::GenerationConfig {
                 max_tokens,
-                ..nexus_llama_bridge::GenerationConfig::fast()
+                ..self.gen_config.clone()
             };
 
             let output = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
@@ -218,27 +305,49 @@ impl LlmProvider for FlashProvider {
 mod tests {
     use super::*;
 
+    fn test_provider() -> FlashProvider {
+        #[cfg(feature = "flash-infer")]
+        {
+            FlashProvider::new(
+                "test-model".into(),
+                nexus_flash_infer::LoadConfig::default(),
+                nexus_llama_bridge::GenerationConfig::fast(),
+            )
+        }
+        #[cfg(not(feature = "flash-infer"))]
+        {
+            FlashProvider::new("test-model".into())
+        }
+    }
+
     #[test]
     fn test_flash_provider_name() {
-        let provider = FlashProvider::new("test-model".into());
+        let provider = test_provider();
         assert_eq!(provider.name(), "flash");
     }
 
     #[test]
     fn test_flash_provider_free() {
-        let provider = FlashProvider::new("test-model".into());
+        let provider = test_provider();
         assert_eq!(provider.cost_per_token(), 0.0);
         assert!(!provider.is_paid());
     }
 
     #[test]
     fn test_flash_provider_endpoint() {
-        let provider = FlashProvider::new("test-model".into());
+        let provider = test_provider();
         assert_eq!(provider.endpoint_url(), "local://flash-infer");
     }
 
     #[test]
     fn test_flash_provider_query_without_feature() {
+        #[cfg(feature = "flash-infer")]
+        let provider = FlashProvider::new(
+            "qwen3.5-moe.gguf".into(),
+            nexus_flash_infer::LoadConfig::default(),
+            nexus_llama_bridge::GenerationConfig::fast(),
+        );
+        #[cfg(not(feature = "flash-infer"))]
         let provider = FlashProvider::new("qwen3.5-moe.gguf".into());
         // Without flash-infer feature, query returns an error
         #[cfg(not(feature = "flash-infer"))]

@@ -169,9 +169,13 @@ class JarvisPipeline:
 
         tts_start = time.perf_counter()
         audio_started_at: Optional[float] = None
-        for _audio_chunk in self.tts.synthesize_stream(response_text):
-            if audio_started_at is None:
-                audio_started_at = time.perf_counter()
+        try:
+            for _audio_chunk in self.tts.synthesize_stream(response_text):
+                if audio_started_at is None:
+                    audio_started_at = time.perf_counter()
+        except Exception as tts_err:
+            import sys
+            print(f"[jarvis] TTS synthesis failed (non-fatal): {tts_err}", file=sys.stderr)
         if audio_started_at is None:
             audio_started_at = time.perf_counter()
 
@@ -202,7 +206,13 @@ class JarvisPipeline:
         return self.run_once(transcript_chunks)
 
     def start_foreground(self) -> None:
+        import sys
         print("Jarvis voice pipeline started. Type text to simulate voice input, Ctrl+C to stop.")
+        # Check if stdin is interactive — if not (e.g., spawned by Tauri with no TTY),
+        # exit immediately instead of crash-looping on EOF.
+        if not sys.stdin.isatty():
+            print("[jarvis] no interactive terminal detected — exiting foreground mode", file=sys.stderr)
+            return
         while True:
             try:
                 line = input("> ").strip()
@@ -217,9 +227,12 @@ class JarvisPipeline:
             wake = self.wake_word.detect(line)
             if wake.detected:
                 print("Wake word detected.")
-            result = self.run_once([line])
-            print(f"User: {result.transcription}")
-            print(f"NEXUS: {result.response_text}")
+            try:
+                result = self.run_once([line])
+                print(f"User: {result.transcription}")
+                print(f"NEXUS: {result.response_text}")
+            except Exception as exc:
+                print(f"[jarvis] run_once failed (non-fatal): {exc}", file=sys.stderr)
 
 
 def cmd_start() -> int:

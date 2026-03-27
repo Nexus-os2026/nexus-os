@@ -1,0 +1,16 @@
+[package]
+name = "nexus-predictive-router"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Predictive model routing — selects the optimal LLM model based on empirical capability boundaries and estimated task difficulty."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+thiserror = "2"
+nexus-capability-measurement = { path = "../nexus-capability-measurement" }
+
+[lints]
+workspace = true

@@ -7,5 +7,5 @@
   "fuel_budget": 150000,
   "schedule": "0 6 * * *",
   "default_goal": "Generate a multi-horizon forecast with causal reasoning, calibrated confidence, and explicit update triggers.",
-  "llm_model": "qwen3.5:35b"
+  "llm_model": "auto"
 }

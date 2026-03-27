@@ -179,13 +179,36 @@ impl OllamaProvider {
     }
 
     /// Check if Ollama is running and reachable.
+    /// Uses a fast TCP connect probe (200ms timeout) instead of a full HTTP request,
+    /// so a dead Ollama is detected in milliseconds, not seconds.
     pub fn health_check(&self) -> Result<bool, AgentError> {
-        match curl_get_status(self.tags_endpoint().as_str()) {
-            Ok(code) if (200..300).contains(&code) => Ok(true),
-            Ok(code) => Err(AgentError::SupervisorError(format!(
-                "Ollama returned status {code}"
+        // Fast TCP probe: try connecting to the port. If Ollama isn't running,
+        // this fails in < 1ms instead of the 5s curl timeout.
+        let addr = self
+            .base_url
+            .trim_start_matches("http://")
+            .trim_start_matches("https://")
+            .trim_end_matches('/');
+        let socket_addr: std::net::SocketAddr = addr
+            .parse()
+            .or_else(|_| {
+                // If it's a hostname without port, try with default port
+                format!("{addr}:11434")
+                    .parse()
+                    .or_else(|_| "127.0.0.1:11434".parse())
+            })
+            .map_err(|e| {
+                AgentError::SupervisorError(format!("invalid Ollama address '{addr}': {e}"))
+            })?;
+
+        match std::net::TcpStream::connect_timeout(
+            &socket_addr,
+            std::time::Duration::from_millis(200),
+        ) {
+            Ok(_) => Ok(true),
+            Err(e) => Err(AgentError::SupervisorError(format!(
+                "Ollama not reachable at {addr}: {e}"
             ))),
-            Err(e) => Err(e),
         }
     }
 
@@ -401,15 +424,12 @@ fn curl_get_json(endpoint: &str) -> Result<(u16, Value), AgentError> {
 
 impl LlmProvider for OllamaProvider {
     fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
-        let tags_status = curl_get_status(self.tags_endpoint().as_str());
-        match tags_status {
-            Ok(code) if (200..300).contains(&code) => {}
-            _ => {
-                return Err(AgentError::SupervisorError(format!(
-                    "Ollama not running at {}",
-                    self.base_url
-                )));
-            }
+        // Fast check: is Ollama even running? (200ms TCP probe instead of 5s curl)
+        if self.health_check().is_err() {
+            return Err(AgentError::SupervisorError(format!(
+                "Ollama not running at {} — is `ollama serve` started?",
+                self.base_url
+            )));
         }
 
         let request = self.build_request(prompt, max_tokens, model);

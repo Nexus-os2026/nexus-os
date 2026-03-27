@@ -6,5 +6,5 @@
   "autonomy_level": 6,
   "fuel_budget": 150000,
   "default_goal": "Design and deploy a governed automation workflow, including agents, approval points, monitoring, and recovery guidance, with documentation that operators can trust.",
-  "llm_model": "qwen3.5:35b"
+  "llm_model": "auto"
 }

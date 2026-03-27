@@ -1089,6 +1089,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1137cd7e7fc0fb5d3c5a8678be38ec56e819125d8d7907411fe24ccb943faca8"
+dependencies = [
+ "crossbeam-channel",
+ "crossbeam-deque",
+ "crossbeam-epoch",
+ "crossbeam-queue",
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "crossbeam-channel"
 version = "0.5.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1112,6 +1125,15 @@ name = "crossbeam-epoch"
 version = "0.9.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b82ac4a3c2ca9c3460964f020e1402edd5753411d7737aa39c3714ad1b5420e"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-queue"
+version = "0.3.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f58bbc28f91df819d0aa2a2c00cd19754769c2fad90579b3592b1c9ba7a3115"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -1675,6 +1697,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
 dependencies = [
  "pkcs8",
+ "serde",
  "signature",
 ]
 
@@ -4012,6 +4035,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-browser-agent"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "nexus-capability-measurement"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
 name = "nexus-cli"
 version = "9.0.0"
 dependencies = [
@@ -4070,6 +4114,18 @@ dependencies = [
  "thiserror 2.0.18",
  "uuid",
  "web-builder-agent",
+]
+
+[[package]]
+name = "nexus-conductor-benchmark"
+version = "9.0.0"
+dependencies = [
+ "crossbeam",
+ "nexus-capability-measurement",
+ "nexus-kernel",
+ "serde_json",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -4190,6 +4246,8 @@ dependencies = [
  "nexus-adaptation",
  "nexus-airgap",
  "nexus-auth",
+ "nexus-browser-agent",
+ "nexus-capability-measurement",
  "nexus-conductor",
  "nexus-connectors-core",
  "nexus-connectors-llm",
@@ -4200,15 +4258,19 @@ dependencies = [
  "nexus-enterprise",
  "nexus-factory",
  "nexus-flash-infer",
+ "nexus-governance-evolution",
+ "nexus-governance-oracle",
  "nexus-integrations",
  "nexus-kernel",
  "nexus-marketplace",
  "nexus-metering",
  "nexus-persistence",
+ "nexus-predictive-router",
  "nexus-protocols",
  "nexus-sdk",
  "nexus-telemetry",
  "nexus-tenancy",
+ "nexus-token-economy",
  "open",
  "reqwest 0.12.28",
  "rusqlite",
@@ -4278,6 +4340,49 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "nexus-governance-engine"
+version = "0.1.0"
+dependencies = [
+ "nexus-governance-oracle",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "nexus-governance-evolution"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "nexus-governance-engine",
+ "nexus-governance-oracle",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "nexus-governance-oracle"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+ "tokio",
  "uuid",
 ]
 
@@ -4363,6 +4468,8 @@ dependencies = [
  "bs58",
  "chrono",
  "cron",
+ "crossbeam",
+ "dashmap",
  "ed25519-dalek",
  "flate2",
  "getrandom 0.2.17",
@@ -4443,6 +4550,17 @@ version = "9.0.0"
 dependencies = [
  "chrono",
  "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "nexus-predictive-router"
+version = "0.1.0"
+dependencies = [
+ "nexus-capability-measurement",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -4538,6 +4656,20 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "nexus-token-economy"
+version = "9.0.0"
+dependencies = [
+ "ed25519-dalek",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
  "tracing",
  "uuid",
 ]

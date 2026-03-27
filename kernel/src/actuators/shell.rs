@@ -14,22 +14,53 @@ const MAX_OUTPUT_BYTES: usize = 100 * 1024;
 const FUEL_COST_SHELL: f64 = 5.0;
 
 /// Commands in the base allowlist (no subcommand restrictions).
+///
+/// Includes basic shell utilities + system monitoring commands needed by
+/// agents like nexus-sysmon. Dangerous commands (rm, kill, shutdown, etc.)
+/// are NOT included — see `COMMAND_BLOCKLIST`.
 const BASE_ALLOWLIST: &[&str] = &[
+    // Basic shell utilities
     "ls", "cat", "head", "tail", "wc", "grep", "find", "echo", "date", "pwd", "mkdir", "cp", "mv",
+    "sort", "cut", "tr", "awk", "sed", "tee", "xargs", "which", "file", "diff", "touch",
+    // System monitoring (read-only)
+    "free", "df", "uptime", "top", "ps", "uname", "hostname", "whoami", "id", "nproc", "lsblk",
+    "lscpu", "du", "stat", "env", "printenv", "vmstat", "iostat", "lsof", "ss", "ip",
+    // Development tools
+    "node", "npx", "rustc", "rustup", "make", "cmake", "gcc", "g++",
 ];
 
 /// Commands with restricted subcommands: (command, &[allowed subcommands]).
 const SUBCOMMAND_ALLOWLIST: &[(&str, &[&str])] = &[
     (
         "git",
-        &["status", "log", "diff", "add", "commit", "push", "pull"],
+        &[
+            "status", "log", "diff", "add", "commit", "push", "pull", "branch", "show",
+        ],
     ),
-    ("cargo", &["build", "test", "check", "fmt", "clippy"]),
-    ("npm", &["install", "run", "build", "test"]),
+    ("cargo", &["build", "test", "check", "fmt", "clippy", "run"]),
+    ("npm", &["install", "run", "build", "test", "ls"]),
+    // systemctl: read-only status queries only — no start/stop/enable/disable
+    (
+        "systemctl",
+        &[
+            "status",
+            "list-units",
+            "list-timers",
+            "is-active",
+            "is-enabled",
+            "show",
+        ],
+    ),
+    ("docker", &["ps", "images", "logs", "inspect", "stats"]),
+    ("journalctl", &["--no-pager", "-u", "-n", "--since"]),
 ];
 
-/// Commands/patterns that are always rejected.
-const COMMAND_BLOCKLIST: &[&str] = &["sudo", "su", "eval", "exec"];
+/// Commands/patterns that are always rejected — destructive or privileged operations.
+const COMMAND_BLOCKLIST: &[&str] = &[
+    "sudo", "su", "eval", "exec", "rm", "rmdir", "mkfs", "dd", "kill", "killall", "pkill",
+    "shutdown", "reboot", "halt", "poweroff", "passwd", "chown", "mount", "umount", "fdisk",
+    "iptables", "nftables", "useradd", "userdel", "groupadd", "crontab",
+];
 
 /// Dangerous argument patterns (command + args joined).
 const DANGEROUS_PATTERNS: &[&str] = &[
@@ -134,10 +165,28 @@ impl Actuator for GovernedShell {
 
         Self::validate_command(command, args)?;
 
-        // Use Command::new() directly — NEVER sh -c
-        let mut cmd = std::process::Command::new(command);
-        cmd.args(args);
+        // Run through `sh -c` so the shell resolves the command via its own PATH
+        // (which includes /usr/bin, /usr/sbin, etc.). Command::new("free") fails
+        // in Tauri because the parent process PATH is minimal — the binary isn't
+        // found before spawn. Using sh -c also enables pipes and redirects.
+        let full_command = if args.is_empty() {
+            command.to_string()
+        } else {
+            format!("{} {}", command, shell_escape_args(args))
+        };
+        // Ensure working directory exists (it may not for newly created agents)
+        if !context.working_dir.exists() {
+            let _ = std::fs::create_dir_all(&context.working_dir);
+        }
+
+        let mut cmd = std::process::Command::new("/bin/sh");
+        cmd.arg("-c");
+        cmd.arg(&full_command);
         cmd.current_dir(&context.working_dir);
+        cmd.env(
+            "PATH",
+            "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        );
 
         // Capture stdout/stderr
         cmd.stdout(std::process::Stdio::piped());
@@ -225,6 +274,26 @@ fn wait_with_timeout(
             }
         }
     }
+}
+
+/// Shell-escape each argument and join with spaces for use with `sh -c`.
+/// Wraps each arg in single quotes, escaping any embedded single quotes.
+fn shell_escape_args(args: &[String]) -> String {
+    args.iter()
+        .map(|arg| {
+            if arg
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "-_./=:@,+".contains(c))
+            {
+                // Safe characters — no quoting needed
+                arg.clone()
+            } else {
+                // Wrap in single quotes; escape embedded single quotes
+                format!("'{}'", arg.replace('\'', "'\\''"))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 #[cfg(test)]

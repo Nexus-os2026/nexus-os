@@ -88,6 +88,10 @@ impl ModelStorage {
     /// Scans the primary model directory **and** common user directories
     /// (`~/.nexus/models/`, `~/models/`) recursively so models inside
     /// sub-folders (e.g. `bartowski__gemma-2-2b-it-GGUF/`) are discovered.
+    ///
+    /// Split models (e.g. 4 shard files) are collapsed into a single entry
+    /// pointing at the first shard (`-00001-of-`). The displayed size is
+    /// the sum of all parts. llama.cpp auto-discovers remaining shards.
     pub fn list_models(&self) -> Result<Vec<LocalModel>, FlashError> {
         let mut models = Vec::new();
         let mut seen = std::collections::HashSet::new();
@@ -117,6 +121,10 @@ impl ModelStorage {
     }
 
     /// Recursively scan a directory for `.gguf` files up to `max_depth` levels.
+    ///
+    /// Split models (`-00002-of-`, `-00003-of-`, etc.) are skipped — only the
+    /// first shard (`-00001-of-`) or non-split files are included. The file
+    /// size for split models is the sum of all parts.
     fn scan_dir_recursive(
         dir: &Path,
         models: &mut Vec<LocalModel>,
@@ -127,6 +135,10 @@ impl ModelStorage {
             Ok(e) => e,
             Err(_) => return,
         };
+
+        // First pass: collect all gguf entries in this directory so we can
+        // sum split-model sizes before emitting the first-shard entry.
+        let mut gguf_entries: Vec<(PathBuf, std::fs::Metadata)> = Vec::new();
 
         for entry in entries {
             let entry = match entry {
@@ -149,6 +161,40 @@ impl ModelStorage {
                 continue;
             }
 
+            if let Ok(meta) = std::fs::metadata(&path) {
+                gguf_entries.push((path, meta));
+            }
+        }
+
+        // Build a map: split prefix → total size of all parts.
+        // For "Model-Q4-00001-of-00004.gguf" the prefix is "Model-Q4".
+        let mut split_totals: std::collections::HashMap<String, u64> =
+            std::collections::HashMap::new();
+        for (path, meta) in &gguf_entries {
+            let filename = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            if is_split_shard(&filename) {
+                let prefix = split_prefix(&filename);
+                *split_totals.entry(prefix).or_insert(0) += meta.len();
+            }
+        }
+
+        // Second pass: emit models, skipping non-first split parts.
+        for (path, meta) in gguf_entries {
+            let filename = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+
+            // Skip split shards that aren't the first part.
+            if is_split_shard(&filename) && !is_first_shard(&filename) {
+                continue;
+            }
+
             // Deduplicate by absolute path.
             let canonical = path
                 .canonicalize()
@@ -159,21 +205,19 @@ impl ModelStorage {
                 continue;
             }
 
-            let meta = match std::fs::metadata(&path) {
-                Ok(m) => m,
-                Err(_) => continue,
+            // For split models, use the combined size of all parts.
+            let total_size = if is_first_shard(&filename) {
+                let prefix = split_prefix(&filename);
+                split_totals.get(&prefix).copied().unwrap_or(meta.len())
+            } else {
+                meta.len()
             };
-            let filename = path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string();
 
             models.push(LocalModel {
                 name: filename.clone(),
                 file_path: path.to_string_lossy().to_string(),
-                file_size_bytes: meta.len(),
-                file_size_display: format_bytes(meta.len()),
+                file_size_bytes: total_size,
+                file_size_display: format_bytes(total_size),
                 quant_type: extract_quant_from_filename(&filename),
                 downloaded_at: file_modified_iso(&meta),
                 sha256: None,
@@ -527,6 +571,47 @@ pub fn extract_quant_from_filename(filename: &str) -> String {
     "Unknown".to_string()
 }
 
+/// Returns true if the filename is any part of a split GGUF model
+/// (contains `-NNNNN-of-NNNNN`).
+fn is_split_shard(filename: &str) -> bool {
+    // Match pattern: -DIGITS-of-DIGITS  (e.g. -00001-of-00004)
+    if let Some(of_idx) = filename.find("-of-") {
+        let before = &filename[..of_idx];
+        if let Some(dash_idx) = before.rfind('-') {
+            let shard_num = &before[dash_idx + 1..];
+            return shard_num.chars().all(|c| c.is_ascii_digit()) && !shard_num.is_empty();
+        }
+    }
+    false
+}
+
+/// Returns true if the filename is the first shard (`-00001-of-`).
+fn is_first_shard(filename: &str) -> bool {
+    if let Some(of_idx) = filename.find("-of-") {
+        let before = &filename[..of_idx];
+        if let Some(dash_idx) = before.rfind('-') {
+            let shard_num = &before[dash_idx + 1..];
+            // The first shard number is all zeros except the last digit is 1
+            return shard_num.chars().all(|c| c.is_ascii_digit())
+                && !shard_num.is_empty()
+                && shard_num.parse::<u64>().ok() == Some(1);
+        }
+    }
+    false
+}
+
+/// Extract the prefix of a split filename (everything before `-NNNNN-of-`).
+/// Used as a grouping key to sum sizes across all parts.
+fn split_prefix(filename: &str) -> String {
+    if let Some(of_idx) = filename.find("-of-") {
+        let before = &filename[..of_idx];
+        if let Some(dash_idx) = before.rfind('-') {
+            return before[..dash_idx].to_string();
+        }
+    }
+    filename.to_string()
+}
+
 fn strip_shard_suffix(stem: &str) -> &str {
     // Remove "-00001-of-00005" style suffixes
     if let Some(idx) = stem.rfind("-of-") {
@@ -693,6 +778,89 @@ mod tests {
         assert!(is_quant_token("MXFP4_MOE"));
         assert!(!is_quant_token("70B"));
         assert!(!is_quant_token("A17B"));
+    }
+
+    #[test]
+    fn test_is_split_shard() {
+        assert!(is_split_shard(
+            "Qwen3.5-397B-A17B-UD-IQ3_XXS-00001-of-00004.gguf"
+        ));
+        assert!(is_split_shard(
+            "Qwen3.5-397B-A17B-UD-IQ3_XXS-00003-of-00004.gguf"
+        ));
+        assert!(!is_split_shard("Llama-3.3-70B-Q4_K_M.gguf"));
+        assert!(!is_split_shard("model-Q8_0.gguf"));
+    }
+
+    #[test]
+    fn test_is_first_shard() {
+        assert!(is_first_shard(
+            "Qwen3.5-397B-A17B-UD-IQ3_XXS-00001-of-00004.gguf"
+        ));
+        assert!(!is_first_shard(
+            "Qwen3.5-397B-A17B-UD-IQ3_XXS-00002-of-00004.gguf"
+        ));
+        assert!(!is_first_shard("Llama-3.3-70B-Q4_K_M.gguf"));
+    }
+
+    #[test]
+    fn test_split_prefix() {
+        assert_eq!(
+            split_prefix("Qwen3.5-397B-A17B-UD-IQ3_XXS-00001-of-00004.gguf"),
+            "Qwen3.5-397B-A17B-UD-IQ3_XXS"
+        );
+        assert_eq!(
+            split_prefix("Qwen3.5-397B-A17B-UD-IQ3_XXS-00003-of-00004.gguf"),
+            "Qwen3.5-397B-A17B-UD-IQ3_XXS"
+        );
+    }
+
+    #[test]
+    fn test_list_models_collapses_split_files() {
+        let tmp = std::env::temp_dir().join("nexus-flash-test-split");
+        let _ = std::fs::remove_dir_all(&tmp);
+        let storage = ModelStorage::with_dir(tmp.clone()).unwrap();
+
+        // Create 4 fake split shard files (33 GB each → 132 GB total)
+        let shard_size = 33 * 1024; // small fake size in bytes
+        for i in 1..=4 {
+            let name = format!("Qwen3.5-397B-A17B-UD-IQ3_XXS-{:05}-of-00004.gguf", i);
+            let data = vec![0u8; shard_size];
+            std::fs::write(storage.model_path(&name), &data).unwrap();
+        }
+
+        // Also create a non-split model
+        std::fs::write(storage.model_path("Llama-3.3-70B-Q4_K_M.gguf"), b"single").unwrap();
+
+        let models = storage.list_models().unwrap();
+
+        // Should see exactly 2 models: the first shard and the single model
+        assert_eq!(models.len(), 2, "expected 2 models, got: {models:?}");
+
+        // Find the split model entry
+        let split = models
+            .iter()
+            .find(|m| m.name.contains("IQ3_XXS"))
+            .expect("should find split model");
+        assert!(
+            split.name.contains("-00001-of-"),
+            "split model should show first shard"
+        );
+        // Size should be sum of all 4 parts
+        let expected_total = (shard_size * 4) as u64;
+        assert_eq!(
+            split.file_size_bytes, expected_total,
+            "split model size should be sum of all parts"
+        );
+
+        // Non-split model should be present with its own size
+        let single = models
+            .iter()
+            .find(|m| m.name.contains("Llama"))
+            .expect("should find single model");
+        assert_eq!(single.file_size_bytes, 6); // b"single".len()
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]

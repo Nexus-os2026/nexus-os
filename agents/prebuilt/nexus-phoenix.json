@@ -7,5 +7,5 @@
   "fuel_budget": 8000,
   "schedule": "0 2 * * *",
   "default_goal": "Create or verify the daily backup set, test recovery assumptions, and publish a disaster recovery report with integrity findings and restore steps.",
-  "llm_model": "qwen3.5:9b"
+  "llm_model": "auto"
 }

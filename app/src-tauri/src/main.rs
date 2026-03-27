@@ -11,8 +11,8 @@ use nexus_connectors_llm::model_hub::{self, DownloadProgress, DownloadStatus};
 use nexus_connectors_llm::model_registry::ModelRegistry;
 use nexus_connectors_llm::nexus_link::NexusLink;
 use nexus_connectors_llm::providers::{
-    nvidia::NVIDIA_MODELS, ClaudeProvider, DeepSeekProvider, GeminiProvider, LlmProvider,
-    NvidiaProvider, OllamaProvider, OpenAiProvider,
+    groq::GROQ_MODELS, nvidia::NVIDIA_MODELS, ClaudeProvider, DeepSeekProvider, GeminiProvider,
+    GroqProvider, LlmProvider, NvidiaProvider, OllamaProvider, OpenAiProvider,
 };
 use nexus_connectors_llm::rag::{RagConfig, RagPipeline};
 use nexus_connectors_llm::whisper::WhisperTranscriber;
@@ -98,6 +98,21 @@ use nexus_tenancy::WorkspaceManager;
 // Flash inference imports
 use nexus_flash_infer::SessionManager as FlashSessionManager;
 
+// Capability measurement imports
+use nexus_capability_measurement::tauri_commands::MeasurementState;
+
+// Governance oracle imports
+use nexus_governance_oracle::tauri_commands::{BudgetSummary, OracleStatusSummary};
+
+// Predictive router imports
+use nexus_predictive_router::tauri_commands::RouterState;
+
+// Browser agent imports
+use nexus_browser_agent::BrowserState;
+
+// Token economy imports
+use nexus_token_economy::tauri_commands as token_cmds;
+
 struct GatewayHivemindLlm;
 
 impl nexus_kernel::cognitive::HivemindLlm for GatewayHivemindLlm {
@@ -120,6 +135,9 @@ struct AgentLlmRoute {
 
 thread_local! {
     static ACTIVE_AGENT_LLM_ROUTE: RefCell<Option<AgentLlmRoute>> = const { RefCell::new(None) };
+    /// Cached Flash provider for the current agent's cognitive loop.
+    /// Set by `with_agent_llm_route` when a `flash:*` route is active.
+    static ACTIVE_FLASH_PROVIDER: RefCell<Option<std::sync::Arc<nexus_connectors_llm::providers::FlashProvider>>> = const { RefCell::new(None) };
 }
 
 fn normalize_agent_config_key(value: &str) -> String {
@@ -188,6 +206,9 @@ fn route_from_model_mapping(value: &Value) -> Option<String> {
 
 fn resolve_agent_llm_route(state: &AppState, agent_id: &str) -> Option<AgentLlmRoute> {
     let config = load_config().ok()?;
+    let _agent_short = &agent_id[..agent_id.len().min(8)];
+
+    // 1. Check agent memory for explicit model mapping (user override)
     if let Ok(memories) = state.db.load_memories(agent_id, Some("model_mapping"), 10) {
         for row in memories {
             if let Ok(parsed) = serde_json::from_str::<Value>(&row.value_json) {
@@ -198,16 +219,40 @@ fn resolve_agent_llm_route(state: &AppState, agent_id: &str) -> Option<AgentLlmR
         }
     }
 
+    // 2. Check config-level agent assignments
     for key in agent_lookup_keys(state, agent_id) {
         if let Some(agent_cfg) = config.agents.get(&key) {
-            if !agent_cfg.model.trim().is_empty() {
+            if !agent_cfg.model.trim().is_empty() && agent_cfg.model.trim() != "auto" {
                 return Some(AgentLlmRoute {
                     model: agent_cfg.model.clone(),
                 });
             }
         }
         if let Some(assignment) = config.agent_llm_assignments.get(&key) {
-            if !assignment.provider_id.trim().is_empty() {
+            let pid = assignment.provider_id.trim();
+            if !pid.is_empty() && pid != "auto" {
+                // If provider is "flash" or "flash/model", resolve to an active
+                // Flash session so the downstream code finds the loaded provider.
+                if pid == "flash" || pid.starts_with("flash/") {
+                    let cache = state
+                        .flash_providers
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner());
+                    eprintln!(
+                        "[resolve-route] agent={} assignment pid='{}', flash cache has {} entries",
+                        _agent_short,
+                        pid,
+                        cache.len()
+                    );
+                    if let Some((session_id, _)) = cache.iter().next() {
+                        eprintln!("[resolve-route] resolved to flash:{session_id}");
+                        return Some(AgentLlmRoute {
+                            model: format!("flash:{session_id}"),
+                        });
+                    }
+                    // Cache empty — return the original "flash/model" route
+                    eprintln!("[resolve-route] flash cache empty, returning raw pid '{pid}'");
+                }
                 return Some(AgentLlmRoute {
                     model: assignment.provider_id.clone(),
                 });
@@ -215,16 +260,179 @@ fn resolve_agent_llm_route(state: &AppState, agent_id: &str) -> Option<AgentLlmR
         }
     }
 
+    // 2.5. Check agent manifest llm_model field
+    //   Supports: "flash", "flash:fast", "flash:balanced", "auto", or "provider/model"
+    if let Ok(agent_uuid) = uuid::Uuid::parse_str(agent_id) {
+        let sup = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(handle) = sup.get_agent(agent_uuid) {
+            if let Some(ref llm_model) = handle.manifest.llm_model {
+                let model = llm_model.trim();
+                if !model.is_empty() && model != "auto" {
+                    // "flash" or "flash:*" — resolve to active Flash session
+                    if model == "flash" || model.starts_with("flash:") {
+                        let cache = state
+                            .flash_providers
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner());
+                        if let Some((session_id, _)) = cache.iter().next() {
+                            return Some(AgentLlmRoute {
+                                model: format!("flash:{session_id}"),
+                            });
+                        }
+                        // Flash requested but no session — fall through to auto
+                    } else {
+                        return Some(AgentLlmRoute {
+                            model: model.to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Smart auto-routing: pick the best available model.
+    //    Priority: Flash Inference (local GGUF) → Ollama → Cloud providers.
+    //    Returns None if nothing is available (GatewayPlannerLlm handles fallback).
+    auto_select_best_model(state, &config)
+}
+
+/// Smart model selection: pick the best available LLM provider and model.
+///
+/// Priority order:
+///   1. Flash Inference sessions (local GGUF models — fastest, free, private)
+///   2. Ollama local models (free, private)
+///   3. Cloud providers with API keys configured (paid, external)
+///
+/// Within each tier, prefers larger models for better reasoning quality.
+fn auto_select_best_model(
+    state: &AppState,
+    config: &nexus_kernel::config::NexusConfig,
+) -> Option<AgentLlmRoute> {
+    // --- Tier 0: Check Flash Inference sessions (best: local, fast, free, smart) ---
+    // If a Flash Inference model is loaded, use it — these are larger/smarter models
+    // (Qwen 35B, Gemma 27B) that the user explicitly loaded via the Flash Inference UI.
+    {
+        let cache = state
+            .flash_providers
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        if let Some((session_id, _provider)) = cache.iter().next() {
+            eprintln!(
+                "[auto-select] using Flash Inference session {session_id} (local GGUF, free)"
+            );
+            return Some(AgentLlmRoute {
+                model: format!("flash:{session_id}"),
+            });
+        }
+    }
+
+    // --- Tier 1: Check for FLASH_MODEL_PATH env var (auto-load Flash model) ---
+    if let Ok(model_path) = std::env::var("FLASH_MODEL_PATH") {
+        if std::path::Path::new(&model_path).exists() {
+            eprintln!("[auto-select] using Flash Inference from FLASH_MODEL_PATH={model_path}");
+            return Some(AgentLlmRoute {
+                model: format!("flash/{model_path}"),
+            });
+        }
+    }
+
+    // --- Tier 2: Check Ollama for available models ---
+    // Fast TCP probe first — if Ollama isn't running, skip the slow list_models() call
+    let prov_config = build_provider_config(config);
+    let ollama = OllamaProvider::from_env();
+    if ollama.health_check().is_ok() {
+        if let Ok(models) = ollama.list_models() {
+            if !models.is_empty() {
+                // Prefer larger models for agent reasoning (35b > 9b > 4b)
+                let best = models
+                    .iter()
+                    .max_by_key(|m| {
+                        let name = m.name.to_lowercase();
+                        if name.contains("35b") || name.contains("32b") || name.contains("70b") {
+                            3
+                        } else if name.contains("14b")
+                            || name.contains("13b")
+                            || name.contains("9b")
+                        {
+                            2
+                        } else if name.contains("coder") {
+                            2 // Prefer coder models slightly
+                        } else {
+                            1
+                        }
+                    })
+                    .map(|m| m.name.clone())
+                    .unwrap_or_else(|| models[0].name.clone());
+
+                return Some(AgentLlmRoute { model: best });
+            }
+        }
+    } // close health_check guard
+
+    // --- Tier 3: Check cloud providers with API keys ---
+    if select_provider(&prov_config).is_ok() {
+        return None;
+    }
+
     None
 }
 
 fn with_agent_llm_route<T>(state: &AppState, agent_id: &str, op: impl FnOnce() -> T) -> T {
     let route = resolve_agent_llm_route(state, agent_id);
-    ACTIVE_AGENT_LLM_ROUTE.with(|slot| {
-        let previous = slot.replace(route);
-        let output = op();
-        slot.replace(previous);
-        output
+
+    // If the route points to Flash, resolve the cached provider now
+    // so GatewayPlannerLlm can use it without needing AppState access.
+    // Handles both "flash:{session_id}" and "flash/{model_name}" formats.
+    let flash_prov = route.as_ref().and_then(|r| {
+        let wants_flash =
+            r.model.starts_with("flash:") || r.model.starts_with("flash/") || r.model == "flash";
+        if !wants_flash {
+            return None;
+        }
+
+        // Try the provider cache first
+        let cache = state
+            .flash_providers
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let cache_keys: Vec<_> = cache.keys().cloned().collect();
+        eprintln!(
+            "[flash-route] route='{}', cache has {} entries: {:?}",
+            r.model,
+            cache.len(),
+            cache_keys
+        );
+
+        // Try exact session ID match for "flash:{id}" routes
+        if let Some(session_id) = r.model.strip_prefix("flash:") {
+            if let Some(prov) = cache.get(session_id) {
+                eprintln!("[flash-route] found provider by session ID '{session_id}'");
+                return Some(prov.clone());
+            }
+        }
+        // For any flash route, use whatever provider is cached
+        if let Some((key, prov)) = cache.iter().next() {
+            eprintln!("[flash-route] using cached provider '{key}'");
+            return Some(prov.clone());
+        }
+        drop(cache);
+
+        eprintln!(
+            "[flash-route] provider cache empty for route '{}' — model not loaded",
+            r.model
+        );
+        None
+    });
+
+    ACTIVE_AGENT_LLM_ROUTE.with(|route_slot| {
+        ACTIVE_FLASH_PROVIDER.with(|flash_slot| {
+            let prev_route = route_slot.replace(route);
+            let prev_flash = flash_slot.replace(flash_prov);
+            let output = op();
+            route_slot.replace(prev_route);
+            flash_slot.replace(prev_flash);
+            output
+        })
     })
 }
 
@@ -680,14 +888,21 @@ pub struct AppState {
     telemetry_config: Arc<Mutex<nexus_telemetry::TelemetryConfig>>,
     a2a_client: Arc<Mutex<A2aClient>>,
     schedule_store: Arc<nexus_kernel::scheduler::ScheduleStore>,
+    schedule_runner: Arc<nexus_kernel::scheduler::ScheduleRunner>,
     flash_session_manager: Arc<FlashSessionManager>,
     /// Cached FlashProvider instances per session ID — avoids reloading model on every call.
     /// Wrapped in Arc so the provider (and its loaded model handle) can be shared with
     /// GovernedLlmGateway without transferring ownership.
     flash_providers:
         Arc<Mutex<HashMap<String, std::sync::Arc<nexus_connectors_llm::providers::FlashProvider>>>>,
+    /// Speculative decoding engine — pairs a fast draft model with the loaded target.
+    flash_speculative: Arc<Mutex<Option<nexus_flash_infer::SpeculativeEngine>>>,
     adversarial_arena:
         Arc<Mutex<nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena>>,
+    capability_measurement: Arc<MeasurementState>,
+    predictive_router: Arc<RouterState>,
+    browser_agent: Arc<BrowserState>,
+    token_economy: Arc<token_cmds::EconomyState>,
     #[cfg(all(
         feature = "tauri-runtime",
         any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -741,6 +956,8 @@ impl AppState {
             cognitive_runtime.clone(),
             audit.clone(),
         ));
+        let audit_for_runner = audit.clone();
+        let supervisor_for_runner = supervisor.clone();
         let state = Self {
             supervisor: supervisor.clone(),
             audit,
@@ -925,18 +1142,45 @@ impl AppState {
             metering_rates: Arc::new(nexus_metering::CostRates::default()),
             telemetry_config: Arc::new(Mutex::new(nexus_telemetry::TelemetryConfig::desktop())),
             a2a_client: Arc::new(Mutex::new(A2aClient::new())),
-            schedule_store: Arc::new(nexus_kernel::scheduler::ScheduleStore::new(
-                NexusDatabase::default_db_path()
-                    .parent()
-                    .unwrap_or(std::path::Path::new(".")),
-            )),
+            schedule_store: {
+                let ss = Arc::new(nexus_kernel::scheduler::ScheduleStore::new(
+                    NexusDatabase::default_db_path()
+                        .parent()
+                        .unwrap_or(std::path::Path::new(".")),
+                ));
+                ss
+            },
+            schedule_runner: {
+                // Uses the same ScheduleStore path — ScheduleStore internally re-reads from disk
+                let runner_store = Arc::new(nexus_kernel::scheduler::ScheduleStore::new(
+                    NexusDatabase::default_db_path()
+                        .parent()
+                        .unwrap_or(std::path::Path::new(".")),
+                ));
+                let sched_executor = Arc::new(nexus_kernel::scheduler::ScheduledExecutor::new(
+                    supervisor_for_runner,
+                    Arc::new(Mutex::new(
+                        nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena::new(),
+                    )),
+                    audit_for_runner,
+                ));
+                Arc::new(nexus_kernel::scheduler::ScheduleRunner::new(
+                    runner_store,
+                    sched_executor,
+                ))
+            },
             flash_session_manager: Arc::new(FlashSessionManager::new(
                 nexus_flash_infer::detect_hardware(),
             )),
             flash_providers: Arc::new(Mutex::new(HashMap::new())),
+            flash_speculative: Arc::new(Mutex::new(None)),
             adversarial_arena: Arc::new(Mutex::new(
                 nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena::new(),
             )),
+            capability_measurement: Arc::new(MeasurementState::new()),
+            predictive_router: Arc::new(RouterState::new()),
+            browser_agent: Arc::new(BrowserState::default()),
+            token_economy: Arc::new(token_cmds::EconomyState::new()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1108,13 +1352,30 @@ impl AppState {
             schedule_store: Arc::new(nexus_kernel::scheduler::ScheduleStore::new(
                 std::env::temp_dir().as_path(),
             )),
+            schedule_runner: Arc::new(nexus_kernel::scheduler::ScheduleRunner::new(
+                Arc::new(nexus_kernel::scheduler::ScheduleStore::new(
+                    std::env::temp_dir().as_path(),
+                )),
+                Arc::new(nexus_kernel::scheduler::ScheduledExecutor::new(
+                    Arc::new(Mutex::new(nexus_kernel::supervisor::Supervisor::new())),
+                    Arc::new(Mutex::new(
+                        nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena::new(),
+                    )),
+                    Arc::new(Mutex::new(nexus_kernel::audit::AuditTrail::new())),
+                )),
+            )),
             flash_session_manager: Arc::new(FlashSessionManager::new(
                 nexus_flash_infer::HardwareInfo::default(),
             )),
             flash_providers: Arc::new(Mutex::new(HashMap::new())),
+            flash_speculative: Arc::new(Mutex::new(None)),
             adversarial_arena: Arc::new(Mutex::new(
                 nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena::new(),
             )),
+            capability_measurement: Arc::new(MeasurementState::new()),
+            predictive_router: Arc::new(RouterState::new()),
+            browser_agent: Arc::new(BrowserState::default()),
+            token_economy: Arc::new(token_cmds::EconomyState::new()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1635,6 +1896,10 @@ pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, S
 }
 
 pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
+    eprintln!(
+        "[CRASH-TRACE-01] start_agent called for {}",
+        &agent_id[..agent_id.len().min(12)]
+    );
     let parsed = parse_agent_id(agent_id.as_str())?;
     let agent_id = parsed.to_string();
     if let Some(manifest) = find_manifest(state, &agent_id) {
@@ -3396,6 +3661,49 @@ fn register_manifest_schedule(
     }
 }
 
+/// Seed the ScheduleRunner's ScheduleStore from agent manifests that have schedule + default_goal.
+/// This bridges prebuilt agents with the background scheduler on startup.
+fn seed_manifests_to_runner(state: &AppState) {
+    let agents = match state.db.list_agents() {
+        Ok(rows) => rows,
+        Err(_) => return,
+    };
+
+    for row in agents {
+        if !row.was_running {
+            continue;
+        }
+        let Ok(json_manifest) = serde_json::from_str::<serde_json::Value>(&row.manifest_json)
+        else {
+            continue;
+        };
+
+        let schedule = json_manifest
+            .get("schedule")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let default_goal = json_manifest
+            .get("default_goal")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let fuel_budget = json_manifest
+            .get("fuel_budget")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(5000);
+        let name = json_manifest
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        if let (Some(cron), Some(goal)) = (schedule, default_goal) {
+            state
+                .schedule_runner
+                .seed_from_agent(&row.id, &name, &cron, &goal, fuel_budget);
+        }
+    }
+}
+
 // ── Setup Wizard Types ──
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -3827,6 +4135,7 @@ pub struct ProviderStatus {
     pub deepseek: bool,
     pub gemini: bool,
     pub nvidia: bool,
+    pub groq: bool,
 }
 
 /// List models from ALL configured providers (Ollama + cloud).
@@ -3945,6 +4254,21 @@ pub fn list_provider_models() -> Result<Vec<ProviderModel>, String> {
         }
     }
 
+    // ── Groq ──
+    if has_provider_key(&prov_config.groq_api_key) {
+        for (id, name) in GROQ_MODELS.iter().copied() {
+            models.push(ProviderModel {
+                id: format!("groq/{id}"),
+                name: name.into(),
+                provider: "groq".into(),
+                local: false,
+                requires_key: true,
+                size_gb: None,
+                installed: true,
+            });
+        }
+    }
+
     Ok(models)
 }
 
@@ -3974,7 +4298,217 @@ pub fn get_provider_status() -> Result<ProviderStatus, String> {
         deepseek: has_provider_key(&prov_config.deepseek_api_key),
         gemini: has_provider_key(&prov_config.gemini_api_key),
         nvidia: has_provider_key(&prov_config.nvidia_api_key),
+        groq: has_provider_key(&prov_config.groq_api_key),
     })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AvailableProvider {
+    pub id: String,
+    pub name: String,
+    pub status: String,
+    pub available: bool,
+    pub model: Option<String>,
+    pub models: Vec<String>,
+    /// File paths corresponding to each entry in `models` (Flash only).
+    /// For non-Flash providers this is empty.
+    pub model_paths: Vec<String>,
+}
+
+/// Returns a list of all LLM providers with their live status.
+/// Used by the ProviderSelector component on the Agents page.
+pub async fn get_available_providers(state: &AppState) -> Result<Vec<AvailableProvider>, String> {
+    let config = load_config().map_err(agent_error)?;
+    let prov_config = build_provider_config(&config);
+    let mut providers = Vec::new();
+
+    // ── Flash Inference ──
+    // 1. Check session manager for loaded models (primary: model is in memory)
+    // 2. Check provider cache (secondary: FlashProvider instances)
+    // 3. Scan local .gguf files (tertiary: models on disk, can be loaded)
+    {
+        let sessions = state.flash_session_manager.list_sessions().await;
+        let active_sessions: Vec<_> = sessions
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s.status,
+                    nexus_flash_infer::SessionStatus::Ready
+                        | nexus_flash_infer::SessionStatus::Generating
+                        | nexus_flash_infer::SessionStatus::Idle
+                        | nexus_flash_infer::SessionStatus::Loading
+                )
+            })
+            .collect();
+
+        // Also check the provider cache (populated during flash_generate calls)
+        let cached_provider_count = state
+            .flash_providers
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .len();
+
+        // Scan local .gguf model files on disk
+        let local_models: Vec<nexus_flash_infer::LocalModel> =
+            nexus_flash_infer::ModelStorage::new()
+                .and_then(|s| s.list_models())
+                .unwrap_or_default();
+        // Build name→path lookup from local models
+        let local_model_names: Vec<String> = local_models.iter().map(|m| m.name.clone()).collect();
+        let local_model_paths: Vec<String> =
+            local_models.iter().map(|m| m.file_path.clone()).collect();
+
+        // Helper: build parallel model_paths vec aligned with models vec
+        let build_paths = |models: &[String]| -> Vec<String> {
+            models
+                .iter()
+                .map(|name| {
+                    // Look up file path for this model name; also check active sessions
+                    local_models
+                        .iter()
+                        .find(|lm| &lm.name == name)
+                        .map(|lm| lm.file_path.clone())
+                        .or_else(|| {
+                            active_sessions
+                                .iter()
+                                .find(|s| &s.model_name == name)
+                                .map(|s| s.model_path.clone())
+                        })
+                        .unwrap_or_default()
+                })
+                .collect()
+        };
+
+        if !active_sessions.is_empty() {
+            // Sessions loaded in memory — Flash is ready
+            let session_models: Vec<String> = active_sessions
+                .iter()
+                .map(|s| s.model_name.clone())
+                .collect();
+            let first = session_models.first().cloned();
+            let is_busy = active_sessions
+                .iter()
+                .any(|s| matches!(s.status, nexus_flash_infer::SessionStatus::Generating));
+            // Merge: session models + local models (dedup)
+            let mut all_models = session_models.clone();
+            for name in &local_model_names {
+                if !all_models.contains(name) {
+                    all_models.push(name.clone());
+                }
+            }
+            let paths = build_paths(&all_models);
+            providers.push(AvailableProvider {
+                id: "flash".into(),
+                name: "Flash Inference".into(),
+                status: if is_busy {
+                    "busy".into()
+                } else {
+                    "ready".into()
+                },
+                available: true,
+                model: first,
+                models: all_models,
+                model_paths: paths,
+            });
+        } else if cached_provider_count > 0 {
+            providers.push(AvailableProvider {
+                id: "flash".into(),
+                name: "Flash Inference".into(),
+                status: "ready".into(),
+                available: true,
+                model: local_model_names.first().cloned(),
+                model_paths: local_model_paths.clone(),
+                models: local_model_names,
+            });
+        } else if !local_models.is_empty() {
+            // .gguf files on disk — selectable, user can load from here
+            providers.push(AvailableProvider {
+                id: "flash".into(),
+                name: "Flash Inference".into(),
+                status: "models_on_disk".into(),
+                available: true,
+                model: local_model_names.first().cloned(),
+                model_paths: local_model_paths,
+                models: local_model_names,
+            });
+        } else {
+            providers.push(AvailableProvider {
+                id: "flash".into(),
+                name: "Flash Inference".into(),
+                status: "no_model".into(),
+                available: false,
+                model: None,
+                models: vec![],
+                model_paths: vec![],
+            });
+        }
+    }
+
+    // ── Ollama ──
+    {
+        let ollama_url = prov_config
+            .ollama_url
+            .clone()
+            .unwrap_or_else(|| "http://localhost:11434".to_string());
+        let ollama = OllamaProvider::new(&ollama_url);
+        let reachable = ollama.health_check().unwrap_or(false);
+        if reachable {
+            let models: Vec<String> = ollama
+                .list_models()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|m| m.name)
+                .collect();
+            let first = models.first().cloned();
+            providers.push(AvailableProvider {
+                id: "ollama".into(),
+                name: "Ollama".into(),
+                status: "running".into(),
+                available: !models.is_empty(),
+                model: first,
+                models,
+                model_paths: vec![],
+            });
+        } else {
+            providers.push(AvailableProvider {
+                id: "ollama".into(),
+                name: "Ollama".into(),
+                status: "stopped".into(),
+                available: false,
+                model: None,
+                models: vec![],
+                model_paths: vec![],
+            });
+        }
+    }
+
+    // ── Cloud providers ──
+    let cloud_providers = [
+        ("groq", "Groq", &prov_config.groq_api_key),
+        ("deepseek", "DeepSeek", &prov_config.deepseek_api_key),
+        ("openai", "OpenAI", &prov_config.openai_api_key),
+        ("gemini", "Google Gemini", &prov_config.gemini_api_key),
+        ("nvidia", "NVIDIA NIM", &prov_config.nvidia_api_key),
+        ("anthropic", "Anthropic", &prov_config.anthropic_api_key),
+    ];
+    for (id, name, key) in &cloud_providers {
+        let configured = has_provider_key(key);
+        providers.push(AvailableProvider {
+            id: id.to_string(),
+            name: name.to_string(),
+            status: if configured {
+                "configured".into()
+            } else {
+                "not_configured".into()
+            },
+            available: configured,
+            model: None,
+            models: vec![],
+            model_paths: vec![],
+        });
+    }
+
+    Ok(providers)
 }
 
 /// Save an API key for a provider into `~/.nexus/config.toml` and set the
@@ -4002,6 +4536,9 @@ pub fn save_provider_api_key(provider: String, api_key: String) -> Result<(), St
         "nvidia" | "nvidia-nim" | "nim" => {
             config.llm.nvidia_api_key = api_key.clone();
             std::env::set_var("NVIDIA_NIM_API_KEY", &api_key);
+        }
+        "groq" => {
+            std::env::set_var("GROQ_API_KEY", &api_key);
         }
         _ => return Err(format!("Unknown provider: {provider}")),
     }
@@ -4032,6 +4569,28 @@ fn provider_from_prefixed_model(
             }
             "nvidia" | "nvidia-nim" | "nim" => {
                 Box::new(NvidiaProvider::new(prov_config.nvidia_api_key.clone()))
+            }
+            "groq" => Box::new(GroqProvider::new(prov_config.groq_api_key.clone())),
+            #[cfg(feature = "flash-infer")]
+            "flash" => {
+                // model_name is the path to the GGUF file.
+                // Use auto-configured settings for the model.
+                Box::new(nexus_connectors_llm::providers::FlashProvider::new(
+                    model_name.to_string(),
+                    nexus_flash_infer::LoadConfig {
+                        model_path: model_name.to_string(),
+                        n_threads: Some(8),
+                        n_ctx: 2048,
+                        n_batch: 512,
+                        ..Default::default()
+                    },
+                    nexus_flash_infer::GenerationConfig {
+                        n_ctx: 2048,
+                        n_batch: 512,
+                        n_threads: Some(8),
+                        ..nexus_flash_infer::GenerationConfig::fast()
+                    },
+                ))
             }
             _ => return Err(format!("Unknown provider prefix: {provider_prefix}")),
         };
@@ -5335,6 +5894,7 @@ pub struct PreinstalledAgentRow {
     pub schedule: Option<String>,
     pub capabilities: Vec<String>,
     pub status: String,
+    pub llm_model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -5408,11 +5968,23 @@ fn marketplace_agent_row(
 }
 
 pub fn get_preinstalled_agents(state: &AppState) -> Result<Vec<PreinstalledAgentRow>, String> {
-    let prebuilt_names = list_prebuilt_manifest_paths()
-        .into_iter()
-        .filter_map(|path| std::fs::read_to_string(path).ok())
-        .filter_map(|manifest_json| manifest_name_from_json(&manifest_json))
-        .collect::<HashSet<_>>();
+    // Build a map of prebuilt agent names → their disk manifest llm_model.
+    // This lets us override stale DB values with current disk values.
+    let mut prebuilt_disk: HashMap<String, Option<String>> = HashMap::new();
+    for path in list_prebuilt_manifest_paths() {
+        if let Ok(json_str) = std::fs::read_to_string(&path) {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                if let Some(name) = parsed.get("name").and_then(|v| v.as_str()) {
+                    let llm_model = parsed
+                        .get("llm_model")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    prebuilt_disk.insert(name.to_string(), llm_model);
+                }
+            }
+        }
+    }
+    let prebuilt_names: HashSet<String> = prebuilt_disk.keys().cloned().collect();
 
     let rows = state
         .db
@@ -5440,14 +6012,21 @@ pub fn get_preinstalled_agents(state: &AppState) -> Result<Vec<PreinstalledAgent
             continue;
         }
 
+        let agent_name = json_manifest.manifest.name.clone();
         let (agent_id, status) = runtime_by_name
-            .get(&json_manifest.manifest.name)
+            .get(&agent_name)
             .cloned()
             .unwrap_or_else(|| (row.id.clone(), "Idle".to_string()));
 
+        // Prefer disk manifest's llm_model over stale DB value
+        let resolved_llm = prebuilt_disk
+            .get(&agent_name)
+            .cloned()
+            .unwrap_or(json_manifest.manifest.llm_model);
+
         preinstalled.push(PreinstalledAgentRow {
             agent_id,
-            name: json_manifest.manifest.name,
+            name: agent_name,
             description: json_manifest.description.unwrap_or_else(|| {
                 extract_manifest_description(&row.manifest_json).unwrap_or_default()
             }),
@@ -5456,6 +6035,7 @@ pub fn get_preinstalled_agents(state: &AppState) -> Result<Vec<PreinstalledAgent
             schedule: json_manifest.manifest.schedule,
             capabilities: json_manifest.manifest.capabilities,
             status,
+            llm_model: resolved_llm,
         });
     }
 
@@ -14899,25 +15479,103 @@ fn run_post_goal_evolution(
 /// Bridges the configured LLM provider to the cognitive planner's `PlannerLlm` trait.
 struct GatewayPlannerLlm;
 
+/// Bridges the cognitive loop's LlmQuery actions to the configured LLM provider.
+///
+/// When an agent's plan includes a step like "analyze these file contents" or
+/// "summarize this data", the RegistryExecutor delegates to this handler which
+/// routes through the same LLM provider infrastructure as the planner.
+struct BridgeLlmQueryHandler;
+
+impl nexus_kernel::cognitive::LlmQueryHandler for BridgeLlmQueryHandler {
+    fn query(&self, prompt: &str) -> Result<String, String> {
+        nexus_kernel::cognitive::PlannerLlm::plan_query(&GatewayPlannerLlm, prompt)
+            .map_err(|e| e.to_string())
+    }
+}
+
 impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
     fn plan_query(&self, prompt: &str) -> Result<String, nexus_kernel::errors::AgentError> {
+        // If a Flash Inference provider is loaded, use it. The agent WAITS for Flash
+        // (blocking lock) rather than falling back to Ollama, because Ollama may be dead
+        // and Flash is the primary local provider. llama.cpp is single-threaded, so queries
+        // are serialized — the agent simply waits its turn behind the UI.
+        let flash = ACTIVE_FLASH_PROVIDER.with(|slot| slot.borrow().clone());
+        if let Some(flash_provider) = flash {
+            let prompt_chars = prompt.len();
+            eprintln!("[planner] using Flash Inference, prompt len={prompt_chars} chars");
+
+            // Run Flash query in a dedicated OS thread. This isolates the main
+            // app from llama.cpp crashes (segfaults in FFI). If the thread dies,
+            // we get an error instead of the whole app crashing.
+            let prompt_owned = prompt.to_string();
+            let handle = std::thread::spawn(move || {
+                // Cap max_tokens to 1024 for planner — a JSON plan is 200-500 tokens.
+                flash_provider.query(&prompt_owned, 1024, "flash")
+            });
+
+            match handle.join() {
+                Ok(Ok(response)) => {
+                    eprintln!(
+                        "[planner] Flash Inference query complete ({} chars)",
+                        response.output_text.len()
+                    );
+                    return Ok(strip_think_tags(&response.output_text));
+                }
+                Ok(Err(e)) => {
+                    eprintln!("[planner] Flash Inference error: {e}");
+                    return Err(e);
+                }
+                Err(_) => {
+                    eprintln!(
+                        "[planner] Flash Inference thread crashed (segfault or panic in llama.cpp)"
+                    );
+                    return Err(nexus_kernel::errors::AgentError::SupervisorError(
+                        "Flash Inference crashed during query — the model may be corrupted or out of memory. \
+                         Try reloading the model from the Flash Inference page."
+                            .to_string(),
+                    ));
+                }
+            }
+        }
+
+        eprintln!(
+            "[CRASH-TRACE-30] Flash not available/busy, loading config for standard provider"
+        );
         let config = nexus_kernel::config::load_config().unwrap_or_default();
         let prov_config = build_provider_config(&config);
         let route_model = ACTIVE_AGENT_LLM_ROUTE
             .with(|slot| slot.borrow().as_ref().map(|route| route.model.clone()));
+        eprintln!(
+            "[CRASH-TRACE-31] route_model={:?}",
+            route_model.as_deref().unwrap_or("none")
+        );
         let (provider, model) = if let Some(route_model) = route_model {
-            provider_from_prefixed_model(&route_model, &prov_config).unwrap_or_else(|_| {
-                (
-                    select_provider(&prov_config).unwrap_or_else(|_| {
-                        Box::new(OllamaProvider::from_env()) as Box<dyn LlmProvider>
-                    }),
-                    route_model,
-                )
-            })
+            // Skip flash routes — already handled by ACTIVE_FLASH_PROVIDER above.
+            // If we reach here, Flash was requested but couldn't be resolved.
+            if route_model.starts_with("flash:")
+                || route_model.starts_with("flash/")
+                || route_model == "flash"
+            {
+                // Flash provider wasn't available — return clear error instead of
+                // silently falling back to Ollama (which causes confusing 404 errors).
+                return Err(nexus_kernel::errors::AgentError::SupervisorError(
+                    "Flash Inference is selected but no model is loaded. \
+                     Go to the Agents page and click 'Load Model' to start a Flash session."
+                        .to_string(),
+                ));
+            } else {
+                provider_from_prefixed_model(&route_model, &prov_config).unwrap_or_else(|_| {
+                    (
+                        select_provider(&prov_config).unwrap_or_else(|_| {
+                            Box::new(OllamaProvider::from_env()) as Box<dyn LlmProvider>
+                        }),
+                        route_model,
+                    )
+                })
+            }
         } else {
             let provider = select_provider(&prov_config)?;
             let model = if config.llm.default_model.trim().is_empty() {
-                // If Ollama, try to pick the first available model
                 if provider.name() == "ollama" {
                     let ollama = OllamaProvider::from_env();
                     ollama
@@ -14933,9 +15591,43 @@ impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
             };
             (provider, model)
         };
-        let response = provider.query(prompt, 4096, &model)?;
-        Ok(response.output_text)
+        eprintln!(
+            "[CRASH-TRACE-32] about to call provider.query() on provider={}",
+            provider.name()
+        );
+        // Wrap the LLM query in catch_unwind as a last resort — if the provider
+        // crashes (e.g., llama.cpp segfault caught by signal handler, or Ollama timeout),
+        // we return an error instead of killing the app.
+        let query_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            provider.query(prompt, 4096, &model)
+        }));
+        eprintln!("[CRASH-TRACE-33] provider.query() returned (survived)");
+        match query_result {
+            Ok(Ok(response)) => Ok(strip_think_tags(&response.output_text)),
+            Ok(Err(e)) => Err(e),
+            Err(_panic) => Err(nexus_kernel::errors::AgentError::SupervisorError(
+                "LLM provider panicked during query — model may be corrupted or out of memory"
+                    .to_string(),
+            )),
+        }
     }
+}
+
+/// Strip `<think>...</think>` reasoning blocks from LLM output.
+/// Qwen3 and similar models emit these blocks for chain-of-thought reasoning;
+/// they must be removed before the output reaches the JSON parser or the user.
+fn strip_think_tags(input: &str) -> String {
+    let mut result = input.to_string();
+    while let Some(start) = result.find("<think>") {
+        if let Some(end) = result[start..].find("</think>") {
+            result = format!("{}{}", &result[..start], &result[start + end + 8..]);
+        } else {
+            // Unclosed <think> — remove to end
+            result.truncate(start);
+            break;
+        }
+    }
+    result
 }
 
 impl nexus_kernel::cognitive::EvolutionLlm for GatewayPlannerLlm {
@@ -15184,13 +15876,60 @@ impl BackendEventBridge {
         Self::default()
     }
 
+    /// Maximum payload size for IPC events (64KB). Larger payloads are truncated
+    /// to prevent Tauri/webview serialization crashes.
+    const MAX_EMIT_PAYLOAD: usize = 64 * 1024;
+
     fn emit(&self, _event: &str, _payload: serde_json::Value) {
         #[cfg(all(
             feature = "tauri-runtime",
             any(target_os = "windows", target_os = "macos", target_os = "linux")
         ))]
         if let Some(app) = &self.app {
-            let _ = app.emit(_event, _payload);
+            // Pre-serialize to check size and catch serialization errors safely
+            let payload_json = match serde_json::to_string(&_payload) {
+                Ok(json) => json,
+                Err(e) => {
+                    eprintln!(
+                        "[agent-ipc] serialization FAILED for event '{}': {}",
+                        _event, e
+                    );
+                    // Emit a safe error payload instead of crashing
+                    let fallback = json!({"error": format!("serialization failed: {e}")});
+                    if let Err(emit_err) = app.emit(_event, fallback) {
+                        eprintln!("[agent-ipc] fallback emit also failed: {emit_err}");
+                    }
+                    return;
+                }
+            };
+
+            // Truncate oversized payloads
+            if payload_json.len() > Self::MAX_EMIT_PAYLOAD {
+                eprintln!(
+                    "[agent-ipc] TRUNCATING event '{}': {} bytes > {} max",
+                    _event,
+                    payload_json.len(),
+                    Self::MAX_EMIT_PAYLOAD,
+                );
+                let truncated = json!({
+                    "truncated": true,
+                    "original_size": payload_json.len(),
+                    "partial": &payload_json[..Self::MAX_EMIT_PAYLOAD.min(payload_json.len())],
+                });
+                if let Err(e) = app.emit(_event, truncated) {
+                    eprintln!("[agent-ipc] truncated emit failed: {e}");
+                }
+                return;
+            }
+
+            if let Err(e) = app.emit(_event, _payload) {
+                eprintln!(
+                    "[agent-ipc] emit FAILED for '{}' ({} bytes): {}",
+                    _event,
+                    payload_json.len(),
+                    e,
+                );
+            }
         }
     }
 }
@@ -15260,6 +15999,17 @@ impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
         }
 
         Ok(())
+    }
+}
+
+/// Bridges the ScheduleRunner to the Tauri cognitive loop for run_agent tasks.
+struct RunnerGoalCallback {
+    state: AppState,
+}
+
+impl nexus_kernel::scheduler::ScheduleGoalCallback for RunnerGoalCallback {
+    fn execute_goal(&self, agent_id: &str, goal: &str) -> Result<String, String> {
+        execute_agent_goal(&self.state, agent_id.to_string(), goal.to_string(), 5)
     }
 }
 
@@ -15517,6 +16267,17 @@ fn spawn_cognitive_loop_with_bridge(
     goal_id: String,
 ) {
     tauri::async_runtime::spawn(async move {
+        // NOTE: Do NOT install a custom panic hook here. Calling prev_hook(info)
+        // inside a hook can cause a double-panic (which aborts the entire process).
+        // The catch_unwind below is sufficient for recovery.
+
+        eprintln!(
+            "[CRASH-TRACE-10] cognitive loop spawned for agent={} goal={}",
+            &agent_id[..agent_id.len().min(8)],
+            &goal_id[..goal_id.len().min(8)]
+        );
+
+        eprintln!("[CRASH-TRACE-11] creating planner and memory manager");
         let planner = nexus_kernel::cognitive::CognitivePlanner::new(Box::new(GatewayPlannerLlm));
         let mem_store = DbMemoryStore {
             db: state.db.clone(),
@@ -15527,6 +16288,7 @@ fn spawn_cognitive_loop_with_bridge(
         let workspace_base = std::path::PathBuf::from(&home)
             .join(".nexus")
             .join("agents");
+        let memory_mgr = Arc::new(memory_mgr);
         let executor = nexus_kernel::cognitive::RegistryExecutor::new(
             workspace_base,
             state.audit.clone(),
@@ -15534,28 +16296,71 @@ fn spawn_cognitive_loop_with_bridge(
             Some(Arc::new(WardenReviewEngine {
                 state: state.clone(),
             })),
-        );
+        )
+        .with_llm_handler(Arc::new(BridgeLlmQueryHandler))
+        .with_memory_manager(memory_mgr.clone());
 
+        eprintln!("[CRASH-TRACE-12] entering cycle loop");
         let max_cycles = 500u32;
-        for _cycle in 0..max_cycles {
+        'cycle_loop: for _cycle in 0..max_cycles {
+            eprintln!("[CRASH-TRACE-20] cycle {} starting", _cycle);
             let before_snapshot = capture_agent_snapshot(&state, &agent_id);
-            // Run one cycle
-            let result = {
-                let mut audit_guard = state.audit.lock().unwrap_or_else(|p| p.into_inner());
-                with_agent_llm_route(&state, &agent_id, || {
-                    state.cognitive_runtime.run_cycle_with_evolution(
-                        &agent_id,
-                        &planner,
-                        &memory_mgr,
-                        &executor,
-                        &mut audit_guard,
-                        Some(&state.evolution_tracker),
-                    )
-                })
+
+            eprintln!("[CRASH-TRACE-21] about to run cognitive cycle (catch_unwind)");
+            // Run the cognitive cycle inside catch_unwind
+            let cycle_result_or_panic =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    eprintln!("[CRASH-TRACE-22] inside catch_unwind, acquiring audit lock");
+                    let mut audit_guard = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+                    eprintln!("[CRASH-TRACE-23] audit lock acquired, calling with_agent_llm_route");
+                    with_agent_llm_route(&state, &agent_id, || {
+                        eprintln!(
+                            "[CRASH-TRACE-24] inside llm_route, calling run_cycle_with_evolution"
+                        );
+                        state.cognitive_runtime.run_cycle_with_evolution(
+                            &agent_id,
+                            &planner,
+                            &memory_mgr,
+                            &executor,
+                            &mut audit_guard,
+                            Some(&state.evolution_tracker),
+                        )
+                    })
+                }));
+
+            eprintln!("[CRASH-TRACE-25] catch_unwind returned, processing result");
+            let result = match cycle_result_or_panic {
+                Ok(r) => r,
+                Err(panic_info) => {
+                    let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                        s.to_string()
+                    } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                        s.clone()
+                    } else {
+                        "unknown panic".to_string()
+                    };
+                    eprintln!(
+                        "[agent-loop] PANIC caught for agent={}: {msg}",
+                        &agent_id[..agent_id.len().min(8)]
+                    );
+                    bridge.emit(
+                        "agent-goal-completed",
+                        json!({
+                            "agent_id": &agent_id, "goal_id": &goal_id,
+                            "success": false, "reason": format!("agent panic: {msg}"),
+                        }),
+                    );
+                    break 'cycle_loop;
+                }
             };
 
+            eprintln!("[CRASH-TRACE-26] processing cycle result");
             match result {
                 Ok(cycle_result) => {
+                    eprintln!(
+                        "[CRASH-TRACE-27] cycle OK, phase={}, steps={}",
+                        cycle_result.phase, cycle_result.steps_executed
+                    );
                     let after_snapshot = capture_agent_snapshot(&state, &agent_id);
                     if cycle_result.steps_executed > 0 {
                         persist_agent_fuel_ledger(&state, &agent_id);
@@ -15568,7 +16373,34 @@ fn spawn_cognitive_loop_with_bridge(
                             &format!("Phase {}", cycle_result.phase),
                         );
                     }
+                    // Collect recent step details from audit trail
+                    let step_details: Vec<serde_json::Value> = {
+                        let audit_guard = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+                        let agent_uuid = uuid::Uuid::parse_str(&agent_id).unwrap_or_default();
+                        audit_guard.events()
+                            .iter()
+                            .rev()
+                            .filter(|e| e.agent_id == agent_uuid)
+                            .filter(|e| {
+                                e.payload.get("event")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.starts_with("cognitive."))
+                                    .unwrap_or(false)
+                            })
+                            .take(10)
+                            .map(|e| {
+                                json!({
+                                    "action": e.payload.get("action").and_then(|v| v.as_str()).unwrap_or("unknown"),
+                                    "status": e.payload.get("status").and_then(|v| v.as_str()).unwrap_or("unknown"),
+                                    "result": e.payload.get("result_preview").and_then(|v| v.as_str()).unwrap_or(""),
+                                    "fuel_cost": e.payload.get("fuel_cost").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                })
+                            })
+                            .collect()
+                    };
+
                     // Emit phase/step events to the frontend
+                    eprintln!("[CRASH-TRACE-28] about to emit agent-cognitive-cycle");
                     bridge.emit(
                         "agent-cognitive-cycle",
                         json!({
@@ -15579,6 +16411,7 @@ fn spawn_cognitive_loop_with_bridge(
                             "fuel_consumed": cycle_result.fuel_consumed,
                             "should_continue": cycle_result.should_continue,
                             "blocked_reason": cycle_result.blocked_reason,
+                            "steps": step_details,
                         }),
                     );
 
@@ -15859,6 +16692,11 @@ fn spawn_cognitive_loop_with_bridge(
             "Goal failed: max cognitive cycles reached",
             false,
             0.0,
+        );
+
+        eprintln!(
+            "[agent-loop] cognitive loop finished for agent={}",
+            &agent_id[..agent_id.len().min(8)]
         );
     });
 }
@@ -19753,6 +20591,191 @@ async fn scheduler_trigger_now(
     serde_json::to_value(result).map_err(|e| format!("serialize: {e}"))
 }
 
+/// Get the live status of all schedules in the background runner.
+#[tauri::command]
+async fn scheduler_runner_status(
+    state: tauri::State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let status = state.schedule_runner.status();
+    serde_json::to_value(status).map_err(|e| format!("serialize: {e}"))
+}
+
+// ── Team Orchestration Commands ──────────────────────────────────────
+
+/// Execute a team workflow: Director decomposes goal, assigns to workers, collects results.
+#[tauri::command]
+async fn execute_team_workflow(
+    state: tauri::State<'_, AppState>,
+    director_id: String,
+    goal: String,
+    member_ids: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    let supervisor = state.supervisor.clone();
+
+    // Build team config from registered agents
+    let config = {
+        let sup = supervisor.lock().unwrap_or_else(|p| p.into_inner());
+
+        let director_uuid =
+            Uuid::parse_str(&director_id).map_err(|e| format!("invalid director id: {e}"))?;
+        let director_name = sup
+            .get_agent(director_uuid)
+            .map(|h| h.manifest.name.clone())
+            .unwrap_or_else(|| "director".into());
+
+        let mut members = Vec::new();
+        for mid in &member_ids {
+            let uuid = Uuid::parse_str(mid).map_err(|e| format!("invalid member id: {e}"))?;
+            if let Some(handle) = sup.get_agent(uuid) {
+                members.push(nexus_kernel::team_orchestrator::TeamMember {
+                    agent_id: mid.clone(),
+                    name: handle.manifest.name.clone(),
+                    role: infer_team_role(&handle.manifest.name),
+                    capabilities: handle.manifest.capabilities.clone(),
+                    fuel_budget: handle.remaining_fuel,
+                });
+            }
+        }
+
+        nexus_kernel::team_orchestrator::TeamConfig {
+            director_id: director_id.clone(),
+            director_name,
+            members,
+        }
+    };
+
+    let llm_handler: Arc<dyn nexus_kernel::cognitive::loop_runtime::LlmQueryHandler> =
+        Arc::new(BridgeLlmQueryHandler);
+
+    let orchestrator = nexus_kernel::team_orchestrator::TeamOrchestrator::new(
+        supervisor,
+        state.audit.clone(),
+        llm_handler,
+    );
+
+    let result = orchestrator
+        .execute_team_workflow(&config, &goal)
+        .map_err(agent_error)?;
+
+    serde_json::to_value(result).map_err(|e| format!("serialize: {e}"))
+}
+
+/// Transfer fuel from one agent to another (Director privilege).
+#[tauri::command]
+async fn transfer_agent_fuel(
+    state: tauri::State<'_, AppState>,
+    from_agent_id: String,
+    to_agent_id: String,
+    amount: u64,
+) -> Result<(), String> {
+    let llm_handler: Arc<dyn nexus_kernel::cognitive::loop_runtime::LlmQueryHandler> =
+        Arc::new(BridgeLlmQueryHandler);
+    let orchestrator = nexus_kernel::team_orchestrator::TeamOrchestrator::new(
+        state.supervisor.clone(),
+        state.audit.clone(),
+        llm_handler,
+    );
+    orchestrator
+        .transfer_fuel(&from_agent_id, &to_agent_id, amount)
+        .map_err(agent_error)
+}
+
+fn infer_team_role(name: &str) -> String {
+    let lower = name.to_lowercase();
+    if lower.contains("research") || lower.contains("oracle") {
+        "researcher".into()
+    } else if lower.contains("writ") || lower.contains("content") {
+        "writer".into()
+    } else if lower.contains("publish") {
+        "publisher".into()
+    } else if lower.contains("director") || lower.contains("conductor") {
+        "director".into()
+    } else {
+        "worker".into()
+    }
+}
+
+// ── Content Pipeline Commands ────────────────────────────────────────
+
+/// Run the full content pipeline: scan trends → research → write → publish → analytics.
+/// Returns a PipelineResult with the article path, word count, and all phase details.
+#[tauri::command]
+async fn run_content_pipeline(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+) -> Result<serde_json::Value, String> {
+    let agent_uuid = Uuid::parse_str(&agent_id).map_err(|e| format!("invalid agent id: {e}"))?;
+
+    // Build the pipeline context from the agent's manifest
+    let (agent_name, capabilities, fuel_remaining, autonomy_level, egress_allowlist) = {
+        let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+        let handle = supervisor.get_agent(agent_uuid).ok_or("agent not found")?;
+        (
+            handle.manifest.name.clone(),
+            handle.manifest.capabilities.clone(),
+            handle.remaining_fuel as f64,
+            nexus_kernel::autonomy::AutonomyLevel::from_numeric(handle.autonomy_level)
+                .unwrap_or_default(),
+            handle
+                .manifest
+                .allowed_endpoints
+                .clone()
+                .unwrap_or_default(),
+        )
+    };
+
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let workspace = std::path::PathBuf::from(&home).join("agent-output");
+    if !workspace.exists() {
+        std::fs::create_dir_all(&workspace).map_err(|e| format!("create workspace: {e}"))?;
+    }
+
+    let context = nexus_kernel::actuators::ActuatorContext {
+        agent_id: agent_id.clone(),
+        agent_name,
+        working_dir: workspace,
+        autonomy_level,
+        capabilities: capabilities.into_iter().collect(),
+        fuel_remaining,
+        egress_allowlist,
+        action_review_engine: None,
+    };
+
+    let llm_handler: Arc<dyn nexus_kernel::cognitive::loop_runtime::LlmQueryHandler> =
+        Arc::new(BridgeLlmQueryHandler);
+
+    let pipeline = nexus_kernel::content_pipeline::ContentPipeline::new(llm_handler);
+    let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+    let result = pipeline.run(&context, &mut audit);
+
+    // Send notification if article was created
+    if result.success {
+        drop(audit); // release the lock before emitting
+        #[cfg(all(
+            feature = "tauri-runtime",
+            any(target_os = "windows", target_os = "macos", target_os = "linux")
+        ))]
+        {
+            if let Some(app) = state.app_handle() {
+                let _ = app.emit(
+                    "agent-notification",
+                    json!({
+                        "agent_id": agent_id,
+                        "title": format!("New article: {}", result.article_title),
+                        "body": format!(
+                            "Published {} words on '{}'. Saved to {}",
+                            result.word_count, result.topic, result.article_path
+                        ),
+                        "level": "success",
+                    }),
+                );
+            }
+        }
+    }
+
+    serde_json::to_value(result).map_err(|e| format!("serialize: {e}"))
+}
+
 // ── Flash Inference Commands ────────────────────────────────────────
 
 #[tauri::command]
@@ -19836,6 +20859,39 @@ async fn flash_create_session(
         _ => nexus_flash_infer::InferencePriority::Balanced,
     };
 
+    // Auto-unload other models when loading a large model (>50 GB).
+    // Multiple loaded models split RAM and starve mmap page cache,
+    // killing MoE expert streaming performance.
+    let model_size_gb = profile.file_size_mb as f64 / 1024.0;
+    if model_size_gb > 50.0 {
+        let existing = state.flash_session_manager.list_sessions().await;
+        if !existing.is_empty() {
+            eprintln!(
+                "[flash] Unloading {} other model(s) to free RAM for large model ({:.0} GB)",
+                existing.len(),
+                model_size_gb
+            );
+            // Drop all cached providers first so model handles are released
+            {
+                let mut cache = state
+                    .flash_providers
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner());
+                cache.clear();
+            }
+            state.flash_session_manager.clear_all().await;
+            // Force glibc to return freed memory to the OS
+            #[cfg(target_os = "linux")]
+            {
+                extern "C" {
+                    fn malloc_trim(pad: usize) -> i32;
+                }
+                // SAFETY: malloc_trim is a standard glibc function with no UB risk.
+                let _ = unsafe { malloc_trim(0) };
+            }
+        }
+    }
+
     let preference = nexus_flash_infer::InferencePreference {
         model_path: model_path.clone(),
         target_context_len,
@@ -19843,16 +20899,40 @@ async fn flash_create_session(
         generation_config: None,
     };
 
-    let session_id = state
+    let (session_id, optimal_config) = state
         .flash_session_manager
         .create_session(&model_path, profile, preference)
         .await
         .map_err(|e| e.to_string())?;
 
     // Cache a shared FlashProvider so the model handle persists across generate calls.
+    // Pass the auto-configured LoadConfig and GenerationConfig so thread count,
+    // context size, and batch size match what auto_configure() computed.
     let provider = std::sync::Arc::new(nexus_connectors_llm::providers::FlashProvider::new(
         model_path.clone(),
+        optimal_config.load_config,
+        optimal_config.generation_config,
     ));
+
+    // Pre-load the model into the provider NOW so that the model_handle is
+    // populated before any agent or UI query(). Without this, the agent's
+    // ensure_loaded() creates a SECOND llama context with wrong config
+    // (n_ctx=262144 default instead of the session's optimized value),
+    // which OOMs or asserts in llama.cpp.
+    // spawn_blocking works here — flash_generate uses the same pattern.
+    {
+        let prov_clone = provider.clone();
+        tokio::task::spawn_blocking(move || {
+            if let Err(e) = prov_clone.ensure_loaded() {
+                eprintln!("[flash] WARNING: pre-load failed: {e}");
+            } else {
+                eprintln!("[flash] model pre-loaded into provider");
+            }
+        })
+        .await
+        .unwrap_or_else(|e| eprintln!("[flash] pre-load thread panicked: {e}"));
+    }
+
     {
         let mut cache = state
             .flash_providers
@@ -19916,8 +20996,26 @@ async fn flash_generate(
             .lock()
             .unwrap_or_else(|p| p.into_inner());
         cache.get(&session_id).cloned().unwrap_or_else(|| {
+            // Fallback: provider not cached (shouldn't happen). Use safe defaults
+            // matching the proven 0.26 tok/s test configuration.
+            eprintln!(
+                "[flash] WARNING: provider not cached for session {session_id}, using defaults"
+            );
             std::sync::Arc::new(nexus_connectors_llm::providers::FlashProvider::new(
                 model_path.clone(),
+                nexus_flash_infer::LoadConfig {
+                    model_path: model_path.clone(),
+                    n_threads: Some(8),
+                    n_ctx: 2048,
+                    n_batch: 512,
+                    ..Default::default()
+                },
+                nexus_flash_infer::GenerationConfig {
+                    n_ctx: 2048,
+                    n_batch: 512,
+                    n_threads: Some(8),
+                    ..nexus_flash_infer::GenerationConfig::fast()
+                },
             ))
         })
     };
@@ -20048,7 +21146,9 @@ async fn flash_unload_session(
             .flash_providers
             .lock()
             .unwrap_or_else(|p| p.into_inner());
-        cache.remove(&session_id);
+        let provider = cache.remove(&session_id);
+        // Explicitly drop the provider before malloc_trim so the model is freed
+        std::mem::drop(provider);
     }
 
     state
@@ -20056,6 +21156,16 @@ async fn flash_unload_session(
         .unload_session(&session_id)
         .await
         .map_err(|e| e.to_string())?;
+
+    // Force glibc to return freed memory to the OS
+    #[cfg(target_os = "linux")]
+    {
+        extern "C" {
+            fn malloc_trim(pad: usize) -> i32;
+        }
+        // SAFETY: malloc_trim is a standard glibc function with no UB risk.
+        let _ = unsafe { malloc_trim(0) };
+    }
 
     // Audit session unload
     {
@@ -20119,6 +21229,197 @@ async fn flash_get_metrics(
     };
 
     serde_json::to_value(metrics).map_err(|e| format!("serialize: {e}"))
+}
+
+#[tauri::command]
+async fn flash_system_metrics() -> Result<serde_json::Value, String> {
+    // --- RAM ---
+    let (ram_used_mb, ram_total_mb) = {
+        // Process RSS from /proc/self/status
+        let rss_kb = std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|s| {
+                s.lines().find(|l| l.starts_with("VmRSS:")).and_then(|l| {
+                    l.split_whitespace()
+                        .nth(1)
+                        .and_then(|v| v.parse::<u64>().ok())
+                })
+            })
+            .unwrap_or(0);
+
+        // System total from /proc/meminfo
+        let total_kb = std::fs::read_to_string("/proc/meminfo")
+            .ok()
+            .and_then(|s| {
+                s.lines()
+                    .find(|l| l.starts_with("MemTotal:"))
+                    .and_then(|l| {
+                        l.split_whitespace()
+                            .nth(1)
+                            .and_then(|v| v.parse::<u64>().ok())
+                    })
+            })
+            .unwrap_or(0);
+
+        (rss_kb / 1024, total_kb / 1024)
+    };
+
+    // --- CPU ---
+    let cpu_percent = {
+        // Read /proc/stat twice with a short gap to compute delta
+        fn read_cpu_total() -> Option<(u64, u64)> {
+            let s = std::fs::read_to_string("/proc/stat").ok()?;
+            let line = s.lines().next()?;
+            let vals: Vec<u64> = line
+                .split_whitespace()
+                .skip(1)
+                .filter_map(|v| v.parse().ok())
+                .collect();
+            if vals.len() < 4 {
+                return None;
+            }
+            let total: u64 = vals.iter().sum();
+            let idle = vals[3];
+            Some((total, idle))
+        }
+
+        let before = read_cpu_total();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let after = read_cpu_total();
+
+        match (before, after) {
+            (Some((t1, i1)), Some((t2, i2))) => {
+                let dt = t2.saturating_sub(t1) as f32;
+                let di = i2.saturating_sub(i1) as f32;
+                if dt > 0.0 {
+                    ((dt - di) / dt * 100.0).clamp(0.0, 100.0)
+                } else {
+                    0.0
+                }
+            }
+            _ => 0.0,
+        }
+    };
+
+    // --- VRAM (nvidia-smi) ---
+    let (vram_used_mb, vram_total_mb) = std::process::Command::new("nvidia-smi")
+        .args([
+            "--query-gpu=memory.used,memory.total",
+            "--format=csv,noheader,nounits",
+        ])
+        .output()
+        .ok()
+        .and_then(|out| {
+            if !out.status.success() {
+                return None;
+            }
+            let text = String::from_utf8_lossy(&out.stdout);
+            let line = text.lines().next()?;
+            let mut parts = line
+                .split(',')
+                .map(|s| s.trim().parse::<u64>().unwrap_or(0));
+            let used = parts.next().unwrap_or(0);
+            let total = parts.next().unwrap_or(0);
+            Some((used, total))
+        })
+        .unwrap_or((0, 0));
+
+    // --- Disk I/O and page-cache hit rate ---
+    // During MoE inference, most expert weight reads come from page cache (RAM),
+    // not SSD. Show both: actual disk I/O and cache hit percentage.
+    let (io_read_mb_s, cache_hit_percent) = {
+        fn read_disk_sectors() -> Option<u64> {
+            for prefix in &["nvme0n1", "nvme1n1", "sda", "sdb"] {
+                let path = format!("/sys/block/{}/stat", prefix);
+                if let Ok(s) = std::fs::read_to_string(&path) {
+                    let fields: Vec<&str> = s.split_whitespace().collect();
+                    if let Some(sectors) = fields.get(2).and_then(|v| v.parse::<u64>().ok()) {
+                        if sectors > 0 {
+                            return Some(sectors);
+                        }
+                    }
+                }
+            }
+            None
+        }
+
+        // Page cache stats from /proc/vmstat: pgpgin = pages read from disk
+        fn read_pgpgin() -> Option<u64> {
+            let s = std::fs::read_to_string("/proc/vmstat").ok()?;
+            for line in s.lines() {
+                if line.starts_with("pgpgin ") {
+                    return line.split_whitespace().nth(1)?.parse().ok();
+                }
+            }
+            None
+        }
+
+        // Cache stats from /proc/meminfo
+        fn read_cache_mb() -> u64 {
+            std::fs::read_to_string("/proc/meminfo")
+                .ok()
+                .map(|s| {
+                    let mut cached = 0u64;
+                    for line in s.lines() {
+                        if line.starts_with("Cached:") {
+                            cached = line
+                                .split_whitespace()
+                                .nth(1)
+                                .and_then(|v| v.parse::<u64>().ok())
+                                .unwrap_or(0);
+                            break;
+                        }
+                    }
+                    cached / 1024
+                })
+                .unwrap_or(0)
+        }
+
+        let s1 = read_disk_sectors().unwrap_or(0);
+        let pg1 = read_pgpgin().unwrap_or(0);
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let s2 = read_disk_sectors().unwrap_or(0);
+        let pg2 = read_pgpgin().unwrap_or(0);
+
+        // Actual disk I/O in MB/s
+        let delta_sectors = s2.saturating_sub(s1);
+        let io_mb_s = (delta_sectors * 512) as f32 / (1024.0 * 1024.0);
+
+        // Page-cache hit rate: pgpgin counts KB read from disk.
+        // If total file reads >> disk reads, the rest came from cache.
+        // Use cached memory as proxy: high cache = high hit rate for mmap'd models.
+        let cache_mb = read_cache_mb();
+        let disk_read_kb = pg2.saturating_sub(pg1); // KB read from disk this interval
+        let cache_pct = if cache_mb > 0 && ram_total_mb > 0 {
+            // Heuristic: cache hit rate ≈ fraction of RAM used as page cache,
+            // weighted by whether actual I/O is low relative to expected throughput.
+            let cache_fraction = cache_mb as f32 / ram_total_mb as f32;
+            // If disk reads are near zero, almost everything is cached
+            if disk_read_kb == 0 {
+                (cache_fraction * 100.0).min(99.0)
+            } else {
+                // Lower hit rate when disk is actively reading
+                let io_penalty = (io_mb_s / 500.0).min(1.0); // normalize to 500 MB/s max
+                ((cache_fraction * (1.0 - io_penalty * 0.5)) * 100.0).clamp(0.0, 99.0)
+            }
+        } else {
+            0.0
+        };
+
+        (io_mb_s, cache_pct)
+    };
+
+    let metrics = serde_json::json!({
+        "ram_used_mb": ram_used_mb,
+        "ram_total_mb": ram_total_mb,
+        "cpu_percent": (cpu_percent * 10.0).round() / 10.0,
+        "vram_used_mb": vram_used_mb,
+        "vram_total_mb": vram_total_mb,
+        "ssd_read_mb_s": (io_read_mb_s * 10.0).round() / 10.0,
+        "cache_hit_percent": (cache_hit_percent * 10.0).round() / 10.0,
+    });
+
+    Ok(metrics)
 }
 
 #[tauri::command]
@@ -20198,6 +21499,105 @@ async fn flash_export_benchmark_report(
 
     std::fs::write(&report_path, &report).map_err(|e| format!("write report: {e}"))?;
     Ok(report_path.to_string_lossy().into_owned())
+}
+
+/// Enable speculative decoding for the current session.
+///
+/// Loads a small fast "draft" model and pairs it with the loaded target model.
+/// The draft model generates tokens speculatively, then the target verifies
+/// them in batch. With ~70% acceptance rate, this gives 2-4x throughput
+/// for memory-bandwidth-bound MoE models.
+#[tauri::command]
+async fn flash_enable_speculative(
+    state: tauri::State<'_, AppState>,
+    draft_model_path: String,
+    draft_tokens: Option<u32>,
+) -> Result<serde_json::Value, String> {
+    let hw = state.flash_session_manager.hardware().clone();
+
+    // Auto-configure the draft model for speed
+    let registry = {
+        let mut r = nexus_flash_infer::BackendRegistry::new();
+        r.register(Box::new(nexus_flash_infer::LlamaBackend::new(hw.clone())));
+        r
+    };
+    let path = std::path::Path::new(&draft_model_path);
+    let backend = registry.select_backend(path).map_err(|e| e.to_string())?;
+    let metadata = backend.probe_model(path).map_err(|e| e.to_string())?;
+    let profile = nexus_flash_infer::ModelProfile::from_metadata(&metadata);
+
+    let preference = nexus_flash_infer::InferencePreference {
+        model_path: draft_model_path.clone(),
+        target_context_len: 2048,
+        priority: nexus_flash_infer::InferencePriority::Speed,
+        generation_config: None,
+    };
+
+    let optimal =
+        nexus_flash_infer::auto_configure(&hw, &profile, preference).map_err(|e| e.to_string())?;
+
+    let spec_config = nexus_flash_infer::SpeculativeConfig {
+        draft_model_path: draft_model_path.clone(),
+        draft_tokens: draft_tokens.unwrap_or(5),
+        draft_load_config: optimal.load_config,
+        draft_gen_config: optimal.generation_config,
+    };
+
+    let engine = nexus_flash_infer::SpeculativeEngine::new(spec_config, hw);
+    engine.load_draft().map_err(|e| e.to_string())?;
+
+    let info = json!({
+        "draft_model": draft_model_path,
+        "draft_tokens": draft_tokens.unwrap_or(5),
+        "status": "loaded",
+        "acceptance_rate": engine.acceptance_rate(),
+    });
+
+    {
+        let mut guard = state
+            .flash_speculative
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        *guard = Some(engine);
+    }
+
+    Ok(info)
+}
+
+/// Disable speculative decoding and unload the draft model.
+#[tauri::command]
+async fn flash_disable_speculative(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let mut guard = state
+        .flash_speculative
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    if let Some(engine) = guard.take() {
+        engine.unload_draft().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Get speculative decoding status and stats.
+#[tauri::command]
+async fn flash_speculative_status(
+    state: tauri::State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let guard = state
+        .flash_speculative
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+
+    match guard.as_ref() {
+        Some(engine) => Ok(json!({
+            "enabled": true,
+            "acceptance_rate": engine.acceptance_rate(),
+            "draft_length": engine.draft_length(),
+            "loaded": engine.is_loaded(),
+        })),
+        None => Ok(json!({
+            "enabled": false,
+        })),
+    }
 }
 
 #[tauri::command]
@@ -20293,6 +21693,510 @@ async fn flash_available_disk_space() -> Result<u64, String> {
 async fn flash_get_model_dir() -> Result<String, String> {
     let storage = nexus_flash_infer::ModelStorage::new().map_err(|e| e.to_string())?;
     Ok(storage.base_dir().to_string_lossy().to_string())
+}
+
+// ── Capability Measurement Commands ──────────────────────────────────────────
+
+#[tauri::command]
+fn cm_start_session(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+    agent_autonomy_level: u8,
+) -> Result<String, String> {
+    nexus_capability_measurement::tauri_commands::start_measurement_session(
+        &state.capability_measurement,
+        &agent_id,
+        agent_autonomy_level,
+    )
+}
+
+#[tauri::command]
+fn cm_get_session(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+) -> Result<nexus_capability_measurement::MeasurementSession, String> {
+    nexus_capability_measurement::tauri_commands::get_measurement_session(
+        &state.capability_measurement,
+        &session_id,
+    )
+}
+
+#[tauri::command]
+fn cm_get_scorecard(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+) -> Result<nexus_capability_measurement::AgentScorecard, String> {
+    nexus_capability_measurement::tauri_commands::get_agent_scorecard(
+        &state.capability_measurement,
+        &agent_id,
+    )
+}
+
+#[tauri::command]
+fn cm_list_sessions(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<nexus_capability_measurement::MeasurementSession>, String> {
+    nexus_capability_measurement::tauri_commands::list_measurement_sessions(
+        &state.capability_measurement,
+    )
+}
+
+#[tauri::command]
+fn cm_get_profile(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+) -> Result<nexus_capability_measurement::CapabilityProfile, String> {
+    nexus_capability_measurement::tauri_commands::get_capability_profile(
+        &state.capability_measurement,
+        &agent_id,
+    )
+}
+
+#[tauri::command]
+fn cm_get_gaming_flags(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+) -> Result<Vec<nexus_capability_measurement::scoring::gaming_detection::GamingFlag>, String> {
+    nexus_capability_measurement::tauri_commands::get_gaming_flags(
+        &state.capability_measurement,
+        &session_id,
+    )
+}
+
+#[tauri::command]
+fn cm_compare_agents(
+    state: tauri::State<'_, AppState>,
+    agent_ids: Vec<String>,
+) -> Result<Vec<nexus_capability_measurement::AgentScorecard>, String> {
+    nexus_capability_measurement::tauri_commands::compare_agents(
+        &state.capability_measurement,
+        &agent_ids,
+    )
+}
+
+#[tauri::command]
+fn cm_get_batteries(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<nexus_capability_measurement::tauri_commands::BatterySummary>, String> {
+    nexus_capability_measurement::tauri_commands::get_locked_batteries(
+        &state.capability_measurement,
+    )
+}
+
+#[tauri::command]
+fn cm_trigger_feedback(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+) -> Result<nexus_capability_measurement::FeedbackResult, String> {
+    nexus_capability_measurement::tauri_commands::trigger_evolution_feedback(
+        &state.capability_measurement,
+        &agent_id,
+    )
+}
+
+// ── Capability Boundary Commands ──────────────────────────────────────────────
+
+#[tauri::command]
+fn cm_get_boundary_map(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<nexus_capability_measurement::evaluation::batch::AgentBoundary>, String> {
+    nexus_capability_measurement::tauri_commands::get_boundary_map(&state.capability_measurement)
+}
+
+#[tauri::command]
+fn cm_get_calibration(
+    state: tauri::State<'_, AppState>,
+) -> Result<nexus_capability_measurement::evaluation::batch::CalibrationReport, String> {
+    nexus_capability_measurement::tauri_commands::get_calibration_report(
+        &state.capability_measurement,
+    )
+}
+
+#[tauri::command]
+fn cm_get_census(
+    state: tauri::State<'_, AppState>,
+) -> Result<nexus_capability_measurement::evaluation::batch::ClassificationCensus, String> {
+    nexus_capability_measurement::tauri_commands::get_classification_census(
+        &state.capability_measurement,
+    )
+}
+
+#[tauri::command]
+fn cm_get_gaming_report_batch(
+    state: tauri::State<'_, AppState>,
+) -> Result<nexus_capability_measurement::evaluation::batch::GamingReport, String> {
+    nexus_capability_measurement::tauri_commands::get_gaming_report_batch(
+        &state.capability_measurement,
+    )
+}
+
+#[tauri::command]
+fn cm_upload_darwin(
+    state: tauri::State<'_, AppState>,
+) -> Result<nexus_capability_measurement::DarwinUploadSummary, String> {
+    nexus_capability_measurement::tauri_commands::upload_to_darwin(&state.capability_measurement)
+}
+
+// ── Validation Run Commands ──────────────────────────────────────────────────
+
+#[tauri::command]
+fn cm_execute_validation_run(
+    state: tauri::State<'_, AppState>,
+    run_label: String,
+    enable_routing: bool,
+) -> Result<nexus_capability_measurement::ValidationRunOutput, String> {
+    nexus_capability_measurement::tauri_commands::execute_validation_run(
+        &state.capability_measurement,
+        &run_label,
+        enable_routing,
+    )
+}
+
+#[tauri::command]
+fn cm_list_validation_runs(
+) -> Result<Vec<nexus_capability_measurement::ValidationRunSummary>, String> {
+    Ok(nexus_capability_measurement::tauri_commands::list_validation_runs())
+}
+
+#[tauri::command]
+fn cm_get_validation_run(
+    run_label: String,
+) -> Result<nexus_capability_measurement::ValidationRunOutput, String> {
+    nexus_capability_measurement::tauri_commands::get_validation_run(&run_label)
+}
+
+#[tauri::command]
+fn cm_three_way_comparison(
+    run1_label: String,
+    run2_label: String,
+) -> Result<nexus_capability_measurement::evaluation::three_way::ThreeWayComparison, String> {
+    nexus_capability_measurement::tauri_commands::three_way_comparison(&run1_label, &run2_label)
+}
+
+// ── A/B Validation Commands ──────────────────────────────────────────────────
+
+#[tauri::command]
+fn cm_run_ab_validation(
+    state: tauri::State<'_, AppState>,
+    agent_ids: Vec<String>,
+) -> Result<nexus_capability_measurement::ABComparisonResult, String> {
+    let entries: Vec<(String, u8)> = if agent_ids.is_empty() {
+        // Use a default set if none specified
+        (0..5)
+            .map(|i| (format!("agent-{i}"), (i % 4) as u8 + 1))
+            .collect()
+    } else {
+        agent_ids.into_iter().map(|id| (id, 3u8)).collect()
+    };
+    nexus_capability_measurement::tauri_commands::run_ab_validation(
+        &state.capability_measurement,
+        &entries,
+    )
+}
+
+// ── Predictive Router Commands ────────────────────────────────────────────────
+
+#[tauri::command]
+fn router_route_task(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+    task_text: String,
+) -> Result<nexus_predictive_router::RoutingDecision, String> {
+    nexus_predictive_router::tauri_commands::route_task(
+        &state.predictive_router,
+        &agent_id,
+        &task_text,
+    )
+}
+
+#[tauri::command]
+fn router_record_outcome(
+    state: tauri::State<'_, AppState>,
+    decision_id: String,
+    success: bool,
+    model_was_sufficient: bool,
+    should_have_staged: bool,
+) -> Result<(), String> {
+    nexus_predictive_router::tauri_commands::record_outcome(
+        &state.predictive_router,
+        &decision_id,
+        nexus_predictive_router::router::RoutingOutcome {
+            success,
+            actual_difficulty: None,
+            model_was_sufficient,
+            should_have_staged,
+        },
+    )
+}
+
+#[tauri::command]
+fn router_get_accuracy(
+    state: tauri::State<'_, AppState>,
+) -> Result<nexus_predictive_router::RoutingAccuracy, String> {
+    nexus_predictive_router::tauri_commands::get_accuracy(&state.predictive_router)
+}
+
+#[tauri::command]
+fn router_get_models(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<nexus_predictive_router::ModelCapabilityProfile>, String> {
+    nexus_predictive_router::tauri_commands::get_model_registry(&state.predictive_router)
+}
+
+#[tauri::command]
+fn router_estimate_difficulty(
+    state: tauri::State<'_, AppState>,
+    task_text: String,
+) -> Result<nexus_predictive_router::TaskDifficultyEstimate, String> {
+    nexus_predictive_router::tauri_commands::estimate_difficulty(
+        &state.predictive_router,
+        &task_text,
+    )
+}
+
+#[tauri::command]
+fn router_get_feedback(
+    state: tauri::State<'_, AppState>,
+) -> Result<nexus_predictive_router::feedback::FeedbackAnalysis, String> {
+    nexus_predictive_router::tauri_commands::get_feedback_analysis(&state.predictive_router)
+}
+
+// ── Browser Agent Commands ────────────────────────────────────────────────────
+
+#[tauri::command]
+fn browser_create_session(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+    autonomy_level: u8,
+) -> Result<String, String> {
+    nexus_browser_agent::tauri_commands::create_session(
+        &state.browser_agent,
+        &agent_id,
+        autonomy_level,
+    )
+}
+
+#[tauri::command]
+fn browser_execute_task(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+    task: String,
+    max_steps: Option<u32>,
+    model_id: Option<String>,
+) -> Result<nexus_browser_agent::BrowserActionResult, String> {
+    nexus_browser_agent::tauri_commands::execute_task(
+        &state.browser_agent,
+        &session_id,
+        &task,
+        max_steps,
+        &model_id.unwrap_or_else(|| "ollama-7b".into()),
+    )
+}
+
+#[tauri::command]
+fn browser_navigate(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+    url: String,
+) -> Result<nexus_browser_agent::BrowserActionResult, String> {
+    nexus_browser_agent::tauri_commands::navigate(&state.browser_agent, &session_id, &url)
+}
+
+#[tauri::command]
+fn browser_screenshot(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+    output_path: Option<String>,
+) -> Result<nexus_browser_agent::BrowserActionResult, String> {
+    nexus_browser_agent::tauri_commands::screenshot(&state.browser_agent, &session_id, output_path)
+}
+
+#[tauri::command]
+fn browser_get_content(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+) -> Result<nexus_browser_agent::BrowserActionResult, String> {
+    nexus_browser_agent::tauri_commands::get_content(&state.browser_agent, &session_id)
+}
+
+#[tauri::command]
+fn browser_close_session(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+) -> Result<(), String> {
+    nexus_browser_agent::tauri_commands::close_session(&state.browser_agent, &session_id)
+}
+
+#[tauri::command]
+fn browser_get_policy(
+    state: tauri::State<'_, AppState>,
+) -> Result<nexus_browser_agent::BrowserPolicy, String> {
+    nexus_browser_agent::tauri_commands::get_policy(&state.browser_agent)
+}
+
+#[tauri::command]
+fn browser_session_count(state: tauri::State<'_, AppState>) -> Result<usize, String> {
+    nexus_browser_agent::tauri_commands::session_count(&state.browser_agent)
+}
+
+// ── Governance Oracle Commands ────────────────────────────────────────────────
+
+#[tauri::command]
+fn oracle_status() -> Result<OracleStatusSummary, String> {
+    Ok(OracleStatusSummary {
+        queue_depth: 0,
+        response_ceiling_ms: 200,
+        requests_processed: 0,
+        uptime_seconds: 0,
+    })
+}
+
+#[tauri::command]
+fn oracle_verify_token(
+    _token_json: String,
+) -> Result<nexus_governance_oracle::tauri_commands::TokenVerification, String> {
+    Ok(nexus_governance_oracle::tauri_commands::TokenVerification {
+        valid: false,
+        token_id: String::new(),
+        timestamp: 0,
+    })
+}
+
+#[tauri::command]
+fn oracle_get_agent_budget(_agent_id: String) -> Result<BudgetSummary, String> {
+    Ok(BudgetSummary {
+        agent_id: _agent_id,
+        allocations: std::collections::HashMap::new(),
+        version: 0,
+    })
+}
+
+#[tauri::command]
+fn cm_evaluate_response(
+    state: tauri::State<'_, AppState>,
+    problem_id: String,
+    agent_response: String,
+) -> Result<nexus_capability_measurement::evaluation::comparator::SingleEvaluationResult, String> {
+    nexus_capability_measurement::tauri_commands::evaluate_single_response(
+        &state.capability_measurement,
+        &problem_id,
+        &agent_response,
+    )
+}
+
+// ── Token Economy Commands ────────────────────────────────────────────────────
+
+#[tauri::command]
+fn token_get_wallet(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+) -> Result<token_cmds::WalletSummary, String> {
+    token_cmds::get_wallet(&state.token_economy, &agent_id)
+}
+
+#[tauri::command]
+fn token_get_all_wallets(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<token_cmds::WalletSummary>, String> {
+    token_cmds::get_all_wallets(&state.token_economy)
+}
+
+#[tauri::command]
+fn token_create_wallet(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+    initial_balance: f64,
+    autonomy_level: u8,
+) -> Result<token_cmds::WalletSummary, String> {
+    token_cmds::create_wallet(
+        &state.token_economy,
+        &agent_id,
+        initial_balance,
+        autonomy_level,
+    )
+}
+
+#[tauri::command]
+fn token_get_ledger(
+    state: tauri::State<'_, AppState>,
+    agent_id: Option<String>,
+    limit: Option<usize>,
+) -> Result<Vec<token_cmds::LedgerEntrySummary>, String> {
+    token_cmds::get_ledger(
+        &state.token_economy,
+        agent_id.as_deref(),
+        limit.unwrap_or(50),
+    )
+}
+
+#[tauri::command]
+fn token_get_supply(
+    state: tauri::State<'_, AppState>,
+) -> Result<token_cmds::SupplySummary, String> {
+    token_cmds::get_supply(&state.token_economy)
+}
+
+#[tauri::command]
+fn token_calculate_burn(
+    state: tauri::State<'_, AppState>,
+    model_id: String,
+    input_tokens: u64,
+    output_tokens: u64,
+) -> token_cmds::BurnEstimate {
+    token_cmds::calculate_burn(&state.token_economy, &model_id, input_tokens, output_tokens)
+}
+
+#[tauri::command]
+fn token_calculate_reward(
+    state: tauri::State<'_, AppState>,
+    quality: f64,
+    difficulty: f64,
+    completion_secs: u64,
+) -> token_cmds::RewardEstimate {
+    token_cmds::calculate_reward(&state.token_economy, quality, difficulty, completion_secs)
+}
+
+#[tauri::command]
+fn token_calculate_spawn(
+    state: tauri::State<'_, AppState>,
+    parent_id: String,
+    fraction: Option<f64>,
+) -> Result<token_cmds::SpawnEstimate, String> {
+    token_cmds::calculate_spawn(&state.token_economy, &parent_id, fraction)
+}
+
+#[tauri::command]
+fn token_create_delegation(
+    state: tauri::State<'_, AppState>,
+    requester_id: String,
+    provider_id: String,
+    task: String,
+    payment: f64,
+    threshold: f64,
+    timeout: u64,
+) -> Result<token_cmds::DelegationSummary, String> {
+    token_cmds::create_delegation(
+        &state.token_economy,
+        &requester_id,
+        &provider_id,
+        &task,
+        payment,
+        threshold,
+        timeout,
+    )
+}
+
+#[tauri::command]
+fn token_get_delegations(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+) -> Result<Vec<token_cmds::DelegationSummary>, String> {
+    token_cmds::get_delegations(&state.token_economy, &agent_id)
+}
+
+#[tauri::command]
+fn token_get_pricing(state: tauri::State<'_, AppState>) -> Vec<token_cmds::PricingSummary> {
+    token_cmds::get_pricing(&state.token_economy)
 }
 
 #[cfg(all(
@@ -20620,6 +22524,13 @@ mod runtime {
     #[tauri::command]
     fn get_provider_status() -> Result<super::ProviderStatus, String> {
         super::get_provider_status()
+    }
+
+    #[tauri::command]
+    async fn get_available_providers(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<super::AvailableProvider>, String> {
+        super::get_available_providers(state.inner()).await
     }
 
     #[tauri::command]
@@ -23095,6 +25006,53 @@ mod runtime {
         Ok(goal_id)
     }
 
+    /// Start an autonomous agent loop — the agent runs its default goal on
+    /// a recurring interval (cron expression). If the agent manifest already
+    /// has a schedule and default_goal, those are used automatically. Provide
+    /// overrides via `interval_seconds` and `goal_override` to customize.
+    #[tauri::command]
+    fn start_autonomous_loop(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        interval_seconds: Option<u64>,
+        goal_override: Option<String>,
+    ) -> Result<(), String> {
+        let interval = interval_seconds.unwrap_or(60);
+        // Build a cron expression from interval: "0 */N * * * *" (every N minutes) or
+        // use seconds-level scheduling for intervals < 60s.
+        let cron_expr = if interval < 60 {
+            format!("*/{interval} * * * * *") // every N seconds
+        } else {
+            let mins = (interval / 60).max(1);
+            format!("0 */{mins} * * * *") // every N minutes
+        };
+
+        let manifest = super::find_manifest(state.inner(), &agent_id);
+        let goal = goal_override
+            .or_else(|| manifest.as_ref().and_then(|m| m.default_goal.clone()))
+            .unwrap_or_else(|| "Execute autonomous task".to_string());
+        let description = super::find_manifest_description(state.inner(), &agent_id);
+
+        let full_goal = super::goal_with_manifest_context(&agent_id, &goal, description.as_deref());
+
+        state
+            .agent_scheduler
+            .register_agent(&agent_id, &cron_expr, &full_goal)
+            .map_err(super::agent_error)?;
+
+        Ok(())
+    }
+
+    /// Stop an autonomous agent loop (unregister from scheduler).
+    #[tauri::command]
+    fn stop_autonomous_loop(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<(), String> {
+        state.agent_scheduler.unregister_agent(&agent_id);
+        Ok(())
+    }
+
     #[tauri::command]
     fn stop_agent_goal(state: tauri::State<'_, AppState>, agent_id: String) -> Result<(), String> {
         super::stop_agent_goal(state.inner(), agent_id)
@@ -23181,6 +25139,18 @@ mod runtime {
             serde_json::json!({"consent_id": consent_id, "status": "denied"}),
         );
         Ok(())
+    }
+
+    #[tauri::command]
+    fn set_agent_review_mode(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+        review_each: bool,
+    ) -> Result<(), String> {
+        state
+            .cognitive_runtime
+            .set_review_each_mode(&agent_id, review_each)
+            .map_err(|e| e.to_string())
     }
 
     #[tauri::command]
@@ -24434,11 +26404,26 @@ mod runtime {
                 .set_executor(Arc::new(ScheduledGoalExecutor {
                     state: state.inner().clone(),
                 }));
+            // Set up the background schedule runner callback
+            state
+                .schedule_runner
+                .set_goal_callback(Arc::new(RunnerGoalCallback {
+                    state: state.inner().clone(),
+                }));
+
             // Defer heavy agent loading so the window appears immediately.
             let state_clone = state.inner().clone();
+            let runner_clone = state.schedule_runner.clone();
             tauri::async_runtime::spawn(async move {
                 state_clone.load_agents_deferred();
                 state_clone.initialize_startup_schedules();
+
+                // Seed schedules from agent manifests that have schedule + default_goal
+                seed_manifests_to_runner(&state_clone);
+
+                // Start the background schedule runner
+                eprintln!("[startup] launching background schedule runner");
+                runner_clone.run().await;
             });
 
             #[cfg(not(target_os = "linux"))]
@@ -24523,6 +26508,7 @@ mod runtime {
                 list_available_models,
                 list_provider_models,
                 get_provider_status,
+                get_available_providers,
                 save_api_key,
                 chat_with_ollama,
                 set_agent_model,
@@ -24766,6 +26752,8 @@ mod runtime {
                 project_delete,
                 assign_agent_goal,
                 execute_agent_goal,
+                start_autonomous_loop,
+                stop_autonomous_loop,
                 stop_agent_goal,
                 get_agent_cognitive_status,
                 get_agent_task_history,
@@ -24775,6 +26763,7 @@ mod runtime {
                 trigger_cross_agent_learning,
                 approve_consent_request,
                 deny_consent_request,
+                set_agent_review_mode,
                 batch_approve_consents,
                 review_consent_batch,
                 batch_deny_consents,
@@ -24979,6 +26968,10 @@ mod runtime {
                 scheduler_delete,
                 scheduler_history,
                 scheduler_trigger_now,
+                scheduler_runner_status,
+                execute_team_workflow,
+                transfer_agent_fuel,
+                run_content_pipeline,
                 // Flash Inference
                 flash_detect_hardware,
                 flash_profile_model,
@@ -24989,9 +26982,13 @@ mod runtime {
                 flash_unload_session,
                 flash_clear_sessions,
                 flash_get_metrics,
+                flash_system_metrics,
                 flash_estimate_performance,
                 flash_run_benchmark,
                 flash_export_benchmark_report,
+                flash_enable_speculative,
+                flash_disable_speculative,
+                flash_speculative_status,
                 flash_catalog_recommend,
                 flash_catalog_search,
                 flash_list_local_models,
@@ -25000,6 +26997,62 @@ mod runtime {
                 flash_delete_local_model,
                 flash_available_disk_space,
                 flash_get_model_dir,
+                // Capability Measurement
+                cm_start_session,
+                cm_get_session,
+                cm_get_scorecard,
+                cm_list_sessions,
+                cm_get_profile,
+                cm_get_gaming_flags,
+                cm_compare_agents,
+                cm_get_batteries,
+                cm_trigger_feedback,
+                cm_evaluate_response,
+                // Capability Boundary
+                cm_get_boundary_map,
+                cm_get_calibration,
+                cm_get_census,
+                cm_get_gaming_report_batch,
+                cm_upload_darwin,
+                // Validation Runs
+                cm_execute_validation_run,
+                cm_list_validation_runs,
+                cm_get_validation_run,
+                cm_three_way_comparison,
+                // A/B Validation
+                cm_run_ab_validation,
+                // Predictive Router
+                router_route_task,
+                router_record_outcome,
+                router_get_accuracy,
+                router_get_models,
+                router_estimate_difficulty,
+                router_get_feedback,
+                // Browser Agent
+                browser_create_session,
+                browser_execute_task,
+                browser_navigate,
+                browser_screenshot,
+                browser_get_content,
+                browser_close_session,
+                browser_get_policy,
+                browser_session_count,
+                // Governance Oracle
+                oracle_status,
+                oracle_verify_token,
+                oracle_get_agent_budget,
+                // Token Economy
+                token_get_wallet,
+                token_get_all_wallets,
+                token_create_wallet,
+                token_get_ledger,
+                token_get_supply,
+                token_calculate_burn,
+                token_calculate_reward,
+                token_calculate_spawn,
+                token_create_delegation,
+                token_get_delegations,
+                token_get_pricing,
             ])
             .run(tauri::generate_context!())
             .unwrap_or_else(|e| {

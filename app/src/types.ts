@@ -739,6 +739,7 @@ export interface PreinstalledAgent {
   schedule: string | null;
   capabilities: string[];
   status: string;
+  llm_model: string | null;
 }
 
 // ── Agent Browser Types ──

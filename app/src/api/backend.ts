@@ -290,6 +290,20 @@ export function getProviderStatus(): Promise<ProviderStatus> {
   return invokeDesktop<ProviderStatus>("get_provider_status");
 }
 
+export interface AvailableProvider {
+  id: string;
+  name: string;
+  status: string;
+  available: boolean;
+  model: string | null;
+  models: string[];
+  model_paths: string[];
+}
+
+export function getAvailableProviders(): Promise<AvailableProvider[]> {
+  return invokeDesktop<AvailableProvider[]>("get_available_providers");
+}
+
 export function captureScreen(region?: ScreenRegion): Promise<string> {
   return invokeDesktop<string>("capture_screen", { region });
 }
@@ -1149,6 +1163,31 @@ export function stopAgentGoal(agentId: string): Promise<void> {
   });
 }
 
+/** Start an autonomous agent loop — the agent runs its default goal on a
+ *  recurring interval. If intervalSeconds is omitted, defaults to 60s. */
+export function startAutonomousLoop(
+  agentId: string,
+  intervalSeconds?: number,
+  goalOverride?: string,
+): Promise<void> {
+  return invokeDesktop<void>("start_autonomous_loop", {
+    agentId,
+    agent_id: agentId,
+    intervalSeconds,
+    interval_seconds: intervalSeconds,
+    goalOverride,
+    goal_override: goalOverride,
+  });
+}
+
+/** Stop an autonomous agent loop (unregister from scheduler). */
+export function stopAutonomousLoop(agentId: string): Promise<void> {
+  return invokeDesktop<void>("stop_autonomous_loop", {
+    agentId,
+    agent_id: agentId,
+  });
+}
+
 export function getAgentCognitiveStatus(
   agentId: string,
 ): Promise<Record<string, unknown>> {
@@ -1346,6 +1385,15 @@ export function denyConsentRequest(
     deniedBy,
     denied_by: deniedBy,
     reason: reason ?? null,
+  });
+}
+
+export function setAgentReviewMode(agentId: string, reviewEach: boolean): Promise<void> {
+  return invokeDesktop<void>("set_agent_review_mode", {
+    agentId,
+    agent_id: agentId,
+    reviewEach,
+    review_each: reviewEach,
   });
 }
 
@@ -3006,6 +3054,56 @@ export function schedulerTriggerNow(id: string): Promise<any> {
   return invokeDesktop("scheduler_trigger_now", { id });
 }
 
+/** Get live status of all schedules in the background runner. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function schedulerRunnerStatus(): Promise<any[]> {
+  return invokeDesktop("scheduler_runner_status");
+}
+
+// ── Team Orchestration API ──────────────────────────────────────────
+
+/** Execute a team workflow: Director assigns tasks to workers, collects results. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function executeTeamWorkflow(
+  directorId: string,
+  goal: string,
+  memberIds: string[],
+): Promise<any> {
+  return invokeDesktop("execute_team_workflow", {
+    directorId,
+    director_id: directorId,
+    goal,
+    memberIds,
+    member_ids: memberIds,
+  });
+}
+
+/** Transfer fuel from one agent to another (Director privilege). */
+export function transferAgentFuel(
+  fromAgentId: string,
+  toAgentId: string,
+  amount: number,
+): Promise<void> {
+  return invokeDesktop<void>("transfer_agent_fuel", {
+    fromAgentId,
+    from_agent_id: fromAgentId,
+    toAgentId,
+    to_agent_id: toAgentId,
+    amount,
+  });
+}
+
+// ── Content Pipeline API ────────────────────────────────────────────
+
+/** Run the full content pipeline: scan → research → write → publish → analytics. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function runContentPipeline(agentId: string): Promise<any> {
+  return invokeDesktop("run_content_pipeline", {
+    agentId,
+    agent_id: agentId,
+  });
+}
+
 // ── Flash Inference API ────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -3067,6 +3165,11 @@ export function flashGetMetrics(sessionId: string): Promise<any> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function flashSystemMetrics(): Promise<any> {
+  return invokeDesktop("flash_system_metrics");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function flashEstimatePerformance(modelPath: string): Promise<any> {
   return invokeDesktop("flash_estimate_performance", {
     modelPath, model_path: modelPath,
@@ -3081,6 +3184,30 @@ export function flashCatalogRecommend(): Promise<any[]> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function flashCatalogSearch(query: string): Promise<any[]> {
   return invokeDesktop("flash_catalog_search", { query });
+}
+
+// ── Flash Inference — Speculative Decoding ─────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function flashEnableSpeculative(
+  draftModelPath: string,
+  draftTokens?: number,
+): Promise<any> {
+  return invokeDesktop("flash_enable_speculative", {
+    draftModelPath,
+    draft_model_path: draftModelPath,
+    draftTokens,
+    draft_tokens: draftTokens,
+  });
+}
+
+export function flashDisableSpeculative(): Promise<void> {
+  return invokeDesktop("flash_disable_speculative");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function flashSpeculativeStatus(): Promise<any> {
+  return invokeDesktop("flash_speculative_status");
 }
 
 // ── Flash Inference — Download & Model Management ─────────────────
@@ -3131,5 +3258,289 @@ export function flashGenerate(
     maxTokens: maxTokens ?? 2048,
     max_tokens: maxTokens ?? 2048,
   });
+}
+
+// ── Capability Measurement ──────────────────────────────────────────────────
+
+export function cmStartSession(
+  agentId: string,
+  agentAutonomyLevel: number,
+): Promise<string> {
+  return invokeDesktop<string>("cm_start_session", {
+    agentId, agent_id: agentId,
+    agentAutonomyLevel, agent_autonomy_level: agentAutonomyLevel,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmGetSession(sessionId: string): Promise<any> {
+  return invokeDesktop("cm_get_session", {
+    sessionId, session_id: sessionId,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmGetScorecard(agentId: string): Promise<any> {
+  return invokeDesktop("cm_get_scorecard", {
+    agentId, agent_id: agentId,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmListSessions(): Promise<any[]> {
+  return invokeDesktop("cm_list_sessions");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmGetProfile(agentId: string): Promise<any> {
+  return invokeDesktop("cm_get_profile", {
+    agentId, agent_id: agentId,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmGetGamingFlags(sessionId: string): Promise<any[]> {
+  return invokeDesktop("cm_get_gaming_flags", {
+    sessionId, session_id: sessionId,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmCompareAgents(agentIds: string[]): Promise<any[]> {
+  return invokeDesktop("cm_compare_agents", {
+    agentIds, agent_ids: agentIds,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmGetBatteries(): Promise<any[]> {
+  return invokeDesktop("cm_get_batteries");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmTriggerFeedback(agentId: string): Promise<any> {
+  return invokeDesktop("cm_trigger_feedback", {
+    agentId, agent_id: agentId,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmEvaluateResponse(problemId: string, agentResponse: string): Promise<any> {
+  return invokeDesktop("cm_evaluate_response", {
+    problemId, problem_id: problemId,
+    agentResponse, agent_response: agentResponse,
+  });
+}
+
+// ── Capability Boundary ─────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmGetBoundaryMap(): Promise<any[]> {
+  return invokeDesktop("cm_get_boundary_map");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmGetCalibration(): Promise<any> {
+  return invokeDesktop("cm_get_calibration");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmGetCensus(): Promise<any> {
+  return invokeDesktop("cm_get_census");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmGetGamingReportBatch(): Promise<any> {
+  return invokeDesktop("cm_get_gaming_report_batch");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmUploadDarwin(): Promise<any> {
+  return invokeDesktop("cm_upload_darwin");
+}
+
+// ── Validation Runs ─────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmExecuteValidationRun(runLabel: string, enableRouting: boolean): Promise<any> {
+  return invokeDesktop("cm_execute_validation_run", {
+    runLabel, run_label: runLabel,
+    enableRouting, enable_routing: enableRouting,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmListValidationRuns(): Promise<any[]> {
+  return invokeDesktop("cm_list_validation_runs");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmGetValidationRun(runLabel: string): Promise<any> {
+  return invokeDesktop("cm_get_validation_run", { runLabel, run_label: runLabel });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmThreeWayComparison(run1Label: string, run2Label: string): Promise<any> {
+  return invokeDesktop("cm_three_way_comparison", {
+    run1Label, run1_label: run1Label,
+    run2Label, run2_label: run2Label,
+  });
+}
+
+// ── A/B Validation ──────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cmRunAbValidation(agentIds: string[]): Promise<any> {
+  return invokeDesktop("cm_run_ab_validation", { agentIds, agent_ids: agentIds });
+}
+
+// ── Predictive Router ───────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function routerRouteTask(agentId: string, taskText: string): Promise<any> {
+  return invokeDesktop("router_route_task", { agentId, agent_id: agentId, taskText, task_text: taskText });
+}
+
+export function routerRecordOutcome(decisionId: string, success: boolean, modelWasSufficient: boolean, shouldHaveStaged: boolean): Promise<void> {
+  return invokeDesktop("router_record_outcome", {
+    decisionId, decision_id: decisionId,
+    success, modelWasSufficient, model_was_sufficient: modelWasSufficient,
+    shouldHaveStaged, should_have_staged: shouldHaveStaged,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function routerGetAccuracy(): Promise<any> { return invokeDesktop("router_get_accuracy"); }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function routerGetModels(): Promise<any[]> { return invokeDesktop("router_get_models"); }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function routerEstimateDifficulty(taskText: string): Promise<any> {
+  return invokeDesktop("router_estimate_difficulty", { taskText, task_text: taskText });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function routerGetFeedback(): Promise<any> { return invokeDesktop("router_get_feedback"); }
+
+// ── Browser Agent ───────────────────────────────────────────────────────────
+
+export function browserCreateSession(agentId: string, autonomyLevel: number): Promise<string> {
+  return invokeDesktop<string>("browser_create_session", { agentId, agent_id: agentId, autonomyLevel, autonomy_level: autonomyLevel });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function browserExecuteTask(sessionId: string, task: string, maxSteps?: number, modelId?: string): Promise<any> {
+  return invokeDesktop("browser_execute_task", { sessionId, session_id: sessionId, task, maxSteps, max_steps: maxSteps, modelId, model_id: modelId });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function browserNavigate(sessionId: string, url: string): Promise<any> {
+  return invokeDesktop("browser_navigate", { sessionId, session_id: sessionId, url });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function browserGetContent(sessionId: string): Promise<any> {
+  return invokeDesktop("browser_get_content", { sessionId, session_id: sessionId });
+}
+
+export function browserCloseSession(sessionId: string): Promise<void> {
+  return invokeDesktop("browser_close_session", { sessionId, session_id: sessionId });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function browserGetPolicy(): Promise<any> { return invokeDesktop("browser_get_policy"); }
+
+export function browserSessionCount(): Promise<number> { return invokeDesktop<number>("browser_session_count"); }
+
+// ── Governance Oracle ───────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function oracleStatus(): Promise<any> {
+  return invokeDesktop("oracle_status");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function oracleVerifyToken(tokenJson: string): Promise<any> {
+  return invokeDesktop("oracle_verify_token", {
+    tokenJson, token_json: tokenJson,
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function oracleGetAgentBudget(agentId: string): Promise<any> {
+  return invokeDesktop("oracle_get_agent_budget", {
+    agentId, agent_id: agentId,
+  });
+}
+
+// ── Token Economy ─────────────────────────────────────────────────────────────
+
+export function tokenGetWallet(agentId: string): Promise<any> {
+  return invokeDesktop("token_get_wallet", { agentId, agent_id: agentId });
+}
+
+export function tokenGetAllWallets(): Promise<any> {
+  return invokeDesktop("token_get_all_wallets");
+}
+
+export function tokenCreateWallet(agentId: string, initialBalance: number, autonomyLevel: number): Promise<any> {
+  return invokeDesktop("token_create_wallet", {
+    agentId, agent_id: agentId,
+    initialBalance, initial_balance: initialBalance,
+    autonomyLevel, autonomy_level: autonomyLevel,
+  });
+}
+
+export function tokenGetLedger(agentId?: string, limit?: number): Promise<any> {
+  return invokeDesktop("token_get_ledger", {
+    agentId, agent_id: agentId,
+    limit,
+  });
+}
+
+export function tokenGetSupply(): Promise<any> {
+  return invokeDesktop("token_get_supply");
+}
+
+export function tokenCalculateBurn(modelId: string, inputTokens: number, outputTokens: number): Promise<any> {
+  return invokeDesktop("token_calculate_burn", {
+    modelId, model_id: modelId,
+    inputTokens, input_tokens: inputTokens,
+    outputTokens, output_tokens: outputTokens,
+  });
+}
+
+export function tokenCalculateReward(quality: number, difficulty: number, completionSecs: number): Promise<any> {
+  return invokeDesktop("token_calculate_reward", {
+    quality, difficulty,
+    completionSecs, completion_secs: completionSecs,
+  });
+}
+
+export function tokenCalculateSpawn(parentId: string, fraction?: number): Promise<any> {
+  return invokeDesktop("token_calculate_spawn", {
+    parentId, parent_id: parentId,
+    fraction,
+  });
+}
+
+export function tokenCreateDelegation(
+  requesterId: string, providerId: string, task: string,
+  payment: number, threshold: number, timeout: number
+): Promise<any> {
+  return invokeDesktop("token_create_delegation", {
+    requesterId, requester_id: requesterId,
+    providerId, provider_id: providerId,
+    task, payment, threshold, timeout,
+  });
+}
+
+export function tokenGetDelegations(agentId: string): Promise<any> {
+  return invokeDesktop("token_get_delegations", { agentId, agent_id: agentId });
+}
+
+export function tokenGetPricing(): Promise<any> {
+  return invokeDesktop("token_get_pricing");
 }
 

@@ -1,4 +1,5 @@
 pub mod federation;
+pub mod retention;
 pub mod zk_mcp;
 pub mod zk_proof;
 pub mod zk_report;
@@ -183,6 +184,9 @@ impl BatcherHandle {
 pub struct AuditTrail {
     events: Vec<AuditEvent>,
     batcher: BatcherHandle,
+    /// Optional bounded retention buffer. When enabled, old events are archived
+    /// to disk with Merkle root proofs and only the recent window stays in memory.
+    retention: Option<retention::RetentionBuffer>,
 }
 
 impl AuditTrail {
@@ -190,7 +194,25 @@ impl AuditTrail {
         Self {
             events: Vec::new(),
             batcher: BatcherHandle::none(),
+            retention: None,
         }
+    }
+
+    /// Enable bounded retention with Merkle tree archival.
+    ///
+    /// Once enabled, the in-memory event buffer is bounded to
+    /// `config.max_live_events`. Older events are archived to disk as
+    /// compressed JSON segments with Merkle root proofs for integrity.
+    ///
+    /// `events()` returns only the live window. Use `load_archived_events()`
+    /// to reconstruct the full history from disk when needed.
+    pub fn enable_retention(&mut self, config: retention::RetentionConfig) {
+        let mut buffer = retention::RetentionBuffer::new(config);
+        // Set the initial count to include any events already in self.events
+        for _ in 0..self.events.len() {
+            buffer.record_append();
+        }
+        self.retention = Some(buffer);
     }
 
     /// Enable distributed audit block batching.
@@ -234,7 +256,16 @@ impl AuditTrail {
             .events
             .last()
             .map(|event| event.hash.clone())
-            .unwrap_or_else(|| GENESIS_HASH.to_string());
+            .unwrap_or_else(|| {
+                // If retention is active and events vec is empty, chain from the
+                // last archived event or genesis.
+                if let Some(ref buf) = self.retention {
+                    if let Some(last_seg) = buf.archived_segments().last() {
+                        return last_seg.last_event_hash.clone();
+                    }
+                }
+                GENESIS_HASH.to_string()
+            });
         let hash = compute_hash(
             event_id,
             timestamp,
@@ -253,7 +284,20 @@ impl AuditTrail {
             previous_hash,
             hash,
         };
+
         self.events.push(event.clone());
+
+        // If retention is active, check if we need to archive old events
+        if let Some(ref mut buffer) = self.retention {
+            buffer.record_append();
+            if self.events.len() > buffer.config().max_live_events {
+                // Archive the oldest segment directly from self.events
+                buffer
+                    .archive_from_vec(&mut self.events)
+                    .map_err(|_| AuditError::SerializationFailed)?;
+            }
+        }
+
         self.batcher.push_event(&event)?;
         Ok(event_id)
     }
@@ -279,8 +323,23 @@ impl AuditTrail {
         &mut self.events
     }
 
+    /// Verify integrity of the in-memory (live) event chain.
+    ///
+    /// When retention is enabled, this verifies only the live window
+    /// (the most recent events). Use `verify_full_integrity()` for a
+    /// complete check including archived segments.
     pub fn verify_integrity(&self) -> bool {
-        let mut expected_previous = GENESIS_HASH.to_string();
+        let expected_start = if let Some(ref buf) = self.retention {
+            if let Some(last_seg) = buf.archived_segments().last() {
+                last_seg.last_event_hash.clone()
+            } else {
+                GENESIS_HASH.to_string()
+            }
+        } else {
+            GENESIS_HASH.to_string()
+        };
+
+        let mut expected_previous = expected_start;
 
         for event in &self.events {
             if event.previous_hash != expected_previous {
@@ -306,6 +365,78 @@ impl AuditTrail {
         }
 
         true
+    }
+
+    /// Verify the FULL audit chain from genesis through all archived segments
+    /// and the live buffer. Loads every segment from disk — use sparingly.
+    ///
+    /// Returns `Ok(true)` if the entire chain is valid, `Ok(false)` if
+    /// tampering is detected, or `Err` if archived segments can't be loaded.
+    pub fn verify_full_integrity(&self) -> Result<bool, retention::ArchiveError> {
+        if let Some(ref buf) = self.retention {
+            let mut expected_previous = GENESIS_HASH.to_string();
+
+            // Verify each archived segment
+            for segment in buf.archived_segments() {
+                if segment.chain_link_hash != expected_previous {
+                    return Ok(false);
+                }
+                let events = segment.load_events()?;
+                if !retention::verify_event_chain_pub(events.iter(), &expected_previous) {
+                    return Ok(false);
+                }
+                // Verify Merkle root
+                let hashes: Vec<String> = events.iter().map(|e| e.hash.clone()).collect();
+                if retention::merkle_root(&hashes).as_deref() != Some(segment.merkle_root.as_str())
+                {
+                    return Ok(false);
+                }
+                expected_previous = segment.last_event_hash.clone();
+            }
+
+            // Verify live events (self.events)
+            Ok(retention::verify_event_chain_pub(
+                self.events.iter(),
+                &expected_previous,
+            ))
+        } else {
+            Ok(self.verify_integrity())
+        }
+    }
+
+    /// Load all archived events from disk (for compliance queries, full history).
+    ///
+    /// Returns an empty Vec if retention is not enabled.
+    pub fn load_archived_events(&self) -> Result<Vec<AuditEvent>, retention::ArchiveError> {
+        if let Some(ref buf) = self.retention {
+            buf.load_all_archived()
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    /// Get metadata for all archived segments (lightweight — no disk reads).
+    pub fn archived_segments(&self) -> Vec<retention::ArchivedSegment> {
+        if let Some(ref buf) = self.retention {
+            buf.archived_segments().to_vec()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Total events ever recorded (live + archived). Returns the live count
+    /// when retention is not enabled.
+    pub fn total_event_count(&self) -> u64 {
+        if let Some(ref buf) = self.retention {
+            buf.total_count()
+        } else {
+            self.events.len() as u64
+        }
+    }
+
+    /// Whether bounded retention is currently active.
+    pub fn retention_enabled(&self) -> bool {
+        self.retention.is_some()
     }
 }
 

@@ -26,7 +26,8 @@ pub use hivemind::{
     HivemindSession, HivemindStatus, SubTask, SubTaskStatus,
 };
 pub use loop_runtime::{
-    ActionExecutor, CognitiveRuntime, EventEmitter, LlmProvider, NoOpEmitter, RegistryExecutor,
+    ActionExecutor, CognitiveRuntime, EventEmitter, LlmProvider, LlmQueryHandler, NoOpEmitter,
+    RegistryExecutor,
 };
 pub use memory_manager::{AgentMemoryManager, MemoryEntry, MemoryStore};
 pub use planner::{CognitivePlanner, PlannerLlm};

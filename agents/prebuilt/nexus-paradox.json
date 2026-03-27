@@ -7,5 +7,5 @@
   "fuel_budget": 25000,
   "schedule": "0 2 * * 0",
   "default_goal": "Run the weekly attacker-defender self-play tournament and report any new governance hardening proposals.",
-  "llm_model": "qwen3.5:35b"
+  "llm_model": "auto"
 }

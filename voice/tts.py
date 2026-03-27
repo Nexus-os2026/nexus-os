@@ -28,19 +28,35 @@ class TtsConfig:
 class PiperTTS:
     def __init__(self, config: TtsConfig | None = None) -> None:
         self.config = config or TtsConfig()
+        self._piper_disabled = False  # Set True after first failure — no retry loop
         if self.config.piper_command is None:
             self.config.piper_command = discover_piper_command()
         if self.config.model_path is None:
             self.config.model_path = discover_piper_model_path()
+        # Validate piper is actually usable at init time
+        if self.config.piper_command and not shutil.which(self.config.piper_command):
+            import sys
+            print(
+                f"[tts] WARNING: piper command '{self.config.piper_command}' not found in PATH "
+                f"— disabling piper TTS, using silent fallback",
+                file=sys.stderr,
+            )
+            self._piper_disabled = True
 
     def synthesize(self, text: str) -> bytes:
-        if self.config.piper_command and self.config.model_path:
+        if self.config.piper_command and self.config.model_path and not self._piper_disabled:
             with tempfile.NamedTemporaryFile(prefix="nexus-tts-", suffix=".wav", delete=False) as tmp:
                 output = Path(tmp.name)
             try:
                 self.synthesize_to_wav(text, output)
                 return output.read_bytes()
-            finally:
+            except (FileNotFoundError, subprocess.CalledProcessError, OSError, RuntimeError) as exc:
+                # Piper failed — disable for the rest of this session to prevent crash loop
+                import sys
+                print(f"[tts] piper synthesis failed: {exc} — disabling for session", file=sys.stderr)
+                self._piper_disabled = True
+                output.unlink(missing_ok=True)
+            except Exception:
                 output.unlink(missing_ok=True)
         return fallback_wav_bytes(text, sample_rate=self.config.sample_rate, volume=self.config.volume)
 
@@ -53,7 +69,7 @@ class PiperTTS:
         output = Path(output_path)
         command = self.config.piper_command
         model = self.config.model_path
-        if command and model:
+        if command and model and not self._piper_disabled:
             run = [
                 command,
                 "--model",
@@ -65,17 +81,24 @@ class PiperTTS:
             ]
             if self.config.speaker is not None:
                 run.extend(["--speaker", str(self.config.speaker)])
-            subprocess.run(
-                run,
-                check=True,
-                capture_output=True,
-                text=True,
-                input=text,
-                timeout=90.0,
-            )
-            if not output.exists():
-                raise RuntimeError("Piper did not produce an output wav file")
-            return output
+            try:
+                subprocess.run(
+                    run,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    input=text,
+                    timeout=90.0,
+                )
+            except (FileNotFoundError, subprocess.CalledProcessError, OSError) as exc:
+                import sys
+                print(f"[tts] piper execution failed: {exc} — disabling for session", file=sys.stderr)
+                self._piper_disabled = True
+                # Fall through to fallback below
+            else:
+                if not output.exists():
+                    raise RuntimeError("Piper did not produce an output wav file")
+                return output
 
         output.write_bytes(
             fallback_wav_bytes(text, sample_rate=self.config.sample_rate, volume=self.config.volume)

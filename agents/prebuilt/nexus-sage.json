@@ -6,5 +6,5 @@
   "autonomy_level": 3,
   "fuel_budget": 15000,
   "default_goal": "Produce a rigorous decision brief that compares options across multiple dimensions, names the real tradeoffs, and recommends a course of action with confidence boundaries.",
-  "llm_model": "qwen3.5:9b"
+  "llm_model": "auto"
 }

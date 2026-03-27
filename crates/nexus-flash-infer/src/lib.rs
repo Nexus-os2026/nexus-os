@@ -18,6 +18,7 @@ pub mod monitor;
 pub mod profiler;
 pub mod registry;
 pub mod session;
+pub mod speculative;
 pub mod types;
 
 // Re-export key types at crate root for convenience.
@@ -33,12 +34,15 @@ pub use error::FlashError;
 pub use hardware::detect_hardware;
 pub use llama_backend::LlamaBackend;
 pub use monitor::{aggregate_metrics, metrics_from_stats, AggregateMetrics, MetricsInput};
+// Re-export llama-bridge types so callers don't need a direct dep.
+pub use nexus_llama_bridge::{GenerationConfig, NumaStrategy};
 pub use profiler::{ModelProfile, PerformanceEstimate};
 pub use registry::BackendRegistry;
 pub use session::SessionManager;
+pub use speculative::{SpeculativeConfig, SpeculativeEngine};
 pub use types::{
-    HardwareInfo, InferencePreference, InferencePriority, ModelSpecialization, SessionInfo,
-    SessionStatus, SsdType,
+    HardwareInfo, InferencePreference, InferencePriority, ModelSpecialization, RamType,
+    SessionInfo, SessionStatus, SsdType,
 };
 
 #[cfg(feature = "download")]

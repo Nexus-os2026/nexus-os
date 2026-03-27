@@ -12,6 +12,20 @@ pub struct HardwareInfo {
     pub ssd_type: SsdType,
     pub ssd_read_speed_mb_s: u32,
     pub numa_nodes: u32,
+    /// Memory type: DDR4, DDR5, LPDDR5, etc.
+    pub ram_type: RamType,
+    /// Estimated single-stream memory bandwidth in GB/s.
+    pub mem_bandwidth_gbps: f64,
+}
+
+/// System RAM type — affects memory bandwidth and optimal thread count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RamType {
+    DDR4,
+    DDR5,
+    LPDDR5,
+    LPDDR4,
+    Unknown,
 }
 
 impl Default for HardwareInfo {
@@ -26,6 +40,8 @@ impl Default for HardwareInfo {
             ssd_type: SsdType::NVMe,
             ssd_read_speed_mb_s: 3500,
             numa_nodes: 1,
+            ram_type: RamType::Unknown,
+            mem_bandwidth_gbps: 7.0,
         }
     }
 }

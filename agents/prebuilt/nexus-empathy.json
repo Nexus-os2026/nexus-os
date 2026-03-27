@@ -7,5 +7,5 @@
   "fuel_budget": 15000,
   "schedule": "0 23 * * *",
   "default_goal": "Update the local behavioral model, detect trust and friction changes, and prepare proactive suggestions for the next day.",
-  "llm_model": "qwen3.5:35b"
+  "llm_model": "auto"
 }

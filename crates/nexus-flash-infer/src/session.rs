@@ -67,12 +67,15 @@ impl SessionManager {
     }
 
     /// Create a new inference session (validates memory budget).
+    ///
+    /// Returns `(session_id, optimal_config)` so the caller can thread the
+    /// auto-configured settings into the inference provider.
     pub async fn create_session(
         &self,
         model_path: &str,
         profile: ModelProfile,
         preference: InferencePreference,
-    ) -> Result<String, FlashError> {
+    ) -> Result<(String, OptimalConfig), FlashError> {
         let config = auto_configure(&self.hw, &profile, preference)?;
 
         let needed_mb = Self::session_footprint(&config);
@@ -89,6 +92,7 @@ impl SessionManager {
         }
 
         let id = uuid::Uuid::new_v4().to_string();
+        let ret_config = config.clone();
         let session = InferenceSession {
             id: id.clone(),
             model_path: model_path.to_string(),
@@ -104,7 +108,7 @@ impl SessionManager {
         let mut sessions = self.sessions.write().await;
         sessions.insert(id.clone(), session);
 
-        Ok(id)
+        Ok((id, ret_config))
     }
 
     /// List active sessions.

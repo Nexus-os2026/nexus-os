@@ -16,5 +16,5 @@
   ],
   "autonomy_level": 4,
   "fuel_budget": 30000,
-  "llm_model": "llava"
+  "llm_model": "auto"
 }

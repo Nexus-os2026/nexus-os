@@ -8,6 +8,7 @@ pub mod cron_trigger;
 pub mod error;
 pub mod event;
 pub mod executor;
+pub mod runner;
 pub mod store;
 pub mod trigger;
 pub mod webhook;
@@ -16,6 +17,7 @@ pub use cron_trigger::CronTrigger;
 pub use error::SchedulerError;
 pub use event::EventTrigger;
 pub use executor::{ExecutionResult, ScheduledExecutor};
+pub use runner::{RunningScheduleStatus, ScheduleGoalCallback, ScheduleRunner};
 pub use store::ScheduleStore;
 pub use trigger::{
     EventKind, FailurePolicy, ScheduleEntry, ScheduleId, ScheduledTask, TriggerType,

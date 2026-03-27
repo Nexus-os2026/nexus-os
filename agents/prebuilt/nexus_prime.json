@@ -6,5 +6,5 @@
   "autonomy_level": 6,
   "fuel_budget": 250000,
   "default_goal": "Orchestrate the right mix of agents, algorithms, and model phases for a complex mission, then refine the architecture from the outcome.",
-  "llm_model": "qwen3.5:35b"
+  "llm_model": "auto"
 }

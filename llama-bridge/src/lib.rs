@@ -106,6 +106,30 @@ pub fn detect_hardware() -> HardwareInfo {
     }
 }
 
+/// Hint the OS to start reading a file into the page cache.
+///
+/// Uses `posix_fadvise(POSIX_FADV_WILLNEED)` on Linux — a non-blocking
+/// hint that tells the kernel to start asynchronous readahead. This is
+/// the safe equivalent of `madvise(MADV_WILLNEED)` for file descriptors.
+///
+/// No-op on non-Linux platforms.
+pub fn fadvise_willneed(file: &std::fs::File, len: usize) {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::io::AsRawFd;
+        let fd = file.as_raw_fd();
+        // SAFETY: posix_fadvise is a standard POSIX syscall that only provides
+        // an advisory hint. It cannot cause UB regardless of arguments.
+        unsafe {
+            libc::posix_fadvise(fd, 0, len as libc::off_t, libc::POSIX_FADV_WILLNEED);
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (file, len);
+    }
+}
+
 fn detect_ssd() -> bool {
     #[cfg(target_os = "linux")]
     {

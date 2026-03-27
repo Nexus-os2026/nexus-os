@@ -359,7 +359,7 @@ fn test_real_model_inference() {
     let mut ctx = LlamaContext::new(&model, &gen_config).expect("Failed to create context");
 
     let stats = ctx
-        .generate_sync("Hello, I am Nexus OS. I can", &gen_config, |event| {
+        .generate_sync("What is the capital of France?", &gen_config, |event| {
             match event {
                 TokenEvent::Token { text, .. } => {
                     output.push_str(&text);

@@ -3,6 +3,36 @@
 use crate::computer_control::ScreenRegion;
 use serde::{Deserialize, Serialize};
 
+/// Deserialize a `Vec<String>` that tolerates LLM output quirks:
+/// - `["a","b"]` → normal array
+/// - `"a"` → wraps into `["a"]`
+/// - `""` or `null` → empty vec
+/// - `123` or other scalars → `["123"]`
+pub(crate) mod string_or_vec {
+    use serde::{Deserialize, Deserializer};
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        Ok(match value {
+            serde_json::Value::Array(arr) => arr
+                .into_iter()
+                .filter_map(|v| match v {
+                    serde_json::Value::String(s) => Some(s),
+                    serde_json::Value::Null => None,
+                    other => Some(other.to_string()),
+                })
+                .collect(),
+            serde_json::Value::String(s) if s.is_empty() => vec![],
+            serde_json::Value::String(s) => vec![s],
+            serde_json::Value::Null => vec![],
+            other => vec![other.to_string()],
+        })
+    }
+}
+
 /// Phase of the cognitive loop an agent is currently in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CognitivePhase {
@@ -108,6 +138,7 @@ pub enum BrowserAction {
 pub enum PlannedAction {
     LlmQuery {
         prompt: String,
+        #[serde(default, deserialize_with = "string_or_vec::deserialize")]
         context: Vec<String>,
     },
     FileRead {
@@ -119,10 +150,12 @@ pub enum PlannedAction {
     },
     ShellCommand {
         command: String,
+        #[serde(default, deserialize_with = "string_or_vec::deserialize")]
         args: Vec<String>,
     },
     DockerCommand {
         subcommand: String,
+        #[serde(default, deserialize_with = "string_or_vec::deserialize")]
         args: Vec<String>,
     },
     WebSearch {
@@ -135,6 +168,9 @@ pub enum PlannedAction {
         method: String,
         url: String,
         body: Option<String>,
+        /// Optional HTTP headers as key-value pairs (e.g. `{"Authorization": "Bearer xxx"}`).
+        #[serde(default)]
+        headers: Option<std::collections::HashMap<String, String>>,
     },
     ImageGenerate {
         prompt: String,
@@ -151,7 +187,9 @@ pub enum PlannedAction {
         model: Option<String>,
     },
     KnowledgeGraphUpdate {
+        #[serde(default, deserialize_with = "string_or_vec::deserialize")]
         entities: Vec<String>,
+        #[serde(default, deserialize_with = "string_or_vec::deserialize")]
         relationships: Vec<String>,
     },
     KnowledgeGraphQuery {
@@ -213,6 +251,7 @@ pub enum PlannedAction {
     },
     HitlRequest {
         question: String,
+        #[serde(default, deserialize_with = "string_or_vec::deserialize")]
         options: Vec<String>,
     },
     MemoryStore {
@@ -223,6 +262,24 @@ pub enum PlannedAction {
     MemoryRecall {
         query: String,
         memory_type: Option<String>,
+    },
+    /// Send a notification to the user (displayed in the UI).
+    SendNotification {
+        title: String,
+        body: String,
+        /// "info", "warning", "error", or "success"
+        level: String,
+    },
+    /// Execute code in a sandboxed environment. No network access, no filesystem
+    /// access outside the agent workspace. Captures stdout/stderr.
+    CodeExecute {
+        /// "python3", "node", or "bash"
+        language: String,
+        /// The code to execute.
+        code: String,
+        /// Timeout in seconds (max 30, default 10).
+        #[serde(default)]
+        timeout_secs: Option<u32>,
     },
     Noop,
     // ── L4/L5 Self-Evolution & Governance Actions ──
@@ -319,6 +376,8 @@ impl PlannedAction {
             PlannedAction::HitlRequest { .. } => vec![], // always allowed
             PlannedAction::MemoryStore { .. } => vec![], // always allowed
             PlannedAction::MemoryRecall { .. } => vec![], // always allowed
+            PlannedAction::SendNotification { .. } => vec![], // always allowed
+            PlannedAction::CodeExecute { .. } => vec!["process.exec"],
             PlannedAction::Noop => vec![],
             PlannedAction::SelfModifyDescription { .. } => vec!["self.modify"],
             PlannedAction::SelfModifyStrategy { .. } => vec!["self.modify"],
@@ -369,6 +428,8 @@ impl PlannedAction {
             PlannedAction::HitlRequest { .. } => "hitl_request",
             PlannedAction::MemoryStore { .. } => "memory_store",
             PlannedAction::MemoryRecall { .. } => "memory_recall",
+            PlannedAction::SendNotification { .. } => "send_notification",
+            PlannedAction::CodeExecute { .. } => "code_execute",
             PlannedAction::Noop => "noop",
             PlannedAction::SelfModifyDescription { .. } => "self_modify_description",
             PlannedAction::SelfModifyStrategy { .. } => "self_modify_strategy",
@@ -505,6 +566,14 @@ pub enum CognitiveEvent {
     AgentCooldown {
         agent_id: String,
         cycles_completed: u32,
+    },
+    /// Notification from an agent to the user (sent via SendNotification action).
+    AgentNotification {
+        agent_id: String,
+        title: String,
+        body: String,
+        /// "info", "warning", "error", or "success"
+        level: String,
     },
 }
 
@@ -691,5 +760,84 @@ mod tests {
         };
         let json = serde_json::to_string(&status).unwrap();
         assert!(json.contains("\"phase\":\"Idle\""));
+    }
+
+    // ── string_or_vec deserializer tests ──
+
+    #[test]
+    fn test_llm_query_context_as_array() {
+        let json = r#"{"type": "LlmQuery", "prompt": "hello", "context": ["a", "b"]}"#;
+        let action: PlannedAction = serde_json::from_str(json).unwrap();
+        if let PlannedAction::LlmQuery { context, .. } = action {
+            assert_eq!(context, vec!["a", "b"]);
+        } else {
+            panic!("expected LlmQuery");
+        }
+    }
+
+    #[test]
+    fn test_llm_query_context_as_string() {
+        let json = r#"{"type": "LlmQuery", "prompt": "hello", "context": "previous output"}"#;
+        let action: PlannedAction = serde_json::from_str(json).unwrap();
+        if let PlannedAction::LlmQuery { context, .. } = action {
+            assert_eq!(context, vec!["previous output"]);
+        } else {
+            panic!("expected LlmQuery");
+        }
+    }
+
+    #[test]
+    fn test_llm_query_context_as_empty_string() {
+        let json = r#"{"type": "LlmQuery", "prompt": "hello", "context": ""}"#;
+        let action: PlannedAction = serde_json::from_str(json).unwrap();
+        if let PlannedAction::LlmQuery { context, .. } = action {
+            assert!(context.is_empty());
+        } else {
+            panic!("expected LlmQuery");
+        }
+    }
+
+    #[test]
+    fn test_llm_query_context_as_null() {
+        let json = r#"{"type": "LlmQuery", "prompt": "hello", "context": null}"#;
+        let action: PlannedAction = serde_json::from_str(json).unwrap();
+        if let PlannedAction::LlmQuery { context, .. } = action {
+            assert!(context.is_empty());
+        } else {
+            panic!("expected LlmQuery");
+        }
+    }
+
+    #[test]
+    fn test_llm_query_context_missing() {
+        let json = r#"{"type": "LlmQuery", "prompt": "hello"}"#;
+        let action: PlannedAction = serde_json::from_str(json).unwrap();
+        if let PlannedAction::LlmQuery { context, .. } = action {
+            assert!(context.is_empty());
+        } else {
+            panic!("expected LlmQuery");
+        }
+    }
+
+    #[test]
+    fn test_shell_command_args_as_string() {
+        let json = r#"{"type": "ShellCommand", "command": "free", "args": "-m"}"#;
+        let action: PlannedAction = serde_json::from_str(json).unwrap();
+        if let PlannedAction::ShellCommand { args, .. } = action {
+            assert_eq!(args, vec!["-m"]);
+        } else {
+            panic!("expected ShellCommand");
+        }
+    }
+
+    #[test]
+    fn test_shell_command_args_missing() {
+        let json = r#"{"type": "ShellCommand", "command": "ls"}"#;
+        let action: PlannedAction = serde_json::from_str(json).unwrap();
+        if let PlannedAction::ShellCommand { args, .. } = action {
+            assert!(args.is_empty());
+        } else {
+            panic!("expected ShellCommand");
+        }
     }
 }

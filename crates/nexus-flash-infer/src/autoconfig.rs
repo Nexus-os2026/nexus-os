@@ -37,10 +37,51 @@ pub fn auto_configure(
         );
     }
 
-    // Use all available cores — modern llama.cpp scales well on high-core CPUs.
-    // Cap at 32 to avoid scheduler overhead on extreme NUMA systems.
-    let n_threads = hw.cpu_cores.min(32);
+    // Thread count strategy for MoE inference:
+    //
+    // MoE models are memory-bandwidth-bound, not compute-bound. The optimal
+    // thread count depends on memory bandwidth (DDR4 vs DDR5) and how much
+    // of the model fits in RAM.
+    //
+    // With DDR5 (~11 GB/s single-stream, ~40 GB/s multi-threaded):
+    //   - 8 threads: optimal for models that partially fit in RAM (cache hot)
+    //   - 6 threads: still viable, leaves 2 cores for OS + page fault handling
+    //
+    // With DDR4 (~6 GB/s single-stream, ~25 GB/s multi-threaded):
+    //   - 4-6 threads: bandwidth-limited, more threads cause contention
+    //
+    // Key insight: MoE expert routing is sparse — only 4-8 of 128 experts
+    // activate per token. The page cache decides performance, not raw
+    // memory bandwidth. More threads help because each thread can overlap
+    // compute with page fault I/O from other threads.
+    //
+    // Never use hyperthreads for MoE — HT siblings share the same physical
+    // core's L1/L2 cache and execution resources, doubling TLB pressure
+    // without adding real parallelism for memory-bound work.
+    let model_size_gb = profile.file_size_mb as f64 / 1024.0;
+    let physical_cores = hw.cpu_cores / 2; // logical / 2 = physical (HT)
+    let has_fast_ram = hw.mem_bandwidth_gbps >= 9.0; // DDR5 or better
+    let n_threads = if !profile.is_moe {
+        hw.cpu_cores.min(32) // Dense models: compute-bound, use all cores
+    } else if model_size_gb > 200.0 && !has_fast_ram {
+        4 // Extreme + DDR4: bandwidth-limited
+    } else if model_size_gb > 200.0 {
+        physical_cores.clamp(4, 6) // Extreme + DDR5: slightly more headroom
+    } else if model_size_gb > 50.0 {
+        physical_cores.clamp(6, 8) // Large MoE: use physical cores
+    } else {
+        hw.cpu_cores.min(32)
+    };
     let n_batch = if profile.is_moe { 512 } else { 2048 }; // Smaller batches for MoE
+                                                           // Smaller physical sub-batch for huge MoE: reduces peak memory pressure per
+                                                           // decode step, keeping more expert pages warm in the page cache.
+    let n_ubatch = if profile.is_moe && model_size_gb > 50.0 {
+        128
+    } else if profile.is_moe {
+        256
+    } else {
+        512
+    };
     let ctx_size = budget
         .max_context_length(profile)
         .min(preference.target_context_len);
@@ -60,11 +101,45 @@ pub fn auto_configure(
             _ => GenerationConfig::balanced(),
         });
 
+    // KV cache quantization: Q4_0 for huge MoE models (>50 GB).
+    // Halves KV memory vs Q8_0, freeing ~2x more RAM for expert page cache.
+    // Quality impact is negligible for MoE since expert weights dominate output.
+    // Smaller models keep Q8_0 for better quality.
+    let (kv_type_k, kv_type_v) = if profile.is_moe && model_size_gb > 50.0 {
+        (
+            Some(nexus_llama_bridge::KvCacheType::Q4_0),
+            Some(nexus_llama_bridge::KvCacheType::Q4_0),
+        )
+    } else {
+        (gen_config.type_k, gen_config.type_v)
+    };
+
+    // GPU offloading DISABLED — force CPU-only for all models.
+    // GPU PCIe transfer overhead tanks MoE throughput:
+    //   0.015 tok/s with GPU layers vs 0.26 tok/s pure CPU.
+    // TODO: re-enable per-model GPU offloading once layer selection is fixed.
+    let _n_gpu_layers_auto = if hw.has_cuda {
+        let sz = profile.file_size_mb as f64 / 1024.0;
+        if sz < 8.0 {
+            999
+        } else if profile.is_moe && sz > 50.0 {
+            0
+        } else if profile.is_moe {
+            5
+        } else if sz < 25.0 {
+            999
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+
     let load_config = LoadConfig {
         model_path: preference.model_path,
-        n_gpu_layers: 0,  // CPU only by default
+        n_gpu_layers: 0,  // Force CPU-only until GPU offload is fixed
         use_mmap: true,   // Essential for disk streaming
-        use_mlock: false, // Don't pin — let OS manage
+        use_mlock: false, // Don't pin — mlocking 44GB+ swaps the rest of the system
         cpu_moe: profile.is_moe,
         n_threads: Some(n_threads),
         numa_strategy,
@@ -75,7 +150,10 @@ pub fn auto_configure(
     let generation_config = GenerationConfig {
         n_ctx: ctx_size,
         n_batch,
+        n_ubatch,
         n_threads: Some(n_threads),
+        type_k: kv_type_k,
+        type_v: kv_type_v,
         ..gen_config
     };
 

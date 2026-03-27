@@ -19,6 +19,7 @@ aes-gcm = "0.10"
 argon2 = "0.5"
 zeroize = { version = "1", features = ["derive"] }
 flate2 = "1"
+dashmap = "6"
 governor = { version = "0.7", default-features = false, features = ["std", "dashmap"] }
 tar = "0.4"
 regex = "1.11"
@@ -34,6 +35,7 @@ bs58 = "0.5"
 base64 = "0.22"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 cron = "0.15"
+crossbeam = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 tokio = { version = "1", features = ["rt", "time", "sync", "macros"] }
 rand = "0.8"

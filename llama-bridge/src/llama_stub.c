@@ -263,6 +263,11 @@ llama_token llama_token_bos(const llama_vocab *vocab) {
     return 1;
 }
 
+bool llama_vocab_is_eog(const llama_vocab *vocab, llama_token token) {
+    (void)vocab;
+    return token == 2; // stub: only EOS is EOG
+}
+
 
 // ===== Batch =====
 

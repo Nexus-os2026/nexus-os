@@ -44,6 +44,14 @@ members = [
   "metering",
   "llama-bridge",
   "crates/nexus-flash-infer",
+  "benchmarks/conductor-bench",
+  "crates/nexus-capability-measurement",
+  "crates/nexus-governance-oracle",
+  "crates/nexus-governance-engine",
+  "crates/nexus-governance-evolution",
+  "crates/nexus-predictive-router",
+  "crates/nexus-browser-agent",
+  "crates/nexus-token-economy",
 ]
 
 [workspace.package]
