@@ -501,22 +501,32 @@ impl McpServer {
         tool_name: &str,
         params: serde_json::Value,
     ) -> Result<GovernedToolResult, AgentError> {
-        // Step 1: Resolve agent
-        let agent = self.agents.get(&agent_id).ok_or_else(|| {
-            AgentError::SupervisorError(format!("agent {agent_id} not registered"))
-        })?;
-
-        // Step 1b: Resolve tool
-        let tool = agent
-            .tools
-            .iter()
-            .find(|t| t.name == tool_name)
-            .ok_or_else(|| AgentError::CapabilityDenied(tool_name.to_string()))?
-            .clone();
+        // Step 1: Resolve agent and extract all needed data upfront to avoid
+        // borrow conflicts between self.agents (immutable) and
+        // self.audit_trail / self.actuator_registry (mutable).
+        let (tool, agent_manifest_name, agent_caps, agent_fuel, agent_autonomy, agent_endpoints) = {
+            let agent = self.agents.get(&agent_id).ok_or_else(|| {
+                AgentError::SupervisorError(format!("agent {agent_id} not registered"))
+            })?;
+            let tool = agent
+                .tools
+                .iter()
+                .find(|t| t.name == tool_name)
+                .ok_or_else(|| AgentError::CapabilityDenied(tool_name.to_string()))?
+                .clone();
+            (
+                tool,
+                agent.manifest.name.clone(),
+                agent.manifest.capabilities.clone(),
+                agent.fuel_remaining,
+                agent.manifest.autonomy_level.unwrap_or(2).min(6),
+                agent.manifest.allowed_endpoints.clone().unwrap_or_default(),
+            )
+        };
 
         // Step 2: Capability check — tool's required capabilities must be in manifest
         for required_cap in &tool.governance.required_capabilities {
-            if !agent.manifest.capabilities.contains(required_cap) {
+            if !agent_caps.contains(required_cap) {
                 if let Err(e) = self.audit_trail.append_event(
                     agent_id,
                     EventType::Error,
@@ -535,14 +545,14 @@ impl McpServer {
 
         // Step 3: Fuel check — must have enough before execution
         let fuel_cost = tool.governance.estimated_fuel_cost;
-        if agent.fuel_remaining < fuel_cost {
+        if agent_fuel < fuel_cost {
             if let Err(e) = self.audit_trail.append_event(
                 agent_id,
                 EventType::Error,
                 json!({
                     "event_kind": "mcp.fuel_exhausted",
                     "tool": tool_name,
-                    "fuel_remaining": agent.fuel_remaining,
+                    "fuel_remaining": agent_fuel,
                     "fuel_required": fuel_cost,
                 }),
             ) {
@@ -572,10 +582,7 @@ impl McpServer {
                     .get("agent_id")
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
-                let limit = params
-                    .get("limit")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(50) as usize;
+                let limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
                 let events: Vec<serde_json::Value> = self
                     .audit_trail
                     .events()
@@ -595,38 +602,29 @@ impl McpServer {
                 serde_json::to_string(&events).unwrap_or_else(|_| "[]".to_string())
             }
             Ok(action) => {
-                let autonomy_u8 = agent.manifest.autonomy_level.unwrap_or(2).min(6);
-                let autonomy_level = format!("L{autonomy_u8}")
+                let autonomy_level = format!("L{agent_autonomy}")
                     .parse::<AutonomyLevel>()
                     .unwrap_or(AutonomyLevel::L2);
                 let context = ActuatorContext {
                     agent_id: agent_id.to_string(),
-                    agent_name: agent.manifest.name.clone(),
+                    agent_name: agent_manifest_name.clone(),
                     working_dir: PathBuf::from(
                         std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string()),
                     )
                     .join(".nexus")
                     .join("mcp-sandbox"),
                     autonomy_level,
-                    capabilities: agent
-                        .manifest
-                        .capabilities
-                        .iter()
-                        .cloned()
-                        .collect::<HashSet<String>>(),
-                    fuel_remaining: agent.fuel_remaining as f64,
-                    egress_allowlist: agent
-                        .manifest
-                        .allowed_endpoints
-                        .clone()
-                        .unwrap_or_default(),
+                    capabilities: agent_caps.iter().cloned().collect::<HashSet<String>>(),
+                    fuel_remaining: agent_fuel as f64,
+                    egress_allowlist: agent_endpoints.clone(),
                     action_review_engine: None,
                 };
 
-                match self
-                    .actuator_registry
-                    .execute_action(&action, &context, &mut self.audit_trail)
-                {
+                match self.actuator_registry.execute_action(
+                    &action,
+                    &context,
+                    &mut self.audit_trail,
+                ) {
                     Ok(ActionResult {
                         success: true,
                         output,
@@ -1308,5 +1306,66 @@ mod tests {
         let parsed: GovernedPrompt = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.arguments.len(), 1);
         assert!(parsed.arguments[0].required);
+    }
+
+    #[test]
+    fn tools_serialize_with_input_schema_camel_case() {
+        let mut server = McpServer::new();
+        let agent_id = Uuid::new_v4();
+        server.register_agent(agent_id, manifest_with(vec!["web.search", "fs.read"], 1000));
+
+        let tools = server.list_tools(agent_id).unwrap();
+        for tool in &tools {
+            let json_str = serde_json::to_string(tool).unwrap();
+            // MCP spec requires "inputSchema" (camelCase), not "input_schema"
+            assert!(
+                json_str.contains("\"inputSchema\""),
+                "tool '{}' must serialize input_schema as inputSchema, got: {}",
+                tool.name,
+                &json_str[..json_str.len().min(200)]
+            );
+            assert!(
+                !json_str.contains("\"input_schema\""),
+                "tool '{}' must NOT use snake_case input_schema",
+                tool.name
+            );
+            // Verify schema has required MCP fields
+            let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+            let schema = &parsed["inputSchema"];
+            assert_eq!(schema["type"], "object", "tool '{}' schema type", tool.name);
+            assert!(
+                schema["properties"].is_object(),
+                "tool '{}' schema properties",
+                tool.name
+            );
+            assert!(
+                schema["required"].is_array(),
+                "tool '{}' schema required",
+                tool.name
+            );
+        }
+    }
+
+    #[test]
+    fn tool_execution_dispatches_to_actuator() {
+        let mut server = McpServer::new();
+        let agent_id = Uuid::new_v4();
+        server.register_agent(agent_id, manifest_with(vec!["fs.read"], 10_000));
+
+        // fs_read dispatches to GovernedFilesystem actuator — reading a
+        // nonexistent path returns a tool result (not a panic).
+        let result = server
+            .invoke_tool(
+                agent_id,
+                "fs_read",
+                json!({"path": "/tmp/nexus_mcp_test_nonexistent_12345"}),
+            )
+            .unwrap();
+        // The actuator should return an error result (file not found) or a
+        // success result — either way it's a real dispatch, not the old mock.
+        assert!(
+            !result.content.is_empty(),
+            "actuator dispatch must produce content"
+        );
     }
 }

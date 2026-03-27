@@ -1,561 +1,1000 @@
 # NEXUS OS COMPLETE AUDIT REPORT
-Generated: 2026-03-27T12:59:23+00:00
-Commit: `5deabe6b14d00ba64c61b95a14dc2028dfc6a6c8`
-Repo root: `/home/nexus/NEXUS/nexus-os`
-Audit mode: full-system verification only. No source fixes were applied.
-Raw evidence: `audit_artifacts/` contains the command outputs, crate logs, and derived analysis used below.
+Generated: 2026-03-27T13:58:44+00:00
+Commit: 883853de2d94c1d5b52b4271cd75655a234490b2
+Workspace root: /home/nexus/NEXUS/nexus-os
 
-## SUMMARY
-```json
-{
-  "generated": "2026-03-27T12:59:23+00:00",
-  "commit": "5deabe6b14d00ba64c61b95a14dc2028dfc6a6c8",
-  "repo_root": "/home/nexus/NEXUS/nexus-os",
-  "raw_artifacts_dir": "audit_artifacts/",
-  "total_crates": 58,
-  "crates_compiling": 58,
-  "crates_with_clippy_failures": 2,
-  "crates_with_test_failures": 1,
-  "crates_with_zero_tests": 4,
-  "total_tauri_commands": 619,
-  "commands_with_todo_or_unimplemented": 0,
-  "commands_with_no_frontend_caller": 0,
-  "commands_missing_backend_ts_binding": 0,
-  "frontend_build": "PASS",
-  "frontend_typecheck": "PASS",
-  "total_frontend_pages": 84,
-  "pages_with_verified_mock_or_demo_logic": 4,
-  "pages_with_no_backend_calls": 1,
-  "pages_with_no_loading_state": 15,
-  "direct_page_invoke_calls": 5,
-  "unused_public_functions": 62,
-  "backend_wrappers_unused_by_pages": 152,
-  "real_orphan_modules": 0
-}
-```
+All file paths below are repo-relative to the workspace root unless marked otherwise.
 
-## CRITICAL FINDINGS
-|Severity|Area|Finding|Evidence|
-|---|---|---|---|
-|CRITICAL|Governance Engine / Evolution Unwired|Both governance crates are declared in workspace/app/tests but have zero runtime references in the desktop backend, so the demo cannot exercise them.|Cargo.toml:50, Cargo.toml:51, app/src-tauri/Cargo.toml:38, app/src-tauri/Cargo.toml:39, tests/integration/Cargo.toml:52, tests/integration/Cargo.toml:53, app/src-tauri/src/main.rs:839, app/src-tauri/src/main.rs:923, app/src-tauri/src/main.rs:933|
-|CRITICAL|Governed Control Is Read-Only And Simulated|The AGENT LAB governed-control page never calls `ccExecuteAction`, and the computer-control engine simulates every non-terminal action by returning `Executed: ...` instead of touching the desktop.|app/src/pages/GovernedControl.tsx:3, app/src/pages/GovernedControl.tsx:4, app/src/pages/GovernedControl.tsx:5, app/src/pages/GovernedControl.tsx:6, app/src/pages/GovernedControl.tsx:93, app/src/pages/GovernedControl.tsx:94, app/src/pages/GovernedControl.tsx:95, app/src/pages/GovernedControl.tsx:96, app/src/api/backend.ts:3549, crates/nexus-computer-control/src/engine.rs:98, crates/nexus-computer-control/src/engine.rs:137, crates/nexus-computer-control/src/engine.rs:168, crates/nexus-computer-control/src/engine.rs:213|
-|CRITICAL|Governance Oracle Tauri Layer Is Stubbed|`oracle_verify_token` only checks whether the payload string is non-empty, `oracle_get_agent_budget` only mirrors `fuel_remaining`, and the page never invokes `oracleVerifyToken` even while advertising cryptographic guarantees.|app/src-tauri/src/main.rs:22129, app/src-tauri/src/main.rs:22136, app/src-tauri/src/main.rs:22149, app/src-tauri/src/main.rs:22154, app/src/pages/GovernanceOracle.tsx:2, app/src/pages/GovernanceOracle.tsx:37, app/src/pages/GovernanceOracle.tsx:48, app/src/pages/GovernanceOracle.tsx:59, app/src/pages/GovernanceOracle.tsx:92, app/src/pages/GovernanceOracle.tsx:93, app/src/pages/GovernanceOracle.tsx:95, app/src/pages/GovernanceOracle.tsx:96, app/src/pages/GovernanceOracle.tsx:97|
-|CRITICAL|World Simulation AGENT LAB Page Cannot Run Simulations|The `world-sim` page only fetches policy and history. The submit/run/result/risk/branch wrappers exist but are unused by any page, so the demo path for the new world-simulation crate is read-only.|app/src/pages/WorldSimulation2.tsx:2, app/src/pages/WorldSimulation2.tsx:52, app/src/pages/WorldSimulation2.tsx:59, app/src/pages/WorldSimulation2.tsx:72, app/src/api/backend.ts:3578, app/src/api/backend.ts:3585, app/src/api/backend.ts:3589, app/src/api/backend.ts:3601, app/src/api/backend.ts:3605|
+## ═══ SUMMARY ═══
+- Total crates: 58
+- Crates compiling: 58
+- Crates with clippy failures: 1
+- Crates with test failures: 1
+- Crates with zero tests: 4
+- Total Tauri commands: 619
+- Commands with todo!/unimplemented!: 0
+- Commands missing generate_handler![] registration: 0
+- Commands missing backend.ts binding: 0
+- Commands with no frontend caller (app/src direct invoke scan): 0
+- backend.ts exports never called from pages: 147
+- Total frontend page/helper modules under app/src/pages: 84
+- Routed page modules: 83
+- Pages with strict mock/demo indicators: 10
+- Pages with no backend wrapper usage: 2
+- Confirmed buttons with no handler: 2
+- Dead/unused public functions (heuristic): 54
+- Orphan modules (heuristic): 6
 
-## MAJOR FINDINGS
-|Severity|Area|Finding|Evidence|
-|---|---|---|---|
-|MAJOR|Measurement Session Is Routed But Unreachable|The measurement-session route exists, but there is no sidebar item and no page-to-page navigation reference to it.|app/src/App.tsx:141, app/src/App.tsx:1712, app/src/App.tsx:1713, app/src/pages/MeasurementSession.tsx:98|
-|MAJOR|Computer Control Ships Visible Demo Mode|The primary Computer Control page includes a visible demo-mode toggle and canned `DEMO_ACTIONS` script instead of a backend-driven dry run.|app/src/pages/ComputerControl.tsx:46, app/src/pages/ComputerControl.tsx:202, app/src/pages/ComputerControl.tsx:281, app/src/pages/ComputerControl.tsx:283, app/src/pages/ComputerControl.tsx:287, app/src/pages/ComputerControl.tsx:291, app/src/pages/ComputerControl.tsx:294, app/src/pages/ComputerControl.tsx:305|
-|MAJOR|Browser-Mode Demo Fallbacks Still Populate Core UI|App-level demo data still fills agents, chat responses, runtime status, and setup wizard flows whenever the desktop backend is absent.|app/src/App.tsx:374, app/src/App.tsx:385, app/src/App.tsx:468, app/src/App.tsx:606, app/src/App.tsx:807, app/src/App.tsx:1989, app/src/App.tsx:2001, app/src/App.tsx:2013|
-|MAJOR|15 Backend-Driven Pages Have No Loading State|These pages perform backend work but expose no explicit loading indicator, increasing the chance of a frozen-looking demo.|app/src/pages/Firewall.tsx:1, app/src/pages/Firewall.tsx:2, app/src/pages/Firewall.tsx:10; app/src/pages/Messaging.tsx:1, app/src/pages/Messaging.tsx:11, app/src/pages/Messaging.tsx:90, app/src/pages/Messaging.tsx:94, app/src/pages/Messaging.tsx:106, app/src/pages/Messaging.tsx:153; app/src/pages/NotesApp.tsx:1, app/src/pages/NotesApp.tsx:3, app/src/pages/NotesApp.tsx:6, app/src/pages/NotesApp.tsx:159, app/src/pages/NotesApp.tsx:166, app/src/pages/NotesApp.tsx:231; app/src/pages/TemporalEngine.tsx:1, app/src/pages/TemporalEngine.tsx:2, app/src/pages/TemporalEngine.tsx:7, app/src/pages/TemporalEngine.tsx:112, app/src/pages/TemporalEngine.tsx:113, app/src/pages/TemporalEngine.tsx:122, ...|
-|MAJOR|A/B Validation Falls Back To Placeholder Agent IDs|The A/B validation flow triggered by the page passes an empty agent list and the backend substitutes `prebuilt-*` placeholder IDs when no live agents are found.|app/src/pages/ABValidation.tsx:43, app/src-tauri/src/main.rs:21936, app/src-tauri/src/main.rs:21949, app/src-tauri/src/main.rs:21952, app/src-tauri/src/main.rs:21953, app/src-tauri/src/main.rs:21954|
+Exact cargo results are authoritative. Dead-code, placeholder, and loading-state sections are heuristic and called out as such.
 
-## MINOR FINDINGS
-|Severity|Area|Finding|Evidence|
-|---|---|---|---|
-|MINOR|Integration Tests Fail|`cargo test -p nexus-integration` does not compile because `tests/integration` includes `app/src-tauri/src/main.rs` and hits an inner-attribute error at line 1.|tests/integration/../../app/src-tauri/src/main.rs:1, audit_artifacts/backend_health/test/nexus-integration.log|
-|MINOR|Clippy Fails In Two Crates|`cargo clippy -D warnings` fails for `nexus-conductor-benchmark` and `nexus-desktop-backend`.|benchmarks/conductor-bench/src/cloud_models_bench.rs:220, benchmarks/conductor-bench/src/inference_consistency_bench.rs:433, benchmarks/conductor-bench/src/cloud_models_bench.rs:813, app/src-tauri/src/main.rs:15788, audit_artifacts/backend_health/clippy/nexus-conductor-benchmark.log, audit_artifacts/backend_health/clippy/nexus-desktop-backend.log|
-|MINOR|Page-Level Tauri Calls Bypass backend.ts|Five direct `invoke(...)` calls bypass the centralized TypeScript bindings even though equivalent wrappers exist.|app/src/pages/TemporalEngine.tsx:143, app/src/pages/CodeEditor.tsx:276, app/src/pages/CodeEditor.tsx:304, app/src/pages/CodeEditor.tsx:384, app/src/pages/CodeEditor.tsx:411|
-|MINOR|Backend Surface Area Outruns Page Usage|152 exported backend wrappers are never referenced from page components, leaving a large amount of dormant UI wiring.|app/src/api/backend.ts:102, app/src/api/backend.ts:174, app/src/api/backend.ts:617, app/src/api/backend.ts:1654, app/src/api/backend.ts:3328, app/src/api/backend.ts:3885|
-|MINOR|Dead-Code Heuristic Found 62 Unused Public Functions|The repo still contains a large set of public functions with no Rust/TS callers under the audit heuristic.|crates/nexus-software-factory/src/roles.rs:24, crates/nexus-perception/src/engine.rs:241, crates/nexus-capability-measurement/src/tauri_commands.rs:467, crates/nexus-browser-agent/src/session.rs:128, crates/nexus-computer-control/src/engine.rs:84|
-|MINOR|Zero-Test Crates|Four crates currently report zero Rust tests in the per-crate test pass.|audit_artifacts/backend_health/test_summary.tsv|
+## ═══ CRITICAL FINDINGS ═══
+| Severity | Location | Finding | Evidence |
+| --- | --- | --- | --- |
+| CRITICAL | app/src/App.tsx:600 | The shell falls back to demo/mock agents, audit data, and chat whenever the desktop runtime is absent. | Demo data is defined at app/src/App.tsx:386 and demo chat responses at app/src/App.tsx:469; the fallback path is executed at app/src/App.tsx:600-612 and again on backend failure at app/src/App.tsx:664-670. |
+| CRITICAL | app/src-tauri/src/main.rs:22130 | Governance Oracle backend commands are synthetic and not wired to real oracle/engine logic. | oracle_status returns supervisor health and a constant 200ms ceiling (app/src-tauri/src/main.rs:22130-22139); oracle_verify_token treats any non-empty string as valid (app/src-tauri/src/main.rs:22143-22159); oracle_get_agent_budget only mirrors remaining fuel from supervisor state (app/src-tauri/src/main.rs:22163-22175). The page still renders hardcoded security claims at app/src/pages/GovernanceOracle.tsx:91-97. |
 
-## INFO
-|Severity|Area|Finding|Evidence|
-|---|---|---|---|
-|INFO|All 58 Crates Compile|`cargo check -p <crate>` succeeded for every workspace package.|audit_artifacts/backend_health/check_summary.tsv|
-|INFO|All 619 Tauri Commands Are Registered|Every `#[tauri::command]` found under `app/src-tauri/src` is present in `generate_handler![]`.|app/src-tauri/src/main.rs:27176|
-|INFO|All 619 Tauri Commands Have A String Binding In backend.ts|A string-level comparison found every registered command name somewhere in `app/src/api/backend.ts`.|app/src/api/backend.ts|
-|INFO|Strict No-Caller Scan Found No Registered Command Without Some Frontend Reference|The user-script-style grep returned no registered Rust command with zero frontend references.|audit_artifacts/static/unused_tauri_commands.txt|
-|INFO|Frontend Typecheck And Production Build Pass|`npm run lint` and `npm run build` both succeeded in `app/`.|audit_artifacts/frontend_build/lint.log, audit_artifacts/frontend_build/build.log|
-|INFO|Security Scan Found No Hardcoded Secrets Or Committed .env Files|No matching secrets, `.env` files, or recent `.env` additions were found.|audit_artifacts/data_security/security_audit.txt|
-|INFO|Validation Data Exists|Validation artifacts, prebuilt agent manifests, and measurement battery data are present and non-empty.|data/validation_runs/real-battery-baseline.json, agents/prebuilt, crates/nexus-capability-measurement/data/battery_v1.json|
-|INFO|Orphan-Module Heuristic Produced Only Test False Positives|The only `ORPHAN:` hits were standalone integration-test files under `crates/nexus-flash-infer/tests/`.|crates/nexus-flash-infer/tests/autoconfig_test.rs, crates/nexus-flash-infer/tests/registry_test.rs|
+## ═══ MAJOR FINDINGS ═══
+| Severity | Location | Finding | Evidence |
+| --- | --- | --- | --- |
+| MAJOR | app/src-tauri/Cargo.toml:38 | nexus-governance-engine is linked as a desktop dependency but has no app wiring. | Dependency declared at app/src-tauri/Cargo.toml:38; repo search found no references in app/src-tauri/src/main.rs, app/src/api/backend.ts, or app/src/pages. |
+| MAJOR | app/src-tauri/Cargo.toml:39 | nexus-governance-evolution is linked as a desktop dependency but has no app wiring. | Dependency declared at app/src-tauri/Cargo.toml:39; repo search found no references in app/src-tauri/src/main.rs, app/src/api/backend.ts, or app/src/pages. |
+| MAJOR | app/src/pages/Collaboration.tsx:14 | Voting is only partially wired in Collaboration: the page can cast votes, but it never exposes a way to call a vote. | collabCallVote is imported and unused at app/src/pages/Collaboration.tsx:14; MSG_TYPES omits CallVote at app/src/pages/Collaboration.tsx:73-76; the UI only shows voting buttons when the session is already in Voting state at app/src/pages/Collaboration.tsx:305-320. |
+| MAJOR | app/src/pages/WorldSimulation2.tsx:118 | Risk retrieval on the new World Simulation page is race-prone and can be skipped on first run. | The handler sets runningId in one promise callback and then reads the stale state variable in the next callback instead of the fresh id (app/src/pages/WorldSimulation2.tsx:118-119). |
+| MAJOR | app/src/pages/AiChatHub.tsx:764 | The inline code-block Run button is rendered but has no event binding. | Only occurrences of `ch-code-run` in app/src are the injected HTML at app/src/pages/AiChatHub.tsx:764 and CSS selectors in app/src/pages/ai-chat-hub.css:557-567. |
+| MAJOR | app/src/pages/ComplianceDashboard.tsx:852 | The Run Retention Enforcement control is a dead button. | The button is rendered without onClick/onSubmit at app/src/pages/ComplianceDashboard.tsx:852-854. |
+| MAJOR | app/src/App.tsx:184 | The nav exposes two different pages with the same label World Simulation, backed by different implementations. | AGENT LAB uses `world-sim` at app/src/App.tsx:184 and routes to WorldSimulation2Page at app/src/App.tsx:1758-1759; SIMULATION uses `simulation` at app/src/App.tsx:210 and routes to WorldSimulation at app/src/App.tsx:1644-1645. |
+| MAJOR | app/src/pages/ComputerControl.tsx:281 | Computer Control intentionally ships a visible demo-mode path with canned action playback instead of backend execution. | The page exposes a `Demo Mode` toggle at app/src/pages/ComputerControl.tsx:281, labels it `Safe preview — no real actions taken` at app/src/pages/ComputerControl.tsx:283, and drives `Run Demo` from a hardcoded `DEMO_ACTIONS` script defined at app/src/pages/ComputerControl.tsx:202-210 and rendered at app/src/pages/ComputerControl.tsx:291-305. |
+| MAJOR | crates/nexus-computer-control/src/engine.rs:98 | Governed computer control is only partially real: non-terminal actions are still simulated. | The engine comment explicitly says execution is `simulated` at crates/nexus-computer-control/src/engine.rs:98, and all non-`TerminalCommand` actions collapse to `format!(\"Executed: {}\", action.label())` at crates/nexus-computer-control/src/engine.rs:168. The Governed Control page still presents this surface as desktop automation and exposes live execution at app/src/pages/GovernedControl.tsx:219. |
 
-## WORKSPACE CRATE HEALTH
-|Crate|Check|Check Warns|Clippy|Tests|Test Count|Notes|
-|---|---|---|---|---|---|---|
-|coder-agent|PASS|0|PASS|PASS|42|-|
-|coding-agent|PASS|0|PASS|PASS|5|-|
-|designer-agent|PASS|0|PASS|PASS|3|-|
-|nexus-adaptation|PASS|0|PASS|PASS|23|-|
-|nexus-agent-memory|PASS|0|PASS|PASS|21|-|
-|nexus-airgap|PASS|0|PASS|PASS|15|-|
-|nexus-analytics|PASS|0|PASS|PASS|5|-|
-|nexus-auth|PASS|0|PASS|PASS|32|-|
-|nexus-benchmarks|PASS|0|PASS|PASS|0|zero tests|
-|nexus-browser-agent|PASS|0|PASS|PASS|12|-|
-|nexus-capability-measurement|PASS|0|PASS|PASS|76|-|
-|nexus-cli|PASS|0|PASS|PASS|103|-|
-|nexus-cloud|PASS|0|PASS|PASS|22|-|
-|nexus-collab-protocol|PASS|0|PASS|PASS|18|-|
-|nexus-collaboration|PASS|0|PASS|PASS|22|-|
-|nexus-computer-control|PASS|0|PASS|PASS|16|-|
-|nexus-conductor|PASS|0|PASS|PASS|28|-|
-|nexus-conductor-benchmark|PASS|17|FAIL|PASS|0|17 cargo-check warnings; clippy failure; zero tests|
-|nexus-connectors-core|PASS|0|PASS|PASS|8|-|
-|nexus-connectors-llm|PASS|0|PASS|PASS|290|-|
-|nexus-connectors-messaging|PASS|0|PASS|PASS|45|-|
-|nexus-connectors-social|PASS|0|PASS|PASS|0|zero tests|
-|nexus-connectors-web|PASS|0|PASS|PASS|8|-|
-|nexus-content|PASS|0|PASS|PASS|3|-|
-|nexus-control|PASS|0|PASS|PASS|15|-|
-|nexus-desktop-backend|PASS|2|FAIL|PASS|90|2 cargo-check warnings; clippy failure|
-|nexus-distributed|PASS|0|PASS|PASS|179|-|
-|nexus-enterprise|PASS|0|PASS|PASS|21|-|
-|nexus-external-tools|PASS|0|PASS|PASS|17|-|
-|nexus-factory|PASS|0|PASS|PASS|30|-|
-|nexus-flash-infer|PASS|0|PASS|PASS|54|-|
-|nexus-governance-engine|PASS|0|PASS|PASS|9|-|
-|nexus-governance-evolution|PASS|0|PASS|PASS|7|-|
-|nexus-governance-oracle|PASS|0|PASS|PASS|12|-|
-|nexus-integration|PASS|0|PASS|FAIL|UNKNOWN|test failure|
-|nexus-integrations|PASS|0|PASS|PASS|42|-|
-|nexus-kernel|PASS|0|PASS|PASS|2015|-|
-|nexus-llama-bridge|PASS|0|PASS|PASS|31|-|
-|nexus-marketplace|PASS|0|PASS|PASS|84|-|
-|nexus-metering|PASS|0|PASS|PASS|18|-|
-|nexus-perception|PASS|0|PASS|PASS|19|-|
-|nexus-persistence|PASS|0|PASS|PASS|58|-|
-|nexus-predictive-router|PASS|0|PASS|PASS|14|-|
-|nexus-protocols|PASS|0|PASS|PASS|92|-|
-|nexus-research|PASS|0|PASS|PASS|12|-|
-|nexus-sdk|PASS|0|PASS|PASS|217|-|
-|nexus-self-update|PASS|0|PASS|PASS|9|-|
-|nexus-software-factory|PASS|0|PASS|PASS|18|-|
-|nexus-telemetry|PASS|0|PASS|PASS|21|-|
-|nexus-tenancy|PASS|0|PASS|PASS|50|-|
-|nexus-token-economy|PASS|0|PASS|PASS|29|-|
-|nexus-workflows|PASS|0|PASS|PASS|5|-|
-|nexus-world-simulation|PASS|0|PASS|PASS|18|-|
-|screen-poster-agent|PASS|0|PASS|PASS|6|-|
-|self-improve-agent|PASS|0|PASS|PASS|7|-|
-|social-poster-agent|PASS|0|PASS|PASS|0|zero tests|
-|web-builder-agent|PASS|0|PASS|PASS|12|-|
-|workflow-studio-agent|PASS|0|PASS|PASS|4|-|
+## ═══ MINOR FINDINGS ═══
+| Severity | Location | Finding | Evidence |
+| --- | --- | --- | --- |
+| MINOR | tests/integration/../../app/src-tauri/src/main.rs:1 | The workspace integration test crate fails to compile because it includes main.rs with an inner attribute in module context. | cargo test -p nexus-integration fails on `#![allow(unexpected_cfgs)]` at tests/integration/../../app/src-tauri/src/main.rs:1. |
+| MINOR | benchmarks/conductor-bench/src/nim_cloud_bench.rs:673 | nexus-conductor-benchmark fails `cargo clippy -D warnings` with 51 diagnostics. | Examples include unread fields at benchmarks/conductor-bench/src/nim_cloud_bench.rs:673 and push_str single-character literal warnings across benchmarks/conductor-bench/src/cloud_models_bench.rs:901-1163. |
+| MINOR | app/src/api/backend.ts:1 | 147 exported backend bindings are never referenced by any page component. | See the Unwired Backend Bindings section for the full list generated from app/src/api/backend.ts exports vs app/src/pages usage. |
+| MINOR | agents/social-poster/Cargo.toml:1 | Four crates/packages have zero test markers. | Zero-test packages: agents/social-poster, connectors/social, benchmarks, benchmarks/conductor-bench. |
+| MINOR | crates/nexus-software-factory/src/roles.rs:24 | Dead-code heuristics found 54 public functions with no references in crates/ or app/. | See the Dead Code section for the full heuristic list. |
 
-### Specific Failures / Warnings
-- `nexus-conductor-benchmark`: cargo check warning hotspots at `benchmarks/conductor-bench/src/inference_consistency_bench.rs:62`, `benchmarks/conductor-bench/src/inference_consistency_bench.rs:278`, `benchmarks/conductor-bench/src/nim_cloud_bench.rs:673`, `benchmarks/conductor-bench/src/cloud_models_bench.rs:220`, `benchmarks/conductor-bench/src/local_vs_cloud_battle.rs:327`; clippy failures logged in `audit_artifacts/backend_health/clippy/nexus-conductor-benchmark.log`.
-- `nexus-desktop-backend`: cargo check warnings plus a clippy failure because `simulation_mock_response` is dead code at `app/src-tauri/src/main.rs:15788`.
-- `nexus-integration`: test compilation fails because `tests/integration` includes `app/src-tauri/src/main.rs` and hits the inner-attribute error at `tests/integration/../../app/src-tauri/src/main.rs:1`.
-- Zero-test crates: `nexus-benchmarks`, `nexus-conductor-benchmark`, `nexus-connectors-social`, `social-poster-agent`.
+## ═══ INFO ═══
+| Severity | Location | Finding | Evidence |
+| --- | --- | --- | --- |
+| INFO | app/src/pages/commandCenterUi.tsx:1 | commandCenterUi.tsx is stored under pages/ but acts as a shared UI helper, not a routed page. | It is imported by 21 page modules and intentionally absent from routing. |
+| INFO | package.json (missing) | Root-level package.json and tsconfig.json are missing, although app/package.json and app/tsconfig.json exist. | The root config completeness check passes for .gitlab-ci.yml and Cargo.toml but fails for package.json and tsconfig.json at repo root. |
+| INFO | cargo +nightly udeps | Dependency dead-code scan could not run because cargo-udeps is not installed. | Command output: `udeps not installed — skip`. |
 
-## NEW CRATE WIRING
-|Crate|Workspace|App Dep|Integration Dep|AppState/main.rs Ref|Rust Tests|Compiles|
-|---|---|---|---|---|---|---|
-|nexus-capability-measurement|yes|yes|yes|yes|76|yes|
-|nexus-governance-oracle|yes|yes|yes|partial|12|yes|
-|nexus-governance-engine|yes|yes|yes|no|9|yes|
-|nexus-governance-evolution|yes|yes|yes|no|7|yes|
-|nexus-predictive-router|yes|yes|yes|yes|14|yes|
-|nexus-token-economy|yes|yes|yes|yes|29|yes|
-|nexus-browser-agent|yes|yes|yes|yes|12|yes|
-|nexus-computer-control|yes|yes|yes|yes|16|yes|
-|nexus-world-simulation|yes|yes|yes|yes|18|yes|
-|nexus-perception|yes|yes|yes|yes|19|yes|
-|nexus-agent-memory|yes|yes|yes|yes|21|yes|
-|nexus-external-tools|yes|yes|yes|yes|17|yes|
-|nexus-collab-protocol|yes|yes|yes|yes|18|yes|
-|nexus-software-factory|yes|yes|yes|yes|18|yes|
+## ═══ PER-CRATE STATUS ═══
+| Crate | Manifest | cargo check | cargo clippy -D warnings | cargo test | Static test markers |
+| --- | --- | --- | --- | --- | --- |
+| coder-agent | agents/coder/Cargo.toml | PASS | PASS | PASS | 45 |
+| nexus-connectors-llm | connectors/llm/Cargo.toml | PASS | PASS | PASS | 345 |
+| nexus-flash-infer | crates/nexus-flash-infer/Cargo.toml | PASS | PASS | PASS | 76 |
+| nexus-llama-bridge | llama-bridge/Cargo.toml | PASS | PASS | PASS | 31 |
+| nexus-kernel | kernel/Cargo.toml | PASS | PASS | PASS | 2021 |
+| nexus-persistence | persistence/Cargo.toml | PASS | PASS | PASS | 58 |
+| nexus-sdk | sdk/Cargo.toml | PASS | PASS | PASS | 217 |
+| designer-agent | agents/designer/Cargo.toml | PASS | PASS | PASS | 3 |
+| coding-agent | agents/coding-agent/Cargo.toml | PASS | PASS | PASS | 5 |
+| screen-poster-agent | agents/screen-poster/Cargo.toml | PASS | PASS | PASS | 6 |
+| self-improve-agent | agents/self-improve/Cargo.toml | PASS | PASS | PASS | 7 |
+| social-poster-agent | agents/social-poster/Cargo.toml | PASS | PASS | PASS | 0 |
+| nexus-connectors-web | connectors/web/Cargo.toml | PASS | PASS | PASS | 8 |
+| nexus-connectors-core | connectors/core/Cargo.toml | PASS | PASS | PASS | 8 |
+| nexus-content | content/Cargo.toml | PASS | PASS | PASS | 3 |
+| web-builder-agent | agents/web-builder/Cargo.toml | PASS | PASS | PASS | 12 |
+| workflow-studio-agent | agents/workflow-studio/Cargo.toml | PASS | PASS | PASS | 4 |
+| nexus-connectors-social | connectors/social/Cargo.toml | PASS | PASS | PASS | 0 |
+| nexus-connectors-messaging | connectors/messaging/Cargo.toml | PASS | PASS | PASS | 46 |
+| nexus-workflows | workflows/Cargo.toml | PASS | PASS | PASS | 5 |
+| nexus-research | research/Cargo.toml | PASS | PASS | PASS | 12 |
+| nexus-cli | cli/Cargo.toml | PASS | PASS | PASS | 114 |
+| nexus-conductor | agents/conductor/Cargo.toml | PASS | PASS | PASS | 28 |
+| nexus-collaboration | agents/collaboration/Cargo.toml | PASS | PASS | PASS | 22 |
+| nexus-factory | factory/Cargo.toml | PASS | PASS | PASS | 30 |
+| nexus-marketplace | marketplace/Cargo.toml | PASS | PASS | PASS | 84 |
+| nexus-adaptation | adaptation/Cargo.toml | PASS | PASS | PASS | 23 |
+| nexus-analytics | analytics/Cargo.toml | PASS | PASS | PASS | 5 |
+| nexus-control | control/Cargo.toml | PASS | PASS | PASS | 15 |
+| nexus-self-update | self-update/Cargo.toml | PASS | PASS | PASS | 10 |
+| nexus-integration | tests/integration/Cargo.toml | PASS | PASS | FAIL | 19 |
+| nexus-agent-memory | crates/nexus-agent-memory/Cargo.toml | PASS | PASS | PASS | 21 |
+| nexus-airgap | packaging/airgap/Cargo.toml | PASS | PASS | PASS | 15 |
+| nexus-auth | auth/Cargo.toml | PASS | PASS | PASS | 32 |
+| nexus-browser-agent | crates/nexus-browser-agent/Cargo.toml | PASS | PASS | PASS | 12 |
+| nexus-capability-measurement | crates/nexus-capability-measurement/Cargo.toml | PASS | PASS | PASS | 76 |
+| nexus-cloud | cloud/Cargo.toml | PASS | PASS | PASS | 22 |
+| nexus-collab-protocol | crates/nexus-collab-protocol/Cargo.toml | PASS | PASS | PASS | 18 |
+| nexus-computer-control | crates/nexus-computer-control/Cargo.toml | PASS | PASS | PASS | 16 |
+| nexus-distributed | distributed/Cargo.toml | PASS | PASS | PASS | 179 |
+| nexus-enterprise | enterprise/Cargo.toml | PASS | PASS | PASS | 21 |
+| nexus-external-tools | crates/nexus-external-tools/Cargo.toml | PASS | PASS | PASS | 17 |
+| nexus-governance-engine | crates/nexus-governance-engine/Cargo.toml | PASS | PASS | PASS | 9 |
+| nexus-governance-oracle | crates/nexus-governance-oracle/Cargo.toml | PASS | PASS | PASS | 12 |
+| nexus-governance-evolution | crates/nexus-governance-evolution/Cargo.toml | PASS | PASS | PASS | 7 |
+| nexus-integrations | integrations/Cargo.toml | PASS | PASS | PASS | 42 |
+| nexus-metering | metering/Cargo.toml | PASS | PASS | PASS | 18 |
+| nexus-perception | crates/nexus-perception/Cargo.toml | PASS | PASS | PASS | 19 |
+| nexus-predictive-router | crates/nexus-predictive-router/Cargo.toml | PASS | PASS | PASS | 14 |
+| nexus-protocols | protocols/Cargo.toml | PASS | PASS | PASS | 92 |
+| nexus-software-factory | crates/nexus-software-factory/Cargo.toml | PASS | PASS | PASS | 18 |
+| nexus-telemetry | telemetry/Cargo.toml | PASS | PASS | PASS | 21 |
+| nexus-tenancy | tenancy/Cargo.toml | PASS | PASS | PASS | 50 |
+| nexus-token-economy | crates/nexus-token-economy/Cargo.toml | PASS | PASS | PASS | 29 |
+| nexus-world-simulation | crates/nexus-world-simulation/Cargo.toml | PASS | PASS | PASS | 18 |
+| nexus-desktop-backend | app/src-tauri/Cargo.toml | PASS | PASS | PASS | 90 |
+| nexus-benchmarks | benchmarks/Cargo.toml | PASS | PASS | PASS | 0 |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/Cargo.toml | PASS | FAIL (51) | PASS | 0 |
 
-Notes:
-- `nexus-governance-engine` and `nexus-governance-evolution` are the only new crates with `AppState/main.rs Ref = no`; `rg -n "nexus_governance_engine|nexus_governance_evolution" app/src-tauri/src/main.rs` returned no matches.
-- `nexus-governance-oracle` is only partially wired: the page exists and wrapper functions exist, but the Tauri command layer is stubbed and there is no long-lived oracle state in `AppState`.
+### Clippy Failures
+| Crate | Location | Diagnostic |
+| --- | --- | --- |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/nim_cloud_bench.rs:673:5 | fields `p99`, `mean`, and `total` are never read |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/nim_cloud_bench.rs:717:5 | fields `det_runs`, `conc_agents`, `avg_tokens_in`, and `avg_tokens_out` are never read |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/nim_cloud_bench.rs:744:5 | field `tokens` is never read |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/local_vs_cloud_battle.rs:327:5 | fields `mean_ms`, `min_ms`, `max_ms`, and `total` are never read |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/local_vs_cloud_battle.rs:596:9 | field `agentic_valid` is never read |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/local_vs_cloud_battle.rs:445:20 | manual implementation of `.is_multiple_of()`: help: replace with: `c.is_multiple_of(50)` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/nim_cloud_bench.rs:999:9 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/local_vs_cloud_battle.rs:501:17 | this expression creates a reference which is immediately dereferenced by the compiler |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/nim_cloud_bench.rs:1024:9 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/nim_cloud_bench.rs:1057:9 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/nim_cloud_bench.rs:1081:9 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/nim_cloud_bench.rs:1143:9 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/nim_cloud_bench.rs:1169:5 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/nim_cloud_bench.rs:1196:9 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/nim_cloud_bench.rs:1212:9 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/local_vs_cloud_battle.rs:738:5 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/nim_cloud_bench.rs:1231:5 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/local_vs_cloud_battle.rs:880:13 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/local_vs_cloud_battle.rs:912:13 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/local_vs_cloud_battle.rs:954:13 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/local_vs_cloud_battle.rs:985:13 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/local_vs_cloud_battle.rs:1272:17 | this `map_or` can be simplified |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/local_vs_cloud_battle.rs:1276:29 | this `map_or` can be simplified |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/inference_consistency_bench.rs:62:5 | fields `output_hash` and `token_count` are never read |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/inference_consistency_bench.rs:278:5 | fields `count`, `mean_ms`, and `errors` are never read |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/inference_consistency_bench.rs:340:5 | field `dominant_output` is never read |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/inference_consistency_bench.rs:467:5 | field `dominant_output` is never read |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/inference_consistency_bench.rs:433:20 | manual implementation of `.is_multiple_of()`: help: replace with: `c.is_multiple_of(100)` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/inference_consistency_bench.rs:496:20 | manual implementation of `.is_multiple_of()`: help: replace with: `c.is_multiple_of(100)` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/inference_consistency_bench.rs:561:36 | called `unwrap` on `r.error` after checking its variant with `is_some` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/inference_consistency_bench.rs:662:12 | manual implementation of `.is_multiple_of()`: help: replace with: `request_count.is_multiple_of(50)` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/inference_consistency_bench.rs:1131:21 | this `map_or` can be simplified |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/inference_consistency_bench.rs:1247:32 | this `map_or` can be simplified |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:220:5 | field `cost_per_token` is never read |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:226:5 | fields `output_hash` and `token_count` are never read |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:526:5 | fields `count`, `min_ms`, `max_ms`, `mean_ms`, and `errors` are never read |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:588:5 | field `dominant_output` is never read |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:9:5 | doc list item overindented: help: try using `  ` (2 spaces) |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:664:20 | manual implementation of `.is_multiple_of()`: help: replace with: `c.is_multiple_of(50)` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:734:20 | manual implementation of `.is_multiple_of()`: help: replace with: `c.is_multiple_of(100)` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:813:1 | this function has too many arguments (9/7) |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:901:9 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:928:9 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:978:9 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:1012:9 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:1037:9 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:1061:9 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:1084:9 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:1101:13 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:1136:9 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/src/cloud_models_bench.rs:1163:5 | calling `push_str()` using a single-character string literal: help: consider using `push` with a character literal: `r.push('\n')` |
 
-## PER-PAGE STATUS
-|Page|File|Imported|Route|Nav|Backend Calls|Mock/Demo Hits|Interactive|Loading|Route Ref|Notes|
-|---|---|---|---|---|---|---|---|---|---|---|
-|ABValidation|app/src/pages/ABValidation.tsx|yes|ab-validation|yes|1|0|2|yes|app/src/App.tsx:1727|-|
-|AdminCompliance|app/src/pages/AdminCompliance.tsx|yes|admin-compliance|yes|4|0|3|yes|app/src/App.tsx:1796|-|
-|AdminDashboard|app/src/pages/AdminDashboard.tsx|yes|admin-console|yes|3|0|1|yes|app/src/App.tsx:1784|-|
-|AdminFleet|app/src/pages/AdminFleet.tsx|yes|admin-fleet|yes|3|0|3|yes|app/src/App.tsx:1790|-|
-|AdminPolicyEditor|app/src/pages/AdminPolicyEditor.tsx|yes|admin-policies|yes|3|0|3|yes|app/src/App.tsx:1793|-|
-|AdminSystemHealth|app/src/pages/AdminSystemHealth.tsx|yes|admin-health|yes|5|0|6|yes|app/src/App.tsx:1799|-|
-|AdminUsers|app/src/pages/AdminUsers.tsx|yes|admin-users|yes|3|0|4|yes|app/src/App.tsx:1787|-|
-|AgentBrowser|app/src/pages/AgentBrowser.tsx|yes|browser|yes|4|1|6|yes|app/src/App.tsx:1691|-|
-|AgentDnaLab|app/src/pages/AgentDnaLab.tsx|yes|dna-lab|yes|10|0|24|yes|app/src/App.tsx:1706|-|
-|AgentMemory|app/src/pages/AgentMemory.tsx|yes|agent-memory|yes|4|0|9|yes|app/src/App.tsx:1745|-|
-|Agents|app/src/pages/Agents.tsx|yes|agents|yes|9|0|33|yes|app/src/App.tsx:1508|-|
-|AiChatHub|app/src/pages/AiChatHub.tsx|yes|ai-chat-hub|yes|38|1|53|yes|app/src/App.tsx:1673|-|
-|ApiClient|app/src/pages/ApiClient.tsx|yes|api-client|yes|14|1|20|yes|app/src/App.tsx:1655|-|
-|ApprovalCenter|app/src/pages/ApprovalCenter.tsx|yes|approvals|yes|11|0|8|yes|app/src/App.tsx:1688|-|
-|AppStore|app/src/pages/AppStore.tsx|yes|marketplace/marketplace-browser/app-store|yes|3|0|10|yes|app/src/App.tsx:1670|-|
-|Audit|app/src/pages/Audit.tsx|yes|audit|yes|12|1|42|yes|app/src/App.tsx:1586|-|
-|AuditTimeline|app/src/pages/AuditTimeline.tsx|yes|audit-timeline|yes|5|0|3|no|app/src/App.tsx:1595|-|
-|BrowserAgent|app/src/pages/BrowserAgent.tsx|yes|browser-agent|yes|3|0|6|yes|app/src/App.tsx:1730|-|
-|CapabilityBoundaryMap|app/src/pages/CapabilityBoundaryMap.tsx|yes|capability-boundaries|yes|3|0|1|yes|app/src/App.tsx:1721|-|
-|Chat|app/src/pages/Chat.tsx|yes|chat|yes|5|1|10|yes|app/src/App.tsx:1481|-|
-|Civilization|app/src/pages/Civilization.tsx|yes|civilization|yes|28|0|31|yes|app/src/App.tsx:1778|-|
-|ClusterStatus|app/src/pages/ClusterStatus.tsx|yes|cluster|yes|3|0|6|yes|app/src/App.tsx:1604|-|
-|CodeEditor|app/src/pages/CodeEditor.tsx|yes|code-editor|yes|17|0|35|yes|app/src/App.tsx:1619|-|
-|Collaboration|app/src/pages/Collaboration.tsx|yes|collab-protocol|yes|3|0|10|no|app/src/App.tsx:1751|-|
-|CommandCenter|app/src/pages/CommandCenter.tsx|yes|command-center|yes|3|0|6|yes|app/src/App.tsx:1592|-|
-|commandCenterUi|app/src/pages/commandCenterUi.tsx|no|none|no|0|0|2|no|-|utility module in pages/; not a route page|
-|ComplianceDashboard|app/src/pages/ComplianceDashboard.tsx|yes|compliance|yes|8|0|13|yes|app/src/App.tsx:1601|-|
-|ComputerControl|app/src/pages/ComputerControl.tsx|yes|computer-control|yes|6|8|22|yes|app/src/App.tsx:1694|-|
-|ConsciousnessMonitor|app/src/pages/ConsciousnessMonitor.tsx|yes|consciousness|yes|8|0|2|yes|app/src/App.tsx:1769|-|
-|Dashboard|app/src/pages/Dashboard.tsx|yes|dashboard|yes|3|0|2|yes|app/src/App.tsx:1478|-|
-|DatabaseManager|app/src/pages/DatabaseManager.tsx|yes|database|yes|2|0|17|no|app/src/App.tsx:1652|-|
-|DeployPipeline|app/src/pages/DeployPipeline.tsx|yes|deploy-pipeline|yes|5|0|21|yes|app/src/App.tsx:1679|-|
-|DesignStudio|app/src/pages/DesignStudio.tsx|yes|design-studio|yes|4|0|8|yes|app/src/App.tsx:1658|-|
-|DeveloperPortal|app/src/pages/DeveloperPortal.tsx|yes|developer-portal|yes|5|0|4|yes|app/src/App.tsx:1598|-|
-|DistributedAudit|app/src/pages/DistributedAudit.tsx|yes|distributed-audit|yes|4|0|0|yes|app/src/App.tsx:1613|-|
-|Documents|app/src/pages/Documents.tsx|yes|documents|yes|7|0|11|yes|app/src/App.tsx:1631|-|
-|DreamForge|app/src/pages/DreamForge.tsx|yes|dreams|yes|4|0|3|no|app/src/App.tsx:1772|-|
-|EmailClient|app/src/pages/EmailClient.tsx|yes|email-client|yes|4|0|18|yes|app/src/App.tsx:1661|-|
-|ExternalTools|app/src/pages/ExternalTools.tsx|yes|external-tools|yes|3|0|6|yes|app/src/App.tsx:1748|-|
-|FileManager|app/src/pages/FileManager.tsx|yes|file-manager|yes|4|0|24|yes|app/src/App.tsx:1625|-|
-|Firewall|app/src/pages/Firewall.tsx|yes|firewall|yes|3|0|2|no|app/src/App.tsx:1700|-|
-|FlashInference|app/src/pages/FlashInference.tsx|yes|flash-inference|yes|11|0|12|yes|app/src/App.tsx:1637|-|
-|GovernanceOracle|app/src/pages/GovernanceOracle.tsx|yes|governance-oracle|yes|3|0|1|yes|app/src/App.tsx:1733|status/budget only; no token verification UI|
-|GovernedControl|app/src/pages/GovernedControl.tsx|yes|governed-control|yes|4|0|0|yes|app/src/App.tsx:1739|read-only control dashboard|
-|Identity|app/src/pages/Identity.tsx|yes|identity|yes|12|0|14|yes|app/src/App.tsx:1616|-|
-|ImmuneDashboard|app/src/pages/ImmuneDashboard.tsx|yes|immune-dashboard|yes|6|0|4|yes|app/src/App.tsx:1766|-|
-|Integrations|app/src/pages/Integrations.tsx|yes|integrations|yes|5|0|16|yes|app/src/App.tsx:1802|-|
-|KnowledgeGraph|app/src/pages/KnowledgeGraph.tsx|yes|knowledge-graph|yes|8|0|14|yes|app/src/App.tsx:1763|-|
-|LearningCenter|app/src/pages/LearningCenter.tsx|yes|learning-center|yes|24|0|13|yes|app/src/App.tsx:1685|-|
-|Login|app/src/pages/Login.tsx|yes|login|yes|3|0|2|yes|app/src/App.tsx:1805|-|
-|MeasurementBatteries|app/src/pages/MeasurementBatteries.tsx|yes|measurement-batteries|yes|3|0|1|yes|app/src/App.tsx:1718|-|
-|MeasurementCompare|app/src/pages/MeasurementCompare.tsx|yes|measurement-compare|yes|3|0|2|yes|app/src/App.tsx:1715|-|
-|MeasurementDashboard|app/src/pages/MeasurementDashboard.tsx|yes|measurement|yes|3|0|6|yes|app/src/App.tsx:1709|-|
-|MeasurementSession|app/src/pages/MeasurementSession.tsx|yes|measurement-session|no|4|0|1|yes|app/src/App.tsx:1712|routed but no App.tsx nav entry or page-to-page link found|
-|MediaStudio|app/src/pages/MediaStudio.tsx|yes|media-studio|yes|4|0|8|no|app/src/App.tsx:1667|-|
-|Messaging|app/src/pages/Messaging.tsx|yes|messaging|yes|6|0|7|no|app/src/App.tsx:1664|-|
-|MissionControl|app/src/pages/MissionControl.tsx|yes|mission-control|yes|5|0|14|yes|app/src/App.tsx:1703|-|
-|ModelHub|app/src/pages/ModelHub.tsx|yes|model-hub|yes|7|0|21|yes|app/src/App.tsx:1634|-|
-|ModelRouting|app/src/pages/ModelRouting.tsx|yes|model-routing|yes|3|0|1|yes|app/src/App.tsx:1724|-|
-|NotesApp|app/src/pages/NotesApp.tsx|yes|notes|yes|8|0|22|no|app/src/App.tsx:1646|-|
-|Perception|app/src/pages/Perception.tsx|yes|perception|yes|1|0|4|yes|app/src/App.tsx:1742|-|
-|PermissionDashboard|app/src/pages/PermissionDashboard.tsx|yes|permissions|yes|4|0|17|yes|app/src/App.tsx:1536|-|
-|PolicyManagement|app/src/pages/PolicyManagement.tsx|yes|policy-management|yes|3|0|8|yes|app/src/App.tsx:1697|-|
-|ProjectManager|app/src/pages/ProjectManager.tsx|yes|project-manager|yes|4|0|13|yes|app/src/App.tsx:1649|-|
-|Protocols|app/src/pages/Protocols.tsx|yes|protocols|yes|3|0|19|yes|app/src/App.tsx:1610|-|
-|Scheduler|app/src/pages/Scheduler.tsx|yes|scheduler|yes|3|0|8|yes|app/src/App.tsx:1682|-|
-|SelfRewriteLab|app/src/pages/SelfRewriteLab.tsx|yes|self-rewrite|yes|8|0|8|no|app/src/App.tsx:1781|-|
-|Settings|app/src/pages/Settings.tsx|yes|settings (default fallback)|yes|36|2|29|yes|app/src/App.tsx:1817|-|
-|SetupWizard|app/src/pages/SetupWizard.tsx|yes|modal overlay|no|4|1|31|yes|app/src/App.tsx:1987|-|
-|SoftwareFactory|app/src/pages/SoftwareFactory.tsx|yes|software-factory|yes|3|0|4|no|app/src/App.tsx:1754|-|
-|SystemMonitor|app/src/pages/SystemMonitor.tsx|yes|system-monitor|yes|4|0|3|no|app/src/App.tsx:1628|-|
-|Telemetry|app/src/pages/Telemetry.tsx|yes|telemetry|yes|5|3|9|yes|app/src/App.tsx:1811|-|
-|TemporalEngine|app/src/pages/TemporalEngine.tsx|yes|temporal|yes|7|0|8|no|app/src/App.tsx:1775|-|
-|Terminal|app/src/pages/Terminal.tsx|yes|terminal|yes|10|0|14|no|app/src/App.tsx:1622|-|
-|TimelineViewer|app/src/pages/TimelineViewer.tsx|yes|timeline-viewer|yes|3|0|3|no|app/src/App.tsx:1760|-|
-|TimeMachine|app/src/pages/TimeMachine.tsx|yes|time-machine|yes|8|0|28|yes|app/src/App.tsx:1640|-|
-|TokenEconomy|app/src/pages/TokenEconomy.tsx|yes|token-economy|yes|5|0|6|yes|app/src/App.tsx:1736|-|
-|TrustDashboard|app/src/pages/TrustDashboard.tsx|yes|trust|yes|5|1|12|yes|app/src/App.tsx:1607|-|
-|UsageBilling|app/src/pages/UsageBilling.tsx|yes|usage-billing|yes|3|0|6|yes|app/src/App.tsx:1814|-|
-|VoiceAssistant|app/src/pages/VoiceAssistant.tsx|yes|voice-assistant|yes|10|1|9|yes|app/src/App.tsx:1676|-|
-|Workflows|app/src/pages/Workflows.tsx|yes|workflows|yes|3|0|10|yes|app/src/App.tsx:1589|-|
-|Workspaces|app/src/pages/Workspaces.tsx|yes|workspaces|yes|4|0|25|yes|app/src/App.tsx:1808|-|
-|WorldSimulation|app/src/pages/WorldSimulation.tsx|yes|simulation|yes|9|0|15|no|app/src/App.tsx:1643|-|
-|WorldSimulation2|app/src/pages/WorldSimulation2.tsx|yes|world-sim|yes|4|0|0|yes|app/src/App.tsx:1757|read-only AGENT LAB world-sim page|
+### Test Failures
+| Crate | Location | Failure |
+| --- | --- | --- |
+| nexus-integration | tests/integration/../../app/src-tauri/src/main.rs:1:1 | inner attribute is not permitted in this context |
 
-## UNWIRED COMMANDS
-### Registered Rust Commands With No Frontend Caller
-None. The user-script-style `generate_handler![]` vs `app/src/` grep returned no registered command with zero frontend references.
+### Zero-Test Packages
+| Crate | Manifest |
+| --- | --- |
+| social-poster-agent | agents/social-poster/Cargo.toml |
+| nexus-connectors-social | connectors/social/Cargo.toml |
+| nexus-benchmarks | benchmarks/Cargo.toml |
+| nexus-conductor-benchmark | benchmarks/conductor-bench/Cargo.toml |
 
-### Registered Rust Commands Missing A backend.ts String Binding
-None. Every registered command name appears somewhere in `app/src/api/backend.ts`.
+## ═══ CROSS-CRATE WIRING ═══
+| Crate | In workspace | In app deps | In integration tests | AppState field | AppState line | Compiles | Test markers | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| nexus-capability-measurement | yes | yes | yes | yes | 923 | PASS | 77 |  |
+| nexus-governance-oracle | yes | yes | yes | no | - | PASS | 12 | types imported; page/backend use hand-rolled commands instead of crate state |
+| nexus-governance-engine | yes | yes | yes | no | - | PASS | 9 | no references found in app/src-tauri/src/main.rs, app/src/api/backend.ts, or app/src/pages |
+| nexus-governance-evolution | yes | yes | yes | no | - | PASS | 7 | no references found in app/src-tauri/src/main.rs, app/src/api/backend.ts, or app/src/pages |
+| nexus-predictive-router | yes | yes | yes | yes | 924 | PASS | 14 |  |
+| nexus-token-economy | yes | yes | yes | yes | 926 | PASS | 29 |  |
+| nexus-browser-agent | yes | yes | yes | yes | 925 | PASS | 12 |  |
+| nexus-computer-control | yes | yes | yes | yes | 927 | PASS | 16 |  |
+| nexus-world-simulation | yes | yes | yes | yes | 928 | PASS | 18 |  |
+| nexus-perception | yes | yes | yes | yes | 929 | PASS | 19 |  |
+| nexus-agent-memory | yes | yes | yes | yes | 930 | PASS | 21 |  |
+| nexus-external-tools | yes | yes | yes | yes | 931 | PASS | 17 |  |
+| nexus-collab-protocol | yes | yes | yes | yes | 932 | PASS | 18 |  |
+| nexus-software-factory | yes | yes | yes | yes | 933 | PASS | 18 |  |
 
-### Page-Level Tauri Calls That Bypass backend.ts
-|Page|Command|Direct Invoke|Existing Wrapper|
-|---|---|---|---|
-|TemporalEngine|temporal_select_fork|app/src/pages/TemporalEngine.tsx:143|app/src/api/backend.ts:2940|
-|CodeEditor|file_manager_list|app/src/pages/CodeEditor.tsx:276|app/src/api/backend.ts:1060|
-|CodeEditor|file_manager_home|app/src/pages/CodeEditor.tsx:304|app/src/api/backend.ts:2925|
-|CodeEditor|file_manager_read|app/src/pages/CodeEditor.tsx:384|app/src/api/backend.ts:1068|
-|CodeEditor|file_manager_write|app/src/pages/CodeEditor.tsx:411|app/src/api/backend.ts:1064|
+## ═══ PER-PAGE STATUS ═══
+| Page | File | In router | Backend wrappers used | Strict mock/demo hits | UI placeholder attrs | Buttons | Has error markers | Has loading markers |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ABValidation | app/src/pages/ABValidation.tsx | yes | 2 | 0 | 0 | 1 | yes | yes |
+| AdminCompliance | app/src/pages/AdminCompliance.tsx | yes | 2 | 0 | 0 | 3 | yes | yes |
+| AdminDashboard | app/src/pages/AdminDashboard.tsx | yes | 1 | 0 | 0 | 1 | yes | yes |
+| AdminFleet | app/src/pages/AdminFleet.tsx | yes | 3 | 0 | 0 | 3 | yes | yes |
+| AdminPolicyEditor | app/src/pages/AdminPolicyEditor.tsx | yes | 3 | 0 | 0 | 2 | yes | yes |
+| AdminSystemHealth | app/src/pages/AdminSystemHealth.tsx | yes | 6 | 0 | 0 | 3 | yes | yes |
+| AdminUsers | app/src/pages/AdminUsers.tsx | yes | 4 | 0 | 1 | 4 | yes | yes |
+| AgentBrowser | app/src/pages/AgentBrowser.tsx | yes | 2 | 1 | 0 | 3 | yes | yes |
+| AgentDnaLab | app/src/pages/AgentDnaLab.tsx | yes | 18 | 0 | 11 | 23 | yes | yes |
+| AgentMemory | app/src/pages/AgentMemory.tsx | yes | 10 | 0 | 5 | 8 | yes | yes |
+| Agents | app/src/pages/Agents.tsx | yes | 11 | 0 | 2 | 18 | yes | yes |
+| AiChatHub | app/src/pages/AiChatHub.tsx | yes | 20 | 1 | 5 | 42 | yes | yes |
+| ApiClient | app/src/pages/ApiClient.tsx | yes | 4 | 1 | 14 | 18 | yes | yes |
+| AppStore | app/src/pages/AppStore.tsx | yes | 6 | 0 | 2 | 7 | yes | yes |
+| ApprovalCenter | app/src/pages/ApprovalCenter.tsx | yes | 9 | 0 | 1 | 4 | yes | yes |
+| Audit | app/src/pages/Audit.tsx | yes | 15 | 1 | 10 | 21 | yes | yes |
+| AuditTimeline | app/src/pages/AuditTimeline.tsx | yes | 3 | 0 | 0 | 1 | yes | no |
+| BrowserAgent | app/src/pages/BrowserAgent.tsx | yes | 9 | 0 | 2 | 1 | yes | yes |
+| CapabilityBoundaryMap | app/src/pages/CapabilityBoundaryMap.tsx | yes | 5 | 0 | 0 | 0 | yes | yes |
+| Chat | app/src/pages/Chat.tsx | yes | 2 | 1 | 1 | 5 | yes | yes |
+| Civilization | app/src/pages/Civilization.tsx | yes | 28 | 0 | 28 | 2 | yes | yes |
+| ClusterStatus | app/src/pages/ClusterStatus.tsx | yes | 8 | 0 | 4 | 3 | yes | yes |
+| CodeEditor | app/src/pages/CodeEditor.tsx | yes | 5 | 0 | 4 | 34 | yes | yes |
+| Collaboration | app/src/pages/Collaboration.tsx | yes | 11 | 0 | 6 | 9 | yes | no |
+| CommandCenter | app/src/pages/CommandCenter.tsx | yes | 7 | 0 | 0 | 3 | yes | yes |
+| ComplianceDashboard | app/src/pages/ComplianceDashboard.tsx | yes | 7 | 0 | 0 | 8 | yes | yes |
+| ComputerControl | app/src/pages/ComputerControl.tsx | yes | 13 | 1 | 2 | 13 | yes | yes |
+| ConsciousnessMonitor | app/src/pages/ConsciousnessMonitor.tsx | yes | 6 | 0 | 0 | 1 | yes | yes |
+| Dashboard | app/src/pages/Dashboard.tsx | yes | 3 | 0 | 0 | 1 | yes | yes |
+| DatabaseManager | app/src/pages/DatabaseManager.tsx | yes | 5 | 0 | 4 | 14 | yes | no |
+| DeployPipeline | app/src/pages/DeployPipeline.tsx | yes | 11 | 0 | 7 | 16 | yes | yes |
+| DesignStudio | app/src/pages/DesignStudio.tsx | yes | 6 | 0 | 0 | 4 | yes | yes |
+| DeveloperPortal | app/src/pages/DeveloperPortal.tsx | yes | 3 | 0 | 0 | 3 | yes | yes |
+| DistributedAudit | app/src/pages/DistributedAudit.tsx | yes | 3 | 0 | 0 | 0 | yes | yes |
+| Documents | app/src/pages/Documents.tsx | yes | 7 | 0 | 1 | 4 | yes | yes |
+| DreamForge | app/src/pages/DreamForge.tsx | yes | 3 | 0 | 0 | 3 | yes | no |
+| EmailClient | app/src/pages/EmailClient.tsx | yes | 9 | 0 | 4 | 16 | yes | yes |
+| ExternalTools | app/src/pages/ExternalTools.tsx | yes | 7 | 0 | 2 | 4 | yes | yes |
+| FileManager | app/src/pages/FileManager.tsx | yes | 7 | 0 | 2 | 23 | yes | yes |
+| Firewall | app/src/pages/Firewall.tsx | yes | 3 | 0 | 0 | 1 | yes | no |
+| FlashInference | app/src/pages/FlashInference.tsx | yes | 12 | 0 | 1 | 11 | yes | yes |
+| GovernanceOracle | app/src/pages/GovernanceOracle.tsx | yes | 3 | 0 | 0 | 1 | yes | yes |
+| GovernedControl | app/src/pages/GovernedControl.tsx | yes | 6 | 0 | 0 | 2 | yes | yes |
+| Identity | app/src/pages/Identity.tsx | yes | 11 | 0 | 4 | 0 | yes | yes |
+| ImmuneDashboard | app/src/pages/ImmuneDashboard.tsx | yes | 4 | 0 | 0 | 0 | yes | yes |
+| Integrations | app/src/pages/Integrations.tsx | yes | 4 | 0 | 1 | 10 | yes | yes |
+| KnowledgeGraph | app/src/pages/KnowledgeGraph.tsx | yes | 11 | 0 | 12 | 1 | yes | yes |
+| LearningCenter | app/src/pages/LearningCenter.tsx | yes | 16 | 0 | 1 | 7 | yes | yes |
+| Login | app/src/pages/Login.tsx | yes | 5 | 0 | 0 | 1 | yes | yes |
+| MeasurementBatteries | app/src/pages/MeasurementBatteries.tsx | yes | 1 | 0 | 0 | 0 | yes | yes |
+| MeasurementCompare | app/src/pages/MeasurementCompare.tsx | yes | 2 | 0 | 0 | 1 | yes | yes |
+| MeasurementDashboard | app/src/pages/MeasurementDashboard.tsx | yes | 5 | 0 | 0 | 1 | yes | yes |
+| MeasurementSession | app/src/pages/MeasurementSession.tsx | yes | 2 | 0 | 0 | 0 | yes | yes |
+| MediaStudio | app/src/pages/MediaStudio.tsx | yes | 5 | 0 | 0 | 4 | yes | no |
+| Messaging | app/src/pages/Messaging.tsx | yes | 8 | 0 | 3 | 4 | yes | no |
+| MissionControl | app/src/pages/MissionControl.tsx | yes | 10 | 0 | 0 | 4 | yes | yes |
+| ModelHub | app/src/pages/ModelHub.tsx | yes | 15 | 0 | 6 | 10 | yes | yes |
+| ModelRouting | app/src/pages/ModelRouting.tsx | yes | 4 | 0 | 1 | 0 | yes | yes |
+| NotesApp | app/src/pages/NotesApp.tsx | yes | 4 | 0 | 3 | 20 | yes | no |
+| Perception | app/src/pages/Perception.tsx | yes | 9 | 0 | 4 | 2 | yes | yes |
+| PermissionDashboard | app/src/pages/PermissionDashboard.tsx | yes | 7 | 0 | 0 | 10 | yes | yes |
+| PolicyManagement | app/src/pages/PolicyManagement.tsx | yes | 4 | 1 | 0 | 4 | yes | yes |
+| ProjectManager | app/src/pages/ProjectManager.tsx | yes | 3 | 0 | 3 | 7 | yes | yes |
+| Protocols | app/src/pages/Protocols.tsx | yes | 17 | 0 | 10 | 9 | yes | yes |
+| Scheduler | app/src/pages/Scheduler.tsx | yes | 6 | 0 | 2 | 8 | yes | yes |
+| SelfRewriteLab | app/src/pages/SelfRewriteLab.tsx | yes | 4 | 0 | 0 | 0 | yes | no |
+| Settings | app/src/pages/Settings.tsx | yes | 6 | 2 | 4 | 23 | yes | yes |
+| SetupWizard | app/src/pages/SetupWizard.tsx | yes | 0 | 1 | 0 | 16 | yes | yes |
+| SoftwareFactory | app/src/pages/SoftwareFactory.tsx | yes | 9 | 0 | 4 | 3 | yes | no |
+| SystemMonitor | app/src/pages/SystemMonitor.tsx | yes | 2 | 0 | 0 | 2 | yes | no |
+| Telemetry | app/src/pages/Telemetry.tsx | yes | 4 | 0 | 2 | 5 | yes | yes |
+| TemporalEngine | app/src/pages/TemporalEngine.tsx | yes | 2 | 0 | 3 | 6 | yes | no |
+| Terminal | app/src/pages/Terminal.tsx | yes | 2 | 0 | 1 | 11 | yes | no |
+| TimeMachine | app/src/pages/TimeMachine.tsx | yes | 15 | 0 | 2 | 13 | yes | yes |
+| TimelineViewer | app/src/pages/TimelineViewer.tsx | yes | 2 | 0 | 0 | 2 | yes | no |
+| TokenEconomy | app/src/pages/TokenEconomy.tsx | yes | 6 | 0 | 1 | 3 | yes | yes |
+| TrustDashboard | app/src/pages/TrustDashboard.tsx | yes | 9 | 0 | 8 | 9 | yes | yes |
+| UsageBilling | app/src/pages/UsageBilling.tsx | yes | 5 | 0 | 1 | 3 | yes | yes |
+| VoiceAssistant | app/src/pages/VoiceAssistant.tsx | yes | 7 | 0 | 0 | 5 | yes | yes |
+| Workflows | app/src/pages/Workflows.tsx | yes | 5 | 0 | 0 | 8 | yes | yes |
+| Workspaces | app/src/pages/Workspaces.tsx | yes | 7 | 0 | 2 | 13 | yes | yes |
+| WorldSimulation | app/src/pages/WorldSimulation.tsx | yes | 10 | 1 | 5 | 10 | yes | no |
+| WorldSimulation2 | app/src/pages/WorldSimulation2.tsx | yes | 6 | 0 | 2 | 2 | yes | yes |
+| commandCenterUi | app/src/pages/commandCenterUi.tsx | no | 0 | 0 | 0 | 1 | no | no |
 
-### Backend Wrappers Never Called From Pages (152)
-|Wrapper|Definition|
-|---|---|
-|emailSearchMessages|app/src/api/backend.ts:1006|
-|clearAllAgents|app/src/api/backend.ts:102|
-|getAgentOutputs|app/src/api/backend.ts:1042|
-|projectGet|app/src/api/backend.ts:1052|
-|createAgent|app/src/api/backend.ts:106|
-|assignAgentGoal|app/src/api/backend.ts:1128|
-|stopAgentGoal|app/src/api/backend.ts:1159|
-|startAutonomousLoop|app/src/api/backend.ts:1168|
-|stopAutonomousLoop|app/src/api/backend.ts:1184|
-|getAgentCognitiveStatus|app/src/api/backend.ts:1191|
-|getAgentMemories|app/src/api/backend.ts:1211|
-|agentMemoryRemember|app/src/api/backend.ts:1227|
-|agentMemoryRecall|app/src/api/backend.ts:1245|
-|agentMemoryRecallByType|app/src/api/backend.ts:1259|
-|agentMemoryForget|app/src/api/backend.ts:1274|
-|agentMemoryGetStats|app/src/api/backend.ts:1283|
-|agentMemorySave|app/src/api/backend.ts:1287|
-|agentMemoryClear|app/src/api/backend.ts:1291|
-|getSelfEvolutionMetrics|app/src/api/backend.ts:1312|
-|getSelfEvolutionStrategies|app/src/api/backend.ts:1321|
-|triggerCrossAgentLearning|app/src/api/backend.ts:1330|
-|getHivemindStatus|app/src/api/backend.ts:1347|
-|cancelHivemind|app/src/api/backend.ts:1356|
-|getOsFitness|app/src/api/backend.ts:1552|
-|getFitnessHistory|app/src/api/backend.ts:1556|
-|getRoutingStats|app/src/api/backend.ts:1560|
-|getUiAdaptations|app/src/api/backend.ts:1564|
-|recordPageVisit|app/src/api/backend.ts:1572|
-|recordFeatureUse|app/src/api/backend.ts:1576|
-|overrideSecurityBlock|app/src/api/backend.ts:1580|
-|getOsImprovementLog|app/src/api/backend.ts:1592|
-|getMorningOsBriefing|app/src/api/backend.ts:1596|
-|recordRoutingOutcome|app/src/api/backend.ts:1600|
-|recordOperationTiming|app/src/api/backend.ts:1613|
-|getPerformanceReport|app/src/api/backend.ts:1624|
-|getSecurityEvolutionReport|app/src/api/backend.ts:1628|
-|recordKnowledgeInteraction|app/src/api/backend.ts:1632|
-|getOsDreamStatus|app/src/api/backend.ts:1644|
-|setSelfImproveEnabled|app/src/api/backend.ts:1648|
-|screenshotAnalyze|app/src/api/backend.ts:1654|
-|screenshotGenerateSpec|app/src/api/backend.ts:1658|
-|voiceProjectStart|app/src/api/backend.ts:1670|
-|voiceProjectStop|app/src/api/backend.ts:1674|
-|voiceProjectAddChunk|app/src/api/backend.ts:1678|
-|voiceProjectGetStatus|app/src/api/backend.ts:1685|
-|voiceProjectGetPrompt|app/src/api/backend.ts:1689|
-|voiceProjectUpdateIntent|app/src/api/backend.ts:1693|
-|stressGeneratePersonas|app/src/api/backend.ts:1705|
-|stressGenerateActions|app/src/api/backend.ts:1709|
-|stressEvaluateReport|app/src/api/backend.ts:1713|
-|deployGenerateDockerfile|app/src/api/backend.ts:1719|
-|deployValidateConfig|app/src/api/backend.ts:1723|
-|deployGetCommands|app/src/api/backend.ts:1727|
-|evolverRegisterApp|app/src/api/backend.ts:1733|
-|evolverUnregisterApp|app/src/api/backend.ts:1737|
-|getAgentPerformance|app/src/api/backend.ts:174|
-|evolverListApps|app/src/api/backend.ts:1741|
-|evolverDetectIssues|app/src/api/backend.ts:1745|
-|freelanceGetStatus|app/src/api/backend.ts:1751|
-|freelanceStartScanning|app/src/api/backend.ts:1755|
-|freelanceStopScanning|app/src/api/backend.ts:1759|
-|freelanceEvaluateJob|app/src/api/backend.ts:1763|
-|freelanceGetRevenue|app/src/api/backend.ts:1767|
-|getAutoEvolutionLog|app/src/api/backend.ts:178|
-|getLivePreview|app/src/api/backend.ts:1781|
-|publishToMarketplace|app/src/api/backend.ts:1793|
-|installFromMarketplace|app/src/api/backend.ts:1797|
-|setAutoEvolutionConfig|app/src/api/backend.ts:182|
-|forceEvolveAgent|app/src/api/backend.ts:196|
-|transcribePushToTalk|app/src/api/backend.ts:208|
-|startJarvisMode|app/src/api/backend.ts:212|
-|stopJarvisMode|app/src/api/backend.ts:216|
-|jarvisStatus|app/src/api/backend.ts:220|
-|detectHardware|app/src/api/backend.ts:224|
-|checkOllama|app/src/api/backend.ts:228|
-|pullOllamaModel|app/src/api/backend.ts:232|
-|runSetupWizard|app/src/api/backend.ts:241|
-|pullModel|app/src/api/backend.ts:248|
-|ensureOllama|app/src/api/backend.ts:257|
-|isOllamaInstalled|app/src/api/backend.ts:264|
-|deleteModel|app/src/api/backend.ts:268|
-|isSetupComplete|app/src/api/backend.ts:277|
-|listAvailableModels|app/src/api/backend.ts:281|
-|schedulerHistory|app/src/api/backend.ts:3048|
-|schedulerRunnerStatus|app/src/api/backend.ts:3059|
-|executeTeamWorkflow|app/src/api/backend.ts:3067|
-|transferAgentFuel|app/src/api/backend.ts:3082|
-|runContentPipeline|app/src/api/backend.ts:3100|
-|analyzeScreen|app/src/api/backend.ts:311|
-|flashProfileModel|app/src/api/backend.ts:3115|
-|flashAutoConfigure|app/src/api/backend.ts:3120|
-|flashListSessions|app/src/api/backend.ts:3146|
-|flashGetMetrics|app/src/api/backend.ts:3161|
-|flashEstimatePerformance|app/src/api/backend.ts:3173|
-|flashCatalogRecommend|app/src/api/backend.ts:3180|
-|flashCatalogSearch|app/src/api/backend.ts:3185|
-|flashDownloadModel|app/src/api/backend.ts:3221|
-|flashDownloadMulti|app/src/api/backend.ts:3229|
-|flashDeleteLocalModel|app/src/api/backend.ts:3236|
-|flashAvailableDiskSpace|app/src/api/backend.ts:3240|
-|flashGetModelDir|app/src/api/backend.ts:3244|
-|cmGetProfile|app/src/api/backend.ts:3295|
-|cmTriggerFeedback|app/src/api/backend.ts:3321|
-|cmEvaluateResponse|app/src/api/backend.ts:3328|
-|cmExecuteValidationRun|app/src/api/backend.ts:3365|
-|cmListValidationRuns|app/src/api/backend.ts:3373|
-|cmGetValidationRun|app/src/api/backend.ts:3378|
-|computerControlCaptureScreen|app/src/api/backend.ts:338|
-|cmThreeWayComparison|app/src/api/backend.ts:3383|
-|routerRouteTask|app/src/api/backend.ts:3400|
-|routerRecordOutcome|app/src/api/backend.ts:3404|
-|computerControlExecuteAction|app/src/api/backend.ts:342|
-|oracleVerifyToken|app/src/api/backend.ts:3464|
-|tokenGetWallet|app/src/api/backend.ts:3479|
-|tokenCreateWallet|app/src/api/backend.ts:3487|
-|tokenCalculateSpawn|app/src/api/backend.ts:3521|
-|tokenCreateDelegation|app/src/api/backend.ts:3528|
-|tokenGetDelegations|app/src/api/backend.ts:3539|
-|ccExecuteAction|app/src/api/backend.ts:3549|
-|simSubmit|app/src/api/backend.ts:3578|
-|simRun|app/src/api/backend.ts:3585|
-|simGetResult|app/src/api/backend.ts:3589|
-|simGetRisk|app/src/api/backend.ts:3601|
-|simBranch|app/src/api/backend.ts:3605|
-|memoryGetEntry|app/src/api/backend.ts:3693|
-|memoryListAgents|app/src/api/backend.ts:3729|
-|toolsListAvailable|app/src/api/backend.ts:3739|
-|setAgentModel|app/src/api/backend.ts:386|
-|swfSubmitArtifact|app/src/api/backend.ts:3885|
-|getSystemInfo|app/src/api/backend.ts:411|
-|getAgentIdentity|app/src/api/backend.ts:532|
-|listIdentities|app/src/api/backend.ts:536|
-|marketplaceInfo|app/src/api/backend.ts:583|
-|getBrowserHistory|app/src/api/backend.ts:607|
-|getAgentActivity|app/src/api/backend.ts:611|
-|startResearch|app/src/api/backend.ts:617|
-|researchAgentAction|app/src/api/backend.ts:624|
-|completeResearch|app/src/api/backend.ts:640|
-|getResearchSession|app/src/api/backend.ts:646|
-|listResearchSessions|app/src/api/backend.ts:652|
-|startBuild|app/src/api/backend.ts:658|
-|buildAppendCode|app/src/api/backend.ts:662|
-|buildAddMessage|app/src/api/backend.ts:674|
-|completeBuild|app/src/api/backend.ts:688|
-|getBuildSession|app/src/api/backend.ts:694|
-|getBuildCode|app/src/api/backend.ts:700|
-|getBuildPreview|app/src/api/backend.ts:704|
-|startLearning|app/src/api/backend.ts:710|
-|getKnowledgeBase|app/src/api/backend.ts:714|
-|getLearningSession|app/src/api/backend.ts:718|
-|learningAgentAction|app/src/api/backend.ts:753|
-|getProviderUsageStats|app/src/api/backend.ts:794|
+## ═══ FRONTEND PAGE → BACKEND → CRATE TRACE ═══
+### MeasurementDashboard
+- file: app/src/pages/MeasurementDashboard.tsx
+- cmListSessions -> cm_list_sessions -> main.rs:21807 -> ) -> Result<Vec<nexus_capability_measurement::MeasurementSession>, String> {
+- cmGetBatteries -> cm_get_batteries -> main.rs:21849 -> ) -> Result<Vec<nexus_capability_measurement::tauri_commands::BatterySummary>, String> {
+- cmGetScorecard -> cm_get_scorecard -> main.rs:21796 -> ) -> Result<nexus_capability_measurement::AgentScorecard, String> {
+- cmStartSession -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+- listAgents -> list_agents -> main.rs:22967 -> ) -> Result<Vec<nexus_kernel::cognitive::ScheduledAgent>, String> {
 
-## DEAD CODE
-### Unused Public Function Candidates (62)
-|Function|Definition|
-|---|---|
-|suggested_capabilities|crates/nexus-software-factory/src/roles.rs:24|
-|get_artifact|crates/nexus-software-factory/src/project.rs:103|
-|complete_project|crates/nexus-software-factory/src/factory.rs:232|
-|stage_cost|crates/nexus-software-factory/src/economy.rs:10|
-|refund_escrow|crates/nexus-token-economy/src/wallet.rs:163|
-|record_snapshot|crates/nexus-token-economy/src/supply.rs:35|
-|clear_cache|crates/nexus-perception/src/engine.rs:241|
-|provider_model_id|crates/nexus-perception/src/engine.rs:245|
-|find_clickable_elements|crates/nexus-perception/src/screen.rs:29|
-|ask_about_screen|crates/nexus-perception/src/screen.rs:53|
-|extract_form_data|crates/nexus-perception/src/extraction.rs:16|
-|extract_table_data|crates/nexus-perception/src/extraction.rs:30|
-|read_page|crates/nexus-perception/src/document.rs:8|
-|extract_table|crates/nexus-perception/src/document.rs:26|
-|tools_by_category|crates/nexus-external-tools/src/registry.rs:76|
-|filter_by_constraints|crates/nexus-predictive-router/src/cost_optimizer.rs:28|
-|max_difficulty|crates/nexus-predictive-router/src/difficulty_estimator.rs:28|
-|check_staging|crates/nexus-predictive-router/src/staging.rs:18|
-|can_propose|crates/nexus-collab-protocol/src/roles.rs:14|
-|complete_session|crates/nexus-collab-protocol/src/protocol.rs:51|
-|completed_sessions|crates/nexus-collab-protocol/src/protocol.rs:65|
-|active_count|crates/nexus-collab-protocol/src/protocol.rs:69|
-|session_cost|crates/nexus-collab-protocol/src/economy.rs:6|
-|with_data|crates/nexus-collab-protocol/src/message.rs:68|
-|with_reasoning|crates/nexus-collab-protocol/src/message.rs:73|
-|with_references|crates/nexus-collab-protocol/src/message.rs:78|
-|is_broadcast|crates/nexus-collab-protocol/src/message.rs:83|
-|has_changed|crates/nexus-governance-engine/src/versioning.rs:6|
-|is_valid_successor|crates/nexus-governance-engine/src/versioning.rs:11|
-|default_capabilities|crates/nexus-governance-engine/src/capability_model.rs:23|
-|active_count|crates/nexus-world-simulation/src/engine.rs:213|
-|restore_fs|crates/nexus-world-simulation/src/sandbox.rs:100|
-|execute_validation_run_real|crates/nexus-capability-measurement/src/evaluation/validation_run.rs:237|
-|run_batch_evaluation|crates/nexus-capability-measurement/src/tauri_commands.rs:292|
-|get_ab_comparison|crates/nexus-capability-measurement/src/tauri_commands.rs:467|
-|compute_articulation|crates/nexus-capability-measurement/src/scoring/articulation.rs:72|
-|difficulty_description|crates/nexus-capability-measurement/src/battery/difficulty.rs:6|
-|level_description|crates/nexus-capability-measurement/src/vectors/tool_use_integrity.rs:9|
-|references_tool_output|crates/nexus-capability-measurement/src/vectors/tool_use_integrity.rs:22|
-|acknowledges_limitations|crates/nexus-capability-measurement/src/vectors/tool_use_integrity.rs:35|
-|level_description|crates/nexus-capability-measurement/src/vectors/reasoning_depth.rs:9|
-|has_causal_language|crates/nexus-capability-measurement/src/vectors/reasoning_depth.rs:24|
-|avoids_correlation_trap|crates/nexus-capability-measurement/src/vectors/reasoning_depth.rs:40|
-|level_description|crates/nexus-capability-measurement/src/vectors/adaptation.rs:9|
-|shows_epistemic_honesty|crates/nexus-capability-measurement/src/vectors/adaptation.rs:26|
-|distinguishes_source_reliability|crates/nexus-capability-measurement/src/vectors/adaptation.rs:41|
-|level_description|crates/nexus-capability-measurement/src/vectors/planning_coherence.rs:9|
-|has_explicit_dependencies|crates/nexus-capability-measurement/src/vectors/planning_coherence.rs:24|
-|has_rollback_handling|crates/nexus-capability-measurement/src/vectors/planning_coherence.rs:39|
-|append_to_chain|crates/nexus-capability-measurement/src/reporting/audit_trail.rs:18|
-|profile_summary|crates/nexus-capability-measurement/src/reporting/cross_vector.rs:6|
-|detect_anomalies|crates/nexus-capability-measurement/src/reporting/cross_vector.rs:21|
-|keyword_count|crates/nexus-agent-memory/src/index.rs:80|
-|tag_count|crates/nexus-agent-memory/src/index.rs:88|
-|update_importance|crates/nexus-agent-memory/src/store.rs:76|
-|request_channel|crates/nexus-governance-oracle/src/submission.rs:7|
-|check_balance|crates/nexus-browser-agent/src/economy.rs:13|
-|score_browser_task|crates/nexus-browser-agent/src/measurement.rs:16|
-|is_running|crates/nexus-browser-agent/src/bridge.rs:150|
-|close_agent_sessions|crates/nexus-browser-agent/src/session.rs:128|
-|generate_speculative|crates/nexus-flash-infer/src/speculative.rs:116|
-|set_subprocess_timeout_ms|crates/nexus-computer-control/src/engine.rs:84|
+### MeasurementSession
+- file: app/src/pages/MeasurementSession.tsx
+- cmGetSession -> cm_get_session -> main.rs:21785 -> ) -> Result<nexus_capability_measurement::MeasurementSession, String> {
+- cmListSessions -> cm_list_sessions -> main.rs:21807 -> ) -> Result<Vec<nexus_capability_measurement::MeasurementSession>, String> {
 
-### Orphan Modules
-- No real orphan modules were verified.
-- The heuristic scan only flagged standalone integration tests under `crates/nexus-flash-infer/tests/` (`autoconfig_test.rs`, `registry_test.rs`, `profiler_test.rs`, `downloader_test.rs`, `catalog_test.rs`, `budget_test.rs`), which are not library modules and should not be counted as routeable/orphan Rust modules.
+### MeasurementCompare
+- file: app/src/pages/MeasurementCompare.tsx
+- cmCompareAgents -> cm_compare_agents -> main.rs:21838 -> ) -> Result<Vec<nexus_capability_measurement::AgentScorecard>, String> {
+- cmListSessions -> cm_list_sessions -> main.rs:21807 -> ) -> Result<Vec<nexus_capability_measurement::MeasurementSession>, String> {
 
-## MOCK DATA LOCATIONS
-### Verified Mock / Demo Logic
-|Severity|Finding|Evidence|
-|---|---|---|
-|MAJOR|Browser demo fallback data and simulated chat replies|app/src/App.tsx:374, app/src/App.tsx:385, app/src/App.tsx:468, app/src/App.tsx:606, app/src/App.tsx:1320|
-|MAJOR|Setup Wizard injects mock hardware/Ollama/model responses outside desktop runtime|app/src/App.tsx:1989, app/src/App.tsx:2001, app/src/App.tsx:2005, app/src/App.tsx:2009, app/src/App.tsx:2013, app/src/App.tsx:2017, app/src/App.tsx:2021, app/src/pages/SetupWizard.tsx:224|
-|MAJOR|Computer Control page ships a full canned demo action sequence|app/src/pages/ComputerControl.tsx:46, app/src/pages/ComputerControl.tsx:202, app/src/pages/ComputerControl.tsx:281, app/src/pages/ComputerControl.tsx:283, app/src/pages/ComputerControl.tsx:287, app/src/pages/ComputerControl.tsx:291, app/src/pages/ComputerControl.tsx:294, app/src/pages/ComputerControl.tsx:305|
-|MAJOR|A/B validation falls back to placeholder agent IDs when no live agents are discovered|app/src-tauri/src/main.rs:21936, app/src-tauri/src/main.rs:21949, app/src-tauri/src/main.rs:21950, app/src-tauri/src/main.rs:21952, app/src-tauri/src/main.rs:21953, app/src-tauri/src/main.rs:21954|
+### MeasurementBatteries
+- file: app/src/pages/MeasurementBatteries.tsx
+- cmGetBatteries -> cm_get_batteries -> main.rs:21849 -> ) -> Result<Vec<nexus_capability_measurement::tauri_commands::BatterySummary>, String> {
 
-### Raw Indicator Matches Reviewed As Non-Issues
-|Severity|Review Outcome|Evidence|
-|---|---|---|
-|INFO|Comment explicitly says data is not hardcoded|app/src/pages/AgentBrowser.tsx:75, app/src/pages/ApiClient.tsx:86|
-|INFO|"mock" appears in error/runtime labels, not fake payloads|app/src/pages/AiChatHub.tsx:187, app/src/pages/Chat.tsx:136, app/src/pages/Settings.tsx:489, app/src/pages/Settings.tsx:504|
-|INFO|String match on "DEMOTE" is a badge label, not demo data|app/src/pages/TrustDashboard.tsx:482|
+### CapabilityBoundaryMap
+- file: app/src/pages/CapabilityBoundaryMap.tsx
+- cmGetBoundaryMap -> cm_get_boundary_map -> main.rs:21871 -> ) -> Result<Vec<nexus_capability_measurement::evaluation::batch::AgentBoundary>, String> {
+- cmGetCalibration -> cm_get_calibration -> main.rs:21878 -> ) -> Result<nexus_capability_measurement::evaluation::batch::CalibrationReport, String> {
+- cmGetCensus -> cm_get_census -> main.rs:21887 -> ) -> Result<nexus_capability_measurement::evaluation::batch::ClassificationCensus, String> {
+- cmGetGamingReportBatch -> cm_get_gaming_report_batch -> main.rs:21896 -> ) -> Result<nexus_capability_measurement::evaluation::batch::GamingReport, String> {
+- cmUploadDarwin -> cm_upload_darwin -> main.rs:21905 -> ) -> Result<nexus_capability_measurement::DarwinUploadSummary, String> {
 
-## MISSING ERROR HANDLING
-Strict grep found no page with backend usage and zero `catch/error` tokens. The larger UX problem is missing loading state plus widespread silent/no-op catches.
+### ABValidation
+- file: app/src/pages/ABValidation.tsx
+- cmRunAbValidation -> cm_run_ab_validation -> main.rs:21950 -> ) -> Result<nexus_capability_measurement::ABComparisonResult, String> {
+- listAgents -> list_agents -> main.rs:22967 -> ) -> Result<Vec<nexus_kernel::cognitive::ScheduledAgent>, String> {
 
-### Pages With Backend Calls But No Loading State (15)
-|Page|File|Backend Call Evidence|Finding|
-|---|---|---|---|
-|Firewall|app/src/pages/Firewall.tsx|app/src/pages/Firewall.tsx:1, app/src/pages/Firewall.tsx:2, app/src/pages/Firewall.tsx:10|no explicit loading token found|
-|Messaging|app/src/pages/Messaging.tsx|app/src/pages/Messaging.tsx:1, app/src/pages/Messaging.tsx:11, app/src/pages/Messaging.tsx:90, app/src/pages/Messaging.tsx:94, app/src/pages/Messaging.tsx:106, app/src/pages/Messaging.tsx:153|no explicit loading token found|
-|NotesApp|app/src/pages/NotesApp.tsx|app/src/pages/NotesApp.tsx:1, app/src/pages/NotesApp.tsx:3, app/src/pages/NotesApp.tsx:6, app/src/pages/NotesApp.tsx:159, app/src/pages/NotesApp.tsx:166, app/src/pages/NotesApp.tsx:231|no explicit loading token found|
-|TemporalEngine|app/src/pages/TemporalEngine.tsx|app/src/pages/TemporalEngine.tsx:1, app/src/pages/TemporalEngine.tsx:2, app/src/pages/TemporalEngine.tsx:7, app/src/pages/TemporalEngine.tsx:112, app/src/pages/TemporalEngine.tsx:113, app/src/pages/TemporalEngine.tsx:122|no explicit loading token found|
-|DreamForge|app/src/pages/DreamForge.tsx|app/src/pages/DreamForge.tsx:1, app/src/pages/DreamForge.tsx:12, app/src/pages/DreamForge.tsx:124, app/src/pages/DreamForge.tsx:131|no explicit loading token found|
-|SystemMonitor|app/src/pages/SystemMonitor.tsx|app/src/pages/SystemMonitor.tsx:1, app/src/pages/SystemMonitor.tsx:7, app/src/pages/SystemMonitor.tsx:144, app/src/pages/SystemMonitor.tsx:217|no explicit loading token found|
-|SoftwareFactory|app/src/pages/SoftwareFactory.tsx|app/src/pages/SoftwareFactory.tsx:1, app/src/pages/SoftwareFactory.tsx:12, app/src/pages/SoftwareFactory.tsx:83|no explicit loading token found|
-|Collaboration|app/src/pages/Collaboration.tsx|app/src/pages/Collaboration.tsx:1, app/src/pages/Collaboration.tsx:15, app/src/pages/Collaboration.tsx:103|no explicit loading token found|
-|TimelineViewer|app/src/pages/TimelineViewer.tsx|app/src/pages/TimelineViewer.tsx:1, app/src/pages/TimelineViewer.tsx:2, app/src/pages/TimelineViewer.tsx:86|no explicit loading token found|
-|WorldSimulation|app/src/pages/WorldSimulation.tsx|app/src/pages/WorldSimulation.tsx:1, app/src/pages/WorldSimulation.tsx:13, app/src/pages/WorldSimulation.tsx:283, app/src/pages/WorldSimulation.tsx:306, app/src/pages/WorldSimulation.tsx:313, app/src/pages/WorldSimulation.tsx:319|no explicit loading token found|
-|DatabaseManager|app/src/pages/DatabaseManager.tsx|app/src/pages/DatabaseManager.tsx:8, app/src/pages/DatabaseManager.tsx:241|no explicit loading token found|
-|MediaStudio|app/src/pages/MediaStudio.tsx|app/src/pages/MediaStudio.tsx:1, app/src/pages/MediaStudio.tsx:4, app/src/pages/MediaStudio.tsx:11, app/src/pages/MediaStudio.tsx:69|no explicit loading token found|
-|AuditTimeline|app/src/pages/AuditTimeline.tsx|app/src/pages/AuditTimeline.tsx:1, app/src/pages/AuditTimeline.tsx:4, app/src/pages/AuditTimeline.tsx:49, app/src/pages/AuditTimeline.tsx:54, app/src/pages/AuditTimeline.tsx:67|no explicit loading token found|
-|SelfRewriteLab|app/src/pages/SelfRewriteLab.tsx|app/src/pages/SelfRewriteLab.tsx:1, app/src/pages/SelfRewriteLab.tsx:2, app/src/pages/SelfRewriteLab.tsx:11, app/src/pages/SelfRewriteLab.tsx:173, app/src/pages/SelfRewriteLab.tsx:219, app/src/pages/SelfRewriteLab.tsx:257|no explicit loading token found|
-|Terminal|app/src/pages/Terminal.tsx|app/src/pages/Terminal.tsx:1, app/src/pages/Terminal.tsx:3, app/src/pages/Terminal.tsx:99, app/src/pages/Terminal.tsx:127, app/src/pages/Terminal.tsx:254, app/src/pages/Terminal.tsx:261|no explicit loading token found|
+### ModelRouting
+- file: app/src/pages/ModelRouting.tsx
+- routerGetAccuracy -> router_get_accuracy -> main.rs:22018 -> ) -> Result<nexus_predictive_router::RoutingAccuracy, String> {
+- routerGetModels -> router_get_models -> main.rs:22025 -> ) -> Result<Vec<nexus_predictive_router::ModelCapabilityProfile>, String> {
+- routerGetFeedback -> router_get_feedback -> main.rs:22043 -> ) -> Result<nexus_predictive_router::feedback::FeedbackAnalysis, String> {
+- routerEstimateDifficulty -> router_estimate_difficulty -> main.rs:22032 -> ) -> Result<nexus_predictive_router::TaskDifficultyEstimate, String> {
 
-### Silent / Suppressed Catch Examples
-|Page|Evidence|Observation|
-|---|---|---|
-|GovernedControl|app/src/pages/GovernedControl.tsx:78, app/src/pages/GovernedControl.tsx:93, app/src/pages/GovernedControl.tsx:94, app/src/pages/GovernedControl.tsx:95, app/src/pages/GovernedControl.tsx:96|empty catches or `catch(() => null/[])` on every backend read|
-|WorldSimulation2|app/src/pages/WorldSimulation2.tsx:58, app/src/pages/WorldSimulation2.tsx:59, app/src/pages/WorldSimulation2.tsx:74|policy/history loads silently degrade to null/[]|
-|BrowserAgent|app/src/pages/BrowserAgent.tsx:43, app/src/pages/BrowserAgent.tsx:44, app/src/pages/BrowserAgent.tsx:45, app/src/pages/BrowserAgent.tsx:78, app/src/pages/BrowserAgent.tsx:83|errors are logged to console but not surfaced to the user|
-|GovernanceOracle|app/src/pages/GovernanceOracle.tsx:41, app/src/pages/GovernanceOracle.tsx:49|errors only go to `console.error`|
-|Collaboration|app/src/pages/Collaboration.tsx:105, app/src/pages/Collaboration.tsx:106, app/src/pages/Collaboration.tsx:107, app/src/pages/Collaboration.tsx:116, app/src/pages/Collaboration.tsx:119, app/src/pages/Collaboration.tsx:122|backend failures are normalized to empty/null state without UI error|
-|SoftwareFactory|app/src/pages/SoftwareFactory.tsx:85, app/src/pages/SoftwareFactory.tsx:86, app/src/pages/SoftwareFactory.tsx:87, app/src/pages/SoftwareFactory.tsx:88, app/src/pages/SoftwareFactory.tsx:98, app/src/pages/SoftwareFactory.tsx:101, app/src/pages/SoftwareFactory.tsx:104|project/pipeline fetches silently degrade|
+### GovernanceOracle
+- file: app/src/pages/GovernanceOracle.tsx
+- oracleStatus -> oracle_status -> main.rs:22130 -> ) -> Result<nexus_governance_oracle::tauri_commands::TokenVerification, String> {
+- oracleGetAgentBudget -> oracle_get_agent_budget -> main.rs:22163 -> ) -> Result<nexus_capability_measurement::evaluation::comparator::SingleEvaluationResult, String> {
+- listAgents -> list_agents -> main.rs:22967 -> ) -> Result<Vec<nexus_kernel::cognitive::ScheduledAgent>, String> {
 
-## DATA / CONFIG INTEGRITY
-- Validation runs present: `data/validation_runs/real-battery-baseline.json` (54 sessions), `data/validation_runs/run1-pre-bugfix-baseline.json` (54 sessions), `data/validation_runs/run2-post-bugfix.json` (54 sessions).
-- Prebuilt agent manifests present: 54 JSON manifests under `agents/prebuilt/`.
-- Measurement battery present: `crates/nexus-capability-measurement/data/battery_v1.json` with 20 problems.
-- Root-level config audit: `.gitlab-ci.yml` and `Cargo.toml` exist; root `package.json` and `tsconfig.json` do not. Frontend build tooling lives under `app/`, where `app/package.json` and `app/tsconfig.json` both exist and build successfully.
-- Environment-variable grep only surfaced standard environment keys (`CARGO_MANIFEST_DIR`, `XDG_DATA_HOME`) not documented in root docs; no clearly project-specific undocumented env contract was found.
+### TokenEconomy
+- file: app/src/pages/TokenEconomy.tsx
+- tokenGetAllWallets -> token_get_all_wallets -> main.rs:22205 -> ) -> Result<Vec<token_cmds::WalletSummary>, String> {
+- tokenGetLedger -> token_get_ledger -> main.rs:22227 -> ) -> Result<Vec<token_cmds::LedgerEntrySummary>, String> {
+- tokenGetSupply -> token_get_supply -> main.rs:22240 -> ) -> Result<token_cmds::SupplySummary, String> {
+- tokenGetPricing -> token_get_pricing -> main.rs:22305 -> fn token_get_pricing(state: tauri::State<'_, AppState>) -> Vec<token_cmds::PricingSummary> {
+- tokenCalculateReward -> token_calculate_reward -> main.rs:22257 -> ) -> token_cmds::RewardEstimate {
+- tokenCalculateBurn -> token_calculate_burn -> main.rs:22247 -> ) -> token_cmds::BurnEstimate {
 
-## SECURITY FINDINGS
-- No hardcoded secrets matched the scan pattern in `crates/` or `app/`.
-- No committed `.env` files were found in the repository tree.
-- `git log --oneline -5 --diff-filter=A -- "*.env"` returned no recent `.env` additions.
+### BrowserAgent
+- file: app/src/pages/BrowserAgent.tsx
+- browserCreateSession -> browser_create_session -> main.rs:22052 -> nexus_browser_agent::tauri_commands::create_session(
+- browserExecuteTask -> browser_execute_task -> main.rs:22065 -> ) -> Result<nexus_browser_agent::BrowserActionResult, String> {
+- browserNavigate -> browser_navigate -> main.rs:22082 -> ) -> Result<nexus_browser_agent::BrowserActionResult, String> {
+- browserGetContent -> browser_get_content -> main.rs:22100 -> ) -> Result<nexus_browser_agent::BrowserActionResult, String> {
+- browserCloseSession -> browser_close_session -> main.rs:22108 -> nexus_browser_agent::tauri_commands::close_session(&state.browser_agent, &session_id)
+- browserGetPolicy -> browser_get_policy -> main.rs:22116 -> ) -> Result<nexus_browser_agent::BrowserPolicy, String> {
+- browserSessionCount -> browser_session_count -> main.rs:22123 -> nexus_browser_agent::tauri_commands::session_count(&state.browser_agent)
+- browserScreenshot -> browser_screenshot -> main.rs:22091 -> ) -> Result<nexus_browser_agent::BrowserActionResult, String> {
+- listAgents -> list_agents -> main.rs:22967 -> ) -> Result<Vec<nexus_kernel::cognitive::ScheduledAgent>, String> {
 
-## AUDIT NOTES
-- `cargo +nightly udeps` was unavailable, so dead-code reporting uses the requested grep heuristic instead of `cargo udeps`.
-- The `pub fn` unused scan is heuristic and can over-report when callers are generated dynamically or live outside Rust/TS text search, but manual spot checks confirmed multiple genuine dead functions.
-- The page inventory heuristic initially over-reported a few route misses; the `PER-PAGE STATUS` table above normalizes known false positives (`Chat`, `Agents`, `PermissionDashboard`, `AppStore`, `Settings`, `SetupWizard`).
-- The single non-route file under `app/src/pages/` is `app/src/pages/commandCenterUi.tsx`, which is a shared UI helper module imported by many pages.
+### GovernedControl
+- file: app/src/pages/GovernedControl.tsx
+- ccGetActionHistory -> cc_get_action_history -> main.rs:22331 -> ) -> Result<Vec<cc_cmds::ActionHistoryEntry>, String> {
+- ccGetCapabilityBudget -> cc_get_capability_budget -> main.rs:22339 -> ) -> Result<cc_cmds::BudgetSummary, String> {
+- ccGetScreenContext -> cc_get_screen_context -> main.rs:22355 -> ) -> Result<nexus_computer_control::ScreenContext, String> {
+- ccVerifyActionSequence -> cc_verify_action_sequence -> main.rs:22347 -> ) -> Result<nexus_computer_control::VerificationResult, String> {
+- ccExecuteAction -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+- listAgents -> list_agents -> main.rs:22967 -> ) -> Result<Vec<nexus_kernel::cognitive::ScheduledAgent>, String> {
+
+### WorldSimulation
+- file: app/src/pages/WorldSimulation.tsx
+- chatWithSimulationPersona -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+- createSimulation -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+- getSimulationReport -> get_simulation_report -> main.rs:25999 -> no crate ref captured in command body window
+- getSimulationStatus -> get_simulation_status -> main.rs:25991 -> no crate ref captured in command body window
+- hasDesktopRuntime -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+- injectSimulationVariable -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+- listSimulations -> list_simulations -> main.rs:26017 -> no crate ref captured in command body window
+- pauseSimulation -> pause_simulation -> main.rs:25976 -> no crate ref captured in command body window
+- runParallelSimulations -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+- startSimulation -> start_simulation -> main.rs:25963 -> no crate ref captured in command body window
+
+### Perception
+- file: app/src/pages/Perception.tsx
+- perceptionAnalyzeChart -> perception_analyze_chart -> main.rs:22501 -> ) -> Result<nexus_perception::PerceptionResult, String> {
+- perceptionDescribe -> perception_describe -> main.rs:22447 -> ) -> Result<nexus_perception::PerceptionResult, String> {
+- perceptionExtractData -> perception_extract_data -> main.rs:22483 -> ) -> Result<nexus_perception::PerceptionResult, String> {
+- perceptionExtractText -> perception_extract_text -> main.rs:22456 -> ) -> Result<nexus_perception::PerceptionResult, String> {
+- perceptionFindUiElements -> perception_find_ui_elements -> main.rs:22475 -> ) -> Result<Vec<nexus_perception::UIElement>, String> {
+- perceptionGetPolicy -> perception_get_policy -> main.rs:22510 -> fn perception_get_policy(state: tauri::State<'_, AppState>) -> nexus_perception::PerceptionPolicy {
+- perceptionInit -> perception_init -> main.rs:22437 -> perception_cmds::init_provider(&state.perception, &provider, &api_key, &model_id)
+- perceptionQuestion -> perception_question -> main.rs:22465 -> ) -> Result<nexus_perception::PerceptionResult, String> {
+- perceptionReadError -> perception_read_error -> main.rs:22493 -> ) -> Result<nexus_perception::PerceptionResult, String> {
+
+### AgentMemory
+- file: app/src/pages/AgentMemory.tsx
+- listAgents -> list_agents -> main.rs:22967 -> ) -> Result<Vec<nexus_kernel::cognitive::ScheduledAgent>, String> {
+- memoryBuildContext -> memory_build_context -> main.rs:22575 -> ) -> Result<nexus_agent_memory::MemoryContext, String> {
+- memoryConsolidate -> memory_consolidate -> main.rs:22598 -> ) -> Result<memory_cmds::ConsolidationResult, String> {
+- memoryDeleteEntry -> memory_delete_entry -> main.rs:22566 -> memory_cmds::memory_delete(&state.persistent_memory, &agent_id, &memory_id)
+- memoryGetPolicy -> memory_get_policy -> main.rs:22621 -> fn memory_get_policy(state: tauri::State<'_, AppState>) -> nexus_agent_memory::MemoryPolicy {
+- memoryGetStats -> memory_get_stats -> main.rs:22590 -> ) -> Result<memory_cmds::MemoryStats, String> {
+- memoryLoad -> memory_load -> main.rs:22611 -> memory_cmds::memory_load(&state.persistent_memory, &agent_id)
+- memoryQueryEntries -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+- memorySave -> memory_save -> main.rs:22606 -> memory_cmds::memory_save(&state.persistent_memory, &agent_id)
+- memoryStoreEntry -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+
+### ExternalTools
+- file: app/src/pages/ExternalTools.tsx
+- toolsExecute -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+- toolsGetAudit -> tools_get_audit -> main.rs:22666 -> ) -> Result<Vec<nexus_external_tools::ToolAuditEntry>, String> {
+- toolsGetPolicy -> tools_get_policy -> main.rs:22679 -> ) -> nexus_external_tools::ToolGovernancePolicy {
+- toolsGetRegistry -> tools_get_registry -> main.rs:22652 -> ) -> Result<Vec<nexus_external_tools::ExternalTool>, String> {
+- toolsRefreshAvailability -> tools_refresh_availability -> main.rs:22659 -> ) -> Result<Vec<nexus_external_tools::ExternalTool>, String> {
+- toolsVerifyAudit -> tools_verify_audit -> main.rs:22674 -> tools_cmds::tools_verify_audit(&state.external_tools)
+- getRateLimitStatus -> get_rate_limit_status -> main.rs:27035 -> use nexus_kernel::rate_limit::RateCategory;
+
+### Collaboration
+- file: app/src/pages/Collaboration.tsx
+- collabAddParticipant -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+- collabCastVote -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+- collabCreateSession -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+- collabDeclareConsensus -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+- collabDetectConsensus -> collab_detect_consensus -> main.rs:22801 -> ) -> Result<nexus_collab_protocol::ConsensusState, String> {
+- collabGetPatterns -> collab_get_patterns -> main.rs:22831 -> fn collab_get_patterns() -> Vec<collab_cmds::PatternInfo> {
+- collabGetPolicy -> collab_get_policy -> main.rs:22824 -> ) -> nexus_collab_protocol::CollaborationPolicy {
+- collabGetSession -> collab_get_session -> main.rs:22809 -> ) -> Result<nexus_collab_protocol::CollaborationSession, String> {
+- collabListActive -> collab_list_active -> main.rs:22817 -> ) -> Result<Vec<nexus_collab_protocol::CollaborationSession>, String> {
+- collabSendMessage -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+- collabStart -> collab_start -> main.rs:22724 -> collab_cmds::collab_start(&state.collab_protocol, &session_id)
+
+### SoftwareFactory
+- file: app/src/pages/SoftwareFactory.tsx
+- swfAssignMember -> UNRESOLVED -> main.rs:- -> no crate ref captured in command body window
+- swfCreateProject -> swf_create_project -> main.rs:22838 -> factory_cmds::factory_create_project(&state.software_factory, &title, &user_request)
+- swfEstimateCost -> swf_estimate_cost -> main.rs:22915 -> factory_cmds::factory_estimate_cost()
+- swfGetCost -> swf_get_cost -> main.rs:22897 -> ) -> Result<factory_cmds::CostBreakdown, String> {
+- swfGetPipelineStages -> swf_get_pipeline_stages -> main.rs:22910 -> fn swf_get_pipeline_stages() -> Vec<factory_cmds::StageInfo> {
+- swfGetPolicy -> swf_get_policy -> main.rs:22905 -> fn swf_get_policy(state: tauri::State<'_, AppState>) -> nexus_software_factory::FactoryPolicy {
+- swfGetProject -> swf_get_project -> main.rs:22882 -> ) -> Result<nexus_software_factory::Project, String> {
+- swfListProjects -> swf_list_projects -> main.rs:22890 -> ) -> Result<Vec<nexus_software_factory::Project>, String> {
+- swfStartPipeline -> swf_start_pipeline -> main.rs:22868 -> factory_cmds::factory_start_pipeline(&state.software_factory, &project_id)
+
+## ═══ UNWIRED COMMANDS ═══
+- Commands present in generate_handler![] with no app/src string caller: 0
+- backend.ts exports never called from any page component: 147
+
+| Export | Location | Severity |
+| --- | --- | --- |
+| clearAllAgents | app/src/api/backend.ts:102 | MINOR |
+| createAgent | app/src/api/backend.ts:106 | MINOR |
+| getAgentPerformance | app/src/api/backend.ts:174 | MINOR |
+| getAutoEvolutionLog | app/src/api/backend.ts:178 | MINOR |
+| setAutoEvolutionConfig | app/src/api/backend.ts:182 | MINOR |
+| forceEvolveAgent | app/src/api/backend.ts:196 | MINOR |
+| transcribePushToTalk | app/src/api/backend.ts:208 | MINOR |
+| startJarvisMode | app/src/api/backend.ts:212 | MINOR |
+| stopJarvisMode | app/src/api/backend.ts:216 | MINOR |
+| jarvisStatus | app/src/api/backend.ts:220 | MINOR |
+| detectHardware | app/src/api/backend.ts:224 | MINOR |
+| checkOllama | app/src/api/backend.ts:228 | MINOR |
+| pullOllamaModel | app/src/api/backend.ts:232 | MINOR |
+| runSetupWizard | app/src/api/backend.ts:241 | MINOR |
+| pullModel | app/src/api/backend.ts:248 | MINOR |
+| ensureOllama | app/src/api/backend.ts:257 | MINOR |
+| isOllamaInstalled | app/src/api/backend.ts:264 | MINOR |
+| deleteModel | app/src/api/backend.ts:268 | MINOR |
+| isSetupComplete | app/src/api/backend.ts:277 | MINOR |
+| listAvailableModels | app/src/api/backend.ts:281 | MINOR |
+| analyzeScreen | app/src/api/backend.ts:311 | MINOR |
+| computerControlCaptureScreen | app/src/api/backend.ts:338 | MINOR |
+| computerControlExecuteAction | app/src/api/backend.ts:342 | MINOR |
+| setAgentModel | app/src/api/backend.ts:386 | MINOR |
+| getSystemInfo | app/src/api/backend.ts:411 | MINOR |
+| getAgentIdentity | app/src/api/backend.ts:532 | MINOR |
+| listIdentities | app/src/api/backend.ts:536 | MINOR |
+| marketplaceInfo | app/src/api/backend.ts:583 | MINOR |
+| getBrowserHistory | app/src/api/backend.ts:607 | MINOR |
+| getAgentActivity | app/src/api/backend.ts:611 | MINOR |
+| startResearch | app/src/api/backend.ts:617 | MINOR |
+| researchAgentAction | app/src/api/backend.ts:624 | MINOR |
+| completeResearch | app/src/api/backend.ts:640 | MINOR |
+| getResearchSession | app/src/api/backend.ts:646 | MINOR |
+| listResearchSessions | app/src/api/backend.ts:652 | MINOR |
+| startBuild | app/src/api/backend.ts:658 | MINOR |
+| buildAppendCode | app/src/api/backend.ts:662 | MINOR |
+| buildAddMessage | app/src/api/backend.ts:674 | MINOR |
+| completeBuild | app/src/api/backend.ts:688 | MINOR |
+| getBuildSession | app/src/api/backend.ts:694 | MINOR |
+| getBuildCode | app/src/api/backend.ts:700 | MINOR |
+| getBuildPreview | app/src/api/backend.ts:704 | MINOR |
+| startLearning | app/src/api/backend.ts:710 | MINOR |
+| getKnowledgeBase | app/src/api/backend.ts:714 | MINOR |
+| getLearningSession | app/src/api/backend.ts:718 | MINOR |
+| learningAgentAction | app/src/api/backend.ts:753 | MINOR |
+| getProviderUsageStats | app/src/api/backend.ts:794 | MINOR |
+| emailSearchMessages | app/src/api/backend.ts:1006 | MINOR |
+| getAgentOutputs | app/src/api/backend.ts:1042 | MINOR |
+| projectGet | app/src/api/backend.ts:1052 | MINOR |
+| assignAgentGoal | app/src/api/backend.ts:1128 | MINOR |
+| stopAgentGoal | app/src/api/backend.ts:1159 | MINOR |
+| startAutonomousLoop | app/src/api/backend.ts:1168 | MINOR |
+| stopAutonomousLoop | app/src/api/backend.ts:1184 | MINOR |
+| getAgentCognitiveStatus | app/src/api/backend.ts:1191 | MINOR |
+| getAgentMemories | app/src/api/backend.ts:1211 | MINOR |
+| agentMemoryRemember | app/src/api/backend.ts:1227 | MINOR |
+| agentMemoryRecall | app/src/api/backend.ts:1245 | MINOR |
+| agentMemoryRecallByType | app/src/api/backend.ts:1259 | MINOR |
+| agentMemoryForget | app/src/api/backend.ts:1274 | MINOR |
+| agentMemoryGetStats | app/src/api/backend.ts:1283 | MINOR |
+| agentMemorySave | app/src/api/backend.ts:1287 | MINOR |
+| agentMemoryClear | app/src/api/backend.ts:1291 | MINOR |
+| getSelfEvolutionMetrics | app/src/api/backend.ts:1312 | MINOR |
+| getSelfEvolutionStrategies | app/src/api/backend.ts:1321 | MINOR |
+| triggerCrossAgentLearning | app/src/api/backend.ts:1330 | MINOR |
+| getHivemindStatus | app/src/api/backend.ts:1347 | MINOR |
+| cancelHivemind | app/src/api/backend.ts:1356 | MINOR |
+| getOsFitness | app/src/api/backend.ts:1552 | MINOR |
+| getFitnessHistory | app/src/api/backend.ts:1556 | MINOR |
+| getRoutingStats | app/src/api/backend.ts:1560 | MINOR |
+| getUiAdaptations | app/src/api/backend.ts:1564 | MINOR |
+| recordPageVisit | app/src/api/backend.ts:1572 | MINOR |
+| recordFeatureUse | app/src/api/backend.ts:1576 | MINOR |
+| overrideSecurityBlock | app/src/api/backend.ts:1580 | MINOR |
+| getOsImprovementLog | app/src/api/backend.ts:1592 | MINOR |
+| getMorningOsBriefing | app/src/api/backend.ts:1596 | MINOR |
+| recordRoutingOutcome | app/src/api/backend.ts:1600 | MINOR |
+| recordOperationTiming | app/src/api/backend.ts:1613 | MINOR |
+| getPerformanceReport | app/src/api/backend.ts:1624 | MINOR |
+| getSecurityEvolutionReport | app/src/api/backend.ts:1628 | MINOR |
+| recordKnowledgeInteraction | app/src/api/backend.ts:1632 | MINOR |
+| getOsDreamStatus | app/src/api/backend.ts:1644 | MINOR |
+| setSelfImproveEnabled | app/src/api/backend.ts:1648 | MINOR |
+| screenshotAnalyze | app/src/api/backend.ts:1654 | MINOR |
+| screenshotGenerateSpec | app/src/api/backend.ts:1658 | MINOR |
+| voiceProjectStart | app/src/api/backend.ts:1670 | MINOR |
+| voiceProjectStop | app/src/api/backend.ts:1674 | MINOR |
+| voiceProjectAddChunk | app/src/api/backend.ts:1678 | MINOR |
+| voiceProjectGetStatus | app/src/api/backend.ts:1685 | MINOR |
+| voiceProjectGetPrompt | app/src/api/backend.ts:1689 | MINOR |
+| voiceProjectUpdateIntent | app/src/api/backend.ts:1693 | MINOR |
+| stressGeneratePersonas | app/src/api/backend.ts:1705 | MINOR |
+| stressGenerateActions | app/src/api/backend.ts:1709 | MINOR |
+| stressEvaluateReport | app/src/api/backend.ts:1713 | MINOR |
+| deployGenerateDockerfile | app/src/api/backend.ts:1719 | MINOR |
+| deployValidateConfig | app/src/api/backend.ts:1723 | MINOR |
+| deployGetCommands | app/src/api/backend.ts:1727 | MINOR |
+| evolverRegisterApp | app/src/api/backend.ts:1733 | MINOR |
+| evolverUnregisterApp | app/src/api/backend.ts:1737 | MINOR |
+| evolverListApps | app/src/api/backend.ts:1741 | MINOR |
+| evolverDetectIssues | app/src/api/backend.ts:1745 | MINOR |
+| freelanceGetStatus | app/src/api/backend.ts:1751 | MINOR |
+| freelanceStartScanning | app/src/api/backend.ts:1755 | MINOR |
+| freelanceStopScanning | app/src/api/backend.ts:1759 | MINOR |
+| freelanceEvaluateJob | app/src/api/backend.ts:1763 | MINOR |
+| freelanceGetRevenue | app/src/api/backend.ts:1767 | MINOR |
+| getLivePreview | app/src/api/backend.ts:1781 | MINOR |
+| publishToMarketplace | app/src/api/backend.ts:1793 | MINOR |
+| installFromMarketplace | app/src/api/backend.ts:1797 | MINOR |
+| schedulerHistory | app/src/api/backend.ts:3048 | MINOR |
+| schedulerRunnerStatus | app/src/api/backend.ts:3059 | MINOR |
+| executeTeamWorkflow | app/src/api/backend.ts:3067 | MINOR |
+| transferAgentFuel | app/src/api/backend.ts:3082 | MINOR |
+| runContentPipeline | app/src/api/backend.ts:3100 | MINOR |
+| flashProfileModel | app/src/api/backend.ts:3115 | MINOR |
+| flashAutoConfigure | app/src/api/backend.ts:3120 | MINOR |
+| flashListSessions | app/src/api/backend.ts:3146 | MINOR |
+| flashGetMetrics | app/src/api/backend.ts:3161 | MINOR |
+| flashEstimatePerformance | app/src/api/backend.ts:3173 | MINOR |
+| flashCatalogRecommend | app/src/api/backend.ts:3180 | MINOR |
+| flashCatalogSearch | app/src/api/backend.ts:3185 | MINOR |
+| flashDownloadModel | app/src/api/backend.ts:3221 | MINOR |
+| flashDownloadMulti | app/src/api/backend.ts:3229 | MINOR |
+| flashDeleteLocalModel | app/src/api/backend.ts:3236 | MINOR |
+| flashAvailableDiskSpace | app/src/api/backend.ts:3240 | MINOR |
+| flashGetModelDir | app/src/api/backend.ts:3244 | MINOR |
+| cmGetProfile | app/src/api/backend.ts:3295 | MINOR |
+| cmTriggerFeedback | app/src/api/backend.ts:3321 | MINOR |
+| cmEvaluateResponse | app/src/api/backend.ts:3328 | MINOR |
+| cmExecuteValidationRun | app/src/api/backend.ts:3365 | MINOR |
+| cmListValidationRuns | app/src/api/backend.ts:3373 | MINOR |
+| cmGetValidationRun | app/src/api/backend.ts:3378 | MINOR |
+| cmThreeWayComparison | app/src/api/backend.ts:3383 | MINOR |
+| routerRouteTask | app/src/api/backend.ts:3400 | MINOR |
+| routerRecordOutcome | app/src/api/backend.ts:3404 | MINOR |
+| oracleVerifyToken | app/src/api/backend.ts:3464 | MINOR |
+| tokenGetWallet | app/src/api/backend.ts:3479 | MINOR |
+| tokenCreateWallet | app/src/api/backend.ts:3487 | MINOR |
+| tokenCalculateSpawn | app/src/api/backend.ts:3521 | MINOR |
+| tokenCreateDelegation | app/src/api/backend.ts:3528 | MINOR |
+| tokenGetDelegations | app/src/api/backend.ts:3539 | MINOR |
+| simBranch | app/src/api/backend.ts:3605 | MINOR |
+| memoryGetEntry | app/src/api/backend.ts:3693 | MINOR |
+| memoryListAgents | app/src/api/backend.ts:3729 | MINOR |
+| toolsListAvailable | app/src/api/backend.ts:3739 | MINOR |
+| swfSubmitArtifact | app/src/api/backend.ts:3885 | MINOR |
+
+## ═══ UNUSED PAGE IMPORTS ═══
+| Page file | Import line | Unused backend imports |
+| --- | --- | --- |
+| app/src/pages/AiChatHub.tsx | 11 | listAgents, analyzeProblem |
+| app/src/pages/CodeEditor.tsx | 11 | type TerminalCommandResult |
+| app/src/pages/Collaboration.tsx | 15 | collabCallVote |
+| app/src/pages/DreamForge.tsx | 12 | getDreamStatus, getDreamQueue, getDreamHistory, getMorningBriefing |
+| app/src/pages/ImmuneDashboard.tsx | 10 | getImmuneStatus, getImmuneMemory, runAdversarialSession |
+| app/src/pages/KnowledgeGraph.tsx | 17 | cogfsGetEntities, cogfsGetGraph |
+| app/src/pages/MeasurementSession.tsx | 2 | cmGetGamingFlags |
+| app/src/pages/ProjectManager.tsx | 2 | projectDelete |
+| app/src/pages/SelfRewriteLab.tsx | 11 | selfRewriteGetHistory, selfRewritePreviewPatch, selfRewriteTestPatch |
+| app/src/pages/TemporalEngine.tsx | 7 | runDilatedSession |
+| app/src/pages/Terminal.tsx | 3 | type TerminalCommandResult |
+| app/src/pages/WorldSimulation2.tsx | 2 | simGetResult |
+
+## ═══ BUTTON AUDIT ═══
+| Severity | Location | Finding | Evidence |
+| --- | --- | --- | --- |
+| MAJOR | app/src/pages/AiChatHub.tsx:764 | Rendered code-block "Run" button has no event wiring anywhere in app/src. | Only occurrences of `ch-code-run` are the CSS selector and the injected HTML string. |
+| MAJOR | app/src/pages/ComplianceDashboard.tsx:852 | "Run Retention Enforcement" button has no onClick/onSubmit handler. | Button is rendered as plain `<button type="button" className="cd-generate-btn">` with no handler. |
+
+## ═══ DEAD CODE ═══
+- cargo +nightly udeps: skipped (`udeps not installed — skip`)
+- Unused public functions found by text scan: 54
+| Symbol | Location |
+| --- | --- |
+| suggested_capabilities | crates/nexus-software-factory/src/roles.rs:24 |
+| get_artifact | crates/nexus-software-factory/src/project.rs:103 |
+| complete_project | crates/nexus-software-factory/src/factory.rs:232 |
+| stage_cost | crates/nexus-software-factory/src/economy.rs:10 |
+| refund_escrow | crates/nexus-token-economy/src/wallet.rs:163 |
+| record_snapshot | crates/nexus-token-economy/src/supply.rs:35 |
+| clear_cache | crates/nexus-perception/src/engine.rs:241 |
+| provider_model_id | crates/nexus-perception/src/engine.rs:245 |
+| find_clickable_elements | crates/nexus-perception/src/screen.rs:29 |
+| ask_about_screen | crates/nexus-perception/src/screen.rs:53 |
+| extract_form_data | crates/nexus-perception/src/extraction.rs:16 |
+| extract_table_data | crates/nexus-perception/src/extraction.rs:30 |
+| read_page | crates/nexus-perception/src/document.rs:8 |
+| tools_by_category | crates/nexus-external-tools/src/registry.rs:76 |
+| max_difficulty | crates/nexus-predictive-router/src/difficulty_estimator.rs:28 |
+| check_staging | crates/nexus-predictive-router/src/staging.rs:18 |
+| can_propose | crates/nexus-collab-protocol/src/roles.rs:14 |
+| complete_session | crates/nexus-collab-protocol/src/protocol.rs:51 |
+| completed_sessions | crates/nexus-collab-protocol/src/protocol.rs:65 |
+| session_cost | crates/nexus-collab-protocol/src/economy.rs:6 |
+| with_data | crates/nexus-collab-protocol/src/message.rs:68 |
+| with_reasoning | crates/nexus-collab-protocol/src/message.rs:73 |
+| with_references | crates/nexus-collab-protocol/src/message.rs:78 |
+| is_broadcast | crates/nexus-collab-protocol/src/message.rs:83 |
+| has_changed | crates/nexus-governance-engine/src/versioning.rs:6 |
+| is_valid_successor | crates/nexus-governance-engine/src/versioning.rs:11 |
+| default_capabilities | crates/nexus-governance-engine/src/capability_model.rs:23 |
+| restore_fs | crates/nexus-world-simulation/src/sandbox.rs:100 |
+| run_batch_evaluation | crates/nexus-capability-measurement/src/tauri_commands.rs:292 |
+| get_ab_comparison | crates/nexus-capability-measurement/src/tauri_commands.rs:467 |
+| execute_validation_run_real | crates/nexus-capability-measurement/src/evaluation/validation_run.rs:237 |
+| compute_articulation | crates/nexus-capability-measurement/src/scoring/articulation.rs:72 |
+| difficulty_description | crates/nexus-capability-measurement/src/battery/difficulty.rs:6 |
+| references_tool_output | crates/nexus-capability-measurement/src/vectors/tool_use_integrity.rs:22 |
+| acknowledges_limitations | crates/nexus-capability-measurement/src/vectors/tool_use_integrity.rs:35 |
+| has_causal_language | crates/nexus-capability-measurement/src/vectors/reasoning_depth.rs:24 |
+| avoids_correlation_trap | crates/nexus-capability-measurement/src/vectors/reasoning_depth.rs:40 |
+| shows_epistemic_honesty | crates/nexus-capability-measurement/src/vectors/adaptation.rs:26 |
+| distinguishes_source_reliability | crates/nexus-capability-measurement/src/vectors/adaptation.rs:41 |
+| has_explicit_dependencies | crates/nexus-capability-measurement/src/vectors/planning_coherence.rs:24 |
+| has_rollback_handling | crates/nexus-capability-measurement/src/vectors/planning_coherence.rs:39 |
+| append_to_chain | crates/nexus-capability-measurement/src/reporting/audit_trail.rs:18 |
+| profile_summary | crates/nexus-capability-measurement/src/reporting/cross_vector.rs:6 |
+| detect_anomalies | crates/nexus-capability-measurement/src/reporting/cross_vector.rs:21 |
+| keyword_count | crates/nexus-agent-memory/src/index.rs:80 |
+| tag_count | crates/nexus-agent-memory/src/index.rs:88 |
+| update_importance | crates/nexus-agent-memory/src/store.rs:76 |
+| request_channel | crates/nexus-governance-oracle/src/submission.rs:7 |
+| check_balance | crates/nexus-browser-agent/src/economy.rs:13 |
+| score_browser_task | crates/nexus-browser-agent/src/measurement.rs:16 |
+| is_running | crates/nexus-browser-agent/src/bridge.rs:150 |
+| close_agent_sessions | crates/nexus-browser-agent/src/session.rs:128 |
+| generate_speculative | crates/nexus-flash-infer/src/speculative.rs:116 |
+| set_subprocess_timeout_ms | crates/nexus-computer-control/src/engine.rs:84 |
+
+- Orphan module candidates found by text scan: 6
+| Location | Detail |
+| --- | --- |
+| crates/nexus-flash-infer/tests/autoconfig_test.rs:1 | Module file is not referenced by nearby mod.rs/lib.rs candidates |
+| crates/nexus-flash-infer/tests/registry_test.rs:1 | Module file is not referenced by nearby mod.rs/lib.rs candidates |
+| crates/nexus-flash-infer/tests/profiler_test.rs:1 | Module file is not referenced by nearby mod.rs/lib.rs candidates |
+| crates/nexus-flash-infer/tests/downloader_test.rs:1 | Module file is not referenced by nearby mod.rs/lib.rs candidates |
+| crates/nexus-flash-infer/tests/catalog_test.rs:1 | Module file is not referenced by nearby mod.rs/lib.rs candidates |
+| crates/nexus-flash-infer/tests/budget_test.rs:1 | Module file is not referenced by nearby mod.rs/lib.rs candidates |
+
+## ═══ MOCK DATA LOCATIONS ═══
+- Strict mock/demo/runtime indicators: 38
+| Location | Line |
+| --- | --- |
+| app/src/types.ts:229 | export type ConnectionStatus = "connected" \| "mock"; |
+| app/src/App.tsx:142 | type RuntimeMode = "desktop" \| "mock"; |
+| app/src/App.tsx:373 | // A prominent "DEMO MODE" banner is displayed whenever these are active. |
+| app/src/App.tsx:475 | text = "[DEMO] Hello! This is the Nexus OS demo preview. You are seeing placeholder data — install the desktop app for full governed chat, agent management, and all runtime features."; |
+| app/src/App.tsx:479 | text = "[DEMO] This is a demo preview. Chat responses, agent data, and all actions are simulated. Install the Nexus OS desktop app to connect to the governed runtime."; |
+| app/src/App.tsx:521 | const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>("mock"); |
+| app/src/App.tsx:528 | const [selectedModel, setSelectedModel] = useState("mock"); |
+| app/src/App.tsx:600 | setRuntimeMode("mock"); |
+| app/src/App.tsx:607 | "[DEMO MODE] You are viewing a demo preview of Nexus OS. Agent data is simulated and actions are disabled. Install the desktop app for full functionality." |
+| app/src/App.tsx:654 | `Connected to desktop backend. Default model: ${normalizedConfig.llm.default_model \|\| "mock-1"}.` |
+| app/src/App.tsx:664 | setRuntimeMode("mock"); |
+| app/src/App.tsx:670 | makeMessage("assistant", "[DEMO MODE] Backend connection failed. Showing demo data. Restart the desktop app and refresh to reconnect.") |
+| app/src/App.tsx:808 | const connectionStatus: ConnectionStatus = runtimeMode === "desktop" ? "connected" : "mock"; |
+| app/src/App.tsx:1061 | const model = selectedModel === "mock" ? getModelForAgent(selectedAgent) : selectedModel; |
+| app/src/App.tsx:1062 | const isOllamaModel = model.startsWith("ollama/") \|\| (!model.includes("/") && model !== "mock"); |
+| app/src/App.tsx:1321 | // Demo mode — simulated reply |
+| app/src/App.tsx:1900 | {connectionStatus === "connected" ? "live" : "mock"} |
+| app/src/pages/PolicyManagement.tsx:251 | Evaluate the editor TOML against a simulated request. |
+| app/src/pages/AgentBrowser.tsx:75 | // Track governance stats — fuel is estimated per-action, not hardcoded |
+| app/src/pages/ApiClient.tsx:86 | /* Collections are loaded from backend on mount, not hardcoded */ |
+| app/src/pages/ComputerControl.tsx:207 | { action: "type", description: "Agent would type: fn main() { println!(\"Hello, world!\"); }", detail: "Keystroke sequence: 45 characters, typing speed: 60 WPM simulated" }, |
+| app/src/pages/SetupWizard.tsx:224 | // Fallback for mock mode: |
+| app/src/pages/AiChatHub.tsx:187 | if (lower.includes("no llm provider") \|\| lower.includes("mock")) { |
+| app/src/pages/Chat.tsx:136 | label: selectedModel === "mock" ? "Browser runtime selection" : selectedModel, |
+| app/src/pages/WorldSimulation.tsx:1043 | <p>Choose any simulated actor and ask them to explain their final worldview.</p> |
+| app/src/pages/Settings.tsx:489 | {!p.available && p.name !== "mock" && <span style={{ color: "#ff5252", marginLeft: 6, fontSize: "0.75rem" }}>{p.error_hint \|\| "Unavailable"}</span>} |
+| app/src/pages/Settings.tsx:504 | {!p.is_paid && p.name !== "mock" && <span className="st-badge st-badge-green" style={{ fontSize: "0.7rem", padding: "2px 6px" }}>Free</span>} |
+| app/src/pages/Audit.tsx:853 | // Client-side fallback for mock mode |
+| app/src/voice/PushToTalk.ts:5 | source: "tauri-stt" \| "web-speech" \| "mock-whisper"; |
+| app/src/voice/PushToTalk.ts:74 | source: "mock-whisper" |
+| app/src/voice/PushToTalk.ts:101 | source: "mock-whisper" |
+| app/src/components/agents/CreateAgent.tsx:66 | { value: "mock", label: "mock (Testing)" }, |
+| app/src/components/agents/CreateAgent.tsx:237 | self-modification is simulated first and checkpointed for rollback. |
+| app/src/components/browser/BuildMode.tsx:81 | /** Generate mock code for a build description, split into typeable chunks. */ |
+| app/src/components/browser/BuildMode.tsx:304 | // fall through to mock |
+| app/src/components/browser/BuildMode.tsx:373 | // continue mock |
+| app/src/components/browser/BuildMode.tsx:415 | // mock complete |
+| app/src/components/browser/ResearchMode.tsx:96 | // continue in mock mode |
+
+- UI placeholder attributes (input hints only, listed separately from runtime mock data): 212
+| Location | Line |
+| --- | --- |
+| app/src/pages/TrustDashboard.tsx:271 | placeholder="Agent DID" |
+| app/src/pages/TrustDashboard.tsx:295 | <input className="td-rep-input" placeholder="DID" value={regDid} onChange={(e) => setRegDid(e.target.value)} /> |
+| app/src/pages/TrustDashboard.tsx:296 | <input className="td-rep-input" placeholder="Name" value={regName} onChange={(e) => setRegName(e.target.value)} /> |
+| app/src/pages/TrustDashboard.tsx:308 | <input className="td-rep-input" placeholder="Target DID" value={rateDid} onChange={(e) => setRateDid(e.target.value)} /> |
+| app/src/pages/TrustDashboard.tsx:309 | <input className="td-rep-input" placeholder="Rater DID" value={raterDid} onChange={(e) => setRaterDid(e.target.value)} /> |
+| app/src/pages/TrustDashboard.tsx:326 | placeholder="Comment (optional)" |
+| app/src/pages/TrustDashboard.tsx:341 | <input className="td-rep-input" placeholder="Agent DID" value={taskDid} onChange={(e) => setTaskDid(e.target.value)} /> |
+| app/src/pages/TrustDashboard.tsx:362 | placeholder="Paste exported JSON here..." |
+| app/src/pages/FileManager.tsx:373 | <input className="fm-search-input" placeholder="Filter files by name..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} autoFocus onKeyDown={(e) => { if (e.key === "Escape") { setShowSearch(false); setSearchQuery(""); } }} /> |
+| app/src/pages/FileManager.tsx:383 | <input className="fm-new-item-input" placeholder={newItemType === "dir" ? "folder-name" : "filename.ext"} value={newItemName} onChange={(e) => setNewItemName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleCreateItem(); if (e.key === "Escape") setNewItemType(null); }} autoFocus /> |
+| app/src/pages/ApprovalCenter.tsx:298 | placeholder="Reason (optional)" |
+| app/src/pages/ProjectManager.tsx:328 | <input className="pm-search" placeholder="Search tasks..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} /> |
+| app/src/pages/ProjectManager.tsx:359 | <input className="pm-modal-input" placeholder="Task title..." value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} autoFocus onKeyDown={e => e.key === "Enter" && createTask()} /> |
+| app/src/pages/ProjectManager.tsx:619 | <textarea className="pm-detail-desc" value={selectedTask.description} onChange={e => { updateTask(selectedTask.id, { description: e.target.value }); setSelectedTask({ ...selectedTask, description: e.target.value }); }} placeholder="Add description..." /> |
+| app/src/pages/Scheduler.tsx:239 | <input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} placeholder="my-scheduled-task" /> |
+| app/src/pages/Scheduler.tsx:243 | <input value={agentDid} onChange={(e) => setAgentDid(e.target.value)} style={inputStyle} placeholder="agent-uuid" /> |
+| app/src/pages/ClusterStatus.tsx:242 | placeholder="Task description" |
+| app/src/pages/ClusterStatus.tsx:247 | placeholder="Agent IDs (comma sep)" |
+| app/src/pages/ClusterStatus.tsx:266 | placeholder="Agent ID" |
+| app/src/pages/ClusterStatus.tsx:271 | placeholder="Target peer ID" |
+| app/src/pages/DeployPipeline.tsx:483 | <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="my-app" /> |
+| app/src/pages/DeployPipeline.tsx:493 | <input value={newSourceDir} onChange={e => setNewSourceDir(e.target.value)} placeholder="." /> |
+| app/src/pages/DeployPipeline.tsx:765 | <input value={bundleOutputPath} onChange={e => setBundleOutputPath(e.target.value)} placeholder="Output path" |
+| app/src/pages/DeployPipeline.tsx:767 | <input value={bundleComponents} onChange={e => setBundleComponents(e.target.value)} placeholder="Components (optional, comma sep)" |
+| app/src/pages/DeployPipeline.tsx:789 | <input value={validatePath} onChange={e => setValidatePath(e.target.value)} placeholder="Bundle path" |
+| app/src/pages/DeployPipeline.tsx:812 | <input value={installBundlePath} onChange={e => setInstallBundlePath(e.target.value)} placeholder="Bundle path" |
+| app/src/pages/DeployPipeline.tsx:814 | <input value={installDir} onChange={e => setInstallDir(e.target.value)} placeholder="Install directory" |
+| app/src/pages/Messaging.tsx:283 | placeholder={`${platform.label} token`} |
+| app/src/pages/Messaging.tsx:349 | <input value={replyChannel} onChange={e => setReplyChannel(e.target.value)} placeholder="Channel / Chat ID" style={{ flex: "0 0 140px", background: "var(--bg-primary, #0f172a)", border: "1px solid var(--border, #334155)", borderRadius: 4, color: "inherit", padding: "4px 8px", fontSize: "0.8rem", fontFamily: "inherit" }} /> |
+| app/src/pages/Messaging.tsx:350 | <input value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Type a message..." style={{ flex: 1, background: "var(--bg-primary, #0f172a)", border: "1px solid var(--border, #334155)", borderRadius: 4, color: "inherit", padding: "4px 8px", fontSize: "0.8rem", fontFamily: "inherit" }} onKeyDown={e => e.key === 'Enter' && handleSendReply()} /> |
+| app/src/pages/ModelRouting.tsx:91 | placeholder="Enter task text to estimate difficulty..." |
+| app/src/pages/AppStore.tsx:212 | placeholder="Search by name, description, or capability..." |
+| app/src/pages/AppStore.tsx:377 | placeholder="Search nexus-agent repos on GitLab..." |
+| app/src/pages/LearningCenter.tsx:1130 | placeholder="Type your response or describe what you built..." |
+| app/src/pages/ApiClient.tsx:378 | <input className="ac-url-input" value={activeReq.url} onChange={e => updateReq({ url: e.target.value })} placeholder="Enter request URL..." onKeyDown={e => e.key === "Enter" && sendRequest()} /> |
+| app/src/pages/ApiClient.tsx:412 | <input className="ac-kv-key" value={kv.key} onChange={e => updateKV("params", i, { key: e.target.value })} placeholder="Key" /> |
+| app/src/pages/ApiClient.tsx:413 | <input className="ac-kv-value" value={kv.value} onChange={e => updateKV("params", i, { value: e.target.value })} placeholder="Value" /> |
+| app/src/pages/ApiClient.tsx:430 | <input className="ac-kv-key" value={kv.key} onChange={e => updateKV("headers", i, { key: e.target.value })} placeholder="Header name" /> |
+| app/src/pages/ApiClient.tsx:431 | <input className="ac-kv-value" value={kv.value} onChange={e => updateKV("headers", i, { value: e.target.value })} placeholder="Value" /> |
+| app/src/pages/ApiClient.tsx:450 | <textarea className="ac-body-editor" value={activeReq.bodyRaw} onChange={e => updateReq({ bodyRaw: e.target.value })} placeholder='{"key": "value"}' spellCheck={false} /> |
+| app/src/pages/ApiClient.tsx:453 | <textarea className="ac-body-editor" value={activeReq.bodyRaw} onChange={e => updateReq({ bodyRaw: e.target.value })} placeholder="Raw text body..." spellCheck={false} /> |
+| app/src/pages/ApiClient.tsx:464 | <input className="ac-kv-key" value={kv.key} onChange={e => updateKV("bodyForm", i, { key: e.target.value })} placeholder="Key" /> |
+| app/src/pages/ApiClient.tsx:465 | <input className="ac-kv-value" value={kv.value} onChange={e => updateKV("bodyForm", i, { value: e.target.value })} placeholder="Value" /> |
+| app/src/pages/ApiClient.tsx:488 | <input className="ac-auth-input" value={activeReq.authToken} onChange={e => updateReq({ authToken: e.target.value })} placeholder="Bearer token..." type="password" /> |
+| app/src/pages/ApiClient.tsx:495 | <input className="ac-auth-input" value={activeReq.authUser} onChange={e => updateReq({ authUser: e.target.value })} placeholder="Username" /> |
+| app/src/pages/ApiClient.tsx:497 | <input className="ac-auth-input" value={activeReq.authPass} onChange={e => updateReq({ authPass: e.target.value })} placeholder="Password" type="password" /> |
+| app/src/pages/ApiClient.tsx:503 | <input className="ac-auth-input" value={activeReq.authKeyName} onChange={e => updateReq({ authKeyName: e.target.value })} placeholder="e.g. x-api-key" /> |
+| app/src/pages/ApiClient.tsx:505 | <input className="ac-auth-input" value={activeReq.authKeyValue} onChange={e => updateReq({ authKeyValue: e.target.value })} placeholder="API key value" type="password" /> |
+| app/src/pages/ComputerControl.tsx:483 | placeholder="App name (e.g. Firefox)" |
+| app/src/pages/ComputerControl.tsx:507 | placeholder='{"type":"click","x":100,"y":200}' |
+| app/src/pages/EmailClient.tsx:402 | <input className="ec-search" placeholder="Search emails..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} /> |
+| app/src/pages/EmailClient.tsx:472 | <input value={composeTo} onChange={e => setComposeTo(e.target.value)} placeholder="recipient@example.com" /> |
+| app/src/pages/EmailClient.tsx:476 | <input value={composeSubject} onChange={e => setComposeSubject(e.target.value)} placeholder="Subject" /> |
+| app/src/pages/EmailClient.tsx:479 | <textarea className="ec-compose-body" value={composeBody} onChange={e => setComposeBody(e.target.value)} placeholder="Write your email..." /> |
+| app/src/pages/WorldSimulation2.tsx:110 | <input placeholder="Scenario description..." value={scenarioDesc} onChange={(e) => setScenarioDesc(e.target.value)} style={{ flex: 1, padding: 8, borderRadius: 6, background: "#2a2a3e", color: "#e0e0e0", border: "1px solid #444" }} /> |
+| app/src/pages/WorldSimulation2.tsx:112 | <textarea placeholder='Actions JSON array' value={actionsJson} onChange={(e) => setActionsJson(e.target.value)} rows={3} style={{ width: "100%", padding: 8, borderRadius: 6, background: "#2a2a3e", color: "#e0e0e0", border: "1px solid #444", fontFamily: "monospace", fontSize: 12, boxSizing: "border-box", resize: "vertical", marginBottom: 8 }} /> |
+| app/src/pages/KnowledgeGraph.tsx:522 | placeholder="Ask anything about your files..." |
+| app/src/pages/KnowledgeGraph.tsx:658 | placeholder="Enter a topic..." |
+| app/src/pages/KnowledgeGraph.tsx:680 | placeholder="File path (e.g. /home/user/doc.md)" |
+| app/src/pages/KnowledgeGraph.tsx:702 | placeholder="File path (e.g. /home/user/doc.md)" |
+| app/src/pages/KnowledgeGraph.tsx:749 | placeholder="Search query..." |
+| app/src/pages/KnowledgeGraph.tsx:756 | placeholder="Time range (start,end)" |
+| app/src/pages/KnowledgeGraph.tsx:762 | placeholder="Source filter (csv)" |
+| app/src/pages/KnowledgeGraph.tsx:768 | placeholder="Max results" |
+| app/src/pages/KnowledgeGraph.tsx:799 | placeholder="Content to ingest..." |
+| app/src/pages/KnowledgeGraph.tsx:806 | placeholder='Metadata JSON e.g. {"tag":"notes"}' |
+| app/src/pages/KnowledgeGraph.tsx:827 | placeholder="Entry ID to delete" |
+| app/src/pages/KnowledgeGraph.tsx:844 | placeholder="Older than N days" |
+| app/src/pages/Identity.tsx:619 | placeholder='Paste proof JSON to verify...' |
+| app/src/pages/Identity.tsx:722 | placeholder="Peer address (e.g. 192.168.1.50:9090)" |
+| app/src/pages/Identity.tsx:728 | placeholder="Peer name (optional)" |
+| app/src/pages/Identity.tsx:788 | placeholder="address:port" |
+| app/src/pages/NotesApp.tsx:424 | <input id="na-search" className="na-search-input" placeholder="Search notes..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} /> |
+| app/src/pages/NotesApp.tsx:528 | <input className="na-title-input" value={selectedNote.title} onChange={e => updateNote(selectedNote.id, { title: e.target.value })} placeholder="Note title..." /> |
+| app/src/pages/NotesApp.tsx:577 | placeholder="Start writing... (Markdown supported)" |
+| app/src/pages/TemporalEngine.tsx:328 | placeholder="e.g. Design database schema" style={inputStyle} /> |
+| app/src/pages/TemporalEngine.tsx:362 | placeholder="e.g. Build a web scraper for news articles" style={inputStyle} /> |
+| app/src/pages/TemporalEngine.tsx:368 | placeholder="agent-1, agent-2" style={inputStyle} /> |
+| app/src/pages/UsageBilling.tsx:321 | placeholder="Threshold in USD (e.g. 50.00)" |
+| app/src/pages/FlashInference.tsx:637 | <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} disabled={!hasAnyModel \|\| generating} placeholder={!hasAnyModel ? "Load a model first..." : generating ? "Generating..." : mode === "auto" ? "Type a message (auto-routed)..." : `Type a message (${MODE_LABELS[mode]})...`} style={{ flex:1, background:"#0d1117", border:"1px solid #1e3a5f", borderRadius:"8px", color:"#e5e7eb", padding:"10px 14px", fontSize:"13px", outline:"none", opacity:!hasAnyModel?0.5:1 }}/> |
+| app/src/pages/Workspaces.tsx:365 | placeholder="e.g. production, staging, team-alpha" |
+| app/src/pages/Workspaces.tsx:615 | placeholder="e.g. oidc:alice or local:nexus" |
+| app/src/pages/AgentDnaLab.tsx:851 | placeholder="Strategy name" |
+| app/src/pages/AgentDnaLab.tsx:857 | placeholder='Parameters JSON, e.g. {"mutation_rate": 0.1, "crossover": "uniform"}' |
+| app/src/pages/AgentDnaLab.tsx:875 | placeholder="Task description" |
+| app/src/pages/AgentDnaLab.tsx:912 | placeholder="e.g. I need an agent that can manage Kubernetes clusters and auto-scale pods" |
+| app/src/pages/AgentDnaLab.tsx:929 | placeholder="User request" |
+| app/src/pages/AgentDnaLab.tsx:936 | placeholder="LLM response (optional)" |
+| app/src/pages/AgentDnaLab.tsx:954 | placeholder='Spec JSON, e.g. {"name": "k8s-agent", "capabilities": ["kubernetes", "scaling"]}' |
+| app/src/pages/AgentDnaLab.tsx:961 | placeholder="System prompt" |
+| app/src/pages/AgentDnaLab.tsx:989 | placeholder="Agent name" |
+| app/src/pages/AgentDnaLab.tsx:1006 | placeholder="Spec JSON" |
+| app/src/pages/AgentDnaLab.tsx:1014 | placeholder="Missing capabilities (comma-separated)" |
+| app/src/pages/Telemetry.tsx:447 | placeholder="http://localhost:4317" |
+| app/src/pages/Telemetry.tsx:468 | placeholder="nexus-os" |
+| app/src/pages/Civilization.tsx:788 | placeholder='Propose a rule, for example: "Max 10% token budget per agent"' |
+| app/src/pages/Civilization.tsx:910 | placeholder="Describe the dispute..." |
+| app/src/pages/Civilization.tsx:987 | placeholder="Rule text..." |
+| app/src/pages/Civilization.tsx:1059 | placeholder="Issue description..." |
+| app/src/pages/Civilization.tsx:1132 | <input type="number" value={earnAmount} onChange={(e) => setEarnAmount(e.target.value)} placeholder="Amount" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1133 | <input value={earnDesc} onChange={(e) => setEarnDesc(e.target.value)} placeholder="Description" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1142 | <input type="number" value={spendAmount} onChange={(e) => setSpendAmount(e.target.value)} placeholder="Amount" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1149 | <input value={spendDesc} onChange={(e) => setSpendDesc(e.target.value)} placeholder="Description" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1159 | <input type="number" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} placeholder="Amount" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1160 | <input value={transferDesc} onChange={(e) => setTransferDesc(e.target.value)} placeholder="Description" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1189 | <input value={contractDesc} onChange={(e) => setContractDesc(e.target.value)} placeholder="Description" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1190 | <input value={contractCriteria} onChange={(e) => setContractCriteria(e.target.value)} placeholder='Criteria JSON (e.g. {"quality":"high"})' style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1192 | <input type="number" value={contractReward} onChange={(e) => setContractReward(e.target.value)} placeholder="Reward" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1193 | <input type="number" value={contractPenalty} onChange={(e) => setContractPenalty(e.target.value)} placeholder="Penalty" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1195 | <input type="number" value={contractDeadline} onChange={(e) => setContractDeadline(e.target.value)} placeholder="Deadline (epoch, optional)" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1204 | <input value={completeContractId} onChange={(e) => setCompleteContractId(e.target.value)} placeholder="Contract ID" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1209 | <input value={completeEvidence} onChange={(e) => setCompleteEvidence(e.target.value)} placeholder="Evidence (optional)" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1218 | <input value={disputeContractId} onChange={(e) => setDisputeContractId(e.target.value)} placeholder="Contract ID" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1219 | <textarea value={disputeContractReason} onChange={(e) => setDisputeContractReason(e.target.value)} placeholder="Reason for dispute..." style={textareaStyle} /> |
+| app/src/pages/Civilization.tsx:1270 | <input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="Plan name" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1271 | <input type="number" value={planPrice} onChange={(e) => setPlanPrice(e.target.value)} placeholder="Price (cents)" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1277 | <input value={planFeatures} onChange={(e) => setPlanFeatures(e.target.value)} placeholder="Features (comma-separated)" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1286 | <input value={invoicePlanId} onChange={(e) => setInvoicePlanId(e.target.value)} placeholder="Plan ID" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1287 | <input value={invoiceBuyerId} onChange={(e) => setInvoiceBuyerId(e.target.value)} placeholder="Buyer ID" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1296 | <input value={payInvoiceId} onChange={(e) => setPayInvoiceId(e.target.value)} placeholder="Invoice ID" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1305 | <input value={payoutDevId} onChange={(e) => setPayoutDevId(e.target.value)} placeholder="Developer ID" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1307 | <input type="number" value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)} placeholder="Amount (cents)" style={inputStyle} /> |
+| app/src/pages/Civilization.tsx:1308 | <input value={payoutPeriod} onChange={(e) => setPayoutPeriod(e.target.value)} placeholder="Period (e.g. 2026-03)" style={inputStyle} /> |
+| app/src/pages/AgentMemory.tsx:200 | placeholder="Memory summary..." |
+| app/src/pages/AgentMemory.tsx:206 | <input placeholder="Tags (comma-separated)" value={newTags} onChange={(e) => setNewTags(e.target.value)} style={inputStyle} /> |
+| app/src/pages/AgentMemory.tsx:208 | <input placeholder="Domain" value={newDomain} onChange={(e) => setNewDomain(e.target.value)} style={{ ...inputStyle, flex: 1 }} /> |
+| app/src/pages/AgentMemory.tsx:230 | <input placeholder="Search query..." value={queryText} onChange={(e) => setQueryText(e.target.value)} style={{ ...inputStyle, flex: 1 }} /> |
+| app/src/pages/AgentMemory.tsx:243 | <input placeholder="Task description..." value={contextTask} onChange={(e) => setContextTask(e.target.value)} style={{ ...inputStyle, flex: 1 }} /> |
+| app/src/pages/AiChatHub.tsx:1159 | <input className="ch-search" placeholder="Search..." value={view === "history" ? historySearch : searchQuery} onChange={e => view === "history" ? setHistorySearch(e.target.value) : setSearchQuery(e.target.value)} /> |
+| app/src/pages/AiChatHub.tsx:1523 | <textarea ref={inputRef} className="ch-input" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder={`Message ${activeModel?.name ?? "AI"}...`} rows={1} /> |
+| app/src/pages/AiChatHub.tsx:1564 | <textarea value={comparePrompt} onChange={e => setComparePrompt(e.target.value)} placeholder="Enter a prompt to compare responses..." rows={3} /> |
+| app/src/pages/AiChatHub.tsx:1658 | placeholder={builderStarted ? "Describe what you want to change..." : "Describe what you want to build..."} |
+| app/src/pages/AiChatHub.tsx:1758 | placeholder={`Enter ${meta?.label ?? provider} API key...`} |
+| app/src/pages/SoftwareFactory.tsx:156 | <input placeholder="Project title" value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} /> |
+| app/src/pages/SoftwareFactory.tsx:157 | <textarea placeholder="Describe what to build..." value={userRequest} onChange={(e) => setUserRequest(e.target.value)} rows={3} style={{ ...inputStyle, resize: "vertical" }} /> |
+| app/src/pages/SoftwareFactory.tsx:237 | <input placeholder="Agent ID" value={agentId} onChange={(e) => setAgentId(e.target.value)} style={{ ...inputStyle, flex: 1 }} /> |
+| app/src/pages/SoftwareFactory.tsx:238 | <input placeholder="Name" value={agentName} onChange={(e) => setAgentName(e.target.value)} style={{ ...inputStyle, flex: 1 }} /> |
+| app/src/pages/Collaboration.tsx:193 | <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} /> |
+| app/src/pages/Collaboration.tsx:194 | <input placeholder="Goal" value={goal} onChange={(e) => setGoal(e.target.value)} style={inputStyle} /> |
+| app/src/pages/Collaboration.tsx:198 | <input placeholder="Lead Agent ID" value={leadAgent} onChange={(e) => setLeadAgent(e.target.value)} style={inputStyle} /> |
+| app/src/pages/Collaboration.tsx:264 | <input placeholder="Agent ID" value={newAgentId} onChange={(e) => setNewAgentId(e.target.value)} style={{ ...inputStyle, flex: 1 }} /> |
+| app/src/pages/Collaboration.tsx:309 | <input placeholder="As agent..." value={msgFrom} onChange={(e) => setMsgFrom(e.target.value)} style={{ ...inputStyle, width: 140 }} /> |
+| app/src/pages/Collaboration.tsx:324 | <textarea placeholder="Message..." value={msgText} onChange={(e) => setMsgText(e.target.value)} rows={2} style={{ ...inputStyle, marginTop: 6, resize: "vertical" }} /> |
+| app/src/pages/BrowserAgent.tsx:115 | <input style={{ ...inputStyle, flex: 1 }} placeholder="Enter browser task..." value={taskInput} |
+| app/src/pages/BrowserAgent.tsx:124 | <input style={{ ...inputStyle, flex: 1 }} placeholder="URL..." value={urlInput} |
+| app/src/pages/Chat.tsx:489 | placeholder="Transmit directive to NexusOS..." |
+| app/src/pages/WorldSimulation.tsx:613 | placeholder="Name this simulation" |
+| app/src/pages/WorldSimulation.tsx:623 | placeholder="Paste the raw seed material here..." |
+| app/src/pages/WorldSimulation.tsx:842 | placeholder="Inject variable" |
+| app/src/pages/WorldSimulation.tsx:847 | placeholder="Value" |
+| app/src/pages/WorldSimulation.tsx:1126 | placeholder="Why did you make your last decision?" |
+| app/src/pages/Settings.tsx:547 | placeholder={`Enter ${entry.label} API key`} |
+| app/src/pages/Settings.tsx:613 | placeholder={`Enter ${key.label} key`} |
+| app/src/pages/Settings.tsx:644 | placeholder={`Enter ${key.label}`} |
+| app/src/pages/Settings.tsx:923 | placeholder={'{\n  "tool": "tool_name",\n  "args": {}\n}'} |
+| app/src/pages/Audit.tsx:266 | placeholder="Operation name (required)" |
+| app/src/pages/Audit.tsx:272 | placeholder="Agent ID (optional)" |
+| app/src/pages/Audit.tsx:296 | placeholder="Trace ID (required)" |
+| app/src/pages/Audit.tsx:302 | placeholder="Parent Span ID" |
+| app/src/pages/Audit.tsx:308 | placeholder="Operation name (required)" |
+| app/src/pages/Audit.tsx:314 | placeholder="Agent ID (optional)" |
+| app/src/pages/Audit.tsx:338 | placeholder="Span ID (required)" |
+| app/src/pages/Audit.tsx:353 | placeholder="Error message (optional)" |
+| app/src/pages/Audit.tsx:648 | placeholder="Invariant name (e.g., capability_checks, fuel_budget, audit_integrity, pii_redaction, hitl_approval, no_unsafe_code)" |
+| app/src/pages/Audit.tsx:982 | placeholder="Search events, payloads, hashes..." |
+| app/src/pages/Agents.tsx:557 | placeholder="Search agents by name, capability, or description…" |
+| app/src/pages/Agents.tsx:1159 | placeholder="Describe a goal for this agent..." |
+| app/src/pages/AdminUsers.tsx:104 | placeholder="Filter users..." |
+| app/src/pages/ExternalTools.tsx:184 | <input placeholder="Agent ID" value={agentId} onChange={(e) => setAgentId(e.target.value)} style={{ ...inputStyle, width: 140 }} /> |
+| app/src/pages/ExternalTools.tsx:191 | placeholder='{"action": "list_repos", "user": "octocat"}' |
+| app/src/pages/DatabaseManager.tsx:313 | placeholder="Connection name..." |
+| app/src/pages/DatabaseManager.tsx:320 | placeholder="SQLite path (e.g. ~/.nexus/data.db)" |
+| app/src/pages/DatabaseManager.tsx:414 | placeholder="Enter SQL query... (Ctrl+Enter to run)" |
+| app/src/pages/DatabaseManager.tsx:502 | <input className="db-builder-filter-val" value={filter.value} onChange={e => updateBuilderFilter(idx, { value: e.target.value })} placeholder="value" /> |
+| app/src/pages/Protocols.tsx:489 | placeholder="Agent base URL (e.g. http://localhost:9000)" |
+| app/src/pages/Protocols.tsx:535 | placeholder="Agent URL" |
+| app/src/pages/Protocols.tsx:541 | placeholder="Task message..." |
+| app/src/pages/Protocols.tsx:562 | placeholder="Agent URL" |
+| app/src/pages/Protocols.tsx:569 | placeholder="Task ID" |
+| app/src/pages/Protocols.tsx:605 | placeholder="Server name" |
+| app/src/pages/Protocols.tsx:612 | placeholder="URL (e.g. http://localhost:8080)" |
+| app/src/pages/Protocols.tsx:628 | placeholder="Auth token (optional)" |
+| app/src/pages/Protocols.tsx:731 | placeholder="Tool name" |
+| app/src/pages/Protocols.tsx:737 | placeholder='Arguments JSON, e.g. {"key": "value"}' |
+| app/src/pages/ModelHub.tsx:590 | placeholder="Search GGUF models on HuggingFace..." |
+| app/src/pages/ModelHub.tsx:1526 | placeholder="Peer address (e.g. 192.168.1.100:9090)" |
+| app/src/pages/ModelHub.tsx:1543 | placeholder="Peer name (e.g. Office Desktop)" |
+| app/src/pages/ModelHub.tsx:1595 | placeholder="Peer address" |
+| app/src/pages/ModelHub.tsx:1612 | placeholder="Model ID (e.g. TheBloke/Llama-2-7B-GGUF)" |
+| app/src/pages/ModelHub.tsx:1629 | placeholder="Filename (e.g. llama-2-7b.Q4_K_M.gguf)" |
+| app/src/pages/TokenEconomy.tsx:437 | placeholder="Filter by agent ID..." |
+| app/src/pages/CodeEditor.tsx:820 | <input className="ce-search-input" placeholder="Search across all files..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} autoFocus onKeyDown={(e) => { if (e.key === "Escape") { setShowSearch(false); setSearchQuery(""); } }} /> |
+| app/src/pages/CodeEditor.tsx:854 | <input className="ce-new-file-input" placeholder="filename.ext" value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleCreateFile(); if (e.key === "Escape") { setShowNewFile(false); setNewFileName(""); } }} autoFocus /> |
+| app/src/pages/CodeEditor.tsx:1030 | placeholder="Type a command..." |
+| app/src/pages/CodeEditor.tsx:1081 | <input className="ce-git-commit-input" placeholder="Commit message..." value={commitMsg} onChange={(e) => setCommitMsg(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleGitCommit(); }} /> |
+| app/src/pages/Perception.tsx:205 | placeholder="API Key" |
+| app/src/pages/Perception.tsx:211 | placeholder="Model ID" |
+| app/src/pages/Perception.tsx:266 | placeholder="Ask a question about the image..." |
+| app/src/pages/Perception.tsx:275 | placeholder='Optional JSON schema, e.g. {"type": "object"}' |
+| app/src/pages/Documents.tsx:1074 | placeholder={ |
+| app/src/pages/Integrations.tsx:229 | placeholder={field.placeholder} |
+| app/src/pages/TimeMachine.tsx:901 | placeholder="Filter by agent ID..." |
+| app/src/pages/TimeMachine.tsx:1485 | placeholder="Checkpoint label..." |
+| app/src/pages/Terminal.tsx:650 | placeholder="Type a command..." |
+| app/src/components/agents/CreateAgent.tsx:180 | placeholder="Agent name" |
+| app/src/components/agents/CreateAgent.tsx:186 | placeholder="Describe mission objectives, constraints, and expected outputs..." |
+| app/src/components/agents/CreateAgent.tsx:293 | placeholder="*/10 * * * *" |
+| app/src/components/agents/CreateAgent.tsx:300 | placeholder="What should this agent do on each scheduled run?" |
+| app/src/components/chat/History.tsx:52 | placeholder="Search transmissions..." |
+| app/src/components/browser/BrowserToolbar.tsx:152 | placeholder="Enter URL... (Ctrl+L to focus)" |
+| app/src/components/browser/BuildMode.tsx:437 | placeholder="Describe what to build... (e.g. landing page with hero section and feature cards)" |
+| app/src/components/browser/ResearchMode.tsx:326 | placeholder="Enter research topic..." |
+
+## ═══ MISSING ERROR HANDLING ═══
+- Pages with backend wrapper usage and no error markers: 0
+| Location | Backend wrappers used |
+| --- | --- |
+| None | - |
+
+- Pages with backend wrapper usage and no loading markers: 15
+| Location | Backend wrappers used |
+| --- | --- |
+| app/src/pages/AuditTimeline.tsx:1 | 3 |
+| app/src/pages/Collaboration.tsx:1 | 11 |
+| app/src/pages/DatabaseManager.tsx:1 | 5 |
+| app/src/pages/DreamForge.tsx:1 | 3 |
+| app/src/pages/Firewall.tsx:1 | 3 |
+| app/src/pages/MediaStudio.tsx:1 | 5 |
+| app/src/pages/Messaging.tsx:1 | 8 |
+| app/src/pages/NotesApp.tsx:1 | 4 |
+| app/src/pages/SelfRewriteLab.tsx:1 | 4 |
+| app/src/pages/SoftwareFactory.tsx:1 | 9 |
+| app/src/pages/SystemMonitor.tsx:1 | 2 |
+| app/src/pages/TemporalEngine.tsx:1 | 2 |
+| app/src/pages/Terminal.tsx:1 | 2 |
+| app/src/pages/TimelineViewer.tsx:1 | 2 |
+| app/src/pages/WorldSimulation.tsx:1 | 10 |
+
+## ═══ SECURITY FINDINGS ═══
+| Finding | Evidence |
+| --- | --- |
+| None | No hardcoded secrets matched the strict grep; no committed .env files found; git log shows no added .env files in the last 5 additions. |
+
+## ═══ CONFIG / ENV COMPLETENESS ═══
+| Expected root file | Exists | Location |
+| --- | --- | --- |
+| .gitlab-ci.yml | yes | .gitlab-ci.yml |
+| Cargo.toml | yes | Cargo.toml |
+| package.json | no | package.json (missing at repo root) |
+| tsconfig.json | no | tsconfig.json (missing at repo root) |
+
+| Env var | Location |
+| --- | --- |
+| XDG_DATA_HOME | crates/nexus-flash-infer/src/downloader.rs:667 |
+| CARGO_MANIFEST_DIR | app/src-tauri/src/main.rs:9277 |

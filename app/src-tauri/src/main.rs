@@ -135,6 +135,9 @@ use nexus_collab_protocol::tauri_commands as collab_cmds;
 // Software factory imports
 use nexus_software_factory::tauri_commands as factory_cmds;
 
+// MCP imports
+use nexus_mcp::tauri_commands as mcp2_cmds;
+
 struct GatewayHivemindLlm;
 
 impl nexus_kernel::cognitive::HivemindLlm for GatewayHivemindLlm {
@@ -931,6 +934,7 @@ pub struct AppState {
     external_tools: Arc<tools_cmds::ToolState>,
     collab_protocol: Arc<collab_cmds::CollabState>,
     software_factory: Arc<factory_cmds::FactoryState>,
+    mcp_standalone: Arc<mcp2_cmds::McpState>,
     #[cfg(all(
         feature = "tauri-runtime",
         any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1216,6 +1220,7 @@ impl AppState {
             external_tools: Arc::new(tools_cmds::ToolState::default()),
             collab_protocol: Arc::new(collab_cmds::CollabState::default()),
             software_factory: Arc::new(factory_cmds::FactoryState::default()),
+            mcp_standalone: Arc::new(mcp2_cmds::McpState::default()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1418,6 +1423,7 @@ impl AppState {
             external_tools: Arc::new(tools_cmds::ToolState::default()),
             collab_protocol: Arc::new(collab_cmds::CollabState::default()),
             software_factory: Arc::new(factory_cmds::FactoryState::default()),
+            mcp_standalone: Arc::new(mcp2_cmds::McpState::default()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -22916,6 +22922,43 @@ fn swf_estimate_cost() -> u64 {
     factory_cmds::factory_estimate_cost()
 }
 
+// ── MCP Standalone Commands ───────────────────────────────────────────────────
+
+#[tauri::command]
+fn mcp2_server_status(state: tauri::State<'_, AppState>) -> Result<mcp2_cmds::McpServerStatus, String> {
+    mcp2_cmds::mcp_server_status(&state.mcp_standalone)
+}
+
+#[tauri::command]
+fn mcp2_server_handle(state: tauri::State<'_, AppState>, request_json: String) -> Result<String, String> {
+    mcp2_cmds::mcp_server_handle_request(&state.mcp_standalone, &request_json)
+}
+
+#[tauri::command]
+fn mcp2_server_list_tools(state: tauri::State<'_, AppState>) -> Result<Vec<nexus_mcp::McpTool>, String> {
+    mcp2_cmds::mcp_server_list_tools(&state.mcp_standalone)
+}
+
+#[tauri::command]
+fn mcp2_client_add(state: tauri::State<'_, AppState>, id: String, name: String, command: String, args: Vec<String>) -> Result<(), String> {
+    mcp2_cmds::mcp_client_add_server(&state.mcp_standalone, &id, &name, &command, args)
+}
+
+#[tauri::command]
+fn mcp2_client_remove(state: tauri::State<'_, AppState>, server_id: String) -> Result<(), String> {
+    mcp2_cmds::mcp_client_remove_server(&state.mcp_standalone, &server_id)
+}
+
+#[tauri::command]
+fn mcp2_client_discover(state: tauri::State<'_, AppState>, server_id: String) -> Result<Vec<nexus_mcp::McpTool>, String> {
+    mcp2_cmds::mcp_client_discover_tools(&state.mcp_standalone, &server_id)
+}
+
+#[tauri::command]
+fn mcp2_client_call(state: tauri::State<'_, AppState>, server_id: String, tool_name: String, arguments_json: String) -> Result<serde_json::Value, String> {
+    mcp2_cmds::mcp_client_call_tool(&state.mcp_standalone, &server_id, &tool_name, &arguments_json)
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -27833,6 +27876,13 @@ mod runtime {
                 swf_get_policy,
                 swf_get_pipeline_stages,
                 swf_estimate_cost,
+                mcp2_server_status,
+                mcp2_server_handle,
+                mcp2_server_list_tools,
+                mcp2_client_add,
+                mcp2_client_remove,
+                mcp2_client_discover,
+                mcp2_client_call,
             ])
             .run(tauri::generate_context!())
             .unwrap_or_else(|e| {

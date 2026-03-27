@@ -59,6 +59,7 @@ members = [
   "crates/nexus-external-tools",
   "crates/nexus-collab-protocol",
   "crates/nexus-software-factory",
+  "crates/nexus-mcp",
 ]
 
 [workspace.package]
