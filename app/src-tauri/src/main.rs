@@ -22458,7 +22458,15 @@ fn memory_store_entry(
     importance: f64,
     domain: Option<String>,
 ) -> Result<String, String> {
-    memory_cmds::memory_store(&state.persistent_memory, &agent_id, &memory_type, &summary, tags, importance, domain)
+    memory_cmds::memory_store(
+        &state.persistent_memory,
+        &agent_id,
+        &memory_type,
+        &summary,
+        tags,
+        importance,
+        domain,
+    )
 }
 
 #[tauri::command]
@@ -22470,7 +22478,14 @@ fn memory_query_entries(
     tags: Option<Vec<String>>,
     limit: usize,
 ) -> Result<Vec<nexus_agent_memory::Memory>, String> {
-    memory_cmds::memory_query(&state.persistent_memory, &agent_id, &query, memory_type, tags, limit)
+    memory_cmds::memory_query(
+        &state.persistent_memory,
+        &agent_id,
+        &query,
+        memory_type,
+        tags,
+        limit,
+    )
 }
 
 #[tauri::command]
@@ -22498,7 +22513,12 @@ fn memory_build_context(
     task_description: String,
     max_memories: usize,
 ) -> Result<nexus_agent_memory::MemoryContext, String> {
-    memory_cmds::memory_build_context(&state.persistent_memory, &agent_id, &task_description, max_memories)
+    memory_cmds::memory_build_context(
+        &state.persistent_memory,
+        &agent_id,
+        &task_description,
+        max_memories,
+    )
 }
 
 #[tauri::command]
@@ -22518,32 +22538,22 @@ fn memory_consolidate(
 }
 
 #[tauri::command]
-fn memory_save(
-    state: tauri::State<'_, AppState>,
-    agent_id: String,
-) -> Result<String, String> {
+fn memory_save(state: tauri::State<'_, AppState>, agent_id: String) -> Result<String, String> {
     memory_cmds::memory_save(&state.persistent_memory, &agent_id)
 }
 
 #[tauri::command]
-fn memory_load(
-    state: tauri::State<'_, AppState>,
-    agent_id: String,
-) -> Result<String, String> {
+fn memory_load(state: tauri::State<'_, AppState>, agent_id: String) -> Result<String, String> {
     memory_cmds::memory_load(&state.persistent_memory, &agent_id)
 }
 
 #[tauri::command]
-fn memory_list_agents(
-    state: tauri::State<'_, AppState>,
-) -> Vec<String> {
+fn memory_list_agents(state: tauri::State<'_, AppState>) -> Vec<String> {
     memory_cmds::memory_list_agents(&state.persistent_memory)
 }
 
 #[tauri::command]
-fn memory_get_policy(
-    state: tauri::State<'_, AppState>,
-) -> nexus_agent_memory::MemoryPolicy {
+fn memory_get_policy(state: tauri::State<'_, AppState>) -> nexus_agent_memory::MemoryPolicy {
     memory_cmds::memory_get_policy(&state.persistent_memory)
 }
 
@@ -22564,7 +22574,13 @@ fn tools_execute(
     tool_id: String,
     params_json: String,
 ) -> Result<nexus_external_tools::ToolCallResult, String> {
-    tools_cmds::tools_execute(&state.external_tools, &agent_id, autonomy_level, &tool_id, &params_json)
+    tools_cmds::tools_execute(
+        &state.external_tools,
+        &agent_id,
+        autonomy_level,
+        &tool_id,
+        &params_json,
+    )
 }
 
 #[tauri::command]
@@ -22590,9 +22606,7 @@ fn tools_get_audit(
 }
 
 #[tauri::command]
-fn tools_verify_audit(
-    state: tauri::State<'_, AppState>,
-) -> Result<bool, String> {
+fn tools_verify_audit(state: tauri::State<'_, AppState>) -> Result<bool, String> {
     tools_cmds::tools_verify_audit(&state.external_tools)
 }
 
@@ -22608,18 +22622,37 @@ fn tools_get_policy(
 #[tauri::command]
 fn collab_create_session(
     state: tauri::State<'_, AppState>,
-    title: String, goal: String, pattern: String,
-    lead_agent_id: String, lead_autonomy: u8,
+    title: String,
+    goal: String,
+    pattern: String,
+    lead_agent_id: String,
+    lead_autonomy: u8,
 ) -> Result<String, String> {
-    collab_cmds::collab_create_session(&state.collab_protocol, &title, &goal, &pattern, &lead_agent_id, lead_autonomy)
+    collab_cmds::collab_create_session(
+        &state.collab_protocol,
+        &title,
+        &goal,
+        &pattern,
+        &lead_agent_id,
+        lead_autonomy,
+    )
 }
 
 #[tauri::command]
 fn collab_add_participant(
     state: tauri::State<'_, AppState>,
-    session_id: String, agent_id: String, autonomy: u8, role: String,
+    session_id: String,
+    agent_id: String,
+    autonomy: u8,
+    role: String,
 ) -> Result<(), String> {
-    collab_cmds::collab_add_participant(&state.collab_protocol, &session_id, &agent_id, autonomy, &role)
+    collab_cmds::collab_add_participant(
+        &state.collab_protocol,
+        &session_id,
+        &agent_id,
+        autonomy,
+        &role,
+    )
 }
 
 #[tauri::command]
@@ -22630,34 +22663,73 @@ fn collab_start(state: tauri::State<'_, AppState>, session_id: String) -> Result
 #[tauri::command]
 fn collab_send_message(
     state: tauri::State<'_, AppState>,
-    session_id: String, from_agent: String, to_agent: Option<String>,
-    message_type: String, text: String, confidence: f64,
+    session_id: String,
+    from_agent: String,
+    to_agent: Option<String>,
+    message_type: String,
+    text: String,
+    confidence: f64,
 ) -> Result<String, String> {
-    collab_cmds::collab_send_message(&state.collab_protocol, &session_id, &from_agent, to_agent, &message_type, &text, confidence)
+    collab_cmds::collab_send_message(
+        &state.collab_protocol,
+        &session_id,
+        &from_agent,
+        to_agent,
+        &message_type,
+        &text,
+        confidence,
+    )
 }
 
 #[tauri::command]
 fn collab_call_vote(
     state: tauri::State<'_, AppState>,
-    session_id: String, proposal_msg_id: String, majority: f64, deadline_secs: u64,
+    session_id: String,
+    proposal_msg_id: String,
+    majority: f64,
+    deadline_secs: u64,
 ) -> Result<(), String> {
-    collab_cmds::collab_call_vote(&state.collab_protocol, &session_id, &proposal_msg_id, majority, deadline_secs)
+    collab_cmds::collab_call_vote(
+        &state.collab_protocol,
+        &session_id,
+        &proposal_msg_id,
+        majority,
+        deadline_secs,
+    )
 }
 
 #[tauri::command]
 fn collab_cast_vote(
     state: tauri::State<'_, AppState>,
-    session_id: String, agent_id: String, vote: String, reason: Option<String>,
+    session_id: String,
+    agent_id: String,
+    vote: String,
+    reason: Option<String>,
 ) -> Result<(), String> {
-    collab_cmds::collab_cast_vote(&state.collab_protocol, &session_id, &agent_id, &vote, reason)
+    collab_cmds::collab_cast_vote(
+        &state.collab_protocol,
+        &session_id,
+        &agent_id,
+        &vote,
+        reason,
+    )
 }
 
 #[tauri::command]
 fn collab_declare_consensus(
     state: tauri::State<'_, AppState>,
-    session_id: String, agent_id: String, decision: String, key_points: Vec<String>,
+    session_id: String,
+    agent_id: String,
+    decision: String,
+    key_points: Vec<String>,
 ) -> Result<(), String> {
-    collab_cmds::collab_declare_consensus(&state.collab_protocol, &session_id, &agent_id, &decision, key_points)
+    collab_cmds::collab_declare_consensus(
+        &state.collab_protocol,
+        &session_id,
+        &agent_id,
+        &decision,
+        key_points,
+    )
 }
 
 #[tauri::command]
@@ -22684,7 +22756,9 @@ fn collab_list_active(
 }
 
 #[tauri::command]
-fn collab_get_policy(state: tauri::State<'_, AppState>) -> nexus_collab_protocol::CollaborationPolicy {
+fn collab_get_policy(
+    state: tauri::State<'_, AppState>,
+) -> nexus_collab_protocol::CollaborationPolicy {
     collab_cmds::collab_get_policy(&state.collab_protocol)
 }
 
@@ -22697,7 +22771,9 @@ fn collab_get_patterns() -> Vec<collab_cmds::PatternInfo> {
 
 #[tauri::command]
 fn swf_create_project(
-    state: tauri::State<'_, AppState>, title: String, user_request: String,
+    state: tauri::State<'_, AppState>,
+    title: String,
+    user_request: String,
 ) -> Result<String, String> {
     factory_cmds::factory_create_project(&state.software_factory, &title, &user_request)
 }
@@ -22705,29 +22781,42 @@ fn swf_create_project(
 #[tauri::command]
 fn swf_assign_member(
     state: tauri::State<'_, AppState>,
-    project_id: String, agent_id: String, agent_name: String,
-    role: String, autonomy: u8, score: Option<f64>,
+    project_id: String,
+    agent_id: String,
+    agent_name: String,
+    role: String,
+    autonomy: u8,
+    score: Option<f64>,
 ) -> Result<(), String> {
-    factory_cmds::factory_assign_member(&state.software_factory, &project_id, &agent_id, &agent_name, &role, autonomy, score)
+    factory_cmds::factory_assign_member(
+        &state.software_factory,
+        &project_id,
+        &agent_id,
+        &agent_name,
+        &role,
+        autonomy,
+        score,
+    )
 }
 
 #[tauri::command]
-fn swf_start_pipeline(
-    state: tauri::State<'_, AppState>, project_id: String,
-) -> Result<(), String> {
+fn swf_start_pipeline(state: tauri::State<'_, AppState>, project_id: String) -> Result<(), String> {
     factory_cmds::factory_start_pipeline(&state.software_factory, &project_id)
 }
 
 #[tauri::command]
 fn swf_submit_artifact(
-    state: tauri::State<'_, AppState>, project_id: String, artifact_json: String,
+    state: tauri::State<'_, AppState>,
+    project_id: String,
+    artifact_json: String,
 ) -> Result<nexus_software_factory::QualityGateResult, String> {
     factory_cmds::factory_submit_artifact(&state.software_factory, &project_id, &artifact_json)
 }
 
 #[tauri::command]
 fn swf_get_project(
-    state: tauri::State<'_, AppState>, project_id: String,
+    state: tauri::State<'_, AppState>,
+    project_id: String,
 ) -> Result<nexus_software_factory::Project, String> {
     factory_cmds::factory_get_project(&state.software_factory, &project_id)
 }
@@ -22741,7 +22830,8 @@ fn swf_list_projects(
 
 #[tauri::command]
 fn swf_get_cost(
-    state: tauri::State<'_, AppState>, project_id: String,
+    state: tauri::State<'_, AppState>,
+    project_id: String,
 ) -> Result<factory_cmds::CostBreakdown, String> {
     factory_cmds::factory_get_cost(&state.software_factory, &project_id)
 }
