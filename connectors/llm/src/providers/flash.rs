@@ -203,12 +203,12 @@ impl FlashProvider {
                 .clone();
             let tokens = token_count.load(std::sync::atomic::Ordering::Relaxed);
 
-            return Ok(LlmResponse {
+            Ok(LlmResponse {
                 output_text,
                 token_count: tokens,
                 model_name: self.model_path.clone(),
                 tool_calls: Vec::new(),
-            });
+            })
         }
         #[cfg(not(feature = "flash-infer"))]
         Err(AgentError::SupervisorError(
