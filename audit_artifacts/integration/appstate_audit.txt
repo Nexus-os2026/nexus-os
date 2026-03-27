@@ -1,0 +1,69 @@
+## appstate_definition
+839:pub struct AppState {
+## appstate_fields
+## appstate_new
+            NexusDatabase::open(&NexusDatabase::default_db_path()).unwrap_or_else(|e| {
+                NexusDatabase::in_memory().unwrap_or_else(|e2| {
+                    std::process::exit(1);
+            nexus_kernel::cognitive::CognitiveRuntime::with_provider_registry(
+                nexus_kernel::cognitive::LoopConfig::default(),
+                Arc::new(nexus_kernel::cognitive::NoOpEmitter),
+            supervisor: supervisor.clone(),
+            meta: Arc::new(Mutex::new(HashMap::new())),
+            voice: Arc::new(Mutex::new(VoiceRuntimeState {
+                wake_word_enabled: true,
+                push_to_talk_enabled: true,
+                overlay_visible: false,
+            identity_mgr: Arc::new(Mutex::new(
+                nexus_kernel::identity::IdentityManager::in_memory(),
+            browser: Arc::new(Mutex::new(BrowserManager::new())),
+            research: Arc::new(Mutex::new(ResearchManager::new())),
+            build: Arc::new(Mutex::new(BuildManager::new())),
+            learning: Arc::new(Mutex::new(LearningManager::new())),
+            rag: Arc::new(Mutex::new(RagPipeline::new(RagConfig::default()))),
+            redaction_engine: Arc::new(Mutex::new(RedactionEngine::default())),
+            model_registry: Arc::new(Mutex::new(ModelRegistry::default_dir())),
+            nexus_link: Arc::new(Mutex::new({
+                NexusLink::new(&hostname, &models_dir.display().to_string())
+            evolution: Arc::new(Mutex::new(EvolutionEngine::new(EvolutionConfig::default()))),
+            mcp_host: Arc::new(Mutex::new(McpHostManager::new())),
+            ghost_protocol: Arc::new(Mutex::new(GhostProtocol::new(GhostConfig::default()))),
+            voice_process: Arc::new(Mutex::new(VoiceProcess::default())),
+            factory: Arc::new(Mutex::new(FactoryPipeline::new())),
+            computer_control: Arc::new(Mutex::new(ComputerControlEngine::new())),
+            neural_bridge: Arc::new(Mutex::new(NeuralBridge::new(NeuralBridgeConfig::default()))),
+            economic_engine: Arc::new(Mutex::new(EconomicEngine::new(EconomicConfig::default()))),
+            agent_memory: Arc::new(Mutex::new(AgentMemory::new(MemoryConfig::default()))),
+            tracing_engine: Arc::new(Mutex::new(TracingEngine::new(1000))),
+            payment_engine: Arc::new(Mutex::new(PaymentEngine::new(RevenueSplit::default()))),
+            whisper: Arc::new(Mutex::new(WhisperTranscriber::new())),
+            replay_recorder: Arc::new(Mutex::new(
+                nexus_kernel::replay::recorder::ReplayRecorder::new(500),
+            reputation_registry: Arc::new(Mutex::new(
+                nexus_kernel::reputation::ReputationRegistry::new(),
+            cognitive_runtime: cognitive_runtime.clone(),
+            blocked_consent_waits: Arc::new(Mutex::new(HashMap::new())),
+            computer_action_cancellations: Arc::new(Mutex::new(HashMap::new())),
+            hivemind: Arc::new(nexus_kernel::cognitive::HivemindCoordinator::new(
+                Box::new(GatewayHivemindLlm),
+                Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
+                Arc::new(Mutex::new(AuditTrail::new())),
+            message_gateway: Arc::new(Mutex::new({
+                                nexus_connectors_messaging::telegram::TelegramAdapter::new(),
+                                nexus_connectors_messaging::discord::DiscordAdapter::new(),
+                                nexus_connectors_messaging::slack::SlackAdapter::new(),
+## crate_references
+[OK] capability_measurement referenced in main.rs
+[OK] governance_oracle referenced in main.rs
+[WARN] governance_engine NOT referenced in main.rs
+[WARN] governance_evolution NOT referenced in main.rs
+[OK] predictive_router referenced in main.rs
+[OK] token_economy referenced in main.rs
+[OK] browser_agent referenced in main.rs
+[OK] computer_control referenced in main.rs
+[OK] world_simulation referenced in main.rs
+[OK] perception referenced in main.rs
+[OK] agent_memory referenced in main.rs
+[OK] external_tools referenced in main.rs
+[OK] collab_protocol referenced in main.rs
+[OK] software_factory referenced in main.rs

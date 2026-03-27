@@ -4,6 +4,7 @@ import {
   ccGetCapabilityBudget,
   ccGetScreenContext,
   ccVerifyActionSequence,
+  ccExecuteAction,
   listAgents,
 } from "../api/backend";
 import {
@@ -75,6 +76,9 @@ export default function GovernedControl() {
   const [screenCtx, setScreenCtx] = useState<ScreenCtx | null>(null);
   const [verification, setVerification] = useState<Verification | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionJson, setActionJson] = useState('{"type":"TerminalCommand","command":"echo hello","working_dir":""}');
+  const [executeResult, setExecuteResult] = useState<any>(null);
 
   useEffect(() => {
     listAgents()
@@ -83,17 +87,17 @@ export default function GovernedControl() {
         setAgents(list);
         if (list.length > 0) setSelectedAgent(list[0].id);
       })
-      .catch(() => {})
+      .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
     if (!selectedAgent) return;
     Promise.all([
-      ccGetActionHistory(selectedAgent).catch(() => []),
-      ccGetCapabilityBudget(selectedAgent).catch(() => null),
-      ccGetScreenContext(selectedAgent).catch(() => null),
-      ccVerifyActionSequence(selectedAgent).catch(() => null),
+      ccGetActionHistory(selectedAgent).catch((e) => { setError(String(e)); return []; }),
+      ccGetCapabilityBudget(selectedAgent).catch((e) => { setError(String(e)); return null; }),
+      ccGetScreenContext(selectedAgent).catch((e) => { setError(String(e)); return null; }),
+      ccVerifyActionSequence(selectedAgent).catch((e) => { setError(String(e)); return null; }),
     ]).then(([h, b, s, v]) => {
       setHistory(Array.isArray(h) ? h : []);
       setBudget(b as Budget | null);
@@ -195,6 +199,32 @@ export default function GovernedControl() {
               </span>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Error display */}
+      {error && (
+        <div style={{ color: "#ef4444", background: alpha("#ef4444", 0.1), padding: "8px 12px", borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
+          {error} <button onClick={() => setError(null)} style={{ marginLeft: 8, background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}>Dismiss</button>
+        </div>
+      )}
+
+      {/* Execute Action */}
+      {selectedAgent && (
+        <div style={{ ...cardStyle, marginBottom: 16 }}>
+          <div style={labelStyle}>Execute Action</div>
+          <textarea value={actionJson} onChange={(e) => setActionJson(e.target.value)} rows={3} style={{ width: "100%", padding: 8, borderRadius: 6, background: "#2a2a3e", color: "#e0e0e0", border: "1px solid #444", fontFamily: "monospace", fontSize: 12, boxSizing: "border-box", marginTop: 8, marginBottom: 8, resize: "vertical" }} />
+          <button onClick={() => {
+            setError(null);
+            ccExecuteAction(selectedAgent, 4, ["computer_control"], actionJson)
+              .then((r) => { setExecuteResult(r); /* refresh history */ ccGetActionHistory(selectedAgent).then((h) => setHistory(Array.isArray(h) ? h : [])).catch(() => {}); })
+              .catch((e) => setError(String(e)));
+          }} style={{ padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer", fontWeight: 600, fontSize: 12, background: "#22c55e", color: "#000" }}>
+            Execute
+          </button>
+          {executeResult && (
+            <pre style={{ fontSize: 11, color: "#22c55e", background: alpha("#000", 0.3), padding: 8, borderRadius: 6, marginTop: 8, whiteSpace: "pre-wrap" }}>{JSON.stringify(executeResult, null, 2)}</pre>
+          )}
         </div>
       )}
 

@@ -167,6 +167,7 @@ export function Agents({
   const [flashLoading, setFlashLoading] = useState(false);
   const [flashLoadError, setFlashLoadError] = useState<string | null>(null);
   const [showPermissionGate, setShowPermissionGate] = useState(false);
+  const [asyncError, setAsyncError] = useState<string | null>(null);
 
   const startGoalExecution = useCallback(async () => {
     if (!selectedAgentId || !goalInput.trim() || goalRunning) return;
@@ -218,7 +219,10 @@ export function Agents({
             result: String(s?.result ?? ""),
             fuel_cost: Number(s?.fuel_cost) || 0,
           }));
-          setGoalStepDetails(prev => [...prev, ...safeSteps]);
+          setGoalStepDetails(prev => {
+            const updated = [...prev, ...safeSteps];
+            return updated.length > 200 ? updated.slice(-200) : updated;
+          });
         }
         if (event.payload.blocked_reason) {
           setGoalPhase(`Blocked: ${String(event.payload.blocked_reason)}`);
@@ -243,20 +247,33 @@ export function Agents({
         setGoalPhase("Complete");
       }
     });
-    // Listen for blocked events — poll for pending consents
+    // Listen for blocked events — fetch pending consents
     const unlistenBlocked = listen("agent-blocked", (event: any) => {
       if (event.payload?.agent_id === selectedAgentId) {
-        // Fetch pending consents for this agent
         listPendingConsents().then(consents => {
           const agentConsents = consents.filter(c => c.agent_id === selectedAgentId);
           setPendingConsents(agentConsents);
-        }).catch(() => {});
+        }).catch((err) => {
+          console.error("[agent-ui] Failed to fetch consent requests:", err);
+        });
+      }
+    });
+    // Also listen for direct consent-request-pending events (emitted alongside agent-blocked)
+    const unlistenConsentPending = listen("consent-request-pending", (event: any) => {
+      if (event.payload?.agent_id === selectedAgentId) {
+        listPendingConsents().then(consents => {
+          const agentConsents = consents.filter(c => c.agent_id === selectedAgentId);
+          setPendingConsents(agentConsents);
+        }).catch((err) => {
+          console.error("[agent-ui] Failed to fetch consent requests on pending event:", err);
+        });
       }
     });
     return () => {
       unlistenCycle.then(f => f());
       unlistenComplete.then(f => f());
       unlistenBlocked.then(f => f());
+      unlistenConsentPending.then(f => f());
     };
   }, [selectedAgentId]);
 
@@ -409,10 +426,53 @@ export function Agents({
 
   const totalTasks = auditEvents.length;
 
+  // Catch unhandled promise rejections from async agent operations
+  useEffect(() => {
+    const handler = (event: PromiseRejectionEvent) => {
+      console.error("[agent-ui] Unhandled rejection:", event.reason);
+      setAsyncError(String(event.reason ?? "Unknown async error"));
+      event.preventDefault();
+    };
+    window.addEventListener("unhandledrejection", handler);
+    return () => window.removeEventListener("unhandledrejection", handler);
+  }, []);
+
   return (
     <RequiresLlm feature="Agents">
     <section className="mission-control">
       <div className="mission-grid-overlay" />
+
+      {/* ─── Async Error Banner ─── */}
+      {asyncError && (
+        <div style={{
+          background: "#1a0000",
+          border: "1px solid #ef444444",
+          borderRadius: 8,
+          padding: "12px 16px",
+          marginBottom: 12,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}>
+          <span style={{ color: "#fca5a5", fontSize: 13 }}>
+            Agent error: {asyncError}
+          </span>
+          <button
+            onClick={() => setAsyncError(null)}
+            style={{
+              background: "transparent",
+              border: "1px solid #ef444444",
+              color: "#ef4444",
+              borderRadius: 6,
+              padding: "4px 12px",
+              cursor: "pointer",
+              fontSize: 12,
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* ─── Header ─── */}
       <header className="mission-header">
@@ -1162,7 +1222,7 @@ export function Agents({
               <div style={{ fontSize: 13, color: "#e2e8f0", marginBottom: 6 }}>
                 <strong>{consent.operation_type}:</strong> {consent.operation_summary}
               </div>
-              {consent.side_effects_preview.length > 0 && (
+              {Array.isArray(consent.side_effects_preview) && consent.side_effects_preview.length > 0 && (
                 <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>
                   {consent.side_effects_preview.map((effect, i) => (
                     <div key={i}>• {effect}</div>
@@ -1172,8 +1232,13 @@ export function Agents({
               <div style={{ display: "flex", gap: 8 }}>
                 <button
                   onClick={async () => {
-                    await approveConsentRequest(consent.consent_id, "user");
-                    setPendingConsents(prev => prev.filter(c => c.consent_id !== consent.consent_id));
+                    try {
+                      await approveConsentRequest(consent.consent_id, "user");
+                      setPendingConsents(prev => prev.filter(c => c.consent_id !== consent.consent_id));
+                    } catch (err) {
+                      console.error("[agent-ui] Approve failed:", err);
+                      setGoalPhase(`Approval error: ${err}`);
+                    }
                   }}
                   style={{
                     background: "#22c55e",
@@ -1190,11 +1255,15 @@ export function Agents({
                 </button>
                 <button
                   onClick={async () => {
-                    // Approve ALL pending consents for this agent
-                    for (const c of pendingConsents) {
-                      await approveConsentRequest(c.consent_id, "user");
+                    try {
+                      for (const c of pendingConsents) {
+                        await approveConsentRequest(c.consent_id, "user");
+                      }
+                      setPendingConsents([]);
+                    } catch (err) {
+                      console.error("[agent-ui] Approve All failed:", err);
+                      setGoalPhase(`Approval error: ${err}`);
                     }
-                    setPendingConsents([]);
                   }}
                   style={{
                     background: "transparent",
@@ -1211,10 +1280,15 @@ export function Agents({
                 </button>
                 <button
                   onClick={async () => {
-                    await denyConsentRequest(consent.consent_id, "user", "User denied");
-                    setPendingConsents(prev => prev.filter(c => c.consent_id !== consent.consent_id));
-                    setGoalRunning(false);
-                    setGoalPhase("Denied by user");
+                    try {
+                      await denyConsentRequest(consent.consent_id, "user", "User denied");
+                      setPendingConsents(prev => prev.filter(c => c.consent_id !== consent.consent_id));
+                      setGoalRunning(false);
+                      setGoalPhase("Denied by user");
+                    } catch (err) {
+                      console.error("[agent-ui] Deny failed:", err);
+                      setGoalPhase(`Deny error: ${err}`);
+                    }
                   }}
                   style={{
                     background: "transparent",

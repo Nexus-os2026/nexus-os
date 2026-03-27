@@ -15785,6 +15785,7 @@ fn simulation_response_is_usable(prompt: &str, response: &str) -> bool {
     true
 }
 
+#[cfg(test)]
 fn simulation_mock_response(prompt: &str) -> String {
     if prompt.contains("Analyze this text and extract") {
         return json!({
@@ -16574,7 +16575,24 @@ fn spawn_cognitive_loop_with_bridge(
                             resolved_at: None,
                             resolved_by: None,
                         };
-                        let _ = state.db.enqueue_consent(&consent_row);
+                        if let Err(e) = state.db.enqueue_consent(&consent_row) {
+                            eprintln!(
+                                "[agent-loop] CRITICAL: consent DB write failed for agent={} action={}: {e}",
+                                &agent_id[..agent_id.len().min(8)],
+                                &action_desc
+                            );
+                            // Emit failure to frontend so user sees the error
+                            bridge.emit(
+                                "agent-goal-completed",
+                                json!({
+                                    "agent_id": &agent_id,
+                                    "goal_id": &goal_id,
+                                    "success": false,
+                                    "reason": format!("Consent request failed to save: {e}"),
+                                }),
+                            );
+                            break 'cycle_loop;
+                        }
                         record_agent_execution_checkpoint(
                             &state,
                             &agent_id,
@@ -21936,26 +21954,22 @@ fn cm_run_ab_validation(
     let entries: Vec<(String, u8)> = if agent_ids.is_empty() {
         // Discover real prebuilt agents instead of generating dummies
         let sup = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-        let real: Vec<(String, u8)> = sup.health_check()
+        let real: Vec<(String, u8)> = sup
+            .health_check()
             .iter()
             .take(5)
             .map(|status| {
-                let level = sup.get_agent(status.id)
+                let level = sup
+                    .get_agent(status.id)
                     .map(|h| h.autonomy_level)
                     .unwrap_or(3);
                 (status.id.to_string(), level)
             })
             .collect();
         if real.is_empty() {
-            // Fallback: at minimum use identifiable placeholder names
-            vec![
-                ("prebuilt-coder".into(), 3),
-                ("prebuilt-designer".into(), 3),
-                ("prebuilt-analyst".into(), 3),
-            ]
-        } else {
-            real
+            return Err("No agents found. Ensure agents are loaded from agents/prebuilt/.".into());
         }
+        real
     } else {
         agent_ids.into_iter().map(|id| (id, 3u8)).collect()
     };
@@ -22146,7 +22160,10 @@ fn oracle_verify_token(
 }
 
 #[tauri::command]
-fn oracle_get_agent_budget(state: tauri::State<'_, AppState>, _agent_id: String) -> Result<BudgetSummary, String> {
+fn oracle_get_agent_budget(
+    state: tauri::State<'_, AppState>,
+    _agent_id: String,
+) -> Result<BudgetSummary, String> {
     let sup = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
     let mut allocations = std::collections::HashMap::new();
     if let Ok(id) = uuid::Uuid::parse_str(&_agent_id) {

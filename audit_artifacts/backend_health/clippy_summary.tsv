@@ -1,0 +1,58 @@
+coder-agent	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.34s 
+coding-agent	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.29s 
+designer-agent	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.30s 
+nexus-adaptation	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.26s 
+nexus-agent-memory	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.21s 
+nexus-airgap	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.18s 
+nexus-analytics	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.26s 
+nexus-auth	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s 
+nexus-benchmarks	PASS	 Compiling nexus-protocols v9.0.0 (/home/nexus/NEXUS/nexus-os/protocols) Checking nexus-benchmarks v9.0.0 (/home/nexus/NEXUS/nexus-os/benchmarks) Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.17s 
+nexus-browser-agent	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s 
+nexus-capability-measurement	PASS	 Checking nexus-capability-measurement v0.1.0 (/home/nexus/NEXUS/nexus-os/crates/nexus-capability-measurement) Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.43s 
+nexus-cli	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.30s 
+nexus-cloud	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s 
+nexus-collab-protocol	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.18s 
+nexus-collaboration	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.27s 
+nexus-computer-control	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.17s 
+nexus-conductor	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.29s 
+nexus-conductor-benchmark	FAIL	1276 - m.get("name").and_then(|n| n.as_str()).map_or(false, |n| { 1276 + m.get("name").and_then(|n| n.as_str()).is_some_and(|n| { | error: could not compile `nexus-conductor-benchmark` (bin "local-vs-cloud-battle") due to 11 previous errors 
+nexus-connectors-core	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.22s 
+nexus-connectors-llm	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.22s 
+nexus-connectors-messaging	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s 
+nexus-connectors-social	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s 
+nexus-connectors-web	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s 
+nexus-content	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.21s 
+nexus-control	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s 
+nexus-desktop-backend	FAIL	 | = note: `-D dead-code` implied by `-D warnings` = help: to override `-D warnings` add `#[expect(dead_code)]` or `#[allow(dead_code)]` error: could not compile `nexus-desktop-backend` (bin "nexus-desktop-backend") due to 1 previous error 
+nexus-distributed	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s 
+nexus-enterprise	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s 
+nexus-external-tools	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s 
+nexus-factory	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s 
+nexus-flash-infer	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.17s 
+nexus-governance-engine	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s 
+nexus-governance-evolution	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.17s 
+nexus-governance-oracle	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.18s 
+nexus-integration	PASS	 Checking nexus-protocols v9.0.0 (/home/nexus/NEXUS/nexus-os/protocols) Checking nexus-integration v9.0.0 (/home/nexus/NEXUS/nexus-os/tests/integration) Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.21s 
+nexus-integrations	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s 
+nexus-kernel	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.22s 
+nexus-llama-bridge	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.17s 
+nexus-marketplace	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s 
+nexus-metering	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s 
+nexus-perception	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.18s 
+nexus-persistence	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s 
+nexus-predictive-router	PASS	 Checking nexus-predictive-router v0.1.0 (/home/nexus/NEXUS/nexus-os/crates/nexus-predictive-router) Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.53s 
+nexus-protocols	PASS	 Checking nexus-protocols v9.0.0 (/home/nexus/NEXUS/nexus-os/protocols) Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.23s 
+nexus-research	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s 
+nexus-sdk	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.27s 
+nexus-self-update	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s 
+nexus-software-factory	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.18s 
+nexus-telemetry	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s 
+nexus-tenancy	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s 
+nexus-token-economy	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.18s 
+nexus-workflows	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s 
+nexus-world-simulation	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.18s 
+screen-poster-agent	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.27s 
+self-improve-agent	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.27s 
+social-poster-agent	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.35s 
+web-builder-agent	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.31s 
+workflow-studio-agent	PASS	 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.32s 

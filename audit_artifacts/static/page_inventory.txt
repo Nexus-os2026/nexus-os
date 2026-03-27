@@ -1,0 +1,172 @@
+## pages
+app/src/pages/ABValidation.tsx
+app/src/pages/AdminCompliance.tsx
+app/src/pages/AdminDashboard.tsx
+app/src/pages/AdminFleet.tsx
+app/src/pages/AdminPolicyEditor.tsx
+app/src/pages/AdminSystemHealth.tsx
+app/src/pages/AdminUsers.tsx
+app/src/pages/AgentBrowser.tsx
+app/src/pages/AgentDnaLab.tsx
+app/src/pages/AgentMemory.tsx
+app/src/pages/Agents.tsx
+app/src/pages/AiChatHub.tsx
+app/src/pages/ApiClient.tsx
+app/src/pages/AppStore.tsx
+app/src/pages/ApprovalCenter.tsx
+app/src/pages/Audit.tsx
+app/src/pages/AuditTimeline.tsx
+app/src/pages/BrowserAgent.tsx
+app/src/pages/CapabilityBoundaryMap.tsx
+app/src/pages/Chat.tsx
+app/src/pages/Civilization.tsx
+app/src/pages/ClusterStatus.tsx
+app/src/pages/CodeEditor.tsx
+app/src/pages/Collaboration.tsx
+app/src/pages/CommandCenter.tsx
+app/src/pages/ComplianceDashboard.tsx
+app/src/pages/ComputerControl.tsx
+app/src/pages/ConsciousnessMonitor.tsx
+app/src/pages/Dashboard.tsx
+app/src/pages/DatabaseManager.tsx
+app/src/pages/DeployPipeline.tsx
+app/src/pages/DesignStudio.tsx
+app/src/pages/DeveloperPortal.tsx
+app/src/pages/DistributedAudit.tsx
+app/src/pages/Documents.tsx
+app/src/pages/DreamForge.tsx
+app/src/pages/EmailClient.tsx
+app/src/pages/ExternalTools.tsx
+app/src/pages/FileManager.tsx
+app/src/pages/Firewall.tsx
+app/src/pages/FlashInference.tsx
+app/src/pages/GovernanceOracle.tsx
+app/src/pages/GovernedControl.tsx
+app/src/pages/Identity.tsx
+app/src/pages/ImmuneDashboard.tsx
+app/src/pages/Integrations.tsx
+app/src/pages/KnowledgeGraph.tsx
+app/src/pages/LearningCenter.tsx
+app/src/pages/Login.tsx
+app/src/pages/MeasurementBatteries.tsx
+app/src/pages/MeasurementCompare.tsx
+app/src/pages/MeasurementDashboard.tsx
+app/src/pages/MeasurementSession.tsx
+app/src/pages/MediaStudio.tsx
+app/src/pages/Messaging.tsx
+app/src/pages/MissionControl.tsx
+app/src/pages/ModelHub.tsx
+app/src/pages/ModelRouting.tsx
+app/src/pages/NotesApp.tsx
+app/src/pages/Perception.tsx
+app/src/pages/PermissionDashboard.tsx
+app/src/pages/PolicyManagement.tsx
+app/src/pages/ProjectManager.tsx
+app/src/pages/Protocols.tsx
+app/src/pages/Scheduler.tsx
+app/src/pages/SelfRewriteLab.tsx
+app/src/pages/Settings.tsx
+app/src/pages/SetupWizard.tsx
+app/src/pages/SoftwareFactory.tsx
+app/src/pages/SystemMonitor.tsx
+app/src/pages/Telemetry.tsx
+app/src/pages/TemporalEngine.tsx
+app/src/pages/Terminal.tsx
+app/src/pages/TimeMachine.tsx
+app/src/pages/TimelineViewer.tsx
+app/src/pages/TokenEconomy.tsx
+app/src/pages/TrustDashboard.tsx
+app/src/pages/UsageBilling.tsx
+app/src/pages/VoiceAssistant.tsx
+app/src/pages/Workflows.tsx
+app/src/pages/Workspaces.tsx
+app/src/pages/WorldSimulation.tsx
+app/src/pages/WorldSimulation2.tsx
+app/src/pages/commandCenterUi.tsx
+## pages_not_in_router
+NOT IN ROUTER: app/src/pages/commandCenterUi.tsx
+## pages_check_nav
+CHECK NAV: app/src/pages/TrustDashboard.tsx
+CHECK NAV: app/src/pages/DeveloperPortal.tsx
+CHECK NAV: app/src/pages/DistributedAudit.tsx
+CHECK NAV: app/src/pages/FileManager.tsx
+CHECK NAV: app/src/pages/ApprovalCenter.tsx
+CHECK NAV: app/src/pages/ProjectManager.tsx
+CHECK NAV: app/src/pages/Scheduler.tsx
+CHECK NAV: app/src/pages/ClusterStatus.tsx
+CHECK NAV: app/src/pages/Firewall.tsx
+CHECK NAV: app/src/pages/DeployPipeline.tsx
+CHECK NAV: app/src/pages/MeasurementSession.tsx
+CHECK NAV: app/src/pages/Messaging.tsx
+CHECK NAV: app/src/pages/ModelRouting.tsx
+CHECK NAV: app/src/pages/PolicyManagement.tsx
+CHECK NAV: app/src/pages/AgentBrowser.tsx
+CHECK NAV: app/src/pages/AppStore.tsx
+CHECK NAV: app/src/pages/ConsciousnessMonitor.tsx
+CHECK NAV: app/src/pages/LearningCenter.tsx
+CHECK NAV: app/src/pages/MeasurementBatteries.tsx
+CHECK NAV: app/src/pages/MissionControl.tsx
+CHECK NAV: app/src/pages/ApiClient.tsx
+CHECK NAV: app/src/pages/ComputerControl.tsx
+CHECK NAV: app/src/pages/EmailClient.tsx
+CHECK NAV: app/src/pages/VoiceAssistant.tsx
+CHECK NAV: app/src/pages/DesignStudio.tsx
+CHECK NAV: app/src/pages/MeasurementDashboard.tsx
+CHECK NAV: app/src/pages/WorldSimulation2.tsx
+CHECK NAV: app/src/pages/CommandCenter.tsx
+CHECK NAV: app/src/pages/KnowledgeGraph.tsx
+CHECK NAV: app/src/pages/GovernedControl.tsx
+CHECK NAV: app/src/pages/Identity.tsx
+CHECK NAV: app/src/pages/SetupWizard.tsx
+CHECK NAV: app/src/pages/NotesApp.tsx
+CHECK NAV: app/src/pages/TemporalEngine.tsx
+CHECK NAV: app/src/pages/DreamForge.tsx
+CHECK NAV: app/src/pages/UsageBilling.tsx
+CHECK NAV: app/src/pages/FlashInference.tsx
+CHECK NAV: app/src/pages/Workspaces.tsx
+CHECK NAV: app/src/pages/ABValidation.tsx
+CHECK NAV: app/src/pages/AgentDnaLab.tsx
+CHECK NAV: app/src/pages/Workflows.tsx
+CHECK NAV: app/src/pages/Telemetry.tsx
+CHECK NAV: app/src/pages/Civilization.tsx
+CHECK NAV: app/src/pages/AdminPolicyEditor.tsx
+CHECK NAV: app/src/pages/CapabilityBoundaryMap.tsx
+CHECK NAV: app/src/pages/SystemMonitor.tsx
+CHECK NAV: app/src/pages/AgentMemory.tsx
+CHECK NAV: app/src/pages/MeasurementCompare.tsx
+CHECK NAV: app/src/pages/AiChatHub.tsx
+CHECK NAV: app/src/pages/SoftwareFactory.tsx
+CHECK NAV: app/src/pages/PermissionDashboard.tsx
+CHECK NAV: app/src/pages/Dashboard.tsx
+CHECK NAV: app/src/pages/Collaboration.tsx
+CHECK NAV: app/src/pages/AdminDashboard.tsx
+CHECK NAV: app/src/pages/BrowserAgent.tsx
+CHECK NAV: app/src/pages/TimelineViewer.tsx
+CHECK NAV: app/src/pages/Chat.tsx
+CHECK NAV: app/src/pages/WorldSimulation.tsx
+CHECK NAV: app/src/pages/Settings.tsx
+CHECK NAV: app/src/pages/Audit.tsx
+CHECK NAV: app/src/pages/AdminFleet.tsx
+CHECK NAV: app/src/pages/Agents.tsx
+CHECK NAV: app/src/pages/AdminSystemHealth.tsx
+CHECK NAV: app/src/pages/AdminUsers.tsx
+CHECK NAV: app/src/pages/commandCenterUi.tsx
+CHECK NAV: app/src/pages/ExternalTools.tsx
+CHECK NAV: app/src/pages/DatabaseManager.tsx
+CHECK NAV: app/src/pages/GovernanceOracle.tsx
+CHECK NAV: app/src/pages/Protocols.tsx
+CHECK NAV: app/src/pages/ModelHub.tsx
+CHECK NAV: app/src/pages/TokenEconomy.tsx
+CHECK NAV: app/src/pages/MediaStudio.tsx
+CHECK NAV: app/src/pages/AuditTimeline.tsx
+CHECK NAV: app/src/pages/CodeEditor.tsx
+CHECK NAV: app/src/pages/Perception.tsx
+CHECK NAV: app/src/pages/SelfRewriteLab.tsx
+CHECK NAV: app/src/pages/Documents.tsx
+CHECK NAV: app/src/pages/ComplianceDashboard.tsx
+CHECK NAV: app/src/pages/Integrations.tsx
+CHECK NAV: app/src/pages/TimeMachine.tsx
+CHECK NAV: app/src/pages/Terminal.tsx
+CHECK NAV: app/src/pages/Login.tsx
+CHECK NAV: app/src/pages/AdminCompliance.tsx
+CHECK NAV: app/src/pages/ImmuneDashboard.tsx

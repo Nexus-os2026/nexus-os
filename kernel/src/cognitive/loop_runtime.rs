@@ -977,7 +977,13 @@ impl CognitiveRuntime {
             state.steps = new_steps;
             state.current_step_index = 0;
             state.consecutive_failures = 0;
-            state.hitl_approval_allowance = 0;
+            // L3+ agents (Act-then-report and above) get pre-approved allowance
+            // for all planned steps; L0-L2 require explicit HITL approval per step.
+            state.hitl_approval_allowance = if autonomy_level >= 3 {
+                state.steps.len() as u32
+            } else {
+                0
+            };
             state.review_each_mode = false;
             state.goal.status = GoalStatus::Active;
         }

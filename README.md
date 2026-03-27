@@ -233,7 +233,7 @@ cargo tauri dev
 
 | Standard | Status | Documentation |
 |----------|--------|--------------|
-| **EU AI Act** | ✅ Conformity self-assessment complete | [EU AI Act](docs/EU_AI_ACT_CONFORMITY.md) |
+| **EU AI Act** | ✅ Conformity self-assessment complete | [EU AI Act](docs/EU_AI_ACT_CONFORMITY.md) — Article-by-article mapping (Arts. 9, 10, 11, 12, 13, 14, 15, 17) |
 | **SOC 2 Type II** | 🔄 Readiness documented | [SOC 2](docs/SOC2_READINESS.md) |
 | **ISO 27001** | 🔄 Controls mapped | [Enterprise Guide](docs/ENTERPRISE_GUIDE.md) |
 | **HIPAA** | 🔄 BAA template available | [Enterprise Guide](docs/ENTERPRISE_GUIDE.md) |

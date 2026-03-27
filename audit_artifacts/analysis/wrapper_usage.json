@@ -1,0 +1,7250 @@
+{
+  "hasDesktopRuntime": [
+    {
+      "file": "app/src/pages/AgentBrowser.tsx",
+      "line": 6,
+      "text": "import { hasDesktopRuntime, navigateTo } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/AgentBrowser.tsx",
+      "line": 97,
+      "text": "if (hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/AgentBrowser.tsx",
+      "line": 331,
+      "text": "{hasDesktopRuntime() ? ("
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 9,
+      "text": "import { getPreinstalledAgents, hasDesktopRuntime, listProviderModels, executeAgentGoal, approveConsentRequest, denyConsentRequest, listPendingConsents, getAvailableProviders, setAgentLlmProvider, fla"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 194,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 265,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 273,
+      "text": "if (!hasDesktopRuntime() || !selectedAgentId) return;"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 5,
+      "text": "sendChat, chatWithOllama, conductBuild, listAgents, hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 478,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/ApiClient.tsx",
+      "line": 3,
+      "text": "import { apiClientRequest, apiClientListCollections, apiClientSaveCollections, hasDesktopRuntime } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/ApiClient.tsx",
+      "line": 115,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/ApiClient.tsx",
+      "line": 133,
+      "text": "if (hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/ApiClient.tsx",
+      "line": 153,
+      "text": "if (hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/AppStore.tsx",
+      "line": 4,
+      "text": "hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/AppStore.tsx",
+      "line": 68,
+      "text": "const isDesktop = hasDesktopRuntime();"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 19,
+      "text": "hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 403,
+      "text": "const isDesktop = hasDesktopRuntime();"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 7,
+      "text": "hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 718,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 746,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 849,
+      "text": "if (hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 877,
+      "text": "if (hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 897,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 1011,
+      "text": "{hasDesktopRuntime() && ("
+    },
+    {
+      "file": "app/src/pages/AuditTimeline.tsx",
+      "line": 4,
+      "text": "import { getAuditLog, getAuditChainStatus, hasDesktopRuntime } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/AuditTimeline.tsx",
+      "line": 55,
+      "text": "if (!hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/AuditTimeline.tsx",
+      "line": 68,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/AuditTimeline.tsx",
+      "line": 92,
+      "text": "if (hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/Chat.tsx",
+      "line": 6,
+      "text": "import { hasDesktopRuntime, listProviderModels } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Chat.tsx",
+      "line": 199,
+      "text": "if (!hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 32,
+      "text": "hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 329,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 3,
+      "text": "hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 46,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 61,
+      "text": "if (!hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/CodeEditor.tsx",
+      "line": 6,
+      "text": "hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/CodeEditor.tsx",
+      "line": 24,
+      "text": "const HAS_DESKTOP = hasDesktopRuntime();"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 2,
+      "text": "import { listAgents, startAgent, stopAgent, pauseAgent, resumeAgent, hasDesktopRuntime, getAuditLog } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 27,
+      "text": "if (!hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 50,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 56,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/ComplianceDashboard.tsx",
+      "line": 6,
+      "text": "hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/ComplianceDashboard.tsx",
+      "line": 109,
+      "text": "if (!hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 10,
+      "text": "hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 143,
+      "text": "const isDesktop = hasDesktopRuntime();"
+    },
+    {
+      "file": "app/src/pages/DeveloperPortal.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, marketplacePublish, marketplaceMyAgents } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/DeveloperPortal.tsx",
+      "line": 48,
+      "text": "const isDesktop = hasDesktopRuntime();"
+    },
+    {
+      "file": "app/src/pages/DistributedAudit.tsx",
+      "line": 2,
+      "text": "import { getAuditLog, getAuditChainStatus, hasDesktopRuntime } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/DistributedAudit.tsx",
+      "line": 41,
+      "text": "if (!hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, emailList, emailSave, emailDelete, emailStartOauth, emailOauthStatus, emailFetchMessages, emailSendMessage, emailDisconnect } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 68,
+      "text": "if (!hasDesktopRuntime()) return [];"
+    },
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 78,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 87,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 128,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 235,
+      "text": "if (connectedProvider && hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/Firewall.tsx",
+      "line": 2,
+      "text": "import { getFirewallStatus, getFirewallPatterns, hasDesktopRuntime } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Firewall.tsx",
+      "line": 11,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 18,
+      "text": "hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 122,
+      "text": "const isDesktop = hasDesktopRuntime();"
+    },
+    {
+      "file": "app/src/pages/ProjectManager.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, projectList, projectSave, projectDelete as projectDeleteApi } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/ProjectManager.tsx",
+      "line": 120,
+      "text": "if (!hasDesktopRuntime()) return null;"
+    },
+    {
+      "file": "app/src/pages/ProjectManager.tsx",
+      "line": 131,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 7,
+      "text": "hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 98,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 184,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 248,
+      "text": "if (!hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 290,
+      "text": "{hasDesktopRuntime()"
+    },
+    {
+      "file": "app/src/pages/Settings.tsx",
+      "line": 5,
+      "text": "import { checkLlmStatus, getLlmRecommendations, testLlmConnection, hasDesktopRuntime, listTools, executeTool } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Settings.tsx",
+      "line": 228,
+      "text": "if (section !== \"llm\" || !hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/Settings.tsx",
+      "line": 244,
+      "text": "if (section !== \"tools\" || !hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/Settings.tsx",
+      "line": 771,
+      "text": "{hasDesktopRuntime() ? \"(live input level)\" : \"(desktop runtime required)\"}"
+    },
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 4,
+      "text": "hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 384,
+      "text": "const isDesktop = hasDesktopRuntime();"
+    },
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 11,
+      "text": "hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 378,
+      "text": "const desktopRuntimeAvailable = hasDesktopRuntime();"
+    },
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 398,
+      "text": "if (hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/Workflows.tsx",
+      "line": 23,
+      "text": "hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/Workflows.tsx",
+      "line": 236,
+      "text": "const isDesktop = hasDesktopRuntime();"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 7,
+      "text": "hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 235,
+      "text": "if (!hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 246,
+      "text": "if (!targetWorldId || !hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 285,
+      "text": "if (!hasDesktopRuntime()) return;"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 314,
+      "text": "if (!hasDesktopRuntime()) {"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 534,
+      "text": "if (!hasDesktopRuntime()) {"
+    }
+  ],
+  "listAgents": [
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 3,
+      "text": "listAgents,"
+    },
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 87,
+      "text": "listAgents()"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 5,
+      "text": "sendChat, chatWithOllama, conductBuild, listAgents, hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 11,
+      "text": "listAgents,"
+    },
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 45,
+      "text": "listAgents().then((a) => setAgents(normalizeArray<{ id: string; name: string }>(a).filter((x) => x.name))).catch(console.error);"
+    },
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 5,
+      "text": "listAgents,"
+    },
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 68,
+      "text": "listAgents(),"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 2,
+      "text": "import { listAgents, startAgent, stopAgent, pauseAgent, resumeAgent, hasDesktopRuntime, getAuditLog } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 32,
+      "text": "const [agentList, auditEvents] = await Promise.all([listAgents(), getAuditLog(undefined, 500)]);"
+    },
+    {
+      "file": "app/src/pages/Dashboard.tsx",
+      "line": 2,
+      "text": "import { getAuditLog, getLiveSystemMetricsJson, listAgents } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Dashboard.tsx",
+      "line": 63,
+      "text": "listAgents(),"
+    },
+    {
+      "file": "app/src/pages/DesignStudio.tsx",
+      "line": 8,
+      "text": "listAgents,"
+    },
+    {
+      "file": "app/src/pages/DesignStudio.tsx",
+      "line": 72,
+      "text": "const agentRows = await listAgents();"
+    },
+    {
+      "file": "app/src/pages/GovernanceOracle.tsx",
+      "line": 2,
+      "text": "import { oracleStatus, oracleGetAgentBudget, listAgents } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/GovernanceOracle.tsx",
+      "line": 37,
+      "text": "Promise.all([oracleStatus(), listAgents()])"
+    },
+    {
+      "file": "app/src/pages/GovernedControl.tsx",
+      "line": 7,
+      "text": "listAgents,"
+    },
+    {
+      "file": "app/src/pages/GovernedControl.tsx",
+      "line": 80,
+      "text": "listAgents()"
+    },
+    {
+      "file": "app/src/pages/ImmuneDashboard.tsx",
+      "line": 8,
+      "text": "listAgents,"
+    },
+    {
+      "file": "app/src/pages/ImmuneDashboard.tsx",
+      "line": 169,
+      "text": "listAgents() as Promise<AgentOption[]>,"
+    },
+    {
+      "file": "app/src/pages/MeasurementDashboard.tsx",
+      "line": 7,
+      "text": "listAgents,"
+    },
+    {
+      "file": "app/src/pages/MeasurementDashboard.tsx",
+      "line": 129,
+      "text": "listAgents()"
+    },
+    {
+      "file": "app/src/pages/MediaStudio.tsx",
+      "line": 10,
+      "text": "listAgents,"
+    },
+    {
+      "file": "app/src/pages/MediaStudio.tsx",
+      "line": 72,
+      "text": "const agentRows = await listAgents();"
+    },
+    {
+      "file": "app/src/pages/Messaging.tsx",
+      "line": 5,
+      "text": "listAgents,"
+    },
+    {
+      "file": "app/src/pages/Messaging.tsx",
+      "line": 136,
+      "text": "listAgents(),"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 4,
+      "text": "listAgents,"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 148,
+      "text": "listAgents() as Promise<AgentSummary[]>,"
+    },
+    {
+      "file": "app/src/pages/SystemMonitor.tsx",
+      "line": 7,
+      "text": "import { getLiveSystemMetrics, listAgents } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/SystemMonitor.tsx",
+      "line": 222,
+      "text": "const agents = await listAgents();"
+    },
+    {
+      "file": "app/src/pages/Workflows.tsx",
+      "line": 24,
+      "text": "listAgents,"
+    },
+    {
+      "file": "app/src/pages/Workflows.tsx",
+      "line": 252,
+      "text": "const [scheduled, registered] = await Promise.all([getScheduledAgents(), listAgents()]);"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation2.tsx",
+      "line": 2,
+      "text": "import { simGetHistory, simGetPolicy, listAgents } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation2.tsx",
+      "line": 58,
+      "text": "listAgents().catch(() => []),"
+    }
+  ],
+  "clearAllAgents": [],
+  "createAgent": [],
+  "getAuditLog": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 7,
+      "text": "startAgent, stopAgent, pauseAgent, resumeAgent, getAuditLog,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 612,
+      "text": "const logs = await getAuditLog(selectedAgent.agent_id, 50);"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 5,
+      "text": "getAuditLog,"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 878,
+      "text": "const fresh = await getAuditLog(undefined, 500);"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 899,
+      "text": "getAuditLog(undefined, 500).then(setLiveEvents).catch(() => {});"
+    },
+    {
+      "file": "app/src/pages/AuditTimeline.tsx",
+      "line": 4,
+      "text": "import { getAuditLog, getAuditChainStatus, hasDesktopRuntime } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/AuditTimeline.tsx",
+      "line": 58,
+      "text": "Promise.all([getAuditLog(undefined, 500), getAuditChainStatus()])"
+    },
+    {
+      "file": "app/src/pages/AuditTimeline.tsx",
+      "line": 70,
+      "text": "getAuditLog(undefined, 500).then(setLiveEvents).catch(() => {});"
+    },
+    {
+      "file": "app/src/pages/AuditTimeline.tsx",
+      "line": 93,
+      "text": "const [fresh, status] = await Promise.all([getAuditLog(undefined, 500), getAuditChainStatus()]);"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 2,
+      "text": "import { listAgents, startAgent, stopAgent, pauseAgent, resumeAgent, hasDesktopRuntime, getAuditLog } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 32,
+      "text": "const [agentList, auditEvents] = await Promise.all([listAgents(), getAuditLog(undefined, 500)]);"
+    },
+    {
+      "file": "app/src/pages/ComplianceDashboard.tsx",
+      "line": 5,
+      "text": "getAuditLog,"
+    },
+    {
+      "file": "app/src/pages/ComplianceDashboard.tsx",
+      "line": 116,
+      "text": "getAuditLog(undefined, 50).catch(() => []),"
+    },
+    {
+      "file": "app/src/pages/Dashboard.tsx",
+      "line": 2,
+      "text": "import { getAuditLog, getLiveSystemMetricsJson, listAgents } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Dashboard.tsx",
+      "line": 64,
+      "text": "getAuditLog(undefined, 12),"
+    },
+    {
+      "file": "app/src/pages/DistributedAudit.tsx",
+      "line": 2,
+      "text": "import { getAuditLog, getAuditChainStatus, hasDesktopRuntime } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/DistributedAudit.tsx",
+      "line": 46,
+      "text": "getAuditLog(undefined, 200).catch(() => []),"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 12,
+      "text": "getAuditLog,"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 156,
+      "text": "getAuditLog() as Promise<AuditEventRow[]>,"
+    }
+  ],
+  "startAgent": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 7,
+      "text": "startAgent, stopAgent, pauseAgent, resumeAgent, getAuditLog,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 575,
+      "text": "await startAgent(selectedAgent.agent_id);"
+    },
+    {
+      "file": "app/src/pages/AppStore.tsx",
+      "line": 8,
+      "text": "startAgent,"
+    },
+    {
+      "file": "app/src/pages/AppStore.tsx",
+      "line": 160,
+      "text": "await startAgent(agentId);"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 2,
+      "text": "import { listAgents, startAgent, stopAgent, pauseAgent, resumeAgent, hasDesktopRuntime, getAuditLog } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 58,
+      "text": "if (action === \"start\") await startAgent(id);"
+    }
+  ],
+  "stopAgent": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 7,
+      "text": "startAgent, stopAgent, pauseAgent, resumeAgent, getAuditLog,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 590,
+      "text": "await stopAgent(selectedAgent.agent_id);"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 595,
+      "text": "await stopAgent(selectedAgent.agent_id); // kill uses stop (no separate kill command)"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 2,
+      "text": "import { listAgents, startAgent, stopAgent, pauseAgent, resumeAgent, hasDesktopRuntime, getAuditLog } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 59,
+      "text": "else if (action === \"stop\") await stopAgent(id);"
+    }
+  ],
+  "pauseAgent": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 7,
+      "text": "startAgent, stopAgent, pauseAgent, resumeAgent, getAuditLog,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 580,
+      "text": "await pauseAgent(selectedAgent.agent_id);"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 2,
+      "text": "import { listAgents, startAgent, stopAgent, pauseAgent, resumeAgent, hasDesktopRuntime, getAuditLog } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 60,
+      "text": "else if (action === \"pause\") await pauseAgent(id);"
+    }
+  ],
+  "resumeAgent": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 7,
+      "text": "startAgent, stopAgent, pauseAgent, resumeAgent, getAuditLog,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 585,
+      "text": "await resumeAgent(selectedAgent.agent_id);"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 2,
+      "text": "import { listAgents, startAgent, stopAgent, pauseAgent, resumeAgent, hasDesktopRuntime, getAuditLog } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/CommandCenter.tsx",
+      "line": 61,
+      "text": "else if (action === \"resume\") await resumeAgent(id);"
+    }
+  ],
+  "sendChat": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 5,
+      "text": "sendChat, chatWithOllama, conductBuild, listAgents, hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 885,
+      "text": "const response = await sendChat(currentInput, selectedModel, selectedAgent?.name);"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 900,
+      "text": "const response = await sendChat(currentInput, selectedModel, selectedAgent?.name);"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 957,
+      "text": "const response = await sendChat(comparePrompt);"
+    },
+    {
+      "file": "app/src/pages/CodeEditor.tsx",
+      "line": 7,
+      "text": "sendChat,"
+    },
+    {
+      "file": "app/src/pages/CodeEditor.tsx",
+      "line": 641,
+      "text": "const response = await sendChat("
+    },
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 12,
+      "text": "sendChat,"
+    },
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 399,
+      "text": "sendChat(\"voice-assistant\", transcript).then(resp => {"
+    },
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 620,
+      "text": "const response = await sendChat(text);"
+    }
+  ],
+  "getAgentPerformance": [],
+  "getAutoEvolutionLog": [],
+  "setAutoEvolutionConfig": [],
+  "forceEvolveAgent": [],
+  "getConfig": [
+    {
+      "file": "app/src/pages/Messaging.tsx",
+      "line": 3,
+      "text": "getConfig,"
+    },
+    {
+      "file": "app/src/pages/Messaging.tsx",
+      "line": 134,
+      "text": "getConfig(),"
+    }
+  ],
+  "saveConfig": [
+    {
+      "file": "app/src/pages/Messaging.tsx",
+      "line": 9,
+      "text": "saveConfig,"
+    },
+    {
+      "file": "app/src/pages/Messaging.tsx",
+      "line": 174,
+      "text": "await saveConfig(next);"
+    },
+    {
+      "file": "app/src/pages/Telemetry.tsx",
+      "line": 150,
+      "text": "async function saveConfig() {"
+    },
+    {
+      "file": "app/src/pages/Telemetry.tsx",
+      "line": 551,
+      "text": "onClick={() => void saveConfig()}"
+    }
+  ],
+  "transcribePushToTalk": [],
+  "startJarvisMode": [],
+  "stopJarvisMode": [],
+  "jarvisStatus": [],
+  "detectHardware": [],
+  "checkOllama": [],
+  "pullOllamaModel": [],
+  "runSetupWizard": [],
+  "pullModel": [],
+  "ensureOllama": [],
+  "isOllamaInstalled": [],
+  "deleteModel": [],
+  "isSetupComplete": [],
+  "listAvailableModels": [],
+  "listProviderModels": [
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 9,
+      "text": "import { getPreinstalledAgents, hasDesktopRuntime, listProviderModels, executeAgentGoal, approveConsentRequest, denyConsentRequest, listPendingConsents, getAvailableProviders, setAgentLlmProvider, fla"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 267,
+      "text": "listProviderModels().then(m => setModelCount(m.length)).catch(() => {});"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 6,
+      "text": "listProviderModels, getProviderStatus, saveApiKey, getPreinstalledAgents,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 403,
+      "text": "listProviderModels(),"
+    },
+    {
+      "file": "app/src/pages/Chat.tsx",
+      "line": 6,
+      "text": "import { hasDesktopRuntime, listProviderModels } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Chat.tsx",
+      "line": 206,
+      "text": "const provModels = await listProviderModels();"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 8,
+      "text": "listProviderModels,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 202,
+      "text": "listProviderModels(),"
+    }
+  ],
+  "getProviderStatus": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 6,
+      "text": "listProviderModels, getProviderStatus, saveApiKey, getPreinstalledAgents,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 404,
+      "text": "getProviderStatus(),"
+    }
+  ],
+  "getAvailableProviders": [
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 9,
+      "text": "import { getPreinstalledAgents, hasDesktopRuntime, listProviderModels, executeAgentGoal, approveConsentRequest, denyConsentRequest, listPendingConsents, getAvailableProviders, setAgentLlmProvider, fla"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 268,
+      "text": "getAvailableProviders().then(setAvailableProviders).catch(() => {});"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 274,
+      "text": "getAvailableProviders().then(setAvailableProviders).catch(() => {});"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 276,
+      "text": "getAvailableProviders().then(setAvailableProviders).catch(() => {});"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 1011,
+      "text": "const updated = await getAvailableProviders();"
+    }
+  ],
+  "captureScreen": [
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 4,
+      "text": "captureScreen,"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 68,
+      "text": "const path = await captureScreen();"
+    }
+  ],
+  "analyzeScreen": [],
+  "analyzeMediaFile": [
+    {
+      "file": "app/src/pages/MediaStudio.tsx",
+      "line": 6,
+      "text": "analyzeMediaFile,"
+    },
+    {
+      "file": "app/src/pages/MediaStudio.tsx",
+      "line": 103,
+      "text": "const result = await analyzeMediaFile(selectedEntry.path, analysisQuery);"
+    }
+  ],
+  "startComputerAction": [
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 15,
+      "text": "startComputerAction,"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 129,
+      "text": "const nextSessionId = await startComputerAction(prompt, 12);"
+    }
+  ],
+  "stopComputerAction": [
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 16,
+      "text": "stopComputerAction,"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 115,
+      "text": "await stopComputerAction(sessionId);"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 403,
+      "text": "onClick={() => void stopComputerAction(sessionId)}"
+    }
+  ],
+  "getInputControlStatus": [
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 8,
+      "text": "getInputControlStatus,"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 55,
+      "text": "getInputControlStatus(),"
+    }
+  ],
+  "computerControlCaptureScreen": [],
+  "computerControlExecuteAction": [],
+  "computerControlGetHistory": [
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 5,
+      "text": "computerControlGetHistory,"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 54,
+      "text": "computerControlGetHistory(),"
+    }
+  ],
+  "computerControlToggle": [
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 7,
+      "text": "computerControlToggle,"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 99,
+      "text": "await computerControlToggle(next);"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 117,
+      "text": "await computerControlToggle(false);"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 317,
+      "text": "<button className=\"cursor-pointer\" onClick={() => computerControlToggle(true).then(() => setEnabled(true))} style={{ padding: \"8px 20px\", background: \"rgba(239,68,68,0.2)\", border: \"1px solid rgba(239"
+    }
+  ],
+  "computerControlStatus": [
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 6,
+      "text": "computerControlStatus,"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 53,
+      "text": "computerControlStatus(),"
+    }
+  ],
+  "saveApiKey": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 6,
+      "text": "listProviderModels, getProviderStatus, saveApiKey, getPreinstalledAgents,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 1046,
+      "text": "await saveApiKey(showApiKeyModal, apiKeyInput.trim());"
+    }
+  ],
+  "chatWithOllama": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 5,
+      "text": "sendChat, chatWithOllama, conductBuild, listAgents, hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 879,
+      "text": "await chatWithOllama(messages, ollamaModelName);"
+    }
+  ],
+  "setAgentModel": [],
+  "conductBuild": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 5,
+      "text": "sendChat, chatWithOllama, conductBuild, listAgents, hasDesktopRuntime,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 806,
+      "text": "const response = await conductBuild(currentInput, undefined, selectedModel);"
+    }
+  ],
+  "getTrustOverview": [
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 3,
+      "text": "getTrustOverview,"
+    },
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 392,
+      "text": "const data = await getTrustOverview();"
+    }
+  ],
+  "checkLlmStatus": [
+    {
+      "file": "app/src/pages/DreamForge.tsx",
+      "line": 11,
+      "text": "checkLlmStatus,"
+    },
+    {
+      "file": "app/src/pages/DreamForge.tsx",
+      "line": 138,
+      "text": "const llm = await checkLlmStatus();"
+    },
+    {
+      "file": "app/src/pages/Settings.tsx",
+      "line": 5,
+      "text": "import { checkLlmStatus, getLlmRecommendations, testLlmConnection, hasDesktopRuntime, listTools, executeTool } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Settings.tsx",
+      "line": 229,
+      "text": "checkLlmStatus().then((status) => {"
+    }
+  ],
+  "getSystemInfo": [],
+  "terminalExecute": [
+    {
+      "file": "app/src/pages/CodeEditor.tsx",
+      "line": 8,
+      "text": "terminalExecute,"
+    },
+    {
+      "file": "app/src/pages/CodeEditor.tsx",
+      "line": 506,
+      "text": ": await terminalExecute(cmd, cwd);"
+    },
+    {
+      "file": "app/src/pages/Terminal.tsx",
+      "line": 3,
+      "text": "import { terminalExecute, terminalExecuteApproved, type TerminalCommandResult } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Terminal.tsx",
+      "line": 272,
+      "text": "const result: TerminalResult = await terminalExecute(cmd, cwd);"
+    }
+  ],
+  "terminalExecuteApproved": [
+    {
+      "file": "app/src/pages/CodeEditor.tsx",
+      "line": 9,
+      "text": "terminalExecuteApproved,"
+    },
+    {
+      "file": "app/src/pages/CodeEditor.tsx",
+      "line": 505,
+      "text": "? await terminalExecuteApproved(cmd, cwd)"
+    },
+    {
+      "file": "app/src/pages/Terminal.tsx",
+      "line": 3,
+      "text": "import { terminalExecute, terminalExecuteApproved, type TerminalCommandResult } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Terminal.tsx",
+      "line": 475,
+      "text": "const result: TerminalResult = await terminalExecuteApproved(cmd, cwd);"
+    }
+  ],
+  "getAgentPermissions": [
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 15,
+      "text": "getAgentPermissions,"
+    },
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 132,
+      "text": "getAgentPermissions(agentId),"
+    }
+  ],
+  "updateAgentPermission": [
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 20,
+      "text": "updateAgentPermission,"
+    },
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 165,
+      "text": "await updateAgentPermission(agentId, capKey, newValue);"
+    }
+  ],
+  "getPermissionHistory": [
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 17,
+      "text": "getPermissionHistory,"
+    },
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 133,
+      "text": "getPermissionHistory(agentId),"
+    },
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 167,
+      "text": "const hist = await getPermissionHistory(agentId);"
+    },
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 205,
+      "text": "const hist = await getPermissionHistory(agentId);"
+    }
+  ],
+  "getCapabilityRequest": [
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 16,
+      "text": "getCapabilityRequest,"
+    },
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 134,
+      "text": "getCapabilityRequest(agentId),"
+    }
+  ],
+  "bulkUpdatePermissions": [
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 14,
+      "text": "bulkUpdatePermissions,"
+    },
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 194,
+      "text": "await bulkUpdatePermissions(agentId, updates, reason);"
+    }
+  ],
+  "getProtocolsStatus": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 6,
+      "text": "getProtocolsStatus,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 254,
+      "text": "getProtocolsStatus(),"
+    }
+  ],
+  "getProtocolsRequests": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 5,
+      "text": "getProtocolsRequests,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 257,
+      "text": "getProtocolsRequests(),"
+    }
+  ],
+  "getMcpTools": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 4,
+      "text": "getMcpTools,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 255,
+      "text": "getMcpTools(),"
+    }
+  ],
+  "getAgentCards": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 3,
+      "text": "getAgentCards,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 256,
+      "text": "getAgentCards(),"
+    }
+  ],
+  "getScheduledAgents": [
+    {
+      "file": "app/src/pages/Workflows.tsx",
+      "line": 22,
+      "text": "getScheduledAgents,"
+    },
+    {
+      "file": "app/src/pages/Workflows.tsx",
+      "line": 252,
+      "text": "const [scheduled, registered] = await Promise.all([getScheduledAgents(), listAgents()]);"
+    }
+  ],
+  "a2aDiscoverAgent": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 15,
+      "text": "a2aDiscoverAgent,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 197,
+      "text": "const card = await a2aDiscoverAgent(a2aDiscoverUrl.trim());"
+    }
+  ],
+  "a2aSendTask": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 16,
+      "text": "a2aSendTask,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 212,
+      "text": "const result = await a2aSendTask(a2aSendUrl.trim(), a2aSendMessage.trim());"
+    }
+  ],
+  "a2aGetTaskStatus": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 17,
+      "text": "a2aGetTaskStatus,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 226,
+      "text": "const result = await a2aGetTaskStatus(a2aStatusUrl.trim(), a2aStatusTaskId.trim());"
+    }
+  ],
+  "a2aCancelTask": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 18,
+      "text": "a2aCancelTask,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 239,
+      "text": "await a2aCancelTask(a2aStatusUrl.trim(), a2aStatusTaskId.trim());"
+    }
+  ],
+  "a2aKnownAgents": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 19,
+      "text": "a2aKnownAgents,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 186,
+      "text": "const agents = await a2aKnownAgents();"
+    }
+  ],
+  "getAgentIdentity": [],
+  "listIdentities": [],
+  "getFirewallStatus": [
+    {
+      "file": "app/src/pages/Firewall.tsx",
+      "line": 2,
+      "text": "import { getFirewallStatus, getFirewallPatterns, hasDesktopRuntime } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Firewall.tsx",
+      "line": 12,
+      "text": "getFirewallStatus().then(setStatus).catch(() => {});"
+    }
+  ],
+  "getFirewallPatterns": [
+    {
+      "file": "app/src/pages/Firewall.tsx",
+      "line": 2,
+      "text": "import { getFirewallStatus, getFirewallPatterns, hasDesktopRuntime } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Firewall.tsx",
+      "line": 13,
+      "text": "getFirewallPatterns().then(setPatterns).catch(() => {});"
+    }
+  ],
+  "getComplianceStatus": [
+    {
+      "file": "app/src/pages/ComplianceDashboard.tsx",
+      "line": 3,
+      "text": "getComplianceStatus,"
+    },
+    {
+      "file": "app/src/pages/ComplianceDashboard.tsx",
+      "line": 114,
+      "text": "getComplianceStatus().catch(() => null),"
+    }
+  ],
+  "getComplianceAgents": [
+    {
+      "file": "app/src/pages/ComplianceDashboard.tsx",
+      "line": 4,
+      "text": "getComplianceAgents,"
+    },
+    {
+      "file": "app/src/pages/ComplianceDashboard.tsx",
+      "line": 115,
+      "text": "getComplianceAgents().catch(() => []),"
+    }
+  ],
+  "getAuditChainStatus": [
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 6,
+      "text": "getAuditChainStatus,"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 850,
+      "text": "const status = await getAuditChainStatus();"
+    },
+    {
+      "file": "app/src/pages/AuditTimeline.tsx",
+      "line": 4,
+      "text": "import { getAuditLog, getAuditChainStatus, hasDesktopRuntime } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/AuditTimeline.tsx",
+      "line": 58,
+      "text": "Promise.all([getAuditLog(undefined, 500), getAuditChainStatus()])"
+    },
+    {
+      "file": "app/src/pages/AuditTimeline.tsx",
+      "line": 93,
+      "text": "const [fresh, status] = await Promise.all([getAuditLog(undefined, 500), getAuditChainStatus()]);"
+    },
+    {
+      "file": "app/src/pages/DistributedAudit.tsx",
+      "line": 2,
+      "text": "import { getAuditLog, getAuditChainStatus, hasDesktopRuntime } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/DistributedAudit.tsx",
+      "line": 47,
+      "text": "getAuditChainStatus().catch(() => null),"
+    }
+  ],
+  "marketplaceSearch": [
+    {
+      "file": "app/src/pages/AppStore.tsx",
+      "line": 6,
+      "text": "marketplaceSearch,"
+    },
+    {
+      "file": "app/src/pages/AppStore.tsx",
+      "line": 82,
+      "text": "marketplaceSearch(\"\"),"
+    }
+  ],
+  "getPreinstalledAgents": [
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 9,
+      "text": "import { getPreinstalledAgents, hasDesktopRuntime, listProviderModels, executeAgentGoal, approveConsentRequest, denyConsentRequest, listPendingConsents, getAvailableProviders, setAgentLlmProvider, fla"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 266,
+      "text": "getPreinstalledAgents().then(setPreinstalledAgents).catch(() => {});"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 6,
+      "text": "listProviderModels, getProviderStatus, saveApiKey, getPreinstalledAgents,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 480,
+      "text": "const agents = await getPreinstalledAgents();"
+    },
+    {
+      "file": "app/src/pages/AppStore.tsx",
+      "line": 3,
+      "text": "getPreinstalledAgents,"
+    },
+    {
+      "file": "app/src/pages/AppStore.tsx",
+      "line": 81,
+      "text": "getPreinstalledAgents(),"
+    }
+  ],
+  "marketplaceInstall": [
+    {
+      "file": "app/src/pages/AppStore.tsx",
+      "line": 5,
+      "text": "marketplaceInstall,"
+    },
+    {
+      "file": "app/src/pages/AppStore.tsx",
+      "line": 174,
+      "text": "await marketplaceInstall(packageId);"
+    }
+  ],
+  "marketplaceInfo": [],
+  "marketplacePublish": [
+    {
+      "file": "app/src/pages/DeveloperPortal.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, marketplacePublish, marketplaceMyAgents } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/DeveloperPortal.tsx",
+      "line": 147,
+      "text": "const result = await marketplacePublish(bundleData);"
+    }
+  ],
+  "marketplaceMyAgents": [
+    {
+      "file": "app/src/pages/DeveloperPortal.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, marketplacePublish, marketplaceMyAgents } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/DeveloperPortal.tsx",
+      "line": 60,
+      "text": "const agents = await marketplaceMyAgents(author);"
+    }
+  ],
+  "navigateTo": [
+    {
+      "file": "app/src/pages/AgentBrowser.tsx",
+      "line": 6,
+      "text": "import { hasDesktopRuntime, navigateTo } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/AgentBrowser.tsx",
+      "line": 99,
+      "text": "const result = await navigateTo(target);"
+    }
+  ],
+  "getBrowserHistory": [],
+  "getAgentActivity": [],
+  "startResearch": [],
+  "researchAgentAction": [],
+  "completeResearch": [],
+  "getResearchSession": [],
+  "listResearchSessions": [],
+  "startBuild": [],
+  "buildAppendCode": [],
+  "buildAddMessage": [],
+  "completeBuild": [],
+  "getBuildSession": [],
+  "getBuildCode": [],
+  "getBuildPreview": [],
+  "startLearning": [],
+  "getKnowledgeBase": [],
+  "getLearningSession": [],
+  "policyList": [
+    {
+      "file": "app/src/pages/PolicyManagement.tsx",
+      "line": 3,
+      "text": "policyList,"
+    },
+    {
+      "file": "app/src/pages/PolicyManagement.tsx",
+      "line": 46,
+      "text": "const [p, c] = await Promise.all([policyList(), policyDetectConflicts()]);"
+    }
+  ],
+  "policyValidate": [
+    {
+      "file": "app/src/pages/PolicyManagement.tsx",
+      "line": 4,
+      "text": "policyValidate,"
+    },
+    {
+      "file": "app/src/pages/PolicyManagement.tsx",
+      "line": 64,
+      "text": "const result = await policyValidate(toml);"
+    }
+  ],
+  "policyTest": [
+    {
+      "file": "app/src/pages/PolicyManagement.tsx",
+      "line": 5,
+      "text": "policyTest,"
+    },
+    {
+      "file": "app/src/pages/PolicyManagement.tsx",
+      "line": 77,
+      "text": "const result = await policyTest(toml, testPrincipal, testAction, testResource);"
+    }
+  ],
+  "policyDetectConflicts": [
+    {
+      "file": "app/src/pages/PolicyManagement.tsx",
+      "line": 6,
+      "text": "policyDetectConflicts,"
+    },
+    {
+      "file": "app/src/pages/PolicyManagement.tsx",
+      "line": 46,
+      "text": "const [p, c] = await Promise.all([policyList(), policyDetectConflicts()]);"
+    }
+  ],
+  "learningAgentAction": [],
+  "getLlmRecommendations": [
+    {
+      "file": "app/src/pages/Settings.tsx",
+      "line": 5,
+      "text": "import { checkLlmStatus, getLlmRecommendations, testLlmConnection, hasDesktopRuntime, listTools, executeTool } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Settings.tsx",
+      "line": 235,
+      "text": "getLlmRecommendations().then((recs) => {"
+    }
+  ],
+  "setAgentLlmProvider": [
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 9,
+      "text": "import { getPreinstalledAgents, hasDesktopRuntime, listProviderModels, executeAgentGoal, approveConsentRequest, denyConsentRequest, listPendingConsents, getAvailableProviders, setAgentLlmProvider, fla"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 869,
+      "text": "setAgentLlmProvider(selectedAgentId, \"auto\", true, 0, 0).catch(() => {});"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 909,
+      "text": "setAgentLlmProvider(selectedAgentId, `${p.id}${modelPart}`, p.id === \"flash\" || p.id === \"ollama\", 0, 0).catch(() => {});"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 972,
+      "text": "setAgentLlmProvider(selectedAgentId, `${selectedProvider}/${model}`, selectedProvider === \"flash\" || selectedProvider === \"ollama\", 0, 0).catch(() => {});"
+    },
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 19,
+      "text": "setAgentLlmProvider as setAgentLlmProviderApi,"
+    },
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 120,
+      "text": "const [agentLlmProvider, setAgentLlmProvider] = useState(\"\");"
+    },
+    {
+      "file": "app/src/pages/PermissionDashboard.tsx",
+      "line": 498,
+      "text": "setAgentLlmProvider(e.target.value);"
+    }
+  ],
+  "getProviderUsageStats": [],
+  "testLlmConnection": [
+    {
+      "file": "app/src/pages/Settings.tsx",
+      "line": 5,
+      "text": "import { checkLlmStatus, getLlmRecommendations, testLlmConnection, hasDesktopRuntime, listTools, executeTool } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Settings.tsx",
+      "line": 271,
+      "text": "testLlmConnection(providerName).then((result) => {"
+    }
+  ],
+  "indexDocument": [
+    {
+      "file": "app/src/pages/Documents.tsx",
+      "line": 3,
+      "text": "indexDocument,"
+    },
+    {
+      "file": "app/src/pages/Documents.tsx",
+      "line": 204,
+      "text": "await indexDocument(filePath);"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 290,
+      "text": "import { indexDocument } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 291,
+      "text": "const result = await indexDocument(\"/path/to/document.md\");`,"
+    }
+  ],
+  "searchDocuments": [
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 298,
+      "text": "import { searchDocuments } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 299,
+      "text": "const results = await searchDocuments(\"how does fuel work?\", 5);"
+    }
+  ],
+  "chatWithDocuments": [
+    {
+      "file": "app/src/pages/Documents.tsx",
+      "line": 4,
+      "text": "chatWithDocuments,"
+    },
+    {
+      "file": "app/src/pages/Documents.tsx",
+      "line": 237,
+      "text": "const raw = await chatWithDocuments(q);"
+    }
+  ],
+  "listIndexedDocuments": [
+    {
+      "file": "app/src/pages/Documents.tsx",
+      "line": 5,
+      "text": "listIndexedDocuments,"
+    },
+    {
+      "file": "app/src/pages/Documents.tsx",
+      "line": 137,
+      "text": "const raw = await listIndexedDocuments();"
+    }
+  ],
+  "removeIndexedDocument": [
+    {
+      "file": "app/src/pages/Documents.tsx",
+      "line": 6,
+      "text": "removeIndexedDocument,"
+    },
+    {
+      "file": "app/src/pages/Documents.tsx",
+      "line": 220,
+      "text": "await removeIndexedDocument(docPath);"
+    }
+  ],
+  "getDocumentGovernance": [
+    {
+      "file": "app/src/pages/Documents.tsx",
+      "line": 7,
+      "text": "getDocumentGovernance,"
+    },
+    {
+      "file": "app/src/pages/Documents.tsx",
+      "line": 159,
+      "text": "getDocumentGovernance(docPath),"
+    }
+  ],
+  "getSemanticMap": [
+    {
+      "file": "app/src/pages/Documents.tsx",
+      "line": 8,
+      "text": "getSemanticMap,"
+    },
+    {
+      "file": "app/src/pages/Documents.tsx",
+      "line": 147,
+      "text": "const raw = await getSemanticMap();"
+    }
+  ],
+  "getDocumentAccessLog": [
+    {
+      "file": "app/src/pages/Documents.tsx",
+      "line": 9,
+      "text": "getDocumentAccessLog,"
+    },
+    {
+      "file": "app/src/pages/Documents.tsx",
+      "line": 160,
+      "text": "getDocumentAccessLog(docPath),"
+    }
+  ],
+  "searchModels": [
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 332,
+      "text": "import { searchModels, checkModelCompatibility } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 335,
+      "text": "const models = await searchModels(\"codellama\", 10);"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 3,
+      "text": "searchModels,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 398,
+      "text": "const raw = await searchModels(query, 20);"
+    }
+  ],
+  "getModelInfo": [
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 4,
+      "text": "getModelInfo,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 439,
+      "text": "const raw = await getModelInfo(model.model_id);"
+    }
+  ],
+  "checkModelCompatibility": [
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 332,
+      "text": "import { searchModels, checkModelCompatibility } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 338,
+      "text": "const compat = await checkModelCompatibility(4_000_000_000);`,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 5,
+      "text": "checkModelCompatibility,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 445,
+      "text": "checkModelCompatibility(file.size_bytes)"
+    }
+  ],
+  "downloadModel": [
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 6,
+      "text": "downloadModel,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 477,
+      "text": "await downloadModel(modelId, filename);"
+    }
+  ],
+  "listLocalModels": [
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 7,
+      "text": "listLocalModels,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 201,
+      "text": "listLocalModels(),"
+    }
+  ],
+  "deleteLocalModel": [
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 9,
+      "text": "deleteLocalModel,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 496,
+      "text": "const raw = await deleteLocalModel(modelId);"
+    }
+  ],
+  "getSystemSpecs": [
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 10,
+      "text": "getSystemSpecs,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 220,
+      "text": "const raw = await getSystemSpecs();"
+    }
+  ],
+  "getLiveSystemMetrics": [
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 4,
+      "text": "getLiveSystemMetrics,"
+    },
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 67,
+      "text": "getLiveSystemMetrics(),"
+    },
+    {
+      "file": "app/src/pages/SystemMonitor.tsx",
+      "line": 7,
+      "text": "import { getLiveSystemMetrics, listAgents } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/SystemMonitor.tsx",
+      "line": 149,
+      "text": "const raw = await getLiveSystemMetrics();"
+    }
+  ],
+  "timeMachineListCheckpoints": [
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 3,
+      "text": "timeMachineListCheckpoints,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 206,
+      "text": "const raw = await timeMachineListCheckpoints();"
+    }
+  ],
+  "timeMachineGetCheckpoint": [
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 4,
+      "text": "timeMachineGetCheckpoint,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 217,
+      "text": "timeMachineGetCheckpoint(id),"
+    }
+  ],
+  "timeMachineCreateCheckpoint": [
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 424,
+      "text": "import { timeMachineCreateCheckpoint } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 425,
+      "text": "const checkpoint = await timeMachineCreateCheckpoint(\"before-deploy\");"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 5,
+      "text": "timeMachineCreateCheckpoint,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 373,
+      "text": "await timeMachineCreateCheckpoint(label);"
+    }
+  ],
+  "timeMachineUndo": [
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 433,
+      "text": "import { timeMachineUndo, timeMachineRedo } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 434,
+      "text": "await timeMachineUndo();   // revert last change"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 6,
+      "text": "timeMachineUndo,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 269,
+      "text": "const raw = await timeMachineUndo();"
+    }
+  ],
+  "timeMachineUndoCheckpoint": [
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 7,
+      "text": "timeMachineUndoCheckpoint,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 310,
+      "text": "const raw = await timeMachineUndoCheckpoint(id);"
+    }
+  ],
+  "timeMachineRedo": [
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 433,
+      "text": "import { timeMachineUndo, timeMachineRedo } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 435,
+      "text": "await timeMachineRedo();   // re-apply last undo`,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 8,
+      "text": "timeMachineRedo,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 284,
+      "text": "const raw = await timeMachineRedo();"
+    }
+  ],
+  "timeMachineGetDiff": [
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 440,
+      "text": "code: `import { timeMachineGetDiff } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 441,
+      "text": "const diff = await timeMachineGetDiff(checkpointId);"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 9,
+      "text": "timeMachineGetDiff,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 218,
+      "text": "timeMachineGetDiff(id),"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 299,
+      "text": "const diffRaw = await timeMachineGetDiff(id);"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 342,
+      "text": "const diffRaw = await timeMachineGetDiff(checkpoint.id);"
+    }
+  ],
+  "timeMachineWhatIf": [
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 10,
+      "text": "timeMachineWhatIf,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 354,
+      "text": "const raw = await timeMachineWhatIf(checkpoint.id, variableKey, variableValue);"
+    }
+  ],
+  "voiceStartListening": [
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 15,
+      "text": "voiceStartListening,"
+    },
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 555,
+      "text": "await voiceStartListening();"
+    }
+  ],
+  "voiceStopListening": [
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 16,
+      "text": "voiceStopListening,"
+    },
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 581,
+      "text": "await voiceStopListening();"
+    }
+  ],
+  "voiceGetStatus": [
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 13,
+      "text": "voiceGetStatus,"
+    },
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 470,
+      "text": "const raw = await voiceGetStatus();"
+    }
+  ],
+  "voiceTranscribe": [
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 17,
+      "text": "voiceTranscribe,"
+    },
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 596,
+      "text": "const transcriptionRaw = await voiceTranscribe(encodePcm16Base64(resampled));"
+    }
+  ],
+  "voiceLoadWhisperModel": [
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 14,
+      "text": "voiceLoadWhisperModel,"
+    },
+    {
+      "file": "app/src/pages/VoiceAssistant.tsx",
+      "line": 642,
+      "text": "voiceLoadWhisperModel(modelPath)"
+    }
+  ],
+  "emailList": [
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, emailList, emailSave, emailDelete, emailStartOauth, emailOauthStatus, emailFetchMessages, emailSendMessage, emailDisconnect } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 70,
+      "text": "const raw = await emailList();"
+    }
+  ],
+  "emailSave": [
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, emailList, emailSave, emailDelete, emailStartOauth, emailOauthStatus, emailFetchMessages, emailSendMessage, emailDisconnect } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 80,
+      "text": "await emailSave(email.id, JSON.stringify(email));"
+    }
+  ],
+  "emailDelete": [
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, emailList, emailSave, emailDelete, emailStartOauth, emailOauthStatus, emailFetchMessages, emailSendMessage, emailDisconnect } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 89,
+      "text": "await emailDelete(id);"
+    }
+  ],
+  "emailStartOauth": [
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, emailList, emailSave, emailDelete, emailStartOauth, emailOauthStatus, emailFetchMessages, emailSendMessage, emailDisconnect } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 285,
+      "text": "const result = await emailStartOauth(provider);"
+    }
+  ],
+  "emailOauthStatus": [
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, emailList, emailSave, emailDelete, emailStartOauth, emailOauthStatus, emailFetchMessages, emailSendMessage, emailDisconnect } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 129,
+      "text": "emailOauthStatus().then(raw => {"
+    }
+  ],
+  "emailFetchMessages": [
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, emailList, emailSave, emailDelete, emailStartOauth, emailOauthStatus, emailFetchMessages, emailSendMessage, emailDisconnect } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 291,
+      "text": "const messagesRaw = await emailFetchMessages(provider, \"inbox\", 0);"
+    }
+  ],
+  "emailSendMessage": [
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, emailList, emailSave, emailDelete, emailStartOauth, emailOauthStatus, emailFetchMessages, emailSendMessage, emailDisconnect } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 237,
+      "text": "await emailSendMessage(connectedProvider, composeTo, composeSubject, composeBody);"
+    },
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 317,
+      "text": "const result = await emailSendMessage(connectedProvider, composeTo, composeSubject, composeBody);"
+    }
+  ],
+  "emailSearchMessages": [],
+  "emailDisconnect": [
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, emailList, emailSave, emailDelete, emailStartOauth, emailOauthStatus, emailFetchMessages, emailSendMessage, emailDisconnect } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/EmailClient.tsx",
+      "line": 306,
+      "text": "await emailDisconnect(connectedProvider);"
+    }
+  ],
+  "messagingConnectPlatform": [
+    {
+      "file": "app/src/pages/Messaging.tsx",
+      "line": 6,
+      "text": "messagingConnectPlatform,"
+    },
+    {
+      "file": "app/src/pages/Messaging.tsx",
+      "line": 187,
+      "text": "const result = await messagingConnectPlatform(platform, token);"
+    }
+  ],
+  "messagingSend": [
+    {
+      "file": "app/src/pages/Messaging.tsx",
+      "line": 7,
+      "text": "messagingSend,"
+    },
+    {
+      "file": "app/src/pages/Messaging.tsx",
+      "line": 202,
+      "text": "await messagingSend(replyPlatform, replyChannel, replyText);"
+    }
+  ],
+  "messagingPollMessages": [
+    {
+      "file": "app/src/pages/Messaging.tsx",
+      "line": 8,
+      "text": "messagingPollMessages,"
+    },
+    {
+      "file": "app/src/pages/Messaging.tsx",
+      "line": 112,
+      "text": "const raw = await messagingPollMessages(platform, \"general\", lastPollId.current);"
+    }
+  ],
+  "integrationStartOauth": [
+    {
+      "file": "app/src/pages/Integrations.tsx",
+      "line": 18,
+      "text": "import { integrationsList, integrationTest, integrationConfigure, integrationStartOauth } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Integrations.tsx",
+      "line": 123,
+      "text": "const result = await integrationStartOauth(providerId);"
+    }
+  ],
+  "marketplaceSearchGitlab": [
+    {
+      "file": "app/src/pages/AppStore.tsx",
+      "line": 7,
+      "text": "marketplaceSearchGitlab,"
+    },
+    {
+      "file": "app/src/pages/AppStore.tsx",
+      "line": 143,
+      "text": "const raw = await marketplaceSearchGitlab(query);"
+    }
+  ],
+  "getAgentOutputs": [],
+  "projectList": [
+    {
+      "file": "app/src/pages/ProjectManager.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, projectList, projectSave, projectDelete as projectDeleteApi } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/ProjectManager.tsx",
+      "line": 122,
+      "text": "const raw = await projectList();"
+    }
+  ],
+  "projectGet": [],
+  "projectSave": [
+    {
+      "file": "app/src/pages/ProjectManager.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, projectList, projectSave, projectDelete as projectDeleteApi } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/ProjectManager.tsx",
+      "line": 133,
+      "text": "await projectSave(PROJECT_ID, JSON.stringify({ ...data, savedAt: Date.now() }));"
+    }
+  ],
+  "fileManagerWrite": [
+    {
+      "file": "app/src/pages/DesignStudio.tsx",
+      "line": 7,
+      "text": "fileManagerWrite,"
+    },
+    {
+      "file": "app/src/pages/DesignStudio.tsx",
+      "line": 112,
+      "text": "await fileManagerWrite(path, markup);"
+    },
+    {
+      "file": "app/src/pages/FileManager.tsx",
+      "line": 8,
+      "text": "fileManagerList, fileManagerRead, fileManagerWrite,"
+    },
+    {
+      "file": "app/src/pages/FileManager.tsx",
+      "line": 290,
+      "text": "await fileManagerWrite(fullPath, \"\");"
+    }
+  ],
+  "fileManagerRead": [
+    {
+      "file": "app/src/pages/DesignStudio.tsx",
+      "line": 6,
+      "text": "fileManagerRead,"
+    },
+    {
+      "file": "app/src/pages/DesignStudio.tsx",
+      "line": 95,
+      "text": "const content = await fileManagerRead(path);"
+    },
+    {
+      "file": "app/src/pages/DesignStudio.tsx",
+      "line": 143,
+      "text": "const content = await fileManagerRead(targetPath);"
+    },
+    {
+      "file": "app/src/pages/FileManager.tsx",
+      "line": 8,
+      "text": "fileManagerList, fileManagerRead, fileManagerWrite,"
+    },
+    {
+      "file": "app/src/pages/FileManager.tsx",
+      "line": 190,
+      "text": "const content: string = await fileManagerRead(entry.path);"
+    }
+  ],
+  "fileManagerCreateDir": [
+    {
+      "file": "app/src/pages/DesignStudio.tsx",
+      "line": 4,
+      "text": "fileManagerCreateDir,"
+    },
+    {
+      "file": "app/src/pages/DesignStudio.tsx",
+      "line": 60,
+      "text": "await fileManagerCreateDir(workspace);"
+    },
+    {
+      "file": "app/src/pages/DesignStudio.tsx",
+      "line": 110,
+      "text": "await fileManagerCreateDir(workspace);"
+    },
+    {
+      "file": "app/src/pages/DesignStudio.tsx",
+      "line": 131,
+      "text": "await fileManagerCreateDir(workspace);"
+    },
+    {
+      "file": "app/src/pages/FileManager.tsx",
+      "line": 9,
+      "text": "fileManagerCreateDir, fileManagerDelete, fileManagerRename, fileManagerHome,"
+    },
+    {
+      "file": "app/src/pages/FileManager.tsx",
+      "line": 288,
+      "text": "await fileManagerCreateDir(fullPath);"
+    },
+    {
+      "file": "app/src/pages/MediaStudio.tsx",
+      "line": 8,
+      "text": "fileManagerCreateDir,"
+    },
+    {
+      "file": "app/src/pages/MediaStudio.tsx",
+      "line": 60,
+      "text": "await fileManagerCreateDir(workspace);"
+    },
+    {
+      "file": "app/src/pages/MediaStudio.tsx",
+      "line": 124,
+      "text": "await fileManagerCreateDir(workspace);"
+    }
+  ],
+  "projectDelete": [
+    {
+      "file": "app/src/pages/ProjectManager.tsx",
+      "line": 2,
+      "text": "import { hasDesktopRuntime, projectList, projectSave, projectDelete as projectDeleteApi } from \"../api/backend\";"
+    }
+  ],
+  "factoryCreateProject": [
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 4,
+      "text": "factoryCreateProject,"
+    },
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 243,
+      "text": "const raw = await factoryCreateProject(newName, newLang, newSourceDir);"
+    }
+  ],
+  "factoryBuildProject": [
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 5,
+      "text": "factoryBuildProject,"
+    },
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 260,
+      "text": "const raw = await factoryBuildProject(projectId);"
+    }
+  ],
+  "factoryTestProject": [
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 6,
+      "text": "factoryTestProject,"
+    },
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 285,
+      "text": "const raw = await factoryTestProject(projectId);"
+    }
+  ],
+  "factoryRunPipeline": [
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 7,
+      "text": "factoryRunPipeline,"
+    },
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 309,
+      "text": "const raw = await factoryRunPipeline(projectId);"
+    }
+  ],
+  "factoryListProjects": [
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 8,
+      "text": "factoryListProjects,"
+    },
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 159,
+      "text": "const raw = await factoryListProjects();"
+    }
+  ],
+  "factoryGetBuildHistory": [
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 9,
+      "text": "factoryGetBuildHistory,"
+    },
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 175,
+      "text": "const raw = await factoryGetBuildHistory(projectId);"
+    }
+  ],
+  "assignAgentGoal": [],
+  "executeAgentGoal": [
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 9,
+      "text": "import { getPreinstalledAgents, hasDesktopRuntime, listProviderModels, executeAgentGoal, approveConsentRequest, denyConsentRequest, listPendingConsents, getAvailableProviders, setAgentLlmProvider, fla"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 181,
+      "text": "await executeAgentGoal(selectedAgentId, goalInput.trim(), 5);"
+    },
+    {
+      "file": "app/src/pages/DesignStudio.tsx",
+      "line": 3,
+      "text": "executeAgentGoal,"
+    },
+    {
+      "file": "app/src/pages/DesignStudio.tsx",
+      "line": 133,
+      "text": "const nextGoalId = await executeAgentGoal("
+    },
+    {
+      "file": "app/src/pages/MediaStudio.tsx",
+      "line": 7,
+      "text": "executeAgentGoal,"
+    },
+    {
+      "file": "app/src/pages/MediaStudio.tsx",
+      "line": 126,
+      "text": "const goalId = await executeAgentGoal("
+    }
+  ],
+  "stopAgentGoal": [],
+  "startAutonomousLoop": [],
+  "stopAutonomousLoop": [],
+  "getAgentCognitiveStatus": [],
+  "getAgentTaskHistory": [
+    {
+      "file": "app/src/pages/Workflows.tsx",
+      "line": 21,
+      "text": "getAgentTaskHistory,"
+    },
+    {
+      "file": "app/src/pages/Workflows.tsx",
+      "line": 256,
+      "text": "const histories = await Promise.all(registered.slice(0, 8).map((a) => getAgentTaskHistory(a.id, 8)));"
+    }
+  ],
+  "getAgentMemories": [],
+  "agentMemoryRemember": [],
+  "agentMemoryRecall": [],
+  "agentMemoryRecallByType": [],
+  "agentMemoryForget": [],
+  "agentMemoryGetStats": [],
+  "agentMemorySave": [],
+  "agentMemoryClear": [],
+  "setDefaultAgent": [
+    {
+      "file": "app/src/pages/Messaging.tsx",
+      "line": 10,
+      "text": "setDefaultAgent,"
+    },
+    {
+      "file": "app/src/pages/Messaging.tsx",
+      "line": 215,
+      "text": "await setDefaultAgent(\"messaging-default\", agentId);"
+    }
+  ],
+  "getSelfEvolutionMetrics": [],
+  "getSelfEvolutionStrategies": [],
+  "triggerCrossAgentLearning": [],
+  "startHivemind": [
+    {
+      "file": "app/src/pages/Workflows.tsx",
+      "line": 25,
+      "text": "startHivemind,"
+    },
+    {
+      "file": "app/src/pages/Workflows.tsx",
+      "line": 323,
+      "text": "const session = await startHivemind(`Execute workflow: ${workflowDesc}`, agentIds);"
+    },
+    {
+      "file": "app/src/pages/Workflows.tsx",
+      "line": 334,
+      "text": "const session = await startHivemind(goal, selectedAgentIds);"
+    }
+  ],
+  "getHivemindStatus": [],
+  "cancelHivemind": [],
+  "approveConsentRequest": [
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 9,
+      "text": "import { getPreinstalledAgents, hasDesktopRuntime, listProviderModels, executeAgentGoal, approveConsentRequest, denyConsentRequest, listPendingConsents, getAvailableProviders, setAgentLlmProvider, fla"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 1175,
+      "text": "await approveConsentRequest(consent.consent_id, \"user\");"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 1195,
+      "text": "await approveConsentRequest(c.consent_id, \"user\");"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 8,
+      "text": "approveConsentRequest, denyConsentRequest,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 655,
+      "text": "await approveConsentRequest(consentId, \"user\");"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 14,
+      "text": "approveConsentRequest,"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 502,
+      "text": "await approveConsentRequest(consentId, \"user\");"
+    }
+  ],
+  "denyConsentRequest": [
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 9,
+      "text": "import { getPreinstalledAgents, hasDesktopRuntime, listProviderModels, executeAgentGoal, approveConsentRequest, denyConsentRequest, listPendingConsents, getAvailableProviders, setAgentLlmProvider, fla"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 1214,
+      "text": "await denyConsentRequest(consent.consent_id, \"user\", \"User denied\");"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 8,
+      "text": "approveConsentRequest, denyConsentRequest,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 657,
+      "text": "await denyConsentRequest(consentId, \"user\", \"User denied from chat\");"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 17,
+      "text": "denyConsentRequest,"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 511,
+      "text": "await denyConsentRequest(consentId, \"user\", reason);"
+    }
+  ],
+  "setAgentReviewMode": [
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 9,
+      "text": "import { getPreinstalledAgents, hasDesktopRuntime, listProviderModels, executeAgentGoal, approveConsentRequest, denyConsentRequest, listPendingConsents, getAvailableProviders, setAgentLlmProvider, fla"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 1324,
+      "text": "setAgentReviewMode(selectedAgentId, true).catch(() => {});"
+    }
+  ],
+  "batchApproveConsents": [
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 15,
+      "text": "batchApproveConsents,"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 520,
+      "text": "await batchApproveConsents(goalId, \"user\");"
+    }
+  ],
+  "reviewConsentBatch": [
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 22,
+      "text": "reviewConsentBatch,"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 538,
+      "text": "await reviewConsentBatch(consentId, \"user\");"
+    }
+  ],
+  "batchDenyConsents": [
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 16,
+      "text": "batchDenyConsents,"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 529,
+      "text": "await batchDenyConsents(goalId, \"user\", reason);"
+    }
+  ],
+  "listPendingConsents": [
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 9,
+      "text": "import { getPreinstalledAgents, hasDesktopRuntime, listProviderModels, executeAgentGoal, approveConsentRequest, denyConsentRequest, listPendingConsents, getAvailableProviders, setAgentLlmProvider, fla"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 250,
+      "text": "listPendingConsents().then(consents => {"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 21,
+      "text": "listPendingConsents,"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 415,
+      "text": "listPendingConsents(),"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 437,
+      "text": "listPendingConsents()"
+    }
+  ],
+  "getConsentHistory": [
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 18,
+      "text": "getConsentHistory,"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 416,
+      "text": "getConsentHistory(50),"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 479,
+      "text": "getConsentHistory(20)"
+    }
+  ],
+  "hitlStats": [
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 20,
+      "text": "hitlStats,"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 417,
+      "text": "hitlStats().catch(() => null),"
+    },
+    {
+      "file": "app/src/pages/ApprovalCenter.tsx",
+      "line": 440,
+      "text": "hitlStats()"
+    }
+  ],
+  "createSimulation": [
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 4,
+      "text": "createSimulation,"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 289,
+      "text": "const id = await createSimulation("
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 415,
+      "text": "const id = await createSimulation("
+    }
+  ],
+  "startSimulation": [
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 12,
+      "text": "startSimulation,"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 430,
+      "text": "await startSimulation(id);"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 448,
+      "text": "await startSimulation(worldId);"
+    }
+  ],
+  "pauseSimulation": [
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 10,
+      "text": "pauseSimulation,"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 465,
+      "text": "await pauseSimulation(worldId);"
+    }
+  ],
+  "injectSimulationVariable": [
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 8,
+      "text": "injectSimulationVariable,"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 481,
+      "text": "await injectSimulationVariable(worldId, injectKey.trim(), injectValue.trim());"
+    }
+  ],
+  "getSimulationStatus": [
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 6,
+      "text": "getSimulationStatus,"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 249,
+      "text": "const status = await getSimulationStatus(targetWorldId);"
+    }
+  ],
+  "getSimulationReport": [
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 5,
+      "text": "getSimulationReport,"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 258,
+      "text": "setReport(await getSimulationReport(targetWorldId));"
+    }
+  ],
+  "chatWithSimulationPersona": [
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 3,
+      "text": "chatWithSimulationPersona,"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 513,
+      "text": "const reply = await chatWithSimulationPersona(worldId, selectedPersonaId, message);"
+    }
+  ],
+  "listSimulations": [
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 9,
+      "text": "listSimulations,"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 238,
+      "text": "const rows = await listSimulations();"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 286,
+      "text": "const rows = await listSimulations();"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 297,
+      "text": "const refreshed = await listSimulations();"
+    }
+  ],
+  "runParallelSimulations": [
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 11,
+      "text": "runParallelSimulations,"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation.tsx",
+      "line": 496,
+      "text": "const reports = await runParallelSimulations(seedText, variantCount);"
+    }
+  ],
+  "getOsFitness": [],
+  "getFitnessHistory": [],
+  "getRoutingStats": [],
+  "getUiAdaptations": [],
+  "getUserProfile": [
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 6,
+      "text": "getUserProfile,"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 115,
+      "text": "const raw = await getUserProfile();"
+    }
+  ],
+  "recordPageVisit": [],
+  "recordFeatureUse": [],
+  "overrideSecurityBlock": [],
+  "getOsImprovementLog": [],
+  "getMorningOsBriefing": [],
+  "recordRoutingOutcome": [],
+  "recordOperationTiming": [],
+  "getPerformanceReport": [],
+  "getSecurityEvolutionReport": [],
+  "recordKnowledgeInteraction": [],
+  "getOsDreamStatus": [],
+  "setSelfImproveEnabled": [],
+  "screenshotAnalyze": [],
+  "screenshotGenerateSpec": [],
+  "voiceProjectStart": [],
+  "voiceProjectStop": [],
+  "voiceProjectAddChunk": [],
+  "voiceProjectGetStatus": [],
+  "voiceProjectGetPrompt": [],
+  "voiceProjectUpdateIntent": [],
+  "stressGeneratePersonas": [],
+  "stressGenerateActions": [],
+  "stressEvaluateReport": [],
+  "deployGenerateDockerfile": [],
+  "deployValidateConfig": [],
+  "deployGetCommands": [],
+  "evolverRegisterApp": [],
+  "evolverUnregisterApp": [],
+  "evolverListApps": [],
+  "evolverDetectIssues": [],
+  "freelanceGetStatus": [],
+  "freelanceStartScanning": [],
+  "freelanceStopScanning": [],
+  "freelanceEvaluateJob": [],
+  "freelanceGetRevenue": [],
+  "startConversationalBuild": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 9,
+      "text": "startConversationalBuild, builderRespond, remixProject, analyzeProblem,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 989,
+      "text": "raw = await startConversationalBuild(text);"
+    }
+  ],
+  "builderRespond": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 9,
+      "text": "startConversationalBuild, builderRespond, remixProject, analyzeProblem,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 1011,
+      "text": "raw = await builderRespond(text);"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 1017,
+      "text": "raw = await builderRespond(text);"
+    }
+  ],
+  "getLivePreview": [],
+  "remixProject": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 9,
+      "text": "startConversationalBuild, builderRespond, remixProject, analyzeProblem,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 1003,
+      "text": "raw = await remixProject(builderProjectId, text);"
+    }
+  ],
+  "analyzeProblem": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 9,
+      "text": "startConversationalBuild, builderRespond, remixProject, analyzeProblem,"
+    }
+  ],
+  "publishToMarketplace": [],
+  "installFromMarketplace": [],
+  "startTeachMode": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 10,
+      "text": "startTeachMode, teachModeRespond,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 995,
+      "text": "const teachRaw = await startTeachMode(resp.project_id);"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 8,
+      "text": "startTeachMode,"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 631,
+      "text": "const response = await startTeachMode(projectId);"
+    }
+  ],
+  "teachModeRespond": [
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 10,
+      "text": "startTeachMode, teachModeRespond,"
+    },
+    {
+      "file": "app/src/pages/AiChatHub.tsx",
+      "line": 982,
+      "text": "raw = await teachModeRespond(builderProjectId, text);"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 9,
+      "text": "teachModeRespond,"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 646,
+      "text": "const response = await teachModeRespond(selectedBuild, input.trim());"
+    }
+  ],
+  "airgapCreateBundle": [
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 11,
+      "text": "airgapCreateBundle,"
+    },
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 199,
+      "text": "const raw = await airgapCreateBundle("
+    }
+  ],
+  "airgapGetSystemInfo": [
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 12,
+      "text": "airgapGetSystemInfo,"
+    },
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 190,
+      "text": "airgapGetSystemInfo().then(raw => {"
+    }
+  ],
+  "airgapInstallBundle": [
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 13,
+      "text": "airgapInstallBundle,"
+    },
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 229,
+      "text": "const raw = await airgapInstallBundle(installBundlePath, installDir);"
+    }
+  ],
+  "airgapValidateBundle": [
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 14,
+      "text": "airgapValidateBundle,"
+    },
+    {
+      "file": "app/src/pages/DeployPipeline.tsx",
+      "line": 216,
+      "text": "const raw = await airgapValidateBundle(validatePath);"
+    }
+  ],
+  "civGetEconomyStatus": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 5,
+      "text": "civGetEconomyStatus,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 1080,
+      "text": "const [stats, econ] = await Promise.allSettled([economyGetStats(), civGetEconomyStatus()]);"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 7,
+      "text": "civGetEconomyStatus,"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 151,
+      "text": "civGetEconomyStatus().then((r) => parse<EconomyStatus>(r)),"
+    }
+  ],
+  "civGetGovernanceLog": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 6,
+      "text": "civGetGovernanceLog,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 1027,
+      "text": "const result = await civGetGovernanceLog(50);"
+    }
+  ],
+  "civGetParliamentStatus": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 7,
+      "text": "civGetParliamentStatus,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 335,
+      "text": "const statusRaw = await civGetParliamentStatus();"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 374,
+      "text": "const ps = await civGetParliamentStatus();"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 968,
+      "text": "const result = await civGetParliamentStatus();"
+    }
+  ],
+  "civGetRoles": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 8,
+      "text": "civGetRoles,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 378,
+      "text": "const rs = await civGetRoles();"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 1000,
+      "text": "const result = await civGetRoles();"
+    }
+  ],
+  "civProposeRule": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 9,
+      "text": "civProposeRule,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 362,
+      "text": "await civProposeRule(\"system\", `Governance model: ${govType} \u2014 all agents must operate within declared fuel budgets`);"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 365,
+      "text": "await civProposeRule(\"system\", \"Agent actions require audit trail entries\");"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 641,
+      "text": "const result = await civProposeRule(proposeAgent, proposeText.trim());"
+    }
+  ],
+  "civResolveDispute": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 10,
+      "text": "civResolveDispute,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 657,
+      "text": "const result = await civResolveDispute(disputeAgentA, disputeAgentB, disputeIssue.trim());"
+    }
+  ],
+  "cogfsGetContext": [
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 4,
+      "text": "cogfsGetContext,"
+    },
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 251,
+      "text": "const result = await cogfsGetContext(contextTopic.trim());"
+    }
+  ],
+  "cogfsGetEntities": [
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 5,
+      "text": "cogfsGetEntities as cogfsGetEntitiesApi,"
+    }
+  ],
+  "cogfsGetGraph": [
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 6,
+      "text": "cogfsGetGraph as cogfsGetGraphApi,"
+    }
+  ],
+  "economyCreateWallet": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 13,
+      "text": "economyCreateWallet,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 368,
+      "text": "await economyCreateWallet(\"treasury\");"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 550,
+      "text": "await handleAction(\"create-wallet\", () => economyCreateWallet(walletAgent), \"Wallet created\");"
+    }
+  ],
+  "economyGetWallet": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 14,
+      "text": "economyGetWallet,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 534,
+      "text": "economyGetWallet(walletAgent),"
+    }
+  ],
+  "economyEarn": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 15,
+      "text": "economyEarn,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 371,
+      "text": "await economyEarn(\"treasury\", 10000, \"Initial treasury funding\");"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 556,
+      "text": "await handleAction(\"earn\", () => economyEarn(walletAgent, Number(earnAmount), earnDesc || \"Manual earn\"), \"Earned\");"
+    }
+  ],
+  "economySpend": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 16,
+      "text": "economySpend,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 564,
+      "text": "await handleAction(\"spend\", () => economySpend(walletAgent, Number(spendAmount), spendType, spendDesc || \"Manual spend\"), \"Spent\");"
+    }
+  ],
+  "economyTransfer": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 17,
+      "text": "economyTransfer,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 572,
+      "text": "await handleAction(\"transfer\", () => economyTransfer(walletAgent, transferTo, Number(transferAmount), transferDesc || \"Transfer\"), \"Transferred\");"
+    }
+  ],
+  "economyFreezeWallet": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 18,
+      "text": "economyFreezeWallet,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 580,
+      "text": "await handleAction(\"freeze-wallet\", () => economyFreezeWallet(walletAgent), \"Wallet frozen\");"
+    }
+  ],
+  "economyGetHistory": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 19,
+      "text": "economyGetHistory,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 535,
+      "text": "economyGetHistory(walletAgent),"
+    }
+  ],
+  "economyGetStats": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 20,
+      "text": "economyGetStats,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 397,
+      "text": "const stats = await economyGetStats();"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 1080,
+      "text": "const [stats, econ] = await Promise.allSettled([economyGetStats(), civGetEconomyStatus()]);"
+    }
+  ],
+  "economyCreateContract": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 21,
+      "text": "economyCreateContract,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 603,
+      "text": "() => economyCreateContract(contractAgent, contractClient, contractDesc, contractCriteria || \"{}\", Number(contractReward) || 0, Number(contractPenalty) || 0, deadline),"
+    }
+  ],
+  "economyCompleteContract": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 22,
+      "text": "economyCompleteContract,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 617,
+      "text": "() => economyCompleteContract(completeContractId, completeSuccess, completeEvidence || undefined),"
+    }
+  ],
+  "economyListContracts": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 23,
+      "text": "economyListContracts,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 590,
+      "text": "const result = await economyListContracts(contractAgent);"
+    }
+  ],
+  "economyDisputeContract": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 24,
+      "text": "economyDisputeContract,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 627,
+      "text": "() => economyDisputeContract(disputeContractId, disputeContractReason),"
+    }
+  ],
+  "economyAgentPerformance": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 25,
+      "text": "economyAgentPerformance,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 536,
+      "text": "economyAgentPerformance(walletAgent),"
+    }
+  ],
+  "evolutionGetStatus": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 14,
+      "text": "evolutionGetStatus,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 301,
+      "text": "evolutionGetStatus()"
+    }
+  ],
+  "evolutionEvolveOnce": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 15,
+      "text": "evolutionEvolveOnce,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 312,
+      "text": "const r = await evolutionEvolveOnce(evoSelectedAgent);"
+    }
+  ],
+  "evolutionGetHistory": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 16,
+      "text": "evolutionGetHistory,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 322,
+      "text": "const r = await evolutionGetHistory(evoSelectedAgent);"
+    }
+  ],
+  "evolutionGetActiveStrategy": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 17,
+      "text": "evolutionGetActiveStrategy,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 331,
+      "text": "const r = await evolutionGetActiveStrategy(evoSelectedAgent);"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 344,
+      "text": "const r = await evolutionGetActiveStrategy(evoSelectedAgent);"
+    }
+  ],
+  "evolutionRegisterStrategy": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 18,
+      "text": "evolutionRegisterStrategy,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 341,
+      "text": "await evolutionRegisterStrategy(evoSelectedAgent, stratName, stratParams);"
+    }
+  ],
+  "evolutionRollback": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 19,
+      "text": "evolutionRollback,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 355,
+      "text": "const r = await evolutionRollback(evoSelectedAgent);"
+    }
+  ],
+  "evolvePopulation": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 20,
+      "text": "evolvePopulation,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 367,
+      "text": "const r = await evolvePopulation(ids, evoPopTask, evoPopGens);"
+    }
+  ],
+  "breedAgents": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 4,
+      "text": "breedAgents,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 244,
+      "text": "const raw = await breedAgents(selectedA, selectedB);"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 478,
+      "text": "const r = await breedAgents(gtBreedA, gtBreedB);"
+    }
+  ],
+  "getAgentGenome": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 5,
+      "text": "getAgentGenome,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 227,
+      "text": "const raw = await getAgentGenome(agentId);"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 456,
+      "text": "const r = await getAgentGenome(gtGenomeAgent);"
+    }
+  ],
+  "getAgentLineage": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 6,
+      "text": "getAgentLineage,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 283,
+      "text": "const raw = await getAgentLineage(selectedA);"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 467,
+      "text": "const r = await getAgentLineage(gtLineageAgent);"
+    }
+  ],
+  "generateAllGenomes": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 7,
+      "text": "generateAllGenomes,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 489,
+      "text": "const r = await generateAllGenomes();"
+    }
+  ],
+  "genesisAnalyzeGap": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 8,
+      "text": "genesisAnalyzeGap,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 391,
+      "text": "const r = await genesisAnalyzeGap(gapRequest);"
+    }
+  ],
+  "genesisPreviewAgent": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 9,
+      "text": "genesisPreviewAgent,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 402,
+      "text": "const r = await genesisPreviewAgent(previewRequest, previewLlm);"
+    }
+  ],
+  "genesisCreateAgent": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 10,
+      "text": "genesisCreateAgent,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 413,
+      "text": "const r = await genesisCreateAgent(createSpec, createPrompt);"
+    }
+  ],
+  "genesisDeleteAgent": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 11,
+      "text": "genesisDeleteAgent,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 427,
+      "text": "await genesisDeleteAgent(deleteAgentName);"
+    }
+  ],
+  "genesisListGenerated": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 12,
+      "text": "genesisListGenerated,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 380,
+      "text": "genesisListGenerated()"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 416,
+      "text": "const list = await genesisListGenerated();"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 429,
+      "text": "const list = await genesisListGenerated();"
+    }
+  ],
+  "genesisStorePattern": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 13,
+      "text": "genesisStorePattern,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 441,
+      "text": "const r = await genesisStorePattern(patternSpec, caps, patternScore);"
+    }
+  ],
+  "getAgentConsciousness": [
+    {
+      "file": "app/src/pages/ConsciousnessMonitor.tsx",
+      "line": 5,
+      "text": "getAgentConsciousness,"
+    },
+    {
+      "file": "app/src/pages/ConsciousnessMonitor.tsx",
+      "line": 205,
+      "text": "getAgentConsciousness(selectedId).then(r => JSON.parse(r) as ConsciousnessState),"
+    }
+  ],
+  "getConsciousnessHeatmap": [
+    {
+      "file": "app/src/pages/ConsciousnessMonitor.tsx",
+      "line": 6,
+      "text": "getConsciousnessHeatmap,"
+    },
+    {
+      "file": "app/src/pages/ConsciousnessMonitor.tsx",
+      "line": 177,
+      "text": "const raw = await getConsciousnessHeatmap();"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 10,
+      "text": "getConsciousnessHeatmap,"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 154,
+      "text": "getConsciousnessHeatmap().then((r) => parse<ConsciousnessEntry[]>(r)),"
+    }
+  ],
+  "getConsciousnessHistory": [
+    {
+      "file": "app/src/pages/ConsciousnessMonitor.tsx",
+      "line": 7,
+      "text": "getConsciousnessHistory,"
+    },
+    {
+      "file": "app/src/pages/ConsciousnessMonitor.tsx",
+      "line": 206,
+      "text": "getConsciousnessHistory(selectedId, 20).then(r => JSON.parse(r) as ConsciousnessSnapshot[]),"
+    }
+  ],
+  "getUserBehaviorState": [
+    {
+      "file": "app/src/pages/ConsciousnessMonitor.tsx",
+      "line": 8,
+      "text": "getUserBehaviorState,"
+    },
+    {
+      "file": "app/src/pages/ConsciousnessMonitor.tsx",
+      "line": 207,
+      "text": "getUserBehaviorState().then(r => JSON.parse(r) as UserBehavior),"
+    }
+  ],
+  "reportUserKeystroke": [
+    {
+      "file": "app/src/pages/ConsciousnessMonitor.tsx",
+      "line": 9,
+      "text": "reportUserKeystroke,"
+    },
+    {
+      "file": "app/src/pages/ConsciousnessMonitor.tsx",
+      "line": 194,
+      "text": "void reportUserKeystroke(isDeletion, Date.now());"
+    }
+  ],
+  "getActiveLlmProvider": [
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 17,
+      "text": "getActiveLlmProvider,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 257,
+      "text": "const raw = await getActiveLlmProvider();"
+    }
+  ],
+  "getDreamStatus": [
+    {
+      "file": "app/src/pages/DreamForge.tsx",
+      "line": 5,
+      "text": "getDreamStatus as fetchDreamStatus,"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 8,
+      "text": "getDreamStatus,"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 152,
+      "text": "getDreamStatus().then((r) => parse<DreamStatus>(r)),"
+    }
+  ],
+  "getDreamQueue": [
+    {
+      "file": "app/src/pages/DreamForge.tsx",
+      "line": 6,
+      "text": "getDreamQueue as fetchDreamQueue,"
+    }
+  ],
+  "getDreamHistory": [
+    {
+      "file": "app/src/pages/DreamForge.tsx",
+      "line": 7,
+      "text": "getDreamHistory as fetchDreamHistory,"
+    }
+  ],
+  "getMorningBriefing": [
+    {
+      "file": "app/src/pages/DreamForge.tsx",
+      "line": 8,
+      "text": "getMorningBriefing as fetchMorningBriefing,"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 9,
+      "text": "getMorningBriefing,"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 153,
+      "text": "getMorningBriefing().then((r) => parse<DreamBriefing>(r)),"
+    }
+  ],
+  "getTemporalHistory": [
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 11,
+      "text": "getTemporalHistory,"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 155,
+      "text": "getTemporalHistory().then((r) => parse<TemporalStatus>(r)),"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 16,
+      "text": "getTemporalHistory,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 460,
+      "text": "const raw = await getTemporalHistory(50);"
+    },
+    {
+      "file": "app/src/pages/TimelineViewer.tsx",
+      "line": 2,
+      "text": "import { getTemporalHistory, temporalSelectFork } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/TimelineViewer.tsx",
+      "line": 78,
+      "text": "const raw = await getTemporalHistory();"
+    }
+  ],
+  "setTemporalConfig": [
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 17,
+      "text": "setTemporalConfig,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 474,
+      "text": "await setTemporalConfig(temporalMaxForks, temporalEvalStrategy, temporalBudgetTokens);"
+    }
+  ],
+  "getImmuneStatus": [
+    {
+      "file": "app/src/pages/ImmuneDashboard.tsx",
+      "line": 3,
+      "text": "getImmuneStatus as fetchImmuneStatus,"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 5,
+      "text": "getImmuneStatus,"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 149,
+      "text": "getImmuneStatus().then((r) => parse<ImmuneStatus>(r)),"
+    }
+  ],
+  "getImmuneMemory": [
+    {
+      "file": "app/src/pages/ImmuneDashboard.tsx",
+      "line": 4,
+      "text": "getImmuneMemory as fetchImmuneMemory,"
+    }
+  ],
+  "setPrivacyRules": [
+    {
+      "file": "app/src/pages/ImmuneDashboard.tsx",
+      "line": 5,
+      "text": "setPrivacyRules,"
+    },
+    {
+      "file": "app/src/pages/ImmuneDashboard.tsx",
+      "line": 154,
+      "text": "const [privacyRules, setPrivacyRules] = useState<PrivacyRule[]>(["
+    },
+    {
+      "file": "app/src/pages/ImmuneDashboard.tsx",
+      "line": 259,
+      "text": "setPrivacyRules((current) =>"
+    },
+    {
+      "file": "app/src/pages/ImmuneDashboard.tsx",
+      "line": 268,
+      "text": "await setPrivacyRules(privacyRules);"
+    }
+  ],
+  "runAdversarialSession": [
+    {
+      "file": "app/src/pages/ImmuneDashboard.tsx",
+      "line": 6,
+      "text": "runAdversarialSession as fetchAdversarialSession,"
+    }
+  ],
+  "ghostProtocolToggle": [
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 7,
+      "text": "ghostProtocolToggle,"
+    },
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 307,
+      "text": "await ghostProtocolToggle(newEnabled);"
+    }
+  ],
+  "ghostProtocolStatus": [
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 8,
+      "text": "ghostProtocolStatus,"
+    },
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 282,
+      "text": "ghostProtocolStatus(),"
+    }
+  ],
+  "ghostProtocolGetState": [
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 9,
+      "text": "ghostProtocolGetState,"
+    },
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 283,
+      "text": "ghostProtocolGetState(),"
+    }
+  ],
+  "ghostProtocolAddPeer": [
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 10,
+      "text": "ghostProtocolAddPeer,"
+    },
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 322,
+      "text": "await ghostProtocolAddPeer(ghostPeerAddress.trim(), ghostPeerName.trim() || ghostPeerAddress.trim());"
+    }
+  ],
+  "ghostProtocolRemovePeer": [
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 11,
+      "text": "ghostProtocolRemovePeer,"
+    },
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 337,
+      "text": "await ghostProtocolRemovePeer(deviceId);"
+    }
+  ],
+  "ghostProtocolSyncNow": [
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 12,
+      "text": "ghostProtocolSyncNow,"
+    },
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 350,
+      "text": "await ghostProtocolSyncNow();"
+    }
+  ],
+  "identityGetAgentPassport": [
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 3,
+      "text": "identityGetAgentPassport,"
+    },
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 204,
+      "text": "const result = await identityGetAgentPassport(agentId);"
+    }
+  ],
+  "identityExportPassport": [
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 4,
+      "text": "identityExportPassport,"
+    },
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 224,
+      "text": "const exported = await identityExportPassport(selectedAgent);"
+    }
+  ],
+  "identityGenerateProof": [
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 5,
+      "text": "identityGenerateProof,"
+    },
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 242,
+      "text": "const result = await identityGenerateProof(selectedAgent, claim);"
+    }
+  ],
+  "identityVerifyProof": [
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 6,
+      "text": "identityVerifyProof,"
+    },
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 265,
+      "text": "const valid = await identityVerifyProof(parsed);"
+    }
+  ],
+  "mcpHostAddServer": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 8,
+      "text": "mcpHostAddServer,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 122,
+      "text": "await mcpHostAddServer(addName.trim(), addUrl.trim(), addTransport, addAuthToken.trim() || undefined);"
+    }
+  ],
+  "mcpHostRemoveServer": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 9,
+      "text": "mcpHostRemoveServer,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 137,
+      "text": "await mcpHostRemoveServer(serverId);"
+    }
+  ],
+  "mcpHostListServers": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 10,
+      "text": "mcpHostListServers,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 101,
+      "text": "mcpHostListServers(),"
+    }
+  ],
+  "mcpHostConnect": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 11,
+      "text": "mcpHostConnect,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 149,
+      "text": "await mcpHostConnect(serverId);"
+    }
+  ],
+  "mcpHostDisconnect": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 12,
+      "text": "mcpHostDisconnect,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 161,
+      "text": "await mcpHostDisconnect(serverId);"
+    }
+  ],
+  "mcpHostListTools": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 13,
+      "text": "mcpHostListTools,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 102,
+      "text": "mcpHostListTools(),"
+    }
+  ],
+  "mcpHostCallTool": [
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 14,
+      "text": "mcpHostCallTool,"
+    },
+    {
+      "file": "app/src/pages/Protocols.tsx",
+      "line": 175,
+      "text": "const result = await mcpHostCallTool(callToolName.trim(), callToolArgs);"
+    }
+  ],
+  "meshDiscoverPeers": [
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 6,
+      "text": "meshDiscoverPeers,"
+    },
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 91,
+      "text": "const raw = await meshDiscoverPeers();"
+    }
+  ],
+  "meshGetPeers": [
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 7,
+      "text": "meshGetPeers,"
+    },
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 49,
+      "text": "meshGetPeers(),"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 6,
+      "text": "meshGetPeers,"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 150,
+      "text": "meshGetPeers().then((r) => parse<MeshPeer[]>(r)),"
+    }
+  ],
+  "meshGetSyncStatus": [
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 8,
+      "text": "meshGetSyncStatus,"
+    },
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 50,
+      "text": "meshGetSyncStatus(),"
+    }
+  ],
+  "meshDistributeTask": [
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 9,
+      "text": "meshDistributeTask,"
+    },
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 107,
+      "text": "const raw = await meshDistributeTask(taskInput, ids);"
+    }
+  ],
+  "meshMigrateAgent": [
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 10,
+      "text": "meshMigrateAgent,"
+    },
+    {
+      "file": "app/src/pages/ClusterStatus.tsx",
+      "line": 122,
+      "text": "const raw = await meshMigrateAgent(migrateAgentId, migrateTarget);"
+    }
+  ],
+  "neuralBridgeIngest": [
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 11,
+      "text": "neuralBridgeIngest,"
+    },
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 330,
+      "text": "const result = await neuralBridgeIngest(nbIngestSourceType, nbIngestContent.trim(), metadata);"
+    }
+  ],
+  "neuralBridgeSearch": [
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 12,
+      "text": "neuralBridgeSearch,"
+    },
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 314,
+      "text": "const result = await neuralBridgeSearch(nbSearchQuery.trim(), timeRange, sourceFilter, maxResults);"
+    }
+  ],
+  "neuralBridgeStatus": [
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 13,
+      "text": "neuralBridgeStatus,"
+    },
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 231,
+      "text": "neuralBridgeStatus()"
+    }
+  ],
+  "neuralBridgeToggle": [
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 14,
+      "text": "neuralBridgeToggle,"
+    },
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 292,
+      "text": "const result = await neuralBridgeToggle(next);"
+    }
+  ],
+  "neuralBridgeDelete": [
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 15,
+      "text": "neuralBridgeDelete,"
+    },
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 345,
+      "text": "const result = await neuralBridgeDelete(nbDeleteId.trim());"
+    }
+  ],
+  "neuralBridgeClearOld": [
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 16,
+      "text": "neuralBridgeClearOld,"
+    },
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 361,
+      "text": "const result = await neuralBridgeClearOld(beforeTimestamp);"
+    }
+  ],
+  "nexusLinkStatus": [
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 11,
+      "text": "nexusLinkStatus,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 236,
+      "text": "const raw = await nexusLinkStatus();"
+    }
+  ],
+  "nexusLinkToggleSharing": [
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 12,
+      "text": "nexusLinkToggleSharing,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 279,
+      "text": "await nexusLinkToggleSharing(enabled);"
+    }
+  ],
+  "nexusLinkAddPeer": [
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 13,
+      "text": "nexusLinkAddPeer,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 293,
+      "text": "await nexusLinkAddPeer(addPeerAddress.trim(), addPeerName.trim());"
+    }
+  ],
+  "nexusLinkRemovePeer": [
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 14,
+      "text": "nexusLinkRemovePeer,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 309,
+      "text": "await nexusLinkRemovePeer(deviceId);"
+    }
+  ],
+  "nexusLinkListPeers": [
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 15,
+      "text": "nexusLinkListPeers,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 246,
+      "text": "const raw = await nexusLinkListPeers();"
+    }
+  ],
+  "nexusLinkSendModel": [
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 16,
+      "text": "nexusLinkSendModel,"
+    },
+    {
+      "file": "app/src/pages/ModelHub.tsx",
+      "line": 324,
+      "text": "await nexusLinkSendModel("
+    }
+  ],
+  "notesGet": [
+    {
+      "file": "app/src/pages/NotesApp.tsx",
+      "line": 3,
+      "text": "import { notesGet, notesList, notesSave, notesDelete } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/NotesApp.tsx",
+      "line": 234,
+      "text": "const raw = await notesGet(id);"
+    }
+  ],
+  "omniscienceEnable": [
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 10,
+      "text": "omniscienceEnable,"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 150,
+      "text": "await omniscienceEnable(5000);"
+    }
+  ],
+  "omniscienceDisable": [
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 9,
+      "text": "omniscienceDisable,"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 144,
+      "text": "await omniscienceDisable();"
+    }
+  ],
+  "omniscienceGetScreenContext": [
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 14,
+      "text": "omniscienceGetScreenContext,"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 163,
+      "text": "const ctx = await omniscienceGetScreenContext();"
+    }
+  ],
+  "omniscienceGetPredictions": [
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 13,
+      "text": "omniscienceGetPredictions,"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 172,
+      "text": "const preds = await omniscienceGetPredictions();"
+    }
+  ],
+  "omniscienceGetAppContext": [
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 12,
+      "text": "omniscienceGetAppContext,"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 185,
+      "text": "const ctx = await omniscienceGetAppContext(omniAppName.trim());"
+    }
+  ],
+  "omniscienceExecuteAction": [
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 11,
+      "text": "omniscienceExecuteAction,"
+    },
+    {
+      "file": "app/src/pages/ComputerControl.tsx",
+      "line": 195,
+      "text": "const result = await omniscienceExecuteAction(parsed);"
+    }
+  ],
+  "paymentCreatePlan": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 26,
+      "text": "paymentCreatePlan,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 673,
+      "text": "() => paymentCreatePlan(planName, Number(planPrice), planInterval, features),"
+    }
+  ],
+  "paymentListPlans": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 27,
+      "text": "paymentListPlans,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 410,
+      "text": "const [plans, rev] = await Promise.allSettled([paymentListPlans(), paymentGetRevenueStats()]);"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 681,
+      "text": "const plans = await paymentListPlans();"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 1255,
+      "text": "const plans = await paymentListPlans();"
+    }
+  ],
+  "paymentCreateInvoice": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 28,
+      "text": "paymentCreateInvoice,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 689,
+      "text": "() => paymentCreateInvoice(invoicePlanId, invoiceBuyerId),"
+    }
+  ],
+  "paymentPayInvoice": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 29,
+      "text": "paymentPayInvoice,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 699,
+      "text": "() => paymentPayInvoice(payInvoiceId),"
+    }
+  ],
+  "paymentGetRevenueStats": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 30,
+      "text": "paymentGetRevenueStats,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 410,
+      "text": "const [plans, rev] = await Promise.allSettled([paymentListPlans(), paymentGetRevenueStats()]);"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 705,
+      "text": "const rev = await paymentGetRevenueStats();"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 1238,
+      "text": "const rev = await paymentGetRevenueStats();"
+    }
+  ],
+  "paymentCreatePayout": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 31,
+      "text": "paymentCreatePayout,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 713,
+      "text": "() => paymentCreatePayout(payoutDevId, payoutAgentId, Number(payoutAmount), payoutPeriod),"
+    }
+  ],
+  "replayToggleRecording": [
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 11,
+      "text": "replayToggleRecording,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 405,
+      "text": "const raw = await replayToggleRecording(!replayRecording);"
+    }
+  ],
+  "replayListBundles": [
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 12,
+      "text": "replayListBundles,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 392,
+      "text": "const raw = await replayListBundles(agentFilter, 50);"
+    }
+  ],
+  "replayGetBundle": [
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 13,
+      "text": "replayGetBundle,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 418,
+      "text": "const raw = await replayGetBundle(bundleId);"
+    }
+  ],
+  "replayVerifyBundle": [
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 14,
+      "text": "replayVerifyBundle,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 430,
+      "text": "const raw = await replayVerifyBundle(bundleId);"
+    }
+  ],
+  "replayExportBundle": [
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 15,
+      "text": "replayExportBundle,"
+    },
+    {
+      "file": "app/src/pages/TimeMachine.tsx",
+      "line": 446,
+      "text": "const raw = await replayExportBundle(bundleId);"
+    }
+  ],
+  "reputationRegister": [
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 5,
+      "text": "reputationRegister,"
+    },
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 158,
+      "text": "const result = await reputationRegister(regDid.trim(), regName.trim());"
+    }
+  ],
+  "reputationGet": [
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 6,
+      "text": "reputationGet,"
+    },
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 109,
+      "text": "const raw = await reputationGet(lookupDid.trim());"
+    }
+  ],
+  "reputationTop": [
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 7,
+      "text": "reputationTop,"
+    },
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 89,
+      "text": "const raw = await reputationTop(10);"
+    }
+  ],
+  "reputationRateAgent": [
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 8,
+      "text": "reputationRateAgent,"
+    },
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 123,
+      "text": "const result = await reputationRateAgent("
+    }
+  ],
+  "reputationRecordTask": [
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 9,
+      "text": "reputationRecordTask,"
+    },
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 143,
+      "text": "const result = await reputationRecordTask(taskDid.trim(), taskSuccess);"
+    }
+  ],
+  "reputationExport": [
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 10,
+      "text": "reputationExport,"
+    },
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 189,
+      "text": "const result = await reputationExport(did);"
+    }
+  ],
+  "reputationImport": [
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 11,
+      "text": "reputationImport,"
+    },
+    {
+      "file": "app/src/pages/TrustDashboard.tsx",
+      "line": 173,
+      "text": "const result = await reputationImport(importJson.trim());"
+    }
+  ],
+  "selfRewriteGetHistory": [
+    {
+      "file": "app/src/pages/SelfRewriteLab.tsx",
+      "line": 6,
+      "text": "selfRewriteGetHistory as fetchRewriteHistory,"
+    }
+  ],
+  "selfRewritePreviewPatch": [
+    {
+      "file": "app/src/pages/SelfRewriteLab.tsx",
+      "line": 7,
+      "text": "selfRewritePreviewPatch as fetchPreviewPatch,"
+    }
+  ],
+  "selfRewriteTestPatch": [
+    {
+      "file": "app/src/pages/SelfRewriteLab.tsx",
+      "line": 10,
+      "text": "selfRewriteTestPatch as fetchTestPatch,"
+    }
+  ],
+  "tracingStartTrace": [
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 8,
+      "text": "tracingStartTrace,"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 170,
+      "text": "const result = await tracingStartTrace(newTraceOp.trim(), newTraceAgent.trim() || undefined);"
+    }
+  ],
+  "tracingEndTrace": [
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 9,
+      "text": "tracingEndTrace,"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 184,
+      "text": "await tracingEndTrace(traceId);"
+    }
+  ],
+  "tracingStartSpan": [
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 10,
+      "text": "tracingStartSpan,"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 214,
+      "text": "const result = await tracingStartSpan("
+    }
+  ],
+  "tracingEndSpan": [
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 11,
+      "text": "tracingEndSpan,"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 238,
+      "text": "const result = await tracingEndSpan("
+    }
+  ],
+  "tracingGetTrace": [
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 12,
+      "text": "tracingGetTrace,"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 200,
+      "text": "const raw = await tracingGetTrace(traceId);"
+    }
+  ],
+  "tracingListTraces": [
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 13,
+      "text": "tracingListTraces,"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 152,
+      "text": "const raw = await tracingListTraces(50);"
+    }
+  ],
+  "listTools": [
+    {
+      "file": "app/src/pages/Settings.tsx",
+      "line": 5,
+      "text": "import { checkLlmStatus, getLlmRecommendations, testLlmConnection, hasDesktopRuntime, listTools, executeTool } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Settings.tsx",
+      "line": 246,
+      "text": "listTools().then((raw) => {"
+    }
+  ],
+  "executeTool": [
+    {
+      "file": "app/src/pages/Settings.tsx",
+      "line": 5,
+      "text": "import { checkLlmStatus, getLlmRecommendations, testLlmConnection, hasDesktopRuntime, listTools, executeTool } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Settings.tsx",
+      "line": 260,
+      "text": "executeTool(toolJson).then((result) => {"
+    }
+  ],
+  "verifyGovernanceInvariants": [
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 14,
+      "text": "verifyGovernanceInvariants,"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 550,
+      "text": "const raw = await verifyGovernanceInvariants();"
+    }
+  ],
+  "verifySpecificInvariant": [
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 15,
+      "text": "verifySpecificInvariant,"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 564,
+      "text": "const raw = await verifySpecificInvariant(invariantName.trim());"
+    }
+  ],
+  "exportComplianceReport": [
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 16,
+      "text": "exportComplianceReport,"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 577,
+      "text": "const raw = await exportComplianceReport();"
+    }
+  ],
+  "trayStatus": [
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 3,
+      "text": "trayStatus,"
+    },
+    {
+      "file": "app/src/pages/MissionControl.tsx",
+      "line": 170,
+      "text": "const trayRaw = await trayStatus();"
+    }
+  ],
+  "runDilatedSession": [
+    {
+      "file": "app/src/pages/TemporalEngine.tsx",
+      "line": 4,
+      "text": "runDilatedSession as runDilatedSessionApi,"
+    }
+  ],
+  "getLearningPaths": [
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 7,
+      "text": "getLearningPaths,"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 130,
+      "text": "const raw = await getLearningPaths();"
+    }
+  ],
+  "completeLearningStep": [
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 10,
+      "text": "completeLearningStep,"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 148,
+      "text": "await completeLearningStep(pathId, stepId);"
+    }
+  ],
+  "adminOverview": [
+    {
+      "file": "app/src/pages/AdminDashboard.tsx",
+      "line": 3,
+      "text": "adminOverview,"
+    },
+    {
+      "file": "app/src/pages/AdminDashboard.tsx",
+      "line": 47,
+      "text": "const data = await adminOverview();"
+    }
+  ],
+  "adminUsersList": [
+    {
+      "file": "app/src/pages/AdminUsers.tsx",
+      "line": 3,
+      "text": "adminUsersList,"
+    },
+    {
+      "file": "app/src/pages/AdminUsers.tsx",
+      "line": 39,
+      "text": "const data = await adminUsersList();"
+    },
+    {
+      "file": "app/src/pages/Login.tsx",
+      "line": 6,
+      "text": "adminUsersList,"
+    },
+    {
+      "file": "app/src/pages/Login.tsx",
+      "line": 118,
+      "text": "const userList = await adminUsersList();"
+    }
+  ],
+  "adminUserCreate": [
+    {
+      "file": "app/src/pages/AdminUsers.tsx",
+      "line": 4,
+      "text": "adminUserCreate,"
+    },
+    {
+      "file": "app/src/pages/AdminUsers.tsx",
+      "line": 57,
+      "text": "const user = await adminUserCreate(createForm.email, createForm.name, createForm.role);"
+    }
+  ],
+  "adminUserUpdateRole": [
+    {
+      "file": "app/src/pages/AdminUsers.tsx",
+      "line": 5,
+      "text": "adminUserUpdateRole,"
+    },
+    {
+      "file": "app/src/pages/AdminUsers.tsx",
+      "line": 68,
+      "text": "await adminUserUpdateRole(userId, role);"
+    }
+  ],
+  "adminUserDeactivate": [
+    {
+      "file": "app/src/pages/AdminUsers.tsx",
+      "line": 6,
+      "text": "adminUserDeactivate,"
+    },
+    {
+      "file": "app/src/pages/AdminUsers.tsx",
+      "line": 77,
+      "text": "await adminUserDeactivate(userId);"
+    }
+  ],
+  "adminFleetStatus": [
+    {
+      "file": "app/src/pages/AdminFleet.tsx",
+      "line": 3,
+      "text": "adminFleetStatus,"
+    },
+    {
+      "file": "app/src/pages/AdminFleet.tsx",
+      "line": 69,
+      "text": "const data = await adminFleetStatus();"
+    }
+  ],
+  "adminAgentStopAll": [
+    {
+      "file": "app/src/pages/AdminFleet.tsx",
+      "line": 4,
+      "text": "adminAgentStopAll,"
+    },
+    {
+      "file": "app/src/pages/AdminFleet.tsx",
+      "line": 101,
+      "text": "const count = await adminAgentStopAll(workspaceId);"
+    }
+  ],
+  "adminAgentBulkUpdate": [
+    {
+      "file": "app/src/pages/AdminFleet.tsx",
+      "line": 5,
+      "text": "adminAgentBulkUpdate,"
+    },
+    {
+      "file": "app/src/pages/AdminFleet.tsx",
+      "line": 112,
+      "text": "await adminAgentBulkUpdate(Array.from(selected), { action });"
+    }
+  ],
+  "adminPolicyGet": [
+    {
+      "file": "app/src/pages/AdminPolicyEditor.tsx",
+      "line": 3,
+      "text": "adminPolicyGet,"
+    },
+    {
+      "file": "app/src/pages/AdminPolicyEditor.tsx",
+      "line": 81,
+      "text": "const data = await adminPolicyGet(scope);"
+    }
+  ],
+  "adminPolicyUpdate": [
+    {
+      "file": "app/src/pages/AdminPolicyEditor.tsx",
+      "line": 4,
+      "text": "adminPolicyUpdate,"
+    },
+    {
+      "file": "app/src/pages/AdminPolicyEditor.tsx",
+      "line": 99,
+      "text": "await adminPolicyUpdate(scope, policy as unknown as Record<string, unknown>);"
+    }
+  ],
+  "adminPolicyHistory": [
+    {
+      "file": "app/src/pages/AdminPolicyEditor.tsx",
+      "line": 5,
+      "text": "adminPolicyHistory,"
+    },
+    {
+      "file": "app/src/pages/AdminPolicyEditor.tsx",
+      "line": 83,
+      "text": "const hist = await adminPolicyHistory(scope);"
+    }
+  ],
+  "adminComplianceStatus": [
+    {
+      "file": "app/src/pages/AdminCompliance.tsx",
+      "line": 3,
+      "text": "adminComplianceStatus,"
+    },
+    {
+      "file": "app/src/pages/AdminCompliance.tsx",
+      "line": 77,
+      "text": "const status = await adminComplianceStatus();"
+    }
+  ],
+  "adminComplianceExport": [
+    {
+      "file": "app/src/pages/AdminCompliance.tsx",
+      "line": 4,
+      "text": "adminComplianceExport,"
+    },
+    {
+      "file": "app/src/pages/AdminCompliance.tsx",
+      "line": 93,
+      "text": "const result = await adminComplianceExport(format);"
+    }
+  ],
+  "adminSystemHealth": [
+    {
+      "file": "app/src/pages/AdminSystemHealth.tsx",
+      "line": 3,
+      "text": "adminSystemHealth,"
+    },
+    {
+      "file": "app/src/pages/AdminSystemHealth.tsx",
+      "line": 94,
+      "text": "adminSystemHealth(),"
+    }
+  ],
+  "integrationsList": [
+    {
+      "file": "app/src/pages/Integrations.tsx",
+      "line": 18,
+      "text": "import { integrationsList, integrationTest, integrationConfigure, integrationStartOauth } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Integrations.tsx",
+      "line": 95,
+      "text": "integrationsList()"
+    }
+  ],
+  "integrationTest": [
+    {
+      "file": "app/src/pages/Integrations.tsx",
+      "line": 18,
+      "text": "import { integrationsList, integrationTest, integrationConfigure, integrationStartOauth } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Integrations.tsx",
+      "line": 109,
+      "text": "const result: TestResult = await integrationTest(id);"
+    }
+  ],
+  "integrationConfigure": [
+    {
+      "file": "app/src/pages/Integrations.tsx",
+      "line": 18,
+      "text": "import { integrationsList, integrationTest, integrationConfigure, integrationStartOauth } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/Integrations.tsx",
+      "line": 137,
+      "text": "await integrationConfigure(id, configValues as unknown as Record<string, unknown>);"
+    }
+  ],
+  "auditSearch": [
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 19,
+      "text": "auditSearch,"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 716,
+      "text": "// Debounced backend search via auditSearch"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 732,
+      "text": "auditSearch(searchQuery)"
+    }
+  ],
+  "auditStatistics": [
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 17,
+      "text": "auditStatistics,"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 749,
+      "text": "const s = await auditStatistics(timeRange === \"all\" ? \"all\" : timeRange);"
+    }
+  ],
+  "auditVerifyChain": [
+    {
+      "file": "app/src/pages/ComplianceDashboard.tsx",
+      "line": 7,
+      "text": "auditVerifyChain,"
+    },
+    {
+      "file": "app/src/pages/ComplianceDashboard.tsx",
+      "line": 171,
+      "text": "const result = await auditVerifyChain();"
+    }
+  ],
+  "auditExportReport": [
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 18,
+      "text": "auditExportReport,"
+    },
+    {
+      "file": "app/src/pages/Audit.tsx",
+      "line": 760,
+      "text": "const data = await auditExportReport(format, timeRange === \"all\" ? \"all\" : timeRange);"
+    }
+  ],
+  "complianceGovernanceMetrics": [
+    {
+      "file": "app/src/pages/ComplianceDashboard.tsx",
+      "line": 8,
+      "text": "complianceGovernanceMetrics,"
+    },
+    {
+      "file": "app/src/pages/ComplianceDashboard.tsx",
+      "line": 184,
+      "text": "const m = await complianceGovernanceMetrics(range);"
+    }
+  ],
+  "complianceSecurityEvents": [
+    {
+      "file": "app/src/pages/ComplianceDashboard.tsx",
+      "line": 9,
+      "text": "complianceSecurityEvents,"
+    },
+    {
+      "file": "app/src/pages/ComplianceDashboard.tsx",
+      "line": 197,
+      "text": "const evts = await complianceSecurityEvents(range);"
+    }
+  ],
+  "authLogin": [
+    {
+      "file": "app/src/pages/Login.tsx",
+      "line": 3,
+      "text": "authLogin,"
+    },
+    {
+      "file": "app/src/pages/Login.tsx",
+      "line": 104,
+      "text": "const loginResult = await authLogin();"
+    }
+  ],
+  "authSessionInfo": [
+    {
+      "file": "app/src/pages/Login.tsx",
+      "line": 4,
+      "text": "authSessionInfo,"
+    },
+    {
+      "file": "app/src/pages/Login.tsx",
+      "line": 110,
+      "text": "sessionInfo = await authSessionInfo(sessionId);"
+    }
+  ],
+  "authLogout": [
+    {
+      "file": "app/src/pages/Login.tsx",
+      "line": 5,
+      "text": "authLogout,"
+    },
+    {
+      "file": "app/src/pages/Login.tsx",
+      "line": 145,
+      "text": "await authLogout(session.session_id);"
+    }
+  ],
+  "authConfigGet": [
+    {
+      "file": "app/src/pages/Login.tsx",
+      "line": 7,
+      "text": "authConfigGet,"
+    },
+    {
+      "file": "app/src/pages/Login.tsx",
+      "line": 122,
+      "text": "const config = await authConfigGet();"
+    }
+  ],
+  "workspaceList": [
+    {
+      "file": "app/src/pages/Workspaces.tsx",
+      "line": 3,
+      "text": "workspaceList,"
+    },
+    {
+      "file": "app/src/pages/Workspaces.tsx",
+      "line": 205,
+      "text": "const raw = await workspaceList();"
+    }
+  ],
+  "workspaceCreate": [
+    {
+      "file": "app/src/pages/Workspaces.tsx",
+      "line": 4,
+      "text": "workspaceCreate,"
+    },
+    {
+      "file": "app/src/pages/Workspaces.tsx",
+      "line": 260,
+      "text": "const raw = await workspaceCreate(createName.trim());"
+    }
+  ],
+  "workspaceGet": [
+    {
+      "file": "app/src/pages/Workspaces.tsx",
+      "line": 5,
+      "text": "workspaceGet,"
+    },
+    {
+      "file": "app/src/pages/Workspaces.tsx",
+      "line": 221,
+      "text": "workspaceGet(id),"
+    }
+  ],
+  "workspaceAddMember": [
+    {
+      "file": "app/src/pages/Workspaces.tsx",
+      "line": 6,
+      "text": "workspaceAddMember,"
+    },
+    {
+      "file": "app/src/pages/Workspaces.tsx",
+      "line": 277,
+      "text": "await workspaceAddMember(detail.id, addMemberForm.userId.trim(), addMemberForm.role);"
+    }
+  ],
+  "workspaceRemoveMember": [
+    {
+      "file": "app/src/pages/Workspaces.tsx",
+      "line": 7,
+      "text": "workspaceRemoveMember,"
+    },
+    {
+      "file": "app/src/pages/Workspaces.tsx",
+      "line": 301,
+      "text": "await workspaceRemoveMember(detail.id, userId);"
+    }
+  ],
+  "workspaceSetPolicy": [
+    {
+      "file": "app/src/pages/Workspaces.tsx",
+      "line": 8,
+      "text": "workspaceSetPolicy,"
+    },
+    {
+      "file": "app/src/pages/Workspaces.tsx",
+      "line": 322,
+      "text": "await workspaceSetPolicy(detail.id, policyJson);"
+    }
+  ],
+  "workspaceUsage": [
+    {
+      "file": "app/src/pages/Workspaces.tsx",
+      "line": 9,
+      "text": "workspaceUsage,"
+    },
+    {
+      "file": "app/src/pages/Workspaces.tsx",
+      "line": 222,
+      "text": "workspaceUsage(id),"
+    }
+  ],
+  "telemetryStatus": [
+    {
+      "file": "app/src/pages/Telemetry.tsx",
+      "line": 3,
+      "text": "telemetryStatus,"
+    },
+    {
+      "file": "app/src/pages/Telemetry.tsx",
+      "line": 116,
+      "text": "telemetryStatus(),"
+    }
+  ],
+  "telemetryHealth": [
+    {
+      "file": "app/src/pages/AdminSystemHealth.tsx",
+      "line": 8,
+      "text": "telemetryHealth,"
+    },
+    {
+      "file": "app/src/pages/AdminSystemHealth.tsx",
+      "line": 95,
+      "text": "telemetryHealth(),"
+    },
+    {
+      "file": "app/src/pages/Telemetry.tsx",
+      "line": 4,
+      "text": "telemetryHealth,"
+    },
+    {
+      "file": "app/src/pages/Telemetry.tsx",
+      "line": 117,
+      "text": "telemetryHealth(),"
+    }
+  ],
+  "telemetryConfigGet": [
+    {
+      "file": "app/src/pages/Telemetry.tsx",
+      "line": 5,
+      "text": "telemetryConfigGet,"
+    },
+    {
+      "file": "app/src/pages/Telemetry.tsx",
+      "line": 118,
+      "text": "telemetryConfigGet(),"
+    }
+  ],
+  "telemetryConfigUpdate": [
+    {
+      "file": "app/src/pages/Telemetry.tsx",
+      "line": 6,
+      "text": "telemetryConfigUpdate,"
+    },
+    {
+      "file": "app/src/pages/Telemetry.tsx",
+      "line": 156,
+      "text": "await telemetryConfigUpdate(JSON.stringify(editConfig));"
+    }
+  ],
+  "meteringUsageReport": [
+    {
+      "file": "app/src/pages/UsageBilling.tsx",
+      "line": 3,
+      "text": "meteringUsageReport,"
+    },
+    {
+      "file": "app/src/pages/UsageBilling.tsx",
+      "line": 94,
+      "text": "meteringUsageReport(\"default\", p),"
+    }
+  ],
+  "meteringCostBreakdown": [
+    {
+      "file": "app/src/pages/UsageBilling.tsx",
+      "line": 4,
+      "text": "meteringCostBreakdown,"
+    },
+    {
+      "file": "app/src/pages/UsageBilling.tsx",
+      "line": 95,
+      "text": "meteringCostBreakdown(\"default\", p),"
+    }
+  ],
+  "meteringExportCsv": [
+    {
+      "file": "app/src/pages/UsageBilling.tsx",
+      "line": 5,
+      "text": "meteringExportCsv,"
+    },
+    {
+      "file": "app/src/pages/UsageBilling.tsx",
+      "line": 116,
+      "text": "const csv = await meteringExportCsv(\"default\", period);"
+    }
+  ],
+  "meteringSetBudgetAlert": [
+    {
+      "file": "app/src/pages/UsageBilling.tsx",
+      "line": 6,
+      "text": "meteringSetBudgetAlert,"
+    },
+    {
+      "file": "app/src/pages/UsageBilling.tsx",
+      "line": 141,
+      "text": "await meteringSetBudgetAlert(\"default\", val);"
+    }
+  ],
+  "meteringBudgetAlerts": [
+    {
+      "file": "app/src/pages/UsageBilling.tsx",
+      "line": 7,
+      "text": "meteringBudgetAlerts,"
+    },
+    {
+      "file": "app/src/pages/UsageBilling.tsx",
+      "line": 96,
+      "text": "meteringBudgetAlerts(\"default\"),"
+    },
+    {
+      "file": "app/src/pages/UsageBilling.tsx",
+      "line": 144,
+      "text": "const updated = await meteringBudgetAlerts(\"default\");"
+    }
+  ],
+  "backupList": [
+    {
+      "file": "app/src/pages/AdminSystemHealth.tsx",
+      "line": 5,
+      "text": "backupList,"
+    },
+    {
+      "file": "app/src/pages/AdminSystemHealth.tsx",
+      "line": 119,
+      "text": "const list = await backupList();"
+    }
+  ],
+  "backupCreate": [
+    {
+      "file": "app/src/pages/AdminSystemHealth.tsx",
+      "line": 4,
+      "text": "backupCreate,"
+    },
+    {
+      "file": "app/src/pages/AdminSystemHealth.tsx",
+      "line": 129,
+      "text": "await backupCreate();"
+    }
+  ],
+  "backupVerify": [
+    {
+      "file": "app/src/pages/AdminSystemHealth.tsx",
+      "line": 7,
+      "text": "backupVerify,"
+    },
+    {
+      "file": "app/src/pages/AdminSystemHealth.tsx",
+      "line": 141,
+      "text": "await backupVerify(id);"
+    }
+  ],
+  "backupRestore": [
+    {
+      "file": "app/src/pages/AdminSystemHealth.tsx",
+      "line": 6,
+      "text": "backupRestore,"
+    },
+    {
+      "file": "app/src/pages/AdminSystemHealth.tsx",
+      "line": 153,
+      "text": "await backupRestore(id);"
+    }
+  ],
+  "dbConnect": [
+    {
+      "file": "app/src/pages/DatabaseManager.tsx",
+      "line": 8,
+      "text": "import { dbConnect, dbListTables, dbExecuteQuery, dbExportTable, dbDisconnect } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/DatabaseManager.tsx",
+      "line": 100,
+      "text": "const raw: string = await dbConnect(connectInput.trim());"
+    }
+  ],
+  "dbListTables": [
+    {
+      "file": "app/src/pages/DatabaseManager.tsx",
+      "line": 8,
+      "text": "import { dbConnect, dbListTables, dbExecuteQuery, dbExportTable, dbDisconnect } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/DatabaseManager.tsx",
+      "line": 104,
+      "text": "const tablesRaw: string = await dbListTables(connectInput.trim());"
+    },
+    {
+      "file": "app/src/pages/DatabaseManager.tsx",
+      "line": 185,
+      "text": "const tablesRaw: string = await dbListTables(selectedConn.path);"
+    }
+  ],
+  "dbExecuteQuery": [
+    {
+      "file": "app/src/pages/DatabaseManager.tsx",
+      "line": 8,
+      "text": "import { dbConnect, dbListTables, dbExecuteQuery, dbExportTable, dbDisconnect } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/DatabaseManager.tsx",
+      "line": 151,
+      "text": "const raw: string = await dbExecuteQuery(selectedConn.path, sql);"
+    }
+  ],
+  "fileManagerHome": [
+    {
+      "file": "app/src/pages/FileManager.tsx",
+      "line": 9,
+      "text": "fileManagerCreateDir, fileManagerDelete, fileManagerRename, fileManagerHome,"
+    },
+    {
+      "file": "app/src/pages/FileManager.tsx",
+      "line": 168,
+      "text": "const home: string = await fileManagerHome();"
+    }
+  ],
+  "fileManagerDelete": [
+    {
+      "file": "app/src/pages/FileManager.tsx",
+      "line": 9,
+      "text": "fileManagerCreateDir, fileManagerDelete, fileManagerRename, fileManagerHome,"
+    },
+    {
+      "file": "app/src/pages/FileManager.tsx",
+      "line": 256,
+      "text": "await fileManagerDelete(entry.path);"
+    }
+  ],
+  "fileManagerRename": [
+    {
+      "file": "app/src/pages/FileManager.tsx",
+      "line": 9,
+      "text": "fileManagerCreateDir, fileManagerDelete, fileManagerRename, fileManagerHome,"
+    },
+    {
+      "file": "app/src/pages/FileManager.tsx",
+      "line": 271,
+      "text": "await fileManagerRename(entry.path, newPath);"
+    }
+  ],
+  "temporalSelectFork": [
+    {
+      "file": "app/src/pages/TimelineViewer.tsx",
+      "line": 2,
+      "text": "import { getTemporalHistory, temporalSelectFork } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/TimelineViewer.tsx",
+      "line": 91,
+      "text": "await temporalSelectFork(forkId);"
+    }
+  ],
+  "apiClientRequest": [
+    {
+      "file": "app/src/pages/ApiClient.tsx",
+      "line": 3,
+      "text": "import { apiClientRequest, apiClientListCollections, apiClientSaveCollections, hasDesktopRuntime } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/ApiClient.tsx",
+      "line": 204,
+      "text": "const raw: string = await apiClientRequest("
+    }
+  ],
+  "apiClientListCollections": [
+    {
+      "file": "app/src/pages/ApiClient.tsx",
+      "line": 3,
+      "text": "import { apiClientRequest, apiClientListCollections, apiClientSaveCollections, hasDesktopRuntime } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/ApiClient.tsx",
+      "line": 117,
+      "text": "const raw = await apiClientListCollections();"
+    }
+  ],
+  "apiClientSaveCollections": [
+    {
+      "file": "app/src/pages/ApiClient.tsx",
+      "line": 3,
+      "text": "import { apiClientRequest, apiClientListCollections, apiClientSaveCollections, hasDesktopRuntime } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/ApiClient.tsx",
+      "line": 134,
+      "text": "apiClientSaveCollections(JSON.stringify(cols)).catch(() => {});"
+    },
+    {
+      "file": "app/src/pages/ApiClient.tsx",
+      "line": 154,
+      "text": "apiClientSaveCollections(JSON.stringify(next)).catch(() => {});"
+    }
+  ],
+  "learningSaveProgress": [
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 11,
+      "text": "learningSaveProgress,"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 99,
+      "text": "learningSaveProgress(JSON.stringify(progress)).catch(() => {});"
+    }
+  ],
+  "learningGetProgress": [
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 12,
+      "text": "learningGetProgress,"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 104,
+      "text": "const raw = await learningGetProgress();"
+    }
+  ],
+  "learningExecuteChallenge": [
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 13,
+      "text": "learningExecuteChallenge,"
+    },
+    {
+      "file": "app/src/pages/LearningCenter.tsx",
+      "line": 663,
+      "text": "const raw = await learningExecuteChallenge(activeChallenge.id, challengeCode, \"rust\");"
+    }
+  ],
+  "dbDisconnect": [
+    {
+      "file": "app/src/pages/DatabaseManager.tsx",
+      "line": 8,
+      "text": "import { dbConnect, dbListTables, dbExecuteQuery, dbExportTable, dbDisconnect } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/DatabaseManager.tsx",
+      "line": 276,
+      "text": "await dbDisconnect(conn.path);"
+    }
+  ],
+  "dbExportTable": [
+    {
+      "file": "app/src/pages/DatabaseManager.tsx",
+      "line": 8,
+      "text": "import { dbConnect, dbListTables, dbExecuteQuery, dbExportTable, dbDisconnect } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/DatabaseManager.tsx",
+      "line": 245,
+      "text": "exportData = await dbExportTable(selectedConn.path, tableName, format);"
+    }
+  ],
+  "triggerDreamNow": [
+    {
+      "file": "app/src/pages/DreamForge.tsx",
+      "line": 9,
+      "text": "triggerDreamNow,"
+    },
+    {
+      "file": "app/src/pages/DreamForge.tsx",
+      "line": 141,
+      "text": "await triggerDreamNow();"
+    },
+    {
+      "file": "app/src/pages/DreamForge.tsx",
+      "line": 155,
+      "text": "await triggerDreamNow();"
+    }
+  ],
+  "setDreamConfig": [
+    {
+      "file": "app/src/pages/DreamForge.tsx",
+      "line": 10,
+      "text": "setDreamConfig,"
+    },
+    {
+      "file": "app/src/pages/DreamForge.tsx",
+      "line": 167,
+      "text": "await setDreamConfig("
+    }
+  ],
+  "triggerImmuneScan": [
+    {
+      "file": "app/src/pages/ImmuneDashboard.tsx",
+      "line": 7,
+      "text": "triggerImmuneScan,"
+    },
+    {
+      "file": "app/src/pages/ImmuneDashboard.tsx",
+      "line": 226,
+      "text": "await triggerImmuneScan();"
+    }
+  ],
+  "getThreatLog": [
+    {
+      "file": "app/src/pages/ImmuneDashboard.tsx",
+      "line": 9,
+      "text": "getThreatLog,"
+    },
+    {
+      "file": "app/src/pages/ImmuneDashboard.tsx",
+      "line": 127,
+      "text": "const raw = await getThreatLog(20);"
+    },
+    {
+      "file": "app/src/pages/ImmuneDashboard.tsx",
+      "line": 131,
+      "text": "const raw = await getThreatLog();"
+    }
+  ],
+  "schedulerCreate": [
+    {
+      "file": "app/src/pages/Scheduler.tsx",
+      "line": 3,
+      "text": "schedulerCreate,"
+    },
+    {
+      "file": "app/src/pages/Scheduler.tsx",
+      "line": 148,
+      "text": "await schedulerCreate({"
+    }
+  ],
+  "schedulerList": [
+    {
+      "file": "app/src/pages/Scheduler.tsx",
+      "line": 7,
+      "text": "schedulerList,"
+    },
+    {
+      "file": "app/src/pages/Scheduler.tsx",
+      "line": 99,
+      "text": "const data = await schedulerList();"
+    }
+  ],
+  "schedulerEnable": [
+    {
+      "file": "app/src/pages/Scheduler.tsx",
+      "line": 6,
+      "text": "schedulerEnable,"
+    },
+    {
+      "file": "app/src/pages/Scheduler.tsx",
+      "line": 178,
+      "text": "await schedulerEnable(entry.id);"
+    }
+  ],
+  "schedulerDisable": [
+    {
+      "file": "app/src/pages/Scheduler.tsx",
+      "line": 5,
+      "text": "schedulerDisable,"
+    },
+    {
+      "file": "app/src/pages/Scheduler.tsx",
+      "line": 176,
+      "text": "await schedulerDisable(entry.id);"
+    }
+  ],
+  "schedulerDelete": [
+    {
+      "file": "app/src/pages/Scheduler.tsx",
+      "line": 4,
+      "text": "schedulerDelete,"
+    },
+    {
+      "file": "app/src/pages/Scheduler.tsx",
+      "line": 188,
+      "text": "await schedulerDelete(id);"
+    }
+  ],
+  "schedulerHistory": [],
+  "schedulerTriggerNow": [
+    {
+      "file": "app/src/pages/Scheduler.tsx",
+      "line": 8,
+      "text": "schedulerTriggerNow,"
+    },
+    {
+      "file": "app/src/pages/Scheduler.tsx",
+      "line": 198,
+      "text": "const result = await schedulerTriggerNow(id);"
+    }
+  ],
+  "schedulerRunnerStatus": [],
+  "executeTeamWorkflow": [],
+  "transferAgentFuel": [],
+  "runContentPipeline": [],
+  "flashDetectHardware": [
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 4,
+      "text": "flashDetectHardware,"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 146,
+      "text": "flashDetectHardware().then((hw: any) => {"
+    }
+  ],
+  "flashProfileModel": [],
+  "flashAutoConfigure": [],
+  "flashCreateSession": [
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 9,
+      "text": "import { getPreinstalledAgents, hasDesktopRuntime, listProviderModels, executeAgentGoal, approveConsentRequest, denyConsentRequest, listPendingConsents, getAvailableProviders, setAgentLlmProvider, fla"
+    },
+    {
+      "file": "app/src/pages/Agents.tsx",
+      "line": 1009,
+      "text": "await flashCreateSession(currentModelPath, 8192, \"balanced\");"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 5,
+      "text": "flashCreateSession,"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 345,
+      "text": "const sid = await flashCreateSession(path, 2048, tier === \"fast\" ? \"speed\" : \"balanced\");"
+    }
+  ],
+  "flashListSessions": [],
+  "flashUnloadSession": [
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 6,
+      "text": "flashUnloadSession,"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 333,
+      "text": "try { await flashUnloadSession(slot.sessionId); } catch {}"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 340,
+      "text": "try { await flashUnloadSession(existing.sessionId); } catch {}"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 356,
+      "text": "try { await flashUnloadSession(slot.sessionId); } catch {}"
+    }
+  ],
+  "flashClearSessions": [
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 7,
+      "text": "flashClearSessions,"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 153,
+      "text": "flashClearSessions().then(() => {"
+    }
+  ],
+  "flashGetMetrics": [],
+  "flashSystemMetrics": [
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 9,
+      "text": "flashSystemMetrics,"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 165,
+      "text": "flashSystemMetrics().then((m: any) => { if (active) setSysMetrics(m); }).catch(() => {});"
+    }
+  ],
+  "flashEstimatePerformance": [],
+  "flashCatalogRecommend": [],
+  "flashCatalogSearch": [],
+  "flashEnableSpeculative": [
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 10,
+      "text": "flashEnableSpeculative,"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 192,
+      "text": "await flashEnableSpeculative(fastSlot.path, 5);"
+    }
+  ],
+  "flashDisableSpeculative": [
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 11,
+      "text": "flashDisableSpeculative,"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 183,
+      "text": "try { await flashDisableSpeculative(); setSpecEnabled(false); } catch {}"
+    }
+  ],
+  "flashSpeculativeStatus": [
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 12,
+      "text": "flashSpeculativeStatus,"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 166,
+      "text": "flashSpeculativeStatus().then((s: any) => {"
+    }
+  ],
+  "flashListLocalModels": [
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 3,
+      "text": "flashListLocalModels,"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 142,
+      "text": "flashListLocalModels().then((list: any[]) => {"
+    }
+  ],
+  "flashDownloadModel": [],
+  "flashDownloadMulti": [],
+  "flashDeleteLocalModel": [],
+  "flashAvailableDiskSpace": [],
+  "flashGetModelDir": [],
+  "flashGenerate": [
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 8,
+      "text": "flashGenerate,"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 380,
+      "text": "try { await flashGenerate(slot.sessionId, userMsg, 19999); }"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 420,
+      "text": "try { await flashGenerate(slot.sessionId, \"Continue\", 19999); }"
+    }
+  ],
+  "cmStartSession": [
+    {
+      "file": "app/src/pages/MeasurementDashboard.tsx",
+      "line": 6,
+      "text": "cmStartSession,"
+    },
+    {
+      "file": "app/src/pages/MeasurementDashboard.tsx",
+      "line": 138,
+      "text": "cmStartSession(agentId, level)"
+    }
+  ],
+  "cmGetSession": [
+    {
+      "file": "app/src/pages/MeasurementSession.tsx",
+      "line": 2,
+      "text": "import { cmGetSession, cmGetGamingFlags, cmListSessions } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/MeasurementSession.tsx",
+      "line": 108,
+      "text": "cmGetSession(resolvedId)"
+    }
+  ],
+  "cmGetScorecard": [
+    {
+      "file": "app/src/pages/MeasurementDashboard.tsx",
+      "line": 5,
+      "text": "cmGetScorecard,"
+    },
+    {
+      "file": "app/src/pages/MeasurementDashboard.tsx",
+      "line": 114,
+      "text": "const card = await cmGetScorecard(id);"
+    }
+  ],
+  "cmListSessions": [
+    {
+      "file": "app/src/pages/MeasurementCompare.tsx",
+      "line": 2,
+      "text": "import { cmCompareAgents, cmListSessions } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/MeasurementCompare.tsx",
+      "line": 57,
+      "text": "cmListSessions()"
+    },
+    {
+      "file": "app/src/pages/MeasurementDashboard.tsx",
+      "line": 3,
+      "text": "cmListSessions,"
+    },
+    {
+      "file": "app/src/pages/MeasurementDashboard.tsx",
+      "line": 104,
+      "text": "Promise.all([cmListSessions(), cmGetBatteries()])"
+    },
+    {
+      "file": "app/src/pages/MeasurementSession.tsx",
+      "line": 2,
+      "text": "import { cmGetSession, cmGetGamingFlags, cmListSessions } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/MeasurementSession.tsx",
+      "line": 115,
+      "text": "cmListSessions()"
+    }
+  ],
+  "cmGetProfile": [],
+  "cmGetGamingFlags": [
+    {
+      "file": "app/src/pages/MeasurementSession.tsx",
+      "line": 2,
+      "text": "import { cmGetSession, cmGetGamingFlags, cmListSessions } from \"../api/backend\";"
+    }
+  ],
+  "cmCompareAgents": [
+    {
+      "file": "app/src/pages/MeasurementCompare.tsx",
+      "line": 2,
+      "text": "import { cmCompareAgents, cmListSessions } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/MeasurementCompare.tsx",
+      "line": 79,
+      "text": "cmCompareAgents(ids)"
+    }
+  ],
+  "cmGetBatteries": [
+    {
+      "file": "app/src/pages/MeasurementBatteries.tsx",
+      "line": 2,
+      "text": "import { cmGetBatteries } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/MeasurementBatteries.tsx",
+      "line": 41,
+      "text": "cmGetBatteries()"
+    },
+    {
+      "file": "app/src/pages/MeasurementDashboard.tsx",
+      "line": 4,
+      "text": "cmGetBatteries,"
+    },
+    {
+      "file": "app/src/pages/MeasurementDashboard.tsx",
+      "line": 104,
+      "text": "Promise.all([cmListSessions(), cmGetBatteries()])"
+    }
+  ],
+  "cmTriggerFeedback": [],
+  "cmEvaluateResponse": [],
+  "cmGetBoundaryMap": [
+    {
+      "file": "app/src/pages/CapabilityBoundaryMap.tsx",
+      "line": 3,
+      "text": "cmGetBoundaryMap,"
+    },
+    {
+      "file": "app/src/pages/CapabilityBoundaryMap.tsx",
+      "line": 59,
+      "text": "Promise.all([cmGetBoundaryMap(), cmGetCalibration(), cmGetCensus(), cmGetGamingReportBatch()])"
+    }
+  ],
+  "cmGetCalibration": [
+    {
+      "file": "app/src/pages/CapabilityBoundaryMap.tsx",
+      "line": 4,
+      "text": "cmGetCalibration,"
+    },
+    {
+      "file": "app/src/pages/CapabilityBoundaryMap.tsx",
+      "line": 59,
+      "text": "Promise.all([cmGetBoundaryMap(), cmGetCalibration(), cmGetCensus(), cmGetGamingReportBatch()])"
+    }
+  ],
+  "cmGetCensus": [
+    {
+      "file": "app/src/pages/CapabilityBoundaryMap.tsx",
+      "line": 5,
+      "text": "cmGetCensus,"
+    },
+    {
+      "file": "app/src/pages/CapabilityBoundaryMap.tsx",
+      "line": 59,
+      "text": "Promise.all([cmGetBoundaryMap(), cmGetCalibration(), cmGetCensus(), cmGetGamingReportBatch()])"
+    }
+  ],
+  "cmGetGamingReportBatch": [
+    {
+      "file": "app/src/pages/CapabilityBoundaryMap.tsx",
+      "line": 6,
+      "text": "cmGetGamingReportBatch,"
+    },
+    {
+      "file": "app/src/pages/CapabilityBoundaryMap.tsx",
+      "line": 59,
+      "text": "Promise.all([cmGetBoundaryMap(), cmGetCalibration(), cmGetCensus(), cmGetGamingReportBatch()])"
+    }
+  ],
+  "cmUploadDarwin": [
+    {
+      "file": "app/src/pages/CapabilityBoundaryMap.tsx",
+      "line": 7,
+      "text": "cmUploadDarwin,"
+    },
+    {
+      "file": "app/src/pages/CapabilityBoundaryMap.tsx",
+      "line": 73,
+      "text": "cmUploadDarwin()"
+    }
+  ],
+  "cmExecuteValidationRun": [],
+  "cmListValidationRuns": [],
+  "cmGetValidationRun": [],
+  "cmThreeWayComparison": [],
+  "cmRunAbValidation": [
+    {
+      "file": "app/src/pages/ABValidation.tsx",
+      "line": 2,
+      "text": "import { cmRunAbValidation } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/ABValidation.tsx",
+      "line": 43,
+      "text": "cmRunAbValidation([])"
+    }
+  ],
+  "routerRouteTask": [],
+  "routerRecordOutcome": [],
+  "routerGetAccuracy": [
+    {
+      "file": "app/src/pages/ModelRouting.tsx",
+      "line": 3,
+      "text": "routerGetAccuracy,"
+    },
+    {
+      "file": "app/src/pages/ModelRouting.tsx",
+      "line": 38,
+      "text": "Promise.all([routerGetAccuracy(), routerGetModels(), routerGetFeedback()])"
+    }
+  ],
+  "routerGetModels": [
+    {
+      "file": "app/src/pages/ModelRouting.tsx",
+      "line": 4,
+      "text": "routerGetModels,"
+    },
+    {
+      "file": "app/src/pages/ModelRouting.tsx",
+      "line": 38,
+      "text": "Promise.all([routerGetAccuracy(), routerGetModels(), routerGetFeedback()])"
+    }
+  ],
+  "routerEstimateDifficulty": [
+    {
+      "file": "app/src/pages/ModelRouting.tsx",
+      "line": 6,
+      "text": "routerEstimateDifficulty,"
+    },
+    {
+      "file": "app/src/pages/ModelRouting.tsx",
+      "line": 50,
+      "text": "routerEstimateDifficulty(taskInput)"
+    }
+  ],
+  "routerGetFeedback": [
+    {
+      "file": "app/src/pages/ModelRouting.tsx",
+      "line": 5,
+      "text": "routerGetFeedback,"
+    },
+    {
+      "file": "app/src/pages/ModelRouting.tsx",
+      "line": 38,
+      "text": "Promise.all([routerGetAccuracy(), routerGetModels(), routerGetFeedback()])"
+    }
+  ],
+  "browserCreateSession": [
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 3,
+      "text": "browserCreateSession,"
+    },
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 50,
+      "text": "browserCreateSession(agentId, level)"
+    }
+  ],
+  "browserExecuteTask": [
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 4,
+      "text": "browserExecuteTask,"
+    },
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 59,
+      "text": "browserExecuteTask(sessionId, taskInput)"
+    }
+  ],
+  "browserNavigate": [
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 5,
+      "text": "browserNavigate,"
+    },
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 68,
+      "text": "browserNavigate(sessionId, urlInput)"
+    }
+  ],
+  "browserGetContent": [
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 6,
+      "text": "browserGetContent,"
+    },
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 76,
+      "text": "browserGetContent(sessionId)"
+    }
+  ],
+  "browserCloseSession": [
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 7,
+      "text": "browserCloseSession,"
+    },
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 83,
+      "text": "browserCloseSession(sessionId).then(() => { setSessionId(null); browserSessionCount().then(setSessionCount); }).catch(console.error);"
+    }
+  ],
+  "browserGetPolicy": [
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 8,
+      "text": "browserGetPolicy,"
+    },
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 43,
+      "text": "browserGetPolicy().then((p) => setPolicy(p as Policy)).catch(console.error);"
+    }
+  ],
+  "browserSessionCount": [
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 9,
+      "text": "browserSessionCount,"
+    },
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 44,
+      "text": "browserSessionCount().then(setSessionCount).catch(console.error);"
+    },
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 51,
+      "text": ".then((id) => { setSessionId(id); browserSessionCount().then(setSessionCount); })"
+    },
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 83,
+      "text": "browserCloseSession(sessionId).then(() => { setSessionId(null); browserSessionCount().then(setSessionCount); }).catch(console.error);"
+    }
+  ],
+  "oracleStatus": [
+    {
+      "file": "app/src/pages/GovernanceOracle.tsx",
+      "line": 2,
+      "text": "import { oracleStatus, oracleGetAgentBudget, listAgents } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/GovernanceOracle.tsx",
+      "line": 37,
+      "text": "Promise.all([oracleStatus(), listAgents()])"
+    }
+  ],
+  "oracleVerifyToken": [],
+  "oracleGetAgentBudget": [
+    {
+      "file": "app/src/pages/GovernanceOracle.tsx",
+      "line": 2,
+      "text": "import { oracleStatus, oracleGetAgentBudget, listAgents } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/GovernanceOracle.tsx",
+      "line": 48,
+      "text": "oracleGetAgentBudget(agentId)"
+    }
+  ],
+  "tokenGetWallet": [],
+  "tokenGetAllWallets": [
+    {
+      "file": "app/src/pages/TokenEconomy.tsx",
+      "line": 3,
+      "text": "tokenGetAllWallets,"
+    },
+    {
+      "file": "app/src/pages/TokenEconomy.tsx",
+      "line": 141,
+      "text": "tokenGetAllWallets().catch(() => []),"
+    }
+  ],
+  "tokenCreateWallet": [],
+  "tokenGetLedger": [
+    {
+      "file": "app/src/pages/TokenEconomy.tsx",
+      "line": 4,
+      "text": "tokenGetLedger,"
+    },
+    {
+      "file": "app/src/pages/TokenEconomy.tsx",
+      "line": 142,
+      "text": "tokenGetLedger(undefined, 100).catch(() => []),"
+    }
+  ],
+  "tokenGetSupply": [
+    {
+      "file": "app/src/pages/TokenEconomy.tsx",
+      "line": 5,
+      "text": "tokenGetSupply,"
+    },
+    {
+      "file": "app/src/pages/TokenEconomy.tsx",
+      "line": 143,
+      "text": "tokenGetSupply().catch(() => null),"
+    }
+  ],
+  "tokenCalculateBurn": [
+    {
+      "file": "app/src/pages/TokenEconomy.tsx",
+      "line": 8,
+      "text": "tokenCalculateBurn,"
+    },
+    {
+      "file": "app/src/pages/TokenEconomy.tsx",
+      "line": 162,
+      "text": "tokenCalculateBurn(burnModel, burnIn, burnOut)"
+    }
+  ],
+  "tokenCalculateReward": [
+    {
+      "file": "app/src/pages/TokenEconomy.tsx",
+      "line": 7,
+      "text": "tokenCalculateReward,"
+    },
+    {
+      "file": "app/src/pages/TokenEconomy.tsx",
+      "line": 156,
+      "text": "tokenCalculateReward(quality, difficulty, speed)"
+    }
+  ],
+  "tokenCalculateSpawn": [],
+  "tokenCreateDelegation": [],
+  "tokenGetDelegations": [],
+  "tokenGetPricing": [
+    {
+      "file": "app/src/pages/TokenEconomy.tsx",
+      "line": 6,
+      "text": "tokenGetPricing,"
+    },
+    {
+      "file": "app/src/pages/TokenEconomy.tsx",
+      "line": 144,
+      "text": "tokenGetPricing().catch(() => []),"
+    }
+  ],
+  "ccExecuteAction": [],
+  "ccGetActionHistory": [
+    {
+      "file": "app/src/pages/GovernedControl.tsx",
+      "line": 3,
+      "text": "ccGetActionHistory,"
+    },
+    {
+      "file": "app/src/pages/GovernedControl.tsx",
+      "line": 93,
+      "text": "ccGetActionHistory(selectedAgent).catch(() => []),"
+    }
+  ],
+  "ccGetCapabilityBudget": [
+    {
+      "file": "app/src/pages/GovernedControl.tsx",
+      "line": 4,
+      "text": "ccGetCapabilityBudget,"
+    },
+    {
+      "file": "app/src/pages/GovernedControl.tsx",
+      "line": 94,
+      "text": "ccGetCapabilityBudget(selectedAgent).catch(() => null),"
+    }
+  ],
+  "ccVerifyActionSequence": [
+    {
+      "file": "app/src/pages/GovernedControl.tsx",
+      "line": 6,
+      "text": "ccVerifyActionSequence,"
+    },
+    {
+      "file": "app/src/pages/GovernedControl.tsx",
+      "line": 96,
+      "text": "ccVerifyActionSequence(selectedAgent).catch(() => null),"
+    }
+  ],
+  "ccGetScreenContext": [
+    {
+      "file": "app/src/pages/GovernedControl.tsx",
+      "line": 5,
+      "text": "ccGetScreenContext,"
+    },
+    {
+      "file": "app/src/pages/GovernedControl.tsx",
+      "line": 95,
+      "text": "ccGetScreenContext(selectedAgent).catch(() => null),"
+    }
+  ],
+  "simSubmit": [],
+  "simRun": [],
+  "simGetResult": [],
+  "simGetHistory": [
+    {
+      "file": "app/src/pages/WorldSimulation2.tsx",
+      "line": 2,
+      "text": "import { simGetHistory, simGetPolicy, listAgents } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation2.tsx",
+      "line": 72,
+      "text": "simGetHistory(selectedAgent)"
+    }
+  ],
+  "simGetPolicy": [
+    {
+      "file": "app/src/pages/WorldSimulation2.tsx",
+      "line": 2,
+      "text": "import { simGetHistory, simGetPolicy, listAgents } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/WorldSimulation2.tsx",
+      "line": 59,
+      "text": "simGetPolicy().catch(() => null),"
+    }
+  ],
+  "simGetRisk": [],
+  "simBranch": [],
+  "perceptionInit": [
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 9,
+      "text": "perceptionInit,"
+    },
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 100,
+      "text": "await perceptionInit(provider, apiKey, modelId);"
+    }
+  ],
+  "perceptionDescribe": [
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 4,
+      "text": "perceptionDescribe,"
+    },
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 153,
+      "text": "res = await perceptionDescribe(imageBase64, imageFormat);"
+    }
+  ],
+  "perceptionExtractText": [
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 6,
+      "text": "perceptionExtractText,"
+    },
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 156,
+      "text": "res = await perceptionExtractText(imageBase64, imageFormat);"
+    }
+  ],
+  "perceptionQuestion": [
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 10,
+      "text": "perceptionQuestion,"
+    },
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 159,
+      "text": "res = await perceptionQuestion(imageBase64, imageFormat, question);"
+    }
+  ],
+  "perceptionFindUiElements": [
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 7,
+      "text": "perceptionFindUiElements,"
+    },
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 162,
+      "text": "res = { ui_elements: await perceptionFindUiElements(imageBase64), success: true, description: \"UI elements found\" };"
+    }
+  ],
+  "perceptionExtractData": [
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 5,
+      "text": "perceptionExtractData,"
+    },
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 165,
+      "text": "res = await perceptionExtractData(imageBase64, imageFormat, schema || undefined);"
+    }
+  ],
+  "perceptionReadError": [
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 11,
+      "text": "perceptionReadError,"
+    },
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 168,
+      "text": "res = await perceptionReadError(imageBase64);"
+    }
+  ],
+  "perceptionAnalyzeChart": [
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 3,
+      "text": "perceptionAnalyzeChart,"
+    },
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 171,
+      "text": "res = await perceptionAnalyzeChart(imageBase64, imageFormat);"
+    }
+  ],
+  "perceptionGetPolicy": [
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 8,
+      "text": "perceptionGetPolicy,"
+    },
+    {
+      "file": "app/src/pages/Perception.tsx",
+      "line": 102,
+      "text": "const p = await perceptionGetPolicy().catch(() => null);"
+    }
+  ],
+  "memoryStoreEntry": [
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 12,
+      "text": "memoryStoreEntry,"
+    },
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 118,
+      "text": "await memoryStoreEntry(selectedAgent, newType, newSummary, tags, newImportance, newDomain || undefined);"
+    }
+  ],
+  "memoryQueryEntries": [
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 10,
+      "text": "memoryQueryEntries,"
+    },
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 101,
+      "text": "memoryQueryEntries(selectedAgent, queryText, queryType || undefined, undefined, 50),"
+    }
+  ],
+  "memoryGetEntry": [],
+  "memoryDeleteEntry": [
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 6,
+      "text": "memoryDeleteEntry,"
+    },
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 127,
+      "text": "await memoryDeleteEntry(selectedAgent, memoryId);"
+    }
+  ],
+  "memoryBuildContext": [
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 4,
+      "text": "memoryBuildContext,"
+    },
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 133,
+      "text": "const ctx = await memoryBuildContext(selectedAgent, contextTask, 10);"
+    }
+  ],
+  "memoryGetStats": [
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 8,
+      "text": "memoryGetStats,"
+    },
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 102,
+      "text": "memoryGetStats(selectedAgent).catch(() => null),"
+    }
+  ],
+  "memoryConsolidate": [
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 5,
+      "text": "memoryConsolidate,"
+    },
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 152,
+      "text": "const result = await memoryConsolidate(selectedAgent);"
+    }
+  ],
+  "memorySave": [
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 11,
+      "text": "memorySave,"
+    },
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 139,
+      "text": "const msg = await memorySave(selectedAgent);"
+    }
+  ],
+  "memoryLoad": [
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 9,
+      "text": "memoryLoad,"
+    },
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 145,
+      "text": "const msg = await memoryLoad(selectedAgent);"
+    }
+  ],
+  "memoryListAgents": [],
+  "memoryGetPolicy": [
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 7,
+      "text": "memoryGetPolicy,"
+    },
+    {
+      "file": "app/src/pages/AgentMemory.tsx",
+      "line": 93,
+      "text": "memoryGetPolicy().then(setPolicy).catch(() => {});"
+    }
+  ],
+  "toolsListAvailable": [],
+  "toolsExecute": [
+    {
+      "file": "app/src/pages/ExternalTools.tsx",
+      "line": 3,
+      "text": "toolsExecute,"
+    },
+    {
+      "file": "app/src/pages/ExternalTools.tsx",
+      "line": 100,
+      "text": "const res = await toolsExecute(agentId, autonomy, selectedTool, paramsJson);"
+    }
+  ],
+  "toolsGetRegistry": [
+    {
+      "file": "app/src/pages/ExternalTools.tsx",
+      "line": 6,
+      "text": "toolsGetRegistry,"
+    },
+    {
+      "file": "app/src/pages/ExternalTools.tsx",
+      "line": 78,
+      "text": "toolsGetRegistry().catch(() => []),"
+    }
+  ],
+  "toolsRefreshAvailability": [
+    {
+      "file": "app/src/pages/ExternalTools.tsx",
+      "line": 7,
+      "text": "toolsRefreshAvailability,"
+    },
+    {
+      "file": "app/src/pages/ExternalTools.tsx",
+      "line": 90,
+      "text": "const reg = await toolsRefreshAvailability().catch(() => []);"
+    }
+  ],
+  "toolsGetAudit": [
+    {
+      "file": "app/src/pages/ExternalTools.tsx",
+      "line": 4,
+      "text": "toolsGetAudit,"
+    },
+    {
+      "file": "app/src/pages/ExternalTools.tsx",
+      "line": 79,
+      "text": "toolsGetAudit(20).catch(() => []),"
+    },
+    {
+      "file": "app/src/pages/ExternalTools.tsx",
+      "line": 102,
+      "text": "const a = await toolsGetAudit(20).catch(() => []);"
+    }
+  ],
+  "toolsVerifyAudit": [
+    {
+      "file": "app/src/pages/ExternalTools.tsx",
+      "line": 8,
+      "text": "toolsVerifyAudit,"
+    },
+    {
+      "file": "app/src/pages/ExternalTools.tsx",
+      "line": 113,
+      "text": "const ok = await toolsVerifyAudit();"
+    }
+  ],
+  "toolsGetPolicy": [
+    {
+      "file": "app/src/pages/ExternalTools.tsx",
+      "line": 5,
+      "text": "toolsGetPolicy,"
+    },
+    {
+      "file": "app/src/pages/ExternalTools.tsx",
+      "line": 80,
+      "text": "toolsGetPolicy().catch(() => null),"
+    }
+  ],
+  "collabCreateSession": [
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 5,
+      "text": "collabCreateSession,"
+    },
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 130,
+      "text": "const id = await collabCreateSession(title, goal, pattern, leadAgent, 4);"
+    }
+  ],
+  "collabAddParticipant": [
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 3,
+      "text": "collabAddParticipant,"
+    },
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 139,
+      "text": "await collabAddParticipant(selectedSession.id, newAgentId, 3, newRole);"
+    }
+  ],
+  "collabStart": [
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 13,
+      "text": "collabStart,"
+    },
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 146,
+      "text": "await collabStart(selectedSession.id);"
+    }
+  ],
+  "collabSendMessage": [
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 12,
+      "text": "collabSendMessage,"
+    },
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 152,
+      "text": "await collabSendMessage(selectedSession.id, msgFrom, null, msgType, msgText, msgConfidence);"
+    }
+  ],
+  "collabCallVote": [
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 14,
+      "text": "collabCallVote,"
+    }
+  ],
+  "collabCastVote": [
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 4,
+      "text": "collabCastVote,"
+    },
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 159,
+      "text": "await collabCastVote(selectedSession.id, msgFrom, vote, undefined);"
+    }
+  ],
+  "collabDeclareConsensus": [
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 6,
+      "text": "collabDeclareConsensus,"
+    },
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 165,
+      "text": "await collabDeclareConsensus(selectedSession.id, leadAgent, msgText || \"Consensus reached\", []);"
+    }
+  ],
+  "collabDetectConsensus": [
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 7,
+      "text": "collabDetectConsensus,"
+    },
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 122,
+      "text": "const c = await collabDetectConsensus(updated.id).catch(() => null);"
+    },
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 173,
+      "text": "const c = await collabDetectConsensus(s.id).catch(() => null);"
+    }
+  ],
+  "collabGetSession": [
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 10,
+      "text": "collabGetSession,"
+    },
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 119,
+      "text": "const updated = await collabGetSession(selectedSession.id).catch(() => null);"
+    },
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 170,
+      "text": "const full = await collabGetSession(s.id).catch(() => s);"
+    }
+  ],
+  "collabListActive": [
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 11,
+      "text": "collabListActive,"
+    },
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 105,
+      "text": "collabListActive().catch(() => []),"
+    },
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 116,
+      "text": "const s = await collabListActive().catch(() => []);"
+    }
+  ],
+  "collabGetPolicy": [
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 9,
+      "text": "collabGetPolicy,"
+    },
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 107,
+      "text": "collabGetPolicy().catch(() => null),"
+    }
+  ],
+  "collabGetPatterns": [
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 8,
+      "text": "collabGetPatterns,"
+    },
+    {
+      "file": "app/src/pages/Collaboration.tsx",
+      "line": 106,
+      "text": "collabGetPatterns().catch(() => []),"
+    }
+  ],
+  "swfCreateProject": [
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 4,
+      "text": "swfCreateProject,"
+    },
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 112,
+      "text": "const id = await swfCreateProject(title, userRequest);"
+    }
+  ],
+  "swfAssignMember": [
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 3,
+      "text": "swfAssignMember,"
+    },
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 121,
+      "text": "await swfAssignMember(selectedProject.id, agentId, agentName || agentId, role, autonomy);"
+    }
+  ],
+  "swfStartPipeline": [
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 11,
+      "text": "swfStartPipeline,"
+    },
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 129,
+      "text": "await swfStartPipeline(selectedProject.id);"
+    }
+  ],
+  "swfSubmitArtifact": [],
+  "swfGetProject": [
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 9,
+      "text": "swfGetProject,"
+    },
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 101,
+      "text": "const updated = await swfGetProject(selectedProject.id).catch(() => null);"
+    },
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 134,
+      "text": "const full = await swfGetProject(p.id).catch(() => p);"
+    }
+  ],
+  "swfListProjects": [
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 10,
+      "text": "swfListProjects,"
+    },
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 85,
+      "text": "swfListProjects().catch(() => []),"
+    },
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 98,
+      "text": "const p = await swfListProjects().catch(() => []);"
+    }
+  ],
+  "swfGetCost": [
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 6,
+      "text": "swfGetCost,"
+    },
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 104,
+      "text": "const c = await swfGetCost(updated.id).catch(() => null);"
+    },
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 136,
+      "text": "const c = await swfGetCost(p.id).catch(() => null);"
+    }
+  ],
+  "swfGetPolicy": [
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 8,
+      "text": "swfGetPolicy,"
+    },
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 87,
+      "text": "swfGetPolicy().catch(() => null),"
+    }
+  ],
+  "swfGetPipelineStages": [
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 7,
+      "text": "swfGetPipelineStages,"
+    },
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 86,
+      "text": "swfGetPipelineStages().catch(() => []),"
+    }
+  ],
+  "swfEstimateCost": [
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 5,
+      "text": "swfEstimateCost,"
+    },
+    {
+      "file": "app/src/pages/SoftwareFactory.tsx",
+      "line": 88,
+      "text": "swfEstimateCost().catch(() => 0),"
+    }
+  ],
+  "flashRunBenchmark": [
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 13,
+      "text": "flashRunBenchmark,"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 630,
+      "text": "<button onClick={async () => { try { const r = await flashRunBenchmark(models[0]?.file_path || \"\", \"balanced\"); setBenchmarkResults(r); } catch(e) { console.error(e); } }} disabled={models.length === "
+    }
+  ],
+  "flashExportBenchmarkReport": [
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 14,
+      "text": "flashExportBenchmarkReport,"
+    },
+    {
+      "file": "app/src/pages/FlashInference.tsx",
+      "line": 631,
+      "text": "<button onClick={async () => { try { if(benchmarkResults) { const p = await flashExportBenchmarkReport(Array.isArray(benchmarkResults) ? benchmarkResults : [benchmarkResults]); setBenchmarkReport(p); "
+    }
+  ],
+  "browserScreenshot": [
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 10,
+      "text": "browserScreenshot,"
+    },
+    {
+      "file": "app/src/pages/BrowserAgent.tsx",
+      "line": 129,
+      "text": "browserScreenshot(sessionId)"
+    }
+  ],
+  "getRateLimitStatus": [
+    {
+      "file": "app/src/pages/ExternalTools.tsx",
+      "line": 9,
+      "text": "getRateLimitStatus,"
+    },
+    {
+      "file": "app/src/pages/ExternalTools.tsx",
+      "line": 135,
+      "text": "<button onClick={() => getRateLimitStatus().then(setRateLimits).catch(() => {})} style={{ ...btnStyle, background: \"#374151\", color: \"#e0e0e0\" }}>Rate Limits</button>"
+    }
+  ],
+  "notesList": [
+    {
+      "file": "app/src/pages/NotesApp.tsx",
+      "line": 3,
+      "text": "import { notesGet, notesList, notesSave, notesDelete } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/NotesApp.tsx",
+      "line": 169,
+      "text": "const raw: string = await notesList();"
+    }
+  ],
+  "notesSave": [
+    {
+      "file": "app/src/pages/NotesApp.tsx",
+      "line": 3,
+      "text": "import { notesGet, notesList, notesSave, notesDelete } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/NotesApp.tsx",
+      "line": 195,
+      "text": "await notesSave(note.id, note.title, note.content, note.folderId, JSON.stringify(note.tags));"
+    },
+    {
+      "file": "app/src/pages/NotesApp.tsx",
+      "line": 296,
+      "text": "await notesSave(newNote.id, newNote.title, newNote.content, newNote.folderId, JSON.stringify(newNote.tags));"
+    },
+    {
+      "file": "app/src/pages/NotesApp.tsx",
+      "line": 323,
+      "text": "await notesSave(dup.id, dup.title, dup.content, dup.folderId, JSON.stringify(dup.tags));"
+    }
+  ],
+  "notesDelete": [
+    {
+      "file": "app/src/pages/NotesApp.tsx",
+      "line": 3,
+      "text": "import { notesGet, notesList, notesSave, notesDelete } from \"../api/backend\";"
+    },
+    {
+      "file": "app/src/pages/NotesApp.tsx",
+      "line": 310,
+      "text": "await notesDelete(id);"
+    }
+  ],
+  "civVote": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 11,
+      "text": "civVote,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 460,
+      "text": "await civVote(proposalId, voteAgent, String(inFavor));"
+    }
+  ],
+  "civRunElection": [
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 12,
+      "text": "civRunElection,"
+    },
+    {
+      "file": "app/src/pages/Civilization.tsx",
+      "line": 483,
+      "text": "await civRunElection(electionRole);"
+    }
+  ],
+  "getGitRepoStatus": [
+    {
+      "file": "app/src/pages/CodeEditor.tsx",
+      "line": 5,
+      "text": "getGitRepoStatus,"
+    },
+    {
+      "file": "app/src/pages/CodeEditor.tsx",
+      "line": 330,
+      "text": "const repo = await getGitRepoStatus();"
+    }
+  ],
+  "resetAgentConsciousness": [
+    {
+      "file": "app/src/pages/ConsciousnessMonitor.tsx",
+      "line": 10,
+      "text": "resetAgentConsciousness,"
+    },
+    {
+      "file": "app/src/pages/ConsciousnessMonitor.tsx",
+      "line": 226,
+      "text": "await resetAgentConsciousness(selectedId);"
+    }
+  ],
+  "mutateAgent": [
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 21,
+      "text": "mutateAgent,"
+    },
+    {
+      "file": "app/src/pages/AgentDnaLab.tsx",
+      "line": 260,
+      "text": "await mutateAgent(agentId, \"random\");"
+    }
+  ],
+  "temporalFork": [
+    {
+      "file": "app/src/pages/TemporalEngine.tsx",
+      "line": 5,
+      "text": "temporalFork,"
+    },
+    {
+      "file": "app/src/pages/TemporalEngine.tsx",
+      "line": 129,
+      "text": "await temporalFork(forkAgentId || \"\", forkRequest);"
+    }
+  ],
+  "temporalRollback": [
+    {
+      "file": "app/src/pages/TemporalEngine.tsx",
+      "line": 6,
+      "text": "temporalRollback,"
+    },
+    {
+      "file": "app/src/pages/TemporalEngine.tsx",
+      "line": 154,
+      "text": "await temporalRollback(decisionId);"
+    }
+  ],
+  "selfRewriteSuggestPatches": [
+    {
+      "file": "app/src/pages/SelfRewriteLab.tsx",
+      "line": 9,
+      "text": "selfRewriteSuggestPatches,"
+    },
+    {
+      "file": "app/src/pages/SelfRewriteLab.tsx",
+      "line": 183,
+      "text": "const remote = normalizeArray<PatchRecord>(await selfRewriteSuggestPatches(\"\"));"
+    }
+  ],
+  "selfRewriteAnalyze": [
+    {
+      "file": "app/src/pages/SelfRewriteLab.tsx",
+      "line": 4,
+      "text": "selfRewriteAnalyze,"
+    },
+    {
+      "file": "app/src/pages/SelfRewriteLab.tsx",
+      "line": 227,
+      "text": "const result = normalizeArray<Bottleneck>(await selfRewriteAnalyze(\"\"));"
+    }
+  ],
+  "selfRewriteApplyPatch": [
+    {
+      "file": "app/src/pages/SelfRewriteLab.tsx",
+      "line": 5,
+      "text": "selfRewriteApplyPatch,"
+    },
+    {
+      "file": "app/src/pages/SelfRewriteLab.tsx",
+      "line": 305,
+      "text": "await selfRewriteApplyPatch(\"\", applyTarget.id);"
+    }
+  ],
+  "selfRewriteRollback": [
+    {
+      "file": "app/src/pages/SelfRewriteLab.tsx",
+      "line": 8,
+      "text": "selfRewriteRollback,"
+    },
+    {
+      "file": "app/src/pages/SelfRewriteLab.tsx",
+      "line": 325,
+      "text": "await selfRewriteRollback(patchId);"
+    }
+  ],
+  "meshAddPeer": [
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 13,
+      "text": "meshAddPeer,"
+    },
+    {
+      "file": "app/src/pages/Identity.tsx",
+      "line": 397,
+      "text": "await meshAddPeer(\"\", manualAddress.trim());"
+    }
+  ],
+  "cogfsQuery": [
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 8,
+      "text": "cogfsQuery,"
+    },
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 407,
+      "text": "const naturalResults = normalizeArray<QueryResult>(await cogfsQuery(query.trim()));"
+    }
+  ],
+  "cogfsSearch": [
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 9,
+      "text": "cogfsSearch,"
+    },
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 415,
+      "text": "const keywordResults = normalizeArray<QueryResult>(await cogfsSearch(query.trim()));"
+    }
+  ],
+  "cogfsWatchDirectory": [
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 10,
+      "text": "cogfsWatchDirectory,"
+    },
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 451,
+      "text": "await cogfsWatchDirectory(path);"
+    },
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 476,
+      "text": "await cogfsWatchDirectory(entry.path);"
+    }
+  ],
+  "cogfsIndexFile": [
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 7,
+      "text": "cogfsIndexFile,"
+    },
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 454,
+      "text": "await cogfsIndexFile(path);"
+    },
+    {
+      "file": "app/src/pages/KnowledgeGraph.tsx",
+      "line": 478,
+      "text": "await cogfsIndexFile(entry.path);"
+    }
+  ]
+}

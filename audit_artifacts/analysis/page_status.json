@@ -1,0 +1,6272 @@
+[
+  {
+    "file": "app/src/pages/ABValidation.tsx",
+    "stem": "ABValidation",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "ABValidation",
+        "import_line": 111
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "ab-validation",
+        "route_line": 1727,
+        "return_line": 1728,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      2
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      60,
+      140
+    ],
+    "loading_lines": [
+      38,
+      42,
+      46,
+      61,
+      65,
+      67
+    ],
+    "error_lines": [
+      45
+    ],
+    "console_lines": [
+      45
+    ]
+  },
+  {
+    "file": "app/src/pages/AdminCompliance.tsx",
+    "stem": "AdminCompliance",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "AdminCompliance",
+        "import_line": 100
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "admin-compliance",
+        "route_line": 1796,
+        "return_line": 1797,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      5,
+      80,
+      86
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      114,
+      115,
+      120
+    ],
+    "loading_lines": [
+      70,
+      82,
+      110
+    ],
+    "error_lines": [
+      79,
+      95
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/AdminDashboard.tsx",
+    "stem": "AdminDashboard",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "AdminDashboard",
+        "import_line": 96
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "admin-console",
+        "route_line": 1784,
+        "return_line": 1785,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      4,
+      56
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      76
+    ],
+    "loading_lines": [
+      40,
+      44,
+      52,
+      60,
+      64
+    ],
+    "error_lines": [
+      41,
+      45,
+      49,
+      50,
+      69,
+      74
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/AdminFleet.tsx",
+    "stem": "AdminFleet",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "AdminFleet",
+        "import_line": 98
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "admin-fleet",
+        "route_line": 1790,
+        "return_line": 1791,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      6,
+      78
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      172,
+      173,
+      176
+    ],
+    "loading_lines": [
+      60,
+      74,
+      199,
+      200
+    ],
+    "error_lines": [
+      14,
+      15,
+      28,
+      38,
+      44,
+      61,
+      67,
+      71,
+      72,
+      102,
+      104,
+      114,
+      132,
+      149,
+      150,
+      165,
+      214
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/AdminPolicyEditor.tsx",
+    "stem": "AdminPolicyEditor",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "AdminPolicyEditor",
+        "import_line": 99
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "admin-policies",
+        "route_line": 1793,
+        "return_line": 1794,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      6,
+      92
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      118,
+      130,
+      201
+    ],
+    "loading_lines": [
+      77,
+      88,
+      201
+    ],
+    "error_lines": [
+      85,
+      100
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/AdminSystemHealth.tsx",
+    "stem": "AdminSystemHealth",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "AdminSystemHealth",
+        "import_line": 101
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "admin-health",
+        "route_line": 1799,
+        "return_line": 1800,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      9,
+      111,
+      122,
+      161
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      264,
+      267,
+      299,
+      302,
+      306,
+      309
+    ],
+    "loading_lines": [
+      87,
+      113,
+      171
+    ],
+    "error_lines": [
+      27,
+      110,
+      121,
+      131,
+      143,
+      154,
+      218,
+      232
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/AdminUsers.tsx",
+    "stem": "AdminUsers",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "AdminUsers",
+        "import_line": 97
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "admin-users",
+        "route_line": 1787,
+        "return_line": 1788,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      7,
+      48
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      104
+    ],
+    "interactive_lines": [
+      96,
+      108,
+      131,
+      182
+    ],
+    "loading_lines": [
+      29,
+      36,
+      44,
+      153,
+      154,
+      156
+    ],
+    "error_lines": [
+      30,
+      37,
+      41,
+      42,
+      52,
+      55,
+      61,
+      62,
+      70,
+      79,
+      93,
+      94,
+      95,
+      133,
+      134,
+      156
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/AgentBrowser.tsx",
+    "stem": "AgentBrowser",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "AgentBrowser",
+        "import_line": 60
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "browser",
+        "route_line": 1691,
+        "return_line": 1692,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      6,
+      56,
+      166
+    ],
+    "mock_lines": [
+      75
+    ],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      242,
+      244,
+      261,
+      263,
+      273,
+      276
+    ],
+    "loading_lines": [
+      33,
+      92,
+      103,
+      111,
+      131,
+      223
+    ],
+    "error_lines": [
+      107,
+      108,
+      109,
+      110
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/AgentDnaLab.tsx",
+    "stem": "AgentDnaLab",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "AgentDnaLab",
+        "import_line": 87
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "dna-lab",
+        "route_line": 1706,
+        "return_line": 1707,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      22,
+      217,
+      222,
+      232,
+      233,
+      273,
+      298,
+      377
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      851,
+      857,
+      875,
+      912,
+      929,
+      936,
+      954,
+      961,
+      989,
+      1006,
+      1014
+    ],
+    "interactive_lines": [
+      549,
+      552,
+      579,
+      580,
+      591,
+      612,
+      613,
+      725,
+      759,
+      812,
+      815,
+      818,
+      821,
+      863,
+      891,
+      918,
+      942,
+      967,
+      994,
+      1031,
+      1053,
+      1068,
+      1088,
+      1100
+    ],
+    "loading_lines": [
+      160,
+      162,
+      178,
+      182,
+      186,
+      188,
+      190,
+      194,
+      200,
+      203,
+      207,
+      208,
+      300,
+      304,
+      320,
+      325,
+      379,
+      383,
+      388,
+      394,
+      399,
+      405,
+      410,
+      419,
+      424,
+      432,
+      437,
+      444,
+      453,
+      459,
+      464,
+      470,
+      475,
+      482,
+      486,
+      492,
+      797,
+      798,
+      815,
+      816,
+      918,
+      919,
+      942,
+      943,
+      967,
+      968,
+      977,
+      978,
+      994,
+      996,
+      1031,
+      1032,
+      1053,
+      1054,
+      1068,
+      1069,
+      1088,
+      1089,
+      1100,
+      1101,
+      1259
+    ],
+    "error_lines": [
+      154,
+      219,
+      229,
+      242,
+      248,
+      249,
+      258,
+      263,
+      264,
+      271,
+      275,
+      276,
+      286,
+      303,
+      310,
+      314,
+      324,
+      333,
+      339,
+      346,
+      353,
+      357,
+      364,
+      369,
+      382,
+      389,
+      393,
+      400,
+      404,
+      411,
+      418,
+      425,
+      431,
+      438,
+      443,
+      454,
+      458,
+      465,
+      469,
+      476,
+      481,
+      487,
+      491,
+      560
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/AgentMemory.tsx",
+    "stem": "AgentMemory",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "AgentMemoryPage",
+        "import_line": 120
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "agent-memory",
+        "route_line": 1745,
+        "return_line": 1746,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      13,
+      86,
+      113
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      200,
+      206,
+      208,
+      230,
+      243
+    ],
+    "interactive_lines": [
+      181,
+      182,
+      183,
+      184,
+      220,
+      235,
+      244,
+      312,
+      313
+    ],
+    "loading_lines": [
+      83,
+      98,
+      109,
+      285,
+      286
+    ],
+    "error_lines": [
+      92,
+      93,
+      102,
+      106
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Agents.tsx",
+    "stem": "Agents",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Agents",
+        "import_line": 42
+      }
+    ],
+    "routes": [],
+    "in_nav": false,
+    "backend_call_lines": [
+      1,
+      9,
+      10,
+      16,
+      193,
+      264,
+      272,
+      387,
+      391
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      497,
+      1099
+    ],
+    "interactive_lines": [
+      428,
+      432,
+      436,
+      516,
+      518,
+      548,
+      550,
+      593,
+      595,
+      624,
+      625,
+      682,
+      684,
+      865,
+      866,
+      899,
+      901,
+      1000,
+      1001,
+      1112,
+      1113,
+      1173,
+      1174,
+      1191,
+      1192,
+      1212,
+      1213,
+      1294,
+      1295,
+      1318,
+      1319,
+      1347,
+      1348
+    ],
+    "loading_lines": [
+      167,
+      999,
+      1006,
+      1016,
+      1034,
+      1037
+    ],
+    "error_lines": [
+      23,
+      84,
+      118,
+      168,
+      182,
+      183,
+      226,
+      227,
+      235,
+      236,
+      240,
+      241,
+      253,
+      266,
+      267,
+      268,
+      274,
+      276,
+      704,
+      869,
+      909,
+      970,
+      972,
+      1003,
+      1007,
+      1013,
+      1014,
+      1041,
+      1043,
+      1082,
+      1324
+    ],
+    "console_lines": [
+      227,
+      241
+    ]
+  },
+  {
+    "file": "app/src/pages/AiChatHub.tsx",
+    "stem": "AiChatHub",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "AiChatHub",
+        "import_line": 75
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "ai-chat-hub",
+        "route_line": 1673,
+        "return_line": 1674,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      11,
+      146,
+      181,
+      380,
+      393,
+      457,
+      462,
+      466,
+      476,
+      491,
+      495,
+      500,
+      507,
+      511,
+      539,
+      543,
+      644,
+      691,
+      698,
+      732,
+      822,
+      868,
+      882,
+      1745,
+      1746,
+      1747,
+      1748,
+      1749,
+      1754,
+      1757,
+      1764,
+      1776,
+      1777,
+      1778,
+      1779,
+      1780,
+      1784
+    ],
+    "mock_lines": [
+      187
+    ],
+    "placeholder_lines": [
+      1159,
+      1523,
+      1564,
+      1658,
+      1758
+    ],
+    "interactive_lines": [
+      285,
+      289,
+      764,
+      1074,
+      1080,
+      1089,
+      1104,
+      1124,
+      1145,
+      1161,
+      1177,
+      1189,
+      1192,
+      1230,
+      1231,
+      1238,
+      1247,
+      1256,
+      1259,
+      1272,
+      1273,
+      1274,
+      1275,
+      1314,
+      1319,
+      1324,
+      1330,
+      1333,
+      1335,
+      1342,
+      1365,
+      1384,
+      1417,
+      1487,
+      1490,
+      1525,
+      1526,
+      1565,
+      1595,
+      1598,
+      1616,
+      1619,
+      1663,
+      1665,
+      1685,
+      1699,
+      1700,
+      1713,
+      1733,
+      1734,
+      1737,
+      1763,
+      1766
+    ],
+    "loading_lines": [
+      353,
+      571,
+      605,
+      1314,
+      1319,
+      1324,
+      1330,
+      1336
+    ],
+    "error_lines": [
+      55,
+      135,
+      136,
+      176,
+      314,
+      324,
+      396,
+      451,
+      471,
+      491,
+      532,
+      562,
+      601,
+      603,
+      614,
+      669,
+      718,
+      816,
+      817,
+      871,
+      872,
+      880,
+      888,
+      889,
+      892,
+      903,
+      904,
+      912,
+      913,
+      959,
+      960,
+      1022,
+      1023,
+      1052,
+      1313
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/ApiClient.tsx",
+    "stem": "ApiClient",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "ApiClient",
+        "import_line": 69
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "api-client",
+        "route_line": 1655,
+        "return_line": 1656,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      3,
+      4,
+      9,
+      86,
+      112,
+      113,
+      130,
+      178,
+      191,
+      478,
+      480,
+      500,
+      503
+    ],
+    "mock_lines": [
+      86
+    ],
+    "placeholder_lines": [
+      378,
+      412,
+      413,
+      430,
+      431,
+      450,
+      453,
+      464,
+      465,
+      488,
+      495,
+      497,
+      503,
+      505
+    ],
+    "interactive_lines": [
+      303,
+      304,
+      333,
+      340,
+      345,
+      350,
+      353,
+      379,
+      392,
+      406,
+      414,
+      425,
+      432,
+      443,
+      459,
+      466,
+      479,
+      508,
+      509,
+      533
+    ],
+    "loading_lines": [
+      104,
+      163,
+      240,
+      379,
+      380,
+      542,
+      543,
+      544,
+      548,
+      553,
+      560,
+      563,
+      573
+    ],
+    "error_lines": [
+      110,
+      124,
+      134,
+      154,
+      165,
+      236,
+      237,
+      350,
+      548,
+      550,
+      553
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/AppStore.tsx",
+    "stem": "AppStore",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "AppStore",
+        "import_line": 74
+      }
+    ],
+    "routes": [],
+    "in_nav": false,
+    "backend_call_lines": [
+      1,
+      9,
+      98
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      212,
+      377
+    ],
+    "interactive_lines": [
+      216,
+      220,
+      286,
+      289,
+      352,
+      355,
+      369,
+      370,
+      381,
+      394
+    ],
+    "loading_lines": [
+      59,
+      72,
+      77,
+      94,
+      246,
+      247,
+      314,
+      315,
+      320
+    ],
+    "error_lines": [
+      60,
+      73,
+      78,
+      90,
+      91,
+      92,
+      146,
+      158,
+      162,
+      163,
+      164,
+      172,
+      176,
+      177,
+      178,
+      228
+    ],
+    "console_lines": [
+      91,
+      163,
+      177
+    ]
+  },
+  {
+    "file": "app/src/pages/ApprovalCenter.tsx",
+    "stem": "ApprovalCenter",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "ApprovalCenter",
+        "import_line": 78
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "approvals",
+        "route_line": 1688,
+        "return_line": 1689,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      23,
+      24,
+      36,
+      65,
+      89,
+      406,
+      429,
+      434,
+      448,
+      451
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      298
+    ],
+    "interactive_lines": [
+      233,
+      235,
+      259,
+      260,
+      276,
+      277,
+      312,
+      313
+    ],
+    "loading_lines": [
+      400,
+      410,
+      425,
+      545,
+      548
+    ],
+    "error_lines": [
+      401,
+      417,
+      422,
+      423,
+      439,
+      442,
+      481,
+      504,
+      505,
+      513,
+      514,
+      522,
+      523,
+      531,
+      532,
+      540,
+      541,
+      587,
+      602
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Audit.tsx",
+    "stem": "Audit",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Audit",
+        "import_line": 43
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "audit",
+        "route_line": 1586,
+        "return_line": 1587,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      20,
+      21,
+      156,
+      161,
+      712,
+      716,
+      717,
+      780,
+      782,
+      888,
+      896
+    ],
+    "mock_lines": [
+      853
+    ],
+    "placeholder_lines": [
+      266,
+      272,
+      296,
+      302,
+      308,
+      314,
+      338,
+      353,
+      648,
+      982
+    ],
+    "interactive_lines": [
+      274,
+      278,
+      316,
+      320,
+      355,
+      359,
+      374,
+      378,
+      417,
+      420,
+      425,
+      428,
+      449,
+      624,
+      628,
+      650,
+      654,
+      667,
+      671,
+      927,
+      930,
+      938,
+      941,
+      945,
+      948,
+      952,
+      955,
+      959,
+      962,
+      1013,
+      1016,
+      1027,
+      1028,
+      1029,
+      1030,
+      1031,
+      1032,
+      1047,
+      1062,
+      1065,
+      1088,
+      1136
+    ],
+    "loading_lines": [
+      115,
+      127,
+      149,
+      158,
+      197,
+      206,
+      377,
+      380,
+      384,
+      451,
+      453,
+      531,
+      537,
+      542,
+      546,
+      555,
+      560,
+      569,
+      573,
+      582,
+      627,
+      630,
+      653,
+      656,
+      670,
+      673,
+      707,
+      747,
+      754,
+      1136,
+      1137,
+      1224
+    ],
+    "error_lines": [
+      32,
+      52,
+      94,
+      108,
+      116,
+      128,
+      144,
+      150,
+      155,
+      156,
+      175,
+      176,
+      189,
+      198,
+      203,
+      204,
+      227,
+      228,
+      241,
+      245,
+      249,
+      250,
+      346,
+      351,
+      352,
+      353,
+      383,
+      384,
+      452,
+      483,
+      498,
+      532,
+      538,
+      543,
+      547,
+      552,
+      553,
+      561,
+      566,
+      567,
+      574,
+      579,
+      580,
+      636,
+      659,
+      679,
+      736,
+      737,
+      751,
+      768,
+      799,
+      868,
+      882,
+      899,
+      1001,
+      1213
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/AuditTimeline.tsx",
+    "stem": "AuditTimeline",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "AuditTimeline",
+        "import_line": 50
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "audit-timeline",
+        "route_line": 1595,
+        "return_line": 1596,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      4,
+      49,
+      54,
+      67
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      119,
+      123,
+      150
+    ],
+    "loading_lines": [],
+    "error_lines": [
+      14,
+      18,
+      63,
+      70,
+      97
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/BrowserAgent.tsx",
+    "stem": "BrowserAgent",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "BrowserAgentPage",
+        "import_line": 112
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "browser-agent",
+        "route_line": 1730,
+        "return_line": 1731,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      12,
+      42
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      115,
+      124
+    ],
+    "interactive_lines": [
+      99,
+      112,
+      117,
+      126,
+      127,
+      128
+    ],
+    "loading_lines": [
+      40,
+      49,
+      53,
+      58,
+      62,
+      67,
+      71,
+      117,
+      118
+    ],
+    "error_lines": [
+      30,
+      43,
+      44,
+      45,
+      52,
+      61,
+      70,
+      78,
+      83,
+      131,
+      152
+    ],
+    "console_lines": [
+      43,
+      44,
+      45,
+      78,
+      83
+    ]
+  },
+  {
+    "file": "app/src/pages/CapabilityBoundaryMap.tsx",
+    "stem": "CapabilityBoundaryMap",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "CapabilityBoundaryMap",
+        "import_line": 109
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "capability-boundaries",
+        "route_line": 1721,
+        "return_line": 1722,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      8,
+      70
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      90
+    ],
+    "loading_lines": [
+      54,
+      58,
+      67,
+      79
+    ],
+    "error_lines": [
+      66,
+      76
+    ],
+    "console_lines": [
+      66
+    ]
+  },
+  {
+    "file": "app/src/pages/Chat.tsx",
+    "stem": "Chat",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Chat",
+        "import_line": 44
+      }
+    ],
+    "routes": [],
+    "in_nav": false,
+    "backend_call_lines": [
+      1,
+      6,
+      196,
+      242,
+      251
+    ],
+    "mock_lines": [
+      136
+    ],
+    "placeholder_lines": [
+      489
+    ],
+    "interactive_lines": [
+      312,
+      315,
+      323,
+      326,
+      418,
+      421,
+      458,
+      466,
+      468,
+      495
+    ],
+    "loading_lines": [
+      296
+    ],
+    "error_lines": [
+      102,
+      103,
+      220
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Civilization.tsx",
+    "stem": "Civilization",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "CivilizationPage",
+        "import_line": 94
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "civilization",
+        "route_line": 1778,
+        "return_line": 1779,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      33,
+      308,
+      309,
+      310,
+      311,
+      312,
+      328,
+      385,
+      393,
+      406,
+      438,
+      498,
+      530,
+      587,
+      634,
+      638,
+      642,
+      654,
+      990,
+      991,
+      1062,
+      1063,
+      1111,
+      1112,
+      1178,
+      1179
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      788,
+      910,
+      987,
+      1059,
+      1132,
+      1133,
+      1142,
+      1149,
+      1159,
+      1160,
+      1189,
+      1190,
+      1192,
+      1193,
+      1195,
+      1204,
+      1209,
+      1218,
+      1219,
+      1270,
+      1271,
+      1277,
+      1286,
+      1287,
+      1296,
+      1305,
+      1307,
+      1308
+    ],
+    "interactive_lines": [
+      205,
+      207,
+      791,
+      811,
+      814,
+      852,
+      913,
+      965,
+      990,
+      997,
+      1024,
+      1062,
+      1077,
+      1108,
+      1111,
+      1114,
+      1134,
+      1150,
+      1161,
+      1178,
+      1196,
+      1210,
+      1220,
+      1235,
+      1252,
+      1278,
+      1288,
+      1297,
+      1309,
+      1339,
+      1341
+    ],
+    "loading_lines": [
+      250,
+      323,
+      351,
+      797,
+      798,
+      860,
+      861,
+      862,
+      977,
+      1009,
+      1036,
+      1092,
+      1112,
+      1179,
+      1246,
+      1263,
+      1379
+    ],
+    "error_lines": [
+      184,
+      252,
+      305,
+      320,
+      321,
+      343,
+      363,
+      366,
+      369,
+      372,
+      376,
+      380,
+      399,
+      413,
+      436,
+      445,
+      446,
+      454,
+      458,
+      472,
+      473,
+      481,
+      486,
+      487,
+      496,
+      506,
+      507,
+      517,
+      521,
+      522,
+      531,
+      541,
+      542,
+      588,
+      592,
+      593,
+      639,
+      645,
+      646,
+      655,
+      660,
+      661,
+      683,
+      707,
+      971,
+      972,
+      1003,
+      1004,
+      1030,
+      1031,
+      1086,
+      1087,
+      1240,
+      1241,
+      1257,
+      1258,
+      1385
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/ClusterStatus.tsx",
+    "stem": "ClusterStatus",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "ClusterStatusPage",
+        "import_line": 52
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "cluster",
+        "route_line": 1604,
+        "return_line": 1605,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      11,
+      59
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      242,
+      247,
+      266,
+      271
+    ],
+    "interactive_lines": [
+      183,
+      185,
+      250,
+      251,
+      274,
+      275
+    ],
+    "loading_lines": [
+      34,
+      62,
+      78,
+      148,
+      150
+    ],
+    "error_lines": [
+      42,
+      54,
+      75,
+      88,
+      95,
+      96,
+      103,
+      112,
+      113,
+      119,
+      128,
+      129,
+      197
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/CodeEditor.tsx",
+    "stem": "CodeEditor",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "CodeEditor",
+        "import_line": 61
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "code-editor",
+        "route_line": 1619,
+        "return_line": 1620,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      11,
+      21,
+      27,
+      31,
+      34,
+      245,
+      272,
+      276,
+      296,
+      304,
+      310,
+      343,
+      384,
+      411,
+      668,
+      687
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      820,
+      854,
+      1030,
+      1081
+    ],
+    "interactive_lines": [
+      746,
+      756,
+      796,
+      797,
+      798,
+      799,
+      800,
+      801,
+      802,
+      803,
+      812,
+      822,
+      831,
+      833,
+      850,
+      866,
+      870,
+      887,
+      892,
+      976,
+      977,
+      987,
+      1002,
+      1003,
+      1004,
+      1005,
+      1035,
+      1038,
+      1042,
+      1058,
+      1059,
+      1082,
+      1149,
+      1167,
+      1171
+    ],
+    "loading_lines": [
+      236,
+      302,
+      312,
+      858,
+      859,
+      860
+    ],
+    "error_lines": [
+      82,
+      113,
+      237,
+      290,
+      298,
+      309,
+      310,
+      332,
+      377,
+      395,
+      396,
+      414,
+      415,
+      487,
+      490,
+      509,
+      514,
+      515,
+      516,
+      539,
+      560,
+      649,
+      651,
+      652,
+      653,
+      656,
+      808,
+      809,
+      811,
+      812,
+      1121
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Collaboration.tsx",
+    "stem": "Collaboration",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "CollaborationPage",
+        "import_line": 122
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "collab-protocol",
+        "route_line": 1751,
+        "return_line": 1752,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      15,
+      103
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      193,
+      194,
+      198,
+      264,
+      309,
+      324
+    ],
+    "interactive_lines": [
+      199,
+      208,
+      257,
+      259,
+      271,
+      318,
+      319,
+      320,
+      326,
+      327
+    ],
+    "loading_lines": [],
+    "error_lines": [
+      105,
+      106,
+      107,
+      116,
+      119,
+      122,
+      170,
+      173
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/CommandCenter.tsx",
+    "stem": "CommandCenter",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "CommandCenter",
+        "import_line": 49
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "command-center",
+        "route_line": 1592,
+        "return_line": 1593,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      48
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      132,
+      136,
+      140,
+      144,
+      148,
+      152
+    ],
+    "loading_lines": [
+      24,
+      28,
+      45,
+      79,
+      81
+    ],
+    "error_lines": [
+      42,
+      63
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/ComplianceDashboard.tsx",
+    "stem": "ComplianceDashboard",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "ComplianceDashboard",
+        "import_line": 51
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "compliance",
+        "route_line": 1601,
+        "return_line": 1602,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      10,
+      11,
+      83,
+      102,
+      108,
+      207,
+      213
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      264,
+      268,
+      478,
+      481,
+      702,
+      706,
+      733,
+      736,
+      769,
+      772,
+      777,
+      780,
+      852
+    ],
+    "loading_lines": [
+      81,
+      95,
+      100,
+      110,
+      121,
+      182,
+      189,
+      195,
+      202,
+      208,
+      211,
+      214,
+      217,
+      243,
+      248,
+      550,
+      551,
+      653,
+      654
+    ],
+    "error_lines": [
+      114,
+      115,
+      116,
+      173,
+      186,
+      199,
+      667
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/ComputerControl.tsx",
+    "stem": "ComputerControl",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "ComputerControl",
+        "import_line": 85
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "computer-control",
+        "route_line": 1694,
+        "return_line": 1695,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      17,
+      75,
+      79,
+      230
+    ],
+    "mock_lines": [
+      46,
+      281,
+      283,
+      286,
+      287,
+      290,
+      291,
+      305
+    ],
+    "placeholder_lines": [
+      483,
+      507
+    ],
+    "interactive_lines": [
+      255,
+      257,
+      262,
+      264,
+      281,
+      282,
+      291,
+      317,
+      393,
+      395,
+      401,
+      403,
+      426,
+      429,
+      445,
+      447,
+      462,
+      464,
+      486,
+      488,
+      510,
+      512
+    ],
+    "loading_lines": [
+      38,
+      141,
+      157,
+      428,
+      436
+    ],
+    "error_lines": [
+      22,
+      61,
+      62,
+      70,
+      71,
+      107,
+      108,
+      122,
+      123,
+      133,
+      134,
+      154,
+      155,
+      165,
+      166,
+      174,
+      175,
+      187,
+      188,
+      197,
+      198,
+      209,
+      378
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/ConsciousnessMonitor.tsx",
+    "stem": "ConsciousnessMonitor",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "ConsciousnessMonitor",
+        "import_line": 91
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "consciousness",
+        "route_line": 1769,
+        "return_line": 1770,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      11,
+      167,
+      172,
+      183,
+      190,
+      217
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      260,
+      330
+    ],
+    "loading_lines": [
+      317
+    ],
+    "error_lines": [
+      162,
+      169,
+      180,
+      212,
+      213,
+      228,
+      229,
+      243
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Dashboard.tsx",
+    "stem": "Dashboard",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Dashboard",
+        "import_line": 45
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "dashboard",
+        "route_line": 1478,
+        "return_line": 1479,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      77
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      116,
+      118
+    ],
+    "loading_lines": [
+      56,
+      59,
+      73,
+      80,
+      156,
+      169,
+      170
+    ],
+    "error_lines": [
+      55,
+      60,
+      70,
+      71,
+      78,
+      79,
+      126,
+      128
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/DatabaseManager.tsx",
+    "stem": "DatabaseManager",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "DatabaseManager",
+        "import_line": 68
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "database",
+        "route_line": 1652,
+        "return_line": 1653,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      8,
+      241
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      313,
+      320,
+      414,
+      502
+    ],
+    "interactive_lines": [
+      323,
+      337,
+      341,
+      346,
+      386,
+      402,
+      405,
+      406,
+      407,
+      473,
+      475,
+      485,
+      503,
+      528,
+      550,
+      586,
+      676
+    ],
+    "loading_lines": [],
+    "error_lines": [
+      18,
+      50,
+      51,
+      72,
+      124,
+      125,
+      134,
+      142,
+      144,
+      149,
+      189,
+      191,
+      193,
+      267,
+      268,
+      277,
+      278,
+      419,
+      420,
+      421,
+      422,
+      445,
+      679
+    ],
+    "console_lines": [
+      278
+    ]
+  },
+  {
+    "file": "app/src/pages/DeployPipeline.tsx",
+    "stem": "DeployPipeline",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "DeployPipeline",
+        "import_line": 76
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "deploy-pipeline",
+        "route_line": 1679,
+        "return_line": 1680,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      15,
+      167,
+      183,
+      188
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      483,
+      493,
+      765,
+      767,
+      789,
+      812,
+      814
+    ],
+    "interactive_lines": [
+      391,
+      396,
+      409,
+      464,
+      469,
+      497,
+      500,
+      512,
+      532,
+      542,
+      642,
+      644,
+      649,
+      651,
+      656,
+      658,
+      674,
+      769,
+      791,
+      816,
+      837
+    ],
+    "loading_lines": [
+      118,
+      141,
+      196,
+      208,
+      213,
+      221,
+      226,
+      235,
+      241,
+      253,
+      497,
+      498,
+      769,
+      771,
+      791,
+      816,
+      818
+    ],
+    "error_lines": [
+      38,
+      74,
+      95,
+      162,
+      163,
+      178,
+      191,
+      192,
+      205,
+      206,
+      218,
+      219,
+      232,
+      233,
+      250,
+      251,
+      265,
+      274,
+      275,
+      290,
+      298,
+      299,
+      317,
+      328,
+      337,
+      342,
+      349,
+      350,
+      712,
+      801,
+      852
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/DesignStudio.tsx",
+    "stem": "DesignStudio",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "DesignStudio",
+        "import_line": 70
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "design-studio",
+        "route_line": 1658,
+        "return_line": 1659,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      9,
+      53,
+      68
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      232,
+      234,
+      240,
+      242,
+      248,
+      250,
+      310,
+      313
+    ],
+    "loading_lines": [
+      48,
+      70,
+      79,
+      301,
+      302
+    ],
+    "error_lines": [
+      76,
+      77,
+      101,
+      102,
+      116,
+      117,
+      146,
+      151,
+      152
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/DeveloperPortal.tsx",
+    "stem": "DeveloperPortal",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "DeveloperPortal",
+        "import_line": 59
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "developer-portal",
+        "route_line": 1598,
+        "return_line": 1599,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      50,
+      67,
+      158
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      203,
+      229,
+      273,
+      289
+    ],
+    "loading_lines": [
+      6,
+      137,
+      234,
+      237
+    ],
+    "error_lines": [
+      6,
+      41,
+      62,
+      80,
+      140,
+      153,
+      154,
+      155,
+      285,
+      286,
+      287,
+      288
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/DistributedAudit.tsx",
+    "stem": "DistributedAudit",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "DistributedAudit",
+        "import_line": 54
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "distributed-audit",
+        "route_line": 1613,
+        "return_line": 1614,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      30,
+      40
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [],
+    "loading_lines": [
+      36,
+      42,
+      51,
+      90,
+      95
+    ],
+    "error_lines": [
+      46,
+      47
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Documents.tsx",
+    "stem": "Documents",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Documents",
+        "import_line": 80
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "documents",
+        "route_line": 1631,
+        "return_line": 1632,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      10,
+      123,
+      172,
+      176,
+      180,
+      186
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      1074
+    ],
+    "interactive_lines": [
+      334,
+      378,
+      379,
+      487,
+      825,
+      868,
+      869,
+      884,
+      885,
+      1091,
+      1092
+    ],
+    "loading_lines": [
+      116,
+      156,
+      168,
+      544,
+      556
+    ],
+    "error_lines": [
+      105,
+      121,
+      125,
+      129,
+      130,
+      131,
+      132,
+      140,
+      150,
+      164,
+      207,
+      208,
+      214,
+      224,
+      225,
+      228,
+      247,
+      248,
+      252,
+      771,
+      772,
+      784
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/DreamForge.tsx",
+    "stem": "DreamForge",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "DreamForge",
+        "import_line": 92
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "dreams",
+        "route_line": 1772,
+        "return_line": 1773,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      12,
+      124,
+      131
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      310,
+      328,
+      331
+    ],
+    "loading_lines": [],
+    "error_lines": [
+      101,
+      119,
+      120,
+      145,
+      157,
+      158,
+      174,
+      175,
+      204
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/EmailClient.tsx",
+    "stem": "EmailClient",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "EmailClient",
+        "import_line": 71
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "email-client",
+        "route_line": 1661,
+        "return_line": 1662,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      119,
+      127
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      402,
+      472,
+      476,
+      479
+    ],
+    "interactive_lines": [
+      346,
+      354,
+      358,
+      361,
+      371,
+      383,
+      423,
+      425,
+      452,
+      453,
+      461,
+      482,
+      484,
+      486,
+      501,
+      502,
+      503,
+      504
+    ],
+    "loading_lines": [
+      413
+    ],
+    "error_lines": [
+      72,
+      81,
+      82,
+      90,
+      91,
+      135,
+      136,
+      252,
+      253,
+      296,
+      309,
+      324
+    ],
+    "console_lines": [
+      82,
+      91
+    ]
+  },
+  {
+    "file": "app/src/pages/ExternalTools.tsx",
+    "stem": "ExternalTools",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "ExternalToolsPage",
+        "import_line": 121
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "external-tools",
+        "route_line": 1748,
+        "return_line": 1749,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      10,
+      87
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      184,
+      191
+    ],
+    "interactive_lines": [
+      133,
+      134,
+      135,
+      147,
+      197,
+      198
+    ],
+    "loading_lines": [
+      74,
+      96,
+      107,
+      199,
+      202
+    ],
+    "error_lines": [
+      73,
+      78,
+      79,
+      80,
+      90,
+      97,
+      102,
+      104,
+      105,
+      114,
+      116,
+      117,
+      135,
+      230,
+      232,
+      233
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/FileManager.tsx",
+    "stem": "FileManager",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "FileManager",
+        "import_line": 64
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "file-manager",
+        "route_line": 1625,
+        "return_line": 1626,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      10,
+      165,
+      302
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      373,
+      383
+    ],
+    "interactive_lines": [
+      333,
+      334,
+      335,
+      336,
+      337,
+      346,
+      353,
+      357,
+      364,
+      365,
+      375,
+      384,
+      385,
+      396,
+      397,
+      398,
+      412,
+      455,
+      456,
+      457,
+      467,
+      468,
+      557,
+      558
+    ],
+    "loading_lines": [
+      127,
+      144,
+      160,
+      402,
+      403,
+      406,
+      438,
+      446
+    ],
+    "error_lines": [
+      128,
+      145,
+      154,
+      155,
+      156,
+      174,
+      175,
+      176,
+      177,
+      192,
+      193,
+      261,
+      262,
+      276,
+      277,
+      296,
+      297,
+      342,
+      343,
+      344,
+      345,
+      346,
+      440
+    ],
+    "console_lines": [
+      155,
+      176
+    ]
+  },
+  {
+    "file": "app/src/pages/Firewall.tsx",
+    "stem": "Firewall",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Firewall",
+        "import_line": 58
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "firewall",
+        "route_line": 1700,
+        "return_line": 1701,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      10
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      28,
+      30
+    ],
+    "loading_lines": [],
+    "error_lines": [
+      12,
+      13
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/FlashInference.tsx",
+    "stem": "FlashInference",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "FlashInference",
+        "import_line": 107
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "flash-inference",
+        "route_line": 1637,
+        "return_line": 1638,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      15,
+      16,
+      141,
+      150,
+      151,
+      161,
+      200,
+      202,
+      208,
+      383
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      637
+    ],
+    "interactive_lines": [
+      449,
+      455,
+      467,
+      497,
+      544,
+      545,
+      560,
+      601,
+      623,
+      630,
+      631,
+      638
+    ],
+    "loading_lines": [
+      109,
+      131,
+      182,
+      184,
+      190,
+      197,
+      320,
+      321,
+      328,
+      350,
+      351,
+      497,
+      504,
+      505,
+      507,
+      510,
+      511,
+      512,
+      515,
+      546,
+      548,
+      550
+    ],
+    "error_lines": [
+      67,
+      74,
+      118,
+      145,
+      149,
+      151,
+      155,
+      165,
+      172,
+      183,
+      189,
+      194,
+      195,
+      301,
+      303,
+      322,
+      333,
+      340,
+      349,
+      356,
+      378,
+      381,
+      386,
+      388,
+      418,
+      421,
+      425,
+      427,
+      619,
+      620,
+      622,
+      623,
+      630,
+      631
+    ],
+    "console_lines": [
+      630,
+      631
+    ]
+  },
+  {
+    "file": "app/src/pages/GovernanceOracle.tsx",
+    "stem": "GovernanceOracle",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "GovernanceOraclePage",
+        "import_line": 113
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "governance-oracle",
+        "route_line": 1733,
+        "return_line": 1734,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      36
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      114
+    ],
+    "loading_lines": [
+      34,
+      43,
+      53
+    ],
+    "error_lines": [
+      42,
+      50
+    ],
+    "console_lines": [
+      42,
+      50
+    ]
+  },
+  {
+    "file": "app/src/pages/GovernedControl.tsx",
+    "stem": "GovernedControl",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "GovernedControlPage",
+        "import_line": 115
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "governed-control",
+        "route_line": 1739,
+        "return_line": 1740,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      8,
+      79,
+      90
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [],
+    "loading_lines": [
+      77,
+      87,
+      105,
+      108
+    ],
+    "error_lines": [
+      28,
+      52,
+      86,
+      93,
+      94,
+      95,
+      96
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Identity.tsx",
+    "stem": "Identity",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Identity",
+        "import_line": 57
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "identity",
+        "route_line": 1616,
+        "return_line": 1617,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      14,
+      15,
+      191,
+      365,
+      366,
+      382,
+      418,
+      433,
+      439,
+      443,
+      468
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      619,
+      722,
+      728,
+      788
+    ],
+    "interactive_lines": [
+      514,
+      558,
+      561,
+      592,
+      622,
+      665,
+      669,
+      672,
+      707,
+      734,
+      779,
+      791,
+      805,
+      827
+    ],
+    "loading_lines": [
+      536
+    ],
+    "error_lines": [
+      156,
+      182,
+      202,
+      210,
+      211,
+      222,
+      228,
+      229,
+      240,
+      252,
+      253,
+      262,
+      267,
+      268,
+      269,
+      279,
+      297,
+      298,
+      304,
+      310,
+      311,
+      320,
+      326,
+      327,
+      335,
+      339,
+      340,
+      348,
+      352,
+      353,
+      362,
+      373,
+      374,
+      380,
+      385,
+      386,
+      395,
+      400,
+      401,
+      416,
+      423,
+      424,
+      522
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/ImmuneDashboard.tsx",
+    "stem": "ImmuneDashboard",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "ImmuneDashboard",
+        "import_line": 90
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "immune-dashboard",
+        "route_line": 1766,
+        "return_line": 1767,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      10,
+      156,
+      194,
+      200,
+      206
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      428,
+      484,
+      501,
+      512
+    ],
+    "loading_lines": [
+      144,
+      190,
+      299,
+      331,
+      335,
+      345,
+      346,
+      371,
+      372,
+      387,
+      388,
+      477
+    ],
+    "error_lines": [
+      129,
+      133,
+      145,
+      163,
+      187,
+      188,
+      223,
+      229,
+      230,
+      239,
+      243,
+      251,
+      252,
+      266,
+      269,
+      270,
+      340
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Integrations.tsx",
+    "stem": "Integrations",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Integrations",
+        "import_line": 102
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "integrations",
+        "route_line": 1802,
+        "return_line": 1803,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      18,
+      97,
+      100,
+      427
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      229
+    ],
+    "interactive_lines": [
+      174,
+      176,
+      198,
+      200,
+      206,
+      208,
+      238,
+      241,
+      254,
+      257,
+      267,
+      318,
+      331,
+      333,
+      361,
+      364
+    ],
+    "loading_lines": [
+      90,
+      121,
+      131,
+      177,
+      190
+    ],
+    "error_lines": [
+      68,
+      89,
+      94,
+      96,
+      97,
+      111,
+      128,
+      129,
+      141,
+      142,
+      263,
+      266
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/KnowledgeGraph.tsx",
+    "stem": "KnowledgeGraph",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "KnowledgeGraph",
+        "import_line": 89
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "knowledge-graph",
+        "route_line": 1763,
+        "return_line": 1764,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      17,
+      228,
+      241,
+      370,
+      380,
+      381
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      522,
+      658,
+      680,
+      702,
+      749,
+      756,
+      762,
+      768,
+      799,
+      806,
+      827,
+      844
+    ],
+    "interactive_lines": [
+      525,
+      544,
+      547,
+      620,
+      623,
+      626,
+      661,
+      683,
+      705,
+      731,
+      772,
+      809,
+      830,
+      847
+    ],
+    "loading_lines": [
+      189,
+      194,
+      199,
+      204,
+      211,
+      217,
+      221,
+      225,
+      230,
+      242,
+      248,
+      256,
+      262,
+      270,
+      276,
+      284,
+      289,
+      298,
+      304,
+      319,
+      325,
+      336,
+      342,
+      351,
+      356,
+      366,
+      661,
+      662,
+      683,
+      684,
+      705,
+      706,
+      724,
+      725,
+      731,
+      772,
+      773,
+      809,
+      810,
+      830,
+      831,
+      847,
+      848
+    ],
+    "error_lines": [
+      66,
+      126,
+      183,
+      238,
+      241,
+      253,
+      254,
+      267,
+      268,
+      281,
+      282,
+      295,
+      296,
+      316,
+      317,
+      329,
+      333,
+      334,
+      348,
+      349,
+      363,
+      364,
+      377,
+      396,
+      397,
+      404,
+      419,
+      420,
+      438,
+      447,
+      459,
+      460,
+      472,
+      482,
+      483,
+      535
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/LearningCenter.tsx",
+    "stem": "LearningCenter",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "LearningCenter",
+        "import_line": 77
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "learning-center",
+        "route_line": 1685,
+        "return_line": 1686,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      14,
+      98,
+      112,
+      283,
+      290,
+      298,
+      332,
+      424,
+      433,
+      440,
+      537,
+      547,
+      548,
+      551,
+      558,
+      578,
+      620,
+      656,
+      675,
+      680,
+      725,
+      1037,
+      1241
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      1130
+    ],
+    "interactive_lines": [
+      705,
+      780,
+      812,
+      843,
+      874,
+      877,
+      903,
+      960,
+      962,
+      1041,
+      1066,
+      1086,
+      1136
+    ],
+    "loading_lines": [
+      325,
+      343,
+      543,
+      644,
+      652,
+      1117,
+      1134,
+      1136
+    ],
+    "error_lines": [
+      91,
+      99,
+      107,
+      123,
+      141,
+      149,
+      351,
+      456,
+      634,
+      649,
+      669,
+      673,
+      675
+    ],
+    "console_lines": [
+      675
+    ]
+  },
+  {
+    "file": "app/src/pages/Login.tsx",
+    "stem": "Login",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Login",
+        "import_line": 103
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "login",
+        "route_line": 1805,
+        "return_line": 1806,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      8,
+      135
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      210,
+      212
+    ],
+    "loading_lines": [
+      93,
+      100,
+      131,
+      171
+    ],
+    "error_lines": [
+      75,
+      94,
+      101,
+      124,
+      125,
+      126,
+      148,
+      149,
+      150,
+      165,
+      167
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/MeasurementBatteries.tsx",
+    "stem": "MeasurementBatteries",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "MeasurementBatteries",
+        "import_line": 124
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "measurement-batteries",
+        "route_line": 1718,
+        "return_line": 1719,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      40
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      69
+    ],
+    "loading_lines": [
+      37,
+      44,
+      59,
+      61,
+      65
+    ],
+    "error_lines": [
+      43
+    ],
+    "console_lines": [
+      43
+    ]
+  },
+  {
+    "file": "app/src/pages/MeasurementCompare.tsx",
+    "stem": "MeasurementCompare",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "MeasurementCompare",
+        "import_line": 118
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "measurement-compare",
+        "route_line": 1715,
+        "return_line": 1716,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      56
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      99,
+      102
+    ],
+    "loading_lines": [
+      53,
+      77,
+      82,
+      117,
+      189
+    ],
+    "error_lines": [
+      54,
+      62,
+      78,
+      81,
+      116
+    ],
+    "console_lines": [
+      62
+    ]
+  },
+  {
+    "file": "app/src/pages/MeasurementDashboard.tsx",
+    "stem": "MeasurementDashboard",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "MeasurementDashboard",
+        "import_line": 108
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "measurement",
+        "route_line": 1709,
+        "return_line": 1710,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      8,
+      126
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      163,
+      169,
+      185,
+      268,
+      270,
+      277
+    ],
+    "loading_lines": [
+      95,
+      102,
+      123,
+      173,
+      174,
+      177,
+      182,
+      250
+    ],
+    "error_lines": [
+      96,
+      103,
+      116,
+      122,
+      134,
+      143,
+      166,
+      168
+    ],
+    "console_lines": [
+      134
+    ]
+  },
+  {
+    "file": "app/src/pages/MeasurementSession.tsx",
+    "stem": "MeasurementSession",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "MeasurementSessionPage",
+        "import_line": 117
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "measurement-session",
+        "route_line": 1712,
+        "return_line": 1713,
+        "in_nav": false
+      }
+    ],
+    "in_nav": false,
+    "backend_call_lines": [
+      1,
+      2,
+      105,
+      113
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      194
+    ],
+    "loading_lines": [
+      100,
+      107,
+      111,
+      114,
+      123,
+      126,
+      130
+    ],
+    "error_lines": [
+      101,
+      110,
+      122,
+      126,
+      131
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/MediaStudio.tsx",
+    "stem": "MediaStudio",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "MediaStudio",
+        "import_line": 72
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "media-studio",
+        "route_line": 1667,
+        "return_line": 1668,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      4,
+      11,
+      69
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      182,
+      184,
+      196,
+      199,
+      248,
+      250,
+      283,
+      285
+    ],
+    "loading_lines": [],
+    "error_lines": [
+      76,
+      77,
+      105,
+      106,
+      132,
+      133
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Messaging.tsx",
+    "stem": "Messaging",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Messaging",
+        "import_line": 73
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "messaging",
+        "route_line": 1664,
+        "return_line": 1665,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      11,
+      90,
+      94,
+      106,
+      153
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      283,
+      349,
+      350
+    ],
+    "interactive_lines": [
+      287,
+      289,
+      294,
+      296,
+      301,
+      304,
+      351
+    ],
+    "loading_lines": [],
+    "error_lines": [
+      87,
+      99,
+      124,
+      148,
+      149,
+      154,
+      155,
+      178,
+      179,
+      190,
+      192,
+      205,
+      206,
+      217,
+      218
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/MissionControl.tsx",
+    "stem": "MissionControl",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "MissionControl",
+        "import_line": 86
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "mission-control",
+        "route_line": 1703,
+        "return_line": 1704,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      13,
+      168,
+      178,
+      185
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      286,
+      289,
+      292,
+      379,
+      388,
+      402,
+      407,
+      412,
+      416,
+      425,
+      479,
+      501,
+      518,
+      585
+    ],
+    "loading_lines": [
+      619
+    ],
+    "error_lines": [
+      140,
+      172,
+      173,
+      174,
+      399
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/ModelHub.tsx",
+    "stem": "ModelHub",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "ModelHub",
+        "import_line": 81
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "model-hub",
+        "route_line": 1634,
+        "return_line": 1635,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      18,
+      182,
+      227,
+      267,
+      341,
+      345
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      590,
+      1526,
+      1543,
+      1595,
+      1612,
+      1629
+    ],
+    "interactive_lines": [
+      620,
+      622,
+      705,
+      1059,
+      1060,
+      1265,
+      1266,
+      1280,
+      1281,
+      1297,
+      1298,
+      1402,
+      1403,
+      1420,
+      1421,
+      1484,
+      1485,
+      1556,
+      1557,
+      1642,
+      1643
+    ],
+    "loading_lines": [
+      158,
+      166,
+      177,
+      195,
+      232,
+      255,
+      263,
+      276,
+      284,
+      290,
+      301,
+      306,
+      315,
+      437,
+      455,
+      811,
+      821,
+      1404,
+      1414,
+      1415,
+      1422,
+      1432,
+      1433,
+      1486,
+      1491,
+      1558,
+      1567,
+      1571,
+      1687,
+      1688
+    ],
+    "error_lines": [
+      159,
+      167,
+      180,
+      185,
+      189,
+      190,
+      191,
+      192,
+      211,
+      212,
+      222,
+      239,
+      249,
+      260,
+      277,
+      281,
+      282,
+      291,
+      298,
+      299,
+      307,
+      312,
+      313,
+      322,
+      332,
+      333,
+      401,
+      402,
+      408,
+      450,
+      452,
+      453,
+      458,
+      478,
+      479,
+      487,
+      501,
+      503,
+      504,
+      507,
+      1360,
+      1371,
+      1748,
+      1749,
+      1761
+    ],
+    "console_lines": [
+      212
+    ]
+  },
+  {
+    "file": "app/src/pages/ModelRouting.tsx",
+    "stem": "ModelRouting",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "ModelRouting",
+        "import_line": 110
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "model-routing",
+        "route_line": 1724,
+        "return_line": 1725,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      7,
+      37
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      91
+    ],
+    "interactive_lines": [
+      96
+    ],
+    "loading_lines": [
+      35,
+      45,
+      55
+    ],
+    "error_lines": [
+      44,
+      52
+    ],
+    "console_lines": [
+      44,
+      52
+    ]
+  },
+  {
+    "file": "app/src/pages/NotesApp.tsx",
+    "stem": "NotesApp",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "NotesApp",
+        "import_line": 66
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "notes",
+        "route_line": 1646,
+        "return_line": 1647,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      3,
+      6,
+      159,
+      166,
+      231,
+      253,
+      378
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      424,
+      528,
+      577
+    ],
+    "interactive_lines": [
+      393,
+      403,
+      404,
+      413,
+      425,
+      432,
+      438,
+      451,
+      475,
+      493,
+      497,
+      501,
+      502,
+      532,
+      533,
+      534,
+      536,
+      538,
+      541,
+      552,
+      560,
+      607
+    ],
+    "loading_lines": [],
+    "error_lines": [
+      152,
+      184,
+      185,
+      196,
+      197,
+      247,
+      297,
+      298,
+      311,
+      312,
+      324,
+      325,
+      392,
+      393,
+      394
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Perception.tsx",
+    "stem": "Perception",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "PerceptionPage",
+        "import_line": 119
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "perception",
+        "route_line": 1742,
+        "return_line": 1743,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      12
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      205,
+      211,
+      266,
+      275
+    ],
+    "interactive_lines": [
+      216,
+      229,
+      283,
+      284
+    ],
+    "loading_lines": [
+      91,
+      146,
+      178,
+      285,
+      290,
+      294,
+      386
+    ],
+    "error_lines": [
+      11,
+      25,
+      34,
+      80,
+      92,
+      98,
+      102,
+      104,
+      105,
+      147,
+      167,
+      168,
+      175,
+      176,
+      219,
+      313,
+      315,
+      316,
+      386
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/PermissionDashboard.tsx",
+    "stem": "PermissionDashboard",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "PermissionDashboard",
+        "import_line": 55
+      }
+    ],
+    "routes": [],
+    "in_nav": false,
+    "backend_call_lines": [
+      1,
+      21,
+      56,
+      146
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      265,
+      267,
+      358,
+      366,
+      375,
+      384,
+      386,
+      394,
+      396,
+      410,
+      412,
+      435,
+      436,
+      440,
+      441,
+      530,
+      532
+    ],
+    "loading_lines": [
+      113,
+      127,
+      142,
+      346,
+      349
+    ],
+    "error_lines": [
+      114,
+      126,
+      139,
+      140,
+      169,
+      179,
+      207,
+      208,
+      363,
+      364,
+      365,
+      366
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/PolicyManagement.tsx",
+    "stem": "PolicyManagement",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "PolicyManagement",
+        "import_line": 79
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "policy-management",
+        "route_line": 1697,
+        "return_line": 1698,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      7,
+      57
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      109,
+      111,
+      133,
+      134,
+      213,
+      214,
+      303,
+      304
+    ],
+    "loading_lines": [
+      41,
+      53,
+      147,
+      148
+    ],
+    "error_lines": [
+      39,
+      49,
+      67,
+      75,
+      79,
+      80,
+      342,
+      344
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/ProjectManager.tsx",
+    "stem": "ProjectManager",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "ProjectManager",
+        "import_line": 67
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "project-manager",
+        "route_line": 1649,
+        "return_line": 1650,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      180,
+      187
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      328,
+      359,
+      619
+    ],
+    "interactive_lines": [
+      316,
+      321,
+      352,
+      353,
+      356,
+      363,
+      390,
+      454,
+      502,
+      521,
+      616,
+      652,
+      683
+    ],
+    "loading_lines": [
+      346
+    ],
+    "error_lines": [
+      125,
+      134,
+      135
+    ],
+    "console_lines": [
+      135
+    ]
+  },
+  {
+    "file": "app/src/pages/Protocols.tsx",
+    "stem": "Protocols",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Protocols",
+        "import_line": 56
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "protocols",
+        "route_line": 1610,
+        "return_line": 1611,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      20,
+      269
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      489,
+      535,
+      541,
+      562,
+      569,
+      605,
+      612,
+      628,
+      731,
+      737
+    ],
+    "interactive_lines": [
+      447,
+      493,
+      496,
+      546,
+      549,
+      573,
+      576,
+      580,
+      583,
+      632,
+      635,
+      670,
+      673,
+      678,
+      681,
+      686,
+      689,
+      742,
+      745
+    ],
+    "loading_lines": [
+      64,
+      249,
+      266,
+      274,
+      279
+    ],
+    "error_lines": [
+      69,
+      95,
+      105,
+      108,
+      112,
+      113,
+      119,
+      127,
+      128,
+      134,
+      139,
+      140,
+      146,
+      151,
+      152,
+      158,
+      163,
+      164,
+      171,
+      177,
+      178,
+      188,
+      193,
+      200,
+      201,
+      208,
+      214,
+      215,
+      222,
+      228,
+      229,
+      236,
+      241,
+      242,
+      263,
+      480,
+      593,
+      594
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Scheduler.tsx",
+    "stem": "Scheduler",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "SchedulerPage",
+        "import_line": 63
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "scheduler",
+        "route_line": 1682,
+        "return_line": 1683,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      9,
+      109
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      239,
+      243
+    ],
+    "interactive_lines": [
+      211,
+      212,
+      221,
+      228,
+      313,
+      362,
+      365,
+      368
+    ],
+    "loading_lines": [
+      77,
+      98,
+      105,
+      320,
+      321
+    ],
+    "error_lines": [
+      79,
+      102,
+      103,
+      114,
+      136,
+      137,
+      168,
+      169,
+      181,
+      182,
+      190,
+      191,
+      201,
+      202,
+      218,
+      220,
+      221
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/SelfRewriteLab.tsx",
+    "stem": "SelfRewriteLab",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "SelfRewriteLab",
+        "import_line": 95
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "self-rewrite",
+        "route_line": 1781,
+        "return_line": 1782,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      11,
+      173,
+      219,
+      257,
+      278,
+      475
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      384,
+      461,
+      464,
+      470,
+      501,
+      519,
+      561,
+      564
+    ],
+    "loading_lines": [],
+    "error_lines": [
+      153,
+      172,
+      176,
+      213,
+      214,
+      225,
+      235,
+      236,
+      244,
+      256,
+      262,
+      263,
+      272,
+      277,
+      287,
+      288,
+      303,
+      314,
+      315,
+      323,
+      333,
+      334,
+      378
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Settings.tsx",
+    "stem": "Settings",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Settings",
+        "import_line": 46
+      }
+    ],
+    "routes": [],
+    "in_nav": false,
+    "backend_call_lines": [
+      1,
+      5,
+      23,
+      76,
+      105,
+      118,
+      124,
+      161,
+      182,
+      188,
+      191,
+      227,
+      243,
+      282,
+      354,
+      361,
+      543,
+      592,
+      594,
+      602,
+      603,
+      604,
+      605,
+      607,
+      610,
+      615,
+      618,
+      631,
+      632,
+      633,
+      634,
+      638,
+      641,
+      646,
+      649,
+      919
+    ],
+    "mock_lines": [
+      489,
+      504
+    ],
+    "placeholder_lines": [
+      547,
+      613,
+      644,
+      923
+    ],
+    "interactive_lines": [
+      355,
+      359,
+      505,
+      510,
+      552,
+      555,
+      595,
+      615,
+      618,
+      646,
+      649,
+      702,
+      713,
+      718,
+      719,
+      764,
+      777,
+      841,
+      844,
+      873,
+      877,
+      903,
+      907,
+      926,
+      929,
+      934,
+      937,
+      983,
+      996
+    ],
+    "loading_lines": [
+      95,
+      245,
+      253,
+      891,
+      892
+    ],
+    "error_lines": [
+      24,
+      176,
+      186,
+      197,
+      200,
+      202,
+      203,
+      205,
+      207,
+      215,
+      221,
+      234,
+      239,
+      250,
+      253,
+      263,
+      264,
+      274,
+      306,
+      329,
+      489,
+      519
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/SetupWizard.tsx",
+    "stem": "SetupWizard",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "SetupWizard",
+        "import_line": 47
+      }
+    ],
+    "routes": [],
+    "in_nav": false,
+    "backend_call_lines": [
+      1,
+      76,
+      80,
+      134
+    ],
+    "mock_lines": [
+      224
+    ],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      381,
+      384,
+      420,
+      423,
+      448,
+      451,
+      461,
+      464,
+      468,
+      471,
+      500,
+      505,
+      548,
+      551,
+      555,
+      559,
+      601,
+      604,
+      608,
+      612,
+      637,
+      640,
+      649,
+      699,
+      702,
+      708,
+      712,
+      745,
+      748,
+      756,
+      760
+    ],
+    "loading_lines": [
+      6,
+      106,
+      218,
+      226,
+      301,
+      354,
+      404,
+      504,
+      558,
+      561,
+      682,
+      711,
+      728,
+      759
+    ],
+    "error_lines": [
+      6,
+      54,
+      62,
+      83,
+      96,
+      97,
+      98,
+      112,
+      123,
+      128,
+      129,
+      141,
+      152,
+      153,
+      161,
+      169,
+      170,
+      178,
+      185,
+      186,
+      194,
+      209,
+      210,
+      219,
+      229,
+      230,
+      231,
+      233,
+      285,
+      634,
+      635,
+      636,
+      639,
+      640,
+      696,
+      697,
+      698,
+      743
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/SoftwareFactory.tsx",
+    "stem": "SoftwareFactory",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "SoftwareFactoryPage",
+        "import_line": 123
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "software-factory",
+        "route_line": 1754,
+        "return_line": 1755,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      12,
+      83
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      156,
+      157,
+      237,
+      238
+    ],
+    "interactive_lines": [
+      158,
+      165,
+      223,
+      243
+    ],
+    "loading_lines": [],
+    "error_lines": [
+      85,
+      86,
+      87,
+      88,
+      98,
+      101,
+      104,
+      134,
+      136
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/SystemMonitor.tsx",
+    "stem": "SystemMonitor",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "SystemMonitor",
+        "import_line": 65
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "system-monitor",
+        "route_line": 1628,
+        "return_line": 1629,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      7,
+      144,
+      217
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      332,
+      343,
+      561
+    ],
+    "loading_lines": [],
+    "error_lines": [
+      104,
+      137,
+      153,
+      202,
+      204,
+      226,
+      312
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Telemetry.tsx",
+    "stem": "Telemetry",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Telemetry",
+        "import_line": 105
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "telemetry",
+        "route_line": 1811,
+        "return_line": 1812,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      7,
+      105,
+      125,
+      132
+    ],
+    "mock_lines": [
+      395,
+      472,
+      482
+    ],
+    "placeholder_lines": [
+      447,
+      468
+    ],
+    "interactive_lines": [
+      196,
+      198,
+      368,
+      422,
+      424,
+      549,
+      551,
+      556,
+      558
+    ],
+    "loading_lines": [
+      99,
+      112,
+      128,
+      199,
+      201,
+      206,
+      315,
+      348,
+      405
+    ],
+    "error_lines": [
+      50,
+      100,
+      101,
+      113,
+      123,
+      124,
+      125,
+      140,
+      147,
+      153,
+      163,
+      164,
+      165,
+      209,
+      211,
+      374,
+      379,
+      543
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/TemporalEngine.tsx",
+    "stem": "TemporalEngine",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "TemporalEngine",
+        "import_line": 93
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "temporal",
+        "route_line": 1775,
+        "return_line": 1776,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      7,
+      112,
+      113,
+      122,
+      143
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      328,
+      362,
+      368
+    ],
+    "interactive_lines": [
+      197,
+      300,
+      301,
+      306,
+      307,
+      344,
+      376,
+      413
+    ],
+    "loading_lines": [],
+    "error_lines": [
+      90,
+      117,
+      118,
+      127,
+      133,
+      134,
+      145,
+      146,
+      157,
+      158,
+      165,
+      171,
+      172,
+      208
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Terminal.tsx",
+    "stem": "Terminal",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Terminal",
+        "import_line": 62
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "terminal",
+        "route_line": 1622,
+        "return_line": 1623,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      3,
+      99,
+      127,
+      254,
+      261,
+      268,
+      353,
+      385,
+      507
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      650
+    ],
+    "interactive_lines": [
+      559,
+      560,
+      573,
+      578,
+      585,
+      610,
+      611,
+      621,
+      625,
+      662,
+      663,
+      664,
+      676,
+      680
+    ],
+    "loading_lines": [],
+    "error_lines": [
+      12,
+      294,
+      299,
+      301,
+      302,
+      303,
+      304,
+      327,
+      328,
+      329,
+      483,
+      486,
+      488,
+      489,
+      490,
+      491
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/TimeMachine.tsx",
+    "stem": "TimeMachine",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "TimeMachine",
+        "import_line": 82
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "time-machine",
+        "route_line": 1640,
+        "return_line": 1641,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      18,
+      228,
+      234,
+      238,
+      249,
+      485,
+      489
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      901,
+      1485
+    ],
+    "interactive_lines": [
+      509,
+      618,
+      619,
+      641,
+      642,
+      873,
+      874,
+      913,
+      914,
+      960,
+      997,
+      998,
+      1011,
+      1012,
+      1227,
+      1228,
+      1278,
+      1279,
+      1438,
+      1439,
+      1455,
+      1456,
+      1498,
+      1499,
+      1516,
+      1517,
+      1578,
+      1580
+    ],
+    "loading_lines": [
+      154,
+      165,
+      168,
+      173,
+      202,
+      371,
+      381,
+      388,
+      399,
+      416,
+      424,
+      457,
+      467,
+      915,
+      922,
+      927,
+      950,
+      1044,
+      1045,
+      1280,
+      1287,
+      1291,
+      1301,
+      1500,
+      1507,
+      1512
+    ],
+    "error_lines": [
+      157,
+      166,
+      174,
+      196,
+      209,
+      222,
+      274,
+      275,
+      289,
+      290,
+      316,
+      317,
+      363,
+      364,
+      378,
+      379,
+      389,
+      395,
+      396,
+      410,
+      411,
+      421,
+      422,
+      436,
+      439,
+      440,
+      449,
+      450,
+      458,
+      463,
+      464,
+      476,
+      477,
+      931,
+      933,
+      1295,
+      1297
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/TimelineViewer.tsx",
+    "stem": "TimelineViewer",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "TimelineViewer",
+        "import_line": 88
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "timeline-viewer",
+        "route_line": 1760,
+        "return_line": 1761,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      86
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      188,
+      189,
+      224
+    ],
+    "loading_lines": [],
+    "error_lines": [
+      73,
+      81,
+      82,
+      93,
+      94,
+      116
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/TokenEconomy.tsx",
+    "stem": "TokenEconomy",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "TokenEconomyPage",
+        "import_line": 114
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "token-economy",
+        "route_line": 1736,
+        "return_line": 1737,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      9,
+      139,
+      155,
+      161
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      437
+    ],
+    "interactive_lines": [
+      196,
+      198,
+      342,
+      344,
+      452,
+      454
+    ],
+    "loading_lines": [
+      125,
+      152,
+      167,
+      171
+    ],
+    "error_lines": [
+      141,
+      142,
+      143,
+      144,
+      158,
+      164
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/TrustDashboard.tsx",
+    "stem": "TrustDashboard",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "TrustDashboard",
+        "import_line": 53
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "trust",
+        "route_line": 1607,
+        "return_line": 1608,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      12,
+      99,
+      401,
+      406
+    ],
+    "mock_lines": [
+      482
+    ],
+    "placeholder_lines": [
+      271,
+      295,
+      296,
+      308,
+      309,
+      326,
+      341,
+      362
+    ],
+    "interactive_lines": [
+      235,
+      237,
+      255,
+      275,
+      297,
+      330,
+      350,
+      367,
+      446,
+      448,
+      452,
+      454
+    ],
+    "loading_lines": [
+      44,
+      50,
+      58,
+      64,
+      70,
+      75,
+      80,
+      86,
+      95,
+      105,
+      114,
+      120,
+      134,
+      140,
+      149,
+      155,
+      164,
+      170,
+      179,
+      185,
+      194,
+      207,
+      209,
+      238,
+      240,
+      275,
+      276,
+      297,
+      298,
+      330,
+      331,
+      350,
+      351,
+      367,
+      368,
+      381,
+      388,
+      397,
+      412,
+      417
+    ],
+    "error_lines": [
+      45,
+      51,
+      82,
+      87,
+      92,
+      93,
+      106,
+      111,
+      112,
+      131,
+      132,
+      146,
+      147,
+      161,
+      162,
+      176,
+      177,
+      186,
+      191,
+      192,
+      208,
+      209,
+      258,
+      260,
+      279,
+      382,
+      394,
+      395,
+      440
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/UsageBilling.tsx",
+    "stem": "UsageBilling",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "UsageBilling",
+        "import_line": 106
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "usage-billing",
+        "route_line": 1814,
+        "return_line": 1815,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      8,
+      108
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      321
+    ],
+    "interactive_lines": [
+      174,
+      177,
+      184,
+      186,
+      325,
+      327
+    ],
+    "loading_lines": [
+      81,
+      90,
+      104,
+      198,
+      203,
+      204
+    ],
+    "error_lines": [
+      82,
+      91,
+      101,
+      102,
+      125,
+      146,
+      196,
+      198
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/VoiceAssistant.tsx",
+    "stem": "VoiceAssistant",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "VoiceAssistant",
+        "import_line": 83
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "voice-assistant",
+        "route_line": 1676,
+        "return_line": 1677,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      9,
+      18,
+      349,
+      439,
+      489,
+      493,
+      499,
+      583,
+      605,
+      804
+    ],
+    "mock_lines": [
+      931
+    ],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      734,
+      735,
+      832,
+      833,
+      854,
+      856,
+      887,
+      985,
+      986
+    ],
+    "loading_lines": [
+      367,
+      639,
+      640,
+      659,
+      987,
+      989,
+      995,
+      996,
+      1002
+    ],
+    "error_lines": [
+      31,
+      125,
+      414,
+      419,
+      481,
+      509,
+      520,
+      531,
+      560,
+      566,
+      567,
+      582,
+      600,
+      611,
+      624,
+      625,
+      626,
+      655,
+      689,
+      690,
+      698,
+      708
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Workflows.tsx",
+    "stem": "Workflows",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Workflows",
+        "import_line": 48
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "workflows",
+        "route_line": 1589,
+        "return_line": 1590,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      26,
+      263
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      357,
+      359,
+      399,
+      408,
+      435,
+      439,
+      463,
+      487,
+      488,
+      497
+    ],
+    "loading_lines": [
+      234,
+      249,
+      250,
+      260,
+      526
+    ],
+    "error_lines": [
+      224,
+      258,
+      259,
+      326,
+      327,
+      337
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/Workspaces.tsx",
+    "stem": "Workspaces",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "Workspaces",
+        "import_line": 104
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "workspaces",
+        "route_line": 1808,
+        "return_line": 1809,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      10,
+      235,
+      239
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      365,
+      615
+    ],
+    "interactive_lines": [
+      343,
+      345,
+      349,
+      372,
+      374,
+      379,
+      381,
+      424,
+      439,
+      526,
+      528,
+      589,
+      591,
+      636,
+      638,
+      643,
+      645,
+      677,
+      679,
+      697,
+      699,
+      759,
+      761,
+      766,
+      768
+    ],
+    "loading_lines": [
+      171,
+      184,
+      202,
+      210,
+      215,
+      231,
+      402,
+      405,
+      546,
+      549,
+      554
+    ],
+    "error_lines": [
+      172,
+      178,
+      185,
+      191,
+      197,
+      203,
+      207,
+      208,
+      216,
+      228,
+      229,
+      245,
+      246,
+      258,
+      265,
+      266,
+      275,
+      291,
+      292,
+      310,
+      311,
+      318,
+      326,
+      327,
+      381,
+      386,
+      388,
+      394,
+      395,
+      397,
+      540,
+      542,
+      591,
+      645,
+      650,
+      651,
+      701,
+      768,
+      773,
+      775
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/WorldSimulation.tsx",
+    "stem": "WorldSimulation",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "WorldSimulation",
+        "import_line": 84
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "simulation",
+        "route_line": 1643,
+        "return_line": 1644,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      13,
+      283,
+      306,
+      313,
+      319,
+      347,
+      354,
+      541
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [
+      613,
+      623,
+      842,
+      847,
+      1126
+    ],
+    "interactive_lines": [
+      576,
+      581,
+      602,
+      669,
+      706,
+      710,
+      766,
+      768,
+      773,
+      776,
+      849,
+      851,
+      889,
+      892,
+      1134
+    ],
+    "loading_lines": [],
+    "error_lines": [
+      224,
+      271,
+      413,
+      433,
+      434,
+      446,
+      451,
+      452,
+      463,
+      467,
+      468,
+      479,
+      485,
+      486,
+      494,
+      498,
+      499,
+      515,
+      516,
+      567
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/WorldSimulation2.tsx",
+    "stem": "WorldSimulation2",
+    "imported_in_app": true,
+    "components": [
+      {
+        "component": "WorldSimulation2Page",
+        "import_line": 116
+      }
+    ],
+    "routes": [
+      {
+        "route_id": "world-sim",
+        "route_line": 1757,
+        "return_line": 1758,
+        "in_nav": true
+      }
+    ],
+    "in_nav": true,
+    "backend_call_lines": [
+      1,
+      2,
+      56,
+      70
+    ],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [],
+    "loading_lines": [
+      54,
+      67,
+      77,
+      80
+    ],
+    "error_lines": [
+      58,
+      59,
+      74
+    ],
+    "console_lines": []
+  },
+  {
+    "file": "app/src/pages/commandCenterUi.tsx",
+    "stem": "commandCenterUi",
+    "imported_in_app": false,
+    "components": [],
+    "routes": [],
+    "in_nav": false,
+    "backend_call_lines": [],
+    "mock_lines": [],
+    "placeholder_lines": [],
+    "interactive_lines": [
+      208,
+      210
+    ],
+    "loading_lines": [],
+    "error_lines": [],
+    "console_lines": []
+  }
+]

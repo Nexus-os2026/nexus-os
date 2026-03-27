@@ -1,0 +1,3 @@
+## hardcoded_secrets
+## committed_env_files
+## env_git_history

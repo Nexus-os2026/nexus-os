@@ -171,6 +171,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "browser", label: "Agent Browser", icon: "Globe", shortcut: "", section: "AGENT LAB" },
   { id: "dna-lab", label: "DNA Lab", icon: "Dna", shortcut: "", section: "AGENT LAB" },
   { id: "measurement", label: "Measurement", icon: "Target", shortcut: "", section: "AGENT LAB" },
+  { id: "measurement-session", label: "Session Detail", icon: "FileSearch", shortcut: "", section: "AGENT LAB" },
   { id: "measurement-compare", label: "Compare Agents", icon: "GitCompare", shortcut: "", section: "AGENT LAB" },
   { id: "measurement-batteries", label: "Test Batteries", icon: "FlaskConical", shortcut: "", section: "AGENT LAB" },
   { id: "capability-boundaries", label: "Boundary Map", icon: "Map", shortcut: "", section: "AGENT LAB" },

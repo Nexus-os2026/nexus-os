@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { simGetHistory, simGetPolicy, listAgents } from "../api/backend";
+import { simGetHistory, simGetPolicy, simSubmit, simRun, simGetResult, simGetRisk, listAgents } from "../api/backend";
 import {
   alpha,
   commandMutedStyle,
@@ -52,11 +52,17 @@ export default function WorldSimulation2() {
   const [history, setHistory] = useState<ScenarioSummary[]>([]);
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [scenarioDesc, setScenarioDesc] = useState("");
+  const [actionsJson, setActionsJson] = useState('[{"action":"deploy","target":"staging","risk":0.3}]');
+  const [runningId, setRunningId] = useState<string | null>(null);
+  const [simResult, setSimResult] = useState<any>(null);
+  const [simRisk, setSimRisk] = useState<any>(null);
 
   useEffect(() => {
     Promise.all([
-      listAgents().catch(() => []),
-      simGetPolicy().catch(() => null),
+      listAgents().catch((e) => { setError(String(e)); return []; }),
+      simGetPolicy().catch((e) => { setError(String(e)); return null; }),
     ])
       .then(([a, p]) => {
         const list = normalizeArray<{ id: string; name: string }>(a);
@@ -71,7 +77,7 @@ export default function WorldSimulation2() {
     if (!selectedAgent) return;
     simGetHistory(selectedAgent)
       .then((h) => setHistory(Array.isArray(h) ? h : []))
-      .catch(() => setHistory([]));
+      .catch((e) => { setHistory([]); setError(String(e)); });
   }, [selectedAgent]);
 
   if (loading) {
@@ -90,6 +96,46 @@ export default function WorldSimulation2() {
       <p style={{ ...commandMutedStyle, marginBottom: 16, fontSize: 13 }}>
         Multi-step action scenario simulation with risk assessment and what-if branching.
       </p>
+
+      {error && (
+        <div style={{ color: "#ef4444", background: alpha("#ef4444", 0.1), padding: "8px 12px", borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
+          {error} <button onClick={() => setError(null)} style={{ marginLeft: 8, background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}>Dismiss</button>
+        </div>
+      )}
+
+      {/* Scenario Builder */}
+      <div style={{ background: alpha("#1e1e2e", 0.7), borderRadius: 10, padding: 16, border: "1px solid " + alpha("#ffffff", 0.08), marginBottom: 16 }}>
+        <div style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Run Simulation</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <input placeholder="Scenario description..." value={scenarioDesc} onChange={(e) => setScenarioDesc(e.target.value)} style={{ flex: 1, padding: 8, borderRadius: 6, background: "#2a2a3e", color: "#e0e0e0", border: "1px solid #444" }} />
+        </div>
+        <textarea placeholder='Actions JSON array' value={actionsJson} onChange={(e) => setActionsJson(e.target.value)} rows={3} style={{ width: "100%", padding: 8, borderRadius: 6, background: "#2a2a3e", color: "#e0e0e0", border: "1px solid #444", fontFamily: "monospace", fontSize: 12, boxSizing: "border-box", resize: "vertical", marginBottom: 8 }} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => {
+            if (!selectedAgent || !scenarioDesc.trim()) return;
+            setError(null);
+            simSubmit(selectedAgent, scenarioDesc, actionsJson)
+              .then((id) => { setRunningId(id); return simRun(id); })
+              .then((result) => { setSimResult(result); if (runningId) simGetRisk(runningId).then(setSimRisk).catch(() => {}); })
+              .catch((e) => setError(String(e)));
+          }} disabled={!selectedAgent || !scenarioDesc.trim()} style={{ padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontWeight: 600, fontSize: 12, background: selectedAgent && scenarioDesc.trim() ? ACCENT : "#444", color: "#fff" }}>
+            Submit & Run
+          </button>
+          {simResult && <span style={{ color: GREEN, fontSize: 12, alignSelf: "center" }}>Simulation complete</span>}
+        </div>
+        {simResult && (
+          <div style={{ marginTop: 12, padding: 10, background: alpha("#000", 0.3), borderRadius: 6, fontSize: 12 }}>
+            <div style={{ color: "#888", marginBottom: 4 }}>Result:</div>
+            <pre style={{ color: GREEN, whiteSpace: "pre-wrap", maxHeight: 200, overflow: "auto", margin: 0 }}>{JSON.stringify(simResult, null, 2)}</pre>
+          </div>
+        )}
+        {simRisk && (
+          <div style={{ marginTop: 8, padding: 10, background: alpha("#000", 0.3), borderRadius: 6, fontSize: 12 }}>
+            <div style={{ color: "#888", marginBottom: 4 }}>Risk Assessment:</div>
+            <pre style={{ color: YELLOW, whiteSpace: "pre-wrap", margin: 0 }}>{JSON.stringify(simRisk, null, 2)}</pre>
+          </div>
+        )}
+      </div>
 
       {/* Agent selector */}
       <div style={{ marginBottom: 20 }}>

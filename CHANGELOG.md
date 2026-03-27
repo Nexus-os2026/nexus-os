@@ -2,6 +2,17 @@
 
 All notable changes to NEXUS OS are documented here.
 
+## [Unreleased]
+
+### Documentation
+- Updated EU AI Act Conformity Self-Assessment with article-by-article compliance mapping covering Articles 9, 10, 11, 12, 13, 14, 15, and 17
+- Added crate-level implementation references (nexus-governance, nexus-darwin, nexus-audit, nexus-crypto, nexus-wasm, etc.)
+- Honest status assessments: Implemented, Partial, Deployer-responsible, Planned
+- L0–L6 autonomy-to-Article-14 human oversight mapping table
+- Competitive governance comparison vs OpenClaw, AIOS, CrewAI, AutoGen, LangGraph
+- 7 identified gaps with remediation timelines targeting August 2, 2026 enforcement deadline
+- Added Word document version for investor/CISO distribution (docs/Nexus_OS_EU_AI_Act_Conformity.docx)
+
 ## v9.4.0 — Flash Inference (March 21, 2026)
 
 ### Flash Inference Engine

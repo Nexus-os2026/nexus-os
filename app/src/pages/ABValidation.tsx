@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { cmRunAbValidation } from "../api/backend";
+import { cmRunAbValidation, listAgents } from "../api/backend";
 import {
   ActionButton,
   EmptyState,
@@ -37,12 +37,22 @@ export default function ABValidation() {
   const [result, setResult] = useState<ABResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const runValidation = () => {
     setLoading(true);
-    cmRunAbValidation([])
+    setError(null);
+    // Load real prebuilt agent IDs instead of passing empty array
+    listAgents()
+      .then((agents: any) => {
+        const ids = (Array.isArray(agents) ? agents : []).map((a: any) => a.id || a).filter(Boolean);
+        if (ids.length === 0) {
+          throw new Error("No agents found. Ensure agents are loaded from agents/prebuilt/.");
+        }
+        return cmRunAbValidation(ids);
+      })
       .then((r) => setResult(r as ABResult))
-      .catch(console.error)
+      .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
   };
 
@@ -62,9 +72,15 @@ export default function ABValidation() {
         </ActionButton>
       </div>
 
+      {error && (
+        <div style={{ color: "#ef4444", background: "rgba(239,68,68,0.1)", padding: "8px 12px", borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
+          {error} <button onClick={() => setError(null)} style={{ marginLeft: 8, background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}>Dismiss</button>
+        </div>
+      )}
+
       {loading && <div style={{ textAlign: "center", padding: 48, color: "#888" }}>Running validation (baseline + routed)...</div>}
 
-      {!loading && !result && <EmptyState text="Run an A/B validation to compare fixed vs predictive model routing." />}
+      {!loading && !result && !error && <EmptyState text="Run an A/B validation to compare fixed vs predictive model routing." />}
 
       {/* Aggregate Summary */}
       {agg && (
