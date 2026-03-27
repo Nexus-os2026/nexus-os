@@ -55,6 +55,7 @@ members = [
   "crates/nexus-computer-control",
   "crates/nexus-world-simulation",
   "crates/nexus-perception",
+  "crates/nexus-agent-memory",
 ]
 
 [workspace.package]

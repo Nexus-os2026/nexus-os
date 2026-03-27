@@ -122,6 +122,9 @@ use nexus_world_simulation::tauri_commands as sim_cmds;
 // Perception imports
 use nexus_perception::tauri_commands as perception_cmds;
 
+// Agent memory imports
+use nexus_agent_memory::tauri_commands as memory_cmds;
+
 struct GatewayHivemindLlm;
 
 impl nexus_kernel::cognitive::HivemindLlm for GatewayHivemindLlm {
@@ -915,6 +918,7 @@ pub struct AppState {
     governed_control: Arc<cc_cmds::ControlState>,
     world_simulation: Arc<sim_cmds::SimulationState>,
     perception: Arc<perception_cmds::PerceptionState>,
+    persistent_memory: Arc<memory_cmds::MemoryState>,
     #[cfg(all(
         feature = "tauri-runtime",
         any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1196,6 +1200,7 @@ impl AppState {
             governed_control: Arc::new(cc_cmds::ControlState::default()),
             world_simulation: Arc::new(sim_cmds::SimulationState::new()),
             perception: Arc::new(perception_cmds::PerceptionState::default()),
+            persistent_memory: Arc::new(memory_cmds::MemoryState::default()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1394,6 +1399,7 @@ impl AppState {
             governed_control: Arc::new(cc_cmds::ControlState::default()),
             world_simulation: Arc::new(sim_cmds::SimulationState::new()),
             perception: Arc::new(perception_cmds::PerceptionState::default()),
+            persistent_memory: Arc::new(memory_cmds::MemoryState::default()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -22422,6 +22428,107 @@ fn perception_get_policy(state: tauri::State<'_, AppState>) -> nexus_perception:
     perception_cmds::get_policy(&state.perception)
 }
 
+// ── Agent Memory Commands ─────────────────────────────────────────────────────
+
+#[tauri::command]
+fn memory_store_entry(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+    memory_type: String,
+    summary: String,
+    tags: Vec<String>,
+    importance: f64,
+    domain: Option<String>,
+) -> Result<String, String> {
+    memory_cmds::memory_store(&state.persistent_memory, &agent_id, &memory_type, &summary, tags, importance, domain)
+}
+
+#[tauri::command]
+fn memory_query_entries(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+    query: String,
+    memory_type: Option<String>,
+    tags: Option<Vec<String>>,
+    limit: usize,
+) -> Result<Vec<nexus_agent_memory::Memory>, String> {
+    memory_cmds::memory_query(&state.persistent_memory, &agent_id, &query, memory_type, tags, limit)
+}
+
+#[tauri::command]
+fn memory_get_entry(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+    memory_id: String,
+) -> Result<nexus_agent_memory::Memory, String> {
+    memory_cmds::memory_get(&state.persistent_memory, &agent_id, &memory_id)
+}
+
+#[tauri::command]
+fn memory_delete_entry(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+    memory_id: String,
+) -> Result<bool, String> {
+    memory_cmds::memory_delete(&state.persistent_memory, &agent_id, &memory_id)
+}
+
+#[tauri::command]
+fn memory_build_context(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+    task_description: String,
+    max_memories: usize,
+) -> Result<nexus_agent_memory::MemoryContext, String> {
+    memory_cmds::memory_build_context(&state.persistent_memory, &agent_id, &task_description, max_memories)
+}
+
+#[tauri::command]
+fn memory_get_stats(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+) -> Result<memory_cmds::MemoryStats, String> {
+    memory_cmds::memory_get_stats(&state.persistent_memory, &agent_id)
+}
+
+#[tauri::command]
+fn memory_consolidate(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+) -> Result<memory_cmds::ConsolidationResult, String> {
+    memory_cmds::memory_consolidate(&state.persistent_memory, &agent_id)
+}
+
+#[tauri::command]
+fn memory_save(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+) -> Result<String, String> {
+    memory_cmds::memory_save(&state.persistent_memory, &agent_id)
+}
+
+#[tauri::command]
+fn memory_load(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+) -> Result<String, String> {
+    memory_cmds::memory_load(&state.persistent_memory, &agent_id)
+}
+
+#[tauri::command]
+fn memory_list_agents(
+    state: tauri::State<'_, AppState>,
+) -> Vec<String> {
+    memory_cmds::memory_list_agents(&state.persistent_memory)
+}
+
+#[tauri::command]
+fn memory_get_policy(
+    state: tauri::State<'_, AppState>,
+) -> nexus_agent_memory::MemoryPolicy {
+    memory_cmds::memory_get_policy(&state.persistent_memory)
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -27299,6 +27406,17 @@ mod runtime {
                 perception_read_error,
                 perception_analyze_chart,
                 perception_get_policy,
+                memory_store_entry,
+                memory_query_entries,
+                memory_get_entry,
+                memory_delete_entry,
+                memory_build_context,
+                memory_get_stats,
+                memory_consolidate,
+                memory_save,
+                memory_load,
+                memory_list_agents,
+                memory_get_policy,
             ])
             .run(tauri::generate_context!())
             .unwrap_or_else(|e| {

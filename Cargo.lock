@@ -3979,6 +3979,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-agent-memory"
+version = "9.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "nexus-airgap"
 version = "9.0.0"
 dependencies = [
@@ -4256,6 +4269,7 @@ dependencies = [
  "chrono",
  "ed25519-dalek",
  "nexus-adaptation",
+ "nexus-agent-memory",
  "nexus-airgap",
  "nexus-auth",
  "nexus-browser-agent",
@@ -4411,6 +4425,7 @@ dependencies = [
  "coding-agent",
  "ed25519-dalek",
  "nexus-adaptation",
+ "nexus-agent-memory",
  "nexus-airgap",
  "nexus-analytics",
  "nexus-auth",

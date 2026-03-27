@@ -3669,3 +3669,68 @@ export function perceptionGetPolicy(): Promise<any> {
   return invokeDesktop("perception_get_policy");
 }
 
+// ── Agent Memory ─────────────────────────────────────────────────────────────
+
+export function memoryStoreEntry(
+  agentId: string, memoryType: string, summary: string, tags: string[], importance: number, domain?: string
+): Promise<string> {
+  return invokeDesktop<string>("memory_store_entry", {
+    agentId, agent_id: agentId, memoryType, memory_type: memoryType,
+    summary, tags, importance, domain,
+  });
+}
+
+export function memoryQueryEntries(
+  agentId: string, query: string, memoryType?: string, tags?: string[], limit?: number
+): Promise<any[]> {
+  return invokeDesktop("memory_query_entries", {
+    agentId, agent_id: agentId, query,
+    memoryType, memory_type: memoryType, tags,
+    limit: limit ?? 10,
+  });
+}
+
+export function memoryGetEntry(agentId: string, memoryId: string): Promise<any> {
+  return invokeDesktop("memory_get_entry", {
+    agentId, agent_id: agentId, memoryId, memory_id: memoryId,
+  });
+}
+
+export function memoryDeleteEntry(agentId: string, memoryId: string): Promise<boolean> {
+  return invokeDesktop<boolean>("memory_delete_entry", {
+    agentId, agent_id: agentId, memoryId, memory_id: memoryId,
+  });
+}
+
+export function memoryBuildContext(agentId: string, taskDescription: string, maxMemories: number): Promise<any> {
+  return invokeDesktop("memory_build_context", {
+    agentId, agent_id: agentId,
+    taskDescription, task_description: taskDescription,
+    maxMemories, max_memories: maxMemories,
+  });
+}
+
+export function memoryGetStats(agentId: string): Promise<any> {
+  return invokeDesktop("memory_get_stats", { agentId, agent_id: agentId });
+}
+
+export function memoryConsolidate(agentId: string): Promise<any> {
+  return invokeDesktop("memory_consolidate", { agentId, agent_id: agentId });
+}
+
+export function memorySave(agentId: string): Promise<string> {
+  return invokeDesktop<string>("memory_save", { agentId, agent_id: agentId });
+}
+
+export function memoryLoad(agentId: string): Promise<string> {
+  return invokeDesktop<string>("memory_load", { agentId, agent_id: agentId });
+}
+
+export function memoryListAgents(): Promise<string[]> {
+  return invokeDesktop("memory_list_agents");
+}
+
+export function memoryGetPolicy(): Promise<any> {
+  return invokeDesktop("memory_get_policy");
+}
+
