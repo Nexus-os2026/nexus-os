@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { runDilatedSession as runDilatedSessionApi } from "../api/backend";
+import {
+  runDilatedSession as runDilatedSessionApi,
+  temporalFork,
+  temporalRollback,
+} from "../api/backend";
 
 /* ================================================================== */
 /*  Types                                                              */
@@ -122,7 +126,7 @@ export default function TemporalEngine(): JSX.Element {
     setForking(true);
     setError(null);
     try {
-      await invoke("temporal_fork", { request: forkRequest, agentId: forkAgentId || null, count: forkCount });
+      await temporalFork(forkAgentId || "", forkRequest);
       await refresh();
       setForkRequest("");
       setTab("timelines");
@@ -147,7 +151,7 @@ export default function TemporalEngine(): JSX.Element {
 
   const handleRollback = useCallback(async (decisionId: string) => {
     try {
-      await invoke("temporal_rollback", { decisionId });
+      await temporalRollback(decisionId);
       setSelectedFork(null);
       await refresh();
     } catch (e) {

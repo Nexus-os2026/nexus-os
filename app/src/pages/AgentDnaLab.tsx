@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   breedAgents,
   getAgentGenome,
@@ -17,8 +18,8 @@ import {
   evolutionRegisterStrategy,
   evolutionRollback,
   evolvePopulation,
+  mutateAgent,
 } from "../api/backend";
-import { invoke } from "@tauri-apps/api/core";
 import {
   Dna, FlaskConical, Zap, TrendingUp, GitMerge, GitBranch,
   BarChart3, RefreshCw, Plus, Eye, Trash2, Layers, Search,
@@ -256,7 +257,7 @@ export default function AgentDnaLab(): JSX.Element {
     setMutating(true);
     setError(null);
     try {
-      await invoke("mutate_agent", { agentId });
+      await mutateAgent(agentId, "random");
       await loadGenome(agentId, agentId === selectedA ? setGenomeA : setGenomeB);
       await loadAgents();
     } catch (e) {

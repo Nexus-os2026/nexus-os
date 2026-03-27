@@ -1,21 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ClipboardList, FolderOpen, Microscope, Calendar, Hexagon, FileText, Package, StickyNote, Bug, Search, ChevronLeft, ChevronRight, ChevronDown, Pin, PinOff, Tag, Download, Copy, Zap, Play } from "lucide-react";
-import { notesGet } from "../api/backend";
+import { notesGet, notesList, notesSave, notesDelete } from "../api/backend";
 import "./notes-app.css";
 
-/* ─── Tauri invoke ─── */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function invoke(cmd: string, args?: Record<string, unknown>): Promise<any> {
-  if (
-    typeof window !== "undefined" &&
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    typeof (window as any).__TAURI__?.invoke === "function"
-  ) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (window as any).__TAURI__.invoke(cmd, args);
-  }
-  return "[]";
-}
+/* ─── Backend calls go through backend.ts ─── */
 
 /* ─── types ─── */
 interface NoteTag {
@@ -178,7 +166,7 @@ export default function NotesApp() {
   useEffect(() => {
     (async () => {
       try {
-        const raw: string = await invoke("notes_list");
+        const raw: string = await notesList();
         const loaded: Note[] = JSON.parse(raw).map((n: Record<string, unknown>) => ({
           id: n.id as string,
           title: n.title as string,
@@ -204,13 +192,7 @@ export default function NotesApp() {
   const persistNote = useCallback(async (note: Note) => {
     setSaving(true);
     try {
-      await invoke("notes_save", {
-        id: note.id,
-        title: note.title,
-        content: note.content,
-        folderId: note.folderId,
-        tagsJson: JSON.stringify(note.tags),
-      });
+      await notesSave(note.id, note.title, note.content, note.folderId, JSON.stringify(note.tags));
     } catch (err) {
       setLastError(String(err));
     }
@@ -311,13 +293,7 @@ export default function NotesApp() {
 
     // Persist immediately
     try {
-      await invoke("notes_save", {
-        id: newNote.id,
-        title: newNote.title,
-        content: newNote.content,
-        folderId: newNote.folderId,
-        tagsJson: JSON.stringify(newNote.tags),
-      });
+      await notesSave(newNote.id, newNote.title, newNote.content, newNote.folderId, JSON.stringify(newNote.tags));
     } catch (err) {
       setLastError(String(err));
     }
@@ -331,7 +307,7 @@ export default function NotesApp() {
       setSelectedNoteId(notes.find(n => n.id !== id)?.id ?? "");
     }
     try {
-      await invoke("notes_delete", { id });
+      await notesDelete(id);
     } catch (err) {
       setLastError(String(err));
     }
@@ -344,13 +320,7 @@ export default function NotesApp() {
     setNotes(prev => [dup, ...prev]);
     setSelectedNoteId(dup.id);
     try {
-      await invoke("notes_save", {
-        id: dup.id,
-        title: dup.title,
-        content: dup.content,
-        folderId: dup.folderId,
-        tagsJson: JSON.stringify(dup.tags),
-      });
+      await notesSave(dup.id, dup.title, dup.content, dup.folderId, JSON.stringify(dup.tags));
     } catch (err) {
       setLastError(String(err));
     }

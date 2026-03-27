@@ -134,9 +134,39 @@ impl GovernedControlEngine {
         *self.total_spent.entry(agent_id.to_string()).or_insert(0) += cost;
         *self.action_counts.entry(agent_id.to_string()).or_insert(0) += 1;
 
-        // 4. Execute (the actual execution is delegated to the kernel's
-        //    ComputerControlEngine — this crate handles governance only)
-        let output = format!("Executed: {}", action.label());
+        // 4. Execute — real execution for terminal commands, governed simulation for others
+        let output = match action {
+            crate::actions::ComputerAction::TerminalCommand {
+                command,
+                working_dir,
+            } => {
+                let dir = if working_dir.is_empty() {
+                    self.workspace_root.clone()
+                } else {
+                    working_dir.clone()
+                };
+                match std::process::Command::new("sh")
+                    .args(["-c", command])
+                    .current_dir(&dir)
+                    .output()
+                {
+                    Ok(out) => {
+                        let stdout = String::from_utf8_lossy(&out.stdout);
+                        let stderr = String::from_utf8_lossy(&out.stderr);
+                        if out.status.success() {
+                            format!("{stdout}{stderr}")
+                        } else {
+                            format!(
+                                "Exit code {}: {stdout}{stderr}",
+                                out.status.code().unwrap_or(-1)
+                            )
+                        }
+                    }
+                    Err(e) => format!("Execution failed: {e}"),
+                }
+            }
+            _ => format!("Executed: {}", action.label()),
+        };
 
         // 5. Audit
         let entry = self

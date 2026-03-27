@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { cmGetSession, cmGetGamingFlags } from "../api/backend";
+import { cmGetSession, cmGetGamingFlags, cmListSessions } from "../api/backend";
 import {
   EmptyState,
   Panel,
@@ -95,20 +95,37 @@ function scoreColor(s: number): string {
   return "#ef4444";
 }
 
-export default function MeasurementSession({ sessionId }: { sessionId: string }) {
+export default function MeasurementSession({ sessionId: initialSessionId }: { sessionId: string }) {
   const [session, setSession] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedLevel, setExpandedLevel] = useState<string | null>(null);
+  const [resolvedId, setResolvedId] = useState(initialSessionId);
 
   useEffect(() => {
-    if (!sessionId) return;
-    setLoading(true);
-    cmGetSession(sessionId)
-      .then((s) => setSession(s as SessionData))
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoading(false));
-  }, [sessionId]);
+    if (resolvedId) {
+      setLoading(true);
+      cmGetSession(resolvedId)
+        .then((s) => setSession(s as SessionData))
+        .catch((e) => setError(String(e)))
+        .finally(() => setLoading(false));
+    } else {
+      // No session ID provided — fetch the most recent session
+      setLoading(true);
+      cmListSessions()
+        .then((sessions: any[]) => {
+          if (sessions && sessions.length > 0) {
+            const latest = sessions[sessions.length - 1];
+            const id = latest.id || latest.session_id || "";
+            setResolvedId(id);
+          } else {
+            setError("No measurement sessions found. Start a session from the Measurement Dashboard.");
+            setLoading(false);
+          }
+        })
+        .catch((e) => { setError(String(e)); setLoading(false); });
+    }
+  }, [resolvedId]);
 
   if (loading) return <div style={commandPageStyle}><div style={{ textAlign: "center", padding: 48, color: "#888" }}>Loading session...</div></div>;
   if (error) return <div style={commandPageStyle}><div style={{ color: "#ef4444", padding: 24 }}>{error}</div></div>;

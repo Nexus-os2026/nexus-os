@@ -70,6 +70,7 @@ export default function AdminCompliance() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"overview" | "eu-ai-act" | "soc2" | "audit">("overview");
   const [exporting, setExporting] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -90,7 +91,7 @@ export default function AdminCompliance() {
     setExporting(true);
     try {
       const result = await adminComplianceExport(format);
-      alert(`Report exported: ${result}`);
+      setStatusMsg(`Report exported: ${result}`);
     } catch {
       /* no-op */
     } finally {

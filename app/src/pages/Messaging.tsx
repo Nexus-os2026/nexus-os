@@ -84,6 +84,7 @@ export default function Messaging(): JSX.Element {
   const [replyPlatform, setReplyPlatform] = useState("");
   const [messages, setMessages] = useState<{platform: string; channel: string; from: string; text: string; time: string}[]>([]);
   const [sendingReply, setSendingReply] = useState(false);
+  const [msgError, setMsgError] = useState<string | null>(null);
 
   /* ─── Real-time message listener via Tauri events ─── */
   useEffect(() => {
@@ -188,7 +189,7 @@ export default function Messaging(): JSX.Element {
       setConnectionResults(prev => ({ ...prev, [platform]: { connected: true, name: data.bot_name || data.team || platform } }));
     } catch (e: any) {
       setConnectionResults(prev => ({ ...prev, [platform]: { connected: false } }));
-      alert(`Connection failed: ${e?.message || e}`);
+      setMsgError(`Connection failed: ${e?.message || e}`);
     } finally {
       setConnectingPlatform(null);
     }
@@ -202,7 +203,7 @@ export default function Messaging(): JSX.Element {
       setMessages(prev => [...prev, { platform: replyPlatform, channel: replyChannel, from: "You", text: replyText, time: new Date().toLocaleTimeString() }]);
       setReplyText("");
     } catch (e: any) {
-      alert(`Send failed: ${e?.message || e}`);
+      setMsgError(`Send failed: ${e?.message || e}`);
     } finally {
       setSendingReply(false);
     }

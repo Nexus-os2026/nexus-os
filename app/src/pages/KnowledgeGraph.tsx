@@ -4,6 +4,10 @@ import {
   cogfsGetContext,
   cogfsGetEntities as cogfsGetEntitiesApi,
   cogfsGetGraph as cogfsGetGraphApi,
+  cogfsIndexFile,
+  cogfsQuery,
+  cogfsSearch,
+  cogfsWatchDirectory,
   neuralBridgeIngest,
   neuralBridgeSearch,
   neuralBridgeStatus,
@@ -400,7 +404,7 @@ export default function KnowledgeGraphPage(): JSX.Element {
     setError(null);
     setStatusMessage("Running semantic query...");
     try {
-      const naturalResults = normalizeArray<QueryResult>(await invoke("cogfs_query", { question: query.trim() }));
+      const naturalResults = normalizeArray<QueryResult>(await cogfsQuery(query.trim()));
       if (naturalResults.length > 0) {
         setResults(naturalResults);
         setSearchMode("natural");
@@ -408,10 +412,7 @@ export default function KnowledgeGraphPage(): JSX.Element {
         return;
       }
 
-      const keywordResults = normalizeArray<QueryResult>(await invoke("cogfs_search", {
-        query: query.trim(),
-        limit: 20,
-      }));
+      const keywordResults = normalizeArray<QueryResult>(await cogfsSearch(query.trim()));
       setResults(keywordResults);
       setSearchMode("keyword");
       setStatusMessage(keywordResults.length > 0 ? `Keyword fallback returned ${keywordResults.length} result${keywordResults.length === 1 ? "" : "s"}` : "No results found");
@@ -447,10 +448,10 @@ export default function KnowledgeGraphPage(): JSX.Element {
       }
 
       if (kind === "directory") {
-        await invoke("cogfs_watch_directory", { path });
+        await cogfsWatchDirectory(path);
         setStatusMessage(`Watching ${path}`);
       } else {
-        await invoke("cogfs_index_file", { path });
+        await cogfsIndexFile(path);
         setStatusMessage(`Indexed ${path}`);
       }
 
@@ -472,9 +473,9 @@ export default function KnowledgeGraphPage(): JSX.Element {
     try {
       for (const entry of trackedPaths) {
         if (entry.kind === "directory") {
-          await invoke("cogfs_watch_directory", { path: entry.path });
+          await cogfsWatchDirectory(entry.path);
         } else {
-          await invoke("cogfs_index_file", { path: entry.path });
+          await cogfsIndexFile(entry.path);
         }
       }
       setStatusMessage(`Rebuilt ${trackedPaths.length} tracked item${trackedPaths.length === 1 ? "" : "s"}`);

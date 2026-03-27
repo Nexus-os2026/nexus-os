@@ -126,7 +126,7 @@ export default function Integrations() {
         setOauthConnected(prev => ({ ...prev, [providerId]: true }));
       }
     } catch (e: any) {
-      alert(`OAuth failed: ${e?.message || e}`);
+      setLoadError(`OAuth failed: ${e?.message || e}`);
     } finally {
       setOauthLoading(null);
     }

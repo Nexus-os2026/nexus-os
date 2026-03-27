@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RequiresLlm from "../components/RequiresLlm";
 import Editor, { type OnMount } from "@monaco-editor/react";
 import {
+  getGitRepoStatus,
   hasDesktopRuntime,
   sendChat,
   terminalExecute,
@@ -326,7 +327,7 @@ export default function CodeEditor(): JSX.Element {
       return;
     }
     try {
-      const repo = await invoke("get_git_repo_status");
+      const repo = await getGitRepoStatus();
       setGitRepo(repo as GitRepoStatus);
     } catch {
       setGitRepo({

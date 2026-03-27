@@ -99,7 +99,7 @@ export default function AdminFleet() {
   const handleStopAll = async (workspaceId: string) => {
     try {
       const count = await adminAgentStopAll(workspaceId);
-      alert(`Stopped ${count} agents`);
+      setError(`Stopped ${count} agents`); // status notification via error banner
       void refresh();
     } catch {
       /* no-op */

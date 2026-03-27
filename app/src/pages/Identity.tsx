@@ -10,6 +10,7 @@ import {
   ghostProtocolAddPeer,
   ghostProtocolRemovePeer,
   ghostProtocolSyncNow,
+  meshAddPeer,
 } from "../api/backend";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -393,7 +394,7 @@ export function Identity({ agents }: { agents: AgentOption[] }): JSX.Element {
     setWorking("add-peer");
     setError(null);
     try {
-      await invoke("mesh_add_peer", { address: manualAddress.trim() });
+      await meshAddPeer("", manualAddress.trim());
       setLocalPeers((current) => [createManualPeer(manualAddress.trim()), ...current]);
       setManualAddress("");
     } catch (peerError) {

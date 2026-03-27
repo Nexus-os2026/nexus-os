@@ -287,18 +287,29 @@ pub fn evaluate_single_response(
     })
 }
 
-/// Run batch evaluation using mock adapters (keyword scoring, no LLM).
-/// `agent_entries` is a list of (agent_id, autonomy_level) pairs.
-/// Each agent responds with a generic response for keyword matching.
+/// Run batch evaluation with real LLM inference. Requires GROQ_API_KEY or
+/// NVIDIA_NIM_API_KEY. Returns error if no API key is configured.
 pub fn run_batch_evaluation(
     state: &MeasurementState,
     agent_entries: &[(String, u8)],
 ) -> Result<crate::evaluation::batch::BatchResult, String> {
+    let api_key = std::env::var("GROQ_API_KEY")
+        .or_else(|_| std::env::var("NVIDIA_NIM_API_KEY"))
+        .map_err(|_| {
+            "Real inference requires GROQ_API_KEY or NVIDIA_NIM_API_KEY. \
+             Configure one to run real validation."
+                .to_string()
+        })?;
+    let client = std::sync::Arc::new(crate::evaluation::nim_client::NimClient::new(
+        api_key,
+        "llama-3.1-8b-instant".into(),
+    ));
     let adapters: Vec<crate::evaluation::agent_adapter::AgentAdapter> = agent_entries
         .iter()
         .map(|(id, level)| {
-            crate::evaluation::agent_adapter::AgentAdapter::new(id.clone(), *level, |_prompt| {
-                Ok("The agent provides a detailed response with test insight.".into())
+            let c = client.clone();
+            crate::evaluation::agent_adapter::AgentAdapter::new(id.clone(), *level, move |prompt| {
+                c.query("You are a helpful assistant.", prompt, 512)
             })
         })
         .collect();
@@ -381,27 +392,50 @@ pub fn upload_to_darwin(
     })
 }
 
-/// Run A/B validation: baseline (fixed) vs routed (predictive).
-/// Both runs use keyword scoring with generic agent responses.
+/// Run A/B validation: baseline (fixed model) vs routed (predictive model selection).
+/// Requires GROQ_API_KEY or NVIDIA_NIM_API_KEY for real LLM inference.
 pub fn run_ab_validation(
     state: &MeasurementState,
     agent_entries: &[(String, u8)],
 ) -> Result<crate::evaluation::ab_validation::ABComparisonResult, String> {
+    let api_key = std::env::var("GROQ_API_KEY")
+        .or_else(|_| std::env::var("NVIDIA_NIM_API_KEY"))
+        .map_err(|_| {
+            "Real A/B validation requires GROQ_API_KEY or NVIDIA_NIM_API_KEY. \
+             Configure one to compare real LLM performance."
+                .to_string()
+        })?;
+
+    // Baseline: small model (simulates unrouted fixed assignment)
+    let baseline_client = std::sync::Arc::new(crate::evaluation::nim_client::NimClient::new(
+        api_key.clone(),
+        "llama-3.1-8b-instant".into(),
+    ));
     let baseline_adapters: Vec<crate::evaluation::agent_adapter::AgentAdapter> = agent_entries
         .iter()
         .map(|(id, level)| {
-            crate::evaluation::agent_adapter::AgentAdapter::new(id.clone(), *level, |_| {
-                Ok("The agent provides a baseline response with test insight.".into())
+            let c = baseline_client.clone();
+            crate::evaluation::agent_adapter::AgentAdapter::new(id.clone(), *level, move |prompt| {
+                c.query("You are a helpful assistant.", prompt, 512)
             })
         })
         .collect();
 
-    // Routed adapters give a slightly enhanced response (simulating better model)
+    // Routed: larger model (simulates predictive routing selecting optimal model)
+    let routed_client = std::sync::Arc::new(crate::evaluation::nim_client::NimClient::new(
+        api_key,
+        "llama-3.3-70b-versatile".into(),
+    ));
     let routed_adapters: Vec<crate::evaluation::agent_adapter::AgentAdapter> = agent_entries
         .iter()
         .map(|(id, level)| {
-            crate::evaluation::agent_adapter::AgentAdapter::new(id.clone(), *level, |_| {
-                Ok("The agent with routing provides a detailed response with test insight and thorough analysis.".into())
+            let c = routed_client.clone();
+            crate::evaluation::agent_adapter::AgentAdapter::new(id.clone(), *level, move |prompt| {
+                c.query(
+                    "You are an expert assistant. Provide thorough, detailed analysis.",
+                    prompt,
+                    1024,
+                )
             })
         })
         .collect();

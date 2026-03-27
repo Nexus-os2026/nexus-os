@@ -7,6 +7,7 @@ import {
   getConsciousnessHistory,
   getUserBehaviorState,
   reportUserKeystroke,
+  resetAgentConsciousness,
 } from "../api/backend";
 
 /* ================================================================== */
@@ -222,7 +223,7 @@ export default function ConsciousnessMonitor(): JSX.Element {
   const handleReset = useCallback(async () => {
     if (!selectedId) return;
     try {
-      await invoke("reset_agent_consciousness", { agentId: selectedId });
+      await resetAgentConsciousness(selectedId);
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

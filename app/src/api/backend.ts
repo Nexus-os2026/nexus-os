@@ -3936,3 +3936,81 @@ export function getRateLimitStatus(): Promise<any> {
   return invokeDesktop("get_rate_limit_status");
 }
 
+// ── Direct-invoke wrappers (migrated from inline page calls) ─────────────────
+
+export function notesList(): Promise<string> {
+  return invokeDesktop<string>("notes_list");
+}
+
+export function notesSave(id: string, title: string, content: string, folderId: string, tagsJson: string): Promise<void> {
+  return invokeDesktop("notes_save", { id, title, content, folderId, folder_id: folderId, tagsJson, tags_json: tagsJson });
+}
+
+export function notesDelete(id: string): Promise<void> {
+  return invokeDesktop("notes_delete", { id });
+}
+
+export function civVote(ruleId: string, agentId: string, vote: string): Promise<any> {
+  return invokeDesktop("civ_vote", { ruleId, rule_id: ruleId, agentId, agent_id: agentId, vote });
+}
+
+export function civRunElection(ruleId: string): Promise<any> {
+  return invokeDesktop("civ_run_election", { ruleId, rule_id: ruleId });
+}
+
+export function getGitRepoStatus(): Promise<any> {
+  return invokeDesktop("get_git_repo_status");
+}
+
+export function resetAgentConsciousness(agentId: string): Promise<any> {
+  return invokeDesktop("reset_agent_consciousness", { agentId, agent_id: agentId });
+}
+
+export function mutateAgent(agentId: string, mutationType: string): Promise<any> {
+  return invokeDesktop("mutate_agent", { agentId, agent_id: agentId, mutationType, mutation_type: mutationType });
+}
+
+export function temporalFork(agentId: string, context: string): Promise<any> {
+  return invokeDesktop("temporal_fork", { agentId, agent_id: agentId, context });
+}
+
+export function temporalRollback(forkId: string): Promise<any> {
+  return invokeDesktop("temporal_rollback", { forkId, fork_id: forkId });
+}
+
+export function selfRewriteSuggestPatches(agentId: string): Promise<any> {
+  return invokeDesktop("self_rewrite_suggest_patches", { agentId, agent_id: agentId });
+}
+
+export function selfRewriteAnalyze(agentId: string): Promise<any> {
+  return invokeDesktop("self_rewrite_analyze", { agentId, agent_id: agentId });
+}
+
+export function selfRewriteApplyPatch(agentId: string, patchId: string): Promise<any> {
+  return invokeDesktop("self_rewrite_apply_patch", { agentId, agent_id: agentId, patchId, patch_id: patchId });
+}
+
+export function selfRewriteRollback(agentId: string): Promise<any> {
+  return invokeDesktop("self_rewrite_rollback", { agentId, agent_id: agentId });
+}
+
+export function meshAddPeer(peerId: string, address: string): Promise<any> {
+  return invokeDesktop("mesh_add_peer", { peerId, peer_id: peerId, address });
+}
+
+export function cogfsQuery(query: string): Promise<any> {
+  return invokeDesktop("cogfs_query", { query });
+}
+
+export function cogfsSearch(query: string): Promise<any> {
+  return invokeDesktop("cogfs_search", { query });
+}
+
+export function cogfsWatchDirectory(path: string): Promise<any> {
+  return invokeDesktop("cogfs_watch_directory", { path });
+}
+
+export function cogfsIndexFile(path: string): Promise<any> {
+  return invokeDesktop("cogfs_index_file", { path });
+}
+

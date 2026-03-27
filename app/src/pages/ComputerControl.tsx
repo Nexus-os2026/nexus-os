@@ -43,7 +43,7 @@ export default function ComputerControl(): JSX.Element {
   const [omniActionInput, setOmniActionInput] = useState('{"type":"click","x":100,"y":200}');
   const [omniActionResult, setOmniActionResult] = useState<string | null>(null);
 
-  const [mode, setMode] = useState<'demo' | 'live'>('demo');
+  const [mode, setMode] = useState<'demo' | 'live'>('live');
   const [demoStep, setDemoStep] = useState(0);
   const [demoRunning, setDemoRunning] = useState(false);
 

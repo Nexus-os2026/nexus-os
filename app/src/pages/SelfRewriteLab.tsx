@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  selfRewriteAnalyze,
+  selfRewriteApplyPatch,
   selfRewriteGetHistory as fetchRewriteHistory,
   selfRewritePreviewPatch as fetchPreviewPatch,
+  selfRewriteRollback,
+  selfRewriteSuggestPatches,
   selfRewriteTestPatch as fetchTestPatch,
 } from "../api/backend";
 import {
@@ -176,7 +180,7 @@ export default function SelfRewriteLab(): JSX.Element {
 
   const loadPatches = useCallback(async (currentBottlenecks: Bottleneck[] = bottlenecks) => {
     try {
-      const remote = normalizeArray<PatchRecord>(await invoke("self_rewrite_suggest_patches"));
+      const remote = normalizeArray<PatchRecord>(await selfRewriteSuggestPatches(""));
       if (remote.length > 0) {
         setPatches(
           remote.map((patch) => ({
@@ -220,7 +224,7 @@ export default function SelfRewriteLab(): JSX.Element {
     setWorking("analyze");
     setError(null);
     try {
-      const result = normalizeArray<Bottleneck>(await invoke("self_rewrite_analyze"));
+      const result = normalizeArray<Bottleneck>(await selfRewriteAnalyze(""));
       setBottlenecks(result);
       await loadPatches(result);
       appendSessionHistory({
@@ -298,7 +302,7 @@ export default function SelfRewriteLab(): JSX.Element {
     setWorking(`apply-${applyTarget.id}`);
     setError(null);
     try {
-      await invoke("self_rewrite_apply_patch", { patchId: applyTarget.id });
+      await selfRewriteApplyPatch("", applyTarget.id);
       appendSessionHistory({
         patch_id: applyTarget.id,
         title: patchTitle(applyTarget),
@@ -318,7 +322,7 @@ export default function SelfRewriteLab(): JSX.Element {
     setWorking(`rollback-${patchId}`);
     setError(null);
     try {
-      await invoke("self_rewrite_rollback", { patchId });
+      await selfRewriteRollback(patchId);
       appendSessionHistory({
         patch_id: patchId,
         title,

@@ -54,6 +54,7 @@ pub enum BridgeError {
 /// Bridge to the browser-use Python subprocess.
 pub struct BrowserBridge {
     child: Option<Child>,
+    stdout_reader: Option<BufReader<std::process::ChildStdout>>,
     python_path: String,
     script_path: String,
 }
@@ -62,6 +63,7 @@ impl BrowserBridge {
     pub fn new(python_path: String, script_path: String) -> Self {
         Self {
             child: None,
+            stdout_reader: None,
             python_path,
             script_path,
         }
@@ -94,14 +96,8 @@ impl BrowserBridge {
             ));
         }
 
-        // Put stdout back (wrapped in BufReader) — store reader as the child's stdout
-        // Since we took stdout, we need to work differently.
-        // Store the reader alongside the child.
+        self.stdout_reader = Some(reader);
         self.child = Some(child);
-        // We'll re-create the reader each time in read_response
-        // Actually, we consumed stdout. We need to keep the reader.
-        // Let's restructure: keep BufReader in the struct.
-
         Ok(())
     }
 
@@ -118,19 +114,24 @@ impl BrowserBridge {
             .flush()
             .map_err(|e| BridgeError::WriteFailed(e.to_string()))?;
 
-        // Read response — we need stdout but we took it in start().
-        // For simplicity, return a mock response. In production,
-        // the stdout reader would be stored in the struct.
-        Ok(BridgeResponse {
-            status: "ok".into(),
-            message: Some("Bridge response".into()),
-            result: None,
-            url: None,
-            title: None,
-            text: None,
-            path: None,
-            steps_taken: None,
-        })
+        // Read response line from subprocess stdout
+        let reader = self
+            .stdout_reader
+            .as_mut()
+            .ok_or(BridgeError::NotRunning)?;
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .map_err(|e| BridgeError::ReadFailed(e.to_string()))?;
+
+        if line.trim().is_empty() {
+            return Err(BridgeError::ReadFailed(
+                "Empty response from subprocess".into(),
+            ));
+        }
+
+        serde_json::from_str(line.trim())
+            .map_err(|e| BridgeError::ParseFailed(e.to_string()))
     }
 
     /// Shutdown the subprocess.

@@ -8,6 +8,8 @@ import {
   civGetRoles,
   civProposeRule,
   civResolveDispute,
+  civVote,
+  civRunElection,
   economyCreateWallet,
   economyGetWallet,
   economyEarn,
@@ -455,11 +457,7 @@ export default function CivilizationPage(): JSX.Element {
     setWorking(`vote-${proposalId}`);
     setError(null);
     try {
-      await invoke("civ_vote", {
-        agentId: voteAgent,
-        proposalId,
-        vote: inFavor,
-      });
+      await civVote(proposalId, voteAgent, String(inFavor));
       setLocalProposals((current) =>
         current.map((proposal) => {
           if (proposal.id !== proposalId) return proposal;
@@ -482,7 +480,7 @@ export default function CivilizationPage(): JSX.Element {
     setWorking("election");
     setError(null);
     try {
-      await invoke("civ_run_election", { role: electionRole });
+      await civRunElection(electionRole);
       appendLog("ElectionHeld", `Election triggered for ${electionRole}`);
       await refresh();
     } catch (electionError) {
