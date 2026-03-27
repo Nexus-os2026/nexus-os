@@ -125,6 +125,9 @@ use nexus_perception::tauri_commands as perception_cmds;
 // Agent memory imports
 use nexus_agent_memory::tauri_commands as memory_cmds;
 
+// External tools imports
+use nexus_external_tools::tauri_commands as tools_cmds;
+
 struct GatewayHivemindLlm;
 
 impl nexus_kernel::cognitive::HivemindLlm for GatewayHivemindLlm {
@@ -919,6 +922,7 @@ pub struct AppState {
     world_simulation: Arc<sim_cmds::SimulationState>,
     perception: Arc<perception_cmds::PerceptionState>,
     persistent_memory: Arc<memory_cmds::MemoryState>,
+    external_tools: Arc<tools_cmds::ToolState>,
     #[cfg(all(
         feature = "tauri-runtime",
         any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1201,6 +1205,7 @@ impl AppState {
             world_simulation: Arc::new(sim_cmds::SimulationState::new()),
             perception: Arc::new(perception_cmds::PerceptionState::default()),
             persistent_memory: Arc::new(memory_cmds::MemoryState::default()),
+            external_tools: Arc::new(tools_cmds::ToolState::default()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1400,6 +1405,7 @@ impl AppState {
             world_simulation: Arc::new(sim_cmds::SimulationState::new()),
             perception: Arc::new(perception_cmds::PerceptionState::default()),
             persistent_memory: Arc::new(memory_cmds::MemoryState::default()),
+            external_tools: Arc::new(tools_cmds::ToolState::default()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -22529,6 +22535,62 @@ fn memory_get_policy(
     memory_cmds::memory_get_policy(&state.persistent_memory)
 }
 
+// ── External Tools Commands ───────────────────────────────────────────────────
+
+#[tauri::command]
+fn tools_list_available(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<nexus_external_tools::ExternalTool>, String> {
+    tools_cmds::tools_list_available(&state.external_tools)
+}
+
+#[tauri::command]
+fn tools_execute(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+    autonomy_level: u8,
+    tool_id: String,
+    params_json: String,
+) -> Result<nexus_external_tools::ToolCallResult, String> {
+    tools_cmds::tools_execute(&state.external_tools, &agent_id, autonomy_level, &tool_id, &params_json)
+}
+
+#[tauri::command]
+fn tools_get_registry(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<nexus_external_tools::ExternalTool>, String> {
+    tools_cmds::tools_get_registry(&state.external_tools)
+}
+
+#[tauri::command]
+fn tools_refresh_availability(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<nexus_external_tools::ExternalTool>, String> {
+    tools_cmds::tools_refresh_availability(&state.external_tools)
+}
+
+#[tauri::command]
+fn tools_get_audit(
+    state: tauri::State<'_, AppState>,
+    limit: usize,
+) -> Result<Vec<nexus_external_tools::ToolAuditEntry>, String> {
+    tools_cmds::tools_get_audit(&state.external_tools, limit)
+}
+
+#[tauri::command]
+fn tools_verify_audit(
+    state: tauri::State<'_, AppState>,
+) -> Result<bool, String> {
+    tools_cmds::tools_verify_audit(&state.external_tools)
+}
+
+#[tauri::command]
+fn tools_get_policy(
+    state: tauri::State<'_, AppState>,
+) -> nexus_external_tools::ToolGovernancePolicy {
+    tools_cmds::tools_get_policy(&state.external_tools)
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -27417,6 +27479,13 @@ mod runtime {
                 memory_load,
                 memory_list_agents,
                 memory_get_policy,
+                tools_list_available,
+                tools_execute,
+                tools_get_registry,
+                tools_refresh_availability,
+                tools_get_audit,
+                tools_verify_audit,
+                tools_get_policy,
             ])
             .run(tauri::generate_context!())
             .unwrap_or_else(|e| {

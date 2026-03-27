@@ -4283,6 +4283,7 @@ dependencies = [
  "nexus-connectors-web",
  "nexus-distributed",
  "nexus-enterprise",
+ "nexus-external-tools",
  "nexus-factory",
  "nexus-flash-infer",
  "nexus-governance-evolution",
@@ -4336,6 +4337,18 @@ dependencies = [
  "nexus-kernel",
  "serde",
  "serde_json",
+ "uuid",
+]
+
+[[package]]
+name = "nexus-external-tools"
+version = "9.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+ "tracing",
  "uuid",
 ]
 
@@ -4443,6 +4456,7 @@ dependencies = [
  "nexus-content",
  "nexus-distributed",
  "nexus-enterprise",
+ "nexus-external-tools",
  "nexus-factory",
  "nexus-flash-infer",
  "nexus-governance-evolution",

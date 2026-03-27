@@ -3734,3 +3734,40 @@ export function memoryGetPolicy(): Promise<any> {
   return invokeDesktop("memory_get_policy");
 }
 
+// ── External Tools ───────────────────────────────────────────────────────────
+
+export function toolsListAvailable(): Promise<any[]> {
+  return invokeDesktop("tools_list_available");
+}
+
+export function toolsExecute(
+  agentId: string, autonomyLevel: number, toolId: string, paramsJson: string
+): Promise<any> {
+  return invokeDesktop("tools_execute", {
+    agentId, agent_id: agentId,
+    autonomyLevel, autonomy_level: autonomyLevel,
+    toolId, tool_id: toolId,
+    paramsJson, params_json: paramsJson,
+  });
+}
+
+export function toolsGetRegistry(): Promise<any[]> {
+  return invokeDesktop("tools_get_registry");
+}
+
+export function toolsRefreshAvailability(): Promise<any[]> {
+  return invokeDesktop("tools_refresh_availability");
+}
+
+export function toolsGetAudit(limit: number): Promise<any[]> {
+  return invokeDesktop("tools_get_audit", { limit });
+}
+
+export function toolsVerifyAudit(): Promise<boolean> {
+  return invokeDesktop<boolean>("tools_verify_audit");
+}
+
+export function toolsGetPolicy(): Promise<any> {
+  return invokeDesktop("tools_get_policy");
+}
+
