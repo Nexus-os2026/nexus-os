@@ -10,6 +10,8 @@ import {
   flashEnableSpeculative,
   flashDisableSpeculative,
   flashSpeculativeStatus,
+  flashRunBenchmark,
+  flashExportBenchmarkReport,
 } from "../api/backend";
 import { listen } from "@tauri-apps/api/event";
 import "./flash-inference.css";
@@ -121,6 +123,8 @@ export default function FlashInference() {
   const [genStartTime, setGenStartTime] = useState(0);
   const [tokPerSec, setTokPerSec] = useState(0);
   const [showLoader, setShowLoader] = useState(false);
+  const [benchmarkResults, setBenchmarkResults] = useState<any>(null);
+  const [benchmarkReport, setBenchmarkReport] = useState<string>("");
   const [specEnabled, setSpecEnabled] = useState(false);
   const [specRate, setSpecRate] = useState(0);
   const [specDraftLen, setSpecDraftLen] = useState(0);
@@ -619,6 +623,14 @@ export default function FlashInference() {
           <button onClick={() => setError("")} style={{ background:"none", border:"none", color:"#f87171", cursor:"pointer", fontSize:"14px" }}>✕</button>
         </div>
       )}
+
+      {/* Benchmark bar */}
+      <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:"8px", padding:"6px 16px", background:"#0d1117", borderTop:"1px solid #1e3a5f", fontSize:12 }}>
+        <span style={{ color:"#64748b" }}>Benchmark:</span>
+        <button onClick={async () => { try { const r = await flashRunBenchmark(models[0]?.file_path || "", "balanced"); setBenchmarkResults(r); } catch(e) { console.error(e); } }} disabled={models.length === 0} style={{ background:"#1e3a5f", color: models.length === 0 ? "#475569" : "#5eead4", border:"none", padding:"4px 12px", borderRadius:4, cursor: models.length === 0 ? "not-allowed" : "pointer", fontSize:12 }}>Run Benchmark</button>
+        <button onClick={async () => { try { if(benchmarkResults) { const p = await flashExportBenchmarkReport(Array.isArray(benchmarkResults) ? benchmarkResults : [benchmarkResults]); setBenchmarkReport(p); } } catch(e) { console.error(e); } }} disabled={!benchmarkResults} style={{ background:"#1e3a5f", color:!benchmarkResults ? "#475569" : "#5eead4", border:"none", padding:"4px 12px", borderRadius:4, cursor:!benchmarkResults ? "not-allowed" : "pointer", fontSize:12 }}>Export Report</button>
+        {benchmarkReport && <span style={{ color:"#22c55e" }}>Saved: {benchmarkReport}</span>}
+      </div>
 
       {/* Input bar */}
       <div style={{ flexShrink:0, height:"56px", display:"flex", alignItems:"center", gap:"8px", padding:"0 16px", background:"#0a1628", borderTop:"1px solid #1e3a5f" }}>

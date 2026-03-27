@@ -161,6 +161,7 @@ export default function NotesApp() {
   const [fuelUsed, setFuelUsed] = useState(0);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -192,8 +193,8 @@ export default function NotesApp() {
         }));
         setNotes(loaded);
         if (loaded.length > 0) setSelectedNoteId(loaded[0].id);
-      } catch {
-        // Backend not available, start empty
+      } catch (err) {
+        setLastError(String(err));
       }
       setLoaded(true);
     })();
@@ -210,8 +211,8 @@ export default function NotesApp() {
         folderId: note.folderId,
         tagsJson: JSON.stringify(note.tags),
       });
-    } catch {
-      // Silently handle save errors in non-Tauri environment
+    } catch (err) {
+      setLastError(String(err));
     }
     setSaving(false);
   }, []);
@@ -317,8 +318,8 @@ export default function NotesApp() {
         folderId: newNote.folderId,
         tagsJson: JSON.stringify(newNote.tags),
       });
-    } catch {
-      // Non-Tauri env
+    } catch (err) {
+      setLastError(String(err));
     }
   }, [selectedFolderId]);
 
@@ -331,8 +332,8 @@ export default function NotesApp() {
     }
     try {
       await invoke("notes_delete", { id });
-    } catch {
-      // Non-Tauri env
+    } catch (err) {
+      setLastError(String(err));
     }
   }, [notes, selectedNoteId]);
 
@@ -350,8 +351,8 @@ export default function NotesApp() {
         folderId: dup.folderId,
         tagsJson: JSON.stringify(dup.tags),
       });
-    } catch {
-      // Non-Tauri env
+    } catch (err) {
+      setLastError(String(err));
     }
   }, [notes]);
 
@@ -418,6 +419,11 @@ export default function NotesApp() {
   /* ─── render ─── */
   return (
     <div className="na-container">
+      {lastError && (
+        <div style={{ position: "absolute", top: 8, right: 16, background: "#7f1d1d", color: "#fca5a5", padding: "6px 14px", borderRadius: 6, fontSize: 12, zIndex: 50, cursor: "pointer" }} onClick={() => setLastError(null)}>
+          {lastError}
+        </div>
+      )}
       {/* ─── Sidebar ─── */}
       {showSidebar && (
         <aside className="na-sidebar">

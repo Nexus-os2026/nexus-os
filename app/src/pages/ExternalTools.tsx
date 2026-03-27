@@ -6,6 +6,7 @@ import {
   toolsGetRegistry,
   toolsRefreshAvailability,
   toolsVerifyAudit,
+  getRateLimitStatus,
 } from "../api/backend";
 import { alpha, commandPageStyle } from "./commandCenterUi";
 
@@ -63,6 +64,7 @@ export default function ExternalTools() {
   const [tools, setTools] = useState<any[]>([]);
   const [audit, setAudit] = useState<any[]>([]);
   const [policy, setPolicy] = useState<any>(null);
+  const [rateLimits, setRateLimits] = useState<any>(null);
   const [selectedTool, setSelectedTool] = useState("");
   const [paramsJson, setParamsJson] = useState("{}");
   const [agentId, setAgentId] = useState("agent-1");
@@ -130,6 +132,7 @@ export default function ExternalTools() {
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button onClick={handleRefreshAvail} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Refresh Availability</button>
         <button onClick={handleVerify} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Verify Audit</button>
+        <button onClick={() => getRateLimitStatus().then(setRateLimits).catch(() => {})} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Rate Limits</button>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -214,8 +217,16 @@ export default function ExternalTools() {
           )}
         </div>
 
-        {/* Right: Result + Audit */}
+        {/* Right: Result + Audit + Rate Limits */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {rateLimits && (
+            <div style={cardStyle}>
+              <div style={labelStyle}>Rate Limit Status</div>
+              <pre style={{ fontSize: 11, color: BLUE, marginTop: 6, whiteSpace: "pre-wrap" }}>
+                {typeof rateLimits === "string" ? rateLimits : JSON.stringify(rateLimits, null, 2)}
+              </pre>
+            </div>
+          )}
           {error && (
             <div style={{ ...cardStyle, borderColor: RED }}>
               <div style={{ ...labelStyle, color: RED }}>Error</div>

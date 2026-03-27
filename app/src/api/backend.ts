@@ -3913,3 +3913,26 @@ export function swfEstimateCost(): Promise<number> {
   return invokeDesktop<number>("swf_estimate_cost");
 }
 
+// ── Unwired Command Bindings ─────────────────────────────────────────────────
+
+export function flashRunBenchmark(modelPath: string, priority?: string): Promise<any> {
+  return invokeDesktop("flash_run_benchmark", {
+    modelPath, model_path: modelPath, priority,
+  });
+}
+
+export function flashExportBenchmarkReport(results: any[]): Promise<string> {
+  return invokeDesktop<string>("flash_export_benchmark_report", { results });
+}
+
+export function browserScreenshot(sessionId: string, outputPath?: string): Promise<any> {
+  return invokeDesktop("browser_screenshot", {
+    sessionId, session_id: sessionId,
+    outputPath, output_path: outputPath,
+  });
+}
+
+export function getRateLimitStatus(): Promise<any> {
+  return invokeDesktop("get_rate_limit_status");
+}
+

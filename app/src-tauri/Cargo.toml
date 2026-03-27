@@ -35,6 +35,7 @@ nexus-metering = { path = "../../metering" }
 nexus-flash-infer = { path = "../../crates/nexus-flash-infer", features = ["download"] }
 nexus-capability-measurement = { path = "../../crates/nexus-capability-measurement" }
 nexus-governance-oracle = { path = "../../crates/nexus-governance-oracle" }
+nexus-governance-engine = { path = "../../crates/nexus-governance-engine" }
 nexus-governance-evolution = { path = "../../crates/nexus-governance-evolution" }
 nexus-predictive-router = { path = "../../crates/nexus-predictive-router" }
 nexus-browser-agent = { path = "../../crates/nexus-browser-agent" }

@@ -7,6 +7,7 @@ import {
   browserCloseSession,
   browserGetPolicy,
   browserSessionCount,
+  browserScreenshot,
   listAgents,
 } from "../api/backend";
 import {
@@ -124,6 +125,11 @@ export default function BrowserAgent() {
                 onChange={(e) => setUrlInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleNavigate()} />
               <ActionButton accent="#3b82f6" onClick={handleNavigate}>Go</ActionButton>
               <ActionButton accent="#94a3b8" onClick={handleGetContent}>Content</ActionButton>
+              <ActionButton accent="#f59e0b" onClick={() => {
+                browserScreenshot(sessionId)
+                  .then((r) => setResults((prev) => [{ ...r, action: "Screenshot" }, ...prev]))
+                  .catch((e) => setResults((prev) => [{ success: false, action: "Screenshot", error: String(e), estimated_tokens: 0 }, ...prev]));
+              }}>Screenshot</ActionButton>
             </div>
           </Panel>
 
