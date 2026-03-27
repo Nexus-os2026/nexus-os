@@ -54,6 +54,7 @@ members = [
   "crates/nexus-token-economy",
   "crates/nexus-computer-control",
   "crates/nexus-world-simulation",
+  "crates/nexus-perception",
 ]
 
 [workspace.package]

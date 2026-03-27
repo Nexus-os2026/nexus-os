@@ -3613,3 +3613,59 @@ export function simBranch(
   });
 }
 
+// ── Perception ───────────────────────────────────────────────────────────────
+
+export function perceptionInit(provider: string, apiKey: string, modelId: string): Promise<string> {
+  return invokeDesktop<string>("perception_init", {
+    provider,
+    apiKey, api_key: apiKey,
+    modelId, model_id: modelId,
+  });
+}
+
+export function perceptionDescribe(imageBase64: string, format: string): Promise<any> {
+  return invokeDesktop("perception_describe", {
+    imageBase64, image_base64: imageBase64, format,
+  });
+}
+
+export function perceptionExtractText(imageBase64: string, format: string): Promise<any> {
+  return invokeDesktop("perception_extract_text", {
+    imageBase64, image_base64: imageBase64, format,
+  });
+}
+
+export function perceptionQuestion(imageBase64: string, format: string, question: string): Promise<any> {
+  return invokeDesktop("perception_question", {
+    imageBase64, image_base64: imageBase64, format, question,
+  });
+}
+
+export function perceptionFindUiElements(imageBase64: string): Promise<any> {
+  return invokeDesktop("perception_find_ui_elements", {
+    imageBase64, image_base64: imageBase64,
+  });
+}
+
+export function perceptionExtractData(imageBase64: string, format: string, schema?: string): Promise<any> {
+  return invokeDesktop("perception_extract_data", {
+    imageBase64, image_base64: imageBase64, format, schema,
+  });
+}
+
+export function perceptionReadError(imageBase64: string): Promise<any> {
+  return invokeDesktop("perception_read_error", {
+    imageBase64, image_base64: imageBase64,
+  });
+}
+
+export function perceptionAnalyzeChart(imageBase64: string, format: string): Promise<any> {
+  return invokeDesktop("perception_analyze_chart", {
+    imageBase64, image_base64: imageBase64, format,
+  });
+}
+
+export function perceptionGetPolicy(): Promise<any> {
+  return invokeDesktop("perception_get_policy");
+}
+

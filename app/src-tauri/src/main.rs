@@ -119,6 +119,9 @@ use nexus_computer_control::tauri_commands as cc_cmds;
 // World simulation imports
 use nexus_world_simulation::tauri_commands as sim_cmds;
 
+// Perception imports
+use nexus_perception::tauri_commands as perception_cmds;
+
 struct GatewayHivemindLlm;
 
 impl nexus_kernel::cognitive::HivemindLlm for GatewayHivemindLlm {
@@ -911,6 +914,7 @@ pub struct AppState {
     token_economy: Arc<token_cmds::EconomyState>,
     governed_control: Arc<cc_cmds::ControlState>,
     world_simulation: Arc<sim_cmds::SimulationState>,
+    perception: Arc<perception_cmds::PerceptionState>,
     #[cfg(all(
         feature = "tauri-runtime",
         any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1191,6 +1195,7 @@ impl AppState {
             token_economy: Arc::new(token_cmds::EconomyState::new()),
             governed_control: Arc::new(cc_cmds::ControlState::default()),
             world_simulation: Arc::new(sim_cmds::SimulationState::new()),
+            perception: Arc::new(perception_cmds::PerceptionState::default()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1388,6 +1393,7 @@ impl AppState {
             token_economy: Arc::new(token_cmds::EconomyState::new()),
             governed_control: Arc::new(cc_cmds::ControlState::default()),
             world_simulation: Arc::new(sim_cmds::SimulationState::new()),
+            perception: Arc::new(perception_cmds::PerceptionState::default()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -22223,7 +22229,13 @@ fn cc_execute_action(
 ) -> Result<nexus_computer_control::ActionResult, String> {
     let action: nexus_computer_control::ComputerAction =
         serde_json::from_str(&action_json).map_err(|e| format!("Invalid action: {e}"))?;
-    cc_cmds::execute_action(&state.governed_control, &agent_id, autonomy_level, &capabilities, &action)
+    cc_cmds::execute_action(
+        &state.governed_control,
+        &agent_id,
+        autonomy_level,
+        &capabilities,
+        &action,
+    )
 }
 
 #[tauri::command]
@@ -22297,9 +22309,7 @@ fn sim_get_history(
 }
 
 #[tauri::command]
-fn sim_get_policy(
-    state: tauri::State<'_, AppState>,
-) -> sim_cmds::PolicySummary {
+fn sim_get_policy(state: tauri::State<'_, AppState>) -> sim_cmds::PolicySummary {
     sim_cmds::get_policy(&state.world_simulation)
 }
 
@@ -22323,7 +22333,93 @@ fn sim_branch(
         serde_json::from_str(&alternative_json).map_err(|e| format!("Invalid alternative: {e}"))?;
     let remaining: Vec<nexus_world_simulation::SimulatedAction> =
         serde_json::from_str(&remaining_json).map_err(|e| format!("Invalid remaining: {e}"))?;
-    sim_cmds::create_branch(&state.world_simulation, &parent_id, diverge_at_step, alternative, remaining)
+    sim_cmds::create_branch(
+        &state.world_simulation,
+        &parent_id,
+        diverge_at_step,
+        alternative,
+        remaining,
+    )
+}
+
+// ── Perception Commands ───────────────────────────────────────────────────────
+
+#[tauri::command]
+fn perception_init(
+    state: tauri::State<'_, AppState>,
+    provider: String,
+    api_key: String,
+    model_id: String,
+) -> Result<String, String> {
+    perception_cmds::init_provider(&state.perception, &provider, &api_key, &model_id)
+}
+
+#[tauri::command]
+fn perception_describe(
+    state: tauri::State<'_, AppState>,
+    image_base64: String,
+    format: String,
+) -> Result<nexus_perception::PerceptionResult, String> {
+    perception_cmds::perceive_describe(&state.perception, &image_base64, &format)
+}
+
+#[tauri::command]
+fn perception_extract_text(
+    state: tauri::State<'_, AppState>,
+    image_base64: String,
+    format: String,
+) -> Result<nexus_perception::PerceptionResult, String> {
+    perception_cmds::perceive_extract_text(&state.perception, &image_base64, &format)
+}
+
+#[tauri::command]
+fn perception_question(
+    state: tauri::State<'_, AppState>,
+    image_base64: String,
+    format: String,
+    question: String,
+) -> Result<nexus_perception::PerceptionResult, String> {
+    perception_cmds::perceive_question(&state.perception, &image_base64, &format, &question)
+}
+
+#[tauri::command]
+fn perception_find_ui_elements(
+    state: tauri::State<'_, AppState>,
+    image_base64: String,
+) -> Result<Vec<nexus_perception::UIElement>, String> {
+    perception_cmds::perceive_find_ui_elements(&state.perception, &image_base64)
+}
+
+#[tauri::command]
+fn perception_extract_data(
+    state: tauri::State<'_, AppState>,
+    image_base64: String,
+    format: String,
+    schema: Option<String>,
+) -> Result<nexus_perception::PerceptionResult, String> {
+    perception_cmds::perceive_extract_data(&state.perception, &image_base64, &format, schema)
+}
+
+#[tauri::command]
+fn perception_read_error(
+    state: tauri::State<'_, AppState>,
+    image_base64: String,
+) -> Result<nexus_perception::PerceptionResult, String> {
+    perception_cmds::perceive_read_error(&state.perception, &image_base64)
+}
+
+#[tauri::command]
+fn perception_analyze_chart(
+    state: tauri::State<'_, AppState>,
+    image_base64: String,
+    format: String,
+) -> Result<nexus_perception::PerceptionResult, String> {
+    perception_cmds::perceive_analyze_chart(&state.perception, &image_base64, &format)
+}
+
+#[tauri::command]
+fn perception_get_policy(state: tauri::State<'_, AppState>) -> nexus_perception::PerceptionPolicy {
+    perception_cmds::get_policy(&state.perception)
 }
 
 #[cfg(all(
@@ -27194,6 +27290,15 @@ mod runtime {
                 sim_get_policy,
                 sim_get_risk,
                 sim_branch,
+                perception_init,
+                perception_describe,
+                perception_extract_text,
+                perception_question,
+                perception_find_ui_elements,
+                perception_extract_data,
+                perception_read_error,
+                perception_analyze_chart,
+                perception_get_policy,
             ])
             .run(tauri::generate_context!())
             .unwrap_or_else(|e| {
