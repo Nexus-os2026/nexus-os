@@ -37,7 +37,7 @@ impl NimClient {
                     std::thread::sleep(std::time::Duration::from_millis(wait));
                     continue;
                 }
-                Err(e) if attempt < 4 => {
+                Err(_) if attempt < 4 => {
                     // Other error — short backoff
                     std::thread::sleep(std::time::Duration::from_millis(500 * 2u64.pow(attempt)));
                     continue;

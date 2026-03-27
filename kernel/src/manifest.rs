@@ -115,7 +115,7 @@ pub fn path_matches_pattern(path: &str, pattern: &str) -> bool {
 const MIN_NAME_LEN: usize = 3;
 const MAX_NAME_LEN: usize = 64;
 const MAX_FUEL_BUDGET: u64 = 1_000_000;
-const CAPABILITY_REGISTRY: [&str; 23] = [
+const CAPABILITY_REGISTRY: [&str; 24] = [
     "web.search",
     "web.read",
     "llm.query",
@@ -139,6 +139,7 @@ const CAPABILITY_REGISTRY: [&str; 23] = [
     "computer.use",
     "self.modify",
     "cognitive_modify",
+    "agent.message",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

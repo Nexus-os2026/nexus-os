@@ -21,17 +21,43 @@ pub struct ScreenRegion {
 /// Every variant maps to a capability requirement and a token cost.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ComputerAction {
-    Screenshot { region: Option<ScreenRegion> },
-    MouseMove { x: u32, y: u32 },
-    MouseClick { x: u32, y: u32, button: MouseButton },
-    MouseDoubleClick { x: u32, y: u32 },
-    KeyboardType { text: String },
-    KeyboardShortcut { keys: Vec<String> },
-    TerminalCommand { command: String, working_dir: String },
+    Screenshot {
+        region: Option<ScreenRegion>,
+    },
+    MouseMove {
+        x: u32,
+        y: u32,
+    },
+    MouseClick {
+        x: u32,
+        y: u32,
+        button: MouseButton,
+    },
+    MouseDoubleClick {
+        x: u32,
+        y: u32,
+    },
+    KeyboardType {
+        text: String,
+    },
+    KeyboardShortcut {
+        keys: Vec<String>,
+    },
+    TerminalCommand {
+        command: String,
+        working_dir: String,
+    },
     ReadClipboard,
-    WriteClipboard { content: String },
-    OpenApplication { app_name: String },
-    WaitForElement { selector: String, timeout_ms: u64 },
+    WriteClipboard {
+        content: String,
+    },
+    OpenApplication {
+        app_name: String,
+    },
+    WaitForElement {
+        selector: String,
+        timeout_ms: u64,
+    },
 }
 
 impl ComputerAction {

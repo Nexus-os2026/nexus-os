@@ -3544,3 +3544,72 @@ export function tokenGetPricing(): Promise<any> {
   return invokeDesktop("token_get_pricing");
 }
 
+// ── Governed Computer Control ─────────────────────────────────────────────────
+
+export function ccExecuteAction(
+  agentId: string, autonomyLevel: number, capabilities: string[], actionJson: string
+): Promise<any> {
+  return invokeDesktop("cc_execute_action", {
+    agentId, agent_id: agentId,
+    autonomyLevel, autonomy_level: autonomyLevel,
+    capabilities,
+    actionJson, action_json: actionJson,
+  });
+}
+
+export function ccGetActionHistory(agentId: string): Promise<any> {
+  return invokeDesktop("cc_get_action_history", { agentId, agent_id: agentId });
+}
+
+export function ccGetCapabilityBudget(agentId: string): Promise<any> {
+  return invokeDesktop("cc_get_capability_budget", { agentId, agent_id: agentId });
+}
+
+export function ccVerifyActionSequence(agentId: string): Promise<any> {
+  return invokeDesktop("cc_verify_action_sequence", { agentId, agent_id: agentId });
+}
+
+export function ccGetScreenContext(agentId: string): Promise<any> {
+  return invokeDesktop("cc_get_screen_context", { agentId, agent_id: agentId });
+}
+
+// ── World Simulation ──────────────────────────────────────────────────────────
+
+export function simSubmit(agentId: string, description: string, actionsJson: string): Promise<string> {
+  return invokeDesktop<string>("sim_submit", {
+    agentId, agent_id: agentId, description,
+    actionsJson, actions_json: actionsJson,
+  });
+}
+
+export function simRun(scenarioId: string): Promise<any> {
+  return invokeDesktop("sim_run", { scenarioId, scenario_id: scenarioId });
+}
+
+export function simGetResult(scenarioId: string): Promise<any> {
+  return invokeDesktop("sim_get_result", { scenarioId, scenario_id: scenarioId });
+}
+
+export function simGetHistory(agentId: string): Promise<any> {
+  return invokeDesktop("sim_get_history", { agentId, agent_id: agentId });
+}
+
+export function simGetPolicy(): Promise<any> {
+  return invokeDesktop("sim_get_policy");
+}
+
+export function simGetRisk(scenarioId: string): Promise<any> {
+  return invokeDesktop("sim_get_risk", { scenarioId, scenario_id: scenarioId });
+}
+
+export function simBranch(
+  parentId: string, divergeAtStep: number, alternativeJson: string, remainingJson: string
+): Promise<string> {
+  return invokeDesktop<string>("sim_branch", {
+    parentId, parent_id: parentId,
+    divergeAtStep, diverge_at_step: divergeAtStep,
+    alternativeJson, alternative_json: alternativeJson,
+    remainingJson, remaining_json: remainingJson,
+  });
+}
+

@@ -4100,6 +4100,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-computer-control"
+version = "9.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "nexus-conductor"
 version = "0.1.0"
 dependencies = [
@@ -4248,6 +4260,7 @@ dependencies = [
  "nexus-auth",
  "nexus-browser-agent",
  "nexus-capability-measurement",
+ "nexus-computer-control",
  "nexus-conductor",
  "nexus-connectors-core",
  "nexus-connectors-llm",
@@ -4271,6 +4284,7 @@ dependencies = [
  "nexus-telemetry",
  "nexus-tenancy",
  "nexus-token-economy",
+ "nexus-world-simulation",
  "open",
  "reqwest 0.12.28",
  "rusqlite",
@@ -4691,6 +4705,18 @@ dependencies = [
  "nexus-research",
  "serde",
  "serde_json",
+ "uuid",
+]
+
+[[package]]
+name = "nexus-world-simulation"
+version = "9.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+ "tracing",
  "uuid",
 ]
 

@@ -113,6 +113,12 @@ use nexus_browser_agent::BrowserState;
 // Token economy imports
 use nexus_token_economy::tauri_commands as token_cmds;
 
+// Computer control imports
+use nexus_computer_control::tauri_commands as cc_cmds;
+
+// World simulation imports
+use nexus_world_simulation::tauri_commands as sim_cmds;
+
 struct GatewayHivemindLlm;
 
 impl nexus_kernel::cognitive::HivemindLlm for GatewayHivemindLlm {
@@ -903,6 +909,8 @@ pub struct AppState {
     predictive_router: Arc<RouterState>,
     browser_agent: Arc<BrowserState>,
     token_economy: Arc<token_cmds::EconomyState>,
+    governed_control: Arc<cc_cmds::ControlState>,
+    world_simulation: Arc<sim_cmds::SimulationState>,
     #[cfg(all(
         feature = "tauri-runtime",
         any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1181,6 +1189,8 @@ impl AppState {
             predictive_router: Arc::new(RouterState::new()),
             browser_agent: Arc::new(BrowserState::default()),
             token_economy: Arc::new(token_cmds::EconomyState::new()),
+            governed_control: Arc::new(cc_cmds::ControlState::default()),
+            world_simulation: Arc::new(sim_cmds::SimulationState::new()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1376,6 +1386,8 @@ impl AppState {
             predictive_router: Arc::new(RouterState::new()),
             browser_agent: Arc::new(BrowserState::default()),
             token_economy: Arc::new(token_cmds::EconomyState::new()),
+            governed_control: Arc::new(cc_cmds::ControlState::default()),
+            world_simulation: Arc::new(sim_cmds::SimulationState::new()),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -22199,6 +22211,121 @@ fn token_get_pricing(state: tauri::State<'_, AppState>) -> Vec<token_cmds::Prici
     token_cmds::get_pricing(&state.token_economy)
 }
 
+// ── Governed Computer Control Commands ────────────────────────────────────────
+
+#[tauri::command]
+fn cc_execute_action(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+    autonomy_level: u8,
+    capabilities: Vec<String>,
+    action_json: String,
+) -> Result<nexus_computer_control::ActionResult, String> {
+    let action: nexus_computer_control::ComputerAction =
+        serde_json::from_str(&action_json).map_err(|e| format!("Invalid action: {e}"))?;
+    cc_cmds::execute_action(&state.governed_control, &agent_id, autonomy_level, &capabilities, &action)
+}
+
+#[tauri::command]
+fn cc_get_action_history(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+) -> Result<Vec<cc_cmds::ActionHistoryEntry>, String> {
+    cc_cmds::get_action_history(&state.governed_control, &agent_id)
+}
+
+#[tauri::command]
+fn cc_get_capability_budget(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+) -> Result<cc_cmds::BudgetSummary, String> {
+    cc_cmds::get_budget(&state.governed_control, &agent_id)
+}
+
+#[tauri::command]
+fn cc_verify_action_sequence(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+) -> Result<nexus_computer_control::VerificationResult, String> {
+    cc_cmds::verify_sequence(&state.governed_control, &agent_id)
+}
+
+#[tauri::command]
+fn cc_get_screen_context(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+) -> Result<nexus_computer_control::ScreenContext, String> {
+    cc_cmds::get_screen_context(&state.governed_control, &agent_id)
+}
+
+// ── World Simulation Commands ─────────────────────────────────────────────────
+
+#[tauri::command]
+fn sim_submit(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+    description: String,
+    actions_json: String,
+) -> Result<String, String> {
+    let actions: Vec<nexus_world_simulation::SimulatedAction> =
+        serde_json::from_str(&actions_json).map_err(|e| format!("Invalid actions: {e}"))?;
+    sim_cmds::submit_scenario(&state.world_simulation, &agent_id, &description, actions)
+}
+
+#[tauri::command]
+fn sim_run(
+    state: tauri::State<'_, AppState>,
+    scenario_id: String,
+) -> Result<nexus_world_simulation::SimulationResult, String> {
+    sim_cmds::run_scenario(&state.world_simulation, &scenario_id)
+}
+
+#[tauri::command]
+fn sim_get_result(
+    state: tauri::State<'_, AppState>,
+    scenario_id: String,
+) -> Result<nexus_world_simulation::SimulationResult, String> {
+    sim_cmds::get_result(&state.world_simulation, &scenario_id)
+}
+
+#[tauri::command]
+fn sim_get_history(
+    state: tauri::State<'_, AppState>,
+    agent_id: String,
+) -> Result<Vec<sim_cmds::ScenarioSummary>, String> {
+    sim_cmds::get_history(&state.world_simulation, &agent_id)
+}
+
+#[tauri::command]
+fn sim_get_policy(
+    state: tauri::State<'_, AppState>,
+) -> sim_cmds::PolicySummary {
+    sim_cmds::get_policy(&state.world_simulation)
+}
+
+#[tauri::command]
+fn sim_get_risk(
+    state: tauri::State<'_, AppState>,
+    scenario_id: String,
+) -> Result<nexus_world_simulation::RiskAssessment, String> {
+    sim_cmds::get_risk(&state.world_simulation, &scenario_id)
+}
+
+#[tauri::command]
+fn sim_branch(
+    state: tauri::State<'_, AppState>,
+    parent_id: String,
+    diverge_at_step: u32,
+    alternative_json: String,
+    remaining_json: String,
+) -> Result<String, String> {
+    let alternative: nexus_world_simulation::SimulatedAction =
+        serde_json::from_str(&alternative_json).map_err(|e| format!("Invalid alternative: {e}"))?;
+    let remaining: Vec<nexus_world_simulation::SimulatedAction> =
+        serde_json::from_str(&remaining_json).map_err(|e| format!("Invalid remaining: {e}"))?;
+    sim_cmds::create_branch(&state.world_simulation, &parent_id, diverge_at_step, alternative, remaining)
+}
+
 #[cfg(all(
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -27053,6 +27180,20 @@ mod runtime {
                 token_create_delegation,
                 token_get_delegations,
                 token_get_pricing,
+                // Governed Computer Control
+                cc_execute_action,
+                cc_get_action_history,
+                cc_get_capability_budget,
+                cc_verify_action_sequence,
+                cc_get_screen_context,
+                // World Simulation
+                sim_submit,
+                sim_run,
+                sim_get_result,
+                sim_get_history,
+                sim_get_policy,
+                sim_get_risk,
+                sim_branch,
             ])
             .run(tauri::generate_context!())
             .unwrap_or_else(|e| {
