@@ -101,9 +101,7 @@ release:
     - echo "Creating release for $CI_COMMIT_TAG"
   release:
     tag_name: $CI_COMMIT_TAG
-    description: "Release $CI_COMMIT_TAG — see CHANGELOG.md for details"
-    assets:
-      links: []
+    description: "Release $CI_COMMIT_TAG"
 
 release-build:
   stage: deploy
