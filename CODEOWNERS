@@ -1,0 +1,10 @@
+# Nexus OS Code Owners
+# All changes require review from the maintainer
+
+* @nexaiceo
+
+# Governance-critical paths require explicit review
+kernel/src/governance/ @nexaiceo
+kernel/src/audit/ @nexaiceo
+kernel/src/consent/ @nexaiceo
+crates/nexus-governance-*/ @nexaiceo

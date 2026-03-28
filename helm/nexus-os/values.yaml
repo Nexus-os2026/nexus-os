@@ -4,7 +4,7 @@ replicaCount: 2
 
 image:
   repository: registry.gitlab.com/nexaiceo/nexus-os
-  tag: "9.0.0"
+  tag: "" # Set by CI on release; defaults to chart appVersion
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []

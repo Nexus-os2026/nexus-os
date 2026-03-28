@@ -19,7 +19,7 @@
 ### 1. Build from Source
 
 ```bash
-git clone https://github.com/nexai-lang/nexus-os.git
+git clone https://gitlab.com/nexaiceo/nexus-os.git
 cd nexus-os
 
 # Build all workspace crates

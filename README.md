@@ -12,7 +12,7 @@
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange.svg)](https://www.rust-lang.org/)
 [![Tauri 2.0](https://img.shields.io/badge/shell-Tauri%202.0-24C8D8.svg)](https://tauri.app/)
 [![EU AI Act](https://img.shields.io/badge/EU%20AI%20Act-Compliant-003399.svg)](#eu-ai-act-compliance)
-[![v9.0.0](https://img.shields.io/badge/version-9.0.0-green.svg)](CHANGELOG.md)
+[![v10.3.0](https://img.shields.io/badge/version-10.3.0-green.svg)](CHANGELOG.md)
 
 [Architecture](#architecture) · [Quick Start](#quick-start) · [Agents](#agents) · [Governance](#governance) · [Enterprise](#enterprise) · [Contributing](CONTRIBUTING.md)
 
@@ -28,7 +28,7 @@ Nexus OS is an **AI agent operating system** — not a framework, not a library,
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     Nexus OS v9.0.0                             │
+│                     Nexus OS v10.3.0                            │
 │                                                                 │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐       │
 │  │ Coder    │  │ Research │  │ Security │  │ DevOps   │  ...53 │
@@ -198,14 +198,14 @@ Configurable consent gates that pause agent execution and require human approval
 git clone https://gitlab.com/nexaiceo/nexus-os.git
 cd nexus-os
 
-# Install frontend dependencies
-cd frontend && npm install && cd ..
+# Build the Rust workspace
+cargo build --workspace
 
-# Build and run (development)
-cargo tauri dev
+# Install frontend dependencies and build
+cd app && npm ci && npm run build && cd ..
 
-# Build for production
-cargo tauri build
+# Run in development mode
+cd app && npm run tauri dev
 ```
 
 ### First Agent
@@ -294,7 +294,7 @@ Dead Buttons ...... 0       Broken Calls ...... 0
 
 ## Roadmap
 
-- [x] v9.0.0 — Full audit: 50 pages, 397 commands, 53 agents, 0 defects
+- [x] v10.3.0 — Full audit: 50 pages, 397 commands, 53 agents, 0 defects
 - [x] Darwin Core — Darwinian evolution engine
 - [x] NVIDIA NIM — 42-model expansion (12 providers)
 - [ ] Premium website with 3D design
@@ -304,7 +304,7 @@ Dead Buttons ...... 0       Broken Calls ...... 0
 - [ ] Kubernetes Helm chart
 - [ ] OpenTelemetry instrumentation
 - [ ] Admin console and fleet management
-- [ ] v10.0.0 — Enterprise Edition GA
+- [ ] v11.0.0 — Enterprise Edition GA
 
 ## Contributing
 

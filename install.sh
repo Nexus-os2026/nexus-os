@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${NEXUS_OS_GITHUB_REPO:-nexaiceo/nexus-os}"
-API_URL="${NEXUS_OS_RELEASE_API:-https://api.github.com/repos/${REPO}/releases/latest}"
+REPO="${NEXUS_OS_REPO:-nexaiceo/nexus-os}"
+API_URL="${NEXUS_OS_RELEASE_API:-https://gitlab.com/api/v4/projects/${REPO//\//%2F}/releases/permalink/latest}"
 INSTALL_PATH="/usr/local/bin/nexus-os"
 TMP_DIR=""
 DMG_MOUNT=""
@@ -52,15 +52,12 @@ detect_platform() {
 }
 
 release_json() {
-  curl -fsSL \
-    -H "Accept: application/vnd.github+json" \
-    -H "X-GitHub-Api-Version: 2022-11-28" \
-    "${API_URL}"
+  curl -fsSL "${API_URL}"
 }
 
 asset_urls() {
   printf '%s' "$1" \
-    | grep -oE '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]+"' \
+    | grep -oE '"direct_asset_url"[[:space:]]*:[[:space:]]*"[^"]+"' \
     | sed -E 's/.*"([^"]+)"/\1/'
 }
 

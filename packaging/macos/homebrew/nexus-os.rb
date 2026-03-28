@@ -1,9 +1,9 @@
 class NexusOs < Formula
   desc "Governed agent runtime with auditable policy controls"
-  homepage "https://github.com/nexai-lang/nexus-os"
-  url "https://github.com/nexai-lang/nexus-os/archive/refs/tags/v1.0.0.tar.gz"
-  sha256 "REPLACE_WITH_RELEASE_TARBALL_SHA256"
-  license "TBD"
+  homepage "https://gitlab.com/nexaiceo/nexus-os"
+  url "https://gitlab.com/nexaiceo/nexus-os/-/archive/v10.3.0/nexus-os-v10.3.0.tar.gz"
+  sha256 "" # Computed from release tarball after tag is pushed
+  license "MIT"
 
   depends_on "rust" => :build
 
