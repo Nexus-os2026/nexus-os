@@ -1,3 +1,5 @@
+[![pipeline status](https://gitlab.com/nexaiceo/nexus-os/badges/main/pipeline.svg)](https://gitlab.com/nexaiceo/nexus-os/-/commits/main)
+
 <div align="center">
 
 # 🧠 Nexus OS
