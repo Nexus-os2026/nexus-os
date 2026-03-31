@@ -39,6 +39,16 @@ const MOCKS: Record<string, unknown> = {
     enabled_domains: ["PromptOptimization", "ConfigTuning"],
     max_proposals_per_cycle: 1,
   },
+  self_improve_get_guardian_status: {
+    has_baseline: true,
+    baseline_hash: "abc123def456",
+    baseline_created_at: 1000,
+    switch_threshold: 0.8,
+    current_drift: 0.01,
+    drift_bound: 1.0,
+    headroom: 0.79,
+    decision: "continue_active",
+  },
 };
 
 describe("SelfImprovement", () => {

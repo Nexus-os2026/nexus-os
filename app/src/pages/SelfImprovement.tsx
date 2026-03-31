@@ -12,6 +12,7 @@ import {
   selfImproveGetInvariants,
   selfImproveGetConfig,
   selfImproveUpdateConfig,
+  selfImproveGetGuardianStatus,
 } from "../api/backend";
 import {
   ActionButton,
@@ -79,6 +80,16 @@ interface InvariantStatus {
   status: string;
 }
 
+interface GuardianStatus {
+  has_baseline: boolean;
+  baseline_hash: string;
+  switch_threshold: number;
+  current_drift: number;
+  drift_bound: number;
+  headroom: number;
+  decision: string;
+}
+
 interface SelfImproveConfig {
   sigma_threshold: number;
   canary_duration_minutes: number;
@@ -111,13 +122,14 @@ export default function SelfImprovement() {
   const [history, setHistory] = useState<AppliedImprovement[]>([]);
   const [invariants, setInvariants] = useState<InvariantStatus[]>([]);
   const [config, setConfig] = useState<SelfImproveConfig | null>(null);
+  const [guardian, setGuardian] = useState<GuardianStatus | null>(null);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cycleResult, setCycleResult] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [s, sig, opp, prop, hist, inv, cfg] = await Promise.all([
+      const [s, sig, opp, prop, hist, inv, cfg, grd] = await Promise.all([
         selfImproveGetStatus(),
         selfImproveGetSignals(),
         selfImproveGetOpportunities(),
@@ -125,6 +137,7 @@ export default function SelfImprovement() {
         selfImproveGetHistory(),
         selfImproveGetInvariants(),
         selfImproveGetConfig(),
+        selfImproveGetGuardianStatus(),
       ]);
       setStatus(s as unknown as PipelineStatus);
       setSignals(Array.isArray(sig) ? (sig as unknown as Signal[]) : []);
@@ -133,6 +146,7 @@ export default function SelfImprovement() {
       setHistory(Array.isArray(hist) ? (hist as unknown as AppliedImprovement[]) : []);
       setInvariants(Array.isArray(inv) ? (inv as unknown as InvariantStatus[]) : []);
       setConfig(cfg as SelfImproveConfig);
+      setGuardian(grd as unknown as GuardianStatus);
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -428,6 +442,64 @@ export default function SelfImprovement() {
           </div>
           <div style={{ marginTop: 12 }}>
             <ActionButton onClick={handleConfigSave} disabled={working}>Save Configuration</ActionButton>
+          </div>
+        </Panel>
+      )}
+
+      {/* SECTION 5: Guardian & Metrics */}
+      {guardian && (
+        <Panel title="Simplex Guardian" style={{ marginTop: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+            <div style={commandInsetStyle}>
+              <div style={commandLabelStyle}>Status</div>
+              <div style={{ fontSize: "1rem", fontWeight: 700, color: guardian.decision === "continue_active" ? "#34d399" : "#ef4444" }}>
+                {guardian.decision === "continue_active" ? "Active" : "SWITCHING"}
+              </div>
+            </div>
+            <div style={commandInsetStyle}>
+              <div style={commandLabelStyle}>Current Drift</div>
+              <div style={{ fontSize: "1rem", fontWeight: 700, color: "#f8fafc", fontFamily: "monospace" }}>{guardian.current_drift.toFixed(4)}</div>
+            </div>
+            <div style={commandInsetStyle}>
+              <div style={commandLabelStyle}>Drift Bound (D*)</div>
+              <div style={{ fontSize: "1rem", fontWeight: 700, color: "#f8fafc", fontFamily: "monospace" }}>{guardian.drift_bound === Infinity ? "\u221E" : guardian.drift_bound.toFixed(4)}</div>
+            </div>
+            <div style={commandInsetStyle}>
+              <div style={commandLabelStyle}>Headroom</div>
+              <div style={{ fontSize: "1rem", fontWeight: 700, color: guardian.headroom > 0.5 ? "#34d399" : "#fbbf24", fontFamily: "monospace" }}>{guardian.headroom === Infinity ? "\u221E" : guardian.headroom.toFixed(4)}</div>
+            </div>
+          </div>
+          <div style={{ marginTop: 8, fontSize: "0.75rem", color: "#64748b" }}>
+            Baseline: {guardian.baseline_hash ? guardian.baseline_hash.slice(0, 16) + "..." : "none"} | Threshold: {guardian.switch_threshold.toFixed(2)}
+          </div>
+        </Panel>
+      )}
+
+      {/* SECTION 6: Success Rate Summary */}
+      {status && (
+        <Panel title="Improvement Metrics" style={{ marginTop: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+            <div style={commandInsetStyle}>
+              <div style={commandLabelStyle}>Total Applied</div>
+              <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#38bdf8" }}>{(status.committed_count || 0) + (status.monitoring_count || 0) + (status.rolled_back_count || 0)}</div>
+            </div>
+            <div style={commandInsetStyle}>
+              <div style={commandLabelStyle}>Committed</div>
+              <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#34d399" }}>{status.committed_count}</div>
+            </div>
+            <div style={commandInsetStyle}>
+              <div style={commandLabelStyle}>Rolled Back</div>
+              <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#ef4444" }}>{status.rolled_back_count}</div>
+            </div>
+            <div style={commandInsetStyle}>
+              <div style={commandLabelStyle}>Success Rate</div>
+              <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#f8fafc" }}>
+                {(() => {
+                  const total = (status.committed_count || 0) + (status.rolled_back_count || 0);
+                  return total > 0 ? `${((status.committed_count || 0) / total * 100).toFixed(0)}%` : "N/A";
+                })()}
+              </div>
+            </div>
           </div>
         </Panel>
       )}

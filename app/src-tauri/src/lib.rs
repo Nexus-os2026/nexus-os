@@ -5203,6 +5203,33 @@ pub mod runtime {
         commands::self_improvement::self_improve_update_config(state.inner(), config)
     }
 
+    #[tauri::command]
+    fn self_improve_get_envelope(
+        state: tauri::State<'_, AppState>,
+        agent_id: String,
+    ) -> Result<serde_json::Value, String> {
+        commands::self_improvement::self_improve_get_envelope(state.inner(), agent_id)
+    }
+
+    #[tauri::command]
+    fn self_improve_get_guardian_status(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<serde_json::Value, String> {
+        commands::self_improvement::self_improve_get_guardian_status(state.inner())
+    }
+
+    #[tauri::command]
+    fn self_improve_force_baseline(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<serde_json::Value, String> {
+        commands::self_improvement::self_improve_force_baseline(state.inner())
+    }
+
+    #[tauri::command]
+    fn self_improve_promote_baseline(state: tauri::State<'_, AppState>) -> Result<(), String> {
+        commands::self_improvement::self_improve_promote_baseline(state.inner())
+    }
+
     // ── Omniscience ──
 
     #[tauri::command]
@@ -6502,6 +6529,10 @@ pub mod runtime {
                 self_improve_get_invariants,
                 self_improve_get_config,
                 self_improve_update_config,
+                self_improve_get_envelope,
+                self_improve_get_guardian_status,
+                self_improve_force_baseline,
+                self_improve_promote_baseline,
                 // Killer Features
                 screenshot_analyze,
                 screenshot_generate_spec,

@@ -4143,6 +4143,22 @@ export function selfImproveUpdateConfig(config: SelfImproveConfig): Promise<void
   return invokeDesktop("self_improve_update_config", { config });
 }
 
+export function selfImproveGetEnvelope(agentId: string): Promise<Record<string, unknown>> {
+  return invokeDesktop("self_improve_get_envelope", { agentId, agent_id: agentId });
+}
+
+export function selfImproveGetGuardianStatus(): Promise<Record<string, unknown>> {
+  return invokeDesktop("self_improve_get_guardian_status");
+}
+
+export function selfImproveForceBaseline(): Promise<Record<string, unknown>> {
+  return invokeDesktop("self_improve_force_baseline");
+}
+
+export function selfImprovePromoteBaseline(): Promise<void> {
+  return invokeDesktop("self_improve_promote_baseline");
+}
+
 export function meshAddPeer(peerId: string, address: string): Promise<any> {
   return invokeDesktop("mesh_add_peer", { peerId, peer_id: peerId, address });
 }

@@ -3,20 +3,41 @@
 //! Bridges the `nexus-self-improve` crate into the desktop frontend.
 
 use crate::AppState;
+use nexus_self_improve::envelope::BehavioralEnvelope;
+use nexus_self_improve::guardian::SimplexGuardian;
 use nexus_self_improve::invariants::{HardInvariant, InvariantCheckState};
 use nexus_self_improve::types::*;
 use serde_json::json;
+use std::collections::HashMap;
 
 // ── Pipeline State ──────────────────────────────────────────────────
 
 /// In-memory state for the self-improvement pipeline managed by the Tauri backend.
-#[derive(Default)]
 pub struct SelfImproveState {
     pub signals: Vec<ImprovementSignal>,
     pub opportunities: Vec<ImprovementOpportunity>,
     pub proposals: Vec<ImprovementProposal>,
     pub history: Vec<AppliedImprovement>,
     pub config: SelfImproveConfig,
+    pub envelopes: HashMap<String, BehavioralEnvelope>,
+    pub guardian: SimplexGuardian,
+}
+
+impl Default for SelfImproveState {
+    fn default() -> Self {
+        let mut guardian = SimplexGuardian::new(0.8);
+        // Capture initial empty baseline
+        guardian.capture_baseline(HashMap::new(), HashMap::new(), vec![]);
+        Self {
+            signals: Vec::new(),
+            opportunities: Vec::new(),
+            proposals: Vec::new(),
+            history: Vec::new(),
+            config: SelfImproveConfig::default(),
+            envelopes: HashMap::new(),
+            guardian,
+        }
+    }
 }
 
 /// Frontend-visible pipeline configuration.
@@ -417,5 +438,91 @@ pub(crate) fn self_improve_update_config(
     }
 
     si.config = config;
+    Ok(())
+}
+
+// ── Envelope + Guardian commands ────────────────────────────────────
+
+pub(crate) fn self_improve_get_envelope(
+    state: &AppState,
+    agent_id: String,
+) -> Result<serde_json::Value, String> {
+    let si = state
+        .self_improve_state
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+
+    // Return the envelope for the requested agent, or a default one
+    let envelope = si
+        .envelopes
+        .get(&agent_id)
+        .cloned()
+        .unwrap_or_else(|| nexus_self_improve::envelope::BehavioralEnvelope::new(&agent_id));
+
+    serde_json::to_value(&envelope).map_err(|e| format!("serialize: {e}"))
+}
+
+pub(crate) fn self_improve_get_guardian_status(
+    state: &AppState,
+) -> Result<serde_json::Value, String> {
+    let si = state
+        .self_improve_state
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+
+    let default_envelope = nexus_self_improve::envelope::BehavioralEnvelope::new("system");
+    let status = si.guardian.status(&default_envelope);
+    serde_json::to_value(&status).map_err(|e| format!("serialize: {e}"))
+}
+
+pub(crate) fn self_improve_force_baseline(state: &AppState) -> Result<serde_json::Value, String> {
+    let si = state
+        .self_improve_state
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+
+    let result = si
+        .guardian
+        .switch_to_baseline()
+        .map_err(|e| e.to_string())?;
+
+    // Log to audit trail
+    {
+        let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = audit.append_event(
+            uuid::Uuid::nil(),
+            nexus_kernel::audit::EventType::StateChange,
+            json!({
+                "type": "guardian_force_baseline",
+                "baseline_hash": result.baseline_hash,
+            }),
+        );
+    }
+
+    serde_json::to_value(&result).map_err(|e| format!("serialize: {e}"))
+}
+
+pub(crate) fn self_improve_promote_baseline(state: &AppState) -> Result<(), String> {
+    let mut si = state
+        .self_improve_state
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+
+    si.guardian.promote_to_baseline(
+        std::collections::HashMap::new(),
+        std::collections::HashMap::new(),
+        vec![],
+    );
+
+    // Log to audit trail
+    {
+        let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = audit.append_event(
+            uuid::Uuid::nil(),
+            nexus_kernel::audit::EventType::StateChange,
+            json!({ "type": "guardian_promote_baseline" }),
+        );
+    }
+
     Ok(())
 }

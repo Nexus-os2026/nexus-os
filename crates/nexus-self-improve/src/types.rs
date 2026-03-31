@@ -355,4 +355,8 @@ pub enum CycleResult {
     ApplyFailed(String),
     /// Improvement successfully applied and entering canary period.
     Applied(AppliedImprovement),
+    /// Guardian triggered a switch to baseline — no improvement attempted.
+    GuardianSwitch(String),
+    /// Rate-limited — too many recent improvements for this agent/domain.
+    RateLimited(String),
 }
