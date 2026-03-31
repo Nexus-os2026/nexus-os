@@ -98,6 +98,21 @@ spec:
               mountPath: /data
             - name: tmp
               mountPath: /tmp
+        {{- if .Values.ollama.enabled }}
+        - name: ollama
+          image: {{ .Values.ollama.image }}
+          ports:
+            - name: ollama
+              containerPort: 11434
+              protocol: TCP
+          {{- with .Values.ollama.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: ollama-models
+              mountPath: /root/.ollama
+        {{- end }}
       volumes:
         - name: data
           {{- if .Values.persistence.enabled }}
@@ -108,6 +123,10 @@ spec:
           {{- end }}
         - name: tmp
           emptyDir: {}
+        {{- if .Values.ollama.enabled }}
+        - name: ollama-models
+          emptyDir: {}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

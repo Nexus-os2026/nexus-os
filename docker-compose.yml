@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   nexus-os:
     build:
@@ -7,15 +5,23 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
+      - "9090:9090"
     volumes:
-      - "./nexus-data:/data"
+      - nexus-data:/data
     environment:
       NEXUS_HTTP_ADDR: 0.0.0.0:8080
       NEXUS_FRONTEND_DIST: /opt/nexus/app/dist
       NEXUS_CONFIG_PATH: /data/config
       NEXUS_MODE: server
+      NEXUS_LOG_LEVEL: info
       JWT_SECRET: ${JWT_SECRET:-changeme}
       OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
@@ -24,15 +30,19 @@ services:
       start_period: 20s
       retries: 3
 
-  # ---------- Optional services (activate with --profile) ----------
+  # ---------- Optional: Ollama for local LLM inference ----------
 
   ollama:
     image: ollama/ollama:latest
-    profiles: ["ollama"]
+    profiles: ["with-ollama"]
     ports:
       - "11434:11434"
     volumes:
-      - ollama:/root/.ollama
+      - ollama-models:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          memory: 4G
     restart: unless-stopped
 
   # ---------- HA profile: multi-replica with shared PostgreSQL ----------
@@ -63,7 +73,7 @@ services:
     ports:
       - "8081:8080"
     volumes:
-      - "./nexus-data:/data"
+      - nexus-data:/data
     environment:
       NEXUS_HTTP_ADDR: 0.0.0.0:8080
       NEXUS_FRONTEND_DIST: /opt/nexus/app/dist
@@ -86,7 +96,7 @@ services:
     ports:
       - "8082:8080"
     volumes:
-      - "./nexus-data:/data"
+      - nexus-data:/data
     environment:
       NEXUS_HTTP_ADDR: 0.0.0.0:8080
       NEXUS_FRONTEND_DIST: /opt/nexus/app/dist
@@ -102,5 +112,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  ollama:
+  nexus-data:
+  ollama-models:
   pgdata:

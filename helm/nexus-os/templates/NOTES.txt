@@ -1,0 +1,36 @@
+
+Nexus OS {{ .Chart.AppVersion }} has been deployed!
+
+{{- if .Values.ingress.enabled }}
+
+Access the UI at:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+
+{{- else }}
+
+Get the application URL by running:
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "nexus-os.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  kubectl port-forward --namespace {{ .Release.Namespace }} $POD_NAME 8080:8080
+
+Then open http://localhost:8080 in your browser.
+
+{{- end }}
+
+Health check:
+  curl http://localhost:8080/health
+
+Metrics (Prometheus):
+  Port {{ .Values.service.metricsPort }} exposes /metrics
+{{- if .Values.serviceMonitor.enabled }}
+  ServiceMonitor is enabled — Prometheus Operator will auto-discover.
+{{- else }}
+  Enable ServiceMonitor: --set serviceMonitor.enabled=true
+{{- end }}
+
+{{- if .Values.ollama.enabled }}
+
+Ollama sidecar is enabled for local LLM inference.
+  URL: {{ .Values.ollama.url }}
+{{- end }}

@@ -45,6 +45,11 @@ ollama:
   enabled: false
   url: "http://localhost:11434"
   image: ollama/ollama:latest
+  resources:
+    limits:
+      memory: 8Gi
+    requests:
+      memory: 4Gi
 
 service:
   type: ClusterIP

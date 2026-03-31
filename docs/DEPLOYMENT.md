@@ -1,231 +1,368 @@
 # Deployment Guide
 
-> Single-node and cluster deployment for Nexus OS.
+> Docker, Kubernetes, and air-gapped deployment for Nexus OS.
 
 ## Platform Requirements
 
 | Component | Minimum | Recommended |
 |-----------|---------|-------------|
 | OS | Linux (x86_64), macOS (ARM64/x86_64), Windows (x86_64) | Ubuntu 22.04+ / macOS 14+ |
-| Rust | 1.75+ | Latest stable |
-| Node.js | 18+ | 20 LTS |
+| Rust | 1.82+ | Latest stable |
+| Node.js | 18+ | 22 LTS |
 | RAM | 4 GB | 16 GB |
 | Disk | 2 GB | 20 GB (models + audit logs) |
 | CPU | 2 cores | 8+ cores |
 | GPU | None (CPU inference) | CUDA-capable for local LLM |
 
-## Single Node Setup
+---
 
-### 1. Build from Source
+## Quick Start (Docker)
 
-```bash
-git clone https://gitlab.com/nexaiceo/nexus-os.git
-cd nexus-os
+### Prerequisites
 
-# Build all workspace crates
-cargo build --workspace --release
+- Docker 24+ and Docker Compose v2
+- 4 GB RAM minimum
 
-# Build the desktop UI
-cd app && npm ci && npm run build && cd ..
-```
-
-### 2. Verify the Build
+### One-command start
 
 ```bash
-# Run all tests
-cargo test --workspace --all-features
-
-# Check formatting and lints
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
+docker compose up -d
 ```
 
-### 3. Run the Desktop App
+Access the UI at **http://localhost:8080**
+
+### With Ollama (local LLM inference)
 
 ```bash
-cd app
-npm run tauri dev
+docker compose --profile with-ollama up -d
 ```
 
-### 4. Run via CLI
+### HA mode (PostgreSQL + 2 replicas)
 
 ```bash
-# List registered agents
-cargo run -p nexus-cli -- agent list
-
-# Check audit trail integrity
-cargo run -p nexus-cli -- audit verify
-
-# View system status
-cargo run -p nexus-cli -- cluster status
+docker compose --profile ha up -d
 ```
+
+### Verify
+
+```bash
+curl http://localhost:8080/health
+```
+
+### Stop
+
+```bash
+docker compose down
+```
+
+---
+
+## Kubernetes (Helm)
+
+### Prerequisites
+
+- kubectl configured with cluster access
+- Helm 3.x
+
+### Install
+
+```bash
+helm install nexus-os helm/nexus-os/
+```
+
+### With custom values
+
+```bash
+helm install nexus-os helm/nexus-os/ -f my-values.yaml
+```
+
+### Common overrides
+
+```bash
+# Enable ingress
+helm install nexus-os helm/nexus-os/ \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host=nexus.mycompany.com \
+  --set ingress.hosts[0].paths[0].path=/ \
+  --set ingress.hosts[0].paths[0].pathType=Prefix
+
+# Enable Prometheus monitoring
+helm install nexus-os helm/nexus-os/ \
+  --set serviceMonitor.enabled=true
+
+# Scale with HPA
+helm install nexus-os helm/nexus-os/ \
+  --set replicaCount=3 \
+  --set autoscaling.enabled=true
+
+# With Ollama sidecar
+helm install nexus-os helm/nexus-os/ \
+  --set ollama.enabled=true
+
+# PostgreSQL backend for HA
+helm install nexus-os helm/nexus-os/ \
+  --set database.backend=postgres \
+  --set database.postgresUrl="postgres://nexus:secret@postgres:5432/nexus"
+```
+
+### Upgrade
+
+```bash
+helm upgrade nexus-os helm/nexus-os/
+```
+
+### Port-forward (no ingress)
+
+```bash
+kubectl port-forward svc/nexus-os 8080:8080
+```
+
+---
+
+## Air-Gapped Deployment
+
+For environments without internet access.
+
+### 1. Pre-pull and save images
+
+```bash
+# On a machine with internet
+docker pull ghcr.io/nexus-os2026/nexus-os:10.5.0
+docker pull ollama/ollama:latest  # if needed
+
+docker save ghcr.io/nexus-os2026/nexus-os:10.5.0 -o nexus-os.tar
+docker save ollama/ollama:latest -o ollama.tar
+```
+
+### 2. Transfer and load
+
+```bash
+# On the air-gapped machine
+docker load -i nexus-os.tar
+docker load -i ollama.tar
+```
+
+### 3. Bundle Helm chart
+
+```bash
+# On a machine with internet
+helm package helm/nexus-os/
+
+# Transfer nexus-os-1.1.0.tgz to the air-gapped environment
+```
+
+### 4. Install from local archive
+
+```bash
+helm install nexus-os nexus-os-1.1.0.tgz \
+  --set image.pullPolicy=Never \
+  --set ollama.enabled=true
+```
+
+### 5. Configure local LLM (no internet required)
+
+With Ollama loaded, pull a model on the air-gapped machine from a pre-downloaded model file or serve models already bundled in the Ollama volume.
+
+---
+
+## Headless Server (Binary)
+
+For running without Docker or Kubernetes.
+
+### Build
+
+```bash
+cargo build --release -p nexus-protocols --bin nexus-server
+```
+
+### Run
+
+```bash
+./target/release/nexus-server start
+```
+
+### CLI server (alternative)
+
+```bash
+cargo build --release -p nexus-server
+./target/release/nexus-server --port 3000 --mcp-port 3001 --a2a-port 3002
+```
+
+---
 
 ## Configuration Reference
 
-### Agent Manifest (`manifest.toml`)
+### Environment Variables
 
-```toml
-name = "my-agent"              # Required. 3-64 chars, alphanumeric + hyphens
-version = "1.0.0"              # Required. Semver
-capabilities = ["llm.query"]   # Required. From capability registry
-fuel_budget = 10000            # Required. 1 - 1,000,000
-autonomy_level = 2             # Optional. 0-5, default 0
-schedule = "*/10 * * * *"      # Optional. Cron expression
-llm_model = "claude-sonnet-4-6"  # Optional. Model identifier
-consent_policy_path = "consent.toml"  # Optional. Path to consent policy
-fuel_period_id = "2024-Q1"     # Optional. Budget period identifier
-monthly_fuel_cap = 50000       # Optional. Monthly fuel limit
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NEXUS_HTTP_ADDR` | `0.0.0.0:8080` | HTTP listen address |
+| `NEXUS_FRONTEND_DIST` | `/opt/nexus/app/dist` | Path to React frontend build |
+| `NEXUS_CONFIG_PATH` | `/data/config` | Configuration directory |
+| `NEXUS_MODE` | `server` | Runtime mode |
+| `NEXUS_LOG_LEVEL` | `info` | Log level (trace, debug, info, warn, error) |
+| `NEXUS_SHUTDOWN_TIMEOUT_SECS` | `30` | Graceful shutdown timeout |
+| `NEXUS_CORS_ORIGINS` | `*` | Allowed CORS origins |
+| `JWT_SECRET` | (required) | JWT signing secret |
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama API endpoint |
+| `DATABASE_URL` | (sqlite) | PostgreSQL connection URL for HA mode |
 
-### Autonomy Levels
+### Helm Values
 
-| Level | Description | Use Case |
-|-------|-------------|----------|
-| 0 | Inert | Disabled agents |
-| 1 | Suggest | Research assistants |
-| 2 | Act-with-approval | Code generation, content creation |
-| 3 | Act-then-report | Monitoring, alerting |
-| 4 | Autonomous-bounded | CI/CD automation |
-| 5 | Full autonomy | Self-improvement (restricted) |
+| Value | Default | Description |
+|-------|---------|-------------|
+| `replicaCount` | `2` | Number of pod replicas |
+| `image.repository` | `registry.gitlab.com/nexaiceo/nexus-os` | Container image |
+| `image.tag` | `""` (appVersion) | Image tag |
+| `service.type` | `ClusterIP` | Service type |
+| `service.port` | `8080` | HTTP port |
+| `service.metricsPort` | `9090` | Metrics port |
+| `ingress.enabled` | `false` | Enable ingress |
+| `persistence.enabled` | `true` | Enable PVC |
+| `persistence.size` | `10Gi` | PVC size |
+| `autoscaling.enabled` | `true` | Enable HPA |
+| `autoscaling.minReplicas` | `2` | Minimum replicas |
+| `autoscaling.maxReplicas` | `10` | Maximum replicas |
+| `ollama.enabled` | `false` | Enable Ollama sidecar |
+| `serviceMonitor.enabled` | `false` | Enable Prometheus ServiceMonitor |
+| `backup.enabled` | `false` | Enable backup CronJob |
+| `database.backend` | `sqlite` | Database backend (sqlite/postgres) |
 
-### Capability Registry
+### API Endpoints
 
-```
-web.search      - Search the web
-web.read        - Read web pages
-llm.query       - Query language models
-fs.read         - Read filesystem
-fs.write        - Write filesystem
-process.exec    - Execute processes
-social.post     - Post to social platforms
-social.x.post   - Post to X/Twitter
-social.x.read   - Read from X/Twitter
-messaging.send  - Send messages
-audit.read      - Read audit events
-```
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Server health + version |
+| GET | `/status` | Agent count, uptime, providers |
+| GET | `/api/v1/agents` | List all agents |
+| POST | `/api/v1/agents/{id}/run` | Execute an agent task |
+| GET | `/api/v1/agents/{id}/status` | Agent execution status |
+| GET | `/api/v1/audit` | Query audit trail |
+| GET | `/mcp/tools/list` | MCP tool listing |
+| POST | `/mcp/tools/invoke` | MCP tool invocation |
+| POST | `/a2a` | A2A task submission |
+| GET | `/a2a/agent-card` | A2A agent discovery |
 
-## Cluster Setup
+---
 
-### Architecture
+## Monitoring & Observability
 
-A Nexus OS cluster consists of multiple nodes communicating over TCP with length-prefix framed messages. The cluster provides:
+### Prometheus Metrics
 
-- **Audit replication** - All audit events are replicated across nodes
-- **Quorum voting** - Governance decisions require majority agreement
-- **Membership** - SWIM-style failure detection with heartbeats
+Metrics are exposed on port **9090** at `/metrics`.
 
-### Node Configuration
-
-Each node requires:
-
-1. A unique node ID
-2. A bind address for incoming connections
-3. Seed node addresses for cluster join
-
-### Starting the First Node
-
-```bash
-cargo run -p nexus-cli -- cluster status
-```
-
-The first node bootstraps as the primary with quorum authority.
-
-### Joining Additional Nodes
+Enable the Prometheus ServiceMonitor:
 
 ```bash
-# From the second machine
-cargo run -p nexus-cli -- cluster join --seed 10.0.1.10:9090
+helm install nexus-os helm/nexus-os/ --set serviceMonitor.enabled=true
 ```
 
-### Cluster Commands
+### Grafana Dashboard
+
+Pre-built dashboards are in `monitoring/grafana/`.
+
+### Health Check
+
+The `/health` endpoint returns:
+
+```json
+{
+  "status": "healthy",
+  "version": "10.5.0",
+  "agents_registered": 5,
+  "tasks_in_flight": 2,
+  "uptime_secs": 3600,
+  "audit_valid": true,
+  "memory_usage_bytes": 104857600,
+  "wasm_cache_hit_rate": 0.85
+}
+```
+
+---
+
+## Security Hardening
+
+### Container Security
+
+The default Dockerfile and Helm chart enforce:
+- Non-root user (UID 1000)
+- Read-only root filesystem
+- All capabilities dropped
+- No privilege escalation
+
+### Network Policies
+
+Restrict traffic to only required ports:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nexus-os
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nexus-os
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports:
+        - port: 8080
+        - port: 9090
+  egress:
+    - ports:
+        - port: 443   # LLM API calls
+        - port: 11434  # Ollama
+```
+
+### Secret Management
+
+For production, use external secret stores:
 
 ```bash
-# View cluster health
-nexus cluster status
+# Use existing Kubernetes secret for JWT
+helm install nexus-os helm/nexus-os/ \
+  --set auth.existingSecret=my-jwt-secret \
+  --set auth.existingSecretKey=jwt-secret
 
-# Join a cluster
-nexus cluster join --seed <address>
-
-# Leave the cluster gracefully
-nexus cluster leave
+# Use existing secret for database URL
+helm install nexus-os helm/nexus-os/ \
+  --set database.existingSecret=my-db-secret \
+  --set database.existingSecretKey=database-url
 ```
 
-### Connection Parameters
+### TLS Termination
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `connect_timeout_secs` | 5 | TCP connection timeout |
-| `read_timeout_secs` | 10 | Read timeout for framed messages |
-| `max_retries` | 5 | Maximum reconnection attempts |
-| `base_retry_delay_ms` | 1000 | Initial retry backoff |
-| `max_retry_delay_ms` | 30000 | Maximum retry backoff |
+Use ingress with TLS:
 
-Retry delay follows exponential backoff: `min(base * 2^count, max_delay)`.
-
-### Quorum
-
-Quorum is reached when `active_nodes >= ceil(total_nodes / 2)`. Without quorum, governance decisions are deferred until quorum is restored.
-
-### Wire Message Types
-
-| Type | Purpose |
-|------|---------|
-| Heartbeat | Node liveness detection |
-| AuditSync | Replicate audit events |
-| QuorumPropose | Propose a governance decision |
-| QuorumVote | Vote on a proposal |
-| ReplicationFull | Full state sync for new nodes |
-| ReplicationDelta | Incremental state updates |
-| AuthChallenge | Node authentication challenge |
-| AuthResponse | Authentication response |
-
-## Monitoring
-
-### Audit Trail
-
-```bash
-# Show recent audit events
-nexus audit show
-
-# Verify hash-chain integrity
-nexus audit verify
-
-# Export audit log
-nexus audit export --format json
-
-# Check federation sync status
-nexus audit federation-status
+```yaml
+ingress:
+  enabled: true
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: nexus.mycompany.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: nexus-tls
+      hosts:
+        - nexus.mycompany.com
 ```
 
-### Compliance
-
-```bash
-# Generate SOC 2 compliance report
-nexus compliance report
-
-# Check current compliance status
-nexus compliance status
-```
-
-### Benchmarks
-
-```bash
-# Run performance benchmarks
-nexus benchmark run
-
-# View benchmark report
-nexus benchmark report
-```
+---
 
 ## Production Checklist
 
-- [ ] Build with `--release` flag
+- [ ] Change `JWT_SECRET` from default
+- [ ] Enable TLS via ingress or load balancer
+- [ ] Set resource limits appropriate to workload
+- [ ] Enable persistence with appropriate storage class
+- [ ] Configure backup CronJob for audit data
+- [ ] Enable ServiceMonitor for Prometheus
+- [ ] Use `existingSecret` for all credentials
 - [ ] Set appropriate autonomy levels for each agent
 - [ ] Configure fuel budgets with monthly caps
-- [ ] Enable audit log rotation and backup
-- [ ] Set up cluster with at least 3 nodes for quorum
-- [ ] Verify all compliance controls are satisfied
-- [ ] Review agent capabilities - grant minimum required
+- [ ] Review agent capabilities — grant minimum required
 - [ ] Test kill gates for emergency shutdown
-- [ ] Configure HITL approval queues for L1/L2 agents
-- [ ] Set up monitoring for fuel burn anomalies
+- [ ] Set up alerts for fuel burn anomalies

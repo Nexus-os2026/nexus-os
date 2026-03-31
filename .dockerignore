@@ -2,7 +2,16 @@ target/
 node_modules/
 **/node_modules/
 .git/
+_old/
+audit_artifacts/
+nexus-output/
+.audit_tmp/
 app/dist/
+data/
 *.log
 .env
+.env.*
 .DS_Store
+.claude/
+.vscode/
+.idea/

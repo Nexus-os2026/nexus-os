@@ -152,6 +152,21 @@ cd app && npm ci && npm run build && cd ..
 cd app && npm run tauri dev
 ```
 
+### Server Deployment (Docker)
+
+```bash
+# One-command start — serves UI + API on port 8080
+docker compose up -d
+
+# With local LLM inference via Ollama
+docker compose --profile with-ollama up -d
+
+# Verify
+curl http://localhost:8080/health
+```
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Kubernetes/Helm, air-gapped, and HA deployment.
+
 ## Post-Audit Status
 
 Independent audit completed 2026-03-31. Every metric verified by inspecting source code.
@@ -234,6 +249,7 @@ nexus-os/
 | [Threat Model](THREAT_MODEL.md) | Adversarial threat analysis |
 | [Privacy Design](PRIVACY_DESIGN.md) | Privacy-by-design principles |
 | [Changelog](CHANGELOG.md) | Version history and release notes |
+| [Deployment Guide](docs/DEPLOYMENT.md) | Docker, Kubernetes/Helm, air-gapped installation |
 | [Contributing](CONTRIBUTING.md) | How to contribute |
 
 ## Roadmap
@@ -243,7 +259,7 @@ nexus-os/
 - [x] v10.3.0 — Full audit: 54 agents, 655 commands, 84 pages
 - [x] Darwin Core — Darwinian evolution engine with adversarial arena
 - [x] Flash Inference — llama.cpp integration, 397B model verified
-- [ ] Docker + Helm chart for server/K8s deployment
+- [x] Docker + Helm chart for server/K8s deployment
 - [ ] SOC 2 Type II / NIST 800-53 formal certification
 - [ ] Governed Self-Improvement (capstone — agents improve the OS itself)
 - [ ] Research paper: formal verification of governance properties
