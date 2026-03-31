@@ -12,6 +12,8 @@ import {
   Settings, ChevronDown, ChevronRight,
   ShieldAlert, UserCog, Boxes, ScrollText, ClipboardCheck, HeartPulse,
   PlugZap, Timer, Gauge, LogIn, Building2, BarChart3, Receipt, Server, Zap,
+  Target, FileSearch, GitCompare, GitCompareArrows, FlaskConical, Map, Route,
+  Coins, Eye, Wrench, Factory,
   type LucideIcon
 } from "lucide-react";
 import "./sidebar.css";
@@ -29,6 +31,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Settings,
   ShieldAlert, UserCog, Boxes, ScrollText, ClipboardCheck, HeartPulse,
   PlugZap, Timer, Gauge, LogIn, Building2, BarChart3, Receipt, Server, Zap,
+  Target, FileSearch, GitCompare, GitCompareArrows, FlaskConical, Map, Route,
+  Coins, Eye, Wrench, Factory,
 };
 
 export interface SidebarItem {

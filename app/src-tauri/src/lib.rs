@@ -901,6 +901,7 @@ pub struct AppState {
     temporal_checkpoints: Arc<Mutex<nexus_kernel::temporal::TemporalCheckpointManager>>,
     time_dilator: Arc<Mutex<nexus_kernel::temporal::TimeDilator>>,
     self_improving_os: Arc<Mutex<nexus_kernel::self_improve::SelfImprovingOS>>,
+    pub self_improve_state: Arc<Mutex<commands::self_improvement::SelfImproveState>>,
     screenshot_cloner: Arc<Mutex<nexus_kernel::autopilot::screenshot_clone::ScreenshotCloner>>,
     voice_project: Arc<Mutex<nexus_kernel::autopilot::voice_project::VoiceProjectBuilder>>,
     stress_simulator: Arc<Mutex<nexus_kernel::autopilot::stress_test::StressSimulator>>,
@@ -1125,6 +1126,9 @@ impl AppState {
             time_dilator: Arc::new(Mutex::new(nexus_kernel::temporal::TimeDilator::default())),
             self_improving_os: Arc::new(Mutex::new(
                 nexus_kernel::self_improve::SelfImprovingOS::new(),
+            )),
+            self_improve_state: Arc::new(Mutex::new(
+                commands::self_improvement::SelfImproveState::default(),
             )),
             screenshot_cloner: Arc::new(Mutex::new(
                 nexus_kernel::autopilot::screenshot_clone::ScreenshotCloner::default(),
@@ -1405,6 +1409,9 @@ impl AppState {
             time_dilator: Arc::new(Mutex::new(nexus_kernel::temporal::TimeDilator::default())),
             self_improving_os: Arc::new(Mutex::new(
                 nexus_kernel::self_improve::SelfImprovingOS::new(),
+            )),
+            self_improve_state: Arc::new(Mutex::new(
+                commands::self_improvement::SelfImproveState::default(),
             )),
             screenshot_cloner: Arc::new(Mutex::new(
                 nexus_kernel::autopilot::screenshot_clone::ScreenshotCloner::default(),
@@ -5105,6 +5112,97 @@ pub mod runtime {
         super::self_rewrite_get_history()
     }
 
+    // ── Self-Improvement Pipeline ──
+
+    #[tauri::command]
+    fn self_improve_get_status(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<serde_json::Value, String> {
+        commands::self_improvement::self_improve_get_status(state.inner())
+    }
+
+    #[tauri::command]
+    fn self_improve_get_signals(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<serde_json::Value, String> {
+        commands::self_improvement::self_improve_get_signals(state.inner())
+    }
+
+    #[tauri::command]
+    fn self_improve_get_opportunities(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<serde_json::Value, String> {
+        commands::self_improvement::self_improve_get_opportunities(state.inner())
+    }
+
+    #[tauri::command]
+    fn self_improve_get_proposals(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<serde_json::Value, String> {
+        commands::self_improvement::self_improve_get_proposals(state.inner())
+    }
+
+    #[tauri::command]
+    fn self_improve_get_history(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<serde_json::Value, String> {
+        commands::self_improvement::self_improve_get_history(state.inner())
+    }
+
+    #[tauri::command]
+    fn self_improve_run_cycle(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<serde_json::Value, String> {
+        commands::self_improvement::self_improve_run_cycle(state.inner())
+    }
+
+    #[tauri::command]
+    fn self_improve_approve_proposal(
+        state: tauri::State<'_, AppState>,
+        proposal_id: String,
+    ) -> Result<serde_json::Value, String> {
+        commands::self_improvement::self_improve_approve_proposal(state.inner(), proposal_id)
+    }
+
+    #[tauri::command]
+    fn self_improve_reject_proposal(
+        state: tauri::State<'_, AppState>,
+        proposal_id: String,
+        reason: String,
+    ) -> Result<(), String> {
+        commands::self_improvement::self_improve_reject_proposal(state.inner(), proposal_id, reason)
+    }
+
+    #[tauri::command]
+    fn self_improve_rollback(
+        state: tauri::State<'_, AppState>,
+        improvement_id: String,
+    ) -> Result<(), String> {
+        commands::self_improvement::self_improve_rollback(state.inner(), improvement_id)
+    }
+
+    #[tauri::command]
+    fn self_improve_get_invariants(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<serde_json::Value, String> {
+        commands::self_improvement::self_improve_get_invariants(state.inner())
+    }
+
+    #[tauri::command]
+    fn self_improve_get_config(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<serde_json::Value, String> {
+        commands::self_improvement::self_improve_get_config(state.inner())
+    }
+
+    #[tauri::command]
+    fn self_improve_update_config(
+        state: tauri::State<'_, AppState>,
+        config: commands::self_improvement::SelfImproveConfig,
+    ) -> Result<(), String> {
+        commands::self_improvement::self_improve_update_config(state.inner(), config)
+    }
+
     // ── Omniscience ──
 
     #[tauri::command]
@@ -6391,6 +6489,19 @@ pub mod runtime {
                 record_knowledge_interaction,
                 get_os_dream_status,
                 set_self_improve_enabled,
+                // Self-Improvement Pipeline
+                self_improve_get_status,
+                self_improve_get_signals,
+                self_improve_get_opportunities,
+                self_improve_get_proposals,
+                self_improve_get_history,
+                self_improve_run_cycle,
+                self_improve_approve_proposal,
+                self_improve_reject_proposal,
+                self_improve_rollback,
+                self_improve_get_invariants,
+                self_improve_get_config,
+                self_improve_update_config,
                 // Killer Features
                 screenshot_analyze,
                 screenshot_generate_spec,

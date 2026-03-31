@@ -260,7 +260,6 @@ mod tests {
             sigma_threshold: 2.0,
             ema_alpha: 0.1,
             min_samples: 5,
-            ..Default::default()
         });
 
         // Feed stable values to build baseline

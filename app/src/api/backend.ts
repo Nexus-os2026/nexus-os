@@ -4085,6 +4085,64 @@ export function selfRewriteRollback(agentId: string): Promise<any> {
   return invokeDesktop("self_rewrite_rollback", { agentId, agent_id: agentId });
 }
 
+// ── Self-Improvement Pipeline ────────────────────────────────────────
+
+export interface SelfImproveConfig {
+  sigma_threshold: number;
+  canary_duration_minutes: number;
+  fuel_budget: number;
+  enabled_domains: string[];
+  max_proposals_per_cycle: number;
+}
+
+export function selfImproveGetStatus(): Promise<Record<string, unknown>> {
+  return invokeDesktop("self_improve_get_status");
+}
+
+export function selfImproveGetSignals(): Promise<Record<string, unknown>[]> {
+  return invokeDesktop("self_improve_get_signals");
+}
+
+export function selfImproveGetOpportunities(): Promise<Record<string, unknown>[]> {
+  return invokeDesktop("self_improve_get_opportunities");
+}
+
+export function selfImproveGetProposals(): Promise<Record<string, unknown>[]> {
+  return invokeDesktop("self_improve_get_proposals");
+}
+
+export function selfImproveGetHistory(): Promise<Record<string, unknown>[]> {
+  return invokeDesktop("self_improve_get_history");
+}
+
+export function selfImproveRunCycle(): Promise<Record<string, unknown>> {
+  return invokeDesktop("self_improve_run_cycle");
+}
+
+export function selfImproveApproveProposal(proposalId: string): Promise<Record<string, unknown>> {
+  return invokeDesktop("self_improve_approve_proposal", { proposalId, proposal_id: proposalId });
+}
+
+export function selfImproveRejectProposal(proposalId: string, reason: string): Promise<void> {
+  return invokeDesktop("self_improve_reject_proposal", { proposalId, proposal_id: proposalId, reason });
+}
+
+export function selfImproveRollback(improvementId: string): Promise<void> {
+  return invokeDesktop("self_improve_rollback", { improvementId, improvement_id: improvementId });
+}
+
+export function selfImproveGetInvariants(): Promise<Record<string, unknown>[]> {
+  return invokeDesktop("self_improve_get_invariants");
+}
+
+export function selfImproveGetConfig(): Promise<SelfImproveConfig> {
+  return invokeDesktop("self_improve_get_config");
+}
+
+export function selfImproveUpdateConfig(config: SelfImproveConfig): Promise<void> {
+  return invokeDesktop("self_improve_update_config", { config });
+}
+
 export function meshAddPeer(peerId: string, address: string): Promise<any> {
   return invokeDesktop("mesh_add_peer", { peerId, peer_id: peerId, address });
 }

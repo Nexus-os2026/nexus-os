@@ -13,6 +13,7 @@ pub mod flash;
 pub mod governance;
 pub mod model_hub;
 pub mod orchestration;
+pub mod self_improvement;
 pub mod simulation;
 pub mod tools_infra;
 pub mod trust_security;

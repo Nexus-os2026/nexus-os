@@ -132,6 +132,14 @@
   position: relative;
   z-index: 1;
   padding: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.nexus-page-panel .holo-panel__content {
+  height: 100%;
 }
 
 .holo-panel-foreground .holo-panel__content {

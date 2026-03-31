@@ -94,6 +94,7 @@ const DreamForge = React.lazy(() => import("./pages/DreamForge"));
 const TemporalEngine = React.lazy(() => import("./pages/TemporalEngine"));
 const CivilizationPage = React.lazy(() => import("./pages/Civilization"));
 const SelfRewriteLab = React.lazy(() => import("./pages/SelfRewriteLab"));
+const SelfImprovement = React.lazy(() => import("./pages/SelfImprovement"));
 const AdminDashboard = React.lazy(() => import("./pages/AdminDashboard"));
 const AdminUsers = React.lazy(() => import("./pages/AdminUsers"));
 const AdminFleet = React.lazy(() => import("./pages/AdminFleet"));
@@ -139,7 +140,7 @@ import type {
 import { createDefaultConfig, normalizeConfig } from "./utils/config";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler" | "flash-inference" | "measurement" | "measurement-session" | "measurement-compare" | "measurement-batteries" | "capability-boundaries" | "model-routing" | "ab-validation" | "browser-agent" | "governance-oracle" | "token-economy" | "governed-control" | "world-sim" | "perception" | "agent-memory" | "external-tools" | "collab-protocol" | "software-factory" | "memory-dashboard";
+type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler" | "flash-inference" | "measurement" | "measurement-session" | "measurement-compare" | "measurement-batteries" | "capability-boundaries" | "model-routing" | "ab-validation" | "browser-agent" | "governance-oracle" | "token-economy" | "governed-control" | "world-sim" | "perception" | "agent-memory" | "external-tools" | "collab-protocol" | "software-factory" | "memory-dashboard" | "self-improvement";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -190,6 +191,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "collab-protocol", label: "Collaboration", icon: "Users", shortcut: "", section: "AGENT LAB" },
   { id: "software-factory", label: "Software Factory", icon: "Factory", shortcut: "", section: "AGENT LAB" },
   { id: "self-rewrite", label: "Self-Rewrite Lab", icon: "Code2", shortcut: "", section: "AGENT LAB" },
+  { id: "self-improvement", label: "Self-Improvement", icon: "Sparkles", shortcut: "", section: "AGENT LAB" },
   { id: "consciousness", label: "Consciousness", icon: "Brain", shortcut: "", section: "AGENT LAB" },
   // ── CREATIVE ──
   { id: "design-studio", label: "Design Studio", icon: "Palette", shortcut: "", section: "CREATIVE" },
@@ -254,6 +256,7 @@ const PAGE_ROUTE_OVERRIDES: Partial<Record<Page, string>> = {
   "knowledge-graph": "/knowledge",
   civilization: "/civilization",
   "self-rewrite": "/self-rewrite",
+  "self-improvement": "/self-improvement",
   chat: "/chat",
   agents: "/agents",
   "command-center": "/command",
@@ -1450,7 +1453,10 @@ export default function App(): JSX.Element {
             <h2 style={{ fontFamily: "var(--font-display, monospace)", color: "var(--text-primary, #e2e8f0)", marginBottom: "1rem" }}>
               Permission Dashboard
             </h2>
-            <p style={{ color: "var(--text-secondary, #94a3b8)", marginBottom: "1.5rem", fontSize: "0.9rem" }}>
+            <p style={{ color: "var(--text-secondary, #94a3b8)", marginBottom: "0.5rem", fontSize: "0.9rem" }}>
+              Configure what each agent is allowed to do
+            </p>
+            <p style={{ color: "var(--text-secondary, #64748b)", marginBottom: "1.5rem", fontSize: "0.82rem" }}>
               Select an agent to manage its permissions.
             </p>
             <div style={{ display: "grid", gap: "0.6rem" }}>
@@ -1692,6 +1698,9 @@ export default function App(): JSX.Element {
     }
     if (page === "self-rewrite") {
       return <SelfRewriteLab />;
+    }
+    if (page === "self-improvement") {
+      return <SelfImprovement />;
     }
     if (page === "admin-console") {
       return <AdminDashboard />;

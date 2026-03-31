@@ -914,6 +914,9 @@ export function Settings({
             )}
 
             <h3 className="st-card-title" style={{ marginTop: "1rem" }}>Execute Tool</h3>
+            <p className="st-row-hint" style={{ marginBottom: "0.5rem" }}>
+              Advanced: Execute MCP tools directly with JSON payloads. For normal tool usage, agents invoke tools automatically through the governance pipeline.
+            </p>
             <div className="st-row" style={{ flexDirection: "column", alignItems: "stretch", gap: "0.5rem" }}>
               <textarea
                 className="st-api-input"

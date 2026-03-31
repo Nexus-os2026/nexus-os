@@ -170,6 +170,8 @@ summary:focus-visible {
   .nexus-page-panel {
     min-height: 100%;
     border-radius: calc(var(--radius-panel-lg) + 0.15rem);
+    display: flex;
+    flex-direction: column;
   }
 
   .nexus-panel {

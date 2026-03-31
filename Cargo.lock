@@ -4340,6 +4340,7 @@ dependencies = [
  "nexus-predictive-router",
  "nexus-protocols",
  "nexus-sdk",
+ "nexus-self-improve",
  "nexus-software-factory",
  "nexus-telemetry",
  "nexus-tenancy",
