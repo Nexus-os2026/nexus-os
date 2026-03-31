@@ -1,6 +1,7 @@
 [package]
 name = "nexus-crypto"
 version = "0.1.0"
+license = "MIT"
 edition = "2021"
 description = "Crypto-agility layer for Nexus OS — pluggable signature and key exchange algorithms"
 

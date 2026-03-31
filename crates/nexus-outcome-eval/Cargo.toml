@@ -1,6 +1,7 @@
 [package]
 name = "nexus-outcome-eval"
 version = "0.1.0"
+license = "MIT"
 edition = "2021"
 description = "Outcome evaluation primitives — compliance-ready goal verification for governed AI agents"
 
