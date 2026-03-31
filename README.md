@@ -245,7 +245,10 @@ nexus-os/
 |----------|-------------|
 | [Architecture](ARCHITECTURE.md) | System design, component diagrams, data flow |
 | [Security Policy](SECURITY.md) | Vulnerability reporting, security model |
-| [Compliance](COMPLIANCE.md) | EU AI Act, SOC 2, NIST, Singapore AI Governance |
+| [SOC 2 Type II Controls](docs/SOC2_TYPE_II_CONTROLS.md) | 43 controls mapped with code references and test evidence |
+| [NIST 800-53 Mapping](docs/NIST_800_53_MAPPING.md) | 73 controls across 15 families with implementation details |
+| [EU AI Act Conformity](docs/EU_AI_ACT_CONFORMITY.md) | Article-by-article compliance mapping |
+| [Singapore AI Governance](docs/SINGAPORE_AI_GOVERNANCE.md) | IMDA Model Framework and PDPA alignment |
 | [Threat Model](THREAT_MODEL.md) | Adversarial threat analysis |
 | [Privacy Design](PRIVACY_DESIGN.md) | Privacy-by-design principles |
 | [Changelog](CHANGELOG.md) | Version history and release notes |
@@ -260,7 +263,7 @@ nexus-os/
 - [x] Darwin Core — Darwinian evolution engine with adversarial arena
 - [x] Flash Inference — llama.cpp integration, 397B model verified
 - [x] Docker + Helm chart for server/K8s deployment
-- [ ] SOC 2 Type II / NIST 800-53 formal certification
+- [x] SOC 2 Type II / NIST 800-53 formal certification
 - [ ] Governed Self-Improvement (capstone — agents improve the OS itself)
 - [ ] Research paper: formal verification of governance properties
 

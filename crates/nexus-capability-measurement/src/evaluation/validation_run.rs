@@ -427,7 +427,6 @@ mod tests {
     use crate::battery::expected_chain::ExpectedReasoning;
     use crate::battery::test_problem::{ProblemContext, ScoringRubric};
     use crate::framework::{DifficultyLevel, Vector};
-    use crate::scoring::gaming_detection::GamingDetectionRule;
 
     fn make_problem(vector: Vector, level: DifficultyLevel) -> TestProblem {
         TestProblem {

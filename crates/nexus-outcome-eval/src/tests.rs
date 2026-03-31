@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod outcome_eval_tests {
     use crate::artifact::OutcomeArtifactGenerator;
     use crate::builder::OutcomeSpecBuilder;
     use crate::evaluator::OutcomeEvaluator;

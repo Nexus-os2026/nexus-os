@@ -176,7 +176,7 @@ mod tests {
             },
         );
         // First session should succeed
-        let id1 = mgr.create_session("agent-l3", 3).unwrap();
+        let _id1 = mgr.create_session("agent-l3", 3).unwrap();
         assert_eq!(mgr.active_session_count(), 1);
 
         // Second session should fail (limit = 1)

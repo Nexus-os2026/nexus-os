@@ -562,7 +562,6 @@ mod tests {
     use super::*;
     use crate::battery::expected_chain::ExpectedReasoning;
     use crate::battery::test_problem::{ProblemContext, ScoringRubric};
-    use crate::scoring::gaming_detection::GamingDetectionRule;
 
     fn sample_problem() -> TestProblem {
         TestProblem {

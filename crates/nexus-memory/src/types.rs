@@ -833,7 +833,7 @@ mod tests {
 
     #[test]
     fn epistemic_class_to_filter_roundtrip() {
-        let classes = vec![
+        let classes = [
             EpistemicClass::Observation,
             EpistemicClass::UserAssertion,
             EpistemicClass::Inference {
@@ -841,7 +841,7 @@ mod tests {
             },
             EpistemicClass::SystemGenerated,
         ];
-        let expected = vec![
+        let expected = [
             EpistemicClassFilter::Observation,
             EpistemicClassFilter::UserAssertion,
             EpistemicClassFilter::Inference,

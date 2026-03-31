@@ -254,7 +254,7 @@ fn epistemic_class_weight(class: &EpistemicClass) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::space::make_semantic_entry;
+
     use chrono::Duration;
     use uuid::Uuid;
 
@@ -544,7 +544,7 @@ mod tests {
         let mut space = make_space();
 
         let now = Utc::now();
-        let mut entry = MemoryEntry {
+        let entry = MemoryEntry {
             id: Uuid::new_v4(),
             schema_version: 1,
             agent_id: "agent-1".into(),

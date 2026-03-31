@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod crypto_tests {
     use crate::*;
 
     #[test]
@@ -265,7 +265,7 @@ mod tests {
         let bob = KeyExchange::generate(KeyExchangeAlgorithm::X25519).unwrap();
 
         // Restore from secret key bytes
-        let restored = KeyExchange::from_secret_bytes(
+        let _restored = KeyExchange::from_secret_bytes(
             KeyExchangeAlgorithm::X25519,
             original.public_key(), // we need secret bytes, not public — get from internal
         );

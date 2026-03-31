@@ -353,7 +353,6 @@ mod tests {
     use crate::evaluation::agent_adapter::AgentAdapter;
     use crate::scoring::articulation::empty_articulation;
     use crate::scoring::asymmetric::PrimaryScore;
-    use crate::scoring::gaming_detection::GamingDetectionRule;
 
     fn make_problem(vector: Vector, level: DifficultyLevel) -> TestProblem {
         TestProblem {
