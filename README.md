@@ -264,7 +264,7 @@ nexus-os/
 - [x] Flash Inference — llama.cpp integration, 397B model verified
 - [x] Docker + Helm chart for server/K8s deployment
 - [x] SOC 2 Type II / NIST 800-53 formal certification
-- [ ] Governed Self-Improvement (capstone — agents improve the OS itself)
+- [x] Governed Self-Improvement (capstone — agents improve the OS itself)
 - [ ] Research paper: formal verification of governance properties
 
 ## License
