@@ -25,7 +25,7 @@ describe("KnowledgeGraph", () => {
   });
 
   it("handles backend failure gracefully", async () => {
-    mockCommandError("cogfs_get_entities", "connection refused");
+    mockCommandError("cogfs_get_entities", "connection refused", MOCKS);
     const { container } = render(<KnowledgeGraph />);
     await waitFor(() => expect(container).toBeTruthy());
   });

@@ -5,10 +5,10 @@ import CapabilityBoundaryMap from "../CapabilityBoundaryMap";
 
 const MOCKS: Record<string, unknown> = {
   cm_get_boundary_map: [],
-  cm_get_calibration: "{}",
-  cm_get_census: "{}",
-  cm_get_gaming_report_batch: "{}",
-  cm_upload_darwin: "{}",
+  cm_get_calibration: { is_calibrated: true, inversions: [] },
+  cm_get_census: { total: 0, balanced: 0, theoretical_reasoner: 0, procedural_executor: 0, rigid_tool_user: 0, pattern_matching: 0, anomalous: 0 },
+  cm_get_gaming_report_batch: { total_flags: 0, red_count: 0, orange_count: 0, yellow_count: 0, agents_with_flags: 0, agents_clean: 0 },
+  cm_upload_darwin: "ok",
   list_agents: [],
 };
 
@@ -26,7 +26,7 @@ describe("CapabilityBoundaryMap", () => {
   });
 
   it("handles backend failure gracefully", async () => {
-    mockCommandError("cm_get_boundary_map", "connection refused");
+    mockCommandError("cm_get_boundary_map", "connection refused", MOCKS);
     const { container } = render(<CapabilityBoundaryMap />);
     await waitFor(() => expect(container).toBeTruthy());
   });

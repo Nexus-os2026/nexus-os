@@ -58,10 +58,12 @@ export function mockCommands(map: Record<string, unknown>): void {
   });
 }
 
-/** Mock a Tauri command to reject. */
-export function mockCommandError(command: string, error: string): void {
+/** Mock a Tauri command to reject. Other commands fall back to the
+ *  provided map (if any) or resolve with `{}` (default). */
+export function mockCommandError(command: string, error: string, fallbackMap?: Record<string, unknown>): void {
   mockInvoke.mockImplementation((cmd: string) => {
     if (cmd === command) return Promise.reject(new Error(error));
+    if (fallbackMap && cmd in fallbackMap) return Promise.resolve(fallbackMap[cmd]);
     return Promise.resolve({});
   });
 }

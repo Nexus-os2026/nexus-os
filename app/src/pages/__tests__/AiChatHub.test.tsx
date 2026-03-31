@@ -26,7 +26,7 @@ describe("AiChatHub", () => {
   });
 
   it("handles backend failure without crashing", async () => {
-    mockCommandError("list_provider_models", "connection refused");
+    mockCommandError("list_provider_models", "connection refused", MOCKS);
     const { container } = render(<AiChatHub />);
     await waitFor(() => {
       expect(container).toBeTruthy();

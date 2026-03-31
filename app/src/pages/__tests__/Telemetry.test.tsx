@@ -4,9 +4,15 @@ import { mockCommands, mockCommandError, expectInvoked } from "../../test/setup"
 import Telemetry from "../Telemetry";
 
 const MOCKS: Record<string, unknown> = {
-  telemetry_status: "{}",
-  telemetry_config_get: "{}",
-  telemetry_health: "{}",
+  telemetry_status: JSON.stringify({
+    status: "Healthy", version: "0.0.0", uptime: "0s", agents_active: 0, audit_chain_valid: true,
+  }),
+  telemetry_config_get: JSON.stringify({
+    enabled: false, otlp_endpoint: "", service_name: "nexus", sample_rate: 1, log_format: "json", log_level: "info",
+  }),
+  telemetry_health: JSON.stringify({
+    status: "Healthy", version: "0.0.0", uptime: "0s", agents_active: 0, audit_chain_valid: true,
+  }),
 };
 
 describe("Telemetry", () => {
@@ -21,7 +27,7 @@ describe("Telemetry", () => {
     await waitFor(() => expectInvoked("telemetry_status"));
   });
   it("handles backend failure gracefully", async () => {
-    mockCommandError("telemetry_status", "connection refused");
+    mockCommandError("telemetry_status", "connection refused", MOCKS);
     const { container } = render(<Telemetry />);
     await waitFor(() => expect(container).toBeTruthy());
   });

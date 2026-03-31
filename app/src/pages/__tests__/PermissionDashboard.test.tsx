@@ -5,8 +5,9 @@ import PermissionDashboard from "../PermissionDashboard";
 
 const MOCKS: Record<string, unknown> = {
   list_agents: [],
-  get_agent_permissions: "[]",
+  get_agent_permissions: [],
   get_permission_history: [],
+  get_capability_request: [],
 };
 
 describe("PermissionDashboard", () => {
@@ -21,7 +22,7 @@ describe("PermissionDashboard", () => {
     await waitFor(() => expectInvoked("get_agent_permissions"));
   });
   it("handles backend failure gracefully", async () => {
-    mockCommandError("list_agents", "connection refused");
+    mockCommandError("list_agents", "connection refused", MOCKS);
     const { container } = render(<PermissionDashboard />);
     await waitFor(() => expect(container).toBeTruthy());
   });

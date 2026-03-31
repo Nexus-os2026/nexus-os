@@ -23,7 +23,7 @@ describe("WorldSimulation", () => {
   });
 
   it("handles backend failure gracefully", async () => {
-    mockCommandError("list_simulations", "connection refused");
+    mockCommandError("list_simulations", "connection refused", MOCKS);
     const { container } = render(<WorldSimulation />);
     await waitFor(() => expect(container).toBeTruthy());
   });

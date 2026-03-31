@@ -4,7 +4,7 @@ import { mockCommands, mockCommandError, expectInvoked } from "../../test/setup"
 import AdminFleet from "../AdminFleet";
 
 const MOCKS: Record<string, unknown> = {
-  admin_fleet_status: "[]",
+  admin_fleet_status: JSON.stringify({ agents: [], total_running: 0, total_idle: 0, total_stopped: 0, total_error: 0 }),
   list_agents: [],
 };
 
@@ -20,7 +20,7 @@ describe("AdminFleet", () => {
     await waitFor(() => expectInvoked("admin_fleet_status"));
   });
   it("handles backend failure gracefully", async () => {
-    mockCommandError("admin_fleet_status", "connection refused");
+    mockCommandError("admin_fleet_status", "connection refused", MOCKS);
     const { container } = render(<AdminFleet />);
     await waitFor(() => expect(container).toBeTruthy());
   });

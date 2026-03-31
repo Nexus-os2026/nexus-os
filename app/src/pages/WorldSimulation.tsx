@@ -301,6 +301,8 @@ export default function WorldSimulation(): JSX.Element {
         } else if (!worldId) {
           setWorldId(rows[0].id);
         }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
       } finally {
         setLoading(false);
       }

@@ -20,7 +20,7 @@ describe("DeveloperPortal", () => {
     await waitFor(() => expectInvoked("marketplace_my_agents"));
   });
   it("handles backend failure gracefully", async () => {
-    mockCommandError("list_agents", "connection refused");
+    mockCommandError("list_agents", "connection refused", MOCKS);
     const { container } = render(<DeveloperPortal />);
     await waitFor(() => expect(container).toBeTruthy());
   });

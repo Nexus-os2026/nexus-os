@@ -65,7 +65,7 @@ async fn run_headless_goal_loop(
     );
 
     for _ in 0..50_u32 {
-        let cycle_result = match {
+        let cycle_res = {
             let mut audit_guard = state.audit.lock().unwrap_or_else(|p| p.into_inner());
             state.cognitive_runtime.run_cycle_with_evolution(
                 &agent_id,
@@ -75,7 +75,8 @@ async fn run_headless_goal_loop(
                 &mut audit_guard,
                 Some(&state.evolution_tracker),
             )
-        } {
+        };
+        let cycle_result = match cycle_res {
             Ok(result) => result,
             Err(error) => {
                 let result_summary = format!("cognitive cycle error for {goal_id}: {error}");

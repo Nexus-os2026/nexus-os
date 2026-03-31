@@ -4,7 +4,7 @@ import { mockCommands, mockCommandError, expectInvoked } from "../../test/setup"
 import TrustDashboard from "../TrustDashboard";
 
 const MOCKS: Record<string, unknown> = {
-  get_trust_overview: '{"agents":[],"network_health":"healthy"}',
+  get_trust_overview: [],
   reputation_top: "[]",
   list_agents: [],
 };
@@ -21,7 +21,7 @@ describe("TrustDashboard", () => {
     await waitFor(() => expectInvoked("get_trust_overview"));
   });
   it("handles backend failure gracefully", async () => {
-    mockCommandError("get_trust_overview", "connection refused");
+    mockCommandError("get_trust_overview", "connection refused", MOCKS);
     const { container } = render(<TrustDashboard />);
     await waitFor(() => expect(container).toBeTruthy());
   });
