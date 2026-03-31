@@ -331,7 +331,7 @@ fn test_cognitive_loop_handles_garbage_json() {
         result.err()
     );
     let cycle = result.unwrap();
-    assert!(cycle.steps_executed >= 0);
+    assert!(cycle.steps_executed > 0, "Expected at least one step executed");
 }
 
 #[test]
