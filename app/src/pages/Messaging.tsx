@@ -13,7 +13,7 @@ import type { AgentSummary, NexusConfig } from "../types";
 import { normalizeConfig } from "../utils/config";
 
 type PlatformCard = {
-  key: "telegram" | "discord" | "slack" | "whatsapp";
+  key: "telegram" | "discord" | "slack" | "whatsapp" | "matrix" | "webhook";
   label: string;
   tokenPath: (config: NexusConfig) => string;
   assign: (config: NexusConfig, value: string) => void;
@@ -58,6 +58,22 @@ const PLATFORMS: PlatformCard[] = [
       config.messaging.whatsapp_api_token = value;
     },
   },
+  {
+    key: "matrix",
+    label: "Matrix",
+    tokenPath: (config) => config.messaging.matrix_access_token,
+    assign: (config, value) => {
+      config.messaging.matrix_access_token = value;
+    },
+  },
+  {
+    key: "webhook",
+    label: "Webhook",
+    tokenPath: (config) => config.messaging.webhook_outbound_url,
+    assign: (config, value) => {
+      config.messaging.webhook_outbound_url = value;
+    },
+  },
 ];
 
 function statusColor(connected: boolean, configured: boolean): string {
@@ -97,7 +113,7 @@ export default function Messaging(): JSX.Element {
           const msg = event.payload;
           setMessages(prev => [...prev, { platform: msg.platform || "slack", channel: msg.channel || "general", from: msg.from || "unknown", text: msg.text || "", time: new Date().toLocaleTimeString() }]);
         });
-      } catch { /* not in desktop runtime */ }
+      } catch (err) { console.error("Messaging event listener failed:", err); }
     })();
     return () => { unlisten?.(); };
   }, []);
@@ -122,7 +138,7 @@ export default function Messaging(): JSX.Element {
               time: new Date().toLocaleTimeString(),
             }))]);
           }
-        } catch { /* not connected or no messages */ }
+        } catch (err) { console.error("Message poll failed:", err); }
       }
     };
     const iv = setInterval(poll, 15_000);

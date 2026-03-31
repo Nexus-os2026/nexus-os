@@ -245,6 +245,7 @@ impl ModelStorage {
         }
         let part = self.base_dir.join(format!("{filename}.part"));
         if part.exists() {
+            // Best-effort: clean up leftover partial download file
             let _ = std::fs::remove_file(&part);
         }
         Ok(())
@@ -354,6 +355,7 @@ impl ModelDownloader {
         if dest.exists() {
             let meta = std::fs::metadata(&dest)
                 .map_err(|e| FlashError::DownloadError(format!("metadata: {e}")))?;
+            // Best-effort: notify progress subscriber that file is already downloaded
             let _ = progress_tx
                 .send(DownloadProgress {
                     model_name: filename.to_string(),
@@ -376,6 +378,7 @@ impl ModelDownloader {
             downloaded_bytes = std::fs::metadata(&part_path).map(|m| m.len()).unwrap_or(0);
         }
 
+        // Best-effort: notify progress subscriber that download is starting
         let _ = progress_tx
             .send(DownloadProgress {
                 model_name: filename.to_string(),
@@ -417,8 +420,10 @@ impl ModelDownloader {
             response
                 .headers()
                 .get("content-range")
+                // Optional: header value may contain non-ASCII bytes
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.split('/').next_back())
+                // Optional: total size may not be a valid u64 (e.g. "*")
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(0)
         } else {
@@ -456,6 +461,7 @@ impl ModelDownloader {
                     0
                 };
 
+                // Best-effort: periodic progress update to subscriber
                 let _ = progress_tx
                     .send(DownloadProgress {
                         model_name: filename.to_string(),
@@ -489,6 +495,7 @@ impl ModelDownloader {
             .await
             .map_err(|e| FlashError::DownloadError(format!("rename: {e}")))?;
 
+        // Best-effort: notify progress subscriber that download is complete
         let _ = progress_tx
             .send(DownloadProgress {
                 model_name: filename.to_string(),
@@ -644,8 +651,10 @@ fn is_quant_token(s: &str) -> bool {
 
 fn file_modified_iso(meta: &std::fs::Metadata) -> String {
     meta.modified()
+        // Optional: modification time may not be available on all filesystems
         .ok()
         .and_then(|t| {
+            // Optional: system time may be before UNIX_EPOCH
             let duration = t.duration_since(std::time::UNIX_EPOCH).ok()?;
             let dt = chrono::DateTime::from_timestamp(duration.as_secs() as i64, 0)?;
             Some(dt.to_rfc3339())
@@ -656,6 +665,7 @@ fn file_modified_iso(meta: &std::fs::Metadata) -> String {
 /// Platform-appropriate data directory.
 fn dirs_next(components: &[&str]) -> Option<PathBuf> {
     // Linux: ~/.local/share/  macOS: ~/Library/Application Support/  Windows: %APPDATA%
+    // Optional: HOME/APPDATA/XDG env vars may not be set in sandboxed environments
     let base = if cfg!(target_os = "macos") {
         std::env::var("HOME")
             .ok()
@@ -686,6 +696,7 @@ fn dirs_next(components: &[&str]) -> Option<PathBuf> {
 ///
 /// Uses `df` on Unix-like systems as a safe alternative to `statvfs`.
 fn available_space_bytes(path: &Path) -> u64 {
+    // Optional: df command may not be available on all platforms
     let output = std::process::Command::new("df")
         .arg("--output=avail")
         .arg("-B1")
@@ -703,7 +714,7 @@ fn available_space_bytes(path: &Path) -> u64 {
         }
     }
 
-    // Fallback: try POSIX df without --output (macOS)
+    // Optional: fallback to POSIX df without --output (macOS compatibility)
     let output = std::process::Command::new("df")
         .arg("-k")
         .arg(path)

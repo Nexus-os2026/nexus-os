@@ -183,9 +183,9 @@ mod tests {
         RoleDefinition, RootMetadata, SnapshotMetadata, TargetDescription, TargetsMetadata,
         TimestampMetadata, TufClient, TufRepository, TufRole,
     };
-    use ed25519_dalek::SigningKey;
     use nexus_connectors_core::connector::{Connector, HealthStatus, RetryPolicy};
     use nexus_connectors_core::registry::ConnectorRegistry;
+    use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
     use nexus_kernel::errors::AgentError;
     use nexus_marketplace::package::{create_unsigned_bundle, sign_package, PackageMetadata};
     use std::collections::BTreeMap;
@@ -309,8 +309,11 @@ fuel_budget = 2000
             "nexus-release",
         )
         .expect("unsigned connector package should build");
-        sign_package(unsigned, &SigningKey::from_bytes(&[13_u8; 32]))
-            .expect("signed connector package should build")
+        sign_package(
+            unsigned,
+            &CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[13_u8; 32]).unwrap(),
+        )
+        .expect("signed connector package should build")
     }
 
     #[test]

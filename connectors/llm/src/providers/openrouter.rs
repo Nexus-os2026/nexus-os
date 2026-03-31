@@ -67,6 +67,7 @@ impl OpenRouterProvider {
     pub fn from_env() -> Self {
         let endpoint = env::var("OPENROUTER_URL")
             .unwrap_or_else(|_| "https://openrouter.ai/api/v1/chat/completions".to_string());
+        // Optional: API key may not be configured in environment
         let mut provider = Self::new(env::var("OPENROUTER_API_KEY").ok());
         provider.endpoint = endpoint;
         provider

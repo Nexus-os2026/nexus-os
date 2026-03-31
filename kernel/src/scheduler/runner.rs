@@ -169,6 +169,7 @@ impl ScheduleRunner {
                     if *at <= now {
                         self.fire_schedule(entry.id, None).await;
                         // Disable after one-shot fires
+                        // Best-effort: disabling a fired one-shot is cleanup; schedule won't re-fire regardless
                         let _ = self.store.disable(&entry.id);
                     }
                 }
@@ -201,6 +202,7 @@ impl ScheduleRunner {
                             // Update next_run in store
                             let mut updated = entry.clone();
                             updated.next_run = Some(next);
+                            // Best-effort: next_run persistence is advisory; cron trigger independently tracks timing
                             let _ = self.store.update(updated);
                         }
                         Err(e) => {
@@ -276,6 +278,7 @@ impl ScheduleRunner {
         // Check max_runs
         if let Some(max) = entry.max_runs {
             if entry.run_count >= max {
+                // Best-effort: disabling an exhausted schedule is cleanup; max_runs check prevents further execution
                 let _ = self.store.disable(&schedule_id);
                 return;
             }
@@ -323,7 +326,7 @@ impl ScheduleRunner {
             self.executor.execute(&entry, trigger_data)
         };
 
-        // Record the run (next_run will be updated below for cron schedules)
+        // Best-effort: run count is informational; schedule execution already completed
         let _ = self.store.record_run(&schedule_id, None);
 
         // Update next_run for cron schedules
@@ -331,6 +334,7 @@ impl ScheduleRunner {
             if let Ok(next) = CronTrigger::next_fire_time(expression) {
                 let mut updated = self.store.get(&schedule_id).unwrap_or(entry.clone());
                 updated.next_run = Some(next);
+                // Best-effort: persisting next_run is cosmetic for status display; cron recalculates independently
                 let _ = self.store.update(updated);
             }
         }
@@ -375,6 +379,7 @@ impl ScheduleRunner {
                     "[schedule-runner] disabling '{}' due to failure policy",
                     entry.name
                 );
+                // Best-effort: failure already logged; disable is a secondary safeguard
                 let _ = self.store.disable(&entry.id);
             }
             super::trigger::FailurePolicy::Retry {
@@ -386,6 +391,7 @@ impl ScheduleRunner {
                         "[schedule-runner] '{}' exceeded max retry attempts ({}), disabling",
                         entry.name, max_attempts
                     );
+                    // Best-effort: retry exhaustion already logged; disable prevents further attempts
                     let _ = self.store.disable(&entry.id);
                 }
             }

@@ -2,16 +2,75 @@
 
 All notable changes to NEXUS OS are documented here.
 
-## [Unreleased]
+## [v10.5.0] — 2026-03-31 — Post-Audit Hardening
 
-### Documentation
-- Updated EU AI Act Conformity Self-Assessment with article-by-article compliance mapping covering Articles 9, 10, 11, 12, 13, 14, 15, and 17
-- Added crate-level implementation references (nexus-governance, nexus-darwin, nexus-audit, nexus-crypto, nexus-wasm, etc.)
-- Honest status assessments: Implemented, Partial, Deployer-responsible, Planned
-- L0–L6 autonomy-to-Article-14 human oversight mapping table
-- Competitive governance comparison vs OpenClaw, AIOS, CrewAI, AutoGen, LangGraph
-- 7 identified gaps with remediation timelines targeting August 2, 2026 enforcement deadline
-- Added Word document version for investor/CISO distribution (docs/Nexus_OS_EU_AI_Act_Conformity.docx)
+### Added
+- OWASP Agentic Top 10: all 10 defenses implemented (62 tests)
+  - Tool Poisoning Guard, Privilege Escalation Guard, Cascade Guard, Secure Logger, Anomaly Monitor
+- Ed25519 cryptographic signing for Tier2+ consent non-repudiation
+- Frontend test coverage: 342 tests across 84/84 pages (100%)
+- 29 new page test files in Session E3
+
+### Changed
+- Monolith split: app/src-tauri/src/lib.rs from 31,717 to 6,684 lines (18 domain modules)
+- Kernel error handling: 0 production unwrap/expect, all 111 let _ = documented
+- All 24 phantom frontend commands wired to backend (Session A)
+- README.md rewritten with verified v10.5.0 numbers
+
+### Removed
+- 3 UI mocks (BuildMode fake code, PushToTalk fake transcript, Mock GPU)
+- 16 empty catch {} blocks replaced with console.error logging
+- All 8 production TODO/FIXME comments resolved
+- _old/ backup directory removed from git
+- audit_artifacts/ and nexus-output/ removed from tracking
+- 32 report/audit markdown files moved from root to docs/
+
+### Fixed
+- Zero frontend-to-backend command mismatches
+- Pre-existing Firewall test mock data shape
+
+### Stats
+- 317,824 lines Rust | 64,598 lines TypeScript
+- 65 crates | 658 Tauri commands | 84 frontend pages
+- 5,029 tests (4,687 Rust + 342 frontend) | 0 failures
+- 15 LLM providers | 200+ models | 10/10 OWASP
+- Audit score: 9.5/10
+
+## [v10.4.0] — 2026-03-29 — Roadmap Completion Sprint
+
+### Added
+- Agent Memory Subsystem (nexus-memory: 10,308 lines, 198 tests)
+- OpenRouter provider (200+ models via single API key)
+- Messaging adapters: Slack, Discord, Matrix, Telegram, WhatsApp, Webhook (69 tests)
+- CrewAI/LangGraph migration tool (nexus-migrate)
+- OpenAI-compatible REST API (protocols/openai_compat.rs)
+- Agent Marketplace with Ed25519 package signing
+- Checkpoint-Rollback system (3 levels: memory, execution, side-effect)
+- Post-quantum cryptography Phase 1 (nexus-crypto: Ed25519, X25519)
+- Global Compliance Framework (SOC2, NIST 800-53, Singapore AI Governance)
+- Outcome Evaluation crate (nexus-outcome-eval)
+
+### Changed
+- EU AI Act conformity upgraded to article-by-article mapping
+
+## [v10.3.0] — 2026-03-28 — Full Audit Clean
+
+### Added
+- 85 frontend pages fully wired
+- 655 Tauri commands registered
+- 54 prebuilt agents with manifests
+- 4,464 Rust tests passing
+
+### Fixed
+- All OpenAI deep research audit findings resolved
+- node_modules removed from git tracking
+
+## [v9.4.0] — 2026-03-26 — Ship Ready
+
+### Added
+- All 10 human simulation user types passing
+- Flash Inference (671B/397B/35B/2B models, CUDA compiled)
+- Website nexus-os.dev (Halo-inspired, Three.js 3D)
 
 ## v9.4.0 — Flash Inference (March 21, 2026)
 

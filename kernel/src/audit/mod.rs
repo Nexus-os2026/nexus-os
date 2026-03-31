@@ -162,6 +162,7 @@ impl BatcherHandle {
     fn sealed_count(&self) -> u64 {
         self.inner
             .as_ref()
+            // Optional: poisoned mutex returns 0 — count is best-effort diagnostic, not governance-critical
             .and_then(|inner| inner.lock().ok())
             .map(|state| state.sealed_count)
             .unwrap_or(0)
@@ -170,6 +171,7 @@ impl BatcherHandle {
     fn pending_count(&self) -> usize {
         self.inner
             .as_ref()
+            // Optional: poisoned mutex returns 0 — count is best-effort diagnostic, not governance-critical
             .and_then(|inner| inner.lock().ok())
             .map(|state| state.pending.len())
             .unwrap_or(0)

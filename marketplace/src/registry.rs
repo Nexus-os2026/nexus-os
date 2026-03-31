@@ -2,7 +2,7 @@ use crate::package::{
     sign_package, verify_attestation, verify_package, MarketplaceError, SignedPackageBundle,
     UnsignedPackageBundle,
 };
-use ed25519_dalek::SigningKey;
+use nexus_crypto::CryptoIdentity;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -30,9 +30,9 @@ impl MarketplaceRegistry {
     pub fn publish(
         &mut self,
         package: UnsignedPackageBundle,
-        author_key: &SigningKey,
+        author_identity: &CryptoIdentity,
     ) -> Result<String, MarketplaceError> {
-        let signed = sign_package(package, author_key)?;
+        let signed = sign_package(package, author_identity)?;
         verify_attestation(&signed)?;
         let id = signed.package_id.clone();
         self.packages.insert(id.clone(), signed);
@@ -122,7 +122,7 @@ impl MarketplaceRegistry {
 mod tests {
     use super::MarketplaceRegistry;
     use crate::package::{create_unsigned_bundle, MarketplaceError, PackageMetadata};
-    use ed25519_dalek::SigningKey;
+    use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 
     #[test]
     fn test_install_checks_signature() {
@@ -147,7 +147,7 @@ fuel_budget = 6000
         )
         .expect("bundle should build");
 
-        let key = SigningKey::from_bytes(&[9_u8; 32]);
+        let key = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[9u8; 32]).unwrap();
         let mut registry = MarketplaceRegistry::new();
         let package_id = registry
             .publish(package, &key)

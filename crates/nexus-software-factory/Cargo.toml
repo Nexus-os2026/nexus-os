@@ -3,6 +3,7 @@ name = "nexus-software-factory"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Agent-driven software factory with pipeline stages and cost tracking"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

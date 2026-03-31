@@ -59,6 +59,7 @@ pub struct RoutingOutcome {
 /// The predictive router.
 pub struct PredictiveRouter {
     model_registry: ModelRegistry,
+    // Populated at construction; will be used for per-agent routing constraints.
     #[allow(dead_code)]
     agent_boundaries: Vec<AgentBoundary>,
     estimator: DifficultyEstimator,

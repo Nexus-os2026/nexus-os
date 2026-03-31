@@ -1,5 +1,6 @@
 [package]
 name = "nexus-desktop-backend"
+description = "Tauri backend for the Nexus OS desktop application"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,6 +10,7 @@ default = ["tauri-runtime"]
 tauri-runtime = ["dep:tauri"]
 real-claude = []
 real-llama = ["nexus-flash-infer/real-llama"]
+test-support = []
 
 [dependencies]
 nexus-kernel = { path = "../../kernel" }
@@ -48,6 +50,10 @@ nexus-external-tools = { path = "../../crates/nexus-external-tools" }
 nexus-collab-protocol = { path = "../../crates/nexus-collab-protocol" }
 nexus-software-factory = { path = "../../crates/nexus-software-factory" }
 nexus-mcp = { path = "../../crates/nexus-mcp" }
+nexus-a2a = { path = "../../crates/nexus-a2a" }
+nexus-memory = { path = "../../crates/nexus-memory" }
+nexus-migrate = { path = "../../crates/nexus-migrate" }
+nexus-crypto = { path = "../../crates/nexus-crypto" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 base64 = "0.22"
@@ -57,7 +63,6 @@ sysinfo = "0.32"
 rusqlite = { version = "0.31", features = ["bundled"] }
 sha2 = "0.10"
 chrono = "0.4"
-ed25519-dalek = "2"
 tokio = { version = "1", features = ["rt", "sync", "time"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 urlencoding = "2"

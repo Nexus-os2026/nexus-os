@@ -1,5 +1,6 @@
 [package]
 name = "nexus-enterprise"
+description = "Enterprise features including SSO, RBAC, and compliance for Nexus OS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

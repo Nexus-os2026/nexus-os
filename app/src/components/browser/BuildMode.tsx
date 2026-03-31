@@ -5,6 +5,7 @@ import {
   buildAppendCode,
   buildAddMessage,
   completeBuild,
+  getBuildCode,
 } from "../../api/backend";
 import type {
   ActivityMessage,
@@ -78,109 +79,7 @@ function highlightCode(code: string): string {
   return html;
 }
 
-/** Generate mock code for a build description, split into typeable chunks. */
-function generateMockCode(description: string): string[] {
-  const desc = description.toLowerCase();
-  const chunks: string[] = [];
-
-  // HTML structure
-  chunks.push('<!DOCTYPE html>\n<html lang="en">\n<head>\n');
-  chunks.push('  <meta charset="utf-8">\n');
-  chunks.push(`  <title>${description.slice(0, 50)}</title>\n`);
-  chunks.push("  <style>\n");
-
-  // CSS reset + base
-  chunks.push("    * { margin: 0; padding: 0; box-sizing: border-box; }\n");
-  chunks.push(
-    "    body {\n      font-family: system-ui, -apple-system, sans-serif;\n      line-height: 1.6;\n      color: #1a1a2e;\n    }\n",
-  );
-
-  // Hero section
-  if (desc.includes("hero") || desc.includes("landing")) {
-    chunks.push(
-      "    .hero {\n      min-height: 80vh;\n      display: flex;\n      flex-direction: column;\n      align-items: center;\n      justify-content: center;\n",
-    );
-    chunks.push(
-      "      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);\n      color: white;\n      text-align: center;\n      padding: 2rem;\n    }\n",
-    );
-    chunks.push(
-      "    .hero h1 {\n      font-size: 3.5rem;\n      font-weight: 800;\n      margin-bottom: 1rem;\n",
-    );
-    chunks.push(
-      "      background: linear-gradient(to right, var(--nexus-accent), #3b82f6);\n      -webkit-background-clip: text;\n      -webkit-text-fill-color: transparent;\n    }\n",
-    );
-    chunks.push(
-      "    .hero p {\n      font-size: 1.25rem;\n      opacity: 0.85;\n      max-width: 600px;\n      margin-bottom: 2rem;\n    }\n",
-    );
-  }
-
-  // Button
-  chunks.push(
-    "    .btn {\n      padding: 0.75rem 2rem;\n      border: none;\n      border-radius: 8px;\n      font-size: 1rem;\n      font-weight: 600;\n      cursor: pointer;\n",
-  );
-  chunks.push(
-    "      background: var(--nexus-accent);\n      color: #0f0c29;\n      transition: transform 0.2s, box-shadow 0.2s;\n    }\n",
-  );
-  chunks.push(
-    "    .btn:hover {\n      transform: translateY(-2px);\n      box-shadow: 0 8px 25px rgba(0, 255, 157, 0.3);\n    }\n",
-  );
-
-  // Features section
-  if (desc.includes("feature") || desc.includes("card") || desc.includes("landing")) {
-    chunks.push(
-      "    .features {\n      display: grid;\n      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));\n      gap: 2rem;\n      padding: 4rem 2rem;\n      max-width: 1200px;\n      margin: 0 auto;\n    }\n",
-    );
-    chunks.push(
-      "    .card {\n      background: #f8fafc;\n      border-radius: 12px;\n      padding: 2rem;\n      box-shadow: 0 4px 20px rgba(0,0,0,0.08);\n      transition: transform 0.2s;\n    }\n",
-    );
-    chunks.push(
-      "    .card:hover { transform: translateY(-4px); }\n",
-    );
-    chunks.push(
-      "    .card h3 { font-size: 1.25rem; margin-bottom: 0.5rem; color: #302b63; }\n",
-    );
-    chunks.push(
-      "    .card p { color: #64748b; }\n",
-    );
-  }
-
-  // Footer
-  chunks.push(
-    "    .footer {\n      text-align: center;\n      padding: 2rem;\n      background: #0f0c29;\n      color: rgba(255,255,255,0.6);\n      font-size: 0.875rem;\n    }\n",
-  );
-
-  chunks.push("  </style>\n</head>\n<body>\n");
-
-  // HTML body
-  if (desc.includes("hero") || desc.includes("landing")) {
-    chunks.push('  <section class="hero">\n');
-    chunks.push("    <h1>Welcome to the Future</h1>\n");
-    chunks.push(
-      "    <p>Build something extraordinary with intelligent agents that understand your vision.</p>\n",
-    );
-    chunks.push('    <button class="btn">Get Started</button>\n');
-    chunks.push("  </section>\n\n");
-  }
-
-  if (desc.includes("feature") || desc.includes("card") || desc.includes("landing")) {
-    chunks.push('  <section class="features">\n');
-    for (const [title, text] of [
-      ["Fast", "Lightning-fast performance powered by modern architecture."],
-      ["Secure", "Enterprise-grade security with zero-trust governance."],
-      ["Intelligent", "AI-powered agents that learn and adapt to your needs."],
-    ]) {
-      chunks.push(`    <div class="card">\n      <h3>${title}</h3>\n      <p>${text}</p>\n    </div>\n`);
-    }
-    chunks.push("  </section>\n\n");
-  }
-
-  chunks.push(
-    '  <footer class="footer">\n    <p>Built by Nexus OS Agents</p>\n  </footer>\n',
-  );
-  chunks.push("\n</body>\n</html>");
-
-  return chunks;
-}
+// Mock code generation removed — builds require a real LLM provider.
 
 /** Conversation script for the build session. */
 function generateConversation(
@@ -300,28 +199,22 @@ export function BuildMode({ onActivity }: BuildModeProps): JSX.Element {
       try {
         sess = await startBuild(description);
         setSession(sess);
-      } catch {
-        // fall through to mock
+      } catch (err) {
+        console.error("Build session init failed:", err);
       }
     }
 
-    // Mock session if no Tauri
+    // If no desktop session could be established, show error
     if (!sess) {
-      sess = {
-        session_id: makeId(),
-        description,
-        status: "planning",
-        code: "",
-        preview_html: "",
-        messages: [],
-        fuel_used: 0,
-        llm_calls: 0,
-      };
-      setSession(sess);
+      addMessage("System", "supervisor", "Build requires an LLM provider. Configure one in Settings.");
+      onActivity("blocked", "Build requires LLM provider. Configure in Settings.", "System");
+      setRunning(false);
+      return;
     }
 
+    // UI conversation animation while real backend build runs via sessionId.
+    // These messages are UX chrome — real code comes from the backend session.
     const conversation = generateConversation(description);
-    const codeChunks = generateMockCode(description);
     const sessionId = sess.session_id;
 
     // Phase 0: Supervisor assigns task
@@ -334,85 +227,43 @@ export function BuildMode({ onActivity }: BuildModeProps): JSX.Element {
     onActivity("coding", "Building HTML structure...", "Coder");
     await delay(600);
 
-    // Type code chunks with interleaved conversation
-    let codeAccum = "";
+    // Stream conversation messages while the backend builds
     let nextConvoIdx = 2;
-    const chunksPerConvo = Math.ceil(codeChunks.length / (conversation.length - 2));
-
-    for (let i = 0; i < codeChunks.length; i++) {
-      const chunk = codeChunks[i];
-
-      // Type character by character for first few chunks, then line-by-line
-      if (i < 3) {
-        // Character-by-character typing
-        for (let c = 0; c < chunk.length; c++) {
-          codeAccum += chunk[c];
-          if (c % 3 === 0) {
-            setCode(codeAccum);
-            setCursorLine(codeAccum.split("\n").length);
-            await delay(15);
-          }
-        }
-        setCode(codeAccum);
-      } else {
-        // Line-by-line for speed
-        const lines = chunk.split("\n");
-        for (const line of lines) {
-          codeAccum += line + "\n";
-          setCode(codeAccum);
-          setCursorLine(codeAccum.split("\n").length);
-          await delay(40 + Math.random() * 30);
-        }
-      }
-
-      // Backend sync
-      if (hasDesktopRuntime() && sessionId) {
-        try {
-          await buildAppendCode(sessionId, chunk, "Coder");
-        } catch {
-          // continue mock
-        }
-      }
-
-      // Interleave conversation at intervals
-      if (
-        nextConvoIdx < conversation.length - 1 &&
-        (i + 1) % chunksPerConvo === 0
-      ) {
-        const convo = conversation[nextConvoIdx];
-        addMessage(convo.agent, convo.role, convo.content);
-        const actType = convo.role === "designer" ? "designing" as const : "coding" as const;
-        onActivity(actType, convo.content, convo.agent);
-
-        if (hasDesktopRuntime() && sessionId) {
-          try {
-            await buildAddMessage(sessionId, convo.agent, convo.role, convo.content);
-          } catch {
-            // continue
-          }
-        }
-
-        nextConvoIdx++;
-        await delay(500);
-      }
-    }
-
-    // Remaining conversation messages
-    while (nextConvoIdx < conversation.length) {
-      const convo = conversation[nextConvoIdx];
+    for (let i = nextConvoIdx; i < conversation.length; i++) {
+      const convo = conversation[i];
       addMessage(convo.agent, convo.role, convo.content);
-      onActivity("info", convo.content, convo.agent);
-      nextConvoIdx++;
-      await delay(400);
+      const actType = convo.role === "designer" ? "designing" as const : "coding" as const;
+      onActivity(actType, convo.content, convo.agent);
+      if (sessionId) {
+        try {
+          await buildAddMessage(sessionId, convo.agent, convo.role, convo.content);
+        } catch (err) {
+          console.error("Build message send failed:", err);
+        }
+      }
+      await delay(600);
     }
 
-    // Complete
-    if (hasDesktopRuntime() && sessionId) {
+    // Fetch the built code from the session
+    if (sessionId) {
+      try {
+        const built = await getBuildCode(sessionId);
+        if (typeof built === "string") {
+          setCode(built);
+          setCursorLine(built.split("\n").length);
+        }
+      } catch (err) {
+        console.error("Failed to fetch build code:", err);
+      }
+    }
+
+    // Complete the build session
+    if (sessionId) {
       try {
         const completed = await completeBuild(sessionId);
         setSession(completed);
-      } catch {
-        // mock complete
+      } catch (err) {
+        console.error("Build completion failed:", err);
       }
     }
 

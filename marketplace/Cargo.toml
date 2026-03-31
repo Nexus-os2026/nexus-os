@@ -1,5 +1,6 @@
 [package]
 name = "nexus-marketplace"
+description = "Agent and skill marketplace with registry, publishing, and discovery for Nexus OS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -21,7 +22,7 @@ nexus-analytics = { path = "../analytics" }
 nexus-adaptation = { path = "../adaptation" }
 nexus-control = { path = "../control" }
 nexus-factory = { path = "../factory" }
-ed25519-dalek = "2.2"
+nexus-crypto = { path = "../crates/nexus-crypto" }
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

@@ -9,7 +9,7 @@ use crate::module_cache::ModuleCache;
 use crate::sandbox::{SandboxConfig, SandboxError, SandboxResult, SandboxRuntime};
 use crate::wasm_signature::{self, SignaturePolicy, SignatureVerification};
 use crate::wasmtime_host_functions::{self, SpeculativePolicy};
-use ed25519_dalek::VerifyingKey;
+
 use nexus_kernel::audit::EventType;
 use serde_json::json;
 use std::cell::RefCell;
@@ -76,7 +76,7 @@ pub struct WasmtimeSandbox {
     /// Ed25519 signature policy for wasm modules.
     signature_policy: SignaturePolicy,
     /// Trusted Ed25519 public keys for module verification.
-    trusted_keys: Vec<VerifyingKey>,
+    trusted_keys: Vec<Vec<u8>>,
     /// Optional speculative policy propagated to WasmAgentState on each execution.
     speculative_policy: Option<SpeculativePolicy>,
     /// Optional compilation cache shared across sandbox instances.
@@ -210,7 +210,7 @@ impl WasmtimeSandbox {
     }
 
     /// Add a trusted Ed25519 public key for module verification.
-    pub fn add_trusted_key(&mut self, key: VerifyingKey) {
+    pub fn add_trusted_key(&mut self, key: Vec<u8>) {
         self.trusted_keys.push(key);
     }
 

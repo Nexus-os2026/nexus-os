@@ -94,6 +94,7 @@ impl TeamOrchestrator {
         // Log the start
         {
             let mut audit = self.audit.lock().unwrap_or_else(|p| p.into_inner());
+            // Best-effort: workflow start audit is informational; workflow execution proceeds regardless
             let _ = audit.append_event(
                 uuid::Uuid::parse_str(&config.director_id).unwrap_or_default(),
                 EventType::StateChange,
@@ -202,6 +203,7 @@ impl TeamOrchestrator {
         // Log completion
         {
             let mut audit = self.audit.lock().unwrap_or_else(|p| p.into_inner());
+            // Best-effort: workflow completion audit is informational; result is already computed
             let _ = audit.append_event(
                 uuid::Uuid::parse_str(&config.director_id).unwrap_or_default(),
                 EventType::StateChange,
@@ -278,6 +280,7 @@ impl TeamOrchestrator {
         // Audit the transfer
         drop(sup);
         let mut audit = self.audit.lock().unwrap_or_else(|p| p.into_inner());
+        // Best-effort: fuel transfer audit is informational; balances were already updated in supervisor
         let _ = audit.append_event(
             from_id,
             EventType::StateChange,

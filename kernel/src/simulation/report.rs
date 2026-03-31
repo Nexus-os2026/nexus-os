@@ -83,6 +83,7 @@ pub fn generate_prediction_report(
         "Analyze this simulation summary and produce a concise executive summary. Scenario: {}. Prediction: {}. Confidence: {:.2}. Turning points: {:?}.",
         world.description, prediction, confidence, turning_points
     ));
+    // Optional: LLM summary failure is non-critical, fall back to generated prediction text
     let summary = llm_summary
         .ok()
         .filter(|text| !text.trim().is_empty())

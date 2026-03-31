@@ -123,6 +123,7 @@ impl MessageGateway {
                 message_id: Uuid::new_v4().to_string(),
             });
 
+            // Best-effort: log routed message to audit trail for governance
             let _ = self.audit_trail.append_event(
                 Uuid::nil(),
                 EventType::UserAction,

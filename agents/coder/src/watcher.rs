@@ -57,6 +57,7 @@ impl Iterator for FileWatcher {
     type Item = FileEvent;
 
     fn next(&mut self) -> Option<Self::Item> {
+        // Optional: return None when sender is disconnected (watcher stopped)
         self.receiver.recv().ok()
     }
 }
@@ -65,6 +66,7 @@ impl Drop for FileWatcher {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {
+            // Best-effort: join watcher thread on drop, ignore panics
             let _ = handle.join();
         }
     }
@@ -229,7 +231,9 @@ fn snapshot(
             })?;
             let modified_nanos = metadata
                 .modified()
+                // Optional: modification time may not be available on all filesystems
                 .ok()
+                // Optional: system time may be before UNIX_EPOCH on misconfigured clocks
                 .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
                 .map(|value| value.as_nanos())
                 .unwrap_or(0);
@@ -283,6 +287,7 @@ fn flush_debounced(
     }
     for path in ready {
         if let Some(pending_event) = pending.remove(path.as_str()) {
+            // Best-effort: send debounced file event, receiver may have been dropped
             let _ = sender.send(pending_event.event);
         }
     }
@@ -297,6 +302,7 @@ fn flush_debounced_immediately(
     keys.sort();
     for key in keys {
         if let Some(pending_event) = pending.remove(key.as_str()) {
+            // Best-effort: flush pending file event immediately, receiver may have been dropped
             let _ = sender.send(pending_event.event);
         }
     }

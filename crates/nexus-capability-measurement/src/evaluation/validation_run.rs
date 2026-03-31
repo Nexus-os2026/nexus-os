@@ -255,7 +255,10 @@ pub fn execute_validation_run_real(
     // Agent model — fast, cheap
     let agent_client: std::sync::Arc<NimClient> = if use_openrouter {
         // OpenRouter uses same OpenAI-compatible format — NimClient works with endpoint swap
-        NimClient::shared(api_key.clone(), "meta-llama/llama-3.3-70b-instruct:free".into())
+        NimClient::shared(
+            api_key.clone(),
+            "meta-llama/llama-3.3-70b-instruct:free".into(),
+        )
     } else {
         NimClient::shared(api_key.clone(), "llama-3.1-8b-instant".into())
     };
@@ -601,7 +604,8 @@ mod tests {
     }
 
     /// Execute Run 1 against all 54 prebuilt agents and persist results.
-    /// cargo test -p nexus-capability-measurement -- execute_run1 --ignored --nocapture
+    /// Ignored in fast CI: runs all agents through capability battery (~minutes).
+    /// Run manually: cargo test -p nexus-capability-measurement -- execute_run1 --ignored --nocapture
     #[test]
     #[ignore]
     fn execute_run1_pre_bugfix_baseline() {
@@ -682,7 +686,8 @@ mod tests {
     }
 
     /// Execute Run 2 post-bugfix and generate three-way comparison.
-    /// cargo test -p nexus-capability-measurement -- execute_run2 --ignored --nocapture
+    /// Ignored in fast CI: runs all agents through capability battery (~minutes).
+    /// Run manually: cargo test -p nexus-capability-measurement -- execute_run2 --ignored --nocapture
     #[test]
     #[ignore]
     fn execute_run2_and_three_way_comparison() {

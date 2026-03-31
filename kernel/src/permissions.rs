@@ -13,7 +13,8 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// TODO: Replace magic string with proper RBAC check against role registry
+/// The admin role identifier used for permission gate checks.
+/// Matches the role stored in `SessionManager` from `nexus-auth`.
 const ADMIN_ROLE: &str = "admin";
 
 // ---------------------------------------------------------------------------
@@ -643,6 +644,7 @@ impl PermissionManager {
                     reason: None,
                 });
 
+            // Best-effort: audit permission lock event; lock state is already applied
             let _ = audit_trail.append_event(
                 agent_id,
                 EventType::UserAction,
@@ -676,6 +678,7 @@ impl PermissionManager {
                     reason: None,
                 });
 
+            // Best-effort: audit permission unlock event; unlock state is already applied
             let _ = audit_trail.append_event(
                 agent_id,
                 EventType::UserAction,

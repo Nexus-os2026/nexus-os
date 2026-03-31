@@ -348,6 +348,7 @@ fn query_llm_summary(
 
     gateway
         .query(&mut runtime, prompt.as_str(), 48, "mock-1")
+        // Optional: LLM query for architecture summary may fail; not critical
         .ok()
         .map(|response| response.output_text)
 }
@@ -355,6 +356,7 @@ fn query_llm_summary(
 fn read_file(project_map: &ProjectMap, rel_path: &str) -> Option<String> {
     let root = PathBuf::from(project_map.root_path.as_str());
     let full = root.join(rel_path);
+    // Optional: file may not exist or may be binary
     fs::read_to_string(full).ok()
 }
 

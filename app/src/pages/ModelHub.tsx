@@ -447,7 +447,7 @@ export default function ModelHub() {
               const compat: SystemCompatibility = JSON.parse(cRaw);
               setCompatibilityMap((prev) => ({ ...prev, [file.filename]: compat }));
             })
-            .catch(() => {});
+            .catch((e) => { if (import.meta.env.DEV) console.warn("[ModelHub]", e); });
         }
       } catch (e) {
         showError(String(e));

@@ -221,7 +221,9 @@ fn scan_dir(
         let language = detect_language(path.as_path(), shebang.as_deref());
         let modified = metadata
             .modified()
+            // Optional: modification time may not be available on all filesystems
             .ok()
+            // Optional: system time may be before UNIX_EPOCH on misconfigured clocks
             .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
             .map(|value| value.as_secs())
             .unwrap_or(0);
@@ -264,6 +266,7 @@ fn make_relative(root: &Path, path: &Path) -> Result<String, AgentError> {
 }
 
 fn read_shebang(path: &Path) -> Option<String> {
+    // Optional: file may be binary or unreadable
     let content = fs::read_to_string(path).ok()?;
     let first = content.lines().next()?;
     if first.starts_with("#!") {
@@ -404,10 +407,12 @@ fn run_command<const N: usize>(cwd: &Path, program: &str, args: [&str; N]) -> Op
         .args(args)
         .current_dir(cwd)
         .output()
+        // Optional: command may not exist or fail to spawn
         .ok()?;
     if !output.status.success() {
         return None;
     }
+    // Optional: output may contain invalid UTF-8
     String::from_utf8(output.stdout).ok()
 }
 

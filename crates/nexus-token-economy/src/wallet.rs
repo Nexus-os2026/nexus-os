@@ -1,3 +1,4 @@
+use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -38,7 +39,7 @@ impl AgentWallet {
         agent_id: String,
         initial_balance: NexusCoin,
         autonomy_level: u8,
-        signing_key: &ed25519_dalek::SigningKey,
+        identity: &CryptoIdentity,
     ) -> Self {
         let mut wallet = Self {
             agent_id,
@@ -53,7 +54,7 @@ impl AgentWallet {
             authority_signature: Vec::new(),
             autonomy_level,
         };
-        wallet.rehash_and_sign(signing_key);
+        wallet.rehash_and_sign(identity);
         wallet
     }
 
@@ -61,7 +62,7 @@ impl AgentWallet {
     pub fn credit(
         &mut self,
         amount: NexusCoin,
-        signing_key: &ed25519_dalek::SigningKey,
+        identity: &CryptoIdentity,
     ) -> Result<(), EconomyError> {
         self.balance = self
             .balance
@@ -72,7 +73,7 @@ impl AgentWallet {
             .checked_add(amount)
             .ok_or(EconomyError::Overflow)?;
         self.version += 1;
-        self.rehash_and_sign(signing_key);
+        self.rehash_and_sign(identity);
         Ok(())
     }
 
@@ -81,7 +82,7 @@ impl AgentWallet {
     pub fn burn(
         &mut self,
         amount: NexusCoin,
-        signing_key: &ed25519_dalek::SigningKey,
+        identity: &CryptoIdentity,
     ) -> Result<(), EconomyError> {
         let available = self.available_balance();
         if available < amount {
@@ -102,7 +103,7 @@ impl AgentWallet {
             .checked_add(amount)
             .ok_or(EconomyError::Overflow)?;
         self.version += 1;
-        self.rehash_and_sign(signing_key);
+        self.rehash_and_sign(identity);
         Ok(())
     }
 
@@ -110,7 +111,7 @@ impl AgentWallet {
     pub fn lock_escrow(
         &mut self,
         amount: NexusCoin,
-        signing_key: &ed25519_dalek::SigningKey,
+        identity: &CryptoIdentity,
     ) -> Result<(), EconomyError> {
         let available = self.available_balance();
         if available < amount {
@@ -124,7 +125,7 @@ impl AgentWallet {
             .checked_add(amount)
             .ok_or(EconomyError::Overflow)?;
         self.version += 1;
-        self.rehash_and_sign(signing_key);
+        self.rehash_and_sign(identity);
         Ok(())
     }
 
@@ -132,7 +133,7 @@ impl AgentWallet {
     pub fn release_escrow(
         &mut self,
         amount: NexusCoin,
-        signing_key: &ed25519_dalek::SigningKey,
+        identity: &CryptoIdentity,
     ) -> Result<(), EconomyError> {
         if self.escrowed < amount {
             return Err(EconomyError::EscrowError(
@@ -155,7 +156,7 @@ impl AgentWallet {
             .checked_add(amount)
             .ok_or(EconomyError::Overflow)?;
         self.version += 1;
-        self.rehash_and_sign(signing_key);
+        self.rehash_and_sign(identity);
         Ok(())
     }
 
@@ -163,7 +164,7 @@ impl AgentWallet {
     pub fn refund_escrow(
         &mut self,
         amount: NexusCoin,
-        signing_key: &ed25519_dalek::SigningKey,
+        identity: &CryptoIdentity,
     ) -> Result<(), EconomyError> {
         if self.escrowed < amount {
             return Err(EconomyError::EscrowError(
@@ -175,7 +176,7 @@ impl AgentWallet {
             .checked_sub(amount)
             .ok_or(EconomyError::EscrowError("Escrow underflow".into()))?;
         self.version += 1;
-        self.rehash_and_sign(signing_key);
+        self.rehash_and_sign(identity);
         Ok(())
     }
 
@@ -183,7 +184,7 @@ impl AgentWallet {
     pub fn receive(
         &mut self,
         amount: NexusCoin,
-        signing_key: &ed25519_dalek::SigningKey,
+        identity: &CryptoIdentity,
     ) -> Result<(), EconomyError> {
         self.balance = self
             .balance
@@ -194,7 +195,7 @@ impl AgentWallet {
             .checked_add(amount)
             .ok_or(EconomyError::Overflow)?;
         self.version += 1;
-        self.rehash_and_sign(signing_key);
+        self.rehash_and_sign(identity);
         Ok(())
     }
 
@@ -206,23 +207,23 @@ impl AgentWallet {
     }
 
     /// Verify wallet integrity
-    pub fn verify(&self, verifying_key: &ed25519_dalek::VerifyingKey) -> Result<(), EconomyError> {
+    pub fn verify(&self, verifying_key: &[u8]) -> Result<(), EconomyError> {
         let expected_hash = self.compute_hash();
         if expected_hash != self.state_hash {
             return Err(EconomyError::IntegrityViolation("Hash mismatch".into()));
         }
-        use ed25519_dalek::Verifier;
-        let signature = ed25519_dalek::Signature::from_bytes(
-            self.authority_signature
-                .as_slice()
-                .try_into()
-                .map_err(|_| EconomyError::IntegrityViolation("Invalid signature".into()))?,
-        );
-        verifying_key
-            .verify(self.state_hash.as_bytes(), &signature)
-            .map_err(|_| {
-                EconomyError::IntegrityViolation("Signature verification failed".into())
-            })?;
+        let ok = CryptoIdentity::verify(
+            SignatureAlgorithm::Ed25519,
+            verifying_key,
+            self.state_hash.as_bytes(),
+            &self.authority_signature,
+        )
+        .map_err(|e| EconomyError::IntegrityViolation(e.to_string()))?;
+        if !ok {
+            return Err(EconomyError::IntegrityViolation(
+                "Signature verification failed".into(),
+            ));
+        }
         Ok(())
     }
 
@@ -234,11 +235,11 @@ impl AgentWallet {
         self.lifetime_burned.as_f64() / self.lifetime_earned.as_f64()
     }
 
-    fn rehash_and_sign(&mut self, signing_key: &ed25519_dalek::SigningKey) {
+    fn rehash_and_sign(&mut self, identity: &CryptoIdentity) {
         self.state_hash = self.compute_hash();
-        use ed25519_dalek::Signer;
-        let signature = signing_key.sign(self.state_hash.as_bytes());
-        self.authority_signature = signature.to_bytes().to_vec();
+        self.authority_signature = identity
+            .sign(self.state_hash.as_bytes())
+            .unwrap_or_default();
     }
 
     fn compute_hash(&self) -> String {
@@ -257,45 +258,45 @@ impl AgentWallet {
 mod tests {
     use super::*;
 
-    fn test_signing_key() -> ed25519_dalek::SigningKey {
-        ed25519_dalek::SigningKey::from_bytes(&[42u8; 32])
+    fn test_identity() -> CryptoIdentity {
+        CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[42u8; 32]).unwrap()
     }
 
     #[test]
     fn test_wallet_credit_and_burn() {
-        let sk = test_signing_key();
-        let mut wallet = AgentWallet::new("agent-1".into(), NexusCoin::from_coins(100), 3, &sk);
+        let id = test_identity();
+        let mut wallet = AgentWallet::new("agent-1".into(), NexusCoin::from_coins(100), 3, &id);
 
         assert_eq!(wallet.balance, NexusCoin::from_coins(100));
 
-        wallet.credit(NexusCoin::from_coins(50), &sk).unwrap();
+        wallet.credit(NexusCoin::from_coins(50), &id).unwrap();
         assert_eq!(wallet.balance, NexusCoin::from_coins(150));
         assert_eq!(wallet.lifetime_earned, NexusCoin::from_coins(150));
 
-        wallet.burn(NexusCoin::from_coins(30), &sk).unwrap();
+        wallet.burn(NexusCoin::from_coins(30), &id).unwrap();
         assert_eq!(wallet.balance, NexusCoin::from_coins(120));
         assert_eq!(wallet.lifetime_burned, NexusCoin::from_coins(30));
     }
 
     #[test]
     fn test_wallet_insufficient_burn() {
-        let sk = test_signing_key();
-        let mut wallet = AgentWallet::new("agent-1".into(), NexusCoin::from_coins(10), 3, &sk);
-        let result = wallet.burn(NexusCoin::from_coins(20), &sk);
+        let id = test_identity();
+        let mut wallet = AgentWallet::new("agent-1".into(), NexusCoin::from_coins(10), 3, &id);
+        let result = wallet.burn(NexusCoin::from_coins(20), &id);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_wallet_escrow_lock_release() {
-        let sk = test_signing_key();
-        let mut wallet = AgentWallet::new("agent-1".into(), NexusCoin::from_coins(100), 3, &sk);
+        let id = test_identity();
+        let mut wallet = AgentWallet::new("agent-1".into(), NexusCoin::from_coins(100), 3, &id);
 
-        wallet.lock_escrow(NexusCoin::from_coins(30), &sk).unwrap();
+        wallet.lock_escrow(NexusCoin::from_coins(30), &id).unwrap();
         assert_eq!(wallet.available_balance(), NexusCoin::from_coins(70));
         assert_eq!(wallet.escrowed, NexusCoin::from_coins(30));
 
         wallet
-            .release_escrow(NexusCoin::from_coins(30), &sk)
+            .release_escrow(NexusCoin::from_coins(30), &id)
             .unwrap();
         assert_eq!(wallet.balance, NexusCoin::from_coins(70));
         assert_eq!(wallet.escrowed, NexusCoin::ZERO);
@@ -304,10 +305,10 @@ mod tests {
 
     #[test]
     fn test_wallet_integrity_verification() {
-        let sk = test_signing_key();
-        let vk = ed25519_dalek::VerifyingKey::from(&sk);
+        let id = test_identity();
+        let vk = id.verifying_key().to_vec();
 
-        let wallet = AgentWallet::new("agent-1".into(), NexusCoin::from_coins(100), 3, &sk);
+        let wallet = AgentWallet::new("agent-1".into(), NexusCoin::from_coins(100), 3, &id);
         assert!(wallet.verify(&vk).is_ok());
 
         // Tamper with the balance
@@ -318,9 +319,9 @@ mod tests {
 
     #[test]
     fn test_wallet_burn_rate() {
-        let sk = test_signing_key();
-        let mut wallet = AgentWallet::new("agent-1".into(), NexusCoin::from_coins(100), 3, &sk);
-        wallet.burn(NexusCoin::from_coins(50), &sk).unwrap();
+        let id = test_identity();
+        let mut wallet = AgentWallet::new("agent-1".into(), NexusCoin::from_coins(100), 3, &id);
+        wallet.burn(NexusCoin::from_coins(50), &id).unwrap();
         let rate = wallet.burn_rate();
         assert!((rate - 0.5).abs() < 0.001);
     }

@@ -70,6 +70,7 @@ impl WebhookTrigger {
         }
 
         // JSONPath filter is a future enhancement — for now all payloads pass
+        // suppress unused filter field; JSONPath filtering is a planned future enhancement
         let _ = &route.filter;
 
         self.tx

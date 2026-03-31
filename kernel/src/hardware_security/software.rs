@@ -11,7 +11,7 @@ use crate::hardware_security::types::{
 };
 use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::aead::OsRng;
-use ed25519_dalek::{Signer, SigningKey};
+use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -25,7 +25,7 @@ struct SealedKeyMeta {
 #[derive(Clone)]
 struct StoredSoftwareKey {
     purpose: KeyPurpose,
-    signing_key: SigningKey,
+    identity: CryptoIdentity,
     deprecated: bool,
 }
 
@@ -76,7 +76,7 @@ impl SoftwareBackend {
         for handle_id in handle_ids {
             // Sealed blob format: meta_len(4 LE) || meta_json || seed(32)
             let plaintext = store.unseal_key(&handle_id)?;
-            let (meta, signing_key) = Self::decode_sealed_payload(&plaintext)?;
+            let (meta, identity) = Self::decode_sealed_payload(&plaintext)?;
 
             // Track highest sequence number to avoid handle ID collisions.
             if let Some(seq) = Self::parse_sequence_from_handle(&handle_id) {
@@ -89,7 +89,7 @@ impl SoftwareBackend {
                 handle_id,
                 StoredSoftwareKey {
                     purpose: meta.purpose,
-                    signing_key,
+                    identity,
                     deprecated: meta.deprecated,
                 },
             );
@@ -111,7 +111,9 @@ impl SoftwareBackend {
     }
 
     /// Decode a sealed payload back into metadata + signing key.
-    fn decode_sealed_payload(plaintext: &[u8]) -> Result<(SealedKeyMeta, SigningKey), KeyError> {
+    fn decode_sealed_payload(
+        plaintext: &[u8],
+    ) -> Result<(SealedKeyMeta, CryptoIdentity), KeyError> {
         if plaintext.len() < 4 + 32 {
             return Err(KeyError::InvalidKeyMaterial(
                 "sealed payload too short".to_string(),
@@ -132,8 +134,9 @@ impl SoftwareBackend {
         let seed_start = 4 + meta_len;
         let mut seed = [0u8; 32];
         seed.copy_from_slice(&plaintext[seed_start..seed_start + 32]);
-        let signing_key = SigningKey::from_bytes(&seed);
-        Ok((meta, signing_key))
+        let identity = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &seed)
+            .map_err(|e| KeyError::InvalidKeyMaterial(format!("key reconstruct: {e}")))?;
+        Ok((meta, identity))
     }
 
     /// Parse the sequence number from a handle ID like `sw-agent_identity-00000003-abcdef01`.
@@ -143,6 +146,7 @@ impl SoftwareBackend {
         // Find the part that looks like an 8-char hex sequence number.
         for part in &parts {
             if part.len() == 8 && u64::from_str_radix(part, 16).is_ok() {
+                // Optional: parse failure means this part is not the sequence field, return None
                 return u64::from_str_radix(part, 16).ok();
             }
         }
@@ -184,9 +188,13 @@ impl KeyBackend for SoftwareBackend {
         // Generate with cryptographic randomness.
         let mut seed = [0u8; 32];
         OsRng.fill_bytes(&mut seed);
-        let signing_key = SigningKey::from_bytes(&seed);
+        let identity = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &seed)
+            .map_err(|e| KeyError::BackendFailure(format!("keygen: {e}")))?;
 
-        let public = signing_key.verifying_key().to_bytes();
+        let public: [u8; 32] = identity
+            .verifying_key()
+            .try_into()
+            .map_err(|_| KeyError::BackendFailure("bad pk len".into()))?;
         let handle_id = format!(
             "sw-{}-{sequence:08x}-{}",
             purpose.as_str(),
@@ -207,7 +215,7 @@ impl KeyBackend for SoftwareBackend {
             handle_id,
             StoredSoftwareKey {
                 purpose,
-                signing_key,
+                identity,
                 deprecated: false,
             },
         );
@@ -225,9 +233,7 @@ impl KeyBackend for SoftwareBackend {
                 actual: stored.purpose,
             });
         }
-        Ok(PublicKeyBytes(
-            stored.signing_key.verifying_key().to_bytes().to_vec(),
-        ))
+        Ok(PublicKeyBytes(stored.identity.verifying_key().to_vec()))
     }
 
     fn sign(&self, handle: &KeyHandle, msg: &[u8]) -> Result<SignatureBytes, KeyError> {
@@ -241,8 +247,11 @@ impl KeyBackend for SoftwareBackend {
                 actual: stored.purpose,
             });
         }
-        let signature = stored.signing_key.sign(msg);
-        Ok(SignatureBytes(signature.to_bytes().to_vec()))
+        let sig = stored
+            .identity
+            .sign(msg)
+            .map_err(|e| KeyError::BackendFailure(format!("sign: {e}")))?;
+        Ok(SignatureBytes(sig))
     }
 
     fn rotate(&mut self, handle: &KeyHandle) -> Result<KeyHandle, KeyError> {
@@ -265,7 +274,11 @@ impl KeyBackend for SoftwareBackend {
                     purpose: stored.purpose,
                     deprecated: true,
                 };
-                let seed = stored.signing_key.to_bytes();
+                let seed: [u8; 32] = stored
+                    .identity
+                    .signing_key_bytes()
+                    .try_into()
+                    .unwrap_or([0u8; 32]);
                 let handle_id = handle.id.clone();
                 let payload = Self::encode_sealed_payload(&meta, &seed);
                 store.seal_key(&handle_id, &payload)?;

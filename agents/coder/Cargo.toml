@@ -1,5 +1,6 @@
 [package]
 name = "coder-agent"
+description = "Autonomous code generation and editing agent for Nexus OS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

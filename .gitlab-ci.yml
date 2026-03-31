@@ -26,7 +26,7 @@ cargo-audit:
   before_script:
     - cargo install cargo-audit --locked 2>/dev/null || true
   script:
-    - cargo audit --config audit.toml
+    - cargo audit --ignore RUSTSEC-2026-0044 --ignore RUSTSEC-2026-0048 --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2026-0049 --ignore RUSTSEC-2026-0067 --ignore RUSTSEC-2026-0068
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -83,6 +83,7 @@ frontend-tests:
   script:
     - cd app
     - npm ci
+    - npm test
     - npm run build
   artifacts:
     paths:
@@ -118,3 +119,27 @@ release-build:
   rules:
     - if: $CI_COMMIT_TAG =~ /^v/
       when: manual
+
+# ---------------------------------------------------------------------------
+# Nightly stage — runs #[ignore]d tests that need API keys or are long-running.
+# Trigger: GitLab scheduled pipeline (set schedule in CI/CD > Schedules).
+# Required CI/CD variables: GROQ_API_KEY, OPENROUTER_API_KEY
+# ---------------------------------------------------------------------------
+
+nightly-api-key-tests:
+  extends: .rust-base
+  stage: test
+  timeout: 30 minutes
+  script:
+    - cargo test -p nexus-capability-measurement -- --ignored --nocapture
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+nightly-long-running-tests:
+  extends: .rust-base
+  stage: test
+  timeout: 45 minutes
+  script:
+    - cargo test -p nexus-capability-measurement -- execute_run1 execute_run2 --ignored --nocapture
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"

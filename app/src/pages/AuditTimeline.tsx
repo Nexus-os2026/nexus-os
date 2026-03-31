@@ -62,7 +62,7 @@ export default function AuditTimeline({ events }: AuditTimelineProps): JSX.Eleme
         setLiveEvents(freshEvents);
         setChainStatus(status);
       })
-      .catch(() => {})
+      .catch((e) => { if (import.meta.env.DEV) console.warn("[AuditTimeline]", e); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -70,7 +70,7 @@ export default function AuditTimeline({ events }: AuditTimelineProps): JSX.Eleme
   useEffect(() => {
     if (!hasDesktopRuntime()) return;
     const timer = window.setInterval(() => {
-      getAuditLog(undefined, 500).then(setLiveEvents).catch(() => {});
+      getAuditLog(undefined, 500).then(setLiveEvents).catch((e) => { if (import.meta.env.DEV) console.warn("[AuditTimeline]", e); });
     }, 10_000);
     return () => window.clearInterval(timer);
   }, []);

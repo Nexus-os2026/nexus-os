@@ -3,6 +3,7 @@ name = "nexus-collab-protocol"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Multi-agent collaboration protocol with voting and consensus"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

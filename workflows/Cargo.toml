@@ -1,5 +1,6 @@
 [package]
 name = "nexus-workflows"
+description = "Workflow engine for defining and executing multi-step agent task pipelines in Nexus OS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

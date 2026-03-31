@@ -3,6 +3,7 @@ name = "nexus-computer-control"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Governed desktop automation — agents interact with the user's screen"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -111,6 +111,10 @@ export interface MessagingConfig {
   whatsapp_api_token: string;
   discord_bot_token: string;
   slack_bot_token: string;
+  matrix_access_token: string;
+  matrix_homeserver: string;
+  webhook_outbound_url: string;
+  webhook_signing_secret: string;
 }
 
 export interface VoiceConfig {

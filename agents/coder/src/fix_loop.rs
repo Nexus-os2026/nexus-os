@@ -96,6 +96,7 @@ impl ErrorFixer for LlmErrorFixer {
             "Iteration {iteration}. Analyze {} errors and propose minimal patch strategy.",
             errors.len()
         );
+        // Best-effort: query LLM for fix strategy analysis (result not used directly)
         let _ = self
             .gateway
             .query(&mut self.runtime, prompt.as_str(), 96, "mock-1")?;

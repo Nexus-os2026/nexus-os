@@ -679,9 +679,13 @@ impl PublishStep for DryRunPublishStep {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn crate_compiles_and_exports_are_reachable() {
-        // Smoke test: verifies the crate compiles and public API is accessible
-        assert!(true);
+    fn config_deserializes_from_json() {
+        let json = r#"{"topic":"AI news","platforms":["x"],"style":"casual","posts_per_day":2}"#;
+        let config: SocialPosterConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.topic, "AI news");
+        assert_eq!(config.posts_per_day, 2);
     }
 }

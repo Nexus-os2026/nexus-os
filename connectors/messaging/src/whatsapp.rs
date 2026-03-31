@@ -58,6 +58,7 @@ impl WhatsAppAdapter {
             .build()
             .unwrap_or_else(|_| Client::new());
 
+        // Optional: WhatsApp credentials may not be configured in environment
         let access_token = std::env::var("WHATSAPP_ACCESS_TOKEN").ok();
         let phone_number_id = std::env::var("WHATSAPP_PHONE_NUMBER_ID").ok();
         let verify_token = std::env::var("WHATSAPP_VERIFY_TOKEN").ok();

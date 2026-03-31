@@ -234,6 +234,7 @@ fn parse_jest_or_npm_counts(stdout: &str) -> (usize, usize) {
                 .split(|ch: char| !ch.is_ascii_alphanumeric())
                 .collect::<Vec<_>>();
             for index in 0..numbers.len().saturating_sub(1) {
+                // Optional: test summary token may not be a valid number
                 let value = numbers[index].parse::<usize>().ok();
                 let label = numbers[index + 1];
                 if let Some(count) = value {

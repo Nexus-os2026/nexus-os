@@ -1,8 +1,0 @@
-## config_files
-[OK] .gitlab-ci.yml exists
-[OK] Cargo.toml exists
-[FAIL] package.json MISSING
-[FAIL] tsconfig.json MISSING
-## undocumented_env_vars
-UNDOCUMENTED ENV VAR: CARGO_MANIFEST_DIR
-UNDOCUMENTED ENV VAR: XDG_DATA_HOME

@@ -5,17 +5,17 @@
 //! - `nexus package` produces signed bundles
 //! - Full create → test → package → publish → install roundtrip
 
-use ed25519_dalek::SigningKey;
 use nexus_cli::packager::{build_signed_bundle, package_agent};
 use nexus_cli::scaffold::scaffold_agent_project;
 use nexus_cli::templates::template_names;
 use nexus_cli::test_runner::run_agent_test_from_str;
+use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use nexus_marketplace::package::verify_package;
 use nexus_marketplace::sqlite_registry::SqliteRegistry;
 use nexus_marketplace::verification_pipeline::{verify_bundle, Verdict};
 
-fn test_key() -> SigningKey {
-    SigningKey::from_bytes(&[42u8; 32])
+fn test_key() -> CryptoIdentity {
+    CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[42u8; 32]).unwrap()
 }
 
 // ── Test 1: nexus create generates compilable agent project ──────────────────

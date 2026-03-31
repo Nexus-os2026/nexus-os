@@ -749,7 +749,7 @@ export default function AiChatHub() {
         if (codeEl?.textContent) {
           navigator.clipboard.writeText(codeEl.textContent)
             .then(() => { target.textContent = 'Copied!'; setTimeout(() => { target.textContent = '\u25B6 Run'; }, 2000); })
-            .catch(() => {});
+            .catch((e) => { if (import.meta.env.DEV) console.warn("[AiChatHub]", e); });
         }
       }
     };

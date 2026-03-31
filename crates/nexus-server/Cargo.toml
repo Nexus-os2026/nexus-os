@@ -3,6 +3,7 @@ name = "nexus-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Standalone HTTP/JSON-RPC gateway for Nexus OS agent and MCP APIs"
 
 [[bin]]
 name = "nexus-server"

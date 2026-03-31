@@ -265,6 +265,7 @@ impl ActionExecutor for RegistryExecutor {
                         };
 
                         // Audit the LLM query
+                        // Best-effort: audit LLM query event; failure does not block execution
                         let _ = audit.append_event(
                             uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
                             EventType::LlmCall,
@@ -288,6 +289,7 @@ impl ActionExecutor for RegistryExecutor {
                     memory_type,
                 } => {
                     if let Some(mgr) = &self.memory_manager {
+                        // Best-effort: audit memory store event; failure does not block storage
                         let _ = audit.append_event(
                             uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
                             EventType::StateChange,
@@ -322,6 +324,7 @@ impl ActionExecutor for RegistryExecutor {
                 }
                 PlannedAction::MemoryRecall { query, memory_type } => {
                     if let Some(mgr) = &self.memory_manager {
+                        // Best-effort: audit memory recall event; failure does not block recall
                         let _ = audit.append_event(
                             uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
                             EventType::StateChange,
@@ -360,6 +363,7 @@ impl ActionExecutor for RegistryExecutor {
                     }
                 }
                 PlannedAction::SendNotification { title, body, level } => {
+                    // Best-effort: audit notification event; failure does not block delivery
                     let _ = audit.append_event(
                         uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
                         EventType::UserAction,
@@ -445,7 +449,7 @@ struct AgentLoopState {
     review_each_mode: bool,
     /// Strategy hash used for this goal (for evolution tracking).
     strategy_hash: Option<String>,
-    /// Timestamp when the goal started (for duration tracking).
+    /// Timestamp when the goal started (for duration tracking / future metrics).
     #[allow(dead_code)]
     started_at_secs: u64,
 }
@@ -561,6 +565,7 @@ impl CognitiveRuntime {
         };
         let latest = memory_mgr
             .load_by_type(agent_id, "cognitive_params", 20)
+            // Optional: missing cognitive params means use defaults
             .ok()
             .and_then(|mut rows| rows.drain(..).next());
         let Some(row) = latest else {
@@ -609,8 +614,10 @@ impl CognitiveRuntime {
         let phase_key = phase.to_string();
         let latest = memory_mgr
             .load_by_type(agent_id, "model_mapping", 10)
+            // Optional: no model mapping means no phase-specific model override
             .ok()
             .and_then(|mut rows| rows.drain(..).next())?;
+        // Optional: malformed JSON means no model selection
         let parsed = serde_json::from_str::<serde_json::Value>(&latest.value_json).ok()?;
         let entry = parsed.get(&phase_key)?;
         let provider = entry.get("provider")?.as_str()?.to_string();
@@ -628,8 +635,10 @@ impl CognitiveRuntime {
     ) -> Option<SelectedAlgorithm> {
         let latest = memory_mgr
             .load_by_type(agent_id, "algorithm_selection", 10)
+            // Optional: no algorithm selection means use default planning
             .ok()
             .and_then(|mut rows| rows.drain(..).next())?;
+        // Optional: malformed JSON means no algorithm selection
         let parsed = serde_json::from_str::<serde_json::Value>(&latest.value_json).ok()?;
         Some(SelectedAlgorithm {
             algorithm: parsed.get("algorithm")?.as_str()?.to_string(),
@@ -667,6 +676,7 @@ impl CognitiveRuntime {
             .get(&selection.provider)
             .map(|provider| provider.name().to_string())
             .unwrap_or(selection.provider);
+        // Best-effort: audit phase model selection; non-critical telemetry
         let _ = audit.append_event(
             uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
             EventType::StateChange,
@@ -683,6 +693,7 @@ impl CognitiveRuntime {
         let Ok(db) = NexusDatabase::open(&NexusDatabase::default_db_path()) else {
             return;
         };
+        // Optional: missing cooldown row means first run; use defaults
         let previous = db.load_l6_cooldown(agent_id).ok().flatten().unwrap_or(
             nexus_persistence::L6CooldownTrackerRow {
                 agent_id: agent_id.to_string(),
@@ -701,6 +712,7 @@ impl CognitiveRuntime {
         } else {
             previous.total_cooldowns
         };
+        // Best-effort: persist cooldown tracker; loop continues even if DB write fails
         let _ = db.upsert_l6_cooldown(
             agent_id,
             cycle_count as i64,
@@ -940,6 +952,7 @@ impl CognitiveRuntime {
                             1.0 - s.len() as f64 * 0.1 - fuel * 0.01
                         });
                         new_steps = result.plan;
+                        // Best-effort: record darwin evolution metrics; informational only
                         let _ = memory_mgr.store_episodic(
                             agent_id,
                             "darwin_plan_evolution",
@@ -950,6 +963,7 @@ impl CognitiveRuntime {
                         );
                     }
                     "world_model" => {
+                        // Best-effort: record world model simulation preview; informational only
                         let _ = memory_mgr.store_episodic(
                             agent_id,
                             "world_model_plan_preview",
@@ -964,6 +978,7 @@ impl CognitiveRuntime {
                     _ => {}
                 }
                 if let Ok(db) = NexusDatabase::open(&NexusDatabase::default_db_path()) {
+                    // Best-effort: persist algorithm selection; planning proceeds regardless
                     let _ = db.save_algorithm_selection(
                         agent_id,
                         &state.goal.id,
@@ -1014,6 +1029,7 @@ impl CognitiveRuntime {
                         let world_model = WorldModel::default();
                         let simulation =
                             world_model.simulate_action(&state.goal.id, step.action.action_type());
+                        // Best-effort: record world model simulation; informational only
                         let _ = memory_mgr.store_episodic(
                             agent_id,
                             "world_model_act_preview",
@@ -1221,6 +1237,7 @@ impl CognitiveRuntime {
                                 if let Some(handle) = sup.get_agent(agent_uuid) {
                                     let remaining = handle.remaining_fuel;
                                     if remaining >= fuel_units {
+                                        // Best-effort: deduct fuel from supervisor; step already succeeded
                                         let _ = sup.record_llm_spend(
                                             agent_uuid,
                                             "cognitive",
@@ -1322,6 +1339,7 @@ impl CognitiveRuntime {
             let success_rate = if total > 0.0 { succeeded / total } else { 0.0 };
 
             if success_rate < 0.5 && total > 0.0 {
+                // Best-effort: record low success rate as procedural learning
                 let _ = memory_mgr.store_procedural(
                     agent_id,
                     &format!(
@@ -1333,6 +1351,7 @@ impl CognitiveRuntime {
                 );
             }
 
+            // Best-effort: record reflection snapshot; non-critical telemetry
             let _ = memory_mgr.store_episodic(
                 agent_id,
                 &format!("reflection at cycle {}", state.cycle_count),
@@ -1351,6 +1370,7 @@ impl CognitiveRuntime {
                         .unwrap_or_default();
                     let (passed, summary, confidence) =
                         arena.challenge(state.goal.description.as_str(), &step_content, &caps);
+                    // Best-effort: record adversarial reflection result; informational only
                     let _ = memory_mgr.store_episodic(
                         agent_id,
                         "adversarial_reflect",
@@ -1384,6 +1404,7 @@ impl CognitiveRuntime {
             self.record_phase_model_selection(agent_id, state.phase, memory_mgr, audit);
             self.emit_phase_change(agent_id, state);
 
+            // Best-effort: record goal outcome as episodic memory for future planning
             let _ = memory_mgr.store_episodic(
                 agent_id,
                 &format!(
@@ -1399,8 +1420,10 @@ impl CognitiveRuntime {
                 ),
             );
 
+            // Best-effort: run memory decay; stale memory cleanup is non-critical
             let _ = memory_mgr.run_decay_cycle(agent_id);
 
+            // suppress unused evolution_tracker
             let _ = evolution_tracker;
 
             self.emitter.emit(CognitiveEvent::GoalCompleted {
@@ -1875,13 +1898,6 @@ mod tests {
     }
 
     impl MockExecutor {
-        #[allow(dead_code)]
-        fn new(results: Vec<Result<String, String>>) -> Self {
-            Self {
-                results: Mutex::new(results),
-            }
-        }
-
         fn always_ok(result: &str) -> Self {
             // Return a large number of successes
             Self {

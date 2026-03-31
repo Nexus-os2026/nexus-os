@@ -3,6 +3,7 @@ name = "nexus-external-tools"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "External tool registry and governed execution for Nexus OS agents"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

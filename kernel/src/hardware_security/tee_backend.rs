@@ -17,7 +17,7 @@ use crate::hardware_security::types::{
 };
 use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::aead::OsRng;
-use ed25519_dalek::{Signer, SigningKey};
+use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -347,8 +347,9 @@ impl SoftwareTeeProvider {
             .map_err(|_| {
                 KeyError::InvalidKeyMaterial("tee payload: expected 32 bytes for seed".to_string())
             })?;
-        let signing_key = SigningKey::from_bytes(&seed);
-        let pub_key = signing_key.verifying_key().to_bytes().to_vec();
+        let identity = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &seed)
+            .map_err(|e| KeyError::InvalidKeyMaterial(format!("tee key reconstruct: {e}")))?;
+        let pub_key = identity.verifying_key().to_vec();
         Ok((meta, pub_key))
     }
 
@@ -365,9 +366,9 @@ impl SoftwareTeeProvider {
 
     /// Unseal the signing key from disk, use it, then drop it.
     /// This mirrors TEE behavior: private key only in protected memory during use.
-    fn with_signing_key<F, T>(&self, handle_id: &str, f: F) -> Result<T, KeyError>
+    fn with_identity<F, T>(&self, handle_id: &str, f: F) -> Result<T, KeyError>
     where
-        F: FnOnce(&SigningKey) -> Result<T, KeyError>,
+        F: FnOnce(&CryptoIdentity) -> Result<T, KeyError>,
     {
         let plaintext = self.sealed_store.unseal_key(handle_id)?;
         if plaintext.len() < 4 + 32 {
@@ -389,9 +390,10 @@ impl SoftwareTeeProvider {
             .map_err(|_| {
                 KeyError::InvalidKeyMaterial("tee payload: expected 32 bytes for seed".to_string())
             })?;
-        let signing_key = SigningKey::from_bytes(&seed);
-        // signing_key is dropped when this scope ends — private key leaves memory.
-        f(&signing_key)
+        let identity = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &seed)
+            .map_err(|e| KeyError::InvalidKeyMaterial(format!("tee key: {e}")))?;
+        // identity is dropped when this scope ends — private key leaves memory.
+        f(&identity)
     }
 }
 
@@ -409,8 +411,9 @@ impl TeeProvider for SoftwareTeeProvider {
 
         let mut seed = [0u8; 32];
         OsRng.fill_bytes(&mut seed);
-        let signing_key = SigningKey::from_bytes(&seed);
-        let pub_key = signing_key.verifying_key().to_bytes().to_vec();
+        let identity = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &seed)
+            .map_err(|e| KeyError::BackendFailure(format!("tee keygen: {e}")))?;
+        let pub_key = identity.verifying_key().to_vec();
 
         let handle_id = format!("tee-{purpose}-{seq:08x}-{}", short_hash_prefix(&pub_key));
 
@@ -433,9 +436,10 @@ impl TeeProvider for SoftwareTeeProvider {
             .map_err(|_| KeyError::InvalidKeyMaterial("handle is not UTF-8".to_string()))?;
 
         // Unseal key, sign, drop key.
-        self.with_signing_key(handle_id, |signing_key| {
-            let signature = signing_key.sign(message);
-            Ok(signature.to_bytes().to_vec())
+        self.with_identity(handle_id, |identity| {
+            identity
+                .sign(message)
+                .map_err(|e| KeyError::BackendFailure(format!("tee sign: {e}")))
         })
     }
 
@@ -512,11 +516,13 @@ impl TeeProvider for SoftwareTeeProvider {
 
         // Self-sign the report: signature = pubkey(32) || ed25519_sig(64).
         let payload = attestation_payload(&report);
-        self.with_signing_key(&handle_id, |signing_key| {
-            let sig = signing_key.sign(&payload);
+        self.with_identity(&handle_id, |identity| {
+            let sig = identity
+                .sign(&payload)
+                .map_err(|e| KeyError::BackendFailure(format!("attest sign: {e}")))?;
             let mut sig_blob = Vec::with_capacity(96);
-            sig_blob.extend_from_slice(&signing_key.verifying_key().to_bytes());
-            sig_blob.extend_from_slice(&sig.to_bytes());
+            sig_blob.extend_from_slice(identity.verifying_key());
+            sig_blob.extend_from_slice(&sig);
             report.signature = sig_blob;
             Ok(())
         })?;
@@ -580,6 +586,7 @@ impl TeeBackend {
         // Fallback: software TEE emulation.
         let dir = sealed_dir.unwrap_or_else(|| {
             let base = std::env::temp_dir().join("nexus-tee-keys");
+            // Optional: dir creation failure is non-fatal here, SealedKeyStore will error later if needed
             std::fs::create_dir_all(&base).ok();
             base
         });
@@ -713,7 +720,7 @@ impl KeyBackend for TeeBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ed25519_dalek::VerifyingKey;
+    use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 
     #[test]
     fn software_tee_provider_generate_and_sign() {
@@ -733,11 +740,9 @@ mod tests {
         assert_eq!(sig.len(), 64);
 
         // Verify signature with public key.
-        let vk_bytes: [u8; 32] = pub_key.as_slice().try_into().unwrap();
-        let vk = VerifyingKey::from_bytes(&vk_bytes).unwrap();
-        let sig_obj = ed25519_dalek::Signature::from_slice(&sig).expect("parse signature");
-        vk.verify_strict(msg, &sig_obj)
-            .expect("signature should verify");
+        let ok = CryptoIdentity::verify(SignatureAlgorithm::Ed25519, &pub_key, msg, &sig)
+            .expect("verify should not error");
+        assert!(ok, "signature should verify");
     }
 
     #[test]
@@ -794,11 +799,14 @@ mod tests {
         assert_eq!(sig.0.len(), 64);
 
         // Verify.
-        let vk_bytes: [u8; 32] = pub_key.0.as_slice().try_into().unwrap();
-        let vk = VerifyingKey::from_bytes(&vk_bytes).unwrap();
-        let sig_obj = ed25519_dalek::Signature::from_slice(&sig.0).expect("parse");
-        vk.verify_strict(b"tee backend test", &sig_obj)
-            .expect("verify");
+        let ok = CryptoIdentity::verify(
+            SignatureAlgorithm::Ed25519,
+            &pub_key.0,
+            b"tee backend test",
+            &sig.0,
+        )
+        .expect("verify should not error");
+        assert!(ok, "verify should pass");
     }
 
     #[test]

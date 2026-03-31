@@ -3,6 +3,7 @@ name = "nexus-world-simulation"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Sandboxed world simulation for safe agent testing and scenario exploration"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

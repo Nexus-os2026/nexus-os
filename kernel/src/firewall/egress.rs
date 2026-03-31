@@ -118,6 +118,7 @@ impl EgressGovernor {
                 let decision = EgressDecision::Deny {
                     reason: "no egress policy registered for agent (default deny)".to_string(),
                 };
+                // Best-effort: egress decision already made; audit failure must not alter the deny verdict
                 let _ = Self::audit(agent_id, url, &decision, audit);
                 return decision;
             }
@@ -137,6 +138,7 @@ impl EgressGovernor {
                         "URL '{url}' does not match any allowed endpoint for this agent"
                     ),
                 };
+                // Best-effort: egress decision already made; audit failure must not alter the deny verdict
                 let _ = Self::audit(agent_id, url, &decision, audit);
                 return decision;
             }
@@ -159,6 +161,7 @@ impl EgressGovernor {
                     policy.rate_limit_per_min
                 ),
             };
+            // Best-effort: egress decision already made; audit failure must not alter the deny verdict
             let _ = Self::audit(agent_id, url, &decision, audit);
             return decision;
         }
@@ -167,6 +170,7 @@ impl EgressGovernor {
         timestamps.push(now);
 
         let decision = EgressDecision::Allow;
+        // Best-effort: allow verdict is final; audit failure is non-fatal
         let _ = Self::audit(agent_id, url, &decision, audit);
         decision
     }

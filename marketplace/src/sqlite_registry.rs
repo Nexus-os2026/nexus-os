@@ -8,7 +8,7 @@ use crate::package::{
     UnsignedPackageBundle,
 };
 use crate::registry::PackageSummary;
-use ed25519_dalek::SigningKey;
+use nexus_crypto::CryptoIdentity;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -52,6 +52,42 @@ pub struct VersionRecord {
     pub signature_hex: String,
     pub changelog: String,
     pub created_at: String,
+}
+
+/// Record of an installed package.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstalledRecord {
+    pub name: String,
+    pub version: String,
+    pub installed_at: String,
+    pub install_path: String,
+    pub verified: bool,
+}
+
+/// An available update for an installed package.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateAvailable {
+    pub name: String,
+    pub installed_version: String,
+    pub available_version: String,
+    pub package_id: String,
+}
+
+/// A trusted publisher entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrustedPublisher {
+    pub public_key: String,
+    pub name: String,
+    pub trusted_since: String,
+}
+
+/// Marketplace statistics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketplaceStats {
+    pub total_packages: usize,
+    pub total_installed: usize,
+    pub total_downloads: usize,
+    pub total_reviews: usize,
 }
 
 /// SQLite-backed marketplace registry with full-text search.
@@ -142,6 +178,20 @@ impl SqliteRegistry {
 
             CREATE INDEX IF NOT EXISTS idx_reviews_agent ON reviews(agent_id);
             CREATE INDEX IF NOT EXISTS idx_versions_agent ON versions(agent_id);
+
+            CREATE TABLE IF NOT EXISTS installed (
+                name         TEXT PRIMARY KEY,
+                version      TEXT NOT NULL,
+                installed_at TEXT NOT NULL DEFAULT (datetime('now')),
+                install_path TEXT NOT NULL DEFAULT '',
+                verified     INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS trusted_publishers (
+                public_key    TEXT PRIMARY KEY,
+                name          TEXT NOT NULL,
+                trusted_since TEXT NOT NULL DEFAULT (datetime('now'))
+            );
             ",
             )
             .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
@@ -152,9 +202,9 @@ impl SqliteRegistry {
     pub fn publish(
         &self,
         package: UnsignedPackageBundle,
-        author_key: &SigningKey,
+        author_identity: &CryptoIdentity,
     ) -> Result<String, SqliteRegistryError> {
-        let signed = sign_package(package, author_key)?;
+        let signed = sign_package(package, author_identity)?;
         verify_attestation(&signed)?;
         self.insert_bundle(&signed)?;
         Ok(signed.package_id)
@@ -265,13 +315,13 @@ impl SqliteRegistry {
         &self,
         package_id: &str,
         new_bundle: UnsignedPackageBundle,
-        author_key: &SigningKey,
+        author_identity: &CryptoIdentity,
         changelog: &str,
     ) -> Result<String, SqliteRegistryError> {
         // Verify the agent already exists
         let existing = self.get_agent(package_id)?;
 
-        let signed = sign_package(new_bundle, author_key)?;
+        let signed = sign_package(new_bundle, author_identity)?;
         verify_attestation(&signed)?;
 
         // Verify version is different
@@ -526,6 +576,316 @@ impl SqliteRegistry {
             )
             .map_err(|_| SqliteRegistryError::NotFound(agent_id.to_string()))
     }
+
+    // ── Advanced search & discovery ──────────────────────────────────────
+
+    /// Search with tag filtering, sort order, and pagination.
+    pub fn search_advanced(
+        &self,
+        query: &str,
+        tags: &[String],
+        sort: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Vec<AgentDetail>, SqliteRegistryError> {
+        let pattern = format!("%{}%", query.trim().to_lowercase());
+        let limit = limit.min(200); // cap to prevent abuse
+
+        // Build tag filter condition
+        let tag_clauses: Vec<String> = tags
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("LOWER(tags) LIKE ?{}", i + 2))
+            .collect();
+        let tag_condition = if tag_clauses.is_empty() {
+            String::new()
+        } else {
+            format!(" AND ({})", tag_clauses.join(" AND "))
+        };
+
+        let order_clause = match sort {
+            "popular" | "most_popular" => "downloads DESC",
+            "rated" | "highest_rated" => "rating DESC",
+            "newest" => "created_at DESC",
+            "updated" | "recently_updated" => "updated_at DESC",
+            "name" | "alphabetical" => "name ASC",
+            _ => "downloads DESC",
+        };
+
+        let sql = format!(
+            "SELECT id, name, version, description, author, tags, capabilities,
+                    price_cents, downloads, rating, created_at, updated_at
+             FROM agents
+             WHERE (LOWER(name) LIKE ?1
+                OR LOWER(description) LIKE ?1
+                OR LOWER(author) LIKE ?1
+                OR LOWER(tags) LIKE ?1)
+             {tag_condition}
+             ORDER BY {order_clause}
+             LIMIT {limit} OFFSET {offset}"
+        );
+
+        let mut stmt = self
+            .conn
+            .prepare(&sql)
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+
+        // Build params: first is the search pattern, then tag patterns
+        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(pattern)];
+        for tag in tags {
+            param_values.push(Box::new(format!("%{}%", tag.to_lowercase())));
+        }
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|p| p.as_ref()).collect();
+
+        let rows = stmt
+            .query_map(params_ref.as_slice(), |row| {
+                let tags_json: String = row.get(5)?;
+                let caps_json: String = row.get(6)?;
+                Ok(AgentDetail {
+                    package_id: row.get(0)?,
+                    name: row.get(1)?,
+                    version: row.get(2)?,
+                    description: row.get(3)?,
+                    author: row.get(4)?,
+                    tags: serde_json::from_str(&tags_json).unwrap_or_default(),
+                    capabilities: serde_json::from_str(&caps_json).unwrap_or_default(),
+                    price_cents: row.get(7)?,
+                    downloads: row.get(8)?,
+                    rating: row.get(9)?,
+                    review_count: 0, // filled below if needed
+                    created_at: row.get(10)?,
+                    updated_at: row.get(11)?,
+                })
+            })
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| SqliteRegistryError::Database(e.to_string()))?);
+        }
+        Ok(results)
+    }
+
+    /// List all packages with sort and pagination.
+    pub fn list_all(
+        &self,
+        sort: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Vec<AgentDetail>, SqliteRegistryError> {
+        self.search_advanced("", &[], sort, offset, limit)
+    }
+
+    /// Total package count in the registry.
+    pub fn package_count(&self) -> Result<usize, SqliteRegistryError> {
+        let count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM agents", [], |row| row.get(0))
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+        Ok(count as usize)
+    }
+
+    /// Get unique tags across all packages.
+    pub fn all_tags(&self) -> Result<Vec<String>, SqliteRegistryError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT DISTINCT tags FROM agents")
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                let tags_json: String = row.get(0)?;
+                Ok(tags_json)
+            })
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+
+        let mut all_tags = std::collections::BTreeSet::new();
+        for row in rows {
+            let tags_json = row.map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+            if let Ok(tags) = serde_json::from_str::<Vec<String>>(&tags_json) {
+                for tag in tags {
+                    all_tags.insert(tag);
+                }
+            }
+        }
+        Ok(all_tags.into_iter().collect())
+    }
+
+    // ── Install tracking ─────────────────────────────────────────────────
+
+    /// Record a package installation in the installed table.
+    pub fn record_install(
+        &self,
+        name: &str,
+        version: &str,
+        install_path: &str,
+        verified: bool,
+    ) -> Result<(), SqliteRegistryError> {
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO installed (name, version, installed_at, install_path, verified)
+                 VALUES (?1, ?2, datetime('now'), ?3, ?4)",
+                params![name, version, install_path, verified as i32],
+            )
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Remove an installed package record.
+    pub fn record_uninstall(&self, name: &str) -> Result<bool, SqliteRegistryError> {
+        let deleted = self
+            .conn
+            .execute("DELETE FROM installed WHERE name = ?1", params![name])
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+        Ok(deleted > 0)
+    }
+
+    /// List all installed packages.
+    pub fn list_installed(&self) -> Result<Vec<InstalledRecord>, SqliteRegistryError> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT name, version, installed_at, install_path, verified FROM installed ORDER BY name",
+            )
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(InstalledRecord {
+                    name: row.get(0)?,
+                    version: row.get(1)?,
+                    installed_at: row.get(2)?,
+                    install_path: row.get(3)?,
+                    verified: row.get::<_, i32>(4)? != 0,
+                })
+            })
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| SqliteRegistryError::Database(e.to_string()))?);
+        }
+        Ok(results)
+    }
+
+    /// Count of installed packages.
+    pub fn installed_count(&self) -> Result<usize, SqliteRegistryError> {
+        let count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM installed", [], |row| row.get(0))
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+        Ok(count as usize)
+    }
+
+    /// Check for available updates by comparing installed versions with latest in registry.
+    pub fn check_updates(&self) -> Result<Vec<UpdateAvailable>, SqliteRegistryError> {
+        let installed = self.list_installed()?;
+        let mut updates = Vec::new();
+
+        for pkg in &installed {
+            // Find the latest version of this package in the registry
+            let results = self.search(&pkg.name)?;
+            for result in &results {
+                if result.name == pkg.name {
+                    if let Ok(detail) = self.get_agent(&result.package_id) {
+                        if detail.version != pkg.version {
+                            updates.push(UpdateAvailable {
+                                name: pkg.name.clone(),
+                                installed_version: pkg.version.clone(),
+                                available_version: detail.version.clone(),
+                                package_id: detail.package_id.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(updates)
+    }
+
+    // ── Trusted publishers ───────────────────────────────────────────────
+
+    /// Add a trusted publisher public key.
+    pub fn add_trusted_publisher(
+        &self,
+        public_key_hex: &str,
+        name: &str,
+    ) -> Result<(), SqliteRegistryError> {
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO trusted_publishers (public_key, name, trusted_since)
+                 VALUES (?1, ?2, datetime('now'))",
+                params![public_key_hex, name],
+            )
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Check if a public key is from a trusted publisher.
+    pub fn is_trusted_publisher(&self, public_key_hex: &str) -> Result<bool, SqliteRegistryError> {
+        let count: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM trusted_publishers WHERE public_key = ?1",
+                params![public_key_hex],
+                |row| row.get(0),
+            )
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+        Ok(count > 0)
+    }
+
+    /// List all trusted publishers.
+    pub fn list_trusted_publishers(&self) -> Result<Vec<TrustedPublisher>, SqliteRegistryError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT public_key, name, trusted_since FROM trusted_publishers ORDER BY name")
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(TrustedPublisher {
+                    public_key: row.get(0)?,
+                    name: row.get(1)?,
+                    trusted_since: row.get(2)?,
+                })
+            })
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| SqliteRegistryError::Database(e.to_string()))?);
+        }
+        Ok(results)
+    }
+
+    // ── Stats ────────────────────────────────────────────────────────────
+
+    /// Get marketplace statistics.
+    pub fn stats(&self) -> Result<MarketplaceStats, SqliteRegistryError> {
+        let total_packages = self.package_count()?;
+        let total_installed = self.installed_count()?;
+        let total_downloads: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(SUM(downloads), 0) FROM agents",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+        let total_reviews: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM reviews", [], |row| row.get(0))
+            .map_err(|e| SqliteRegistryError::Database(e.to_string()))?;
+
+        Ok(MarketplaceStats {
+            total_packages,
+            total_installed,
+            total_downloads: total_downloads as usize,
+            total_reviews: total_reviews as usize,
+        })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -571,9 +931,10 @@ impl From<MarketplaceError> for SqliteRegistryError {
 mod tests {
     use super::*;
     use crate::package::{create_unsigned_bundle, PackageMetadata};
+    use nexus_crypto::SignatureAlgorithm;
 
-    fn test_key() -> SigningKey {
-        SigningKey::from_bytes(&[7u8; 32])
+    fn test_identity() -> CryptoIdentity {
+        CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[7u8; 32]).unwrap()
     }
 
     fn make_metadata(name: &str, version: &str) -> PackageMetadata {
@@ -606,7 +967,7 @@ mod tests {
 
     fn publish_agent(reg: &SqliteRegistry, name: &str, version: &str) -> String {
         let unsigned = make_unsigned(name, version);
-        reg.publish(unsigned, &test_key()).unwrap()
+        reg.publish(unsigned, &test_identity()).unwrap()
     }
 
     // -----------------------------------------------------------------------
@@ -726,7 +1087,7 @@ mod tests {
 
         // Update to 2.0.0
         let unsigned_v2 = make_unsigned("versioned-agent", "2.0.0");
-        reg.update(&pkg_id, unsigned_v2, &test_key(), "Added new feature")
+        reg.update(&pkg_id, unsigned_v2, &test_identity(), "Added new feature")
             .unwrap();
 
         // Current version should be 2.0.0
@@ -747,7 +1108,7 @@ mod tests {
         let pkg_id = publish_agent(&reg, "dup-version", "1.0.0");
 
         let unsigned_dup = make_unsigned("dup-version", "1.0.0");
-        let result = reg.update(&pkg_id, unsigned_dup, &test_key(), "");
+        let result = reg.update(&pkg_id, unsigned_dup, &test_identity(), "");
         assert!(result.is_err());
         assert!(matches!(
             result,
@@ -852,5 +1213,232 @@ mod tests {
         let reg = SqliteRegistry::open_in_memory().unwrap();
         let result = reg.install("pkg-ghost");
         assert!(matches!(result, Err(SqliteRegistryError::NotFound(_))));
+    }
+
+    // ── Advanced search tests ────────────────────────────────────────
+
+    #[test]
+    fn search_advanced_with_sort_popular() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        let id_a = publish_agent(&reg, "agent-popular", "1.0.0");
+        let _id_b = publish_agent(&reg, "agent-unpopular", "1.0.0");
+
+        // Install popular agent 3 times to boost downloads
+        reg.install(&id_a).unwrap();
+        reg.install(&id_a).unwrap();
+        reg.install(&id_a).unwrap();
+
+        let results = reg.search_advanced("agent", &[], "popular", 0, 10).unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].name, "agent-popular");
+    }
+
+    #[test]
+    fn search_advanced_with_sort_newest() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        publish_agent(&reg, "agent-old", "1.0.0");
+        publish_agent(&reg, "agent-new", "1.0.0");
+
+        let results = reg.search_advanced("agent", &[], "newest", 0, 10).unwrap();
+        assert_eq!(results.len(), 2);
+        // newest first (both created at "now" but agent-new inserted second)
+    }
+
+    #[test]
+    fn search_advanced_with_sort_alphabetical() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        publish_agent(&reg, "zebra-agent", "1.0.0");
+        publish_agent(&reg, "alpha-agent", "1.0.0");
+
+        let results = reg
+            .search_advanced("agent", &[], "alphabetical", 0, 10)
+            .unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].name, "alpha-agent");
+        assert_eq!(results[1].name, "zebra-agent");
+    }
+
+    #[test]
+    fn search_advanced_pagination() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        for i in 0..5 {
+            publish_agent(&reg, &format!("page-agent-{i}"), "1.0.0");
+        }
+
+        let page1 = reg
+            .search_advanced("page-agent", &[], "name", 0, 2)
+            .unwrap();
+        assert_eq!(page1.len(), 2);
+
+        let page2 = reg
+            .search_advanced("page-agent", &[], "name", 2, 2)
+            .unwrap();
+        assert_eq!(page2.len(), 2);
+
+        let page3 = reg
+            .search_advanced("page-agent", &[], "name", 4, 2)
+            .unwrap();
+        assert_eq!(page3.len(), 1);
+    }
+
+    #[test]
+    fn search_advanced_tag_filter() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        publish_agent(&reg, "tagged-agent", "1.0.0");
+        publish_agent(&reg, "other-agent", "1.0.0");
+
+        // Both agents have tags ["test", "ai"] from the test helper
+        let results = reg
+            .search_advanced("", &["test".into()], "name", 0, 10)
+            .unwrap();
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn list_all_returns_everything() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        publish_agent(&reg, "a1", "1.0.0");
+        publish_agent(&reg, "a2", "1.0.0");
+        publish_agent(&reg, "a3", "1.0.0");
+
+        let all = reg.list_all("name", 0, 100).unwrap();
+        assert_eq!(all.len(), 3);
+    }
+
+    #[test]
+    fn package_count_works() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        assert_eq!(reg.package_count().unwrap(), 0);
+        publish_agent(&reg, "counter-agent", "1.0.0");
+        assert_eq!(reg.package_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn all_tags_works() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        publish_agent(&reg, "tag-agent", "1.0.0");
+
+        let tags = reg.all_tags().unwrap();
+        assert!(tags.contains(&"test".to_string()));
+        assert!(tags.contains(&"ai".to_string()));
+    }
+
+    // ── Install tracking tests ───────────────────────────────────────
+
+    #[test]
+    fn record_install_and_list() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        reg.record_install("my-agent", "1.0.0", "/path/to/agent", true)
+            .unwrap();
+
+        let installed = reg.list_installed().unwrap();
+        assert_eq!(installed.len(), 1);
+        assert_eq!(installed[0].name, "my-agent");
+        assert_eq!(installed[0].version, "1.0.0");
+        assert!(installed[0].verified);
+    }
+
+    #[test]
+    fn record_uninstall_removes_entry() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        reg.record_install("rm-agent", "1.0.0", "/path", false)
+            .unwrap();
+        assert_eq!(reg.installed_count().unwrap(), 1);
+
+        assert!(reg.record_uninstall("rm-agent").unwrap());
+        assert_eq!(reg.installed_count().unwrap(), 0);
+    }
+
+    #[test]
+    fn record_uninstall_nonexistent_returns_false() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        assert!(!reg.record_uninstall("ghost").unwrap());
+    }
+
+    #[test]
+    fn installed_count_works() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        assert_eq!(reg.installed_count().unwrap(), 0);
+        reg.record_install("a1", "1.0", "/p", true).unwrap();
+        reg.record_install("a2", "1.0", "/p", true).unwrap();
+        assert_eq!(reg.installed_count().unwrap(), 2);
+    }
+
+    #[test]
+    fn record_install_upserts_on_duplicate() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        reg.record_install("dup", "1.0.0", "/p1", false).unwrap();
+        reg.record_install("dup", "2.0.0", "/p2", true).unwrap();
+
+        let installed = reg.list_installed().unwrap();
+        assert_eq!(installed.len(), 1);
+        assert_eq!(installed[0].version, "2.0.0");
+        assert!(installed[0].verified);
+    }
+
+    // ── Trusted publisher tests ──────────────────────────────────────
+
+    #[test]
+    fn trusted_publisher_lifecycle() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+
+        assert!(!reg.is_trusted_publisher("abc123").unwrap());
+        reg.add_trusted_publisher("abc123", "Alice Dev").unwrap();
+        assert!(reg.is_trusted_publisher("abc123").unwrap());
+
+        let publishers = reg.list_trusted_publishers().unwrap();
+        assert_eq!(publishers.len(), 1);
+        assert_eq!(publishers[0].name, "Alice Dev");
+    }
+
+    // ── Stats tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn stats_work() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        let pkg_id = publish_agent(&reg, "stats-agent", "1.0.0");
+        reg.install(&pkg_id).unwrap();
+        reg.rate(&pkg_id, "user-1", 5, "great").unwrap();
+        reg.record_install("stats-agent", "1.0.0", "/p", true)
+            .unwrap();
+
+        let stats = reg.stats().unwrap();
+        assert_eq!(stats.total_packages, 1);
+        assert_eq!(stats.total_installed, 1);
+        assert_eq!(stats.total_downloads, 1);
+        assert_eq!(stats.total_reviews, 1);
+    }
+
+    // ── Check updates tests ──────────────────────────────────────────
+
+    #[test]
+    fn check_updates_finds_newer_version() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        let pkg_id = publish_agent(&reg, "updatable", "1.0.0");
+
+        // Record installed v1.0.0
+        reg.record_install("updatable", "1.0.0", "/p", true)
+            .unwrap();
+
+        // Update to v2.0.0
+        let unsigned_v2 = make_unsigned("updatable", "2.0.0");
+        reg.update(&pkg_id, unsigned_v2, &test_identity(), "New features")
+            .unwrap();
+
+        let updates = reg.check_updates().unwrap();
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].name, "updatable");
+        assert_eq!(updates[0].installed_version, "1.0.0");
+        assert_eq!(updates[0].available_version, "2.0.0");
+    }
+
+    #[test]
+    fn check_updates_empty_when_current() {
+        let reg = SqliteRegistry::open_in_memory().unwrap();
+        publish_agent(&reg, "current", "1.0.0");
+        reg.record_install("current", "1.0.0", "/p", true).unwrap();
+
+        let updates = reg.check_updates().unwrap();
+        assert!(updates.is_empty());
     }
 }

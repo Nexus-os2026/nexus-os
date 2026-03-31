@@ -199,6 +199,7 @@ impl BridgeDaemon {
         for message in incoming {
             let response = self.handle_incoming(runtime, &message)?;
             if let Some(platform) = self.platforms.get_mut(platform_name) {
+                // Best-effort: send reply back to platform, continue processing if send fails
                 let _ = platform.send_message(message.chat_id.as_str(), response.as_str());
             }
             outputs.push(response);

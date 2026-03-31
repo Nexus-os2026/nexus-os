@@ -127,6 +127,7 @@ impl ScheduledExecutor {
         // 7. AUDIT
         {
             let mut audit = self.audit.lock().unwrap_or_else(|p| p.into_inner());
+            // Best-effort: audit scheduled execution event; execution result is unaffected
             let _ = audit.append_event(
                 agent_id,
                 EventType::StateChange,

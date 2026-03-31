@@ -43,6 +43,7 @@ impl GroqProvider {
     pub fn from_env() -> Self {
         let endpoint = env::var("GROQ_URL")
             .unwrap_or_else(|_| "https://api.groq.com/openai/v1/chat/completions".to_string());
+        // Optional: API key may not be configured in environment
         let mut provider = Self::new(env::var("GROQ_API_KEY").ok());
         provider.endpoint = endpoint;
         provider

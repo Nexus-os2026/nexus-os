@@ -157,6 +157,7 @@ impl RoleManager {
             election_score: winner.score,
         });
 
+        // Best-effort: audit election result; governance action succeeds regardless
         let _ = log.append_event(
             GovernanceEventType::ElectionHeld,
             &format!(

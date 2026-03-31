@@ -17,7 +17,17 @@ import {
   a2aGetTaskStatus,
   a2aCancelTask,
   a2aKnownAgents,
+  a2aCrateGetAgentCard,
+  a2aCrateListSkills,
+  a2aCrateGetStatus,
+  mcp2ServerStatus,
+  mcp2ServerListTools,
+  mcp2ClientAdd,
+  mcp2ClientRemove,
+  mcp2ClientDiscover,
+  mcp2ClientCall,
 } from "../api/backend";
+import type { Mcp2ServerStatus, Mcp2Tool } from "../api/backend";
 import type { AgentCardSummary, McpTool, ProtocolRequest, ProtocolsStatus } from "../types";
 import "./protocols.css";
 
@@ -93,6 +103,30 @@ export default function Protocols(): JSX.Element {
   const [a2aStatusResult, setA2aStatusResult] = useState<string | null>(null);
   const [a2aBusy, setA2aBusy] = useState<string | null>(null);
   const [a2aError, setA2aError] = useState<string | null>(null);
+
+  // A2A Crate state
+  const [a2aCrateCard, setA2aCrateCard] = useState<any | null>(null);
+  const [a2aCrateSkills, setA2aCrateSkills] = useState<any[]>([]);
+  const [a2aCrateStatus, setA2aCrateStatus] = useState<any | null>(null);
+
+  // MCP2 Standalone state
+  const [mcp2Status, setMcp2Status] = useState<Mcp2ServerStatus | null>(null);
+  const [mcp2Tools, setMcp2Tools] = useState<Mcp2Tool[]>([]);
+  const [mcp2Error, setMcp2Error] = useState<string | null>(null);
+  const [mcp2Busy, setMcp2Busy] = useState<string | null>(null);
+  // MCP2 client add form
+  const [mcp2AddId, setMcp2AddId] = useState("");
+  const [mcp2AddName, setMcp2AddName] = useState("");
+  const [mcp2AddCommand, setMcp2AddCommand] = useState("");
+  const [mcp2AddArgs, setMcp2AddArgs] = useState("");
+  // MCP2 call tool form
+  const [mcp2CallServerId, setMcp2CallServerId] = useState("");
+  const [mcp2CallToolName, setMcp2CallToolName] = useState("");
+  const [mcp2CallToolArgs, setMcp2CallToolArgs] = useState("{}");
+  const [mcp2CallResult, setMcp2CallResult] = useState<string | null>(null);
+  // MCP2 discover
+  const [mcp2DiscoverServerId, setMcp2DiscoverServerId] = useState("");
+  const [mcp2DiscoverResult, setMcp2DiscoverResult] = useState<Mcp2Tool[] | null>(null);
 
   const refreshMcpHost = useCallback(async () => {
     if (!hasDesktopRuntime()) return;
@@ -244,6 +278,80 @@ export default function Protocols(): JSX.Element {
     setA2aBusy(null);
   };
 
+  // ── MCP2 Standalone handlers ──
+
+  const refreshMcp2 = useCallback(async () => {
+    if (!hasDesktopRuntime()) return;
+    try {
+      const [st, tl] = await Promise.all([
+        mcp2ServerStatus(),
+        mcp2ServerListTools(),
+      ]);
+      setMcp2Status(st);
+      setMcp2Tools(tl);
+    } catch (err) {
+      setMcp2Error(`MCP2 refresh failed: ${err}`);
+    }
+  }, []);
+
+  const handleMcp2AddClient = async () => {
+    if (!mcp2AddId.trim() || !mcp2AddCommand.trim()) return;
+    setMcp2Error(null);
+    setMcp2Busy("Registering MCP2 client...");
+    try {
+      const argsArr = mcp2AddArgs.trim() ? mcp2AddArgs.split(/\s+/) : [];
+      await mcp2ClientAdd(mcp2AddId.trim(), mcp2AddName.trim() || mcp2AddId.trim(), mcp2AddCommand.trim(), argsArr);
+      setMcp2AddId("");
+      setMcp2AddName("");
+      setMcp2AddCommand("");
+      setMcp2AddArgs("");
+      await refreshMcp2();
+    } catch (err) {
+      setMcp2Error(`Add client failed: ${err}`);
+    }
+    setMcp2Busy(null);
+  };
+
+  const handleMcp2RemoveClient = async (serverId: string) => {
+    setMcp2Error(null);
+    setMcp2Busy(`Removing ${serverId}...`);
+    try {
+      await mcp2ClientRemove(serverId);
+      await refreshMcp2();
+    } catch (err) {
+      setMcp2Error(`Remove failed: ${err}`);
+    }
+    setMcp2Busy(null);
+  };
+
+  const handleMcp2Discover = async () => {
+    if (!mcp2DiscoverServerId.trim()) return;
+    setMcp2Error(null);
+    setMcp2DiscoverResult(null);
+    setMcp2Busy("Discovering tools...");
+    try {
+      const tools = await mcp2ClientDiscover(mcp2DiscoverServerId.trim());
+      setMcp2DiscoverResult(tools);
+    } catch (err) {
+      setMcp2Error(`Discover failed: ${err}`);
+    }
+    setMcp2Busy(null);
+  };
+
+  const handleMcp2CallTool = async () => {
+    if (!mcp2CallServerId.trim() || !mcp2CallToolName.trim()) return;
+    setMcp2Error(null);
+    setMcp2CallResult(null);
+    setMcp2Busy(`Calling ${mcp2CallToolName}...`);
+    try {
+      const result = await mcp2ClientCall(mcp2CallServerId.trim(), mcp2CallToolName.trim(), mcp2CallToolArgs);
+      setMcp2CallResult(JSON.stringify(result, null, 2));
+    } catch (err) {
+      setMcp2Error(`Tool call failed: ${err}`);
+    }
+    setMcp2Busy(null);
+  };
+
   const loadData = useCallback(async () => {
     if (!hasDesktopRuntime()) {
       setLoading(false);
@@ -266,7 +374,7 @@ export default function Protocols(): JSX.Element {
     setLoading(false);
   }, []);
 
-  useEffect(() => { void loadData(); void refreshMcpHost(); void refreshA2aKnown(); }, [loadData, refreshMcpHost, refreshA2aKnown]);
+  useEffect(() => { void loadData(); void refreshMcpHost(); void refreshA2aKnown(); void refreshMcp2(); }, [loadData, refreshMcpHost, refreshA2aKnown, refreshMcp2]);
 
   const totalFuelConsumed = requests.reduce((sum, r) => sum + r.fuel_consumed, 0);
   const selectedCardData = cards.find((c) => c.agent_name === selectedCard);
@@ -587,6 +695,47 @@ export default function Protocols(): JSX.Element {
       </div>
       {a2aStatusResult && <div className="proto-json-preview">{a2aStatusResult}</div>}
 
+      {/* ====== A2A Crate (Agent Card, Skills, Status) ====== */}
+      <h3 className="proto-section-title">A2A Protocol (nexus-a2a)</h3>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        <button className="proto-mcp-btn" onClick={async () => {
+          try {
+            const card = await a2aCrateGetAgentCard();
+            setA2aCrateCard(card);
+          } catch (e: any) { setA2aError(e?.toString() ?? "Failed to get agent card"); }
+        }}>Get Agent Card</button>
+        <button className="proto-mcp-btn" onClick={async () => {
+          try {
+            const skills = await a2aCrateListSkills();
+            setA2aCrateSkills(Array.isArray(skills) ? skills : []);
+          } catch (e: any) { setA2aError(e?.toString() ?? "Failed to list skills"); }
+        }}>List Skills</button>
+        <button className="proto-mcp-btn" onClick={async () => {
+          try {
+            const st = await a2aCrateGetStatus();
+            setA2aCrateStatus(st);
+          } catch (e: any) { setA2aError(e?.toString() ?? "Failed to get status"); }
+        }}>Get Status</button>
+      </div>
+      {a2aCrateCard && (
+        <div style={{ marginBottom: 12 }}>
+          <h4 style={{ color: "rgba(165, 243, 252, 0.7)", margin: "0 0 6px" }}>Instance Agent Card</h4>
+          <div className="proto-json-preview">{JSON.stringify(a2aCrateCard, null, 2)}</div>
+        </div>
+      )}
+      {a2aCrateSkills.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <h4 style={{ color: "rgba(165, 243, 252, 0.7)", margin: "0 0 6px" }}>Skills ({a2aCrateSkills.length})</h4>
+          <div className="proto-json-preview">{JSON.stringify(a2aCrateSkills, null, 2)}</div>
+        </div>
+      )}
+      {a2aCrateStatus && (
+        <div style={{ marginBottom: 12 }}>
+          <h4 style={{ color: "rgba(165, 243, 252, 0.7)", margin: "0 0 6px" }}>A2A Crate Status</h4>
+          <div className="proto-json-preview">{JSON.stringify(a2aCrateStatus, null, 2)}</div>
+        </div>
+      )}
+
       {/* ====== MCP Host Servers ====== */}
       <h3 className="proto-section-title">MCP Servers (Host)</h3>
 
@@ -750,6 +899,76 @@ export default function Protocols(): JSX.Element {
       {callToolResult !== null && (
         <div className="proto-json-preview">{callToolResult}</div>
       )}
+
+      {/* ── MCP2 Standalone Protocol ── */}
+      <h3 className="proto-section-title">MCP2 Standalone Protocol</h3>
+      {mcp2Error && <div className="proto-error">{mcp2Error}</div>}
+      {mcp2Busy && <div className="proto-status-note">{mcp2Busy}</div>}
+
+      {mcp2Status && (
+        <div className="proto-stats-row">
+          <span>Tools: {mcp2Status.tools_count}</span>
+          <span>Resources: {mcp2Status.resources_count}</span>
+          <span>Prompts: {mcp2Status.prompts_count}</span>
+        </div>
+      )}
+
+      <div className="proto-mcp-section">
+        <h4>Server Tools</h4>
+        {mcp2Tools.length === 0 ? (
+          <div className="proto-empty">No MCP2 tools registered.</div>
+        ) : (
+          <table className="proto-table">
+            <thead><tr><th>Name</th><th>Description</th></tr></thead>
+            <tbody>
+              {mcp2Tools.map((t) => (
+                <tr key={t.name}>
+                  <td style={{ fontFamily: "monospace" }}>{t.name}</td>
+                  <td>{t.description ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="proto-mcp-section">
+        <h4>Register MCP2 Client Server</h4>
+        <div className="proto-form-row">
+          <input className="proto-input" placeholder="Server ID" value={mcp2AddId} onChange={(e) => setMcp2AddId(e.target.value)} />
+          <input className="proto-input" placeholder="Display name" value={mcp2AddName} onChange={(e) => setMcp2AddName(e.target.value)} />
+          <input className="proto-input" placeholder="Command (e.g. npx)" value={mcp2AddCommand} onChange={(e) => setMcp2AddCommand(e.target.value)} />
+          <input className="proto-input" placeholder="Args (space-separated)" value={mcp2AddArgs} onChange={(e) => setMcp2AddArgs(e.target.value)} />
+          <button className="proto-btn" onClick={handleMcp2AddClient} disabled={!!mcp2Busy}>Register</button>
+        </div>
+      </div>
+
+      <div className="proto-mcp-section">
+        <h4>Discover Remote Tools</h4>
+        <div className="proto-form-row">
+          <input className="proto-input" placeholder="Server ID" value={mcp2DiscoverServerId} onChange={(e) => setMcp2DiscoverServerId(e.target.value)} />
+          <button className="proto-btn" onClick={handleMcp2Discover} disabled={!!mcp2Busy}>Discover</button>
+          {mcp2DiscoverResult && (
+            <button className="proto-btn-secondary" onClick={() => handleMcp2RemoveClient(mcp2DiscoverServerId.trim())} disabled={!!mcp2Busy}>Remove</button>
+          )}
+        </div>
+        {mcp2DiscoverResult && (
+          <div className="proto-json-preview">{JSON.stringify(mcp2DiscoverResult, null, 2)}</div>
+        )}
+      </div>
+
+      <div className="proto-mcp-section">
+        <h4>Call MCP2 Tool</h4>
+        <div className="proto-form-row">
+          <input className="proto-input" placeholder="Server ID" value={mcp2CallServerId} onChange={(e) => setMcp2CallServerId(e.target.value)} />
+          <input className="proto-input" placeholder="Tool name" value={mcp2CallToolName} onChange={(e) => setMcp2CallToolName(e.target.value)} />
+        </div>
+        <textarea className="proto-textarea" rows={3} placeholder='{"key": "value"}' value={mcp2CallToolArgs} onChange={(e) => setMcp2CallToolArgs(e.target.value)} />
+        <button className="proto-btn" onClick={handleMcp2CallTool} disabled={!!mcp2Busy}>Execute</button>
+        {mcp2CallResult && (
+          <div className="proto-json-preview">{mcp2CallResult}</div>
+        )}
+      </div>
 
       {/* Recent Protocol Requests */}
       <h3 className="proto-section-title">Recent Protocol Requests</h3>

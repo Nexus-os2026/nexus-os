@@ -82,6 +82,7 @@ impl CodeWriter {
             "Task: {task}\nContext files: {}\nReturn concise strategy.",
             context.files.len()
         );
+        // Best-effort: query LLM for writing strategy (result not used directly)
         let _ = self
             .gateway
             .query(&mut self.runtime, prompt.as_str(), 64, "mock-1")?;

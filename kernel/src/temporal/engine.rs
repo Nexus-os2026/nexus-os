@@ -305,9 +305,11 @@ impl TemporalEngine {
 #[derive(Debug)]
 struct Approach {
     name: String,
+    // Populated during LLM JSON parsing; kept for debug logging and future scoring.
     #[allow(dead_code)]
     strategy: String,
     steps: Vec<String>,
+    // Populated during LLM JSON parsing; kept for debug logging and future scoring.
     #[allow(dead_code)]
     risk: f64,
 }

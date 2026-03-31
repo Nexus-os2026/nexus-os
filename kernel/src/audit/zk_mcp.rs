@@ -247,6 +247,7 @@ impl ZkMcpHandler {
             GovernanceProofType::AutonomyLevelCompliance => {
                 let observed: u8 = parameters
                     .get("observed_level")
+                    // Optional: invalid observed_level parse falls through to default 0
                     .and_then(|v| v.parse().ok())
                     .unwrap_or(0);
                 ProofGenerator::prove_autonomy_compliance(
@@ -270,6 +271,7 @@ impl ZkMcpHandler {
             GovernanceProofType::ApprovalChainValid => {
                 let approval_count: usize = parameters
                     .get("approval_count")
+                    // Optional: invalid approval_count parse falls through to default 0
                     .and_then(|v| v.parse().ok())
                     .unwrap_or(0);
                 let approvals: Vec<(String, String, bool)> = (0..approval_count)
@@ -285,6 +287,7 @@ impl ZkMcpHandler {
             GovernanceProofType::DataRetentionCompliance => {
                 let retention_days: u64 = parameters
                     .get("retention_days")
+                    // Optional: invalid retention_days parse falls through to default 0
                     .and_then(|v| v.parse().ok())
                     .unwrap_or(0);
                 ProofGenerator::prove_data_retention(

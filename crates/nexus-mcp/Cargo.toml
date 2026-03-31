@@ -3,6 +3,7 @@ name = "nexus-mcp"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Model Context Protocol server and client for Nexus OS"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -1226,9 +1226,32 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn crate_compiles_and_exports_are_reachable() {
-        // Smoke test: verifies the crate compiles and public API is accessible
-        assert!(true);
+    fn latency_bucket_records_and_reports() {
+        let mut bucket = LatencyBucket::new();
+        assert_eq!(bucket.count(), 0);
+        bucket.record(std::time::Duration::from_micros(100));
+        bucket.record(std::time::Duration::from_micros(200));
+        assert_eq!(bucket.count(), 2);
+        assert!(bucket.mean_us() > 0.0);
+        assert!(bucket.p50_us() > 0.0);
+    }
+
+    #[test]
+    fn generate_manifest_produces_valid_agent() {
+        let manifest = generate_manifest(0);
+        assert!(!manifest.name.is_empty());
+        assert!(!manifest.capabilities.is_empty());
+        assert!(manifest.fuel_budget > 0);
+    }
+
+    #[test]
+    fn spawn_agents_registers_correct_count() {
+        let mut supervisor = Supervisor::new();
+        let ids = spawn_agents(&mut supervisor, 5);
+        assert_eq!(ids.len(), 5);
+        assert_eq!(supervisor.health_check().len(), 5);
     }
 }

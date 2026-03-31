@@ -3,6 +3,7 @@ name = "nexus-perception"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Multimodal perception engine — vision, OCR, chart analysis for agents"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

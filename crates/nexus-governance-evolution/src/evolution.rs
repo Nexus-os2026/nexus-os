@@ -210,22 +210,21 @@ mod tests {
 
     #[test]
     fn test_child_cannot_exceed_parent_budget() {
+        use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
         use nexus_governance_oracle::CapabilityBudget;
-        let mut seed = [0u8; 32];
-        rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut seed);
-        let sk = ed25519_dalek::SigningKey::from_bytes(&seed);
-        let vk = sk.verifying_key();
+        let id = CryptoIdentity::generate(SignatureAlgorithm::Ed25519).unwrap();
+        let vk = id.verifying_key().to_vec();
 
         let mut allocs = std::collections::HashMap::new();
         allocs.insert("llm.query".into(), 1000u64);
-        let parent = CapabilityBudget::new("parent".into(), allocs, &sk);
+        let parent = CapabilityBudget::new("parent".into(), allocs, &id);
 
-        let child = parent.derive_child("child".into(), 0.5, &sk).unwrap();
+        let child = parent.derive_child("child".into(), 0.5, &id).unwrap();
         assert!(child.allocations["llm.query"] <= parent.allocations["llm.query"]);
         assert!(child.verify(&vk).is_ok());
 
         // Full fraction
-        let child_full = parent.derive_child("child-full".into(), 1.0, &sk).unwrap();
+        let child_full = parent.derive_child("child-full".into(), 1.0, &id).unwrap();
         assert!(child_full.allocations["llm.query"] <= parent.allocations["llm.query"]);
     }
 }

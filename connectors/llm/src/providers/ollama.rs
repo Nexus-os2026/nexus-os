@@ -321,7 +321,7 @@ impl OllamaProvider {
             }
         }
 
-        // Wait for child process to avoid zombies
+        // Best-effort: wait for curl child process to avoid zombie processes
         let _ = child.wait();
 
         Ok(full_response)
@@ -376,7 +376,7 @@ impl OllamaProvider {
             }
         }
 
-        // Wait for child process to avoid zombies
+        // Best-effort: wait for curl child process to avoid zombie processes
         let _ = child.wait();
 
         Ok(last_status)

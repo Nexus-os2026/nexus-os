@@ -131,7 +131,7 @@ export default function ApiClient() {
   const persistCollections = useCallback((cols: Collection[]) => {
     setCollections(cols);
     if (hasDesktopRuntime()) {
-      apiClientSaveCollections(JSON.stringify(cols)).catch(() => {});
+      apiClientSaveCollections(JSON.stringify(cols)).catch((e) => { if (import.meta.env.DEV) console.warn("[ApiClient]", e); });
     }
   }, []);
 
@@ -151,7 +151,7 @@ export default function ApiClient() {
         requests: col.requests.map(r => r.id === activeReqId ? { ...r, ...updates } : r),
       }));
       if (hasDesktopRuntime()) {
-        apiClientSaveCollections(JSON.stringify(next)).catch(() => {});
+        apiClientSaveCollections(JSON.stringify(next)).catch((e) => { if (import.meta.env.DEV) console.warn("[ApiClient]", e); });
       }
       return next;
     });

@@ -139,6 +139,7 @@ impl McpClient {
 
         // Step 2: Send initialized notification (no response expected for notifications,
         // but we send as a request for simplicity with curl)
+        // Best-effort: MCP spec notification, no response expected
         let _ = self.send_jsonrpc("notifications/initialized", None);
 
         // Step 3: Discover tools
@@ -233,6 +234,7 @@ impl McpClient {
 
             content_array
                 .into_iter()
+                // Optional: skip content items that don't match expected schema
                 .filter_map(|c| serde_json::from_value(c).ok())
                 .collect()
         } else {
@@ -555,6 +557,7 @@ impl StdioMcpClient {
             }
         });
         let _init_response = self.send_jsonrpc("initialize", Some(init_params))?;
+        // Best-effort: MCP spec notification, no response expected
         let _ = self.send_jsonrpc("notifications/initialized", None);
 
         let tools_response = self.send_jsonrpc("tools/list", None)?;
@@ -642,6 +645,7 @@ impl StdioMcpClient {
                 .unwrap_or_default();
             content_array
                 .into_iter()
+                // Optional: skip content items that don't match expected schema
                 .filter_map(|c| serde_json::from_value(c).ok())
                 .collect()
         } else {
@@ -710,7 +714,9 @@ impl StdioMcpClient {
 
     /// Shut down the child process.
     pub fn shutdown(&mut self) -> Result<(), String> {
+        // Best-effort: send kill signal to MCP server child process
         let _ = self.child.kill();
+        // Best-effort: reap child process to avoid zombie
         let _ = self.child.wait();
         Ok(())
     }
@@ -718,6 +724,7 @@ impl StdioMcpClient {
 
 impl Drop for StdioMcpClient {
     fn drop(&mut self) {
+        // Best-effort: ensure child process is cleaned up on drop
         let _ = self.shutdown();
     }
 }
@@ -802,6 +809,7 @@ impl GovernedMcpHost {
     /// Record an audit event for a tool call.
     fn audit_call(&self, tool_name: &str, server_id: &str, success: bool, detail: &str) {
         if let Ok(mut audit) = self.audit.lock() {
+            // Best-effort: record MCP tool call in audit trail for governance
             let _ = audit.append_event(
                 uuid::Uuid::nil(),
                 EventType::ToolCall,

@@ -226,6 +226,7 @@ impl SimulationRuntime {
         let (report_tx, report_rx) = mpsc::channel();
         thread::spawn(move || {
             let result = generate_prediction_report(&report_world, report_llm.as_ref());
+            // Best-effort: receiver may have timed out; report generation result is lost if channel is closed
             let _ = report_tx.send(result);
         });
         let report = report_rx
@@ -383,6 +384,7 @@ impl SimulationRuntime {
             thread::spawn(move || {
                 let nearby_refs: Vec<&Persona> = nearby.iter().collect();
                 let result = persona_decide(&persona, &environment, &nearby_refs, llm.as_ref());
+                // Best-effort: receiver may have timed out; fallback action is used if channel is closed
                 let _ = tx.send(result);
             });
 
@@ -402,6 +404,7 @@ impl SimulationRuntime {
         let (tx, rx) = mpsc::channel();
         thread::spawn(move || {
             let result = persona_decide_batch(&batch, &environment, &world_personas, llm.as_ref());
+            // Best-effort: receiver may have timed out; fallback actions are used if channel is closed
             let _ = tx.send(result);
         });
 
@@ -940,6 +943,7 @@ pub fn create_world_nonblocking(
                 llm.as_ref(),
             )
         })();
+        // Best-effort: receiver may have dropped; background world creation result is discarded if unused
         let _ = tx.send(result);
     });
     rx

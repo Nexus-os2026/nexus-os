@@ -1,5 +1,6 @@
 [package]
 name = "nexus-connectors-llm"
+description = "LLM provider connectors (OpenAI, Anthropic, local models) for Nexus OS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

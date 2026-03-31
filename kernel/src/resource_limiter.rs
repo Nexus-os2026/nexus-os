@@ -157,6 +157,7 @@ impl ResourceLimiter {
     /// Non-Linux fallback — kill direct process only.
     #[cfg(not(target_os = "linux"))]
     pub fn kill_process_tree(pid: u32) -> Result<(), ResourceLimitError> {
+        // suppress unused pid
         let _ = pid;
         Ok(())
     }
@@ -214,6 +215,9 @@ mod tests {
         assert!(e.to_string().contains("ESRCH"));
     }
 
+    /// Verifies applying resource limits to a Command doesn't panic.
+    /// Panic-freedom is the assertion: the limiter must handle default config
+    /// on any platform without unwinding.
     #[test]
     fn apply_to_command_no_spawn_does_not_panic() {
         let limiter = ResourceLimiter::default();

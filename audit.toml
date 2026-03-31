@@ -1,5 +1,14 @@
 # cargo-audit configuration
 # Mirrors the ignore list in deny.toml for cargo-deny parity.
+# Each advisory is accepted risk — upgrade when upstream releases a fix
+# that doesn't break our dependency tree.
 
 [advisories]
-ignore = []
+ignore = [
+    "RUSTSEC-2026-0044",  # aws-lc-sys: X.509 name constraints bypass via wildcard/unicode CN — no direct X.509 validation in Nexus
+    "RUSTSEC-2026-0048",  # aws-lc-sys: CRL distribution point scope check logic error — TLS only, no CRL validation in Nexus
+    "RUSTSEC-2023-0071",  # rsa: Marvin Attack timing sidechannel on RSA decryption — Nexus uses Ed25519, not RSA decryption
+    "RUSTSEC-2026-0049",  # rustls-webpki: CRL matching logic error — transitive dep via reqwest, no CRL usage in Nexus
+    "RUSTSEC-2026-0067",  # tar: unpack_in symlink chmod — tar used only for trusted package extraction in kernel
+    "RUSTSEC-2026-0068",  # tar: PAX size header ignored — same scope as above, trusted inputs only
+]

@@ -1,4 +1,4 @@
-use ed25519_dalek::{Verifier, VerifyingKey};
+use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -209,15 +209,14 @@ pub fn verify_attestation_with_max_age(
         return Ok(false);
     }
 
-    let verifying_key = VerifyingKey::from_bytes(&pub_bytes)
-        .map_err(|e| KeyError::BackendFailure(format!("invalid attestation public key: {e}")))?;
-    let signature = ed25519_dalek::Signature::from_bytes(&sig_bytes);
-
     let payload = attestation_payload(report);
-    match verifying_key.verify(&payload, &signature) {
-        Ok(()) => Ok(true),
-        Err(_) => Ok(false),
-    }
+    CryptoIdentity::verify(
+        SignatureAlgorithm::Ed25519,
+        &pub_bytes,
+        &payload,
+        &sig_bytes,
+    )
+    .map_err(|e| KeyError::BackendFailure(format!("attestation verification: {e}")))
 }
 
 pub(crate) fn platform_info_string() -> String {

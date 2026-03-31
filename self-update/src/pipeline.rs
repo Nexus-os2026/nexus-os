@@ -200,7 +200,7 @@ mod tests {
         RoleDefinition, RootMetadata, SnapshotMetadata, TargetDescription, TargetsMetadata,
         TimestampMetadata, TufClient, TufRepository, TufRole,
     };
-    use ed25519_dalek::SigningKey;
+    use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
     use nexus_marketplace::package::{create_unsigned_bundle, sign_package, PackageMetadata};
     use std::collections::BTreeMap;
     use std::sync::Arc;
@@ -295,8 +295,11 @@ fuel_budget = 5000
             "nexus-release",
         )
         .expect("unsigned bundle should be created");
-        sign_package(unsigned, &SigningKey::from_bytes(&[11_u8; 32]))
-            .expect("bundle should be signed")
+        sign_package(
+            unsigned,
+            &CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[11_u8; 32]).unwrap(),
+        )
+        .expect("bundle should be signed")
     }
 
     #[test]

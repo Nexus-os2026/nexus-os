@@ -490,12 +490,16 @@ fn signature_rejects_wrong_key() {
     let other_seed = sha2::Sha256::digest(b"other-untrusted-key");
     let mut other_bytes = [0u8; 32];
     other_bytes.copy_from_slice(&other_seed);
-    let other_sk = ed25519_dalek::SigningKey::from_bytes(&other_bytes);
+    let other_sk = nexus_crypto::CryptoIdentity::from_bytes(
+        nexus_crypto::SignatureAlgorithm::Ed25519,
+        &other_bytes,
+    )
+    .unwrap();
     let other_vk = other_sk.verifying_key();
 
     let mut sandbox = make_sandbox();
     sandbox.set_signature_policy(SignaturePolicy::RequireSigned);
-    sandbox.add_trusted_key(other_vk);
+    sandbox.add_trusted_key(other_vk.to_vec());
 
     let mut ctx = make_ctx(vec![], 1000);
     let result = sandbox.execute(&signed, &mut ctx);

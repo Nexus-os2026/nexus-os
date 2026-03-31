@@ -205,6 +205,7 @@ impl BurnAnomalyDetector {
     pub fn observe(&mut self, cost_units: u64) -> Option<AnomalyEvent> {
         self.history.push_back(cost_units);
         while self.history.len() > self.window_calls {
+            // Best-effort: discard oldest observation when sliding window is full
             let _ = self.history.pop_front();
         }
 

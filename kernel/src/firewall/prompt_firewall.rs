@@ -57,8 +57,9 @@ pub struct FirewallAuditEntry {
 /// Inspects prompts BEFORE they reach the LLM provider.
 #[derive(Debug, Clone)]
 pub struct InputFilter {
-    /// Retained for future policy-aware scanning; currently unused because
-    /// `check` delegates to `RedactionEngine::scan` (static, policy-default).
+    /// Retained for future policy-aware scanning; `check` currently delegates
+    /// to `RedactionEngine::scan` (static, policy-default). Kept so the engine
+    /// instance is available when per-policy scanning is added.
     #[allow(dead_code)]
     redaction_engine: RedactionEngine,
 }
@@ -93,6 +94,7 @@ impl InputFilter {
                 let action = FirewallAction::Block {
                     reason: format!("prompt injection detected: matched pattern '{pattern}'"),
                 };
+                // Best-effort: firewall decision already made; audit failure must not alter the block verdict
                 let _ = Self::audit(agent_id, "input", &action, audit);
                 return action;
             }
@@ -103,6 +105,7 @@ impl InputFilter {
             let action = FirewallAction::Block {
                 reason: "unicode homoglyph attack detected: mixed scripts in token".to_string(),
             };
+            // Best-effort: firewall decision already made; audit failure must not alter the block verdict
             let _ = Self::audit(agent_id, "input", &action, audit);
             return action;
         }
@@ -117,6 +120,7 @@ impl InputFilter {
                     CONTEXT_OVERFLOW_THRESHOLD_BYTES,
                 ),
             };
+            // Best-effort: firewall decision already made; audit failure must not alter the block verdict
             let _ = Self::audit(agent_id, "input", &action, audit);
             return action;
         }
@@ -132,11 +136,13 @@ impl InputFilter {
                 redacted_text: redacted,
                 findings_count: findings.len(),
             };
+            // Best-effort: firewall decision already made; audit failure must not alter the redaction verdict
             let _ = Self::audit(agent_id, "input", &action, audit);
             return action;
         }
 
         let action = FirewallAction::Allow;
+        // Best-effort: allow verdict is final; audit failure is non-fatal
         let _ = Self::audit(agent_id, "input", &action, audit);
         action
     }
@@ -204,6 +210,7 @@ impl OutputFilter {
                                         "output schema validation failed: missing key '{key}'"
                                     ),
                                 };
+                                // Best-effort: firewall decision already made; audit failure must not alter the block verdict
                                 let _ = Self::audit(agent_id, &action, audit);
                                 return action;
                             }
@@ -213,6 +220,7 @@ impl OutputFilter {
                             reason: "output schema validation failed: expected JSON object"
                                 .to_string(),
                         };
+                        // Best-effort: firewall decision already made; audit failure must not alter the block verdict
                         let _ = Self::audit(agent_id, &action, audit);
                         return action;
                     }
@@ -221,6 +229,7 @@ impl OutputFilter {
                     let action = FirewallAction::Block {
                         reason: format!("output schema validation failed: invalid JSON: {e}"),
                     };
+                    // Best-effort: firewall decision already made; audit failure must not alter the block verdict
                     let _ = Self::audit(agent_id, &action, audit);
                     return action;
                 }
@@ -234,6 +243,7 @@ impl OutputFilter {
                 let action = FirewallAction::Block {
                     reason: format!("data exfiltration detected: response contains '{pattern}'"),
                 };
+                // Best-effort: firewall decision already made; audit failure must not alter the block verdict
                 let _ = Self::audit(agent_id, &action, audit);
                 return action;
             }
@@ -244,11 +254,13 @@ impl OutputFilter {
             let action = FirewallAction::Block {
                 reason: "data exfiltration detected: internal IP address in response".to_string(),
             };
+            // Best-effort: firewall decision already made; audit failure must not alter the block verdict
             let _ = Self::audit(agent_id, &action, audit);
             return action;
         }
 
         let action = FirewallAction::Allow;
+        // Best-effort: allow verdict is final; audit failure is non-fatal
         let _ = Self::audit(agent_id, &action, audit);
         action
     }

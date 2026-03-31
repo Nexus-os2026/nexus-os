@@ -1,5 +1,6 @@
 [package]
 name = "nexus-airgap"
+description = "Air-gapped deployment packaging for offline Nexus OS installations"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

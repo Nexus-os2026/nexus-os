@@ -218,22 +218,27 @@ fn provider_allowed(provider: &str) -> bool {
 fn instantiate_algorithm(algorithm: &str) -> Result<(), ActuatorError> {
     match algorithm {
         "evolutionary" => {
+            // Best-effort: instantiation validates the algorithm exists; value is intentionally unused
             let _ = EvolutionEngine::default();
             Ok(())
         }
         "swarm" => {
+            // Best-effort: instantiation validates the algorithm exists; value is intentionally unused
             let _ = SwarmCoordinator::default();
             Ok(())
         }
         "world_model" => {
+            // Best-effort: instantiation validates the algorithm exists; value is intentionally unused
             let _ = WorldModel::default();
             Ok(())
         }
         "adversarial" => {
+            // Best-effort: instantiation validates the algorithm exists; value is intentionally unused
             let _ = AdversarialArena::default();
             Ok(())
         }
         "darwin" => {
+            // Best-effort: instantiation validates the algorithm exists; value is intentionally unused
             let _ = super::super::cognitive::PlanEvolutionEngine::default();
             Ok(())
         }
@@ -541,6 +546,7 @@ impl Actuator for EcosystemDesignActuator {
                 let team_id = if roles.is_empty() {
                     None
                 } else {
+                    // Optional: team creation is supplementary; ecosystem agents function independently without a team
                     orchestrator.create_team(&roles).ok()
                 };
 
@@ -653,6 +659,7 @@ impl Actuator for CounterfactualActuator {
                 alternatives,
             } => {
                 let world_model = latest_memory_json(&db, &context.agent_id, "world_model")?
+                    // Optional: deserialization failure means no prior world model; falls back to default
                     .and_then(|(_, value)| serde_json::from_value::<WorldModel>(value).ok())
                     .unwrap_or_default();
                 let simulations = alternatives

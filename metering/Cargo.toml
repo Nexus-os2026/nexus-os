@@ -1,5 +1,6 @@
 [package]
 name = "nexus-metering"
+description = "Fuel metering, usage tracking, and budget enforcement for Nexus OS agents"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -31,7 +31,7 @@ use nexus_cloud::auth::AuthManager;
 use nexus_cloud::metering::MeteringEngine;
 use nexus_cloud::tenant::{Plan, TenantManager};
 
-use ed25519_dalek::SigningKey;
+use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use nexus_kernel::consent::{ApprovalDecision, ApprovalVerdict, GovernedOperation};
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -316,7 +316,8 @@ fuel_budget = 5000
     .expect("bundle should build");
 
     // Sign with Ed25519 key and publish
-    let key = SigningKey::from_bytes(&[42_u8; 32]);
+    let key = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[42_u8; 32])
+        .expect("valid ed25519 key");
     let package_id = registry
         .publish(package, &key)
         .expect("publish should sign and store package");

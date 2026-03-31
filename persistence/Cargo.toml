@@ -1,5 +1,6 @@
 [package]
 name = "nexus-persistence"
+description = "Storage and persistence layer for agent state, audit logs, and configuration in Nexus OS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -137,6 +137,9 @@ fn test_atomic_changeset() {
     );
 }
 
+/// Tests Rust binary project scaffolding via LLM-assisted init.
+/// Requires a running Ollama instance with a deployed model (e.g. llama3).
+/// Run manually: ollama serve && cargo test -p coder-agent -- test_project_init_rust --ignored --nocapture
 #[test]
 #[ignore = "requires Ollama with a deployed model"]
 fn test_project_init_rust() {

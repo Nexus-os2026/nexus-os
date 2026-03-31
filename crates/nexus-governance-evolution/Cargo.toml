@@ -17,7 +17,7 @@ nexus-governance-oracle = { path = "../nexus-governance-oracle" }
 nexus-governance-engine = { path = "../nexus-governance-engine" }
 
 [dev-dependencies]
-ed25519-dalek = "2.2"
+nexus-crypto = { path = "../nexus-crypto" }
 
 [lints]
 workspace = true

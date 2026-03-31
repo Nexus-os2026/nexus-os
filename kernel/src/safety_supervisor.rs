@@ -295,6 +295,7 @@ impl SafetySupervisor {
         let violations_log = self.recent_violations.entry(agent_id).or_default();
         violations_log.push(selected.clone());
         if violations_log.len() > 32 {
+            // Best-effort: evict oldest violation entry to cap history at 32
             let _ = violations_log.remove(0);
         }
 

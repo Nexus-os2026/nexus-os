@@ -1,7 +1,9 @@
 [package]
 name = "nexus-conductor"
+description = "Orchestrator agent that coordinates and delegates tasks across Nexus OS agents"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 
 [dependencies]
 nexus-kernel = { path = "../../kernel" }

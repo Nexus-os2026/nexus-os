@@ -6,7 +6,7 @@
 
 use crate::hardware_security::KeyManager;
 use crate::identity::agent_identity::AgentIdentity;
-use ed25519_dalek::{Verifier, VerifyingKey};
+use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use uuid::Uuid;
@@ -259,12 +259,16 @@ impl TokenManager {
         // Verify signature over "header.payload".
         let signing_input = format!("{}.{}", parts[0], parts[1]);
 
-        let vk = VerifyingKey::from_bytes(&identity.public_key_bytes())
-            .map_err(|_| TokenError::InvalidSignature)?;
-        let sig = ed25519_dalek::Signature::from_slice(&sig_bytes)
-            .map_err(|_| TokenError::InvalidSignature)?;
-        vk.verify(signing_input.as_bytes(), &sig)
-            .map_err(|_| TokenError::InvalidSignature)?;
+        let ok = CryptoIdentity::verify(
+            SignatureAlgorithm::Ed25519,
+            &identity.public_key_bytes(),
+            signing_input.as_bytes(),
+            &sig_bytes,
+        )
+        .map_err(|_| TokenError::InvalidSignature)?;
+        if !ok {
+            return Err(TokenError::InvalidSignature);
+        }
 
         let claims: OidcAClaims = serde_json::from_slice(&payload_bytes)
             .map_err(|e| TokenError::Malformed(e.to_string()))?;

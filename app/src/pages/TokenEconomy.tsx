@@ -155,13 +155,13 @@ export default function TokenEconomy() {
   useEffect(() => {
     tokenCalculateReward(quality, difficulty, speed)
       .then((r) => setRewardEst(r as RewardEstimate))
-      .catch(() => {});
+      .catch((e) => { if (import.meta.env.DEV) console.warn("[TokenEconomy]", e); });
   }, [quality, difficulty, speed]);
 
   useEffect(() => {
     tokenCalculateBurn(burnModel, burnIn, burnOut)
       .then((b) => setBurnEst(b as { cost_nxc: number }))
-      .catch(() => {});
+      .catch((e) => { if (import.meta.env.DEV) console.warn("[TokenEconomy]", e); });
   }, [burnModel, burnIn, burnOut]);
 
   if (loading) {

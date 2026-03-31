@@ -6,7 +6,7 @@ use crate::hardware_security::types::{
     verify_attestation, verify_attestation_with_max_age, KeyBackend,
 };
 use crate::identity::{AgentIdentity, IdentityManager};
-use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use uuid::Uuid;
 
 use super::TeeBackend;
@@ -55,11 +55,14 @@ fn test_software_backend_generate_sign_verify() {
         .try_into()
         .expect("signature length should be 64 bytes");
 
-    let verifying_key =
-        VerifyingKey::from_bytes(&public_key_array).expect("public key should parse");
-    let signature = Signature::from_bytes(&signature_array);
-    let verify_result = verifying_key.verify(message, &signature);
+    let verify_result = CryptoIdentity::verify(
+        SignatureAlgorithm::Ed25519,
+        &public_key_array,
+        message,
+        &signature_array,
+    );
     assert!(verify_result.is_ok());
+    assert!(verify_result.unwrap());
     assert!(event_exists(&audit, "keys.generated"));
 
     // Verify key is random (not deterministic): generate a second key and compare.
@@ -124,9 +127,9 @@ fn test_sealed_storage_roundtrip() {
 
     // Verify the signature.
     let vk_bytes: [u8; 32] = pk2.0.as_slice().try_into().unwrap();
-    let vk = VerifyingKey::from_bytes(&vk_bytes).unwrap();
-    let sig_obj = Signature::from_bytes(&<[u8; 64]>::try_from(sig.0.as_slice()).unwrap());
-    vk.verify(msg, &sig_obj).expect("signature should verify");
+    let ok = CryptoIdentity::verify(SignatureAlgorithm::Ed25519, &vk_bytes, msg, &sig.0)
+        .expect("verify should not error");
+    assert!(ok, "signature should verify");
 }
 
 // ---------------------------------------------------------------------------
@@ -194,11 +197,9 @@ fn test_tee_backend_falls_back_to_software() {
     let sig = backend.sign(&handle, msg).expect("sign");
     assert_eq!(sig.0.len(), 64);
 
-    let vk_bytes: [u8; 32] = pub_key.0.as_slice().try_into().unwrap();
-    let vk = VerifyingKey::from_bytes(&vk_bytes).unwrap();
-    let sig_obj = Signature::from_bytes(&<[u8; 64]>::try_from(sig.0.as_slice()).unwrap());
-    vk.verify(msg, &sig_obj)
-        .expect("signature should verify with software-tee fallback");
+    let ok = CryptoIdentity::verify(SignatureAlgorithm::Ed25519, &pub_key.0, msg, &sig.0)
+        .expect("verify should not error");
+    assert!(ok, "signature should verify with software-tee fallback");
 }
 
 // ---------------------------------------------------------------------------
@@ -272,11 +273,15 @@ fn test_agent_identity_uses_key_manager() {
         .verify(payload, &sig)
         .expect("signature should verify");
 
-    // Cross-verify with raw ed25519-dalek.
-    let vk = VerifyingKey::from_bytes(&identity.public_key_bytes()).unwrap();
-    let sig_obj = ed25519_dalek::Signature::from_slice(&sig).unwrap();
-    vk.verify(payload, &sig_obj)
-        .expect("raw ed25519 verify should pass");
+    // Cross-verify with nexus-crypto.
+    let ok = CryptoIdentity::verify(
+        SignatureAlgorithm::Ed25519,
+        &identity.public_key_bytes(),
+        payload,
+        &sig,
+    )
+    .expect("verify should not error");
+    assert!(ok, "nexus-crypto verify should pass");
 
     // AgentIdentity struct should NOT contain any secret key field.
     // It only has: agent_id, key_handle_id, public_key, did, created_at.
@@ -764,11 +769,14 @@ fn test_tee_backend_generates_and_signs() {
         .expect("sign");
     assert_eq!(sig.0.len(), 64);
 
-    let vk_bytes: [u8; 32] = pub_key.0.as_slice().try_into().unwrap();
-    let vk = VerifyingKey::from_bytes(&vk_bytes).unwrap();
-    let sig_obj = Signature::from_bytes(&<[u8; 64]>::try_from(sig.0.as_slice()).unwrap());
-    vk.verify(b"tee integration test", &sig_obj)
-        .expect("signature should verify");
+    let ok = CryptoIdentity::verify(
+        SignatureAlgorithm::Ed25519,
+        &pub_key.0,
+        b"tee integration test",
+        &sig.0,
+    )
+    .expect("verify should not error");
+    assert!(ok, "TEE integration: signature should verify");
 }
 
 #[test]

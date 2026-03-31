@@ -64,14 +64,18 @@ function loadHistory(): ChatMsg[] {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);
     if (raw) return JSON.parse(raw);
-  } catch {}
+  } catch (err) {
+    console.error("Failed to load chat history:", err);
+  }
   return [];
 }
 
 function saveHistory(msgs: ChatMsg[]) {
   try {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(msgs.slice(-100)));
-  } catch {}
+  } catch (err) {
+    console.error("Failed to save chat history:", err);
+  }
 }
 
 /** Simple heuristic to pick the best tier for a prompt. */
@@ -146,7 +150,7 @@ export default function FlashInference() {
     flashDetectHardware().then((hw: any) => {
       setHwRam(hw.total_ram_mb || 0);
       setHwCores(hw.cpu_cores || 0);
-    }).catch(() => {});
+    }).catch((e) => { if (import.meta.env.DEV) console.warn("[FlashInference]", e); });
     // Clear stale backend sessions from previous navigation and reset frontend state.
     // This prevents "session not found" errors when the backend was cleared but
     // the frontend still held stale session IDs.
@@ -162,14 +166,14 @@ export default function FlashInference() {
     if (slots.length === 0) return;
     let active = true;
     const poll = () => {
-      flashSystemMetrics().then((m: any) => { if (active) setSysMetrics(m); }).catch(() => {});
+      flashSystemMetrics().then((m: any) => { if (active) setSysMetrics(m); }).catch((e) => { if (import.meta.env.DEV) console.warn("[FlashInference]", e); });
       flashSpeculativeStatus().then((s: any) => {
         if (active && s) {
           setSpecEnabled(!!s.enabled);
           setSpecRate(s.acceptance_rate || 0);
           setSpecDraftLen(s.draft_length || 0);
         }
-      }).catch(() => {});
+      }).catch((e) => { if (import.meta.env.DEV) console.warn("[FlashInference]", e); });
     };
     poll();
     const id = setInterval(poll, 2000);
@@ -180,7 +184,7 @@ export default function FlashInference() {
   const handleSpecToggle = useCallback(async () => {
     if (specEnabled) {
       setSpecLoading(true);
-      try { await flashDisableSpeculative(); setSpecEnabled(false); } catch {}
+      try { await flashDisableSpeculative(); setSpecEnabled(false); } catch (err) { console.error("Failed to disable speculative:", err); }
       setSpecLoading(false);
       return;
     }
@@ -330,14 +334,14 @@ export default function FlashInference() {
       // killing MoE expert streaming performance.
       if (fileSizeGB > 50) {
         for (const slot of slots) {
-          try { await flashUnloadSession(slot.sessionId); } catch {}
+          try { await flashUnloadSession(slot.sessionId); } catch (err) { console.error("Unload failed:", err); }
         }
         setSlots([]);
       } else {
         // Otherwise just unload the same tier if already occupied
         const existing = slots.find(s => s.tier === tier);
         if (existing) {
-          try { await flashUnloadSession(existing.sessionId); } catch {}
+          try { await flashUnloadSession(existing.sessionId); } catch (err) { console.error("Unload failed:", err); }
           setSlots(prev => prev.filter(s => s.tier !== tier));
         }
       }
@@ -353,7 +357,7 @@ export default function FlashInference() {
   const handleUnloadSlot = useCallback(async (tier: Tier) => {
     const slot = slots.find(s => s.tier === tier);
     if (!slot) return;
-    try { await flashUnloadSession(slot.sessionId); } catch {}
+    try { await flashUnloadSession(slot.sessionId); } catch (err) { console.error("Unload failed:", err); }
     setSlots(prev => prev.filter(s => s.tier !== tier));
   }, [slots]);
 

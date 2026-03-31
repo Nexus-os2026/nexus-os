@@ -138,6 +138,7 @@ impl WebConductEngine {
                 "allow" => allows.push(value),
                 "disallow" => disallows.push(value),
                 "crawl-delay" => {
+                    // Optional: invalid crawl-delay value is ignored, directive treated as absent
                     crawl_delay = value.parse::<f64>().ok();
                 }
                 _ => {}

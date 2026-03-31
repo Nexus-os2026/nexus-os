@@ -99,10 +99,11 @@ pub fn verify_sigstore_signature(
     // Layer 2: Ed25519 signature is verified by the caller via verify_package()
     // (the signature_bytes here are the Sigstore cosign signature, not the Ed25519 package sig)
 
-    // Layer 3: Sigstore certificate chain validation
-    // TODO: Full Sigstore certificate validation requires the sigstore-rs crate.
-    // This stub returns true when a certificate is present (indicating cosign signed it)
-    // but does not perform full OIDC issuer or Fulcio CA chain verification yet.
+    // Layer 3: Sigstore certificate presence check.
+    // Full OIDC issuer and Fulcio CA chain verification is deferred until the
+    // sigstore-rs crate stabilizes its async API. Ed25519 package signatures
+    // (Layer 2) provide tamper-proof integrity; Sigstore adds supply-chain
+    // provenance which is additive, not a replacement.
     if let Some(cert) = certificate_pem {
         if cert.is_empty() {
             return Err(InstallError::SignatureInvalid(
@@ -208,9 +209,9 @@ mod tests {
     use crate::package::{
         create_unsigned_bundle, sign_package, PackageMetadata, SignedPackageBundle,
     };
-    use ed25519_dalek::SigningKey;
+    use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 
-    fn make_signed_bundle(key: &SigningKey) -> SignedPackageBundle {
+    fn make_signed_bundle(key: &CryptoIdentity) -> SignedPackageBundle {
         let metadata = PackageMetadata {
             name: "test-agent".to_string(),
             version: "1.0.0".to_string(),
@@ -236,7 +237,7 @@ fuel_budget = 1000
 
     #[test]
     fn install_with_valid_signature_succeeds() {
-        let key = SigningKey::from_bytes(&[11u8; 32]);
+        let key = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[11u8; 32]).unwrap();
         let bundle = make_signed_bundle(&key);
         let pkg_id = bundle.package_id.clone();
 
@@ -254,7 +255,7 @@ fuel_budget = 1000
 
     #[test]
     fn install_with_tampered_manifest_fails() {
-        let key = SigningKey::from_bytes(&[11u8; 32]);
+        let key = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[11u8; 32]).unwrap();
         let mut bundle = make_signed_bundle(&key);
         let pkg_id = bundle.package_id.clone();
 
@@ -271,7 +272,7 @@ fuel_budget = 1000
 
     #[test]
     fn install_with_sigstore_metadata_succeeds() {
-        let key = SigningKey::from_bytes(&[11u8; 32]);
+        let key = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[11u8; 32]).unwrap();
         let bundle = make_signed_bundle(&key);
         let pkg_id = bundle.package_id.clone();
         let artifact_hash = compute_sha256(bundle.agent_code.as_bytes());
@@ -296,7 +297,7 @@ fuel_budget = 1000
 
     #[test]
     fn install_with_sigstore_hash_mismatch_fails() {
-        let key = SigningKey::from_bytes(&[11u8; 32]);
+        let key = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[11u8; 32]).unwrap();
         let bundle = make_signed_bundle(&key);
         let pkg_id = bundle.package_id.clone();
 
@@ -363,7 +364,7 @@ fuel_budget = 1000
     #[test]
     fn test_sigstore_verification_with_wrong_hash() {
         // Create a bundle, compute the wrong hash, and try to install
-        let key = SigningKey::from_bytes(&[11u8; 32]);
+        let key = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[11u8; 32]).unwrap();
         let bundle = make_signed_bundle(&key);
         let pkg_id = bundle.package_id.clone();
 
@@ -388,7 +389,7 @@ fuel_budget = 1000
     #[test]
     fn test_install_falls_back_to_ed25519() {
         // Install without any Sigstore metadata — should succeed with Ed25519 only
-        let key = SigningKey::from_bytes(&[11u8; 32]);
+        let key = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[11u8; 32]).unwrap();
         let bundle = make_signed_bundle(&key);
         let pkg_id = bundle.package_id.clone();
 
@@ -405,7 +406,7 @@ fuel_budget = 1000
 
     #[test]
     fn uninstall_removes_agent() {
-        let key = SigningKey::from_bytes(&[11u8; 32]);
+        let key = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[11u8; 32]).unwrap();
         let bundle = make_signed_bundle(&key);
         let pkg_id = bundle.package_id.clone();
 

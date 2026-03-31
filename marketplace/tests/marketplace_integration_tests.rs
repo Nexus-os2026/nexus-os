@@ -3,7 +3,7 @@
 //! Tests: unsigned bundle rejection, crashing agent rejection, version update preserves
 //! downloads, search by name and tags, and the full developer workflow roundtrip.
 
-use ed25519_dalek::SigningKey;
+use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use nexus_marketplace::package::{
     create_unsigned_bundle, sign_package, verify_package, PackageMetadata,
 };
@@ -12,12 +12,12 @@ use nexus_marketplace::verification_pipeline::{verified_publish_sqlite, verify_b
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-fn test_key() -> SigningKey {
-    SigningKey::from_bytes(&[42u8; 32])
+fn test_key() -> CryptoIdentity {
+    CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[42u8; 32]).unwrap()
 }
 
-fn other_key() -> SigningKey {
-    SigningKey::from_bytes(&[99u8; 32])
+fn other_key() -> CryptoIdentity {
+    CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[99u8; 32]).unwrap()
 }
 
 fn valid_manifest(name: &str, version: &str, capabilities: &[&str]) -> String {
@@ -49,7 +49,7 @@ fn publish_test_agent(
     version: &str,
     caps: &[&str],
     tags: &[&str],
-    key: &SigningKey,
+    key: &CryptoIdentity,
 ) -> String {
     let manifest = valid_manifest(name, version, caps);
     let metadata = make_metadata(name, version, caps, tags);

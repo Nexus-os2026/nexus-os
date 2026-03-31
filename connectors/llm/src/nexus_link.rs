@@ -354,6 +354,7 @@ impl NexusLink {
         } else {
             let cs = Self::compute_file_checksum(&path.display().to_string())?;
             // Cache the checksum for future use
+            // Best-effort: cache checksum for faster future scans
             let _ = std::fs::write(&checksum_path, &cs);
             cs
         };
@@ -662,6 +663,7 @@ impl NexusLink {
 
         let actual_checksum = Self::compute_file_checksum(&temp_path.display().to_string())?;
         if actual_checksum != expected_checksum {
+            // Best-effort: clean up corrupted temp file after checksum mismatch
             let _ = std::fs::remove_file(&temp_path);
             let msg =
                 format!("Checksum mismatch: expected {expected_checksum}, got {actual_checksum}");
@@ -686,6 +688,7 @@ impl NexusLink {
         let toml_content = format!(
             "[model]\nmodel_id = \"{model_id}\"\nfilename = \"{filename}\"\nsource = \"nexus-link\"\n"
         );
+        // Best-effort: write model metadata for registry discovery
         let _ = std::fs::write(toml_path, toml_content);
 
         progress_callback(TransferProgress {

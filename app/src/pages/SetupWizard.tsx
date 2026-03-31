@@ -109,7 +109,7 @@ export function SetupWizard({
           }
         }
       }).then((fn) => { unlisten = fn; });
-    }).catch(() => {});
+    }).catch((e) => { if (import.meta.env.DEV) console.warn("[SetupWizard]", e); });
 
     return () => {
       mounted = false;

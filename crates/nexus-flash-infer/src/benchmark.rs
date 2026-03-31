@@ -120,11 +120,13 @@ pub fn run_single_benchmark(
             match event {
                 TokenEvent::Token { ref text, .. } => {
                     {
+                        // Benchmark: panic on poison is acceptable
                         let mut ttft = ttft_clone.lock().unwrap();
                         if ttft.is_none() {
                             *ttft = Some(start.elapsed().as_secs_f64() * 1000.0);
                         }
                     }
+                    // Benchmark: panic on poison is acceptable
                     out_clone.lock().unwrap().push_str(text);
                     ControlFlow::Continue
                 }
@@ -133,7 +135,9 @@ pub fn run_single_benchmark(
         }),
     )?;
 
+    // Benchmark: panic on poison is acceptable
     let ttft = first_token_time.lock().unwrap().unwrap_or(0.0);
+    // Benchmark: panic on poison is acceptable
     let output = output.lock().unwrap().clone();
     let peak_memory_mb = mem_usage.total_mb;
     let coherent = basic_coherence_check(&output);

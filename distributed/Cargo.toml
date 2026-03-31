@@ -1,5 +1,6 @@
 [package]
 name = "nexus-distributed"
+description = "Distributed agent coordination, clustering, and peer-to-peer communication for Nexus OS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

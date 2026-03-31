@@ -151,6 +151,7 @@ fn detect_numa_nodes() -> u32 {
     {
         if let Ok(entries) = std::fs::read_dir("/sys/devices/system/node") {
             let count = entries
+                // Optional: skip directory entries that can't be read
                 .filter_map(|e| e.ok())
                 .filter(|e| e.file_name().to_string_lossy().starts_with("node"))
                 .count();

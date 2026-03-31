@@ -280,17 +280,17 @@ export function Agents({
   /* ─── load preinstalled agents + model count ─── */
   useEffect(() => {
     if (!hasDesktopRuntime()) return;
-    getPreinstalledAgents().then(setPreinstalledAgents).catch(() => {});
-    listProviderModels().then(m => setModelCount(m.length)).catch(() => {});
-    getAvailableProviders().then(setAvailableProviders).catch(() => {});
+    getPreinstalledAgents().then(setPreinstalledAgents).catch((e) => { if (import.meta.env.DEV) console.warn("[Agents]", e); });
+    listProviderModels().then(m => setModelCount(m.length)).catch((e) => { if (import.meta.env.DEV) console.warn("[Agents]", e); });
+    getAvailableProviders().then(setAvailableProviders).catch((e) => { if (import.meta.env.DEV) console.warn("[Agents]", e); });
   }, []);
 
   // Refresh provider status when agent is selected or every 15s while panel open
   useEffect(() => {
     if (!hasDesktopRuntime() || !selectedAgentId) return;
-    getAvailableProviders().then(setAvailableProviders).catch(() => {});
+    getAvailableProviders().then(setAvailableProviders).catch((e) => { if (import.meta.env.DEV) console.warn("[Agents]", e); });
     const interval = setInterval(() => {
-      getAvailableProviders().then(setAvailableProviders).catch(() => {});
+      getAvailableProviders().then(setAvailableProviders).catch((e) => { if (import.meta.env.DEV) console.warn("[Agents]", e); });
     }, 15000);
     return () => clearInterval(interval);
   }, [selectedAgentId]);
@@ -926,7 +926,7 @@ export function Agents({
               onClick={() => {
                 setSelectedProvider("auto");
                 if (selectedAgentId) {
-                  setAgentLlmProvider(selectedAgentId, "auto", true, 0, 0).catch(() => {});
+                  setAgentLlmProvider(selectedAgentId, "auto", true, 0, 0).catch((e) => { if (import.meta.env.DEV) console.warn("[Agents]", e); });
                 }
               }}
               style={{
@@ -966,7 +966,7 @@ export function Agents({
                     setSelectedModel(firstModel);
                     if (selectedAgentId) {
                       const modelPart = firstModel ? `/${firstModel}` : "";
-                      setAgentLlmProvider(selectedAgentId, `${p.id}${modelPart}`, p.id === "flash" || p.id === "ollama", 0, 0).catch(() => {});
+                      setAgentLlmProvider(selectedAgentId, `${p.id}${modelPart}`, p.id === "flash" || p.id === "ollama", 0, 0).catch((e) => { if (import.meta.env.DEV) console.warn("[Agents]", e); });
                     }
                   }}
                   style={{
@@ -1029,7 +1029,7 @@ export function Agents({
                       setSelectedModel(model);
                       setFlashLoadError(null);
                       if (selectedAgentId) {
-                        setAgentLlmProvider(selectedAgentId, `${selectedProvider}/${model}`, selectedProvider === "flash" || selectedProvider === "ollama", 0, 0).catch(() => {});
+                        setAgentLlmProvider(selectedAgentId, `${selectedProvider}/${model}`, selectedProvider === "flash" || selectedProvider === "ollama", 0, 0).catch((e) => { if (import.meta.env.DEV) console.warn("[Agents]", e); });
                       }
                     }}
                     style={{
@@ -1395,7 +1395,7 @@ export function Agents({
                 // Enable review-each mode via the cognitive runtime
                 // This uses the existing HITL system — the agent will pause at each sensitive action
                 if (selectedAgentId) {
-                  setAgentReviewMode(selectedAgentId, true).catch(() => {});
+                  setAgentReviewMode(selectedAgentId, true).catch((e) => { if (import.meta.env.DEV) console.warn("[Agents]", e); });
                 }
                 startGoalExecution();
               }}

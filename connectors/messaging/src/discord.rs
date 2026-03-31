@@ -31,6 +31,7 @@ impl DiscordAdapter {
             .build()
             .unwrap_or_else(|_| Client::new());
 
+        // Optional: bot token may not be configured in environment
         let token = std::env::var("DISCORD_BOT_TOKEN").ok();
 
         Self {
@@ -123,6 +124,7 @@ impl DiscordAdapter {
             return Ok(());
         };
         let url = self.api_url(&format!("channels/{channel_id}/typing"));
+        // Best-effort: typing indicator is cosmetic, don't fail the operation
         let _ = self
             .http_client
             .post(&url)

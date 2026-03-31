@@ -252,6 +252,7 @@ impl KillGateRegistry {
 
             self.escalate_to(subsystem, EscalationLevel::Freeze, agent_id, audit);
         } else if metric_value > 0.0 && status == GateStatus::Open {
+            // Best-effort: escalate kill-gate level once; gate continues operating at current level on failure
             let _ = self.escalate_once(subsystem, agent_id, audit);
         }
 

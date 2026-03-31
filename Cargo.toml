@@ -58,14 +58,19 @@ members = [
   "crates/nexus-agent-memory",
   "crates/nexus-external-tools",
   "crates/nexus-collab-protocol",
+  "crates/nexus-crypto",
   "crates/nexus-software-factory",
   "crates/nexus-mcp",
   "crates/nexus-server",
+  "crates/nexus-a2a",
+  "crates/nexus-memory",
+  "crates/nexus-migrate",
+  "crates/nexus-outcome-eval",
 ]
 
 [workspace.package]
 edition = "2021"
-version = "9.0.0"
+version = "10.5.0"
 license = "MIT"
 
 [workspace.lints.rust]

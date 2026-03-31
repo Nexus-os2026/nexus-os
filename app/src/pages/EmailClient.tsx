@@ -69,7 +69,8 @@ async function loadEmails(): Promise<Email[]> {
   try {
     const raw = await emailList();
     return JSON.parse(raw) as Email[];
-  } catch {
+  } catch (err) {
+    console.error("Failed to load emails:", err);
     return [];
   }
 }
@@ -132,8 +133,8 @@ export default function EmailClient() {
         setOauthStatus(statuses);
         const connected = statuses.find((s: any) => s.connected);
         if (connected) setConnectedProvider(connected.provider);
-      } catch {}
-    }).catch(() => {});
+      } catch (err) { console.error("Failed to parse OAuth status:", err); }
+    }).catch((e) => { if (import.meta.env.DEV) console.warn("[EmailClient]", e); });
   }, []);
 
   /* ─── filtered emails ─── */

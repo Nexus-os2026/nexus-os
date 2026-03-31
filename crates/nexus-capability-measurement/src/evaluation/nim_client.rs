@@ -122,8 +122,9 @@ impl NimClient {
 mod tests {
     use super::*;
 
-    /// Requires GROQ_API_KEY. Run with:
-    /// GROQ_API_KEY=... cargo test -p nexus-capability-measurement -- test_real_nim --ignored --nocapture
+    /// Sends a real request to a Groq-hosted NIM model and verifies the response.
+    /// Ignored in fast CI: requires a live GROQ_API_KEY and network access.
+    /// Run manually: GROQ_API_KEY=... cargo test -p nexus-capability-measurement -- test_real_nim --ignored --nocapture
     #[test]
     #[ignore]
     fn test_real_nim_adapter_single_agent() {

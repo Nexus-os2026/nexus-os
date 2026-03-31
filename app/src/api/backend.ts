@@ -1,3 +1,21 @@
+/**
+ * NEXUS OS Backend API — Tauri Command Bindings
+ *
+ * Total exports: ~660
+ * Active (called from pages): ~505
+ * Backend-ready, pending UI: ~155
+ *
+ * Every export calls a real Tauri command with real logic — none are stubs.
+ * Unused exports represent features ready for future UI pages:
+ * - Freelance agent management (5 functions)
+ * - Advanced deployment CLI (3 functions)
+ * - Evolution engine controls (4 functions)
+ * - Advanced measurement features (12 functions)
+ * - Agent marketplace publishing (2 functions)
+ * - Governance engine/evolution direct access (5 functions)
+ *
+ * See DEEP_HELL_AUDIT.md for the complete unused export list.
+ */
 import { invoke } from "@tauri-apps/api/core";
 import type {
   ActivityMessage,
@@ -525,6 +543,33 @@ export function a2aCancelTask(agentUrl: string, taskId: string): Promise<void> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function a2aKnownAgents(): Promise<any> {
   return invokeDesktop("a2a_known_agents");
+}
+
+// ── A2A Crate API ──
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function a2aCrateGetAgentCard(): Promise<any> {
+  return invokeDesktop("a2a_crate_get_agent_card");
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function a2aCrateListSkills(): Promise<any> {
+  return invokeDesktop("a2a_crate_list_skills");
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function a2aCrateSendTask(agentUrl: string, message: string): Promise<any> {
+  return invokeDesktop("a2a_crate_send_task", { agentUrl: agentUrl, agent_url: agentUrl, message });
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function a2aCrateGetTask(taskId: string, agentUrl?: string): Promise<any> {
+  return invokeDesktop("a2a_crate_get_task", { taskId: taskId, task_id: taskId, agentUrl: agentUrl ?? null, agent_url: agentUrl ?? null });
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function a2aCrateDiscoverAgent(url: string): Promise<any> {
+  return invokeDesktop("a2a_crate_discover_agent", { url });
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function a2aCrateGetStatus(): Promise<any> {
+  return invokeDesktop("a2a_crate_get_status");
 }
 
 // ── Identity API ──
@@ -2247,6 +2292,52 @@ export function mcpHostCallTool(toolName: string, args: string): Promise<string>
   return invokeDesktop<string>("mcp_host_call_tool", {
     toolName, tool_name: toolName,
     arguments: args,
+  });
+}
+
+// ============ MCP2 Standalone ============
+
+export interface Mcp2ServerStatus {
+  tools_count: number;
+  resources_count: number;
+  prompts_count: number;
+}
+
+export interface Mcp2Tool {
+  name: string;
+  description: string | null;
+  inputSchema: Record<string, unknown>;
+}
+
+export function mcp2ServerStatus(): Promise<Mcp2ServerStatus> {
+  return invokeDesktop<Mcp2ServerStatus>("mcp2_server_status");
+}
+
+export function mcp2ServerHandle(requestJson: string): Promise<string> {
+  return invokeDesktop<string>("mcp2_server_handle", { requestJson, request_json: requestJson });
+}
+
+export function mcp2ServerListTools(): Promise<Mcp2Tool[]> {
+  return invokeDesktop<Mcp2Tool[]>("mcp2_server_list_tools");
+}
+
+export function mcp2ClientAdd(id: string, name: string, command: string, args: string[]): Promise<void> {
+  return invokeDesktop<void>("mcp2_client_add", { id, name, command, args });
+}
+
+export function mcp2ClientRemove(serverId: string): Promise<void> {
+  return invokeDesktop<void>("mcp2_client_remove", { serverId, server_id: serverId });
+}
+
+export function mcp2ClientDiscover(serverId: string): Promise<Mcp2Tool[]> {
+  return invokeDesktop<Mcp2Tool[]>("mcp2_client_discover", { serverId, server_id: serverId });
+}
+
+export function mcp2ClientCall(serverId: string, toolName: string, argumentsJson: string): Promise<Record<string, unknown>> {
+  return invokeDesktop<Record<string, unknown>>("mcp2_client_call", {
+    serverId, server_id: serverId,
+    toolName, tool_name: toolName,
+    argumentsJson, arguments_json: argumentsJson,
   });
 }
 
@@ -4044,5 +4135,81 @@ export function governanceEvolutionGetThreatModel(): Promise<any> {
 
 export function governanceEvolutionRunAttackCycle(): Promise<any> {
   return invokeDesktop("governance_evolution_run_attack_cycle");
+}
+
+// ── Memory Kernel ──────────────────────────────────────────────────────────
+
+export function mkGetStats(agentId: string): Promise<any> {
+  return invokeDesktop("mk_get_stats", { agent_id: agentId });
+}
+
+export function mkQuery(agentId: string, memoryType?: string, limit?: number): Promise<any[]> {
+  return invokeDesktop("mk_query", { agent_id: agentId, memory_type: memoryType, limit });
+}
+
+export function mkSearch(agentId: string, queryText: string, policy?: string, limit?: number): Promise<any[]> {
+  return invokeDesktop("mk_search", { agent_id: agentId, query_text: queryText, policy, limit });
+}
+
+export function mkGetAudit(agentId: string, limit?: number): Promise<any[]> {
+  return invokeDesktop("mk_get_audit", { agent_id: agentId, limit });
+}
+
+export function mkGetProcedures(agentId: string): Promise<any[]> {
+  return invokeDesktop("mk_get_procedures", { agent_id: agentId });
+}
+
+export function mkGetCandidates(agentId: string): Promise<any[]> {
+  return invokeDesktop("mk_get_candidates", { agent_id: agentId });
+}
+
+export function mkWrite(agentId: string, memoryType: string, content: any): Promise<string> {
+  return invokeDesktop("mk_write", { agent_id: agentId, memory_type: memoryType, content });
+}
+
+export function mkClearWorking(agentId: string): Promise<boolean> {
+  return invokeDesktop("mk_clear_working", { agent_id: agentId });
+}
+
+export function mkShare(ownerId: string, granteeId: string, readTypes: string[], writeTypes: string[]): Promise<boolean> {
+  return invokeDesktop("mk_share", { owner_id: ownerId, grantee_id: granteeId, read_types: readTypes, write_types: writeTypes });
+}
+
+export function mkRevokeShare(ownerId: string, granteeId: string): Promise<any> {
+  return invokeDesktop("mk_revoke_share", { owner_id: ownerId, grantee_id: granteeId });
+}
+
+export function mkRunGc(): Promise<any> {
+  return invokeDesktop("mk_run_gc");
+}
+
+export function mkCreateCheckpoint(agentId: string, label: string): Promise<string> {
+  return invokeDesktop("mk_create_checkpoint", { agent_id: agentId, label });
+}
+
+export function mkRollback(agentId: string, checkpointId: string, reason: string): Promise<any> {
+  return invokeDesktop("mk_rollback", { agent_id: agentId, checkpoint_id: checkpointId, reason });
+}
+
+export function mkListCheckpoints(agentId: string): Promise<any[]> {
+  return invokeDesktop("mk_list_checkpoints", { agent_id: agentId });
+}
+
+// ── Migration ──────────────────────────────────────────────────────────────
+
+export function migratePreview(source: string, agentsYaml?: string, tasksYaml?: string, pythonSource?: string): Promise<any> {
+  return invokeDesktop("migrate_preview", { source, agents_yaml: agentsYaml, tasks_yaml: tasksYaml, python_source: pythonSource });
+}
+
+export function migrateExecute(source: string, agentsYaml?: string, tasksYaml?: string, pythonSource?: string): Promise<any> {
+  return invokeDesktop("migrate_execute", { source, agents_yaml: agentsYaml, tasks_yaml: tasksYaml, python_source: pythonSource });
+}
+
+export function migrateSupportedSources(): Promise<string[]> {
+  return invokeDesktop("migrate_supported_sources");
+}
+
+export function migrateReport(source: string, agentsYaml?: string, tasksYaml?: string, pythonSource?: string): Promise<string> {
+  return invokeDesktop("migrate_report", { source, agents_yaml: agentsYaml, tasks_yaml: tasksYaml, python_source: pythonSource });
 }
 

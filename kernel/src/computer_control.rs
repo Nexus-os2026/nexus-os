@@ -326,6 +326,7 @@ fn capture_screen_impl(region: Option<&ScreenRegion>) -> Result<Vec<u8>, String>
     }
 
     let bytes = std::fs::read(&tmp).map_err(|e| format!("failed to read screenshot: {e}"))?;
+    // Best-effort: temp screenshot file cleanup is housekeeping; captured bytes are already in memory
     let _ = std::fs::remove_file(&tmp);
     Ok(bytes)
 }
@@ -350,6 +351,7 @@ fn capture_screen_impl(region: Option<&ScreenRegion>) -> Result<Vec<u8>, String>
     }
 
     let bytes = std::fs::read(&tmp).map_err(|e| format!("failed to read screenshot: {e}"))?;
+    // Best-effort: temp screenshot file cleanup is housekeeping; captured bytes are already in memory
     let _ = std::fs::remove_file(&tmp);
     Ok(bytes)
 }
@@ -390,6 +392,7 @@ fn capture_window_impl(window_title: &str) -> Result<Vec<u8>, String> {
     }
 
     let bytes = std::fs::read(&tmp).map_err(|e| format!("failed to read screenshot: {e}"))?;
+    // Best-effort: temp window capture file cleanup is housekeeping; captured bytes are already in memory
     let _ = std::fs::remove_file(&tmp);
     Ok(bytes)
 }

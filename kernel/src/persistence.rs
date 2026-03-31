@@ -55,7 +55,14 @@ impl PersistentAuditStore {
             .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
 
         // Get the event we just appended (last one)
-        let event = trail.events().last().expect("just appended");
+        let event = match trail.events().last() {
+            Some(e) => e,
+            None => {
+                return Err(PersistenceError::Serialization(
+                    "audit trail empty after append".to_string(),
+                ));
+            }
+        };
 
         *seq += 1;
         let current_seq = *seq;

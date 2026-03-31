@@ -130,6 +130,7 @@ pub(crate) fn extract_total_tokens(payload: &Value) -> Option<u32> {
         .get("usage")
         .and_then(|usage| usage.get("total_tokens"))
         .and_then(Value::as_u64)
+        // Optional: token count may exceed u32 range for very large responses
         .and_then(|value| u32::try_from(value).ok())
 }
 

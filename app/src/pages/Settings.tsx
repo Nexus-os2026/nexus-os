@@ -231,12 +231,12 @@ export function Settings({
       setLlmActiveProvider(status.active_provider);
       setLlmGovernanceWarning(status.governance_warning ?? null);
       setLlmHasAny(status.has_any_provider);
-    }).catch(() => {});
+    }).catch((e) => { if (import.meta.env.DEV) console.warn("[Settings]", e); });
     getLlmRecommendations().then((recs) => {
       setLlmRecs(recs.recommendations);
       setLlmRecsRam(recs.ram_mb);
       setLlmRecsCanLocal(recs.can_run_local);
-    }).catch(() => {});
+    }).catch((e) => { if (import.meta.env.DEV) console.warn("[Settings]", e); });
   }, [section]);
 
   // Fetch tools when the tools section is active

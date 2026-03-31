@@ -28,6 +28,7 @@ impl ClaudeProvider {
     pub fn from_env() -> Self {
         let endpoint = env::var("ANTHROPIC_URL")
             .unwrap_or_else(|_| "https://api.anthropic.com/v1/messages".to_string());
+        // Optional: API key may not be configured in environment
         let mut provider = Self::new(env::var("ANTHROPIC_API_KEY").ok());
         provider.endpoint = endpoint;
         provider
@@ -72,6 +73,7 @@ impl LlmProvider for ClaudeProvider {
     fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
         #[cfg(not(feature = "real-claude"))]
         {
+            // Best-effort: suppress unused variable warnings when feature disabled
             let _ = (prompt, max_tokens, model);
             Err(AgentError::SupervisorError(
                 "Claude provider is disabled. Rebuild with feature 'real-claude'.".to_string(),

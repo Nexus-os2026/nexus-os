@@ -71,6 +71,7 @@ const DesignStudio = React.lazy(() => import("./pages/DesignStudio"));
 const EmailClient = React.lazy(() => import("./pages/EmailClient"));
 const MediaStudio = React.lazy(() => import("./pages/MediaStudio"));
 const Messaging = React.lazy(() => import("./pages/Messaging"));
+const MemoryDashboard = React.lazy(() => import("./pages/Memory"));
 const AppStore = React.lazy(() => import("./pages/AppStore"));
 const AiChatHub = React.lazy(() => import("./pages/AiChatHub"));
 const DeployPipeline = React.lazy(() => import("./pages/DeployPipeline"));
@@ -138,7 +139,7 @@ import type {
 import { createDefaultConfig, normalizeConfig } from "./utils/config";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler" | "flash-inference" | "measurement" | "measurement-session" | "measurement-compare" | "measurement-batteries" | "capability-boundaries" | "model-routing" | "ab-validation" | "browser-agent" | "governance-oracle" | "token-economy" | "governed-control" | "world-sim" | "perception" | "agent-memory" | "external-tools" | "collab-protocol" | "software-factory";
+type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler" | "flash-inference" | "measurement" | "measurement-session" | "measurement-compare" | "measurement-batteries" | "capability-boundaries" | "model-routing" | "ab-validation" | "browser-agent" | "governance-oracle" | "token-economy" | "governed-control" | "world-sim" | "perception" | "agent-memory" | "external-tools" | "collab-protocol" | "software-factory" | "memory-dashboard";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -169,6 +170,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "permissions", label: "Permissions", icon: "Key", shortcut: "", section: "MONITORING" },
   // ── AGENT LAB ──
   { id: "browser", label: "Agent Browser", icon: "Globe", shortcut: "", section: "AGENT LAB" },
+  { id: "memory-dashboard", label: "Agent Memory", icon: "Brain", shortcut: "", section: "AGENT LAB" },
   { id: "dna-lab", label: "DNA Lab", icon: "Dna", shortcut: "", section: "AGENT LAB" },
   { id: "measurement", label: "Measurement", icon: "Target", shortcut: "", section: "AGENT LAB" },
   { id: "measurement-session", label: "Session Detail", icon: "FileSearch", shortcut: "", section: "AGENT LAB" },
@@ -1571,6 +1573,9 @@ export default function App(): JSX.Element {
     if (page === "messaging") {
       return <Messaging />;
     }
+    if (page === "memory-dashboard") {
+      return <MemoryDashboard />;
+    }
     if (page === "media-studio") {
       return <MediaStudio />;
     }
@@ -1895,13 +1900,13 @@ export default function App(): JSX.Element {
           onDetectHardware={async () => {
             if (runtimeMode === "desktop") return detectHardware();
             return {
-              gpu: "Mock GPU",
-              vram_mb: 8192,
-              ram_mb: 16384,
+              gpu: "Hardware detection requires desktop app",
+              vram_mb: 0,
+              ram_mb: 0,
               detected_at: new Date().toISOString(),
-              tier: "Medium (8-24GB VRAM)",
-              recommended_primary: "qwen3.5:9b",
-              recommended_fast: "qwen3.5:4b"
+              tier: "Unknown — launch Nexus OS desktop for detection",
+              recommended_primary: "",
+              recommended_fast: ""
             };
           }}
           onCheckOllama={async (url?: string) => {

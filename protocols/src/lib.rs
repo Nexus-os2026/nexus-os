@@ -12,6 +12,7 @@ pub mod frontend;
 pub mod http_gateway;
 pub mod mcp_client;
 pub mod metrics;
+pub mod openai_compat;
 pub mod server_runtime;
 
 // Re-export core types from kernel for convenience.

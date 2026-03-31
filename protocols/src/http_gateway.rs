@@ -513,7 +513,7 @@ impl GatewayState {
     /// Broadcast a WebSocket event to all connected clients.
     pub fn broadcast(&self, event: WsEvent) {
         let inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
-        // Ignore send errors — they just mean no active subscribers.
+        // Best-effort: send to WebSocket subscribers, ignore if no listeners
         let _ = inner.ws_tx.send(event);
     }
 
@@ -529,13 +529,14 @@ impl GatewayState {
             .map(|s| s.id)
             .collect();
         for id in &agent_ids {
+            // Best-effort: stop each agent during shutdown, continue even if one fails
             let _ = inner.supervisor.stop_agent(*id);
         }
 
-        // 2. Flush audit trail batcher to persist pending events
+        // Best-effort: flush audit trail batcher to persist pending events
         let _ = inner.audit_trail.flush_batcher();
 
-        // 3. Log shutdown event
+        // Best-effort: log shutdown event to audit trail before exit
         let _ = inner.audit_trail.append_event(
             Uuid::nil(),
             EventType::StateChange,
@@ -565,11 +566,13 @@ async fn rate_limit_middleware(
     let key = req
         .headers()
         .get("x-api-key")
+        // Optional: header value may contain non-ASCII bytes
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string())
         .or_else(|| {
             req.headers()
                 .get("authorization")
+                // Optional: header value may contain non-ASCII bytes
                 .and_then(|v| v.to_str().ok())
                 .and_then(|v| v.strip_prefix("Bearer "))
                 .map(|s| s.to_string())
@@ -617,11 +620,13 @@ pub fn build_router(state: GatewayState) -> Router {
                 .unwrap_or_else(|_| axum::http::HeaderValue::from_static("tauri://localhost")),
         ];
 
+        // Optional: CORS origins env var may not be set; defaults to localhost origins
         let origin_layer = match std::env::var("NEXUS_CORS_ORIGINS").ok().as_deref() {
             Some("*") => AllowOrigin::any(),
             Some(origins) => {
                 let parsed: Vec<axum::http::HeaderValue> = origins
                     .split(',')
+                    // Optional: skip origins that fail to parse as valid header values
                     .filter_map(|s| s.trim().parse().ok())
                     .collect();
                 AllowOrigin::list(if parsed.is_empty() {
@@ -715,6 +720,7 @@ pub fn build_router(state: GatewayState) -> Router {
         .route("/v1/chat/completions", post(openai_chat_completions))
         .route("/v1/embeddings", post(openai_embeddings))
         .route("/v1/models", get(openai_list_models))
+        .route("/v1/models/{model}", get(openai_get_model))
         // Anthropic-compatible API
         .route("/v1/messages", post(anthropic_messages))
         // REST API (nested under /api)
@@ -1229,6 +1235,7 @@ async fn mcp_tool_invoke(
         {
             Ok(result) => {
                 let fuel = inner.mcp_server.fuel_remaining(agent_id).unwrap_or(0);
+                // Best-effort: notify WebSocket subscribers of fuel consumption
                 let _ = inner.ws_tx.send(WsEvent::fuel_consumed(agent_id, fuel));
                 // Metrics: host function call + fuel consumed
                 if let Some(ref m) = inner.metrics {
@@ -1338,6 +1345,7 @@ async fn api_create_agent(
             EventType::UserAction,
             serde_json::json!({"event": "create_agent", "status": "ok"}),
         ) {
+            // Best-effort: notify WebSocket subscribers of audit event
             let _ = inner
                 .ws_tx
                 .send(WsEvent::audit_event(eid, agent_id, "UserAction"));
@@ -1346,6 +1354,7 @@ async fn api_create_agent(
                 m.inc_audit_blocks_created();
             }
         }
+        // Best-effort: notify WebSocket subscribers of agent status change
         let _ = inner
             .ws_tx
             .send(WsEvent::agent_status_changed(agent_id, "running"));
@@ -1387,10 +1396,12 @@ async fn api_start_agent(State(state): State<GatewayState>, Path(id): Path<Strin
             EventType::StateChange,
             serde_json::json!({"event": "start_agent", "status": "ok"}),
         ) {
+            // Best-effort: notify WebSocket subscribers of audit event
             let _ = inner
                 .ws_tx
                 .send(WsEvent::audit_event(eid, agent_id, "StateChange"));
         }
+        // Best-effort: notify WebSocket subscribers of agent status change
         let _ = inner
             .ws_tx
             .send(WsEvent::agent_status_changed(agent_id, "started"));
@@ -1424,10 +1435,12 @@ async fn api_stop_agent(State(state): State<GatewayState>, Path(id): Path<String
             EventType::StateChange,
             serde_json::json!({"event": "stop_agent", "status": "ok"}),
         ) {
+            // Best-effort: notify WebSocket subscribers of audit event
             let _ = inner
                 .ws_tx
                 .send(WsEvent::audit_event(eid, agent_id, "StateChange"));
         }
+        // Best-effort: notify WebSocket subscribers of agent status change
         let _ = inner
             .ws_tx
             .send(WsEvent::agent_status_changed(agent_id, "stopped"));
@@ -1526,6 +1539,7 @@ async fn api_update_permission(
                 "enabled": req.enabled,
             }),
         ) {
+            // Best-effort: notify WebSocket subscribers of permission change audit event
             let _ = inner
                 .ws_tx
                 .send(WsEvent::audit_event(eid, agent_id, "UserAction"));
@@ -1569,6 +1583,7 @@ async fn api_bulk_update_permissions(
                 "reason": req.reason,
             }),
         ) {
+            // Best-effort: notify WebSocket subscribers of bulk permission audit event
             let _ = inner
                 .ws_tx
                 .send(WsEvent::audit_event(eid, agent_id, "UserAction"));
@@ -1756,6 +1771,7 @@ async fn api_compliance_report(
         let did = inner
             .identity_manager
             .get_or_create(parsed)
+            // Optional: identity creation may fail; report proceeds without DID
             .ok()
             .map(|i| i.did.clone());
         let report = generator.generate(&manifest, did.as_deref(), &inner.audit_trail, parsed);
@@ -1812,6 +1828,7 @@ async fn api_compliance_erase(
             )
             .map_err(|e| error_json(StatusCode::CONFLICT, e.to_string()))?;
 
+        // Best-effort: notify WebSocket subscribers of GDPR erasure event
         let _ = ws_tx.send(WsEvent::compliance_alert(
             parsed,
             "agent data erased (GDPR Article 17)",
@@ -2227,6 +2244,7 @@ async fn anthropic_messages(
     // Log anthropic-version header if present (accept all versions)
     let _api_version = headers
         .get("anthropic-version")
+        // Optional: header value may contain non-ASCII bytes
         .and_then(|v| v.to_str().ok())
         .unwrap_or("2023-06-01");
 
@@ -2260,7 +2278,7 @@ async fn anthropic_messages(
             let findings = RedactionEngine::scan(&prompt);
             let redacted_prompt = RedactionEngine::apply(&prompt, &findings);
 
-            // Audit the request
+            // Best-effort: audit the Anthropic-compat API request
             let _ = inner.audit_trail.append_event(
                 Uuid::nil(),
                 EventType::UserAction,
@@ -2420,123 +2438,177 @@ async fn anthropic_messages(
 
 // ── OpenAI-compatible API (/v1/) ─────────────────────────────────────────────
 
-/// OpenAI Chat Completion request.
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct OpenAiChatRequest {
-    model: String,
-    messages: Vec<OpenAiChatMessage>,
-    #[serde(default)]
-    max_tokens: Option<u32>,
-    #[serde(default)]
-    temperature: Option<f32>,
-    #[serde(default)]
-    stream: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAiChatMessage {
-    role: String,
-    content: String,
-}
+use crate::openai_compat::ErrorResponse as OaiErrorResponse;
+use crate::openai_compat::{
+    self, ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, GovernanceMetadata,
+    ModelInfo, ModelRoute, ModelsResponse,
+};
 
 /// `POST /v1/chat/completions` — OpenAI Chat Completions compatible endpoint.
+///
+/// Supports two routing modes:
+/// - **Agent mode** (`model: "agent/<name>"`) — routes to a governed Nexus OS agent
+/// - **LLM passthrough** (`model: "gpt-4o"`, etc.) — routes to the configured LLM provider
+///
+/// Streaming (SSE) is supported when `stream: true`.
 async fn openai_chat_completions(
     State(state): State<GatewayState>,
     headers: HeaderMap,
-    Json(req): Json<OpenAiChatRequest>,
+    Json(req): Json<ChatCompletionRequest>,
 ) -> Response {
-    // Auth: accept Bearer token or x-api-key
+    // ── Auth ──
     {
         let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         if let Err(e) =
             validate_anthropic_auth(&headers, &inner.token_manager, &inner.gateway_identity)
         {
-            let body = serde_json::json!({
-                "error": { "message": e.message(), "type": "authentication_error", "code": "invalid_api_key" }
-            });
-            return (e.status_code(), Json(body)).into_response();
+            return (
+                e.status_code(),
+                Json(OaiErrorResponse::auth_error(&e.message())),
+            )
+                .into_response();
         }
     }
 
-    let prompt: String = req
-        .messages
-        .iter()
-        .map(|m| format!("[{}]\n{}", m.role, m.content))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let input_tokens = estimate_tokens(&prompt);
     let model = req.model.clone();
+    let stream = req.stream;
 
+    // ── Resolve model route ──
+    let known_agents: Vec<String> = {
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
+        inner.agent_cards.keys().cloned().collect()
+    };
+    let route = openai_compat::resolve_model(&model, &known_agents);
+
+    // ── Build prompt ──
+    let prompt = openai_compat::messages_to_prompt(&req.messages);
+    let input_tokens = openai_compat::estimate_tokens(&prompt);
     let max_tokens = req.max_tokens.unwrap_or(1024);
-    let result: Result<String, String> = tokio::task::spawn_blocking({
-        let state = state.clone();
-        let model = model.clone();
-        move || {
-            use nexus_kernel::redaction::RedactionEngine;
 
-            let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
-            let findings = RedactionEngine::scan(&prompt);
-            let redacted = RedactionEngine::apply(&prompt, &findings);
+    // ── Execute ──
+    let result: Result<(String, Option<GovernanceMetadata>), String> =
+        tokio::task::spawn_blocking({
+            let state = state.clone();
+            let model = model.clone();
+            let route = route.clone();
+            move || {
+                use nexus_kernel::redaction::RedactionEngine;
 
-            let _ = inner.audit_trail.append_event(
-                Uuid::nil(),
-                EventType::UserAction,
-                serde_json::json!({
-                    "event": "openai_chat_completions",
-                    "model": model,
-                    "input_tokens": input_tokens,
-                }),
-            );
+                let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
+                let findings = RedactionEngine::scan(&prompt);
+                let redacted = RedactionEngine::apply(&prompt, &findings);
 
-            if let Some(ref m) = inner.metrics {
-                m.inc_host_function_call("openai_chat_completions");
-            }
+                // Best-effort: audit the OpenAI-compat API request
+                let _ = inner.audit_trail.append_event(
+                    Uuid::nil(),
+                    EventType::UserAction,
+                    serde_json::json!({
+                        "event": "openai_chat_completions",
+                        "model": model,
+                        "route": format!("{route:?}"),
+                        "input_tokens": input_tokens,
+                    }),
+                );
 
-            // Route through real LLM provider if configured
-            match &inner.llm_provider {
-                Some(provider) => match provider.query(&redacted, max_tokens, &model) {
-                    Ok(resp) => Ok(resp.output_text),
-                    Err(e) => Err(format!("LLM provider error: {e}")),
-                },
-                None => {
-                    Err("No LLM provider configured. Install Ollama or set an API key.".to_string())
+                if let Some(ref m) = inner.metrics {
+                    m.inc_host_function_call("openai_chat_completions");
+                }
+
+                match route {
+                    ModelRoute::Agent { ref agent_id } => {
+                        // Agent mode: route through governance with agent context
+                        let agent_uuid = inner.agent_ids.get(agent_id).copied();
+                        let governance = GovernanceMetadata {
+                            agent_id: Some(agent_id.clone()),
+                            autonomy_level: agent_uuid.map(|_| 3),
+                            fuel_consumed: None,
+                            audit_hash: None,
+                            hitl_required: false,
+                        };
+
+                        // Route through LLM provider (agent context enriches prompt)
+                        match &inner.llm_provider {
+                            Some(provider) => match provider.query(&redacted, max_tokens, &model) {
+                                Ok(resp) => Ok((resp.output_text, Some(governance))),
+                                Err(e) => Err(format!("Agent LLM error: {e}")),
+                            },
+                            None => {
+                                Err(format!("No LLM provider configured for agent '{agent_id}'"))
+                            }
+                        }
+                    }
+                    ModelRoute::LlmPassthrough {
+                        provider: _,
+                        ref model,
+                    } => {
+                        // LLM passthrough: route to provider
+                        match &inner.llm_provider {
+                            Some(provider) => match provider.query(&redacted, max_tokens, model) {
+                                Ok(resp) => Ok((resp.output_text, None)),
+                                Err(e) => Err(format!("LLM provider error: {e}")),
+                            },
+                            None => Err(
+                                "No LLM provider configured. Install Ollama or set an API key."
+                                    .to_string(),
+                            ),
+                        }
+                    }
                 }
             }
-        }
-    })
-    .await
-    .unwrap_or_else(|e| Err(format!("internal error: {e}")));
+        })
+        .await
+        .unwrap_or_else(|e| Err(format!("internal error: {e}")));
 
-    // Return error if no provider or provider failed
-    let result = match result {
-        Ok(text) => text,
+    // ── Format response ──
+    match result {
+        Ok((text, governance)) => {
+            let output_tokens = openai_compat::estimate_tokens(&text);
+
+            if stream {
+                // SSE streaming response
+                let stream_id = format!("chatcmpl-{}", Uuid::new_v4().simple());
+                let chunks = openai_compat::chunk_text(&text, 3);
+
+                let mut body = String::new();
+                // Role announcement
+                body.push_str(&openai_compat::sse_data(&ChatCompletionChunk::role_chunk(
+                    &stream_id, &model,
+                )));
+                // Content chunks
+                for chunk_text in &chunks {
+                    body.push_str(&openai_compat::sse_data(
+                        &ChatCompletionChunk::content_chunk(&stream_id, &model, chunk_text),
+                    ));
+                }
+                // Stop chunk
+                body.push_str(&openai_compat::sse_data(&ChatCompletionChunk::stop_chunk(
+                    &stream_id, &model,
+                )));
+                // Done sentinel
+                body.push_str(openai_compat::SSE_DONE);
+
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Type", "text/event-stream")
+                    .header("Cache-Control", "no-cache")
+                    .header("Connection", "keep-alive")
+                    .body(axum::body::Body::from(body))
+                    .unwrap_or_else(|_| {
+                        (StatusCode::INTERNAL_SERVER_ERROR, "stream error").into_response()
+                    })
+            } else {
+                // Non-streaming response
+                let mut resp =
+                    ChatCompletionResponse::simple(&model, &text, input_tokens, output_tokens);
+                resp.nexus_governance = governance;
+                (StatusCode::OK, Json(resp)).into_response()
+            }
+        }
         Err(msg) => {
-            let body = serde_json::json!({
-                "error": { "message": msg, "type": "api_error", "code": "no_provider" }
-            });
-            return (StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response();
+            let body = OaiErrorResponse::new(&msg, "api_error", Some("no_provider"));
+            (StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response()
         }
-    };
-
-    let output_tokens = estimate_tokens(&result);
-    let response = serde_json::json!({
-        "id": format!("chatcmpl-{}", Uuid::new_v4().simple()),
-        "object": "chat.completion",
-        "created": WsEvent::now_ms() / 1000,
-        "model": model,
-        "choices": [{
-            "index": 0,
-            "message": { "role": "assistant", "content": result },
-            "finish_reason": "stop"
-        }],
-        "usage": {
-            "prompt_tokens": input_tokens,
-            "completion_tokens": output_tokens,
-            "total_tokens": input_tokens + output_tokens,
-        }
-    });
-    (StatusCode::OK, Json(response)).into_response()
+    }
 }
 
 /// `POST /v1/embeddings` — OpenAI Embeddings compatible endpoint.
@@ -2622,31 +2694,79 @@ async fn openai_embeddings(
 }
 
 /// `GET /v1/models` — list available models (OpenAI compatible).
+///
+/// Returns all registered agents as "agent/<name>" models plus well-known LLM models.
 async fn openai_list_models(State(state): State<GatewayState>, headers: HeaderMap) -> Response {
     {
         let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         if let Err(e) =
             validate_anthropic_auth(&headers, &inner.token_manager, &inner.gateway_identity)
         {
-            let body = serde_json::json!({
-                "error": { "message": e.message(), "type": "authentication_error" }
-            });
-            return (e.status_code(), Json(body)).into_response();
+            return (
+                e.status_code(),
+                Json(OaiErrorResponse::auth_error(&e.message())),
+            )
+                .into_response();
         }
     }
 
-    let models = serde_json::json!({
-        "object": "list",
-        "data": [
-            { "id": "nexus-governed", "object": "model", "created": 1700000000, "owned_by": "nexus-os" },
-            { "id": "llama3", "object": "model", "created": 1700000000, "owned_by": "meta" },
-            { "id": "claude-sonnet-4-20250514", "object": "model", "created": 1700000000, "owned_by": "anthropic" },
-            { "id": "gpt-4o", "object": "model", "created": 1700000000, "owned_by": "openai" },
-            { "id": "deepseek-chat", "object": "model", "created": 1700000000, "owned_by": "deepseek" },
-            { "id": "gemini-2.0-flash", "object": "model", "created": 1700000000, "owned_by": "google" },
-        ]
-    });
-    (StatusCode::OK, Json(models)).into_response()
+    let mut models: Vec<ModelInfo> = Vec::new();
+
+    // Add registered agents as models
+    {
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
+        for name in inner.agent_cards.keys() {
+            models.push(ModelInfo::new(&format!("agent/{name}"), "nexus-os"));
+        }
+    }
+
+    // Add the governed default
+    models.push(ModelInfo::new("nexus-governed", "nexus-os"));
+
+    // Add well-known provider models
+    models.push(ModelInfo::new("gpt-4o", "openai"));
+    models.push(ModelInfo::new("gpt-4o-mini", "openai"));
+    models.push(ModelInfo::new("claude-sonnet-4-20250514", "anthropic"));
+    models.push(ModelInfo::new("claude-3-5-haiku-20241022", "anthropic"));
+    models.push(ModelInfo::new("gemini-2.0-flash", "google"));
+    models.push(ModelInfo::new("deepseek-chat", "deepseek"));
+    models.push(ModelInfo::new("llama3", "meta"));
+
+    let response = ModelsResponse {
+        object: "list".into(),
+        data: models,
+    };
+    (StatusCode::OK, Json(response)).into_response()
+}
+
+/// `GET /v1/models/{model}` — get specific model info.
+async fn openai_get_model(
+    State(state): State<GatewayState>,
+    headers: HeaderMap,
+    Path(model_id): Path<String>,
+) -> Response {
+    {
+        let inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
+        if let Err(e) =
+            validate_anthropic_auth(&headers, &inner.token_manager, &inner.gateway_identity)
+        {
+            return (
+                e.status_code(),
+                Json(OaiErrorResponse::auth_error(&e.message())),
+            )
+                .into_response();
+        }
+    }
+
+    let route = openai_compat::resolve_model(&model_id, &[]);
+    let owned_by = if model_id.starts_with("agent/") {
+        "nexus-os"
+    } else {
+        route.provider_name()
+    };
+
+    let info = ModelInfo::new(&model_id, owned_by);
+    (StatusCode::OK, Json(info)).into_response()
 }
 
 // ── WebSocket ────────────────────────────────────────────────────────────────

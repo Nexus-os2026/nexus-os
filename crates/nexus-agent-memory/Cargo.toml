@@ -3,6 +3,7 @@ name = "nexus-agent-memory"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Agent memory store with consolidation, indexing, and governance"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

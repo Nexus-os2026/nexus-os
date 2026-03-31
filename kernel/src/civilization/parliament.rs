@@ -103,6 +103,7 @@ impl Parliament {
             created_at: now,
             expires_at: now + self.proposal_duration_secs,
         };
+        // Best-effort: audit proposal creation; proposal is stored regardless of log failure
         let _ = log.append_event(
             GovernanceEventType::ProposalCreated,
             &format!("Proposal {} by {}: {}", proposal.id, proposer_id, rule_text),
@@ -166,6 +167,7 @@ impl Parliament {
             proposal.votes_against += 1;
         }
 
+        // Best-effort: audit vote cast; vote is already recorded in proposal tally
         let _ = log.append_event(
             GovernanceEventType::VoteCast,
             &format!(
@@ -234,6 +236,7 @@ impl Parliament {
         proposal.status = new_status.clone();
 
         if new_status == ProposalStatus::Passed {
+            // Best-effort: audit rule passage; proposal status is already updated
             let _ = log.append_event(
                 GovernanceEventType::RulePassed,
                 &format!(

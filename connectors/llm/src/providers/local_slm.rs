@@ -306,6 +306,7 @@ impl LocalSlmProvider {
     pub fn active_model_id(&self) -> Option<String> {
         self.active_model
             .read()
+            // Optional: return None if RwLock is poisoned rather than panicking
             .ok()
             .and_then(|m| m.as_ref().map(|l| l.config.model_id.clone()))
     }
@@ -695,6 +696,7 @@ impl LocalSlmProvider {
             // Store the new tokens' hidden state in the cache.
             // For this MLP arch the "key" and "value" are both the hidden
             // state after the layer.
+            // Best-effort: store hidden state in KV cache for incremental inference
             let _ = kv_cache
                 .update(layer_idx, current.clone(), current.clone())
                 .map_err(map_err)?;

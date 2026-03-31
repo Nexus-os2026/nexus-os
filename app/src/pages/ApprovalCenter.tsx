@@ -436,10 +436,10 @@ export default function ApprovalCenter(): JSX.Element {
     const interval = setInterval(() => {
       listPendingConsents()
         .then((p) => setPending(p))
-        .catch(() => {});
+        .catch((e) => { if (import.meta.env.DEV) console.warn("[ApprovalCenter]", e); });
       hitlStats()
         .then((s) => setStats(s))
-        .catch(() => {});
+        .catch((e) => { if (import.meta.env.DEV) console.warn("[ApprovalCenter]", e); });
     }, 2000);
     return () => clearInterval(interval);
   }, [isDesktop]);
@@ -478,7 +478,7 @@ export default function ApprovalCenter(): JSX.Element {
             // Refresh history
             getConsentHistory(20)
               .then((h) => setHistory(h))
-              .catch(() => {});
+              .catch((e) => { if (import.meta.env.DEV) console.warn("[ApprovalCenter]", e); });
           }
         )
         .then((fn) => {

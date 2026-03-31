@@ -25,6 +25,7 @@ impl OpenAiProvider {
     pub fn from_env() -> Self {
         let endpoint = env::var("OPENAI_URL")
             .unwrap_or_else(|_| "https://api.openai.com/v1/chat/completions".to_string());
+        // Optional: API key may not be configured in environment
         let mut provider = Self::new(env::var("OPENAI_API_KEY").ok());
         provider.endpoint = endpoint;
         provider

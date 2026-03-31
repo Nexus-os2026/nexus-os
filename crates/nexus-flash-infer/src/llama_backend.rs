@@ -26,6 +26,7 @@ fn warm_page_cache(model_path: &Path) {
             let paths = collect_model_files(&path);
             let total_bytes: u64 = paths
                 .iter()
+                // Optional: skip files whose metadata can't be read
                 .filter_map(|p| std::fs::metadata(p).ok())
                 .map(|m| m.len())
                 .sum();
@@ -44,6 +45,7 @@ fn warm_page_cache(model_path: &Path) {
 
             tracing::info!("page cache warmup complete");
         })
+        // Optional: page cache warmup is non-critical, don't fail model loading
         .ok();
 }
 
@@ -200,6 +202,7 @@ impl InferenceBackend for LlamaBackend {
 
 /// A loaded llama.cpp model handle.
 struct LlamaModelHandle {
+    // Owns the loaded model; must stay alive while context is in use.
     #[allow(dead_code)]
     model: LlamaModel,
     context: Mutex<Option<LlamaContext>>,

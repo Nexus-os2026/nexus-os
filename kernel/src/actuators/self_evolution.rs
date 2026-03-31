@@ -296,6 +296,7 @@ impl SelfEvolutionActuator {
         builder.record_agent_state(&context.agent_id, field, before, after);
         let checkpoint = builder.build();
         let checkpoint_id = checkpoint.id.clone();
+        // Best-effort: discard commit_checkpoint Ok value; error is propagated via ?
         let _ = tm
             .commit_checkpoint(checkpoint.clone())
             .map_err(|e| ActuatorError::IoError(format!("commit time machine checkpoint: {e}")))?;

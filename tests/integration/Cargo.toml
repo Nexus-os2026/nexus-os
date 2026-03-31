@@ -1,5 +1,6 @@
 [package]
 name = "nexus-integration"
+description = "Integration tests for Nexus OS cross-crate functionality"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -62,8 +63,12 @@ nexus-external-tools = { path = "../../crates/nexus-external-tools" }
 nexus-collab-protocol = { path = "../../crates/nexus-collab-protocol" }
 nexus-software-factory = { path = "../../crates/nexus-software-factory" }
 nexus-mcp = { path = "../../crates/nexus-mcp" }
+nexus-a2a = { path = "../../crates/nexus-a2a" }
+nexus-memory = { path = "../../crates/nexus-memory" }
+nexus-migrate = { path = "../../crates/nexus-migrate" }
 nexus-metering = { path = "../../metering" }
-ed25519-dalek = { version = "2", features = ["rand_core"] }
+nexus-crypto = { path = "../../crates/nexus-crypto" }
+nexus-desktop-backend = { path = "../../app/src-tauri", features = ["test-support"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 base64 = "0.22"

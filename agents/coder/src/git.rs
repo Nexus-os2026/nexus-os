@@ -145,12 +145,14 @@ pub fn git_branch(project: impl AsRef<Path>, name: &str) -> Result<(), AgentErro
             "git branch name cannot be empty".to_string(),
         ));
     }
+    // Best-effort: git output not needed, only success/failure matters via ?
     let _ = run_git(project.as_ref(), ["checkout", "-b", name])?;
     Ok(())
 }
 
 pub fn auto_commit(project: impl AsRef<Path>, description: &str) -> Result<String, AgentError> {
     let message = format!("feat: {}", description.trim());
+    // Best-effort: git output not needed, only success/failure matters via ?
     let _ = run_git(project.as_ref(), ["add", "."])?;
     git_commit(project, message.as_str())
 }

@@ -22,6 +22,7 @@ impl TogetherProvider {
     pub fn from_env() -> Self {
         let endpoint = env::var("TOGETHER_URL")
             .unwrap_or_else(|_| "https://api.together.xyz/v1/chat/completions".to_string());
+        // Optional: API key may not be configured in environment
         let mut provider = Self::new(env::var("TOGETHER_API_KEY").ok());
         provider.endpoint = endpoint;
         provider

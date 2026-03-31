@@ -132,7 +132,7 @@ export default function ExternalTools() {
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button onClick={handleRefreshAvail} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Refresh Availability</button>
         <button onClick={handleVerify} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Verify Audit</button>
-        <button onClick={() => getRateLimitStatus().then(setRateLimits).catch(() => {})} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Rate Limits</button>
+        <button onClick={() => getRateLimitStatus().then(setRateLimits).catch((e) => { if (import.meta.env.DEV) console.warn("[ExternalTools]", e); })} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Rate Limits</button>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>

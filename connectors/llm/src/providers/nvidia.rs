@@ -469,6 +469,7 @@ impl NvidiaProvider {
     pub fn from_env() -> Self {
         let endpoint =
             env::var("NVIDIA_NIM_URL").unwrap_or_else(|_| NVIDIA_NIM_ENDPOINT.to_string());
+        // Optional: API key may not be configured in environment
         let mut provider = Self::new(env::var("NVIDIA_NIM_API_KEY").ok());
         provider.endpoint = endpoint;
         provider

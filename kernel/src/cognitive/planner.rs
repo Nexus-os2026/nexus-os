@@ -504,6 +504,7 @@ Each item must be:
 #[derive(Debug, Deserialize)]
 struct RawStep {
     action: PlannedAction,
+    // Deserialized from LLM JSON response; kept for debug / logging.
     #[allow(dead_code)]
     description: Option<String>,
 }

@@ -51,8 +51,10 @@ impl TelegramAdapter {
             .build()
             .unwrap_or_else(|_| Client::new());
 
+        // Optional: bot token may not be configured in environment
         let token_from_env = std::env::var("TELEGRAM_BOT_TOKEN").ok();
         let token_from_config = load_config()
+            // Optional: config file may not exist or be malformed
             .ok()
             .map(|cfg| cfg.messaging.telegram_bot_token)
             .map(|value| value.trim().to_string())
@@ -95,6 +97,7 @@ impl TelegramAdapter {
             "chat_id": chat_id,
             "action": "typing"
         });
+        // Best-effort: typing indicator is cosmetic, don't fail the operation
         let _ = self.send_payload("sendChatAction", &payload)?;
         Ok(())
     }

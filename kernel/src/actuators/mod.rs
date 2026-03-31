@@ -136,6 +136,7 @@ impl ActuatorRegistry {
         let required_caps = action.required_capabilities();
         for cap in &required_caps {
             if !has_capability(context.capabilities.iter().map(String::as_str), cap) {
+                // Best-effort: audit of denied action is secondary; the capability error is returned to the caller
                 let _ = self.audit_action(
                     action,
                     context,
@@ -151,6 +152,7 @@ impl ActuatorRegistry {
         // 2. Verify fuel budget (estimate cost before execution)
         let estimated_cost = estimate_action_cost(action);
         if context.fuel_remaining < estimated_cost {
+            // Best-effort: audit of fuel rejection is secondary; the InsufficientFuel error is returned to the caller
             let _ = self.audit_action(
                 action,
                 context,
@@ -170,6 +172,7 @@ impl ActuatorRegistry {
             if let Some(review_engine) = &context.action_review_engine {
                 match review_engine.review(&context.agent_id, &context.agent_name, action) {
                     Ok(ActionReviewDecision::Allow { reason }) => {
+                        // Best-effort: warden allow-decision audit is informational; action proceeds regardless
                         let _ = audit.append_event(
                             uuid::Uuid::parse_str(&context.agent_id)
                                 .unwrap_or_else(|_| uuid::Uuid::new_v4()),
@@ -185,6 +188,7 @@ impl ActuatorRegistry {
                         );
                     }
                     Ok(ActionReviewDecision::Deny { reason }) => {
+                        // Best-effort: warden deny-decision audit is informational; denial error is returned to caller
                         let _ = audit.append_event(
                             uuid::Uuid::parse_str(&context.agent_id)
                                 .unwrap_or_else(|_| uuid::Uuid::new_v4()),
@@ -203,6 +207,7 @@ impl ActuatorRegistry {
                         )));
                     }
                     Err(error) => {
+                        // Best-effort: warden error audit is informational; review failure error is returned to caller
                         let _ = audit.append_event(
                             uuid::Uuid::parse_str(&context.agent_id)
                                 .unwrap_or_else(|_| uuid::Uuid::new_v4()),
@@ -226,6 +231,7 @@ impl ActuatorRegistry {
         let result = actuator.execute(action, context)?;
 
         // 5. Audit
+        // Best-effort: post-execution audit is secondary; action result is already determined
         let _ = self.audit_action(
             action,
             context,

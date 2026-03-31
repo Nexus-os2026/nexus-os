@@ -2,6 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use coding_agent::run_coding_agent_from_manifest;
+use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use nexus_kernel::manifest::parse_manifest;
 use self_improve_agent::prompt_optimizer::PromptOutcome;
 use self_improve_agent::r#loop::{run_once_with_storage, AgentRunObservation, ImprovementStatus};
@@ -361,7 +362,9 @@ pub fn execute_package_command(path: &str) -> Result<String, String> {
 
     // Generate a deterministic dev signing key.
     // In production this would come from IdentityManager / keyring.
-    let signing_key = ed25519_dalek::SigningKey::from_bytes(&dev_signing_key_bytes());
+    let signing_key =
+        CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &dev_signing_key_bytes())
+            .map_err(|e| format!("key: {e}"))?;
 
     let result = packager::package_agent(project_dir, &signing_key)?;
     Ok(packager::format_result(&result))

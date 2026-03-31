@@ -510,6 +510,7 @@ impl A2aClient {
 
     fn audit_action(&self, action: &str, agent_name: &str, url: &str, success: bool, detail: &str) {
         if let Ok(mut audit) = self.audit.lock() {
+            // Best-effort: audit A2A client action; logging failure must not break protocol flow
             let _ = audit.append_event(
                 Uuid::nil(),
                 EventType::ToolCall,

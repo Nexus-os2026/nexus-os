@@ -95,6 +95,7 @@ pub(crate) fn token_to_text(vocab: *const ffi::LlamaVocab, token: ffi::LlamaToke
 }
 
 /// Get the end-of-sequence token ID.
+/// Part of the core tokenizer API surface; kept alongside `is_eog` for completeness.
 #[allow(dead_code)]
 pub(crate) fn eos_token(vocab: *const ffi::LlamaVocab) -> ffi::LlamaToken {
     if vocab.is_null() {
@@ -115,6 +116,7 @@ pub(crate) fn is_eog(vocab: *const ffi::LlamaVocab, token: ffi::LlamaToken) -> b
 }
 
 /// Get the beginning-of-sequence token ID.
+/// Part of the core tokenizer API surface; kept alongside `is_eog` for completeness.
 #[allow(dead_code)]
 pub(crate) fn bos_token(vocab: *const ffi::LlamaVocab) -> ffi::LlamaToken {
     if vocab.is_null() {

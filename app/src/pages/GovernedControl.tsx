@@ -217,7 +217,7 @@ export default function GovernedControl() {
           <button onClick={() => {
             setError(null);
             ccExecuteAction(selectedAgent, 4, ["computer_control"], actionJson)
-              .then((r) => { setExecuteResult(r); /* refresh history */ ccGetActionHistory(selectedAgent).then((h) => setHistory(Array.isArray(h) ? h : [])).catch(() => {}); })
+              .then((r) => { setExecuteResult(r); /* refresh history */ ccGetActionHistory(selectedAgent).then((h) => setHistory(Array.isArray(h) ? h : [])).catch((e) => { if (import.meta.env.DEV) console.warn("[GovernedControl]", e); }); })
               .catch((e) => setError(String(e)));
           }} style={{ padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer", fontWeight: 600, fontSize: 12, background: "#22c55e", color: "#000" }}>
             Execute

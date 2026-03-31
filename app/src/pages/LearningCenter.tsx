@@ -96,7 +96,7 @@ function loadProgress(): Record<string, number> {
 function saveProgress(progress: Record<string, number>) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
   // Also persist to backend for cross-session durability
-  learningSaveProgress(JSON.stringify(progress)).catch(() => {});
+  learningSaveProgress(JSON.stringify(progress)).catch((e) => { if (import.meta.env.DEV) console.warn("[LearningCenter]", e); });
 }
 
 async function loadBackendProgress(): Promise<Record<string, number> | null> {

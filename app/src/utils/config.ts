@@ -28,6 +28,10 @@ export function createDefaultConfig(): NexusConfig {
       whatsapp_api_token: "",
       discord_bot_token: "",
       slack_bot_token: "",
+      matrix_access_token: "",
+      matrix_homeserver: "",
+      webhook_outbound_url: "",
+      webhook_signing_secret: "",
     },
     voice: {
       whisper_model: "auto",

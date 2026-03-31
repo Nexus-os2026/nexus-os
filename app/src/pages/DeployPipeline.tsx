@@ -175,7 +175,8 @@ export default function DeployPipeline() {
       const raw = await factoryGetBuildHistory(projectId);
       const parsed: BuildResult[] = JSON.parse(raw);
       setBuildHistory(parsed);
-    } catch {
+    } catch (err) {
+      console.error("Failed to load build history:", err);
       setBuildHistory([]);
     }
   }, [isDesktop]);
@@ -188,8 +189,8 @@ export default function DeployPipeline() {
   useEffect(() => {
     if (view !== "airgap" || !isDesktop) return;
     airgapGetSystemInfo().then(raw => {
-      try { setAirgapSysInfo(JSON.parse(raw)); } catch { /* ignore */ }
-    }).catch(() => {});
+      try { setAirgapSysInfo(JSON.parse(raw)); } catch (err) { console.error("Failed to parse airgap info:", err); }
+    }).catch((e) => { if (import.meta.env.DEV) console.warn("[DeployPipeline]", e); });
   }, [view, isDesktop]);
 
   const handleCreateBundle = useCallback(async () => {

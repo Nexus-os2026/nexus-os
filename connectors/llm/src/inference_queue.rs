@@ -271,6 +271,7 @@ impl InferenceScheduler {
             let result = execute_request(provider.as_ref(), &entry.request);
             self.queue.in_flight.fetch_sub(1, Ordering::Relaxed);
             self.queue.completed.fetch_add(1, Ordering::Relaxed);
+            // Best-effort: receiver may have been dropped if caller timed out
             let _ = entry.reply_tx.send(result);
         }
     }
@@ -313,6 +314,7 @@ impl InferenceScheduler {
                     let result = execute_request(provider.as_ref(), &entry.request);
                     queue.in_flight.fetch_sub(1, Ordering::Relaxed);
                     queue.completed.fetch_add(1, Ordering::Relaxed);
+                    // Best-effort: receiver may have been dropped if caller timed out
                     let _ = entry.reply_tx.send(result);
                 }
             });
@@ -320,6 +322,7 @@ impl InferenceScheduler {
         }
 
         for handle in handles {
+            // Best-effort: join worker threads, ignore panics from individual workers
             let _ = handle.join();
         }
     }
@@ -332,6 +335,7 @@ impl InferenceScheduler {
             let result = execute_request(provider.as_ref(), &entry.request);
             self.queue.in_flight.fetch_sub(1, Ordering::Relaxed);
             self.queue.completed.fetch_add(1, Ordering::Relaxed);
+            // Best-effort: receiver may have been dropped if caller timed out
             let _ = entry.reply_tx.send(result);
         }
     }

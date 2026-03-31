@@ -7,7 +7,10 @@
     "dev": "npx vite",
     "build": "npx tsc && npx vite build",
     "preview": "npx vite preview",
-    "test": "node --test ./tests/*.test.js",
+    "test": "node --test ./tests/*.test.js && npx vitest run",
+    "test:smoke": "node --test ./tests/*.test.js",
+    "test:react": "npx vitest run",
+    "test:frontend": "npx vitest run",
     "lint": "tsc --noEmit",
     "tauri": "tauri",
     "dist:windows": "tauri build --features tauri-runtime --bundles nsis,msi",
@@ -27,13 +30,17 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.5.5",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.4",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
+    "jsdom": "^29.0.1",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
     "typescript": "^5.6.3",
-    "vite": "^5.4.8"
+    "vite": "^5.4.8",
+    "vitest": "^4.1.2"
   }
 }

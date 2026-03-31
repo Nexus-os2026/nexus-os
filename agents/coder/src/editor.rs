@@ -390,8 +390,11 @@ fn rollback(project_root: &Path, backups: &HashMap<String, Backup>) -> Result<()
 }
 
 fn file_version(path: &Path) -> Option<u128> {
+    // Optional: file may not exist or be inaccessible
     let metadata = fs::metadata(path).ok()?;
+    // Optional: modification time may not be available on all filesystems
     let modified = metadata.modified().ok()?;
+    // Optional: system time may be before UNIX_EPOCH on misconfigured clocks
     let duration = modified.duration_since(UNIX_EPOCH).ok()?;
     Some(duration.as_nanos())
 }

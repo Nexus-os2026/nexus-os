@@ -190,6 +190,7 @@ impl CodeExecuteActuator {
                         .take()
                         .map(|mut s| {
                             let mut buf = Vec::new();
+                            // Optional: partial stdout read still produces usable output; pipe may be broken after process exit
                             std::io::Read::read_to_end(&mut s, &mut buf).ok();
                             buf
                         })
@@ -199,12 +200,13 @@ impl CodeExecuteActuator {
                         .take()
                         .map(|mut s| {
                             let mut buf = Vec::new();
+                            // Optional: partial stderr read still produces usable diagnostics; pipe may be broken after process exit
                             std::io::Read::read_to_end(&mut s, &mut buf).ok();
                             buf
                         })
                         .unwrap_or_default();
 
-                    // Clean up temp file
+                    // Best-effort: temp file cleanup is housekeeping; execution result is already captured
                     let _ = std::fs::remove_file(&temp_path);
 
                     let mut output = String::from_utf8_lossy(&stdout).to_string();
@@ -228,8 +230,11 @@ impl CodeExecuteActuator {
                 Ok(None) => {
                     // Still running — check timeout
                     if start.elapsed() > timeout {
+                        // Best-effort: kill signal may fail if process already exited; timeout error is returned regardless
                         let _ = child.kill();
+                        // Best-effort: reaping the child avoids zombies but timeout error takes precedence
                         let _ = child.wait();
+                        // Best-effort: temp file cleanup after timeout; OS will reclaim on reboot if removal fails
                         let _ = std::fs::remove_file(&temp_path);
                         return Err(ActuatorError::CommandTimeout {
                             seconds: timeout.as_secs(),
@@ -238,6 +243,7 @@ impl CodeExecuteActuator {
                     std::thread::sleep(Duration::from_millis(50));
                 }
                 Err(e) => {
+                    // Best-effort: temp file cleanup on error; the wait error itself is returned
                     let _ = std::fs::remove_file(&temp_path);
                     return Err(ActuatorError::IoError(format!("wait: {e}")));
                 }

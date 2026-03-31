@@ -411,7 +411,7 @@ export default function VoiceAssistant() {
               utterance.onend = () => setSpeaking(false);
               speechSynthesis.speak(utterance);
             }
-          }).catch(() => {});
+          }).catch((e) => { if (import.meta.env.DEV) console.warn("[VoiceAssistant]", e); });
         }
       }
     };

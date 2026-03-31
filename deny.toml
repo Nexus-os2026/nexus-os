@@ -2,29 +2,89 @@
 all-features = true
 
 [advisories]
-unmaintained = "workspace"
-yanked = "warn"
-ignore = []
+ignore = [
+    # ── Vulnerabilities (accepted risk, upgrade when dependency tree allows) ──
+
+    # aws-lc-sys 0.38.0: X.509 name constraints bypass via wildcard/unicode CN.
+    # Nexus does not perform direct X.509 name constraint validation.
+    { id = "RUSTSEC-2026-0044", reason = "No direct X.509 name constraint validation in Nexus" },
+
+    # aws-lc-sys 0.38.0: CRL distribution point scope check logic error.
+    # TLS-only impact; Nexus does not use CRL distribution points.
+    { id = "RUSTSEC-2026-0048", reason = "TLS-only CRL impact; no CRL distribution points used" },
+
+    # rsa 0.9.x: Marvin Attack — timing sidechannel on PKCS#1 v1.5 decryption.
+    # Nexus uses Ed25519, not RSA decryption. Transitive dep via oauth2.
+    { id = "RUSTSEC-2023-0071", reason = "Nexus uses Ed25519, not RSA decryption" },
+
+    # rustls-webpki: CRL matching logic error.
+    # Transitive dep via reqwest; no CRL validation in Nexus.
+    { id = "RUSTSEC-2026-0049", reason = "Transitive dep via reqwest; no CRL validation" },
+
+    # tar 0.4.44: unpack_in symlink chmod and PAX size header issues.
+    # tar used only in kernel for trusted package extraction.
+    { id = "RUSTSEC-2026-0067", reason = "tar used only for trusted package extraction in kernel" },
+    { id = "RUSTSEC-2026-0068", reason = "tar used only for trusted package extraction; trusted inputs" },
+
+    # ── Unmaintained crates (transitive deps, no direct replacement available) ──
+
+    # gtk-rs GTK3 bindings — pulled by Tauri on Linux. GTK4 migration is a Tauri concern.
+    { id = "RUSTSEC-2024-0411", reason = "Transitive Tauri/GTK3 dep; GTK4 migration is upstream" },
+    { id = "RUSTSEC-2024-0412", reason = "Transitive Tauri/GTK3 dep" },
+    { id = "RUSTSEC-2024-0413", reason = "Transitive Tauri/GTK3 dep" },
+    { id = "RUSTSEC-2024-0415", reason = "Transitive Tauri/GTK3 dep" },
+    { id = "RUSTSEC-2024-0416", reason = "Transitive Tauri/GTK3 dep" },
+    { id = "RUSTSEC-2024-0418", reason = "Transitive Tauri/GTK3 dep" },
+    { id = "RUSTSEC-2024-0419", reason = "Transitive Tauri/GTK3 dep" },
+    { id = "RUSTSEC-2024-0420", reason = "Transitive Tauri/GTK3 dep" },
+
+    # proc-macro-error: unmaintained. Transitive dep, no replacement yet.
+    { id = "RUSTSEC-2024-0370", reason = "Transitive proc-macro dep; no drop-in replacement" },
+
+    # paste: unmaintained. Widely used, stable, no security impact.
+    { id = "RUSTSEC-2024-0436", reason = "Stable transitive dep; no security impact" },
+
+    # fxhash: unmaintained. Used transitively; foldhash is the replacement but not adopted upstream.
+    { id = "RUSTSEC-2025-0057", reason = "Transitive dep; upstream hasn't migrated to foldhash" },
+
+    # unic-* crates: unmaintained Unicode helpers. Transitive deps.
+    { id = "RUSTSEC-2025-0075", reason = "Transitive Unicode helper dep" },
+    { id = "RUSTSEC-2025-0080", reason = "Transitive Unicode helper dep" },
+    { id = "RUSTSEC-2025-0081", reason = "Transitive Unicode helper dep" },
+    { id = "RUSTSEC-2025-0098", reason = "Transitive Unicode helper dep" },
+    { id = "RUSTSEC-2025-0100", reason = "Transitive Unicode helper dep" },
+
+    # number_prefix: unmaintained. Transitive dep for human-readable byte formatting.
+    { id = "RUSTSEC-2025-0119", reason = "Transitive dep; stable, no security impact" },
+]
 
 [licenses]
 allow = [
-  "Apache-2.0",
-  "Apache-2.0 WITH LLVM-exception",
-  "BSD-2-Clause",
-  "BSD-3-Clause",
-  "CDLA-Permissive-2.0",
-  "ISC",
-  "MIT",
-  "MPL-2.0",
-  "OpenSSL",
-  "Unicode-3.0",
-  "Zlib",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "OpenSSL",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+    "BlueOak-1.0.0",
+    "Artistic-2.0",
 ]
 confidence-threshold = 0.8
 
+[licenses.private]
+ignore = true
+
 [bans]
 multiple-versions = "warn"
-wildcards = "allow"
+wildcards = "warn"
 
 [sources]
 unknown-registry = "deny"

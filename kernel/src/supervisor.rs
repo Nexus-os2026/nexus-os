@@ -127,6 +127,7 @@ impl Supervisor {
     /// Create a supervisor with a policy engine loaded from the given directory.
     pub fn with_policy_dir(dir: impl Into<PathBuf>) -> Self {
         let mut engine = PolicyEngine::new(dir);
+        // Best-effort: failure to load policies does not block supervisor creation
         let _ = engine.load_policies();
         Self {
             agents: HashMap::new(),
@@ -326,6 +327,7 @@ impl Supervisor {
             json!("running"),
         );
         let checkpoint = builder.build();
+        // Best-effort: failure to record checkpoint does not block agent start
         let _ = self.time_machine.commit_checkpoint(checkpoint);
 
         Ok(id)
@@ -360,6 +362,7 @@ impl Supervisor {
                     json!("stopped"),
                 );
                 let checkpoint = builder.build();
+                // Best-effort: failure to record checkpoint does not block agent stop
                 let _ = self.time_machine.commit_checkpoint(checkpoint);
 
                 Ok(())
@@ -982,6 +985,7 @@ impl Supervisor {
             json!(handle.manifest.capabilities),
         );
         let checkpoint = builder.build();
+        // Best-effort: failure to record checkpoint does not block permission update
         let _ = self.time_machine.commit_checkpoint(checkpoint);
 
         Ok(())
@@ -1141,6 +1145,7 @@ impl Supervisor {
             json!(handle.remaining_fuel),
         );
         let checkpoint = builder.build();
+        // Best-effort: failure to record checkpoint does not block fuel reservation
         let _ = self.time_machine.commit_checkpoint(checkpoint);
 
         Ok(SupervisorFuelReservation {

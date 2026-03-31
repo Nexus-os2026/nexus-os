@@ -1,5 +1,6 @@
 [package]
 name = "nexus-analytics"
+description = "Agent performance analytics, KPI tracking, and metrics aggregation for Nexus OS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

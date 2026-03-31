@@ -1,0 +1,4292 @@
+{
+  "generatedAt": "2026-03-30T14:01:30.009Z",
+  "appRoot": "/home/nexus/NEXUS/nexus-os/app",
+  "summary": {
+    "totalPageFiles": 85,
+    "totalRoutePageIds": 85,
+    "totalNavItems": 85,
+    "totalUniqueRoutes": 85,
+    "routedFilesCount": 83,
+    "unroutedFiles": [
+      "SetupWizard.tsx",
+      "commandCenterUi.tsx"
+    ]
+  },
+  "routing": {
+    "pageIds": [
+      "dashboard",
+      "chat",
+      "agents",
+      "audit",
+      "workflows",
+      "marketplace",
+      "settings",
+      "command-center",
+      "audit-timeline",
+      "marketplace-browser",
+      "developer-portal",
+      "compliance",
+      "cluster",
+      "trust",
+      "distributed-audit",
+      "permissions",
+      "protocols",
+      "identity",
+      "firewall",
+      "browser",
+      "computer-control",
+      "code-editor",
+      "terminal",
+      "file-manager",
+      "system-monitor",
+      "notes",
+      "project-manager",
+      "database",
+      "api-client",
+      "design-studio",
+      "email-client",
+      "messaging",
+      "media-studio",
+      "app-store",
+      "ai-chat-hub",
+      "deploy-pipeline",
+      "learning-center",
+      "policy-management",
+      "documents",
+      "model-hub",
+      "time-machine",
+      "voice-assistant",
+      "approvals",
+      "simulation",
+      "mission-control",
+      "dna-lab",
+      "timeline-viewer",
+      "knowledge-graph",
+      "immune-dashboard",
+      "consciousness",
+      "dreams",
+      "temporal",
+      "civilization",
+      "self-rewrite",
+      "admin-console",
+      "admin-users",
+      "admin-fleet",
+      "admin-policies",
+      "admin-compliance",
+      "admin-health",
+      "integrations",
+      "login",
+      "workspaces",
+      "telemetry",
+      "usage-billing",
+      "scheduler",
+      "flash-inference",
+      "measurement",
+      "measurement-session",
+      "measurement-compare",
+      "measurement-batteries",
+      "capability-boundaries",
+      "model-routing",
+      "ab-validation",
+      "browser-agent",
+      "governance-oracle",
+      "token-economy",
+      "governed-control",
+      "world-sim",
+      "perception",
+      "agent-memory",
+      "external-tools",
+      "collab-protocol",
+      "software-factory",
+      "memory-dashboard"
+    ],
+    "navItems": [
+      {
+        "id": "dashboard",
+        "label": "Dashboard",
+        "section": "CORE"
+      },
+      {
+        "id": "ai-chat-hub",
+        "label": "Chat",
+        "section": "CORE"
+      },
+      {
+        "id": "agents",
+        "label": "Agents",
+        "section": "CORE"
+      },
+      {
+        "id": "file-manager",
+        "label": "Files",
+        "section": "CORE"
+      },
+      {
+        "id": "model-hub",
+        "label": "Models",
+        "section": "CORE"
+      },
+      {
+        "id": "flash-inference",
+        "label": "Flash Inference",
+        "section": "CORE"
+      },
+      {
+        "id": "documents",
+        "label": "Documents",
+        "section": "CORE"
+      },
+      {
+        "id": "scheduler",
+        "label": "Scheduler",
+        "section": "CORE"
+      },
+      {
+        "id": "approvals",
+        "label": "Approvals",
+        "section": "CORE"
+      },
+      {
+        "id": "terminal",
+        "label": "Terminal",
+        "section": "CORE"
+      },
+      {
+        "id": "settings",
+        "label": "Settings",
+        "section": "CORE"
+      },
+      {
+        "id": "email-client",
+        "label": "Email",
+        "section": "COMMUNICATION"
+      },
+      {
+        "id": "voice-assistant",
+        "label": "Voice",
+        "section": "COMMUNICATION"
+      },
+      {
+        "id": "messaging",
+        "label": "Messaging",
+        "section": "COMMUNICATION"
+      },
+      {
+        "id": "integrations",
+        "label": "Integrations",
+        "section": "COMMUNICATION"
+      },
+      {
+        "id": "system-monitor",
+        "label": "System Monitor",
+        "section": "MONITORING"
+      },
+      {
+        "id": "audit",
+        "label": "Audit",
+        "section": "MONITORING"
+      },
+      {
+        "id": "audit-timeline",
+        "label": "Audit Timeline",
+        "section": "MONITORING"
+      },
+      {
+        "id": "trust",
+        "label": "Trust Dashboard",
+        "section": "MONITORING"
+      },
+      {
+        "id": "firewall",
+        "label": "Firewall",
+        "section": "MONITORING"
+      },
+      {
+        "id": "compliance",
+        "label": "Compliance",
+        "section": "MONITORING"
+      },
+      {
+        "id": "permissions",
+        "label": "Permissions",
+        "section": "MONITORING"
+      },
+      {
+        "id": "browser",
+        "label": "Agent Browser",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "memory-dashboard",
+        "label": "Agent Memory",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "dna-lab",
+        "label": "DNA Lab",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "measurement",
+        "label": "Measurement",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "measurement-session",
+        "label": "Session Detail",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "measurement-compare",
+        "label": "Compare Agents",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "measurement-batteries",
+        "label": "Test Batteries",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "capability-boundaries",
+        "label": "Boundary Map",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "model-routing",
+        "label": "Model Routing",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "ab-validation",
+        "label": "A/B Validation",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "browser-agent",
+        "label": "Browser Agent",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "governance-oracle",
+        "label": "Governance Oracle",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "token-economy",
+        "label": "Token Economy",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "governed-control",
+        "label": "Computer Control",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "world-sim",
+        "label": "World Simulation",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "perception",
+        "label": "Perception",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "agent-memory",
+        "label": "Agent Memory",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "external-tools",
+        "label": "External Tools",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "collab-protocol",
+        "label": "Collaboration",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "software-factory",
+        "label": "Software Factory",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "self-rewrite",
+        "label": "Self-Rewrite Lab",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "consciousness",
+        "label": "Consciousness",
+        "section": "AGENT LAB"
+      },
+      {
+        "id": "design-studio",
+        "label": "Design Studio",
+        "section": "CREATIVE"
+      },
+      {
+        "id": "media-studio",
+        "label": "Media Studio",
+        "section": "CREATIVE"
+      },
+      {
+        "id": "dreams",
+        "label": "DreamForge",
+        "section": "CREATIVE"
+      },
+      {
+        "id": "notes",
+        "label": "Notes",
+        "section": "CREATIVE"
+      },
+      {
+        "id": "code-editor",
+        "label": "Code Editor",
+        "section": "DEVELOPER"
+      },
+      {
+        "id": "api-client",
+        "label": "API Client",
+        "section": "DEVELOPER"
+      },
+      {
+        "id": "database",
+        "label": "Database",
+        "section": "DEVELOPER"
+      },
+      {
+        "id": "developer-portal",
+        "label": "Developer Portal",
+        "section": "DEVELOPER"
+      },
+      {
+        "id": "deploy-pipeline",
+        "label": "Deploy Pipeline",
+        "section": "DEVELOPER"
+      },
+      {
+        "id": "protocols",
+        "label": "Protocols",
+        "section": "DEVELOPER"
+      },
+      {
+        "id": "workflows",
+        "label": "Workflows",
+        "section": "AUTOMATION"
+      },
+      {
+        "id": "time-machine",
+        "label": "Time Machine",
+        "section": "AUTOMATION"
+      },
+      {
+        "id": "timeline-viewer",
+        "label": "Timeline Viewer",
+        "section": "AUTOMATION"
+      },
+      {
+        "id": "temporal",
+        "label": "Temporal Engine",
+        "section": "AUTOMATION"
+      },
+      {
+        "id": "simulation",
+        "label": "Scenario Sandbox",
+        "section": "SIMULATION"
+      },
+      {
+        "id": "civilization",
+        "label": "Civilization",
+        "section": "SIMULATION"
+      },
+      {
+        "id": "computer-control",
+        "label": "Computer Control",
+        "section": "SIMULATION"
+      },
+      {
+        "id": "login",
+        "label": "Auth / Sessions",
+        "section": "ENTERPRISE"
+      },
+      {
+        "id": "workspaces",
+        "label": "Workspaces",
+        "section": "ENTERPRISE"
+      },
+      {
+        "id": "admin-console",
+        "label": "Admin Dashboard",
+        "section": "ENTERPRISE"
+      },
+      {
+        "id": "admin-users",
+        "label": "Admin Users",
+        "section": "ENTERPRISE"
+      },
+      {
+        "id": "admin-fleet",
+        "label": "Admin Fleet",
+        "section": "ENTERPRISE"
+      },
+      {
+        "id": "admin-compliance",
+        "label": "Admin Compliance",
+        "section": "ENTERPRISE"
+      },
+      {
+        "id": "admin-policies",
+        "label": "Admin Policy",
+        "section": "ENTERPRISE"
+      },
+      {
+        "id": "admin-health",
+        "label": "Admin Health",
+        "section": "ENTERPRISE"
+      },
+      {
+        "id": "usage-billing",
+        "label": "Usage & Billing",
+        "section": "ENTERPRISE"
+      },
+      {
+        "id": "telemetry",
+        "label": "Telemetry",
+        "section": "ENTERPRISE"
+      },
+      {
+        "id": "cluster",
+        "label": "Cluster Status",
+        "section": "ENTERPRISE"
+      },
+      {
+        "id": "distributed-audit",
+        "label": "Distributed Audit",
+        "section": "ENTERPRISE"
+      },
+      {
+        "id": "policy-management",
+        "label": "Policy Management",
+        "section": "ENTERPRISE"
+      },
+      {
+        "id": "learning-center",
+        "label": "Learning Center",
+        "section": "LEARN & DISCOVER"
+      },
+      {
+        "id": "app-store",
+        "label": "App Store",
+        "section": "LEARN & DISCOVER"
+      },
+      {
+        "id": "knowledge-graph",
+        "label": "Knowledge Graph",
+        "section": "LEARN & DISCOVER"
+      },
+      {
+        "id": "project-manager",
+        "label": "Project Manager",
+        "section": "LEARN & DISCOVER"
+      },
+      {
+        "id": "chat",
+        "label": "Chat (Legacy)",
+        "section": "OTHER"
+      },
+      {
+        "id": "command-center",
+        "label": "Command Center",
+        "section": "OTHER"
+      },
+      {
+        "id": "mission-control",
+        "label": "Mission Control",
+        "section": "OTHER"
+      },
+      {
+        "id": "marketplace",
+        "label": "Publish Agent",
+        "section": "OTHER"
+      },
+      {
+        "id": "marketplace-browser",
+        "label": "Browse Agents",
+        "section": "OTHER"
+      },
+      {
+        "id": "immune-dashboard",
+        "label": "Immune System",
+        "section": "OTHER"
+      },
+      {
+        "id": "identity",
+        "label": "Identity & Mesh",
+        "section": "OTHER"
+      }
+    ],
+    "pageIdToRoute": {
+      "dashboard": "/legacy-dashboard",
+      "chat": "/chat",
+      "agents": "/agents",
+      "audit": "/audit",
+      "workflows": "/workflows",
+      "marketplace": "/publish",
+      "settings": "/settings",
+      "command-center": "/command",
+      "audit-timeline": "/timeline",
+      "marketplace-browser": "/marketplace-browser",
+      "developer-portal": "/developer-portal",
+      "compliance": "/compliance",
+      "cluster": "/cluster",
+      "trust": "/trust",
+      "distributed-audit": "/chain",
+      "permissions": "/permissions",
+      "protocols": "/protocols",
+      "identity": "/identity",
+      "firewall": "/firewall",
+      "browser": "/browser",
+      "computer-control": "/computer-control",
+      "code-editor": "/code",
+      "terminal": "/terminal",
+      "file-manager": "/files",
+      "system-monitor": "/monitor",
+      "notes": "/notes",
+      "project-manager": "/projects",
+      "database": "/database",
+      "api-client": "/api-client",
+      "design-studio": "/design",
+      "email-client": "/email",
+      "messaging": "/messaging",
+      "media-studio": "/media",
+      "app-store": "/agent-store",
+      "ai-chat-hub": "/ai-chat",
+      "deploy-pipeline": "/deploy",
+      "learning-center": "/learn",
+      "policy-management": "/policies",
+      "documents": "/documents",
+      "model-hub": "/models",
+      "time-machine": "/time-machine",
+      "voice-assistant": "/voice",
+      "approvals": "/approvals",
+      "simulation": "/world-simulation",
+      "mission-control": "/dashboard",
+      "dna-lab": "/dna-lab",
+      "timeline-viewer": "/timeline-viewer",
+      "knowledge-graph": "/knowledge",
+      "immune-dashboard": "/immune",
+      "consciousness": "/consciousness",
+      "dreams": "/dreams",
+      "temporal": "/temporal",
+      "civilization": "/civilization",
+      "self-rewrite": "/self-rewrite",
+      "admin-console": "/admin-console",
+      "admin-users": "/admin-users",
+      "admin-fleet": "/admin-fleet",
+      "admin-policies": "/admin-policies",
+      "admin-compliance": "/admin-compliance",
+      "admin-health": "/admin-health",
+      "integrations": "/integrations",
+      "login": "/login",
+      "workspaces": "/workspaces",
+      "telemetry": "/telemetry",
+      "usage-billing": "/usage-billing",
+      "scheduler": "/scheduler",
+      "flash-inference": "/flash-inference",
+      "measurement": "/measurement",
+      "measurement-session": "/measurement-session",
+      "measurement-compare": "/measurement-compare",
+      "measurement-batteries": "/measurement-batteries",
+      "capability-boundaries": "/capability-boundaries",
+      "model-routing": "/model-routing",
+      "ab-validation": "/ab-validation",
+      "browser-agent": "/browser-agent",
+      "governance-oracle": "/governance-oracle",
+      "token-economy": "/token-economy",
+      "governed-control": "/governed-control",
+      "world-sim": "/world-sim",
+      "perception": "/perception",
+      "agent-memory": "/agent-memory",
+      "external-tools": "/external-tools",
+      "collab-protocol": "/collab-protocol",
+      "software-factory": "/software-factory",
+      "memory-dashboard": "/memory-dashboard"
+    },
+    "routeToPageIds": {
+      "/legacy-dashboard": [
+        "dashboard"
+      ],
+      "/chat": [
+        "chat"
+      ],
+      "/agents": [
+        "agents"
+      ],
+      "/audit": [
+        "audit"
+      ],
+      "/workflows": [
+        "workflows"
+      ],
+      "/publish": [
+        "marketplace"
+      ],
+      "/settings": [
+        "settings"
+      ],
+      "/command": [
+        "command-center"
+      ],
+      "/timeline": [
+        "audit-timeline"
+      ],
+      "/marketplace-browser": [
+        "marketplace-browser"
+      ],
+      "/developer-portal": [
+        "developer-portal"
+      ],
+      "/compliance": [
+        "compliance"
+      ],
+      "/cluster": [
+        "cluster"
+      ],
+      "/trust": [
+        "trust"
+      ],
+      "/chain": [
+        "distributed-audit"
+      ],
+      "/permissions": [
+        "permissions"
+      ],
+      "/protocols": [
+        "protocols"
+      ],
+      "/identity": [
+        "identity"
+      ],
+      "/firewall": [
+        "firewall"
+      ],
+      "/browser": [
+        "browser"
+      ],
+      "/computer-control": [
+        "computer-control"
+      ],
+      "/code": [
+        "code-editor"
+      ],
+      "/terminal": [
+        "terminal"
+      ],
+      "/files": [
+        "file-manager"
+      ],
+      "/monitor": [
+        "system-monitor"
+      ],
+      "/notes": [
+        "notes"
+      ],
+      "/projects": [
+        "project-manager"
+      ],
+      "/database": [
+        "database"
+      ],
+      "/api-client": [
+        "api-client"
+      ],
+      "/design": [
+        "design-studio"
+      ],
+      "/email": [
+        "email-client"
+      ],
+      "/messaging": [
+        "messaging"
+      ],
+      "/media": [
+        "media-studio"
+      ],
+      "/agent-store": [
+        "app-store"
+      ],
+      "/ai-chat": [
+        "ai-chat-hub"
+      ],
+      "/deploy": [
+        "deploy-pipeline"
+      ],
+      "/learn": [
+        "learning-center"
+      ],
+      "/policies": [
+        "policy-management"
+      ],
+      "/documents": [
+        "documents"
+      ],
+      "/models": [
+        "model-hub"
+      ],
+      "/time-machine": [
+        "time-machine"
+      ],
+      "/voice": [
+        "voice-assistant"
+      ],
+      "/approvals": [
+        "approvals"
+      ],
+      "/world-simulation": [
+        "simulation"
+      ],
+      "/dashboard": [
+        "mission-control"
+      ],
+      "/dna-lab": [
+        "dna-lab"
+      ],
+      "/timeline-viewer": [
+        "timeline-viewer"
+      ],
+      "/knowledge": [
+        "knowledge-graph"
+      ],
+      "/immune": [
+        "immune-dashboard"
+      ],
+      "/consciousness": [
+        "consciousness"
+      ],
+      "/dreams": [
+        "dreams"
+      ],
+      "/temporal": [
+        "temporal"
+      ],
+      "/civilization": [
+        "civilization"
+      ],
+      "/self-rewrite": [
+        "self-rewrite"
+      ],
+      "/admin-console": [
+        "admin-console"
+      ],
+      "/admin-users": [
+        "admin-users"
+      ],
+      "/admin-fleet": [
+        "admin-fleet"
+      ],
+      "/admin-policies": [
+        "admin-policies"
+      ],
+      "/admin-compliance": [
+        "admin-compliance"
+      ],
+      "/admin-health": [
+        "admin-health"
+      ],
+      "/integrations": [
+        "integrations"
+      ],
+      "/login": [
+        "login"
+      ],
+      "/workspaces": [
+        "workspaces"
+      ],
+      "/telemetry": [
+        "telemetry"
+      ],
+      "/usage-billing": [
+        "usage-billing"
+      ],
+      "/scheduler": [
+        "scheduler"
+      ],
+      "/flash-inference": [
+        "flash-inference"
+      ],
+      "/measurement": [
+        "measurement"
+      ],
+      "/measurement-session": [
+        "measurement-session"
+      ],
+      "/measurement-compare": [
+        "measurement-compare"
+      ],
+      "/measurement-batteries": [
+        "measurement-batteries"
+      ],
+      "/capability-boundaries": [
+        "capability-boundaries"
+      ],
+      "/model-routing": [
+        "model-routing"
+      ],
+      "/ab-validation": [
+        "ab-validation"
+      ],
+      "/browser-agent": [
+        "browser-agent"
+      ],
+      "/governance-oracle": [
+        "governance-oracle"
+      ],
+      "/token-economy": [
+        "token-economy"
+      ],
+      "/governed-control": [
+        "governed-control"
+      ],
+      "/world-sim": [
+        "world-sim"
+      ],
+      "/perception": [
+        "perception"
+      ],
+      "/agent-memory": [
+        "agent-memory"
+      ],
+      "/external-tools": [
+        "external-tools"
+      ],
+      "/collab-protocol": [
+        "collab-protocol"
+      ],
+      "/software-factory": [
+        "software-factory"
+      ],
+      "/memory-dashboard": [
+        "memory-dashboard"
+      ]
+    },
+    "pageIdToComponent": {
+      "dashboard": "Dashboard",
+      "chat": "Chat",
+      "agents": "Agents",
+      "audit": "Audit",
+      "workflows": "Workflows",
+      "marketplace": "AppStore",
+      "settings": "Settings",
+      "command-center": "CommandCenter",
+      "audit-timeline": "AuditTimeline",
+      "marketplace-browser": "AppStore",
+      "developer-portal": "DeveloperPortal",
+      "compliance": "ComplianceDashboard",
+      "cluster": "ClusterStatusPage",
+      "trust": "TrustDashboard",
+      "distributed-audit": "DistributedAudit",
+      "permissions": "PermissionDashboard",
+      "protocols": "Protocols",
+      "identity": "Identity",
+      "firewall": "Firewall",
+      "browser": "AgentBrowser",
+      "computer-control": "ComputerControl",
+      "code-editor": "CodeEditor",
+      "terminal": "Terminal",
+      "file-manager": "FileManager",
+      "system-monitor": "SystemMonitor",
+      "notes": "NotesApp",
+      "project-manager": "ProjectManager",
+      "database": "DatabaseManager",
+      "api-client": "ApiClient",
+      "design-studio": "DesignStudio",
+      "email-client": "EmailClient",
+      "messaging": "Messaging",
+      "media-studio": "MediaStudio",
+      "app-store": "AppStore",
+      "ai-chat-hub": "AiChatHub",
+      "deploy-pipeline": "DeployPipeline",
+      "learning-center": "LearningCenter",
+      "policy-management": "PolicyManagement",
+      "documents": "Documents",
+      "model-hub": "ModelHub",
+      "time-machine": "TimeMachine",
+      "voice-assistant": "VoiceAssistant",
+      "approvals": "ApprovalCenter",
+      "simulation": "WorldSimulation",
+      "mission-control": "MissionControl",
+      "dna-lab": "AgentDnaLab",
+      "timeline-viewer": "TimelineViewer",
+      "knowledge-graph": "KnowledgeGraph",
+      "immune-dashboard": "ImmuneDashboard",
+      "consciousness": "ConsciousnessMonitor",
+      "dreams": "DreamForge",
+      "temporal": "TemporalEngine",
+      "civilization": "CivilizationPage",
+      "self-rewrite": "SelfRewriteLab",
+      "admin-console": "AdminDashboard",
+      "admin-users": "AdminUsers",
+      "admin-fleet": "AdminFleet",
+      "admin-policies": "AdminPolicyEditor",
+      "admin-compliance": "AdminCompliance",
+      "admin-health": "AdminSystemHealth",
+      "integrations": "Integrations",
+      "login": "Login",
+      "workspaces": "Workspaces",
+      "telemetry": "Telemetry",
+      "usage-billing": "UsageBilling",
+      "scheduler": "SchedulerPage",
+      "flash-inference": "FlashInference",
+      "measurement": "MeasurementDashboard",
+      "measurement-session": "MeasurementSessionPage",
+      "measurement-compare": "MeasurementCompare",
+      "measurement-batteries": "MeasurementBatteries",
+      "capability-boundaries": "CapabilityBoundaryMap",
+      "model-routing": "ModelRouting",
+      "ab-validation": "ABValidation",
+      "browser-agent": "BrowserAgentPage",
+      "governance-oracle": "GovernanceOraclePage",
+      "token-economy": "TokenEconomyPage",
+      "governed-control": "GovernedControlPage",
+      "world-sim": "WorldSimulation2Page",
+      "perception": "PerceptionPage",
+      "agent-memory": "AgentMemoryPage",
+      "external-tools": "ExternalToolsPage",
+      "collab-protocol": "CollaborationPage",
+      "software-factory": "SoftwareFactoryPage",
+      "memory-dashboard": "MemoryDashboard"
+    },
+    "pageIdToFile": {
+      "dashboard": "Dashboard.tsx",
+      "chat": "Chat.tsx",
+      "agents": "Agents.tsx",
+      "audit": "Audit.tsx",
+      "workflows": "Workflows.tsx",
+      "marketplace": "AppStore.tsx",
+      "settings": "Settings.tsx",
+      "command-center": "CommandCenter.tsx",
+      "audit-timeline": "AuditTimeline.tsx",
+      "marketplace-browser": "AppStore.tsx",
+      "developer-portal": "DeveloperPortal.tsx",
+      "compliance": "ComplianceDashboard.tsx",
+      "cluster": "ClusterStatus.tsx",
+      "trust": "TrustDashboard.tsx",
+      "distributed-audit": "DistributedAudit.tsx",
+      "permissions": "PermissionDashboard.tsx",
+      "protocols": "Protocols.tsx",
+      "identity": "Identity.tsx",
+      "firewall": "Firewall.tsx",
+      "browser": "AgentBrowser.tsx",
+      "computer-control": "ComputerControl.tsx",
+      "code-editor": "CodeEditor.tsx",
+      "terminal": "Terminal.tsx",
+      "file-manager": "FileManager.tsx",
+      "system-monitor": "SystemMonitor.tsx",
+      "notes": "NotesApp.tsx",
+      "project-manager": "ProjectManager.tsx",
+      "database": "DatabaseManager.tsx",
+      "api-client": "ApiClient.tsx",
+      "design-studio": "DesignStudio.tsx",
+      "email-client": "EmailClient.tsx",
+      "messaging": "Messaging.tsx",
+      "media-studio": "MediaStudio.tsx",
+      "app-store": "AppStore.tsx",
+      "ai-chat-hub": "AiChatHub.tsx",
+      "deploy-pipeline": "DeployPipeline.tsx",
+      "learning-center": "LearningCenter.tsx",
+      "policy-management": "PolicyManagement.tsx",
+      "documents": "Documents.tsx",
+      "model-hub": "ModelHub.tsx",
+      "time-machine": "TimeMachine.tsx",
+      "voice-assistant": "VoiceAssistant.tsx",
+      "approvals": "ApprovalCenter.tsx",
+      "simulation": "WorldSimulation.tsx",
+      "mission-control": "MissionControl.tsx",
+      "dna-lab": "AgentDnaLab.tsx",
+      "timeline-viewer": "TimelineViewer.tsx",
+      "knowledge-graph": "KnowledgeGraph.tsx",
+      "immune-dashboard": "ImmuneDashboard.tsx",
+      "consciousness": "ConsciousnessMonitor.tsx",
+      "dreams": "DreamForge.tsx",
+      "temporal": "TemporalEngine.tsx",
+      "civilization": "Civilization.tsx",
+      "self-rewrite": "SelfRewriteLab.tsx",
+      "admin-console": "AdminDashboard.tsx",
+      "admin-users": "AdminUsers.tsx",
+      "admin-fleet": "AdminFleet.tsx",
+      "admin-policies": "AdminPolicyEditor.tsx",
+      "admin-compliance": "AdminCompliance.tsx",
+      "admin-health": "AdminSystemHealth.tsx",
+      "integrations": "Integrations.tsx",
+      "login": "Login.tsx",
+      "workspaces": "Workspaces.tsx",
+      "telemetry": "Telemetry.tsx",
+      "usage-billing": "UsageBilling.tsx",
+      "scheduler": "Scheduler.tsx",
+      "flash-inference": "FlashInference.tsx",
+      "measurement": "MeasurementDashboard.tsx",
+      "measurement-session": "MeasurementSession.tsx",
+      "measurement-compare": "MeasurementCompare.tsx",
+      "measurement-batteries": "MeasurementBatteries.tsx",
+      "capability-boundaries": "CapabilityBoundaryMap.tsx",
+      "model-routing": "ModelRouting.tsx",
+      "ab-validation": "ABValidation.tsx",
+      "browser-agent": "BrowserAgent.tsx",
+      "governance-oracle": "GovernanceOracle.tsx",
+      "token-economy": "TokenEconomy.tsx",
+      "governed-control": "GovernedControl.tsx",
+      "world-sim": "WorldSimulation2.tsx",
+      "perception": "Perception.tsx",
+      "agent-memory": "AgentMemory.tsx",
+      "external-tools": "ExternalTools.tsx",
+      "collab-protocol": "Collaboration.tsx",
+      "software-factory": "SoftwareFactory.tsx",
+      "memory-dashboard": "Memory.tsx"
+    },
+    "hiddenRoutePageIds": [],
+    "navItemsWithoutRoute": [],
+    "duplicateRoutes": [],
+    "rootRouteAlias": {
+      "/": "mission-control",
+      "/index.html": "mission-control"
+    }
+  },
+  "pages": [
+    {
+      "fileName": "ABValidation.tsx",
+      "path": "src/pages/ABValidation.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "cmRunAbValidation",
+        "listAgents"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 930,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "AdminCompliance.tsx",
+      "path": "src/pages/AdminCompliance.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "adminComplianceStatus",
+        "adminComplianceExport"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 1559,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/admin.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "AdminDashboard.tsx",
+      "path": "src/pages/AdminDashboard.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "adminOverview"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 106,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/admin.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "AdminFleet.tsx",
+      "path": "src/pages/AdminFleet.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "adminFleetStatus",
+        "adminAgentStopAll",
+        "adminAgentBulkUpdate"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 1640,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/admin.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "AdminPolicyEditor.tsx",
+      "path": "src/pages/AdminPolicyEditor.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "adminPolicyGet",
+        "adminPolicyUpdate",
+        "adminPolicyHistory"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": true,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 3027,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/admin.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "AdminSystemHealth.tsx",
+      "path": "src/pages/AdminSystemHealth.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "adminSystemHealth",
+        "backupCreate",
+        "backupList",
+        "backupRestore",
+        "backupVerify",
+        "telemetryHealth"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 3602,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/admin.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "AdminUsers.tsx",
+      "path": "src/pages/AdminUsers.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "adminUsersList",
+        "adminUserCreate",
+        "adminUserUpdateRole",
+        "adminUserDeactivate"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 635,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/admin.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "AgentBrowser.tsx",
+      "path": "src/pages/AgentBrowser.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "hasDesktopRuntime",
+        "navigateTo"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "AgentBrowser",
+        "htmlLength": 2008,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/agent-browser.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "AgentDnaLab.tsx",
+      "path": "src/pages/AgentDnaLab.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "breedAgents",
+        "getAgentGenome",
+        "getAgentLineage",
+        "generateAllGenomes",
+        "genesisAnalyzeGap",
+        "genesisPreviewAgent",
+        "genesisCreateAgent",
+        "genesisDeleteAgent",
+        "genesisListGenerated",
+        "genesisStorePattern",
+        "evolutionGetStatus",
+        "evolutionEvolveOnce",
+        "evolutionGetHistory",
+        "evolutionGetActiveStrategy",
+        "evolutionRegisterStrategy",
+        "evolutionRollback",
+        "evolvePopulation",
+        "mutateAgent"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 11568,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/dna-lab.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "AgentMemory.tsx",
+      "path": "src/pages/AgentMemory.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "listAgents",
+        "memoryBuildContext",
+        "memoryConsolidate",
+        "memoryDeleteEntry",
+        "memoryGetPolicy",
+        "memoryGetStats",
+        "memoryLoad",
+        "memoryQueryEntries",
+        "memorySave",
+        "memoryStoreEntry"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 5092,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Agents.tsx",
+      "path": "src/pages/Agents.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getPreinstalledAgents",
+        "hasDesktopRuntime",
+        "listProviderModels",
+        "executeAgentGoal",
+        "approveConsentRequest",
+        "denyConsentRequest",
+        "listPendingConsents",
+        "getAvailableProviders",
+        "setAgentLlmProvider",
+        "flashCreateSession",
+        "setAgentReviewMode"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": true,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "Agents",
+        "htmlLength": 0,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/agents.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "AiChatHub.tsx",
+      "path": "src/pages/AiChatHub.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "sendChat",
+        "chatWithOllama",
+        "conductBuild",
+        "listAgents",
+        "hasDesktopRuntime",
+        "listProviderModels",
+        "getProviderStatus",
+        "saveApiKey",
+        "getPreinstalledAgents",
+        "startAgent",
+        "stopAgent",
+        "pauseAgent",
+        "resumeAgent",
+        "getAuditLog",
+        "approveConsentRequest",
+        "denyConsentRequest",
+        "startConversationalBuild",
+        "builderRespond",
+        "remixProject",
+        "analyzeProblem",
+        "startTeachMode",
+        "teachModeRespond"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": true,
+        "usesSessionStorage": true,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": true,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 0,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/ai-chat-hub.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "ApiClient.tsx",
+      "path": "src/pages/ApiClient.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "apiClientRequest",
+        "apiClientListCollections",
+        "apiClientSaveCollections",
+        "hasDesktopRuntime"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 2671,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/api-client.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "AppStore.tsx",
+      "path": "src/pages/AppStore.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getPreinstalledAgents",
+        "hasDesktopRuntime",
+        "marketplaceInstall",
+        "marketplaceSearch",
+        "marketplaceSearchGitlab",
+        "startAgent"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 2484,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/app-store.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "ApprovalCenter.tsx",
+      "path": "src/pages/ApprovalCenter.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "approveConsentRequest",
+        "batchApproveConsents",
+        "batchDenyConsents",
+        "denyConsentRequest",
+        "getConsentHistory",
+        "hasDesktopRuntime",
+        "hitlStats",
+        "listPendingConsents",
+        "reviewConsentBatch"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": true,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 112,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Audit.tsx",
+      "path": "src/pages/Audit.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getAuditLog",
+        "getAuditChainStatus",
+        "hasDesktopRuntime",
+        "tracingStartTrace",
+        "tracingEndTrace",
+        "tracingStartSpan",
+        "tracingEndSpan",
+        "tracingGetTrace",
+        "tracingListTraces",
+        "verifyGovernanceInvariants",
+        "verifySpecificInvariant",
+        "exportComplianceReport",
+        "auditStatistics",
+        "auditExportReport",
+        "auditSearch"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": true,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "Audit",
+        "htmlLength": 2182,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/audit.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "AuditTimeline.tsx",
+      "path": "src/pages/AuditTimeline.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getAuditLog",
+        "getAuditChainStatus",
+        "hasDesktopRuntime"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 125,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/audit-timeline.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "BrowserAgent.tsx",
+      "path": "src/pages/BrowserAgent.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "browserCreateSession",
+        "browserExecuteTask",
+        "browserNavigate",
+        "browserGetContent",
+        "browserCloseSession",
+        "browserGetPolicy",
+        "browserSessionCount",
+        "browserScreenshot",
+        "listAgents"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 1182,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "CapabilityBoundaryMap.tsx",
+      "path": "src/pages/CapabilityBoundaryMap.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "cmGetBoundaryMap",
+        "cmGetCalibration",
+        "cmGetCensus",
+        "cmGetGamingReportBatch",
+        "cmUploadDarwin"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 162,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Chat.tsx",
+      "path": "src/pages/Chat.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "hasDesktopRuntime",
+        "listProviderModels"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "Chat",
+        "htmlLength": 0,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/chat.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Civilization.tsx",
+      "path": "src/pages/Civilization.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "civGetEconomyStatus",
+        "civGetGovernanceLog",
+        "civGetParliamentStatus",
+        "civGetRoles",
+        "civProposeRule",
+        "civResolveDispute",
+        "civVote",
+        "civRunElection",
+        "economyCreateWallet",
+        "economyGetWallet",
+        "economyEarn",
+        "economySpend",
+        "economyTransfer",
+        "economyFreezeWallet",
+        "economyGetHistory",
+        "economyGetStats",
+        "economyCreateContract",
+        "economyCompleteContract",
+        "economyListContracts",
+        "economyDisputeContract",
+        "economyAgentPerformance",
+        "paymentCreatePlan",
+        "paymentListPlans",
+        "paymentCreateInvoice",
+        "paymentPayInvoice",
+        "paymentGetRevenueStats",
+        "paymentCreatePayout",
+        "hasDesktopRuntime"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 0,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "ClusterStatus.tsx",
+      "path": "src/pages/ClusterStatus.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "hasDesktopRuntime",
+        "getLiveSystemMetrics",
+        "listAgents",
+        "meshDiscoverPeers",
+        "meshGetPeers",
+        "meshGetSyncStatus",
+        "meshDistributeTask",
+        "meshMigrateAgent"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 265,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/cluster-status.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "CodeEditor.tsx",
+      "path": "src/pages/CodeEditor.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getGitRepoStatus",
+        "hasDesktopRuntime",
+        "sendChat",
+        "terminalExecute",
+        "terminalExecuteApproved",
+        "TerminalCommandResult"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 0,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/code-editor.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Collaboration.tsx",
+      "path": "src/pages/Collaboration.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "collabAddParticipant",
+        "collabCastVote",
+        "collabCreateSession",
+        "collabDeclareConsensus",
+        "collabDetectConsensus",
+        "collabGetPatterns",
+        "collabGetPolicy",
+        "collabGetSession",
+        "collabListActive",
+        "collabSendMessage",
+        "collabStart",
+        "collabCallVote"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 125,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "CommandCenter.tsx",
+      "path": "src/pages/CommandCenter.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "listAgents",
+        "startAgent",
+        "stopAgent",
+        "pauseAgent",
+        "resumeAgent",
+        "hasDesktopRuntime",
+        "getAuditLog"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 281,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/command-center.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "ComplianceDashboard.tsx",
+      "path": "src/pages/ComplianceDashboard.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getComplianceStatus",
+        "getComplianceAgents",
+        "getAuditLog",
+        "hasDesktopRuntime",
+        "auditVerifyChain",
+        "complianceGovernanceMetrics",
+        "complianceSecurityEvents"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 168,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/compliance-dashboard.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "ComputerControl.tsx",
+      "path": "src/pages/ComputerControl.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "captureScreen",
+        "computerControlGetHistory",
+        "computerControlStatus",
+        "computerControlToggle",
+        "getInputControlStatus",
+        "omniscienceDisable",
+        "omniscienceEnable",
+        "omniscienceExecuteAction",
+        "omniscienceGetAppContext",
+        "omniscienceGetPredictions",
+        "omniscienceGetScreenContext",
+        "startComputerAction",
+        "stopComputerAction"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": true,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 7059,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "ConsciousnessMonitor.tsx",
+      "path": "src/pages/ConsciousnessMonitor.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getAgentConsciousness",
+        "getConsciousnessHeatmap",
+        "getConsciousnessHistory",
+        "getUserBehaviorState",
+        "reportUserKeystroke",
+        "resetAgentConsciousness"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 0,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Dashboard.tsx",
+      "path": "src/pages/Dashboard.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getAuditLog",
+        "getLiveSystemMetricsJson",
+        "listAgents"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 2258,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "DatabaseManager.tsx",
+      "path": "src/pages/DatabaseManager.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "dbConnect",
+        "dbListTables",
+        "dbExecuteQuery",
+        "dbExportTable",
+        "dbDisconnect"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": true,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 125,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/database-manager.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "DeployPipeline.tsx",
+      "path": "src/pages/DeployPipeline.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "factoryCreateProject",
+        "factoryBuildProject",
+        "factoryTestProject",
+        "factoryRunPipeline",
+        "factoryListProjects",
+        "factoryGetBuildHistory",
+        "hasDesktopRuntime",
+        "airgapCreateBundle",
+        "airgapGetSystemInfo",
+        "airgapInstallBundle",
+        "airgapValidateBundle"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 5420,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/deploy-pipeline.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "DesignStudio.tsx",
+      "path": "src/pages/DesignStudio.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "executeAgentGoal",
+        "fileManagerCreateDir",
+        "fileManagerList",
+        "fileManagerRead",
+        "fileManagerWrite",
+        "listAgents"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 0,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "DeveloperPortal.tsx",
+      "path": "src/pages/DeveloperPortal.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "hasDesktopRuntime",
+        "marketplacePublish",
+        "marketplaceMyAgents"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 902,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/developer-portal.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "DistributedAudit.tsx",
+      "path": "src/pages/DistributedAudit.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getAuditLog",
+        "getAuditChainStatus",
+        "hasDesktopRuntime"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 179,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/distributed-audit.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Documents.tsx",
+      "path": "src/pages/Documents.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "indexDocument",
+        "chatWithDocuments",
+        "listIndexedDocuments",
+        "removeIndexedDocument",
+        "getDocumentGovernance",
+        "getSemanticMap",
+        "getDocumentAccessLog"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 3484,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "DreamForge.tsx",
+      "path": "src/pages/DreamForge.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getDreamStatus",
+        "getDreamQueue",
+        "getDreamHistory",
+        "getMorningBriefing",
+        "triggerDreamNow",
+        "setDreamConfig",
+        "checkLlmStatus"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 125,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "EmailClient.tsx",
+      "path": "src/pages/EmailClient.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "hasDesktopRuntime",
+        "emailList",
+        "emailSave",
+        "emailDelete",
+        "emailStartOauth",
+        "emailOauthStatus",
+        "emailFetchMessages",
+        "emailSendMessage",
+        "emailDisconnect"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": true,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 8585,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/email-client.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "ExternalTools.tsx",
+      "path": "src/pages/ExternalTools.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "toolsExecute",
+        "toolsGetAudit",
+        "toolsGetPolicy",
+        "toolsGetRegistry",
+        "toolsRefreshAvailability",
+        "toolsVerifyAudit",
+        "getRateLimitStatus"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 1884,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "FileManager.tsx",
+      "path": "src/pages/FileManager.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "fileManagerList",
+        "fileManagerRead",
+        "fileManagerWrite",
+        "fileManagerCreateDir",
+        "fileManagerDelete",
+        "fileManagerRename",
+        "fileManagerHome"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 5097,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/file-manager.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Firewall.tsx",
+      "path": "src/pages/Firewall.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getFirewallStatus",
+        "getFirewallPatterns",
+        "hasDesktopRuntime"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "Firewall",
+        "htmlLength": 125,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "FlashInference.tsx",
+      "path": "src/pages/FlashInference.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "flashListLocalModels",
+        "flashDetectHardware",
+        "flashCreateSession",
+        "flashUnloadSession",
+        "flashClearSessions",
+        "flashGenerate",
+        "flashSystemMetrics",
+        "flashEnableSpeculative",
+        "flashDisableSpeculative",
+        "flashSpeculativeStatus",
+        "flashRunBenchmark",
+        "flashExportBenchmarkReport"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": true,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 2337,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/flash-inference.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "GovernanceOracle.tsx",
+      "path": "src/pages/GovernanceOracle.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "oracleStatus",
+        "oracleGetAgentBudget",
+        "listAgents"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 162,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "GovernedControl.tsx",
+      "path": "src/pages/GovernedControl.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "ccGetActionHistory",
+        "ccGetCapabilityBudget",
+        "ccGetScreenContext",
+        "ccVerifyActionSequence",
+        "ccExecuteAction",
+        "listAgents"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 148,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Identity.tsx",
+      "path": "src/pages/Identity.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "identityGetAgentPassport",
+        "identityExportPassport",
+        "identityGenerateProof",
+        "identityVerifyProof",
+        "ghostProtocolToggle",
+        "ghostProtocolStatus",
+        "ghostProtocolGetState",
+        "ghostProtocolAddPeer",
+        "ghostProtocolRemovePeer",
+        "ghostProtocolSyncNow",
+        "meshAddPeer"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "Identity",
+        "htmlLength": 2990,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "ImmuneDashboard.tsx",
+      "path": "src/pages/ImmuneDashboard.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getImmuneStatus",
+        "getImmuneMemory",
+        "setPrivacyRules",
+        "runAdversarialSession",
+        "triggerImmuneScan",
+        "listAgents",
+        "getThreatLog"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": true,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 14238,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Integrations.tsx",
+      "path": "src/pages/Integrations.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "integrationsList",
+        "integrationTest",
+        "integrationConfigure",
+        "integrationStartOauth"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 2562,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/integrations.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "KnowledgeGraph.tsx",
+      "path": "src/pages/KnowledgeGraph.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "cogfsGetContext",
+        "cogfsGetEntities",
+        "cogfsGetGraph",
+        "cogfsIndexFile",
+        "cogfsQuery",
+        "cogfsSearch",
+        "cogfsWatchDirectory",
+        "neuralBridgeIngest",
+        "neuralBridgeSearch",
+        "neuralBridgeStatus",
+        "neuralBridgeToggle",
+        "neuralBridgeDelete",
+        "neuralBridgeClearOld"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": true,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": true,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 16663,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "LearningCenter.tsx",
+      "path": "src/pages/LearningCenter.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getUserProfile",
+        "getLearningPaths",
+        "startTeachMode",
+        "teachModeRespond",
+        "completeLearningStep",
+        "learningSaveProgress",
+        "learningGetProgress",
+        "learningExecuteChallenge",
+        "indexDocument",
+        "searchDocuments",
+        "searchModels",
+        "checkModelCompatibility",
+        "timeMachineCreateCheckpoint",
+        "timeMachineUndo",
+        "timeMachineRedo",
+        "timeMachineGetDiff"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": true,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": true,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 10643,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/learning-center.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Login.tsx",
+      "path": "src/pages/Login.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "authLogin",
+        "authSessionInfo",
+        "authLogout",
+        "adminUsersList",
+        "authConfigGet"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": true,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 205,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/admin.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "MeasurementBatteries.tsx",
+      "path": "src/pages/MeasurementBatteries.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "cmGetBatteries"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 417,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "MeasurementCompare.tsx",
+      "path": "src/pages/MeasurementCompare.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "cmCompareAgents",
+        "cmListSessions"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 1364,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "MeasurementDashboard.tsx",
+      "path": "src/pages/MeasurementDashboard.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "cmListSessions",
+        "cmGetBatteries",
+        "cmGetScorecard",
+        "cmStartSession",
+        "listAgents"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 851,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "MeasurementSession.tsx",
+      "path": "src/pages/MeasurementSession.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "cmGetSession",
+        "cmGetGamingFlags",
+        "cmListSessions"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 156,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "MediaStudio.tsx",
+      "path": "src/pages/MediaStudio.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "analyzeMediaFile",
+        "executeAgentGoal",
+        "fileManagerCreateDir",
+        "fileManagerList",
+        "listAgents"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 125,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Memory.tsx",
+      "path": "src/pages/Memory.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "listAgents",
+        "mkGetStats",
+        "mkQuery",
+        "mkSearch",
+        "mkGetProcedures",
+        "mkGetCandidates",
+        "mkClearWorking",
+        "mkRunGc",
+        "mkCreateCheckpoint",
+        "mkListCheckpoints"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 73,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Messaging.tsx",
+      "path": "src/pages/Messaging.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getConfig",
+        "getMessagingStatus",
+        "listAgents",
+        "messagingConnectPlatform",
+        "messagingSend",
+        "messagingPollMessages",
+        "saveConfig",
+        "setDefaultAgent"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 125,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "MissionControl.tsx",
+      "path": "src/pages/MissionControl.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "trayStatus",
+        "listAgents",
+        "getImmuneStatus",
+        "meshGetPeers",
+        "civGetEconomyStatus",
+        "getDreamStatus",
+        "getMorningBriefing",
+        "getConsciousnessHeatmap",
+        "getTemporalHistory",
+        "getAuditLog"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 11418,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/mission-control.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "ModelHub.tsx",
+      "path": "src/pages/ModelHub.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "searchModels",
+        "getModelInfo",
+        "checkModelCompatibility",
+        "downloadModel",
+        "listLocalModels",
+        "listProviderModels",
+        "deleteLocalModel",
+        "getSystemSpecs",
+        "nexusLinkStatus",
+        "nexusLinkToggleSharing",
+        "nexusLinkAddPeer",
+        "nexusLinkRemovePeer",
+        "nexusLinkListPeers",
+        "nexusLinkSendModel",
+        "getActiveLlmProvider"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 6853,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "ModelRouting.tsx",
+      "path": "src/pages/ModelRouting.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "routerGetAccuracy",
+        "routerGetModels",
+        "routerGetFeedback",
+        "routerEstimateDifficulty"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 160,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "NotesApp.tsx",
+      "path": "src/pages/NotesApp.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "notesGet",
+        "notesList",
+        "notesSave",
+        "notesDelete"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 125,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/notes-app.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Perception.tsx",
+      "path": "src/pages/Perception.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "perceptionAnalyzeChart",
+        "perceptionDescribe",
+        "perceptionExtractData",
+        "perceptionExtractText",
+        "perceptionFindUiElements",
+        "perceptionGetPolicy",
+        "perceptionInit",
+        "perceptionQuestion",
+        "perceptionReadError"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 1416,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "PermissionDashboard.tsx",
+      "path": "src/pages/PermissionDashboard.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "bulkUpdatePermissions",
+        "getAgentPermissions",
+        "getCapabilityRequest",
+        "getPermissionHistory",
+        "hasDesktopRuntime",
+        "setAgentLlmProvider",
+        "updateAgentPermission"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "PermissionDashboard",
+        "htmlLength": 88,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/permission-dashboard.css\" was marked as having no side effects",
+          "Ignoring this import because \"src/pages/permission-dashboard.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "PolicyManagement.tsx",
+      "path": "src/pages/PolicyManagement.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "policyList",
+        "policyValidate",
+        "policyTest",
+        "policyDetectConflicts"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 1361,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "ProjectManager.tsx",
+      "path": "src/pages/ProjectManager.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "hasDesktopRuntime",
+        "projectList",
+        "projectSave",
+        "projectDelete"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 8315,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/project-manager.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Protocols.tsx",
+      "path": "src/pages/Protocols.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getAgentCards",
+        "getMcpTools",
+        "getProtocolsRequests",
+        "getProtocolsStatus",
+        "hasDesktopRuntime",
+        "mcpHostAddServer",
+        "mcpHostRemoveServer",
+        "mcpHostListServers",
+        "mcpHostConnect",
+        "mcpHostDisconnect",
+        "mcpHostListTools",
+        "mcpHostCallTool",
+        "a2aDiscoverAgent",
+        "a2aSendTask",
+        "a2aGetTaskStatus",
+        "a2aCancelTask",
+        "a2aKnownAgents",
+        "a2aCrateGetAgentCard",
+        "a2aCrateListSkills",
+        "a2aCrateGetStatus"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 190,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/protocols.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Scheduler.tsx",
+      "path": "src/pages/Scheduler.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "schedulerCreate",
+        "schedulerDelete",
+        "schedulerDisable",
+        "schedulerEnable",
+        "schedulerList",
+        "schedulerTriggerNow"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 658,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "SelfRewriteLab.tsx",
+      "path": "src/pages/SelfRewriteLab.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "selfRewriteAnalyze",
+        "selfRewriteApplyPatch",
+        "selfRewriteGetHistory",
+        "selfRewritePreviewPatch",
+        "selfRewriteRollback",
+        "selfRewriteSuggestPatches",
+        "selfRewriteTestPatch"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 125,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Settings.tsx",
+      "path": "src/pages/Settings.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "checkLlmStatus",
+        "getLlmRecommendations",
+        "testLlmConnection",
+        "hasDesktopRuntime",
+        "listTools",
+        "executeTool"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": true,
+        "usesEnv": true,
+        "usesLocalStorage": true,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": true,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "Settings",
+        "htmlLength": 4284,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/settings.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "SetupWizard.tsx",
+      "path": "src/pages/SetupWizard.tsx",
+      "routedByApp": false,
+      "backendImports": [],
+      "dependencyFlags": {
+        "usesBackendWrapper": false,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": true,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "SetupWizard",
+        "htmlLength": 1094,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/setup-wizard.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "SoftwareFactory.tsx",
+      "path": "src/pages/SoftwareFactory.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "swfAssignMember",
+        "swfCreateProject",
+        "swfEstimateCost",
+        "swfGetCost",
+        "swfGetPipelineStages",
+        "swfGetPolicy",
+        "swfGetProject",
+        "swfListProjects",
+        "swfStartPipeline"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 125,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "SystemMonitor.tsx",
+      "path": "src/pages/SystemMonitor.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getLiveSystemMetrics",
+        "listAgents"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 125,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/system-monitor.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Telemetry.tsx",
+      "path": "src/pages/Telemetry.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "telemetryStatus",
+        "telemetryHealth",
+        "telemetryConfigGet",
+        "telemetryConfigUpdate"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 2140,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/admin.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "TemporalEngine.tsx",
+      "path": "src/pages/TemporalEngine.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "runDilatedSession",
+        "temporalFork",
+        "temporalRollback"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 125,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Terminal.tsx",
+      "path": "src/pages/Terminal.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "terminalExecute",
+        "terminalExecuteApproved",
+        "TerminalCommandResult"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 125,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/terminal.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "TimeMachine.tsx",
+      "path": "src/pages/TimeMachine.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "timeMachineListCheckpoints",
+        "timeMachineGetCheckpoint",
+        "timeMachineCreateCheckpoint",
+        "timeMachineUndo",
+        "timeMachineUndoCheckpoint",
+        "timeMachineRedo",
+        "timeMachineGetDiff",
+        "timeMachineWhatIf",
+        "replayToggleRecording",
+        "replayListBundles",
+        "replayGetBundle",
+        "replayVerifyBundle",
+        "replayExportBundle",
+        "getTemporalHistory",
+        "setTemporalConfig"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 3933,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "TimelineViewer.tsx",
+      "path": "src/pages/TimelineViewer.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getTemporalHistory",
+        "temporalSelectFork"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 125,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "TokenEconomy.tsx",
+      "path": "src/pages/TokenEconomy.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "tokenGetAllWallets",
+        "tokenGetLedger",
+        "tokenGetSupply",
+        "tokenGetPricing",
+        "tokenCalculateReward",
+        "tokenCalculateBurn"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 162,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "TrustDashboard.tsx",
+      "path": "src/pages/TrustDashboard.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getTrustOverview",
+        "hasDesktopRuntime",
+        "reputationRegister",
+        "reputationGet",
+        "reputationTop",
+        "reputationRateAgent",
+        "reputationRecordTask",
+        "reputationExport",
+        "reputationImport"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": true,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 170,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/trust-dashboard.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "UsageBilling.tsx",
+      "path": "src/pages/UsageBilling.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "meteringUsageReport",
+        "meteringCostBreakdown",
+        "meteringExportCsv",
+        "meteringSetBudgetAlert",
+        "meteringBudgetAlerts"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 1213,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/admin.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "VoiceAssistant.tsx",
+      "path": "src/pages/VoiceAssistant.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "hasDesktopRuntime",
+        "sendChat",
+        "voiceGetStatus",
+        "voiceLoadWhisperModel",
+        "voiceStartListening",
+        "voiceStopListening",
+        "voiceTranscribe"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": true,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 5825,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Workflows.tsx",
+      "path": "src/pages/Workflows.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "getAgentTaskHistory",
+        "getScheduledAgents",
+        "hasDesktopRuntime",
+        "listAgents",
+        "startHivemind"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": true,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "Workflows",
+        "htmlLength": 8191,
+        "buildWarnings": [
+          "Ignoring this import because \"node_modules/@xyflow/react/dist/style.css\" was marked as having no side effects",
+          "Ignoring this import because \"src/pages/workflows.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "Workspaces.tsx",
+      "path": "src/pages/Workspaces.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "workspaceList",
+        "workspaceCreate",
+        "workspaceGet",
+        "workspaceAddMember",
+        "workspaceRemoveMember",
+        "workspaceSetPolicy",
+        "workspaceUsage"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 468,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/admin.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "WorldSimulation.tsx",
+      "path": "src/pages/WorldSimulation.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "chatWithSimulationPersona",
+        "createSimulation",
+        "getSimulationReport",
+        "getSimulationStatus",
+        "hasDesktopRuntime",
+        "injectSimulationVariable",
+        "listSimulations",
+        "pauseSimulation",
+        "runParallelSimulations",
+        "startSimulation"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": true,
+        "usesHasDesktopRuntime": true,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 125,
+        "buildWarnings": [
+          "Ignoring this import because \"src/pages/world-simulation.css\" was marked as having no side effects"
+        ],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "WorldSimulation2.tsx",
+      "path": "src/pages/WorldSimulation2.tsx",
+      "routedByApp": true,
+      "backendImports": [
+        "simGetHistory",
+        "simGetPolicy",
+        "simSubmit",
+        "simRun",
+        "simGetResult",
+        "simGetRisk",
+        "listAgents"
+      ],
+      "dependencyFlags": {
+        "usesBackendWrapper": true,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": true
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "default.default",
+        "htmlLength": 148,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    },
+    {
+      "fileName": "commandCenterUi.tsx",
+      "path": "src/pages/commandCenterUi.tsx",
+      "routedByApp": false,
+      "backendImports": [],
+      "dependencyFlags": {
+        "usesBackendWrapper": false,
+        "usesDirectTauriApi": false,
+        "usesHasDesktopRuntime": false,
+        "usesFetch": false,
+        "usesEnv": false,
+        "usesLocalStorage": false,
+        "usesSessionStorage": false,
+        "hasTodoFixme": false,
+        "hasDemoModeHints": false,
+        "hasPlaceholderHints": false
+      },
+      "smoke": {
+        "bundled": true,
+        "imported": true,
+        "rendered": true,
+        "exportResolvedAs": "ActionButton",
+        "htmlLength": 320,
+        "buildWarnings": [],
+        "buildError": null,
+        "importError": null,
+        "renderError": null
+      }
+    }
+  ]
+}

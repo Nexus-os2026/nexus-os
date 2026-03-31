@@ -1,4 +1,4 @@
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -164,7 +164,7 @@ pub fn create_unsigned_bundle(
 
 pub fn sign_package(
     bundle: UnsignedPackageBundle,
-    author_key: &SigningKey,
+    author_identity: &CryptoIdentity,
 ) -> Result<SignedPackageBundle, MarketplaceError> {
     let package_id = derive_package_id(
         bundle.metadata.name.as_str(),
@@ -178,7 +178,9 @@ pub fn sign_package(
         &bundle.metadata,
         &bundle.attestation,
     )?;
-    let signature = author_key.sign(payload.as_slice()).to_bytes().to_vec();
+    let signature = author_identity
+        .sign(payload.as_slice())
+        .map_err(|e| MarketplaceError::SerializationError(e.to_string()))?;
 
     Ok(SignedPackageBundle {
         package_id,
@@ -187,27 +189,13 @@ pub fn sign_package(
         metadata: bundle.metadata,
         attestation: bundle.attestation,
         signature,
-        author_public_key: author_key.verifying_key().to_bytes().to_vec(),
+        author_public_key: author_identity.verifying_key().to_vec(),
     })
 }
 
 pub fn verify_package(bundle: &SignedPackageBundle) -> Result<(), MarketplaceError> {
     verify_attestation(bundle)?;
 
-    let public_key_bytes: [u8; 32] = bundle
-        .author_public_key
-        .as_slice()
-        .try_into()
-        .map_err(|_| MarketplaceError::SignatureInvalid)?;
-    let signature_bytes: [u8; 64] = bundle
-        .signature
-        .as_slice()
-        .try_into()
-        .map_err(|_| MarketplaceError::SignatureInvalid)?;
-
-    let verifying_key = VerifyingKey::from_bytes(&public_key_bytes)
-        .map_err(|_| MarketplaceError::SignatureInvalid)?;
-    let signature = Signature::from_bytes(&signature_bytes);
     let payload = canonical_signing_payload(
         bundle.package_id.as_str(),
         bundle.manifest_toml.as_str(),
@@ -216,9 +204,18 @@ pub fn verify_package(bundle: &SignedPackageBundle) -> Result<(), MarketplaceErr
         &bundle.attestation,
     )?;
 
-    verifying_key
-        .verify(payload.as_slice(), &signature)
-        .map_err(|_| MarketplaceError::SignatureInvalid)
+    let ok = CryptoIdentity::verify(
+        SignatureAlgorithm::Ed25519,
+        &bundle.author_public_key,
+        payload.as_slice(),
+        &bundle.signature,
+    )
+    .map_err(|_| MarketplaceError::SignatureInvalid)?;
+
+    if !ok {
+        return Err(MarketplaceError::SignatureInvalid);
+    }
+    Ok(())
 }
 
 pub fn verify_attestation(bundle: &SignedPackageBundle) -> Result<(), MarketplaceError> {
@@ -272,7 +269,13 @@ mod tests {
         create_attestation, create_attestation_with_options, create_unsigned_bundle, sign_package,
         verify_package, InTotoAttestation, MarketplaceError, PackageMetadata,
     };
-    use ed25519_dalek::SigningKey;
+    fn test_identity() -> nexus_crypto::CryptoIdentity {
+        nexus_crypto::CryptoIdentity::from_bytes(
+            nexus_crypto::SignatureAlgorithm::Ed25519,
+            &[7u8; 32],
+        )
+        .unwrap()
+    }
 
     fn test_metadata() -> PackageMetadata {
         PackageMetadata {
@@ -302,9 +305,9 @@ fuel_budget = 5000
             "nexus-buildkit",
         )
         .expect("unsigned package should be created");
-        let signing_key = SigningKey::from_bytes(&[7_u8; 32]);
+        let id = test_identity();
 
-        let mut signed = sign_package(unsigned, &signing_key).expect("package should be signed");
+        let mut signed = sign_package(unsigned, &id).expect("package should be signed");
         let verified = verify_package(&signed);
         assert!(verified.is_ok());
 

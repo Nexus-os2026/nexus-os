@@ -3,7 +3,7 @@
 //! Bundles an agent project directory into a signed `.nexus-agent` package
 //! using the marketplace's `create_unsigned_bundle` and `sign_package` functions.
 
-use ed25519_dalek::SigningKey;
+use nexus_crypto::CryptoIdentity;
 use nexus_kernel::manifest::parse_manifest;
 use nexus_marketplace::package::{
     create_unsigned_bundle, sign_package, verify_package, PackageMetadata, SignedPackageBundle,
@@ -30,7 +30,7 @@ pub struct PackageResult {
 /// - `README.md`     — included in metadata description
 pub fn package_agent(
     project_dir: &Path,
-    signing_key: &SigningKey,
+    signing_key: &CryptoIdentity,
 ) -> Result<PackageResult, String> {
     let manifest_path = project_dir.join("manifest.toml");
     let source_path = project_dir.join("src/lib.rs");
@@ -84,7 +84,7 @@ pub fn build_signed_bundle(
     version: &str,
     description: &str,
     capabilities: &[String],
-    signing_key: &SigningKey,
+    signing_key: &CryptoIdentity,
 ) -> Result<SignedPackageBundle, String> {
     let metadata = PackageMetadata {
         name: name.to_string(),
@@ -92,10 +92,7 @@ pub fn build_signed_bundle(
         description: description.to_string(),
         capabilities: capabilities.to_vec(),
         tags: vec![],
-        author_id: format!(
-            "dev-{}",
-            hex::encode(&signing_key.verifying_key().to_bytes()[..8])
-        ),
+        author_id: format!("dev-{}", hex::encode(&signing_key.verifying_key()[..8])),
     };
 
     let unsigned = create_unsigned_bundle(
@@ -151,10 +148,11 @@ pub fn format_result(result: &PackageResult) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nexus_crypto::SignatureAlgorithm;
     use nexus_marketplace::package::verify_package;
 
-    fn test_signing_key() -> SigningKey {
-        SigningKey::from_bytes(&[42u8; 32])
+    fn test_signing_key() -> CryptoIdentity {
+        CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[42u8; 32]).unwrap()
     }
 
     fn valid_manifest() -> &'static str {
@@ -286,8 +284,8 @@ fuel_budget = 10000
 
     #[test]
     fn different_keys_produce_different_signatures() {
-        let key1 = SigningKey::from_bytes(&[1u8; 32]);
-        let key2 = SigningKey::from_bytes(&[2u8; 32]);
+        let key1 = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[1u8; 32]).unwrap();
+        let key2 = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[2u8; 32]).unwrap();
 
         let bundle1 = build_signed_bundle(
             valid_manifest(),

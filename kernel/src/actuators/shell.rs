@@ -176,6 +176,7 @@ impl Actuator for GovernedShell {
         };
         // Ensure working directory exists (it may not for newly created agents)
         if !context.working_dir.exists() {
+            // Best-effort: create working directory for agent; command will fail separately if needed
             let _ = std::fs::create_dir_all(&context.working_dir);
         }
 
@@ -261,7 +262,9 @@ fn wait_with_timeout(
             Ok(None) => {
                 // Still running
                 if std::time::Instant::now() >= deadline {
+                    // Best-effort: kill timed-out child process; already returning timeout error
                     let _ = child.kill();
+                    // Best-effort: reap killed child to avoid zombie; timeout error is still returned
                     let _ = child.wait();
                     return Err(ActuatorError::CommandTimeout {
                         seconds: timeout_secs,

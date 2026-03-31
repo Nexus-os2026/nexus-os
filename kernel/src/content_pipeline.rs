@@ -390,23 +390,27 @@ impl ContentPipeline {
             command: "git".into(),
             args: vec!["init".into()],
         };
+        // Best-effort: git init may already exist or git may be unavailable; pipeline succeeds without VCS
         let _ = self.registry.execute_action(&git_init, context, audit);
 
         let git_add = PlannedAction::ShellCommand {
             command: "git".into(),
             args: vec!["add".into(), "-A".into()],
         };
+        // Best-effort: git staging failure does not invalidate already-written article files
         let _ = self.registry.execute_action(&git_add, context, audit);
 
         let git_commit = PlannedAction::ShellCommand {
             command: "git".into(),
             args: vec!["commit".into(), "-m".into(), format!("article: {title}")],
         };
+        // Best-effort: git commit is a convenience; published files exist on disk regardless
         let _ = self.registry.execute_action(&git_commit, context, audit);
 
         // Audit the publish event
         let agent_uuid =
             uuid::Uuid::parse_str(&context.agent_id).unwrap_or_else(|_| uuid::Uuid::new_v4());
+        // Best-effort: publish audit event is informational; article files are already written to disk
         let _ = audit.append_event(
             agent_uuid,
             EventType::StateChange,
@@ -441,6 +445,7 @@ impl ContentPipeline {
         eprintln!("[content-pipeline] phase 5: analytics for '{title}'");
 
         let agent_uuid = uuid::Uuid::new_v4();
+        // Best-effort: analytics audit event is a supplementary record; pipeline result already captures metrics
         let _ = audit.append_event(
             agent_uuid,
             EventType::StateChange,

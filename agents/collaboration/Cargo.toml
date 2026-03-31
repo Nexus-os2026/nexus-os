@@ -1,5 +1,6 @@
 [package]
 name = "nexus-collaboration"
+description = "Multi-agent collaboration and coordination framework for Nexus OS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

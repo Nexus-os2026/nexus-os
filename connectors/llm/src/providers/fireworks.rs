@@ -23,6 +23,7 @@ impl FireworksProvider {
         let endpoint = env::var("FIREWORKS_URL").unwrap_or_else(|_| {
             "https://api.fireworks.ai/inference/v1/chat/completions".to_string()
         });
+        // Optional: API key may not be configured in environment
         let mut provider = Self::new(env::var("FIREWORKS_API_KEY").ok());
         provider.endpoint = endpoint;
         provider

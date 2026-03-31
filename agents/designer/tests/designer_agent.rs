@@ -2,6 +2,9 @@ use designer_agent::component_lib::{generate_library, BrandGuide};
 use designer_agent::generator::{generate_design, DesignComponent, LayoutKind, LayoutNode};
 use designer_agent::screenshot_to_code::screenshot_to_code;
 
+/// Tests LLM-driven design spec generation for a dashboard layout.
+/// Requires a running Ollama instance with a deployed model.
+/// Run manually: ollama serve && cargo test -p designer-agent -- test_design_generation --ignored --nocapture
 #[test]
 #[ignore = "requires Ollama with a deployed model"]
 fn test_design_generation() {
@@ -50,6 +53,9 @@ fn test_component_library() {
     );
 }
 
+/// Tests LLM-driven screenshot-to-code analysis.
+/// Requires a running Ollama instance with a deployed model.
+/// Run manually: ollama serve && cargo test -p designer-agent -- test_screenshot_analysis --ignored --nocapture
 #[test]
 #[ignore = "requires Ollama with a deployed model"]
 fn test_screenshot_analysis() {

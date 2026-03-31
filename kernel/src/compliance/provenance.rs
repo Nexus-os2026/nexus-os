@@ -183,7 +183,7 @@ impl ProvenanceTracker {
 
         self.lineage.insert(data_id, lineage);
 
-        // Audit the origin event
+        // Best-effort: provenance origin audit is supplementary; lineage record is already stored in-memory
         let _ = audit_trail.append_event(
             agent_id,
             EventType::StateChange,
@@ -223,6 +223,7 @@ impl ProvenanceTracker {
 
         lineage.transformations.push(transformation);
 
+        // Best-effort: provenance transformation audit is supplementary; lineage record is already updated in-memory
         let _ = audit_trail.append_event(
             agent_id,
             EventType::StateChange,
@@ -260,6 +261,7 @@ impl ProvenanceTracker {
         });
         lineage.current_holder = to_agent;
 
+        // Best-effort: provenance delegation audit is supplementary; lineage handoff is already recorded in-memory
         let _ = audit_trail.append_event(
             from_agent,
             EventType::StateChange,

@@ -122,6 +122,7 @@ impl AgentScheduler {
                 Ok(g) => g,
                 Err(p) => p.into_inner(),
             };
+            // Best-effort: schedule registration audit is informational; the schedule is already active
             let _ = trail.append_event(
                 agent_uuid,
                 EventType::StateChange,
@@ -205,6 +206,7 @@ async fn schedule_loop(
         // Fire the goal.
         let goal = AgentGoal::new(default_goal.to_string(), 5);
 
+        // Optional: non-UUID agent IDs are valid; UUID is only needed for optional audit logging below
         let agent_uuid = Uuid::parse_str(&agent_id).ok();
 
         let execution = match &executor {
@@ -218,6 +220,7 @@ async fn schedule_loop(
             Ok(()) => {
                 if let Some(uuid) = agent_uuid {
                     if let Ok(mut trail) = audit.lock() {
+                        // Best-effort: goal-fired audit is informational; the goal was already submitted
                         let _ = trail.append_event(
                             uuid,
                             EventType::StateChange,
@@ -232,6 +235,7 @@ async fn schedule_loop(
             Err(e) => {
                 if let Some(uuid) = agent_uuid {
                     if let Ok(mut trail) = audit.lock() {
+                        // Best-effort: goal-failure audit is informational; the error is already logged via eprintln
                         let _ = trail.append_event(
                             uuid,
                             EventType::Error,

@@ -361,6 +361,7 @@ impl AutoEvolutionManager {
         }
 
         let current_prompt = &genome.genes.personality.system_prompt;
+        // Optional: LLM mutation failure means no evolution candidate, return None
         let mutated_prompt = llm.mutate_prompt(current_prompt, &weak_tasks).ok()?;
         let mut evolved = mutate_with_prompt(genome, mutated_prompt);
 

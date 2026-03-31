@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use ed25519_dalek::{Signer, Verifier};
+use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -24,17 +24,17 @@ impl CapabilityBudget {
     pub fn new(
         agent_id: String,
         allocations: HashMap<String, u64>,
-        signing_key: &ed25519_dalek::SigningKey,
+        identity: &CryptoIdentity,
     ) -> Self {
         let initial_hash = Self::compute_hash(&agent_id, &allocations, 0);
-        let signature = signing_key.sign(initial_hash.as_bytes());
+        let signature = identity.sign(initial_hash.as_bytes()).unwrap_or_default();
 
         Self {
             agent_id,
             allocations,
             initial_hash: initial_hash.clone(),
             current_hash: initial_hash,
-            authority_signature: signature.to_bytes().to_vec(),
+            authority_signature: signature,
             version: 0,
         }
     }
@@ -44,7 +44,7 @@ impl CapabilityBudget {
         &mut self,
         capability: &str,
         amount: u64,
-        signing_key: &ed25519_dalek::SigningKey,
+        identity: &CryptoIdentity,
     ) -> Result<(), BudgetError> {
         let current = self
             .allocations
@@ -64,8 +64,10 @@ impl CapabilityBudget {
             .insert(capability.to_string(), current - amount);
         self.version += 1;
         self.current_hash = Self::compute_hash(&self.agent_id, &self.allocations, self.version);
-        let signature = signing_key.sign(self.current_hash.as_bytes());
-        self.authority_signature = signature.to_bytes().to_vec();
+        let signature = identity
+            .sign(self.current_hash.as_bytes())
+            .map_err(|e| BudgetError::IntegrityViolation(e.to_string()))?;
+        self.authority_signature = signature;
         Ok(())
     }
 
@@ -74,7 +76,7 @@ impl CapabilityBudget {
         &self,
         child_agent_id: String,
         fraction: f64,
-        signing_key: &ed25519_dalek::SigningKey,
+        identity: &CryptoIdentity,
     ) -> Result<CapabilityBudget, BudgetError> {
         if !(0.0..=1.0).contains(&fraction) {
             return Err(BudgetError::InvalidFraction(fraction));
@@ -89,27 +91,30 @@ impl CapabilityBudget {
         Ok(CapabilityBudget::new(
             child_agent_id,
             child_allocations,
-            signing_key,
+            identity,
         ))
     }
 
     /// Verify budget integrity against the authority signature.
-    pub fn verify(&self, verifying_key: &ed25519_dalek::VerifyingKey) -> Result<(), BudgetError> {
+    pub fn verify(&self, verifying_key: &[u8]) -> Result<(), BudgetError> {
         let expected_hash = Self::compute_hash(&self.agent_id, &self.allocations, self.version);
         if expected_hash != self.current_hash {
             return Err(BudgetError::IntegrityViolation("Hash mismatch".to_string()));
         }
 
-        let sig_bytes: [u8; 64] = self
-            .authority_signature
-            .as_slice()
-            .try_into()
-            .map_err(|_| BudgetError::IntegrityViolation("Invalid signature bytes".into()))?;
-        let signature = ed25519_dalek::Signature::from_bytes(&sig_bytes);
+        let ok = CryptoIdentity::verify(
+            SignatureAlgorithm::Ed25519,
+            verifying_key,
+            self.current_hash.as_bytes(),
+            &self.authority_signature,
+        )
+        .map_err(|e| BudgetError::IntegrityViolation(e.to_string()))?;
 
-        verifying_key
-            .verify(self.current_hash.as_bytes(), &signature)
-            .map_err(|_| BudgetError::IntegrityViolation("Signature verification failed".into()))?;
+        if !ok {
+            return Err(BudgetError::IntegrityViolation(
+                "Signature verification failed".into(),
+            ));
+        }
 
         Ok(())
     }
@@ -153,12 +158,8 @@ pub enum BudgetError {
 mod tests {
     use super::*;
 
-    fn test_keypair() -> (ed25519_dalek::SigningKey, ed25519_dalek::VerifyingKey) {
-        let mut seed = [0u8; 32];
-        rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut seed);
-        let sk = ed25519_dalek::SigningKey::from_bytes(&seed);
-        let vk = sk.verifying_key();
-        (sk, vk)
+    fn test_identity() -> CryptoIdentity {
+        CryptoIdentity::generate(SignatureAlgorithm::Ed25519).expect("keygen should succeed")
     }
 
     fn sample_allocations() -> HashMap<String, u64> {
@@ -170,13 +171,14 @@ mod tests {
 
     #[test]
     fn test_budget_creation_and_spending() {
-        let (sk, vk) = test_keypair();
-        let mut budget = CapabilityBudget::new("agent-1".into(), sample_allocations(), &sk);
+        let id = test_identity();
+        let vk = id.verifying_key().to_vec();
+        let mut budget = CapabilityBudget::new("agent-1".into(), sample_allocations(), &id);
 
         assert_eq!(budget.allocations["llm.query"], 1000);
         assert!(budget.verify(&vk).is_ok());
 
-        budget.spend("llm.query", 100, &sk).unwrap();
+        budget.spend("llm.query", 100, &id).unwrap();
         assert_eq!(budget.allocations["llm.query"], 900);
         assert_eq!(budget.version, 1);
         assert!(budget.verify(&vk).is_ok());
@@ -184,10 +186,10 @@ mod tests {
 
     #[test]
     fn test_budget_insufficient_funds() {
-        let (sk, _vk) = test_keypair();
-        let mut budget = CapabilityBudget::new("agent-1".into(), sample_allocations(), &sk);
+        let id = test_identity();
+        let mut budget = CapabilityBudget::new("agent-1".into(), sample_allocations(), &id);
 
-        let result = budget.spend("llm.query", 2000, &sk);
+        let result = budget.spend("llm.query", 2000, &id);
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -197,9 +199,10 @@ mod tests {
 
     #[test]
     fn test_budget_child_derivation() {
-        let (sk, vk) = test_keypair();
-        let parent = CapabilityBudget::new("parent".into(), sample_allocations(), &sk);
-        let child = parent.derive_child("child".into(), 0.5, &sk).unwrap();
+        let id = test_identity();
+        let vk = id.verifying_key().to_vec();
+        let parent = CapabilityBudget::new("parent".into(), sample_allocations(), &id);
+        let child = parent.derive_child("child".into(), 0.5, &id).unwrap();
 
         assert_eq!(child.allocations["llm.query"], 500); // 50% of 1000
         assert_eq!(child.allocations["fs.write"], 250); // 50% of 500
@@ -213,8 +216,9 @@ mod tests {
 
     #[test]
     fn test_budget_integrity_verification() {
-        let (sk, vk) = test_keypair();
-        let mut budget = CapabilityBudget::new("agent-1".into(), sample_allocations(), &sk);
+        let id = test_identity();
+        let vk = id.verifying_key().to_vec();
+        let mut budget = CapabilityBudget::new("agent-1".into(), sample_allocations(), &id);
         assert!(budget.verify(&vk).is_ok());
 
         // Tamper with allocation
@@ -224,8 +228,9 @@ mod tests {
 
     #[test]
     fn test_sealed_token_roundtrip() {
-        let (sk, vk) = test_keypair();
-        let budget = CapabilityBudget::new("agent-1".into(), sample_allocations(), &sk);
+        let id = test_identity();
+        let vk = id.verifying_key().to_vec();
+        let budget = CapabilityBudget::new("agent-1".into(), sample_allocations(), &id);
         let hash = budget.current_hash.clone();
 
         // Verify the budget can be serialized and deserialized
@@ -237,12 +242,14 @@ mod tests {
 
     #[test]
     fn test_token_signature_verification() {
-        let (sk, vk) = test_keypair();
-        let budget = CapabilityBudget::new("agent-1".into(), sample_allocations(), &sk);
+        let id = test_identity();
+        let vk = id.verifying_key().to_vec();
+        let budget = CapabilityBudget::new("agent-1".into(), sample_allocations(), &id);
         assert!(budget.verify(&vk).is_ok());
 
         // Verify with wrong key fails
-        let (_, wrong_vk) = test_keypair();
+        let wrong_id = test_identity();
+        let wrong_vk = wrong_id.verifying_key().to_vec();
         assert!(budget.verify(&wrong_vk).is_err());
     }
 }

@@ -87,6 +87,7 @@ impl TtsActuator {
         }
         let model = voice
             .map(str::to_string)
+            // Optional: missing PIPER_MODEL env var means no model override, fall through to error
             .or_else(|| env::var("PIPER_MODEL").ok())
             .ok_or_else(|| ActuatorError::IoError("PIPER_MODEL is not set".to_string()))?;
         let mut child = Command::new("piper")

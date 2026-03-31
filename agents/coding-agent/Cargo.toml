@@ -1,5 +1,6 @@
 [package]
 name = "coding-agent"
+description = "Full-lifecycle software development agent for Nexus OS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

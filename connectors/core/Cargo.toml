@@ -1,5 +1,6 @@
 [package]
 name = "nexus-connectors-core"
+description = "Core connector traits and shared utilities for Nexus OS integrations"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

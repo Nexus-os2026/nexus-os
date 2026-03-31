@@ -132,6 +132,7 @@ impl AgentMemoryManager {
 
         // Touch each returned memory
         for mem in &memories {
+            // Best-effort: update last-accessed timestamp; recall succeeds even if touch fails
             let _ = self.store.touch_memory(mem.id);
         }
 

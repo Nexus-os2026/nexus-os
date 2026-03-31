@@ -18,15 +18,14 @@ pub struct EconomyState {
     pub rewards: RewardEngine,
     pub genesis: GenesisEconomy,
     pub supply: RwLock<SupplyMetrics>,
-    pub signing_key: ed25519_dalek::SigningKey,
+    pub identity: nexus_crypto::CryptoIdentity,
 }
 
 impl EconomyState {
     pub fn new() -> Self {
-        let mut rng = rand::rngs::OsRng;
-        let mut key_bytes = [0u8; 32];
-        rand::RngCore::fill_bytes(&mut rng, &mut key_bytes);
-        let signing_key = ed25519_dalek::SigningKey::from_bytes(&key_bytes);
+        let identity =
+            nexus_crypto::CryptoIdentity::generate(nexus_crypto::SignatureAlgorithm::Ed25519)
+                .expect("Ed25519 key generation should never fail");
         Self {
             wallets: RwLock::new(Vec::new()),
             ledger: RwLock::new(EconomyLedger::new()),
@@ -35,7 +34,7 @@ impl EconomyState {
             rewards: RewardEngine::default_config(),
             genesis: GenesisEconomy::default_config(),
             supply: RwLock::new(SupplyMetrics::new()),
-            signing_key,
+            identity,
         }
     }
 }
@@ -179,7 +178,7 @@ pub fn create_wallet(
         agent_id.to_string(),
         balance,
         autonomy_level,
-        &state.signing_key,
+        &state.identity,
     );
 
     // Record mint in ledger
@@ -330,7 +329,7 @@ pub fn create_delegation(
             .find(|w| w.agent_id == requester_id)
             .ok_or_else(|| format!("Requester wallet not found: {}", requester_id))?;
         requester
-            .lock_escrow(payment_coins, &state.signing_key)
+            .lock_escrow(payment_coins, &state.identity)
             .map_err(|e| e.to_string())?;
     }
 

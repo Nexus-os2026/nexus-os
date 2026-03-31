@@ -104,6 +104,7 @@ impl CivilizationEconomy {
             timestamp: now_secs(),
         });
 
+        // Best-effort: governance log is supplementary; token balance was already updated in-memory
         let _ = log.append_event(
             GovernanceEventType::TokensEarned,
             &format!("{agent_id} earned {amount:.2} tokens: {reason}"),
@@ -150,6 +151,7 @@ impl CivilizationEconomy {
             timestamp: now_secs(),
         });
 
+        // Best-effort: governance log is supplementary; token balance was already deducted in-memory
         let _ = log.append_event(
             GovernanceEventType::TokensSpent,
             &format!("{agent_id} spent {amount:.2} tokens: {reason}"),
@@ -157,6 +159,7 @@ impl CivilizationEconomy {
 
         // Detect bankruptcy.
         if bal.balance <= 0.0 {
+            // Best-effort: bankruptcy detection log is advisory; is_bankrupt() check uses live balance
             let _ = log.append_event(
                 GovernanceEventType::Bankruptcy,
                 &format!("{agent_id} is bankrupt (balance: {:.2})", bal.balance),
@@ -221,6 +224,7 @@ impl CivilizationEconomy {
             timestamp: now_secs(),
         });
 
+        // Best-effort: governance log is supplementary; transfer was already applied to both balances
         let _ = log.append_event(
             GovernanceEventType::TokensSpent,
             &format!("{from} transferred {amount:.2} tokens to {to}: {reason}"),
@@ -229,6 +233,7 @@ impl CivilizationEconomy {
         // Check sender bankruptcy.
         let sender_balance = self.balances.get(from).map(|b| b.balance).unwrap_or(0.0);
         if sender_balance <= 0.0 {
+            // Best-effort: post-transfer bankruptcy notice is advisory; is_bankrupt() uses live balance
             let _ = log.append_event(
                 GovernanceEventType::Bankruptcy,
                 &format!("{from} is bankrupt after transfer (balance: {sender_balance:.2})"),

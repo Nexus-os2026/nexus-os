@@ -4,7 +4,7 @@
 //! auditors can verify without accessing sensitive data (prompts, agent
 //! reasoning, payload content). The report is Ed25519-signed for authenticity.
 
-use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -328,25 +328,15 @@ impl ZkAuditReport {
             return Ok(false);
         }
 
-        let pub_bytes: [u8; 32] = self
-            .signer_public_key
-            .as_slice()
-            .try_into()
-            .map_err(|_| ReportError::VerificationFailed("invalid public key length".into()))?;
-
-        let verifying_key = VerifyingKey::from_bytes(&pub_bytes)
-            .map_err(|e| ReportError::VerificationFailed(format!("invalid public key: {e}")))?;
-
-        let sig_bytes: [u8; 64] = self
-            .signature
-            .as_slice()
-            .try_into()
-            .map_err(|_| ReportError::VerificationFailed("invalid signature length".into()))?;
-
-        let signature = Signature::from_bytes(&sig_bytes);
         let digest = self.compute_report_digest();
 
-        Ok(verifying_key.verify(&digest, &signature).is_ok())
+        CryptoIdentity::verify(
+            SignatureAlgorithm::Ed25519,
+            &self.signer_public_key,
+            &digest,
+            &self.signature,
+        )
+        .map_err(|e| ReportError::VerificationFailed(e.to_string()))
     }
 
     /// Verify every proof in this report.

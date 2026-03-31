@@ -80,6 +80,7 @@ impl DisputeResolver {
             created_at: now_secs(),
         };
 
+        // Best-effort: audit dispute filing; dispute is recorded regardless of log failure
         let _ = log.append_event(
             GovernanceEventType::DisputeFiled,
             &format!(
@@ -139,6 +140,7 @@ impl DisputeResolver {
         dispute.resolution = Some(resolution.to_string());
         dispute.status = DisputeStatus::Resolved;
 
+        // Best-effort: audit dispute resolution; resolution state is already committed
         let _ = log.append_event(
             GovernanceEventType::DisputeResolved,
             &format!(
@@ -170,6 +172,7 @@ impl DisputeResolver {
 
         dispute.status = DisputeStatus::Escalated;
 
+        // Best-effort: audit dispute escalation; HITL escalation state is already committed
         let _ = log.append_event(
             GovernanceEventType::DisputeFiled,
             &format!("Dispute {} escalated to human review", dispute_id),

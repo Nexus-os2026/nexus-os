@@ -89,8 +89,8 @@ export default function AgentMemory() {
         const list = Array.isArray(a) ? a : [];
         setAgents(list.map((x: any) => ({ id: x.id || x, name: x.name || x.id || x })));
       })
-      .catch(() => {});
-    memoryGetPolicy().then(setPolicy).catch(() => {});
+      .catch((e) => { if (import.meta.env.DEV) console.warn("[AgentMemory]", e); });
+    memoryGetPolicy().then(setPolicy).catch((e) => { if (import.meta.env.DEV) console.warn("[AgentMemory]", e); });
   }, []);
 
   const refresh = useCallback(async () => {

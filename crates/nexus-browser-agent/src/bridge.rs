@@ -115,10 +115,7 @@ impl BrowserBridge {
             .map_err(|e| BridgeError::WriteFailed(e.to_string()))?;
 
         // Read response line from subprocess stdout
-        let reader = self
-            .stdout_reader
-            .as_mut()
-            .ok_or(BridgeError::NotRunning)?;
+        let reader = self.stdout_reader.as_mut().ok_or(BridgeError::NotRunning)?;
         let mut line = String::new();
         reader
             .read_line(&mut line)
@@ -130,8 +127,7 @@ impl BrowserBridge {
             ));
         }
 
-        serde_json::from_str(line.trim())
-            .map_err(|e| BridgeError::ParseFailed(e.to_string()))
+        serde_json::from_str(line.trim()).map_err(|e| BridgeError::ParseFailed(e.to_string()))
     }
 
     /// Shutdown the subprocess.

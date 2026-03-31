@@ -1,5 +1,6 @@
 [package]
 name = "nexus-factory"
+description = "Agent factory for spawning, configuring, and managing agent lifecycles in Nexus OS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

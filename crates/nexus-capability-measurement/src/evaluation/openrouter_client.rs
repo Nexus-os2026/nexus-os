@@ -36,9 +36,7 @@ impl OpenRouterClient {
                     continue;
                 }
                 Err(_e) if attempt < 4 => {
-                    std::thread::sleep(std::time::Duration::from_millis(
-                        500 * 2u64.pow(attempt),
-                    ));
+                    std::thread::sleep(std::time::Duration::from_millis(500 * 2u64.pow(attempt)));
                     continue;
                 }
                 Err(e) => return Err(e),
@@ -129,10 +127,8 @@ mod tests {
     #[ignore = "Requires OPENROUTER_API_KEY"]
     fn test_real_openrouter_query() {
         let api_key = std::env::var("OPENROUTER_API_KEY").expect("Set OPENROUTER_API_KEY");
-        let client = OpenRouterClient::new(
-            api_key,
-            "meta-llama/llama-3.3-70b-instruct:free".into(),
-        );
+        let client =
+            OpenRouterClient::new(api_key, "meta-llama/llama-3.3-70b-instruct:free".into());
         let response = client
             .query("You are a helpful assistant.", "What is 2 + 2?", 50)
             .expect("OpenRouter call failed");

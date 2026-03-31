@@ -6,7 +6,7 @@
 //! sealed-at-rest, or TEE-backed key storage depending on configuration.
 
 use crate::hardware_security::{KeyHandle, KeyManager, KeyPurpose};
-use ed25519_dalek::{Verifier, VerifyingKey};
+use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -118,9 +118,7 @@ impl AgentIdentity {
             .try_into()
             .map_err(|_| IdentityError::InvalidKeyBytes)?;
 
-        let vk =
-            VerifyingKey::from_bytes(&public_key).map_err(|_| IdentityError::InvalidKeyBytes)?;
-        let did = did_from_public_key(&vk);
+        let did = did_from_public_key_bytes(&public_key);
 
         let created_at = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -151,12 +149,17 @@ impl AgentIdentity {
 
     /// Verify a signature produced by this identity.
     pub fn verify(&self, payload: &[u8], signature: &[u8]) -> Result<(), IdentityError> {
-        let sig = ed25519_dalek::Signature::from_slice(signature)
-            .map_err(|_| IdentityError::VerificationFailed)?;
-        let vk = VerifyingKey::from_bytes(&self.public_key)
-            .map_err(|_| IdentityError::VerificationFailed)?;
-        vk.verify(payload, &sig)
-            .map_err(|_| IdentityError::VerificationFailed)
+        let ok = CryptoIdentity::verify(
+            SignatureAlgorithm::Ed25519,
+            &self.public_key,
+            payload,
+            signature,
+        )
+        .map_err(|_| IdentityError::VerificationFailed)?;
+        if !ok {
+            return Err(IdentityError::VerificationFailed);
+        }
+        Ok(())
     }
 
     /// Return the raw 32-byte public key.
@@ -209,8 +212,12 @@ impl AgentIdentity {
             .map_err(|_| IdentityError::InvalidKeyBytes)?;
 
         // Derive the public key from the secret to verify consistency.
-        let signing_key = ed25519_dalek::SigningKey::from_bytes(&seed);
-        let public_key = signing_key.verifying_key().to_bytes();
+        let legacy_id = CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &seed)
+            .map_err(|_| IdentityError::InvalidKeyBytes)?;
+        let public_key: [u8; 32] = legacy_id
+            .verifying_key()
+            .try_into()
+            .map_err(|_| IdentityError::InvalidKeyBytes)?;
 
         // Import the key into KeyManager via generate (the old key material
         // is effectively replaced — the identity gets a new handle but
@@ -240,9 +247,7 @@ impl AgentIdentity {
             .try_into()
             .map_err(|_| IdentityError::InvalidKeyBytes)?;
 
-        let vk = VerifyingKey::from_bytes(&new_public_key)
-            .map_err(|_| IdentityError::InvalidKeyBytes)?;
-        let did = did_from_public_key(&vk);
+        let did = did_from_public_key_bytes(&new_public_key);
 
         Ok(Self {
             agent_id: legacy.agent_id,
@@ -443,10 +448,10 @@ impl IdentityManager {
 ///
 /// Follows the `did:key` method specification:
 ///   multicodec(0xed01) ++ raw_public_key  →  base58btc  →  "did:key:z" ++ encoded
-fn did_from_public_key(vk: &VerifyingKey) -> String {
+fn did_from_public_key_bytes(pk: &[u8; 32]) -> String {
     let mut buf = Vec::with_capacity(34);
     buf.extend_from_slice(&ED25519_MULTICODEC);
-    buf.extend_from_slice(&vk.to_bytes());
+    buf.extend_from_slice(pk);
     format!("did:key:z{}", bs58::encode(&buf).into_string())
 }
 
@@ -527,10 +532,15 @@ mod tests {
         // Verify via the identity helper.
         identity.verify(payload, &sig).expect("verification ok");
 
-        // Also verify with raw ed25519-dalek to prove interop.
-        let vk = VerifyingKey::from_bytes(&identity.public_key_bytes()).unwrap();
-        let sig_obj = ed25519_dalek::Signature::from_slice(&sig).unwrap();
-        vk.verify(payload, &sig_obj).expect("raw verify ok");
+        // Also verify with CryptoIdentity::verify to prove interop.
+        let ok = CryptoIdentity::verify(
+            SignatureAlgorithm::Ed25519,
+            &identity.public_key_bytes(),
+            payload,
+            &sig,
+        )
+        .expect("verify ok");
+        assert!(ok);
     }
 
     #[test]

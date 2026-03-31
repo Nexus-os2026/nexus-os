@@ -26,6 +26,7 @@ impl CohereProvider {
     pub fn from_env() -> Self {
         let endpoint =
             env::var("COHERE_URL").unwrap_or_else(|_| "https://api.cohere.ai/v2/chat".to_string());
+        // Optional: API key may not be configured in environment
         let mut provider = Self::new(env::var("COHERE_API_KEY").ok());
         provider.endpoint = endpoint;
         provider

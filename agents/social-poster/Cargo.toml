@@ -1,5 +1,6 @@
 [package]
 name = "social-poster-agent"
+description = "Automated social media content creation and publishing agent for Nexus OS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

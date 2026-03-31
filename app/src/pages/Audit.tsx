@@ -896,7 +896,7 @@ export function Audit({ events, onRefresh }: AuditProps): JSX.Element {
   useEffect(() => {
     if (!hasDesktopRuntime()) return;
     const timer = window.setInterval(() => {
-      getAuditLog(undefined, 500).then(setLiveEvents).catch(() => {});
+      getAuditLog(undefined, 500).then(setLiveEvents).catch((e) => { if (import.meta.env.DEV) console.warn("[Audit]", e); });
     }, 10_000);
     return () => window.clearInterval(timer);
   }, []);

@@ -3,7 +3,7 @@
 //! Agents submit capability requests and receive sealed tokens. They learn
 //! nothing about the decision process, timing, or governance rules.
 
-use ed25519_dalek::{Signer, Verifier};
+use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
@@ -75,8 +75,7 @@ pub enum OracleError {
 pub struct GovernanceOracle {
     request_tx: mpsc::Sender<OracleRequest>,
     timing: TimingConfig,
-    signing_key: ed25519_dalek::SigningKey,
-    verifying_key: ed25519_dalek::VerifyingKey,
+    identity: CryptoIdentity,
     requests_processed: std::sync::atomic::AtomicU64,
     started_at: std::time::Instant,
 }
@@ -84,10 +83,8 @@ pub struct GovernanceOracle {
 impl GovernanceOracle {
     /// Create a new oracle with a channel to the decision engine.
     pub fn new(request_tx: mpsc::Sender<OracleRequest>, response_ceiling: Duration) -> Self {
-        let mut seed = [0u8; 32];
-        rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut seed);
-        let signing_key = ed25519_dalek::SigningKey::from_bytes(&seed);
-        let verifying_key = signing_key.verifying_key();
+        let identity = CryptoIdentity::generate(SignatureAlgorithm::Ed25519)
+            .expect("Ed25519 key generation should never fail");
 
         Self {
             request_tx,
@@ -95,8 +92,7 @@ impl GovernanceOracle {
                 response_ceiling,
                 ..TimingConfig::default()
             },
-            signing_key,
-            verifying_key,
+            identity,
             requests_processed: std::sync::atomic::AtomicU64::new(0),
             started_at: std::time::Instant::now(),
         }
@@ -161,27 +157,31 @@ impl GovernanceOracle {
         let payload_bytes =
             serde_json::to_vec(&payload).map_err(|e| OracleError::SealingError(e.to_string()))?;
 
-        let signature = self.signing_key.sign(&payload_bytes);
+        let signature = self
+            .identity
+            .sign(&payload_bytes)
+            .map_err(|e| OracleError::SealingError(e.to_string()))?;
 
         Ok(SealedToken {
             payload: payload_bytes,
-            signature: signature.to_bytes().to_vec(),
+            signature,
             token_id: Uuid::new_v4().to_string(),
         })
     }
 
     /// Verify a sealed token is authentic and untampered.
     pub fn verify_token(&self, token: &SealedToken) -> Result<TokenPayload, OracleError> {
-        let sig_bytes: [u8; 64] = token
-            .signature
-            .as_slice()
-            .try_into()
-            .map_err(|_| OracleError::InvalidSignature)?;
-        let signature = ed25519_dalek::Signature::from_bytes(&sig_bytes);
+        let valid = CryptoIdentity::verify(
+            SignatureAlgorithm::Ed25519,
+            self.identity.verifying_key(),
+            &token.payload,
+            &token.signature,
+        )
+        .map_err(|_| OracleError::InvalidSignature)?;
 
-        self.verifying_key
-            .verify(&token.payload, &signature)
-            .map_err(|_| OracleError::InvalidSignature)?;
+        if !valid {
+            return Err(OracleError::InvalidSignature);
+        }
 
         let payload: TokenPayload = serde_json::from_slice(&token.payload)
             .map_err(|e| OracleError::InvalidPayload(e.to_string()))?;
@@ -189,8 +189,10 @@ impl GovernanceOracle {
         Ok(payload)
     }
 
-    pub fn verifying_key(&self) -> &ed25519_dalek::VerifyingKey {
-        &self.verifying_key
+    /// Get the verifying (public) key bytes. Returns a byte slice rather than
+    /// a library-specific type, enabling algorithm-agile consumers.
+    pub fn verifying_key_bytes(&self) -> &[u8] {
+        self.identity.verifying_key()
     }
 
     pub fn requests_processed(&self) -> u64 {
@@ -281,9 +283,7 @@ mod tests {
 
     #[test]
     fn test_sealed_token_verify() {
-        let mut seed = [0u8; 32];
-        rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut seed);
-        let sk = ed25519_dalek::SigningKey::from_bytes(&seed);
+        let identity = CryptoIdentity::generate(SignatureAlgorithm::Ed25519).unwrap();
         let payload = TokenPayload {
             decision: GovernanceDecision::Approved {
                 capability_token: "t".into(),
@@ -295,18 +295,17 @@ mod tests {
             agent_id: "a".into(),
         };
         let bytes = serde_json::to_vec(&payload).unwrap();
-        let sig = sk.sign(&bytes);
+        let sig = identity.sign(&bytes).unwrap();
         let token = SealedToken {
             payload: bytes,
-            signature: sig.to_bytes().to_vec(),
+            signature: sig,
             token_id: "tid".into(),
         };
 
         let (tx, _rx) = mpsc::channel::<OracleRequest>(1);
         let mut oracle = GovernanceOracle::new(tx, Duration::from_millis(10));
-        // Replace keys with our test keypair
-        oracle.signing_key = sk;
-        oracle.verifying_key = oracle.signing_key.verifying_key();
+        // Replace identity with our test keypair
+        oracle.identity = identity;
 
         let verified = oracle.verify_token(&token).unwrap();
         assert_eq!(verified.agent_id, "a");

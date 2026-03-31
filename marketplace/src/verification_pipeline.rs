@@ -383,11 +383,11 @@ impl From<MarketplaceError> for VerifiedPublishError {
 pub fn verified_publish(
     registry: &mut crate::registry::MarketplaceRegistry,
     package: crate::package::UnsignedPackageBundle,
-    author_key: &ed25519_dalek::SigningKey,
+    author_identity: &nexus_crypto::CryptoIdentity,
 ) -> Result<(String, VerificationResult), VerifiedPublishError> {
     use crate::package::sign_package;
 
-    let signed = sign_package(package, author_key)?;
+    let signed = sign_package(package, author_identity)?;
     let result = verify_bundle(&signed);
 
     if result.verdict == Verdict::Rejected {
@@ -405,12 +405,12 @@ pub fn verified_publish(
 pub fn verified_publish_sqlite(
     registry: &crate::sqlite_registry::SqliteRegistry,
     package: crate::package::UnsignedPackageBundle,
-    author_key: &ed25519_dalek::SigningKey,
+    author_identity: &nexus_crypto::CryptoIdentity,
 ) -> Result<(String, VerificationResult), VerifiedPublishError> {
     use crate::package::sign_package;
     use crate::sqlite_registry::SqliteRegistryError;
 
-    let signed = sign_package(package, author_key)?;
+    let signed = sign_package(package, author_identity)?;
     let result = verify_bundle(&signed);
 
     if result.verdict == Verdict::Rejected {
@@ -435,10 +435,10 @@ pub fn verified_publish_sqlite(
 mod tests {
     use super::*;
     use crate::package::{create_unsigned_bundle, sign_package, PackageMetadata};
-    use ed25519_dalek::SigningKey;
+    use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 
-    fn test_key() -> SigningKey {
-        SigningKey::from_bytes(&[7u8; 32])
+    fn test_identity() -> CryptoIdentity {
+        CryptoIdentity::from_bytes(SignatureAlgorithm::Ed25519, &[7u8; 32]).unwrap()
     }
 
     fn make_metadata(name: &str, caps: Vec<String>) -> PackageMetadata {
@@ -479,7 +479,7 @@ mod tests {
             "nexus-test",
         )
         .unwrap();
-        sign_package(unsigned, &test_key()).unwrap()
+        sign_package(unsigned, &test_identity()).unwrap()
     }
 
     // -----------------------------------------------------------------------
@@ -512,7 +512,7 @@ mod tests {
             "nexus-test",
         )
         .unwrap();
-        let mut signed = sign_package(unsigned, &test_key()).unwrap();
+        let mut signed = sign_package(unsigned, &test_identity()).unwrap();
 
         // Corrupt the signature
         if signed.signature.is_empty() {
@@ -542,7 +542,7 @@ mod tests {
             "nexus-test",
         )
         .unwrap();
-        let signed = sign_package(unsigned, &test_key()).unwrap();
+        let signed = sign_package(unsigned, &test_identity()).unwrap();
 
         let result = verify_bundle(&signed);
         assert_eq!(result.verdict, Verdict::Rejected);
@@ -575,7 +575,7 @@ mod tests {
             "nexus-test",
         )
         .unwrap();
-        let signed = sign_package(unsigned, &test_key()).unwrap();
+        let signed = sign_package(unsigned, &test_identity()).unwrap();
 
         let result = verify_bundle(&signed);
         assert_eq!(result.verdict, Verdict::ConditionalApproval);
@@ -608,7 +608,7 @@ mod tests {
             "nexus-test",
         )
         .unwrap();
-        let signed = sign_package(unsigned, &test_key()).unwrap();
+        let signed = sign_package(unsigned, &test_identity()).unwrap();
 
         let result = verify_bundle(&signed);
         assert_eq!(result.verdict, Verdict::ConditionalApproval);
@@ -635,7 +635,7 @@ mod tests {
             "nexus-test",
         )
         .unwrap();
-        let signed = sign_package(unsigned, &test_key()).unwrap();
+        let signed = sign_package(unsigned, &test_identity()).unwrap();
 
         let result = verify_bundle(&signed);
         assert_eq!(result.verdict, Verdict::ConditionalApproval);
@@ -665,7 +665,7 @@ mod tests {
             "nexus-test",
         )
         .unwrap();
-        let signed = sign_package(unsigned, &test_key()).unwrap();
+        let signed = sign_package(unsigned, &test_identity()).unwrap();
 
         let result = verify_bundle(&signed);
         assert_eq!(result.verdict, Verdict::Rejected);
@@ -693,7 +693,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = verified_publish(&mut registry, unsigned, &test_key());
+        let result = verified_publish(&mut registry, unsigned, &test_identity());
         assert!(result.is_err());
         if let Err(VerifiedPublishError::Verification(vr)) = result {
             assert_eq!(vr.verdict, Verdict::Rejected);
@@ -717,7 +717,7 @@ mod tests {
         )
         .unwrap();
 
-        let (pkg_id, vr) = verified_publish(&mut registry, unsigned, &test_key()).unwrap();
+        let (pkg_id, vr) = verified_publish(&mut registry, unsigned, &test_identity()).unwrap();
         assert_eq!(vr.verdict, Verdict::Approved);
         assert!(registry.get(&pkg_id).is_some());
     }
@@ -735,7 +735,7 @@ mod tests {
             "nexus-test",
         )
         .unwrap();
-        let signed = sign_package(unsigned, &test_key()).unwrap();
+        let signed = sign_package(unsigned, &test_identity()).unwrap();
 
         let result = verify_bundle(&signed);
         // sandbox heuristic detects "loop {"

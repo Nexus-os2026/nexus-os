@@ -308,6 +308,7 @@ pub fn rotate_encryption_key(
         // Verify round-trip.
         let verify_blob = std::fs::read(&tmp_path)
             .map_err(|e| CryptoError::Io(format!("{}: {e}", tmp_path.display())))?;
+        // Best-effort: verify re-encryption round-trip; discard plaintext, only check decryptability
         let _ = decrypt_data(new_key, &verify_blob)?;
 
         std::fs::rename(&tmp_path, &path).map_err(|e| CryptoError::Io(format!("rename: {e}")))?;

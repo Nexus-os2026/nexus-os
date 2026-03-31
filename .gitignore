@@ -40,3 +40,7 @@ node_modules/
 app/dist/
 app/node_modules/
 node_modules/
+.audit_tmp/
+_old/
+audit_artifacts/
+nexus-output/

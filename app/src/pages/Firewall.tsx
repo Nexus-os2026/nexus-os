@@ -11,8 +11,8 @@ export function Firewall() {
   useEffect(() => {
     if (!hasDesktopRuntime()) { setLoading(false); return; }
     Promise.all([
-      getFirewallStatus().then(setStatus).catch(() => {}),
-      getFirewallPatterns().then(setPatterns).catch(() => {}),
+      getFirewallStatus().then(setStatus).catch((e) => { if (import.meta.env.DEV) console.warn("[Firewall]", e); }),
+      getFirewallPatterns().then(setPatterns).catch((e) => { if (import.meta.env.DEV) console.warn("[Firewall]", e); }),
     ]).finally(() => setLoading(false));
   }, []);
 

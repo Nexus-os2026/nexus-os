@@ -1,5 +1,6 @@
 [package]
 name = "nexus-connectors-messaging"
+description = "Messaging platform connectors (Matrix, webhooks, etc.) for Nexus OS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

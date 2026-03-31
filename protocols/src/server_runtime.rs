@@ -75,8 +75,10 @@ async fn run_server() -> Result<(), String> {
     ready_state.set_ready();
 
     // 6. Serve with graceful shutdown.
+    // Optional: shutdown timeout env var may not be set; falls back to mode-based default
     let shutdown_timeout = std::env::var("NEXUS_SHUTDOWN_TIMEOUT_SECS")
         .ok()
+        // Optional: env var value may not parse as u64
         .and_then(|s| s.parse().ok())
         .unwrap_or(match mode {
             // Server mode gets a longer drain period for in-flight agent work.

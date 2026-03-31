@@ -69,14 +69,18 @@ impl ExecutionGate {
 mod tests {
     use super::*;
 
-    fn test_signing_key() -> ed25519_dalek::SigningKey {
-        ed25519_dalek::SigningKey::from_bytes(&[42u8; 32])
+    fn test_identity() -> nexus_crypto::CryptoIdentity {
+        nexus_crypto::CryptoIdentity::from_bytes(
+            nexus_crypto::SignatureAlgorithm::Ed25519,
+            &[42u8; 32],
+        )
+        .unwrap()
     }
 
     #[test]
     fn test_l3_not_gated() {
-        let sk = test_signing_key();
-        let wallet = AgentWallet::new("agent-l3".into(), NexusCoin::ZERO, 3, &sk);
+        let id = test_identity();
+        let wallet = AgentWallet::new("agent-l3".into(), NexusCoin::ZERO, 3, &id);
         // L3 with zero balance can still compute
         let result = ExecutionGate::check_compute(&wallet, NexusCoin::from_coins(100));
         assert!(result.is_ok());
@@ -84,8 +88,8 @@ mod tests {
 
     #[test]
     fn test_l4_gated() {
-        let sk = test_signing_key();
-        let wallet = AgentWallet::new("agent-l4".into(), NexusCoin::ZERO, 4, &sk);
+        let id = test_identity();
+        let wallet = AgentWallet::new("agent-l4".into(), NexusCoin::ZERO, 4, &id);
         // L4 with zero balance is blocked
         let result = ExecutionGate::check_compute(&wallet, NexusCoin::from_coins(1));
         assert!(result.is_err());
@@ -93,17 +97,17 @@ mod tests {
 
     #[test]
     fn test_l4_sufficient_balance_allowed() {
-        let sk = test_signing_key();
-        let wallet = AgentWallet::new("agent-l4".into(), NexusCoin::from_coins(100), 4, &sk);
+        let id = test_identity();
+        let wallet = AgentWallet::new("agent-l4".into(), NexusCoin::from_coins(100), 4, &id);
         let result = ExecutionGate::check_compute(&wallet, NexusCoin::from_coins(10));
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_spawn_always_gated() {
-        let sk = test_signing_key();
+        let id = test_identity();
         // Even L0 must have balance to spawn
-        let wallet = AgentWallet::new("agent-l0".into(), NexusCoin::ZERO, 0, &sk);
+        let wallet = AgentWallet::new("agent-l0".into(), NexusCoin::ZERO, 0, &id);
         let result = ExecutionGate::check_spawn(&wallet, NexusCoin::from_coins(10));
         assert!(result.is_err());
     }

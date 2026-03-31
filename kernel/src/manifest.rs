@@ -371,6 +371,7 @@ fn parse_autonomy_level(value: Option<u8>) -> Result<Option<u8>, AgentError> {
         return Ok(None);
     };
 
+    // Best-effort: validate autonomy level enum; discard parsed variant since raw u8 is returned
     let _ = AutonomyLevel::from_numeric(value).ok_or_else(|| {
         AgentError::ManifestError("autonomy_level must be one of 0, 1, 2, 3, 4, 5, 6".to_string())
     })?;

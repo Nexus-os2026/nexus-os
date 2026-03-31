@@ -1,0 +1,602 @@
+{
+  "generatedAt": "2026-03-30T14:03:34.133Z",
+  "total": 85,
+  "failures": 0,
+  "results": [
+    {
+      "page": "dashboard",
+      "route": "/legacy-dashboard",
+      "rendered": true,
+      "htmlLength": 70133,
+      "error": null
+    },
+    {
+      "page": "chat",
+      "route": "/chat",
+      "rendered": true,
+      "htmlLength": 66073,
+      "error": null
+    },
+    {
+      "page": "agents",
+      "route": "/agents",
+      "rendered": true,
+      "htmlLength": 67881,
+      "error": null
+    },
+    {
+      "page": "audit",
+      "route": "/audit",
+      "rendered": true,
+      "htmlLength": 70053,
+      "error": null
+    },
+    {
+      "page": "workflows",
+      "route": "/workflows",
+      "rendered": true,
+      "htmlLength": 76066,
+      "error": null
+    },
+    {
+      "page": "marketplace",
+      "route": "/publish",
+      "rendered": true,
+      "htmlLength": 68946,
+      "error": null
+    },
+    {
+      "page": "settings",
+      "route": "/settings",
+      "rendered": true,
+      "htmlLength": 72168,
+      "error": null
+    },
+    {
+      "page": "command-center",
+      "route": "/command",
+      "rendered": true,
+      "htmlLength": 68934,
+      "error": null
+    },
+    {
+      "page": "audit-timeline",
+      "route": "/timeline",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "marketplace-browser",
+      "route": "/marketplace-browser",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "developer-portal",
+      "route": "/developer-portal",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "compliance",
+      "route": "/compliance",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "cluster",
+      "route": "/cluster",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "trust",
+      "route": "/trust",
+      "rendered": true,
+      "htmlLength": 68948,
+      "error": null
+    },
+    {
+      "page": "distributed-audit",
+      "route": "/chain",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "permissions",
+      "route": "/permissions",
+      "rendered": true,
+      "htmlLength": 68944,
+      "error": null
+    },
+    {
+      "page": "protocols",
+      "route": "/protocols",
+      "rendered": true,
+      "htmlLength": 68942,
+      "error": null
+    },
+    {
+      "page": "identity",
+      "route": "/identity",
+      "rendered": true,
+      "htmlLength": 68952,
+      "error": null
+    },
+    {
+      "page": "firewall",
+      "route": "/firewall",
+      "rendered": true,
+      "htmlLength": 68941,
+      "error": null
+    },
+    {
+      "page": "browser",
+      "route": "/browser",
+      "rendered": true,
+      "htmlLength": 68946,
+      "error": null
+    },
+    {
+      "page": "computer-control",
+      "route": "/computer-control",
+      "rendered": true,
+      "htmlLength": 68949,
+      "error": null
+    },
+    {
+      "page": "code-editor",
+      "route": "/code",
+      "rendered": true,
+      "htmlLength": 68944,
+      "error": null
+    },
+    {
+      "page": "terminal",
+      "route": "/terminal",
+      "rendered": true,
+      "htmlLength": 68941,
+      "error": null
+    },
+    {
+      "page": "file-manager",
+      "route": "/files",
+      "rendered": true,
+      "htmlLength": 68938,
+      "error": null
+    },
+    {
+      "page": "system-monitor",
+      "route": "/monitor",
+      "rendered": true,
+      "htmlLength": 68947,
+      "error": null
+    },
+    {
+      "page": "notes",
+      "route": "/notes",
+      "rendered": true,
+      "htmlLength": 68938,
+      "error": null
+    },
+    {
+      "page": "project-manager",
+      "route": "/projects",
+      "rendered": true,
+      "htmlLength": 68948,
+      "error": null
+    },
+    {
+      "page": "database",
+      "route": "/database",
+      "rendered": true,
+      "htmlLength": 68941,
+      "error": null
+    },
+    {
+      "page": "api-client",
+      "route": "/api-client",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "design-studio",
+      "route": "/design",
+      "rendered": true,
+      "htmlLength": 68946,
+      "error": null
+    },
+    {
+      "page": "email-client",
+      "route": "/email",
+      "rendered": true,
+      "htmlLength": 68938,
+      "error": null
+    },
+    {
+      "page": "messaging",
+      "route": "/messaging",
+      "rendered": true,
+      "htmlLength": 68942,
+      "error": null
+    },
+    {
+      "page": "media-studio",
+      "route": "/media",
+      "rendered": true,
+      "htmlLength": 68945,
+      "error": null
+    },
+    {
+      "page": "app-store",
+      "route": "/agent-store",
+      "rendered": true,
+      "htmlLength": 68942,
+      "error": null
+    },
+    {
+      "page": "ai-chat-hub",
+      "route": "/ai-chat",
+      "rendered": true,
+      "htmlLength": 68937,
+      "error": null
+    },
+    {
+      "page": "deploy-pipeline",
+      "route": "/deploy",
+      "rendered": true,
+      "htmlLength": 68948,
+      "error": null
+    },
+    {
+      "page": "learning-center",
+      "route": "/learn",
+      "rendered": true,
+      "htmlLength": 68948,
+      "error": null
+    },
+    {
+      "page": "policy-management",
+      "route": "/policies",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "documents",
+      "route": "/documents",
+      "rendered": true,
+      "htmlLength": 68942,
+      "error": null
+    },
+    {
+      "page": "model-hub",
+      "route": "/models",
+      "rendered": true,
+      "htmlLength": 68939,
+      "error": null
+    },
+    {
+      "page": "time-machine",
+      "route": "/time-machine",
+      "rendered": true,
+      "htmlLength": 68945,
+      "error": null
+    },
+    {
+      "page": "voice-assistant",
+      "route": "/voice",
+      "rendered": true,
+      "htmlLength": 68938,
+      "error": null
+    },
+    {
+      "page": "approvals",
+      "route": "/approvals",
+      "rendered": true,
+      "htmlLength": 68940,
+      "error": null
+    },
+    {
+      "page": "simulation",
+      "route": "/world-simulation",
+      "rendered": true,
+      "htmlLength": 68949,
+      "error": null
+    },
+    {
+      "page": "mission-control",
+      "route": "/dashboard",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "dna-lab",
+      "route": "/dna-lab",
+      "rendered": true,
+      "htmlLength": 68936,
+      "error": null
+    },
+    {
+      "page": "timeline-viewer",
+      "route": "/timeline-viewer",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "knowledge-graph",
+      "route": "/knowledge",
+      "rendered": true,
+      "htmlLength": 68948,
+      "error": null
+    },
+    {
+      "page": "immune-dashboard",
+      "route": "/immune",
+      "rendered": true,
+      "htmlLength": 68946,
+      "error": null
+    },
+    {
+      "page": "consciousness",
+      "route": "/consciousness",
+      "rendered": true,
+      "htmlLength": 68946,
+      "error": null
+    },
+    {
+      "page": "dreams",
+      "route": "/dreams",
+      "rendered": true,
+      "htmlLength": 68943,
+      "error": null
+    },
+    {
+      "page": "temporal",
+      "route": "/temporal",
+      "rendered": true,
+      "htmlLength": 68948,
+      "error": null
+    },
+    {
+      "page": "civilization",
+      "route": "/civilization",
+      "rendered": true,
+      "htmlLength": 68945,
+      "error": null
+    },
+    {
+      "page": "self-rewrite",
+      "route": "/self-rewrite",
+      "rendered": true,
+      "htmlLength": 68949,
+      "error": null
+    },
+    {
+      "page": "admin-console",
+      "route": "/admin-console",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "admin-users",
+      "route": "/admin-users",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "admin-fleet",
+      "route": "/admin-fleet",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "admin-policies",
+      "route": "/admin-policies",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "admin-compliance",
+      "route": "/admin-compliance",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "admin-health",
+      "route": "/admin-health",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "integrations",
+      "route": "/integrations",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "login",
+      "route": "/login",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "workspaces",
+      "route": "/workspaces",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "telemetry",
+      "route": "/telemetry",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "usage-billing",
+      "route": "/usage-billing",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "scheduler",
+      "route": "/scheduler",
+      "rendered": true,
+      "htmlLength": 68942,
+      "error": null
+    },
+    {
+      "page": "flash-inference",
+      "route": "/flash-inference",
+      "rendered": true,
+      "htmlLength": 67151,
+      "error": null
+    },
+    {
+      "page": "measurement",
+      "route": "/measurement",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "measurement-session",
+      "route": "/measurement-session",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "measurement-compare",
+      "route": "/measurement-compare",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "measurement-batteries",
+      "route": "/measurement-batteries",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "capability-boundaries",
+      "route": "/capability-boundaries",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "model-routing",
+      "route": "/model-routing",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "ab-validation",
+      "route": "/ab-validation",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "browser-agent",
+      "route": "/browser-agent",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "governance-oracle",
+      "route": "/governance-oracle",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "token-economy",
+      "route": "/token-economy",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "governed-control",
+      "route": "/governed-control",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "world-sim",
+      "route": "/world-sim",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "perception",
+      "route": "/perception",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "agent-memory",
+      "route": "/agent-memory",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "external-tools",
+      "route": "/external-tools",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "collab-protocol",
+      "route": "/collab-protocol",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "software-factory",
+      "route": "/software-factory",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    },
+    {
+      "page": "memory-dashboard",
+      "route": "/memory-dashboard",
+      "rendered": true,
+      "htmlLength": 68950,
+      "error": null
+    }
+  ]
+}

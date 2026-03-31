@@ -65,6 +65,7 @@ pub struct ProviderSelectionConfig {
 }
 
 impl ProviderSelectionConfig {
+    // Optional: all env vars are optional — None means the provider is not configured
     pub fn from_env() -> Self {
         Self {
             provider: env::var("LLM_PROVIDER").ok(),
@@ -574,6 +575,7 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
                 Err(e) => {
                     // Refund pre-deducted fuel on provider error
                     agent.fuel_remaining += estimated_tokens;
+                    // Best-effort: log provider error to audit trail before returning
                     let _ = self.audit_trail.append_event(
                         agent.agent_id,
                         EventType::Error,
@@ -710,6 +712,7 @@ impl<P: LlmProvider> GovernedLlmGateway<P> {
             "provider_name": self.provider.name(),
             "timestamp": timestamp
         });
+        // Best-effort: log OracleEvent to audit trail (event ID not needed)
         let _ = self
             .audit_trail
             .append_event(agent.agent_id, EventType::LlmCall, payload)?;

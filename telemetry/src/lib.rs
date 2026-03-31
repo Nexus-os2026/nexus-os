@@ -65,12 +65,14 @@ mod tests {
 
     #[test]
     fn re_exports_accessible() {
-        // Verify that all re-exports compile and are accessible.
-        let _config = TelemetryConfig::default();
-        let _health = HealthStatus::Healthy;
-        let _check = CheckResult::Granted;
-        let _decision = HitlDecision::Approved;
-        let _sub = subsystem("test", true, None);
+        let config = TelemetryConfig::default();
+        assert!(!config.service_name.is_empty());
+        assert!(matches!(HealthStatus::Healthy, HealthStatus::Healthy));
+        assert!(matches!(CheckResult::Granted, CheckResult::Granted));
+        assert!(matches!(HitlDecision::Approved, HitlDecision::Approved));
+        let sub = subsystem("test", true, None);
+        assert_eq!(sub.name, "test");
+        assert!(sub.ready);
     }
 
     #[test]

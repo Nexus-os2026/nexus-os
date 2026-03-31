@@ -430,7 +430,7 @@ fn extract_number_after(text: &str, marker: &str) -> Option<f64> {
             .chars()
             .take_while(|c| c.is_ascii_digit() || *c == '.')
             .collect();
-        num_str.parse().ok()
+        num_str.parse().ok() // Optional: non-numeric text means no number found, return None
     } else {
         None
     }

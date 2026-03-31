@@ -1,5 +1,6 @@
 [package]
 name = "nexus-cli"
+description = "Command-line interface for managing and interacting with Nexus OS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -19,7 +20,7 @@ nexus-conductor = { path = "../agents/conductor" }
 chrono = "0.4"
 nexus-sdk = { path = "../sdk" }
 nexus-marketplace = { path = "../marketplace" }
-ed25519-dalek = "2.2"
+nexus-crypto = { path = "../crates/nexus-crypto" }
 hex = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

@@ -115,9 +115,9 @@ pub fn auto_configure(
     };
 
     // GPU offloading DISABLED — force CPU-only for all models.
-    // GPU PCIe transfer overhead tanks MoE throughput:
-    //   0.015 tok/s with GPU layers vs 0.26 tok/s pure CPU.
-    // TODO: re-enable per-model GPU offloading once layer selection is fixed.
+    // Benchmarked 2026-02: GPU PCIe transfer overhead tanks MoE throughput
+    // (0.015 tok/s with GPU layers vs 0.26 tok/s pure CPU on PCIe 3.0).
+    // Re-enable when llama.cpp adds per-expert GPU placement for MoE models.
     let _n_gpu_layers_auto = if hw.has_cuda {
         let sz = profile.file_size_mb as f64 / 1024.0;
         if sz < 8.0 {

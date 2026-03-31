@@ -344,6 +344,7 @@ pub fn download_model_file(
                     return Ok(file_path_str);
                 } else {
                     // Clean up partial file.
+                    // Best-effort: clean up partial download on curl failure
                     let _ = std::fs::remove_file(&file_path);
                     return Err("download failed: curl exited with error".to_string());
                 }
@@ -367,6 +368,7 @@ pub fn download_model_file(
                 std::thread::sleep(poll_interval);
             }
             Err(e) => {
+                // Best-effort: clean up partial download on wait error
                 let _ = std::fs::remove_file(&file_path);
                 return Err(format!("error waiting for curl: {e}"));
             }
@@ -380,12 +382,14 @@ fn get_content_length(url: &str) -> Option<u64> {
         .args(["-sS", "-L", "-I", "-m", "10"])
         .arg(url)
         .output()
+        // Optional: curl may not be installed or HEAD request may fail
         .ok()?;
 
     let headers = String::from_utf8_lossy(&output.stdout);
     for line in headers.lines() {
         let lower = line.to_lowercase();
         if let Some(rest) = lower.strip_prefix("content-length:") {
+            // Optional: header value may not be a valid u64
             return rest.trim().parse().ok();
         }
     }
@@ -542,10 +546,12 @@ fn recommend_quantization(total_ram_mb: u64) -> String {
 
 /// Read total system RAM in megabytes from `/proc/meminfo`.
 fn read_total_ram_mb() -> Option<usize> {
+    // Optional: /proc/meminfo not available on non-Linux platforms
     let content = std::fs::read_to_string("/proc/meminfo").ok()?;
     for line in content.lines() {
         if let Some(rest) = line.strip_prefix("MemTotal:") {
             let kb_str = rest.trim().trim_end_matches("kB").trim();
+            // Optional: parse failure means malformed meminfo line
             let kb: usize = kb_str.parse().ok()?;
             return Some(kb / 1024);
         }
@@ -555,10 +561,12 @@ fn read_total_ram_mb() -> Option<usize> {
 
 /// Read available system RAM in megabytes from `/proc/meminfo`.
 fn read_available_ram_mb() -> Option<usize> {
+    // Optional: /proc/meminfo not available on non-Linux platforms
     let content = std::fs::read_to_string("/proc/meminfo").ok()?;
     for line in content.lines() {
         if let Some(rest) = line.strip_prefix("MemAvailable:") {
             let kb_str = rest.trim().trim_end_matches("kB").trim();
+            // Optional: parse failure means malformed meminfo line
             let kb: usize = kb_str.parse().ok()?;
             return Some(kb / 1024);
         }

@@ -13,7 +13,8 @@ pub struct EventTrigger {
 struct EventSubscription {
     schedule_id: ScheduleId,
     event_kind: EventKind,
-    /// Reserved for future JSONPath filtering on event data.
+    /// Reserved for future JSONPath filtering on event data; stored so it
+    /// can be enabled without schema changes.
     #[allow(dead_code)]
     filter: Option<String>,
 }

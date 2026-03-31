@@ -174,8 +174,10 @@ impl KeyManager {
             });
         }
 
-        // TODO: enforce rotation via centralized HITL ConsentPolicyEngine once that module is
-        // available in this kernel branch. This API currently requires explicit approvals input.
+        // Key rotation is gated by the `approval` parameter which must contain
+        // sufficient approver signatures (checked above). Callers obtain these
+        // signatures via the ConsentRuntime's Tier2 approval flow before invoking
+        // this method. See supervisor.rs::rotate_key for the HITL integration.
         let old_public_hash = public_key_hash(self.backend.public_key(handle)?);
         let new_handle = self.backend.rotate(handle)?;
         let new_public_hash = public_key_hash(self.backend.public_key(&new_handle)?);

@@ -220,10 +220,12 @@ impl ModelRegistry {
     }
 
     fn read_available_ram_mb() -> Option<usize> {
+        // Optional: /proc/meminfo not available on non-Linux platforms
         let content = std::fs::read_to_string("/proc/meminfo").ok()?;
         for line in content.lines() {
             if let Some(rest) = line.strip_prefix("MemAvailable:") {
                 let kb_str = rest.trim().trim_end_matches("kB").trim();
+                // Optional: parse failure means malformed meminfo line
                 let kb: usize = kb_str.parse().ok()?;
                 return Some(kb / 1024);
             }

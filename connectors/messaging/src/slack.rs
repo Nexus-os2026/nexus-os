@@ -33,6 +33,7 @@ impl SlackAdapter {
             .build()
             .unwrap_or_else(|_| Client::new());
 
+        // Optional: Slack tokens may not be configured in environment
         let bot_token = std::env::var("SLACK_BOT_TOKEN").ok();
         let app_token = std::env::var("SLACK_APP_TOKEN").ok();
 

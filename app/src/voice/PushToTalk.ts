@@ -94,10 +94,8 @@ export class PushToTalk {
       };
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 250));
-
     return {
-      transcript: "create an agent to post weekly Rust updates",
+      transcript: "",
       source: "mock-whisper"
     };
   }

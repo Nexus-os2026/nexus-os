@@ -257,6 +257,7 @@ impl TerminalExecutor {
                 timed_out = true;
                 // Kill the entire process group (child + all descendants) to
                 // prevent orphaned grandchildren from surviving the timeout.
+                // Best-effort: kill timed-out process tree to prevent orphan descendants
                 let _ = ResourceLimiter::kill_process_tree(process.id());
                 exit_status = process.wait().map_err(|error| {
                     CommandError::ExecutionFailed(format!("failed waiting after kill: {error}"))
@@ -276,6 +277,7 @@ impl TerminalExecutor {
             }
         }
 
+        // Best-effort: join I/O reader threads, ignore panics
         let _ = stdout_handle.join();
         let _ = stderr_handle.join();
         drain_output(

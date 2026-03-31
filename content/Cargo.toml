@@ -1,5 +1,6 @@
 [package]
 name = "nexus-content"
+description = "Content generation, transformation, and management for Nexus OS agents"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
