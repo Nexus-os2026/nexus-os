@@ -10,7 +10,6 @@ use nexus_kernel::audit::AuditTrail;
 use nexus_kernel::autonomy::AutonomyLevel;
 use nexus_kernel::cognitive::PlannedAction;
 use std::collections::HashSet;
-use std::path::PathBuf;
 
 fn make_exec_context() -> ActuatorContext {
     let mut caps = HashSet::new();
