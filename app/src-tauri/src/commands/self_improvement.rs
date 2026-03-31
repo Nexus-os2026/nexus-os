@@ -526,3 +526,31 @@ pub(crate) fn self_improve_promote_baseline(state: &AppState) -> Result<(), Stri
 
     Ok(())
 }
+
+pub(crate) fn self_improve_get_report(
+    state: &AppState,
+    days: u32,
+) -> Result<serde_json::Value, String> {
+    let si = state
+        .self_improve_state
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let period_start = now.saturating_sub(u64::from(days) * 86400);
+
+    let report = nexus_self_improve::report::ImprovementReport::generate(
+        &si.history,
+        si.history.len() as u32,
+        0,
+        0,
+        si.config.fuel_budget,
+        period_start,
+        now,
+    );
+
+    serde_json::to_value(&report).map_err(|e| format!("serialize: {e}"))
+}

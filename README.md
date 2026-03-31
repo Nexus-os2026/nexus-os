@@ -252,6 +252,7 @@ nexus-os/
 | [Threat Model](THREAT_MODEL.md) | Adversarial threat analysis |
 | [Privacy Design](PRIVACY_DESIGN.md) | Privacy-by-design principles |
 | [Changelog](CHANGELOG.md) | Version history and release notes |
+| [Self-Improvement](docs/SELF_IMPROVEMENT.md) | Governed self-improvement pipeline, 10 hard invariants |
 | [Deployment Guide](docs/DEPLOYMENT.md) | Docker, Kubernetes/Helm, air-gapped installation |
 | [Contributing](CONTRIBUTING.md) | How to contribute |
 

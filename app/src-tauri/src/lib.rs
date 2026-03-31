@@ -5230,6 +5230,14 @@ pub mod runtime {
         commands::self_improvement::self_improve_promote_baseline(state.inner())
     }
 
+    #[tauri::command]
+    fn self_improve_get_report(
+        state: tauri::State<'_, AppState>,
+        days: u32,
+    ) -> Result<serde_json::Value, String> {
+        commands::self_improvement::self_improve_get_report(state.inner(), days)
+    }
+
     // ── Omniscience ──
 
     #[tauri::command]
@@ -6533,6 +6541,7 @@ pub mod runtime {
                 self_improve_get_guardian_status,
                 self_improve_force_baseline,
                 self_improve_promote_baseline,
+                self_improve_get_report,
                 // Killer Features
                 screenshot_analyze,
                 screenshot_generate_spec,

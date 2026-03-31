@@ -6,7 +6,7 @@
 
 use crate::types::{
     ImprovementDomain, ImprovementOpportunity, ImprovementProposal, PromptVariant, ProposedChange,
-    RollbackPlan, RollbackStep, SystemContext,
+    RollbackPlan, RollbackStep, SystemContext, SystemMetrics,
 };
 use thiserror::Error;
 use uuid::Uuid;
@@ -181,18 +181,38 @@ impl Proposer {
     fn propose_config_change(
         &mut self,
         opportunity: &ImprovementOpportunity,
-        _context: &SystemContext,
+        context: &SystemContext,
     ) -> Result<ImprovementProposal, ProposerError> {
+        use crate::config_optimizer::{ConfigOptimizer, ConfigOptimizerConfig};
+
         let fuel = self.consume_fuel(50)?;
 
-        let change = ProposedChange::ConfigChange {
-            key: "agent.response_timeout_ms".into(),
-            old_value: serde_json::json!(5000),
-            new_value: serde_json::json!(3000),
-            justification: format!(
-                "opportunity {} suggests reducing timeout to improve latency",
-                opportunity.id
-            ),
+        let optimizer = ConfigOptimizer::new(ConfigOptimizerConfig::default());
+
+        // Build metrics from context
+        let mut metrics = SystemMetrics::new();
+        if let Some(obj) = context.agent_configs.as_object() {
+            for (key, value) in obj {
+                if let Some(v) = value.as_f64() {
+                    metrics.insert(key.clone(), v);
+                }
+            }
+        }
+
+        let suggestions = optimizer.analyze_config(&metrics);
+        let change = if let Some(suggestion) = suggestions.first() {
+            optimizer.propose_change(suggestion)
+        } else {
+            // Fallback: generic timeout adjustment
+            ProposedChange::ConfigChange {
+                key: "agent.response_timeout_ms".into(),
+                old_value: serde_json::json!(5000),
+                new_value: serde_json::json!(3000),
+                justification: format!(
+                    "opportunity {} suggests reducing timeout to improve latency",
+                    opportunity.id
+                ),
+            }
         };
 
         Ok(self.wrap_proposal(opportunity, change, fuel))
@@ -203,14 +223,36 @@ impl Proposer {
         opportunity: &ImprovementOpportunity,
         _context: &SystemContext,
     ) -> Result<ImprovementProposal, ProposerError> {
+        use crate::policy_optimizer::{PolicyOptimizer, PolicyOptimizerConfig};
+
         let fuel = self.consume_fuel(150)?;
 
-        let change = ProposedChange::PolicyUpdate {
+        let optimizer = PolicyOptimizer::new(PolicyOptimizerConfig::default());
+
+        // In production, audit entries come from the real audit trail.
+        // For now, generate a safe narrowing policy.
+        let suggestion = crate::policy_optimizer::PolicySuggestion {
+            kind: crate::policy_optimizer::SuggestionKind::OverlyBroad,
             policy_id: "policy-001".into(),
-            old_policy_hash: "sha256:old_policy".into(),
-            new_policy_cedar: "permit(principal, action, resource) when { context.risk < 0.5 };"
-                .into(),
+            reasoning: format!(
+                "opportunity {} suggests narrowing policy scope",
+                opportunity.id
+            ),
+            proposed_cedar: Some(
+                "permit(principal, action, resource) when { context.risk < 0.5 };".into(),
+            ),
+            trigger_count: 0,
         };
+
+        let change =
+            optimizer
+                .propose_refinement(&suggestion)
+                .unwrap_or(ProposedChange::PolicyUpdate {
+                    policy_id: "policy-001".into(),
+                    old_policy_hash: "sha256:current".into(),
+                    new_policy_cedar:
+                        "permit(principal, action, resource) when { context.risk < 0.5 };".into(),
+                });
 
         Ok(self.wrap_proposal(opportunity, change, fuel))
     }

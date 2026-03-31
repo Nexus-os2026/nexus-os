@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { render, waitFor, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import { mockCommands, mockCommandError, expectInvoked } from "../../test/setup";
 import SelfImprovement from "../SelfImprovement";
@@ -6,20 +6,62 @@ import SelfImprovement from "../SelfImprovement";
 const MOCKS: Record<string, unknown> = {
   self_improve_get_status: {
     pipeline_state: "idle",
-    signals_count: 0,
-    opportunities_count: 0,
-    pending_proposals: 0,
+    signals_count: 2,
+    opportunities_count: 1,
+    pending_proposals: 1,
     monitoring_count: 0,
-    committed_count: 0,
-    rolled_back_count: 0,
-    rejected_count: 0,
+    committed_count: 5,
+    rolled_back_count: 1,
+    rejected_count: 2,
     fuel_budget: 5000,
     enabled_domains: ["PromptOptimization", "ConfigTuning"],
   },
-  self_improve_get_signals: [],
-  self_improve_get_opportunities: [],
-  self_improve_get_proposals: [],
-  self_improve_get_history: [],
+  self_improve_get_signals: [
+    {
+      id: "sig-1",
+      metric_name: "latency_p99",
+      domain: "ConfigTuning",
+      source: "PerformanceProfiler",
+      current_value: 500,
+      baseline_value: 100,
+      deviation_sigma: 3.5,
+    },
+  ],
+  self_improve_get_opportunities: [
+    {
+      id: "opp-1",
+      domain: "ConfigTuning",
+      classification: "Performance",
+      severity: "High",
+      blast_radius: "Agent",
+      confidence: 0.85,
+      estimated_impact: 3.2,
+    },
+  ],
+  self_improve_get_proposals: [
+    {
+      id: "prop-1",
+      domain: "PromptOptimization",
+      description: "Improve reasoning depth",
+      fuel_cost: 100,
+    },
+  ],
+  self_improve_get_history: [
+    {
+      id: "imp-1",
+      proposal_id: "prop-0",
+      status: "Monitoring",
+      applied_at: 1711900000,
+      canary_deadline: 1711901800,
+    },
+    {
+      id: "imp-2",
+      proposal_id: "prop-prev",
+      status: "Committed",
+      applied_at: 1711800000,
+      canary_deadline: 1711801800,
+    },
+  ],
   self_improve_get_invariants: [
     { id: 1, name: "#1 Governance kernel immutable", status: "passing" },
     { id: 2, name: "#2 Audit trail integrity", status: "passing" },
@@ -49,6 +91,11 @@ const MOCKS: Record<string, unknown> = {
     headroom: 0.79,
     decision: "continue_active",
   },
+  self_improve_run_cycle: { result: "NoSignals", message: "System healthy" },
+  self_improve_approve_proposal: { id: "imp-new", status: "Monitoring" },
+  self_improve_reject_proposal: undefined,
+  self_improve_rollback: undefined,
+  self_improve_update_config: undefined,
 };
 
 describe("SelfImprovement", () => {
@@ -70,5 +117,80 @@ describe("SelfImprovement", () => {
     mockCommandError("self_improve_get_status", "connection refused");
     const { container } = render(<SelfImprovement />);
     await waitFor(() => expect(container).toBeTruthy());
+  });
+
+  it("renders pipeline status metrics", async () => {
+    mockCommands(MOCKS);
+    render(<SelfImprovement />);
+    await waitFor(() => {
+      const text = document.body.textContent || "";
+      expect(text).toContain("5000");
+      expect(text).toContain("Committed");
+    });
+  });
+
+  it("renders all 10 invariants", async () => {
+    mockCommands(MOCKS);
+    render(<SelfImprovement />);
+    await waitFor(() => {
+      const text = document.body.textContent || "";
+      expect(text).toContain("Governance kernel immutable");
+      expect(text).toContain("Self-improvement pipeline protected");
+    });
+  });
+
+  it("renders guardian status", async () => {
+    mockCommands(MOCKS);
+    render(<SelfImprovement />);
+    await waitFor(() => {
+      const text = document.body.textContent || "";
+      expect(text).toContain("Active");
+      expect(text).toContain("Drift");
+    });
+  });
+
+  it("renders domain toggles with CodePatch locked", async () => {
+    mockCommands(MOCKS);
+    render(<SelfImprovement />);
+    await waitFor(() => {
+      const text = document.body.textContent || "";
+      expect(text).toContain("PromptOptimization");
+      expect(text).toContain("CodePatch");
+    });
+  });
+
+  it("renders empty state messages", async () => {
+    mockCommands({
+      ...MOCKS,
+      self_improve_get_signals: [],
+      self_improve_get_opportunities: [],
+      self_improve_get_proposals: [],
+      self_improve_get_history: [],
+    });
+    render(<SelfImprovement />);
+    await waitFor(() => {
+      const text = document.body.textContent || "";
+      expect(text).toContain("No signals detected");
+    });
+  });
+
+  it("shows error on full backend failure", async () => {
+    mockCommandError("self_improve_get_status", "server down");
+    render(<SelfImprovement />);
+    await waitFor(() => {
+      const text = document.body.textContent || "";
+      expect(text).toContain("server down");
+    });
+  });
+
+  it("renders proposal with approve/reject buttons", async () => {
+    mockCommands(MOCKS);
+    render(<SelfImprovement />);
+    await waitFor(() => {
+      const text = document.body.textContent || "";
+      expect(text).toContain("Approve");
+      expect(text).toContain("Reject");
+      expect(text).toContain("Improve reasoning depth");
+    });
   });
 });

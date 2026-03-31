@@ -15,13 +15,16 @@
 
 pub mod analyzer;
 pub mod applier;
+pub mod config_optimizer;
 pub mod envelope;
 pub mod guardian;
 pub mod invariants;
 pub mod observer;
 pub mod pipeline;
+pub mod policy_optimizer;
 pub mod prompt_optimizer;
 pub mod proposer;
+pub mod report;
 pub mod scheduler;
 pub mod trajectory;
 pub mod types;
