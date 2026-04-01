@@ -1,6 +1,6 @@
 [package]
 name = "nexus-self-improve"
-version = "10.5.0"
+version = "10.6.0"
 edition = "2021"
 license = "MIT"
 description = "Governed self-improvement engine for Nexus OS — the capstone kernel-level system that allows agents to improve themselves while governance remains immutable"

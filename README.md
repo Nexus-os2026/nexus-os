@@ -6,16 +6,16 @@
 
 ### The Governed Agentic AI Operating System
 
-**65 Crates | 658 Commands | 84 Pages | 5,029 Tests | 10/10 OWASP | Zero Stubs**
+**66 Crates | 675 Commands | 86 Pages | 5,229 Tests | 10/10 OWASP | Zero Stubs**
 
 *Local-first. Air-gappable. Post-quantum ready. Built in Rust.*
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-317K%20lines-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-326K%20lines-orange.svg)](https://www.rust-lang.org/)
 [![Tauri 2.0](https://img.shields.io/badge/shell-Tauri%202.0-24C8D8.svg)](https://tauri.app/)
-[![Tests](https://img.shields.io/badge/tests-5%2C029%20passing-brightgreen.svg)](#post-audit-status)
+[![Tests](https://img.shields.io/badge/tests-5%2C229%20passing-brightgreen.svg)](#post-audit-status)
 [![OWASP](https://img.shields.io/badge/OWASP%20Agentic-10%2F10-brightgreen.svg)](#security--governance)
-[![v10.5.0](https://img.shields.io/badge/version-10.5.0-green.svg)](CHANGELOG.md)
+[![v10.6.0](https://img.shields.io/badge/version-10.6.0-green.svg)](CHANGELOG.md)
 
 [Architecture](#architecture) | [Quick Start](#quick-start) | [Features](#features) | [Audit Status](#post-audit-status) | [Docs](docs/)
 
@@ -27,10 +27,10 @@ Nexus OS is an AI agent operating system where agents are first-class citizens w
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                        Nexus OS v10.5.0                              │
+│                        Nexus OS v10.6.0                              │
 │                                                                      │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐            │
-│  │ Coder    │  │ Research │  │ Security │  │ DevOps   │  ...54     │
+│  │ Coder    │  │ Research │  │ Security │  │ DevOps   │  ...55     │
 │  │ Agent    │  │ Agent    │  │ Agent    │  │ Agent    │  agents    │
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘            │
 │       │              │              │              │                  │
@@ -53,7 +53,7 @@ Nexus OS is an AI agent operating system where agents are first-class citizens w
 │  │  Together · Perplexity · Flash (llama.cpp) · + Mock      │           │
 │  └────────────────────────────────────────────────────────┘           │
 │                                                                      │
-│  Rust Kernel (317K LOC) · Tauri 2.0 Shell · React/TS Frontend (64K)  │
+│  Rust Kernel (326K LOC) · Tauri 2.0 Shell · React/TS Frontend (65K)  │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -90,7 +90,7 @@ Nexus OS is an AI agent operating system where agents are first-class citizens w
 - **Capability measurement** — 4-vector scoring with gaming detection
 - **Predictive routing** — Model selection optimized for latency, cost, and task complexity
 - **Memory subsystem** — 4 types (working, episodic, semantic, procedural) with SQLite, GC, rollback, ACL
-- **54 prebuilt agents** across 7 autonomy levels (L0-L6)
+- **55 prebuilt agents** across 7 autonomy levels (L0-L6)
 
 ### Protocols and Integration
 - **MCP** — JSON-RPC 2.0 client with subprocess tool discovery
@@ -106,13 +106,23 @@ Nexus OS is an AI agent operating system where agents are first-class citizens w
 - **World simulation** — Virtual filesystem sandbox with dry-run and risk assessment
 - **Collaboration protocol** — Multi-agent sessions with voting and consensus
 
+### Governed Self-Improvement
+- **5-stage pipeline** — Observer, Analyzer, Proposer, Validator, Applier
+- **10 hard invariants** — Governance kernel immutable, HITL Tier3 required, audit chain integrity
+- **DSPy/OPRO prompt optimizer** — Variant generation, safety keyword enforcement, cosine similarity scoring
+- **Config optimizer** — 8 tunable parameters with bounded step-size adjustments
+- **Policy optimizer** — Cedar policy refinement (can only narrow, never broaden)
+- **Behavioral envelope** — Drift Bounds Theorem (D* = alpha/gamma) bounds agent drift
+- **Simplex guardian** — Verified-safe baseline with barrier certificate switching
+- **182 tests + 7,424 property-generated cases**
+
 ### Desktop and Local-First
 - **Flash inference** — llama.cpp via FFI, GGUF loading, speculative decoding
 - **15 LLM providers** — All with real HTTP calls, automatic failover
 - **Voice pipeline** — Push-to-talk, Whisper transcription, Web Speech API
 - **Browser automation** — Playwright integration with URL allowlist and financial blocking
 - **Computer control** — Screen capture, input execution, governance-gated at L4+
-- **84 frontend pages** — Full management UI for every subsystem
+- **86 frontend pages** — Full management UI for every subsystem
 
 ## Flash Inference — Run Any Open-Source Model Locally
 
@@ -174,8 +184,8 @@ Independent audit completed 2026-03-31. Every metric verified by inspecting sour
 | Category | Score | Evidence |
 |----------|------:|---------|
 | Feature completeness | 10/10 | 23 features, all real implementations, 0 stubs |
-| Rust test coverage | 9/10 | 4,687 tests, 0 failures, every crate tested |
-| Frontend test coverage | 9/10 | 342 tests, 84/84 pages (100% coverage) |
+| Rust test coverage | 10/10 | 4,877 tests, 0 failures, every crate tested |
+| Frontend test coverage | 9/10 | 352 tests, 86/86 pages (100% coverage) |
 | Build health | 10/10 | fmt clean, clippy clean, 0 compile warnings |
 | Error handling | 9/10 | 0 production unwrap/expect in kernel + Tauri |
 | Code organization | 9/10 | 31K monolith split into 18 domain modules |
@@ -184,9 +194,9 @@ Independent audit completed 2026-03-31. Every metric verified by inspecting sour
 | **Overall** | **9.5/10** | |
 
 ```
-Tauri Commands .... 658     Agents ............ 54
-Rust Crates ....... 65      Frontend Pages .... 84
-Rust Tests ........ 4,687   Frontend Tests .... 342
+Tauri Commands .... 675     Agents ............ 55
+Rust Crates ....... 66      Frontend Pages .... 86
+Rust Tests ........ 4,877   Frontend Tests .... 352
 LLM Providers ..... 15      OWASP Score ....... 10/10
 Production TODOs .. 0       Production Stubs .. 0
 ```
@@ -225,16 +235,16 @@ HITL: Required for file.delete, process.execute
 
 ```
 nexus-os/
-├── kernel/          109K lines — governance, cognitive loop, actuators, audit
-├── app/src-tauri/     30K lines — 658 Tauri commands across 18 domain modules
-├── app/src/           64K lines — 84 React pages, 342 tests
+├── kernel/          110K lines — governance, cognitive loop, actuators, audit
+├── app/src-tauri/     34K lines — 675 Tauri commands across 19 domain modules
+├── app/src/           65K lines — 86 React pages, 352 tests
 ├── connectors/        23K lines — LLM (15 providers), messaging (6 channels), web, social
-├── crates/            52K lines — memory, crypto, A2A, MCP, measurement, simulation, ...
-├── agents/            18K lines — 8 agent crates + 54 prebuilt manifests
-├── sdk/                8K lines — agent-facing API wrapping kernel
+├── crates/            55K lines — memory, crypto, self-improve, A2A, MCP, simulation, ...
+├── agents/            19K lines — 10 agent crates + 55 prebuilt manifests
+├── sdk/               10K lines — agent-facing API wrapping kernel
 ├── distributed/        9K lines — P2P, ghost protocol, mesh
-├── protocols/          7K lines — HTTP gateway, OpenAI-compat API, MCP client
-├── marketplace/        4K lines — Ed25519 signing, SQLite registry
+├── protocols/          8K lines — HTTP gateway, OpenAI-compat API, MCP client
+├── marketplace/        5K lines — Ed25519 signing, SQLite registry
 ├── enterprise/         7K lines — auth, tenancy, integrations, metering, telemetry
 └── cli/                6K lines — CLI tools, packager
 ```
@@ -258,6 +268,7 @@ nexus-os/
 
 ## Roadmap
 
+- [x] v10.6.0 — Governed Self-Improvement, SOC 2/NIST compliance, Docker/Helm deployment
 - [x] v10.5.0 — Post-audit hardening: 9.5/10 audit score, OWASP 10/10
 - [x] v10.4.0 — Agent memory, PQC crypto, migration tool, OpenAI-compat API
 - [x] v10.3.0 — Full audit: 54 agents, 655 commands, 84 pages

@@ -749,7 +749,7 @@ dependencies = [
 
 [[package]]
 name = "coder-agent"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-sdk",
@@ -762,7 +762,7 @@ dependencies = [
 
 [[package]]
 name = "coding-agent"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-sdk",
  "serde",
@@ -1469,7 +1469,7 @@ dependencies = [
 
 [[package]]
 name = "designer-agent"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-sdk",
@@ -3965,7 +3965,7 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "nexus-a2a"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-kernel",
  "serde",
@@ -3978,7 +3978,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-adaptation"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-analytics",
  "nexus-connectors-llm",
@@ -3993,7 +3993,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-agent-memory"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4006,7 +4006,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-airgap"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4016,7 +4016,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-analytics"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-connectors-social",
  "nexus-connectors-web",
@@ -4028,7 +4028,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-auth"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -4047,7 +4047,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-benchmarks"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "criterion",
  "nexus-connectors-llm",
@@ -4083,7 +4083,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-cli"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "chrono",
  "clap",
@@ -4106,7 +4106,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-cloud"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4116,7 +4116,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-collab-protocol"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4128,7 +4128,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-collaboration"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-sdk",
  "serde",
@@ -4139,7 +4139,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-computer-control"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4168,7 +4168,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-conductor-benchmark"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "crossbeam",
  "nexus-capability-measurement",
@@ -4180,7 +4180,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-connectors-core"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "aes-gcm",
  "nexus-kernel",
@@ -4193,7 +4193,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-connectors-llm"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "aes-gcm",
  "candle-core",
@@ -4217,7 +4217,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-connectors-messaging"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-kernel",
@@ -4231,7 +4231,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-connectors-social"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-kernel",
@@ -4242,7 +4242,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-connectors-web"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "base64 0.22.1",
  "hmac",
@@ -4262,7 +4262,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-content"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-kernel",
@@ -4274,7 +4274,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-control"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-connectors-llm",
@@ -4300,7 +4300,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-desktop-backend"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -4364,7 +4364,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-distributed"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "aes-gcm",
  "ed25519-dalek",
@@ -4377,7 +4377,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-enterprise"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-kernel",
  "serde",
@@ -4387,7 +4387,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-external-tools"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4399,7 +4399,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-factory"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-connectors-llm",
@@ -4475,7 +4475,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-integration"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -4551,7 +4551,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-integrations"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "base64 0.22.1",
  "nexus-connectors-core",
@@ -4566,7 +4566,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-kernel"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -4614,7 +4614,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-marketplace"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "hex",
  "nexus-adaptation",
@@ -4640,7 +4640,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-mcp"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4652,7 +4652,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-memory"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "chrono",
  "dashmap",
@@ -4670,7 +4670,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-metering"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "chrono",
  "nexus-kernel",
@@ -4712,7 +4712,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-perception"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "base64 0.22.1",
  "serde",
@@ -4725,7 +4725,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-persistence"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "chrono",
  "rusqlite",
@@ -4748,7 +4748,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-protocols"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "axum",
  "futures-util",
@@ -4772,7 +4772,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-research"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-connectors-web",
@@ -4784,7 +4784,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-sdk"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-crypto",
  "nexus-kernel",
@@ -4799,7 +4799,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-self-improve"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "chrono",
  "proptest",
@@ -4813,7 +4813,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-self-update"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "ed25519-dalek",
  "nexus-connectors-core",
@@ -4829,7 +4829,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-server"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "axum",
  "clap",
@@ -4846,7 +4846,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-software-factory"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4858,7 +4858,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-telemetry"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "chrono",
  "metrics",
@@ -4873,7 +4873,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-tenancy"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "chrono",
  "serde",
@@ -4885,7 +4885,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-token-economy"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-crypto",
  "rand 0.8.5",
@@ -4899,7 +4899,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-workflows"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-connectors-core",
  "nexus-connectors-social",
@@ -4913,7 +4913,7 @@ dependencies = [
 
 [[package]]
 name = "nexus-world-simulation"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -6897,7 +6897,7 @@ dependencies = [
 
 [[package]]
 name = "screen-poster-agent"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-sdk",
@@ -7004,7 +7004,7 @@ dependencies = [
 
 [[package]]
 name = "self-improve-agent"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-sdk",
@@ -7371,7 +7371,7 @@ dependencies = [
 
 [[package]]
 name = "social-poster-agent"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-connectors-web",
@@ -9311,7 +9311,7 @@ dependencies = [
 
 [[package]]
 name = "web-builder-agent"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-connectors-llm",
  "nexus-sdk",
@@ -10179,7 +10179,7 @@ dependencies = [
 
 [[package]]
 name = "workflow-studio-agent"
-version = "10.5.0"
+version = "10.6.0"
 dependencies = [
  "nexus-sdk",
  "serde",

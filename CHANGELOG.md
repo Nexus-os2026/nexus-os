@@ -2,6 +2,39 @@
 
 All notable changes to NEXUS OS are documented here.
 
+## [v10.6.0] — 2026-04-01 — Governed Self-Improvement
+
+### Added
+- Governed Self-Improvement engine (`nexus-self-improve` crate, 66th workspace member)
+  - 5-stage pipeline: Observer → Analyzer → Proposer → Validator → Applier
+  - 10 hard invariants enforced (governance kernel immutable, HITL Tier3 required)
+  - DSPy/OPRO prompt optimizer with safety keyword enforcement and cosine similarity scoring
+  - Config optimizer with 8 tunable parameters and bounded step-size adjustments
+  - Cedar policy optimizer (narrows only, never broadens — invariant #3)
+  - Behavioral envelope with Drift Bounds Theorem (D* = α/γ)
+  - Simplex guardian with barrier certificate switching and verified-safe baseline
+  - Adaptive scheduler with exponential backoff on failure
+  - Optimization trajectory tracking (OPRO-style meta-prompt enrichment)
+  - Improvement report generator with markdown output
+  - 17 Tauri commands + SelfImprovement.tsx dashboard
+- Docker deployment hardened (pinned Rust 1.82, OCI labels, comprehensive .dockerignore)
+- docker-compose.yml with Ollama sidecar profile and HA mode (PostgreSQL + 2 replicas)
+- Helm chart updated to v1.1.0 (appVersion 10.6.0, NOTES.txt, Ollama sidecar)
+- SOC 2 Type II controls document (43 controls, all IMPLEMENTED with code references)
+- NIST 800-53 Rev 5 mapping (73 controls across 15 families, all IMPLEMENTED)
+- Singapore AI Governance Framework mapping (4 principles + PDPA alignment)
+- Self-Improvement documentation (architecture, safety guarantees, FAQ)
+- Deep testing: 182 explicit tests + 29 property-based tests (7,424 generated cases)
+
+### Changed
+- Deployment documentation completely rewritten (Docker, Helm, air-gapped, binary)
+- README updated with verified v10.6.0 numbers (326K Rust LOC, 5,229 tests)
+- Workspace grows to 66 crates, 675 Tauri commands, 86 frontend pages
+
+### Fixed
+- 12 clippy warnings for CI Rust 1.94 compatibility
+- Frontend component prop names for build compatibility
+
 ## [v10.5.0] — 2026-03-31 — Post-Audit Hardening
 
 ### Added
