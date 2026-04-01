@@ -416,7 +416,7 @@ fn test_task_result_with_error() {
     };
     assert!(!result.success);
     assert!(result.error.is_some());
-    assert!(result.error.as_ref().map_or(false, |e| e.contains("Fuel")));
+    assert!(result.error.as_ref().is_some_and(|e| e.contains("Fuel")));
 }
 
 #[test]
