@@ -96,6 +96,7 @@ frontend-tests:
 
 release:
   stage: deploy
+  allow_failure: true
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
   script:
@@ -106,6 +107,7 @@ release:
 
 release-build:
   stage: deploy
+  allow_failure: true
   timeout: 45 minutes
   variables:
     CARGO_INCREMENTAL: "0"
