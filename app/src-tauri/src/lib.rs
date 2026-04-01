@@ -6040,10 +6040,7 @@ pub mod runtime {
                     .build(),
             )
             .manage(AppState::new())
-            .manage(
-                nx_bridge::init_nx_state()
-                    .expect("Failed to initialize Nexus Code bridge"),
-            );
+            .manage(nx_bridge::init_nx_state().expect("Failed to initialize Nexus Code bridge"));
 
         let builder = builder.setup(|app| {
             let state = app.state::<AppState>();

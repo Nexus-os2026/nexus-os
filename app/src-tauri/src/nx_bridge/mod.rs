@@ -12,8 +12,7 @@ pub struct NxState {
     /// The nx application instance (governance kernel + providers + tools)
     pub app: Arc<Mutex<nexus_code::app::App>>,
     /// Pending consent requests waiting for frontend response
-    pub pending_consents:
-        Arc<Mutex<std::collections::HashMap<String, ConsentPending>>>,
+    pub pending_consents: Arc<Mutex<std::collections::HashMap<String, ConsentPending>>>,
     /// Whether an agent loop is currently running
     pub is_running: Arc<std::sync::atomic::AtomicBool>,
     /// Cancellation token for the current agent loop
@@ -28,9 +27,7 @@ pub struct ConsentPending {
 
 /// Initialize the nx bridge. Called during Tauri app setup.
 pub fn init_nx_state() -> Result<NxState, String> {
-    let nexuscode = nexus_code::context::NexusCodeMd::load(
-        &std::path::Path::new("NEXUSCODE.md"),
-    );
+    let nexuscode = nexus_code::context::NexusCodeMd::load(std::path::Path::new("NEXUSCODE.md"));
 
     let mut config = nexus_code::config::NxConfig::default();
     if let Some(budget) = nexuscode.fuel_budget {

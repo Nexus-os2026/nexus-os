@@ -47,9 +47,7 @@ pub struct UnconfiguredProvider {
 #[command]
 pub async fn nx_status(state: State<'_, NxState>) -> Result<GovernanceStatus, String> {
     let app = state.app.lock().await;
-    let is_running = state
-        .is_running
-        .load(std::sync::atomic::Ordering::Relaxed);
+    let is_running = state.is_running.load(std::sync::atomic::Ordering::Relaxed);
 
     let fuel_remaining = app.governance.fuel.remaining();
     let fuel_total = app.governance.fuel.budget().total;
@@ -91,10 +89,7 @@ pub async fn nx_chat(
     app_handle: AppHandle,
     state: State<'_, NxState>,
 ) -> Result<(), String> {
-    if state
-        .is_running
-        .load(std::sync::atomic::Ordering::Relaxed)
-    {
+    if state.is_running.load(std::sync::atomic::Ordering::Relaxed) {
         return Err("Agent is already running. Call nx_chat_cancel first.".to_string());
     }
     state
@@ -182,16 +177,14 @@ pub async fn nx_tool(
 
     let mut app = state.app.lock().await;
 
-    let tool = app
-        .tool_registry
-        .get(&tool_name)
-        .ok_or_else(|| {
-            format!(
-                "Unknown tool: {}. Available: {:?}",
-                tool_name,
-                app.tool_registry.list()
-            )
-        })?;
+    // Create tool independently to avoid borrow conflict with governance
+    let tool = nexus_code::tools::create_tool(&tool_name).ok_or_else(|| {
+        format!(
+            "Unknown tool: {}. Available: {:?}",
+            tool_name,
+            app.tool_registry.list()
+        )
+    })?;
 
     let tool_ctx = nexus_code::tools::ToolContext {
         working_dir: app.config.project_dir().unwrap_or_default(),
@@ -200,15 +193,17 @@ pub async fn nx_tool(
         non_interactive: false,
     };
 
-    match nexus_code::tools::execute_governed(tool, input, &tool_ctx, &mut app.governance).await {
+    match nexus_code::tools::execute_governed(tool.as_ref(), input, &tool_ctx, &mut app.governance)
+        .await
+    {
         Ok(result) => Ok(serde_json::json!({
             "success": result.success,
             "output": result.output,
             "duration_ms": result.duration_ms,
         })),
-        Err(nexus_code::error::NxError::ConsentRequired { .. }) => Err(
-            "Consent required. Use nx_chat for interactive consent flow.".to_string(),
-        ),
+        Err(nexus_code::error::NxError::ConsentRequired { .. }) => {
+            Err("Consent required. Use nx_chat for interactive consent flow.".to_string())
+        }
         Err(e) => Err(format!("{}", e)),
     }
 }
@@ -270,10 +265,7 @@ pub async fn nx_tools(state: State<'_, NxState>) -> Result<Vec<serde_json::Value
 
 /// Save the current session.
 #[command]
-pub async fn nx_session_save(
-    name: String,
-    state: State<'_, NxState>,
-) -> Result<String, String> {
+pub async fn nx_session_save(name: String, state: State<'_, NxState>) -> Result<String, String> {
     let app = state.app.lock().await;
     let sessions_dir = dirs::data_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
@@ -459,26 +451,39 @@ async fn run_agent_with_events(
                     reason,
                     total_turns,
                 } => {
-                    let _ = handle_for_events
-                        .emit("nx:done", super::events::NxDone { reason, total_turns });
+                    let _ = handle_for_events.emit(
+                        "nx:done",
+                        super::events::NxDone {
+                            reason,
+                            total_turns,
+                        },
+                    );
                 }
                 nexus_code::agent::AgentEvent::Error(msg) => {
-                    let _ = handle_for_events.emit(
-                        "nx:error",
-                        super::events::NxError { message: msg },
-                    );
+                    let _ =
+                        handle_for_events.emit("nx:error", super::events::NxError { message: msg });
                 }
                 _ => {}
             }
         }
     });
 
+    // Destructure to allow simultaneous immutable and mutable borrows of different fields
+    let nexus_code::app::App {
+        ref router,
+        ref tool_registry,
+        ref mut governance,
+        ref config,
+        ..
+    } = *app;
+    let _ = config; // suppress unused warning
+
     let result = nexus_code::agent::run_agent_loop(
         &mut messages,
-        &app.router,
-        &app.tool_registry,
+        router,
+        tool_registry,
         &tool_ctx,
-        &mut app.governance,
+        governance,
         &agent_config,
         event_tx,
         consent_handler,
