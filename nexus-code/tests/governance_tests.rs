@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 // ===== Identity tests =====
 mod identity {
     use nexus_code::governance::SessionIdentity;

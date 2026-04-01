@@ -422,15 +422,17 @@ fn test_collected_response_default() {
 
 #[test]
 fn test_collected_response_with_tools() {
-    let mut response = CollectedResponse::default();
-    response.text = "I'll read that file.".to_string();
+    let mut response = CollectedResponse {
+        text: "I'll read that file.".to_string(),
+        stop_reason: Some("tool_use".to_string()),
+        ..Default::default()
+    };
     response.tool_use_blocks.push(json!({
         "type": "tool_use",
         "id": "toolu_123",
         "name": "file_read",
         "input": {"path": "src/main.rs"}
     }));
-    response.stop_reason = Some("tool_use".to_string());
 
     assert_eq!(response.tool_use_blocks.len(), 1);
     assert_eq!(response.tool_use_blocks[0]["name"], "file_read");

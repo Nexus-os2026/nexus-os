@@ -356,7 +356,7 @@ fn test_should_compact_above_threshold() {
 #[test]
 fn test_compact_too_few_messages() {
     // 3 messages with preserve_recent=4 should not compact
-    let messages = vec![
+    let messages = [
         nexus_code::llm::types::Message {
             role: nexus_code::llm::types::Role::User,
             content: "m1".to_string(),
