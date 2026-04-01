@@ -67,6 +67,7 @@ members = [
   "crates/nexus-migrate",
   "crates/nexus-outcome-eval",
   "crates/nexus-self-improve",
+  "nexus-code",
 ]
 
 [workspace.package]
