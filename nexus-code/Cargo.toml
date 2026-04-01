@@ -9,6 +9,10 @@ license = "MIT"
 name = "nx"
 path = "src/main.rs"
 
+[lib]
+name = "nexus_code"
+path = "src/lib.rs"
+
 [dependencies]
 # CLI
 clap = { version = "4", features = ["derive"] }

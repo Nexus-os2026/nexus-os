@@ -4287,3 +4287,73 @@ export function migrateReport(source: string, agentsYaml?: string, tasksYaml?: s
   return invokeDesktop("migrate_report", { source, agents_yaml: agentsYaml, tasks_yaml: tasksYaml, python_source: pythonSource });
 }
 
+// ── Nexus Code (nx) Bridge ────────────────────────────────────────────────
+
+export interface NxGovernanceStatus {
+  session_id: string;
+  provider: string;
+  model: string;
+  fuel_remaining: number;
+  fuel_total: number;
+  fuel_consumed: number;
+  fuel_percentage: number;
+  audit_entries: number;
+  audit_chain_valid: boolean;
+  envelope_similarity: number;
+  envelope_status: string;
+  tool_count: number;
+  tools: string[];
+  is_running: boolean;
+  memory_count: number;
+}
+
+export interface NxDiagnosticResult {
+  has_any_provider: boolean;
+  configured_providers: string[];
+  unconfigured_providers: { name: string; env_var: string }[];
+  has_git: boolean;
+  has_ripgrep: boolean;
+  has_nexuscode_md: boolean;
+  ready: boolean;
+}
+
+export function nxStatus(): Promise<NxGovernanceStatus> {
+  return invokeDesktop<NxGovernanceStatus>("nx_status");
+}
+
+export function nxChat(message: string): Promise<void> {
+  return invokeDesktop<void>("nx_chat", { message });
+}
+
+export function nxChatCancel(): Promise<void> {
+  return invokeDesktop<void>("nx_chat_cancel");
+}
+
+export function nxConsentRespond(requestId: string, granted: boolean): Promise<void> {
+  return invokeDesktop<void>("nx_consent_respond", { request_id: requestId, requestId, granted });
+}
+
+export function nxTool(toolName: string, input: unknown): Promise<unknown> {
+  return invokeDesktop("nx_tool", { tool_name: toolName, toolName, input: JSON.stringify(input) });
+}
+
+export function nxDoctor(): Promise<NxDiagnosticResult> {
+  return invokeDesktop<NxDiagnosticResult>("nx_doctor");
+}
+
+export function nxProviders(): Promise<{ name: string; configured: boolean; env_var?: string }[]> {
+  return invokeDesktop("nx_providers");
+}
+
+export function nxTools(): Promise<{ name: string; description: string }[]> {
+  return invokeDesktop("nx_tools");
+}
+
+export function nxSessionSave(name: string): Promise<string> {
+  return invokeDesktop<string>("nx_session_save", { name });
+}
+
+export function nxSessionList(): Promise<unknown[]> {
+  return invokeDesktop("nx_session_list");
+}
+

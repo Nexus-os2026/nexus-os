@@ -4502,6 +4502,7 @@ version = "10.6.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "dirs 5.0.1",
  "nexus-a2a",
  "nexus-adaptation",
  "nexus-agent-memory",
@@ -4509,6 +4510,7 @@ dependencies = [
  "nexus-auth",
  "nexus-browser-agent",
  "nexus-capability-measurement",
+ "nexus-code",
  "nexus-collab-protocol",
  "nexus-computer-control",
  "nexus-conductor",
@@ -4555,7 +4557,9 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-global-shortcut",
  "tokio",
+ "tokio-util",
  "toml 0.8.2",
+ "tracing",
  "urlencoding",
  "uuid",
 ]

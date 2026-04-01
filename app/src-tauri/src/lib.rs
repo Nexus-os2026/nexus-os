@@ -1,6 +1,7 @@
 #![allow(unexpected_cfgs)]
 #![allow(unused_imports)]
 mod commands;
+pub mod nx_bridge;
 use base64::Engine;
 use chrono::TimeZone;
 use nexus_adaptation::evolution::{EvolutionConfig, EvolutionEngine, MutationType, Strategy};
@@ -6038,7 +6039,11 @@ pub mod runtime {
                     })
                     .build(),
             )
-            .manage(AppState::new());
+            .manage(AppState::new())
+            .manage(
+                nx_bridge::init_nx_state()
+                    .expect("Failed to initialize Nexus Code bridge"),
+            );
 
         let builder = builder.setup(|app| {
             let state = app.state::<AppState>();
@@ -6821,6 +6826,17 @@ pub mod runtime {
                 crate::commands::crate_bridges::mk_create_checkpoint,
                 crate::commands::crate_bridges::mk_rollback,
                 crate::commands::crate_bridges::mk_list_checkpoints,
+                // Nexus Code (nx) Bridge
+                nx_bridge::commands::nx_status,
+                nx_bridge::commands::nx_chat,
+                nx_bridge::commands::nx_chat_cancel,
+                nx_bridge::commands::nx_consent_respond,
+                nx_bridge::commands::nx_tool,
+                nx_bridge::commands::nx_doctor,
+                nx_bridge::commands::nx_providers,
+                nx_bridge::commands::nx_tools,
+                nx_bridge::commands::nx_session_save,
+                nx_bridge::commands::nx_session_list,
             ])
             .run(tauri::generate_context!())
             .unwrap_or_else(|e| {

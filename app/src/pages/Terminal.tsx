@@ -1,172 +1,28 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Menu } from "lucide-react";
-import { terminalExecute, terminalExecuteApproved, type TerminalCommandResult } from "../api/backend";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Send, Square, Shield, Zap, Link2, Activity, Wrench, AlertTriangle, CheckCircle, XCircle, ChevronDown } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
+import { nxStatus, nxChat, nxChatCancel, nxConsentRespond, nxDoctor, type NxGovernanceStatus, type NxDiagnosticResult } from "../api/backend";
 import "./terminal.css";
 
 /* ================================================================== */
 /*  Types                                                              */
 /* ================================================================== */
 
-interface TermLine {
+interface ChatMessage {
   id: number;
-  type: "input" | "output" | "error" | "system" | "warn" | "agent-suggest";
-  text: string;
+  role: "user" | "assistant" | "system" | "tool";
+  content: string;
   ts: number;
-  pane: number;
+  toolName?: string;
+  toolSuccess?: boolean;
+  toolDuration?: number;
 }
 
-interface TermPane {
-  id: number;
-  label: string;
-  cwd: string;
-  shell: string;
-}
-
-interface AuditEntry {
-  ts: number;
-  event: string;
-  detail: string;
-}
-
-interface CommandHistoryEntry {
-  cmd: string;
-  ts: number;
-  pane: number;
-  blocked: boolean;
-}
-
-interface AgentSuggestion {
-  cmd: string;
-  reason: string;
-}
-
-type TerminalResult = TerminalCommandResult;
-
-type ApprovalState = { cmd: string; reason: string } | null;
-
-/* ================================================================== */
-/*  Constants — Defense-in-depth frontend checks                       */
-/* ================================================================== */
-
-/*
- * Governance: blocked dangerous commands (defense-in-depth, frontend layer)
- * Matches: rm -rf, sudo rm, mkfs, dd if=, chmod 777, > /dev/sda,
- *          fork bombs, shutdown, kill init, curl|bash, passwd, iptables -F
- */
-const BLOCKED_PATTERNS = [
-  { pattern: /rm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+|--force\s+)?\//i, reason: "Recursive delete from root" },
-  { pattern: /rm\s+-[a-zA-Z]*r[a-zA-Z]*f|rm\s+-[a-zA-Z]*f[a-zA-Z]*r/i, reason: "Force recursive delete (rm -rf)" },
-  { pattern: /sudo\s+rm/i, reason: "Elevated delete operation" },
-  { pattern: /mkfs\b/i, reason: "Filesystem format" },
-  { pattern: /dd\s+if=/i, reason: "Raw disk write (dd if=/dev/zero)" },
-  { pattern: /:\(\)\{.*:\|:.*\};:/i, reason: "Fork bomb" },
-  { pattern: /chmod\s+777/i, reason: "Unrestricted permissions (chmod 777)" },
-  { pattern: /shutdown|reboot|poweroff|halt/i, reason: "System power control" },
-  { pattern: /kill\s+-9\s+1\b/i, reason: "Kill init process" },
-  { pattern: />(\/dev\/sd|\/dev\/nvme)/i, reason: "Direct device write (> /dev/sda)" },
-  { pattern: /curl\s+.*\|\s*(sudo\s+)?bash/i, reason: "Piped remote execution" },
-  { pattern: /wget\s+.*\|\s*(sudo\s+)?bash/i, reason: "Piped remote execution" },
-  { pattern: /eval\s*\$\(curl/i, reason: "Remote eval execution" },
-  { pattern: /sudo\s+su\b/i, reason: "Elevate to root shell" },
-  { pattern: /passwd\b/i, reason: "Password change" },
-  { pattern: /userdel\b|useradd\b|groupdel\b/i, reason: "User/group modification" },
-  { pattern: /iptables\s+-F/i, reason: "Flush firewall rules" },
-  { pattern: /systemctl\s+(stop|disable|mask)/i, reason: "Stop system service" },
-  { pattern: /DROP\s+DATABASE|DROP\s+TABLE|TRUNCATE/i, reason: "Destructive SQL" },
-];
-
-const WARN_PATTERNS = [
-  { pattern: /sudo\b/i, reason: "Elevated privileges" },
-  { pattern: /chmod\b/i, reason: "Permission change" },
-  { pattern: /chown\b/i, reason: "Ownership change" },
-  { pattern: /git\s+push\s+--force/i, reason: "Force push" },
-  { pattern: /git\s+reset\s+--hard/i, reason: "Hard reset" },
-  { pattern: /npm\s+publish/i, reason: "Package publish" },
-  { pattern: /docker\s+rm/i, reason: "Container removal" },
-  { pattern: /pip\s+install\b(?!.*--user)/i, reason: "Global package install" },
-];
-
-const HELP_TEXT = [
-  "Nexus OS Terminal — Governed Shell v9.0",
-  "",
-  "All commands execute via TypedTools (no raw shell).",
-  "Built-in (client-side):",
-  "  cd [dir]          Change directory",
-  "  clear             Clear terminal",
-  "  history           Command history",
-  "  help              Show this help",
-  "",
-  "Executed via backend:",
-  "  ls [-la] [dir]    List directory contents",
-  "  cat [file]        Display file contents",
-  "  pwd               Print working directory",
-  "  echo [text]       Print text",
-  "  env / printenv    Environment variables",
-  "  ps                Process list",
-  "  df [path]         Disk usage",
-  "  free              Memory usage",
-  "  date / uptime     System time / uptime",
-  "  whoami / uname    User / system info",
-  "",
-  "Build commands:",
-  "  cargo build       Build Rust workspace",
-  "  cargo test        Run test suite",
-  "  cargo clippy      Run linter",
-  "  npm run build     Build frontend",
-  "  npm run dev       Start dev server",
-  "",
-  "Git commands:",
-  "  git status        Show working tree status",
-  "  git log           Show commit history",
-  "  git diff          Show changes",
-  "  git commit        Commit staged changes",
-  "",
-  "Governance:",
-  "  Dangerous commands are BLOCKED (Tier2+ HITL approval required)",
-  "  Warned commands show a caution notice",
-  "  All commands are audit-logged on the backend",
-];
-
-/* ================================================================== */
-/*  Agent suggestion engine                                            */
-/* ================================================================== */
-
-function getSuggestions(cmd: string, history: CommandHistoryEntry[]): AgentSuggestion[] {
-  const suggestions: AgentSuggestion[] = [];
-  const recent = history.slice(-5).map((h) => h.cmd);
-
-  if (cmd.startsWith("git s")) {
-    suggestions.push({ cmd: "git status", reason: "Check working tree changes" });
-    suggestions.push({ cmd: "git stash", reason: "Stash current changes" });
-  } else if (cmd.startsWith("git l")) {
-    suggestions.push({ cmd: "git log --oneline -10", reason: "Recent commit history" });
-    suggestions.push({ cmd: "git log --graph --oneline", reason: "Visual branch history" });
-  } else if (cmd.startsWith("git c")) {
-    suggestions.push({ cmd: "git commit -m \"\"", reason: "Commit staged changes" });
-    suggestions.push({ cmd: "git checkout -b feature/", reason: "Create new branch" });
-  } else if (cmd.startsWith("cargo")) {
-    suggestions.push({ cmd: "cargo build --release", reason: "Optimized build" });
-    suggestions.push({ cmd: "cargo test --workspace", reason: "Run all tests" });
-    suggestions.push({ cmd: "cargo clippy -- -D warnings", reason: "Lint check" });
-  } else if (cmd.startsWith("npm")) {
-    suggestions.push({ cmd: "npm run build", reason: "Build frontend" });
-    suggestions.push({ cmd: "npm run dev", reason: "Start dev server" });
-  } else if (cmd.startsWith("ls")) {
-    suggestions.push({ cmd: "ls -la", reason: "Detailed listing" });
-    suggestions.push({ cmd: "tree", reason: "Visual directory tree" });
-  } else if (!cmd && recent.length > 0) {
-    if (recent.some((c) => c.includes("git add"))) {
-      suggestions.push({ cmd: "git commit -m \"\"", reason: "Commit after staging" });
-    }
-    if (recent.some((c) => c.includes("cargo build"))) {
-      suggestions.push({ cmd: "cargo test", reason: "Test after build" });
-    }
-    if (recent.some((c) => c.includes("cargo test"))) {
-      suggestions.push({ cmd: "cargo clippy -- -D warnings", reason: "Lint after testing" });
-    }
-  }
-
-  return suggestions.slice(0, 4);
+interface ConsentRequest {
+  requestId: string;
+  toolName: string;
+  tier: string;
+  details: string;
 }
 
 /* ================================================================== */
@@ -174,593 +30,457 @@ function getSuggestions(cmd: string, history: CommandHistoryEntry[]): AgentSugge
 /* ================================================================== */
 
 export default function Terminal(): JSX.Element {
-  /* ---- State ---- */
-  const [panes, setPanes] = useState<TermPane[]>([
-    { id: 1, label: "Terminal 1", cwd: "/home/nexus/NEXUS/nexus-os", shell: "nexus-sh" },
-  ]);
-  const [activePane, setActivePane] = useState(1);
-  const [lines, setLines] = useState<TermLine[]>([
-    { id: 0, type: "system", text: "╔══════════════════════════════════════════════════════════════╗", ts: Date.now(), pane: 1 },
-    { id: 1, type: "system", text: "║  Nexus OS Terminal v9.0 — Governed Shell                    ║", ts: Date.now(), pane: 1 },
-    { id: 2, type: "system", text: "║  Don't trust. Verify. Every command is audit-logged.        ║", ts: Date.now(), pane: 1 },
-    { id: 3, type: "system", text: "║  Dangerous commands require Tier2+ HITL approval.           ║", ts: Date.now(), pane: 1 },
-    { id: 4, type: "system", text: "║  Type 'help' for available commands.                        ║", ts: Date.now(), pane: 1 },
-    { id: 5, type: "system", text: "╚══════════════════════════════════════════════════════════════╝", ts: Date.now(), pane: 1 },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [commandHistory, setCommandHistory] = useState<CommandHistoryEntry[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
-  const [fuelUsed, setFuelUsed] = useState(0);
-  const [showSidebar, setShowSidebar] = useState(true);
-  const [sidebarTab, setSidebarTab] = useState<"history" | "audit" | "blocked">("history");
-  const [pendingApproval, setPendingApproval] = useState<ApprovalState>(null);
-  const [suggestions, setSuggestions] = useState<AgentSuggestion[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [selectedSuggestion, setSelectedSuggestion] = useState(0);
-  const [isExecuting, setIsExecuting] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+  const [governance, setGovernance] = useState<NxGovernanceStatus | null>(null);
+  const [diagnostic, setDiagnostic] = useState<NxDiagnosticResult | null>(null);
+  const [consent, setConsent] = useState<ConsentRequest | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeToolName, setActiveToolName] = useState<string | null>(null);
 
-  useEffect(() => { setLoading(false); }, []);
-
-  const lineId = useRef(6);
-  const termRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fuelBudget = 10000;
-  const fuelRemaining = fuelBudget - fuelUsed;
-  const fuelPct = Math.round((fuelRemaining / fuelBudget) * 100);
-
-  const currentPane = useMemo(() => panes.find((p) => p.id === activePane), [panes, activePane]);
-  const paneLines = useMemo(() => lines.filter((l) => l.pane === activePane), [lines, activePane]);
-
-  /* ---- Helpers ---- */
-  const appendAudit = useCallback((event: string, detail: string) => {
-    setAuditLog((prev) => [{ ts: Date.now(), event, detail }, ...prev].slice(0, 200));
-  }, []);
-
-  const addLine = useCallback((type: TermLine["type"], text: string, pane?: number) => {
-    const id = lineId.current++;
-    setLines((prev) => [...prev, { id, type, text, ts: Date.now(), pane: pane ?? activePane }]);
-  }, [activePane]);
-
-  const addLines = useCallback((type: TermLine["type"], text: string, pane?: number) => {
-    const outputLines = text.split("\n");
-    // Remove trailing empty line from split
-    if (outputLines.length > 0 && outputLines[outputLines.length - 1] === "") {
-      outputLines.pop();
-    }
-    for (const line of outputLines) {
-      const id = lineId.current++;
-      setLines((prev) => [...prev, { id, type, text: line, ts: Date.now(), pane: pane ?? activePane }]);
-    }
-  }, [activePane]);
+  const msgId = useRef(0);
+  const chatRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = useCallback(() => {
-    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
-    scrollTimerRef.current = setTimeout(() => termRef.current?.scrollTo(0, termRef.current.scrollHeight), 30);
+    setTimeout(() => chatRef.current?.scrollTo(0, chatRef.current.scrollHeight), 30);
   }, []);
 
-  /* ---- Handle cd locally ---- */
-  const handleCd = useCallback((target: string, cwd: string): string => {
-    if (!target || target === "~" || target === "$HOME") return "/home/nexus";
-    if (target === "-") return cwd; // no OLDPWD tracking, stay put
-    if (target === "..") {
-      const parts = cwd.split("/");
-      parts.pop();
-      return parts.join("/") || "/";
-    }
-    if (target.startsWith("/")) return target;
-    return `${cwd}/${target}`.replace(/\/+/g, "/");
+  const addMessage = useCallback((role: ChatMessage["role"], content: string, extra?: Partial<ChatMessage>) => {
+    const id = msgId.current++;
+    setMessages(prev => [...prev, { id, role, content, ts: Date.now(), ...extra }]);
   }, []);
 
+  /* ---- Init: load governance status + diagnostics ---- */
   useEffect(() => {
-    return () => {
-      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
-    };
+    let cancelled = false;
+    (async () => {
+      try {
+        const [status, diag] = await Promise.all([nxStatus(), nxDoctor()]);
+        if (cancelled) return;
+        setGovernance(status);
+        setDiagnostic(diag);
+      } catch {
+        // Bridge not available — show setup guidance
+      }
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, []);
 
-  /* ---- Update suggestions on input change ---- */
+  /* ---- Subscribe to Tauri events ---- */
   useEffect(() => {
-    const s = getSuggestions(input, commandHistory);
-    setSuggestions(s);
-    setShowSuggestions(s.length > 0 && input.length > 0);
-    setSelectedSuggestion(0);
-  }, [input, commandHistory]);
+    const unlisteners: (() => void)[] = [];
 
-  /* ---- Execute command via Tauri backend ---- */
-  async function executeViaBackend(cmd: string, cwd: string): Promise<void> {
-    setIsExecuting(true);
-    try {
-      const result: TerminalResult = await terminalExecute(cmd, cwd);
-
-      // Backend says this command needs HITL approval
-      if (result.needs_approval) {
-        addLine("warn", `[HITL REQUIRED] Command requires approval: ${cmd}`);
-        addLine("system", `  Tool: ${result.tool} — Use the approval dialog to confirm.`);
-        appendAudit("TermHITL", `${cmd} — needs approval (${result.tool})`);
-        setPendingApproval({ cmd, reason: `Backend: ${result.tool} requires HITL approval` });
+    const setup = async () => {
+      unlisteners.push(await listen<{ text: string }>("nx:text-delta", (e) => {
+        setStreamingText(prev => prev + e.payload.text);
         scrollToBottom();
-        return;
-      }
+      }));
 
-      // Fuel accounting
-      setFuelUsed((prev) => prev + result.fuel_cost);
+      unlisteners.push(await listen<{ name: string; id: string }>("nx:tool-start", (e) => {
+        setActiveToolName(e.payload.name);
+        scrollToBottom();
+      }));
 
-      // Display stdout
-      if (result.stdout) {
-        addLines("output", result.stdout);
-      }
+      unlisteners.push(await listen<{ name: string; success: boolean; duration_ms: number; summary: string }>("nx:tool-complete", (e) => {
+        const { name, success, duration_ms, summary } = e.payload;
+        setActiveToolName(null);
+        setMessages(prev => [...prev, {
+          id: msgId.current++,
+          role: "tool",
+          content: summary || (success ? "Completed" : "Failed"),
+          ts: Date.now(),
+          toolName: name,
+          toolSuccess: success,
+          toolDuration: duration_ms,
+        }]);
+        scrollToBottom();
+      }));
 
-      // Display stderr in red
-      if (result.stderr) {
-        addLines("error", result.stderr);
-      }
+      unlisteners.push(await listen<{ name: string; reason: string }>("nx:tool-denied", (e) => {
+        setMessages(prev => [...prev, {
+          id: msgId.current++,
+          role: "tool",
+          content: `Denied: ${e.payload.reason}`,
+          ts: Date.now(),
+          toolName: e.payload.name,
+          toolSuccess: false,
+        }]);
+        scrollToBottom();
+      }));
 
-      // Show exit code if non-zero
-      if (result.exit_code !== 0) {
-        addLine("error", `[exit code ${result.exit_code}] (${result.duration_ms}ms)`);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      addLine("error", `Error: ${message}`);
-      appendAudit("TermError", `${cmd} — ${message}`);
-    } finally {
-      setIsExecuting(false);
-      scrollToBottom();
-    }
-  }
+      unlisteners.push(await listen<{ request_id: string; tool_name: string; tier: string; details: string }>("nx:consent-required", (e) => {
+        setConsent({
+          requestId: e.payload.request_id,
+          toolName: e.payload.tool_name,
+          tier: e.payload.tier,
+          details: e.payload.details,
+        });
+      }));
 
-  /* ---- Execute command ---- */
-  function handleSubmit(): void {
-    const cmd = input.trim();
-    if (!cmd) return;
+      unlisteners.push(await listen<{ fuel_remaining: number; fuel_consumed: number; audit_entries: number; envelope_similarity: number }>("nx:governance-update", (e) => {
+        setGovernance(prev => prev ? {
+          ...prev,
+          fuel_remaining: e.payload.fuel_remaining,
+          fuel_consumed: e.payload.fuel_consumed,
+          audit_entries: e.payload.audit_entries,
+          envelope_similarity: e.payload.envelope_similarity,
+        } : prev);
+      }));
+
+      unlisteners.push(await listen<{ reason: string; total_turns: number }>("nx:done", (e) => {
+        setStreamingText(prev => {
+          if (prev.trim()) {
+            setMessages(msgs => [...msgs, {
+              id: msgId.current++,
+              role: "assistant",
+              content: prev,
+              ts: Date.now(),
+            }]);
+          }
+          return "";
+        });
+        setIsRunning(false);
+        setActiveToolName(null);
+        // Refresh governance status
+        nxStatus().then(setGovernance).catch(() => {});
+        scrollToBottom();
+      }));
+
+      unlisteners.push(await listen<{ message: string }>("nx:error", (e) => {
+        setStreamingText(prev => {
+          if (prev.trim()) {
+            setMessages(msgs => [...msgs, {
+              id: msgId.current++,
+              role: "assistant",
+              content: prev,
+              ts: Date.now(),
+            }]);
+          }
+          return "";
+        });
+        addMessage("system", `Error: ${e.payload.message}`);
+        setIsRunning(false);
+        setActiveToolName(null);
+        scrollToBottom();
+      }));
+    };
+
+    setup();
+    return () => { unlisteners.forEach(fn => fn()); };
+  }, [addMessage, scrollToBottom]);
+
+  /* ---- Send message ---- */
+  const handleSubmit = useCallback(async () => {
+    const msg = input.trim();
+    if (!msg || isRunning) return;
     setInput("");
-    setHistoryIndex(-1);
-    setShowSuggestions(false);
+    addMessage("user", msg);
+    setStreamingText("");
+    setIsRunning(true);
 
-    addLine("input", `${currentPane?.cwd.split("/").pop() ?? "~"} $ ${cmd}`);
-
-    // Log to command history
-    const histEntry: CommandHistoryEntry = { cmd, ts: Date.now(), pane: activePane, blocked: false };
-
-    // Defense-in-depth: Check blocked patterns on frontend
-    const blocked = BLOCKED_PATTERNS.find((p) => p.pattern.test(cmd));
-    if (blocked) {
-      addLine("error", `[BLOCKED] Command requires Tier2+ HITL approval`);
-      addLine("error", `  Reason: ${blocked.reason}`);
-      addLine("error", `  Command: ${cmd}`);
-      addLine("system", "  Use the approval dialog to request execution.");
-      appendAudit("TermBlocked", `${cmd} — ${blocked.reason}`);
-      histEntry.blocked = true;
-      setCommandHistory((prev) => [...prev, histEntry]);
-      setPendingApproval({ cmd, reason: blocked.reason });
-      scrollToBottom();
-      return;
-    }
-
-    // Check warn patterns
-    const warned = WARN_PATTERNS.find((p) => p.pattern.test(cmd));
-    if (warned) {
-      addLine("warn", `[CAUTION] ${warned.reason}: ${cmd}`);
-      appendAudit("TermWarn", `${cmd} — ${warned.reason}`);
-    }
-
-    setCommandHistory((prev) => [...prev, histEntry]);
-    appendAudit("TermExec", cmd);
-
-    const cwd = currentPane?.cwd ?? "/home/nexus/NEXUS/nexus-os";
-    const parts = cmd.trim().split(/\s+/);
-    const base = parts[0];
-
-    // Client-side builtins (no backend call needed)
-    if (base === "clear") {
-      setLines((prev) => prev.filter((l) => l.pane !== activePane));
-      addLine("system", "Terminal cleared.");
-      scrollToBottom();
-      return;
-    }
-    if (base === "help") {
-      HELP_TEXT.forEach((line) => addLine("output", line));
-      scrollToBottom();
-      return;
-    }
-    if (base === "history") {
-      addLine("system", "(see COMMAND HISTORY panel on the right)");
-      scrollToBottom();
-      return;
-    }
-    if (base === "exit") {
-      addLine("warn", "nexus-sh: governed terminal cannot be exited. Close the tab instead.");
-      scrollToBottom();
-      return;
-    }
-    if (base === "cd") {
-      const target = parts[1] ?? "~";
-      const newCwd = handleCd(target, cwd);
-      setPanes((prev) =>
-        prev.map((p) => (p.id === activePane ? { ...p, cwd: newCwd } : p))
-      );
-      scrollToBottom();
-      return;
-    }
-
-    // All other commands → execute via Tauri backend
-    void executeViaBackend(cmd, cwd);
-  }
-
-  /* ---- History navigation ---- */
-  function handleKeyDown(e: React.KeyboardEvent): void {
-    if (e.key === "Enter") {
-      if (showSuggestions && suggestions[selectedSuggestion]) {
-        setInput(suggestions[selectedSuggestion].cmd);
-        setShowSuggestions(false);
-      } else {
-        handleSubmit();
-      }
-      return;
-    }
-    if (e.key === "Tab" && showSuggestions && suggestions.length > 0) {
-      e.preventDefault();
-      setInput(suggestions[selectedSuggestion].cmd);
-      setShowSuggestions(false);
-      return;
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      if (showSuggestions) {
-        setSelectedSuggestion((p) => Math.max(0, p - 1));
-        return;
-      }
-      const cmds = commandHistory.map((h) => h.cmd);
-      if (cmds.length === 0) return;
-      const nextIdx = historyIndex === -1 ? cmds.length - 1 : Math.max(0, historyIndex - 1);
-      setHistoryIndex(nextIdx);
-      setInput(cmds[nextIdx]);
-    }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      if (showSuggestions) {
-        setSelectedSuggestion((p) => Math.min(suggestions.length - 1, p + 1));
-        return;
-      }
-      const cmds = commandHistory.map((h) => h.cmd);
-      if (historyIndex === -1) return;
-      const nextIdx = historyIndex + 1;
-      if (nextIdx >= cmds.length) {
-        setHistoryIndex(-1);
-        setInput("");
-      } else {
-        setHistoryIndex(nextIdx);
-        setInput(cmds[nextIdx]);
-      }
-    }
-    if (e.key === "Escape") {
-      setShowSuggestions(false);
-      setPendingApproval(null);
-    }
-    if (e.key === "l" && e.ctrlKey) {
-      e.preventDefault();
-      setLines((prev) => prev.filter((l) => l.pane !== activePane));
-      addLine("system", "Terminal cleared.");
-    }
-  }
-
-  /* ---- Pane management ---- */
-  function addPane(): void {
-    const id = Math.max(...panes.map((p) => p.id)) + 1;
-    setPanes((prev) => [...prev, { id, label: `Terminal ${id}`, cwd: "/home/nexus/NEXUS/nexus-os", shell: "nexus-sh" }]);
-    setActivePane(id);
-    addLine("system", `╔══ Terminal ${id} ══╗  New governed shell session.`, id);
-    appendAudit("PaneCreate", `Terminal ${id}`);
-  }
-
-  function closePane(id: number): void {
-    if (panes.length <= 1) return;
-    setPanes((prev) => prev.filter((p) => p.id !== id));
-    setLines((prev) => prev.filter((l) => l.pane !== id));
-    if (activePane === id) setActivePane(panes.find((p) => p.id !== id)?.id ?? 1);
-    appendAudit("PaneClose", `Terminal ${id}`);
-  }
-
-  /* ---- Approval dialog — real execution after HITL confirm ---- */
-  async function handleApprove(): Promise<void> {
-    if (!pendingApproval) return;
-    const cmd = pendingApproval.cmd;
-    const cwd = currentPane?.cwd ?? "/home/nexus/NEXUS/nexus-os";
-
-    appendAudit("TermApproved", `HITL approved: ${cmd}`);
-    addLine("system", `[APPROVED] Executing with Tier2 approval: ${cmd}`);
-    setPendingApproval(null);
-
-    setIsExecuting(true);
     try {
-      const result: TerminalResult = await terminalExecuteApproved(cmd, cwd);
-
-      setFuelUsed((prev) => prev + result.fuel_cost);
-
-      if (result.stdout) {
-        addLines("output", result.stdout);
-      }
-      if (result.stderr) {
-        addLines("error", result.stderr);
-      }
-      if (result.exit_code !== 0) {
-        addLine("error", `[exit code ${result.exit_code}] (${result.duration_ms}ms)`);
-      }
+      await nxChat(msg);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      addLine("error", `Error: ${message}`);
-      appendAudit("TermError", `approved exec failed: ${cmd} — ${message}`);
-    } finally {
-      setIsExecuting(false);
-      scrollToBottom();
+      addMessage("system", `Failed to start agent: ${err instanceof Error ? err.message : String(err)}`);
+      setIsRunning(false);
     }
-  }
-
-  function handleDeny(): void {
-    if (!pendingApproval) return;
-    appendAudit("TermDenied", `HITL denied: ${pendingApproval.cmd}`);
-    addLine("system", `[DENIED] Command rejected: ${pendingApproval.cmd}`);
-    setPendingApproval(null);
     scrollToBottom();
-  }
+  }, [input, isRunning, addMessage, scrollToBottom]);
 
-  /* ---- Keyboard shortcuts ---- */
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent): void {
-      const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.key === "`") { e.preventDefault(); inputRef.current?.focus(); }
-      if (mod && e.key === "b") { e.preventDefault(); setShowSidebar((p) => !p); }
-      if (mod && e.key === "t") { e.preventDefault(); addPane(); }
-      if (mod && e.key === "w") {
-        e.preventDefault();
-        if (panes.length > 1) closePane(activePane);
+  const handleCancel = useCallback(async () => {
+    try {
+      await nxChatCancel();
+    } catch { /* ignore */ }
+    setStreamingText(prev => {
+      if (prev.trim()) {
+        setMessages(msgs => [...msgs, {
+          id: msgId.current++,
+          role: "assistant",
+          content: prev + "\n\n[Cancelled]",
+          ts: Date.now(),
+        }]);
       }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  });
+      return "";
+    });
+    setIsRunning(false);
+    setActiveToolName(null);
+  }, []);
 
-  /* ---- Focus terminal on click ---- */
-  function handleTermClick(): void {
-    inputRef.current?.focus();
+  const handleConsent = useCallback(async (granted: boolean) => {
+    if (!consent) return;
+    try {
+      await nxConsentRespond(consent.requestId, granted);
+    } catch { /* ignore */ }
+    addMessage("system", granted
+      ? `Approved: ${consent.toolName}`
+      : `Denied: ${consent.toolName}`);
+    setConsent(null);
+  }, [consent, addMessage]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void handleSubmit();
+    }
+  }, [handleSubmit]);
+
+  /* ---- Governance metrics ---- */
+  const fuelPct = governance
+    ? (governance.fuel_total > 0 ? (governance.fuel_remaining / governance.fuel_total) * 100 : 0)
+    : 100;
+  const fuelColor = fuelPct > 50 ? "var(--nexus-accent, #22c55e)" : fuelPct > 20 ? "#f59e0b" : "#ef4444";
+
+  /* ---- Loading ---- */
+  if (loading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
+        Loading Nexus Code bridge...
+      </div>
+    );
   }
 
-  const formatTime = (ts: number): string =>
-    new Date(ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  /* ---- Setup guide (no provider configured) ---- */
+  if (diagnostic && !diagnostic.ready) {
+    return (
+      <section className="tm-root">
+        <header className="tm-header">
+          <div className="tm-header-left">
+            <h2 className="tm-title">NEXUS CODE</h2>
+            <span className="tm-subtitle">governed ai agent</span>
+          </div>
+        </header>
+        <div className="tm-setup">
+          <div className="tm-setup-card">
+            <Shield size={32} style={{ color: "#f59e0b", marginBottom: 12 }} />
+            <h3 className="tm-setup-title">Setup Required</h3>
+            <p className="tm-setup-desc">Configure at least one LLM provider and ensure git is available.</p>
 
-  /* ================================================================ */
-  /*  RENDER                                                           */
-  /* ================================================================ */
-  if (loading) return (
-    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", color: "#64748b", fontSize: 14 }}>
-      Loading...
-    </div>
-  );
+            <div className="tm-setup-section">
+              <h4>Configured Providers</h4>
+              {diagnostic.configured_providers.length > 0 ? (
+                diagnostic.configured_providers.map(p => (
+                  <div key={p} className="tm-setup-provider tm-setup-ok">
+                    <CheckCircle size={14} /> {p}
+                  </div>
+                ))
+              ) : (
+                <p className="tm-setup-none">None configured</p>
+              )}
+            </div>
 
+            <div className="tm-setup-section">
+              <h4>Unconfigured Providers</h4>
+              {diagnostic.unconfigured_providers.map(p => (
+                <div key={p.name} className="tm-setup-provider tm-setup-missing">
+                  <XCircle size={14} /> {p.name} — set <code>{p.env_var}</code>
+                </div>
+              ))}
+            </div>
+
+            <div className="tm-setup-section">
+              <h4>System Tools</h4>
+              <div className={`tm-setup-provider ${diagnostic.has_git ? "tm-setup-ok" : "tm-setup-missing"}`}>
+                {diagnostic.has_git ? <CheckCircle size={14} /> : <XCircle size={14} />} git {diagnostic.has_git ? "(found)" : "(not found)"}
+              </div>
+              <div className={`tm-setup-provider ${diagnostic.has_ripgrep ? "tm-setup-ok" : "tm-setup-missing"}`}>
+                {diagnostic.has_ripgrep ? <CheckCircle size={14} /> : <XCircle size={14} />} ripgrep {diagnostic.has_ripgrep ? "(found)" : "(optional)"}
+              </div>
+            </div>
+
+            <p className="tm-setup-hint">
+              Set an API key (e.g. <code>ANTHROPIC_API_KEY</code>) in your environment, then restart Nexus OS.
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  /* ---- Main chat UI ---- */
   return (
     <section className="tm-root">
-      {/* ---- Header ---- */}
+      {/* ---- Governance Bar ---- */}
       <header className="tm-header">
         <div className="tm-header-left">
-          <h2 className="tm-title">TERMINAL</h2>
-          <span className="tm-subtitle">governed shell</span>
+          <h2 className="tm-title">NEXUS CODE</h2>
+          <span className="tm-subtitle">governed ai agent</span>
         </div>
         <div className="tm-header-center">
-          <span className="tm-shell-badge">
-            <span className="tm-shell-icon">$</span>
-            <span className="tm-shell-name">{currentPane?.shell ?? "nexus-sh"}</span>
-          </span>
-          <span className="tm-cwd-badge" title={currentPane?.cwd}>
-            {currentPane?.cwd.split("/").slice(-2).join("/") ?? "~"}
-          </span>
+          {governance && (
+            <>
+              <span className="tm-shell-badge" title="Session ID">
+                <Shield size={11} style={{ color: "var(--nexus-accent, #22c55e)" }} />
+                <span className="tm-shell-name">{governance.session_id}</span>
+              </span>
+              <span className="tm-shell-badge" title={`${governance.provider}/${governance.model}`}>
+                <Activity size={11} style={{ color: "#a78bfa" }} />
+                <span className="tm-shell-name">{governance.model.split("/").pop()?.slice(0, 20)}</span>
+              </span>
+              <span className="tm-shell-badge" title={`Audit: ${governance.audit_entries} entries${governance.audit_chain_valid ? " (chain valid)" : " (chain INVALID)"}`}>
+                <Link2 size={11} style={{ color: governance.audit_chain_valid ? "var(--nexus-accent, #22c55e)" : "#ef4444" }} />
+                <span className="tm-shell-name">{governance.audit_entries} audit</span>
+              </span>
+            </>
+          )}
         </div>
         <div className="tm-header-right">
-          <div className="tm-fuel-badge">
-            <span className="tm-fuel-label">FUEL</span>
-            <div className="tm-fuel-bar">
-              <div className="tm-fuel-fill" style={{ width: `${fuelPct}%`, background: fuelPct > 50 ? "var(--nexus-accent)" : fuelPct > 20 ? "#f59e0b" : "#ef4444" }} />
+          {governance && (
+            <div className="tm-fuel-badge">
+              <Zap size={11} style={{ color: fuelColor }} />
+              <span className="tm-fuel-label">FUEL</span>
+              <div className="tm-fuel-bar">
+                <div className="tm-fuel-fill" style={{ width: `${fuelPct}%`, background: fuelColor }} />
+              </div>
+              <span className="tm-fuel-value">{governance.fuel_remaining.toLocaleString()}</span>
             </div>
-            <span className="tm-fuel-value">{fuelRemaining.toLocaleString()}</span>
-          </div>
-          <div className="tm-toolbar">
-            <button type="button" className="tm-tool-btn cursor-pointer" onClick={addPane} title="New Tab (Ctrl+T)"><Plus size={14} /></button>
-            <button type="button" className={`tm-tool-btn cursor-pointer ${showSidebar ? "tm-tool-active" : ""}`} onClick={() => setShowSidebar((p) => !p)} title="Toggle Sidebar (Ctrl+B)"><Menu size={14} /></button>
-          </div>
+          )}
+          <span className="tm-shell-badge">
+            <Wrench size={11} style={{ color: "#64748b" }} />
+            <span className="tm-shell-name">{governance?.tool_count ?? 0} tools</span>
+          </span>
         </div>
       </header>
 
-      {/* ---- Body ---- */}
+      {/* ---- Chat Area ---- */}
       <div className="tm-body">
-        {/* ---- Terminal area ---- */}
         <div className="tm-main">
-          {/* Pane tabs */}
-          <div className="tm-pane-tabs">
-            {panes.map((p) => (
-              <div key={p.id} className={`tm-pane-tab ${p.id === activePane ? "tm-pane-tab-active" : ""}`}>
-                <button type="button" className="tm-pane-tab-label" onClick={() => setActivePane(p.id)}>
-                  <span className="tm-pane-tab-icon">$</span>
-                  {p.label}
-                </button>
-                {panes.length > 1 && (
-                  <button type="button" className="tm-pane-tab-close" onClick={() => closePane(p.id)}>×</button>
+          <div className="tm-output" ref={chatRef}>
+            {/* Welcome message */}
+            {messages.length === 0 && !streamingText && (
+              <div className="tm-welcome">
+                <Shield size={28} style={{ color: "var(--nexus-accent, #22c55e)", marginBottom: 8 }} />
+                <h3>Nexus Code — Governed AI Agent</h3>
+                <p>Every action is governed: capability-checked, fuel-metered, consent-gated, and hash-chain audited.</p>
+                <div className="tm-welcome-examples">
+                  <button type="button" className="tm-welcome-example" onClick={() => setInput("What files are in this project?")}>
+                    What files are in this project?
+                  </button>
+                  <button type="button" className="tm-welcome-example" onClick={() => setInput("Run the test suite and report results")}>
+                    Run the test suite and report results
+                  </button>
+                  <button type="button" className="tm-welcome-example" onClick={() => setInput("Find and fix any clippy warnings")}>
+                    Find and fix any clippy warnings
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Messages */}
+            {messages.map(msg => (
+              <div key={msg.id} className={`tm-msg tm-msg-${msg.role}`}>
+                {msg.role === "user" && (
+                  <div className="tm-msg-bubble tm-msg-user-bubble">
+                    <span className="tm-msg-label">You</span>
+                    <div className="tm-msg-text">{msg.content}</div>
+                  </div>
+                )}
+                {msg.role === "assistant" && (
+                  <div className="tm-msg-bubble tm-msg-assistant-bubble">
+                    <span className="tm-msg-label">Nexus Code</span>
+                    <pre className="tm-msg-text">{msg.content}</pre>
+                  </div>
+                )}
+                {msg.role === "tool" && (
+                  <div className={`tm-tool-msg ${msg.toolSuccess ? "tm-tool-ok" : "tm-tool-fail"}`}>
+                    {msg.toolSuccess ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                    <span className="tm-tool-name">{msg.toolName}</span>
+                    <span className="tm-tool-summary">{msg.content}</span>
+                    {msg.toolDuration !== undefined && (
+                      <span className="tm-tool-duration">{msg.toolDuration}ms</span>
+                    )}
+                  </div>
+                )}
+                {msg.role === "system" && (
+                  <div className="tm-system-msg">
+                    <AlertTriangle size={12} />
+                    <span>{msg.content}</span>
+                  </div>
                 )}
               </div>
             ))}
-          </div>
 
-          {/* Terminal output */}
-          <div className="tm-output" ref={termRef} onClick={handleTermClick}>
-            {paneLines.map((line) => (
-              <div key={line.id} className={`tm-line tm-line-${line.type}`}>
-                {line.text}
+            {/* Streaming text */}
+            {streamingText && (
+              <div className="tm-msg tm-msg-assistant">
+                <div className="tm-msg-bubble tm-msg-assistant-bubble">
+                  <span className="tm-msg-label">Nexus Code</span>
+                  <pre className="tm-msg-text">{streamingText}<span className="tm-cursor">|</span></pre>
+                </div>
               </div>
-            ))}
-
-            {/* Executing indicator */}
-            {isExecuting && (
-              <div className="tm-line tm-line-system">Running...</div>
             )}
 
-            {/* Approval dialog */}
-            {pendingApproval && (
-              <div className="tm-approval">
-                <div className="tm-approval-header">HITL APPROVAL REQUIRED — Tier2+ Operation</div>
-                <div className="tm-approval-detail">
-                  <span className="tm-approval-label">Command:</span>
-                  <code className="tm-approval-cmd">{pendingApproval.cmd}</code>
-                </div>
-                <div className="tm-approval-detail">
-                  <span className="tm-approval-label">Reason:</span>
-                  <span className="tm-approval-reason">{pendingApproval.reason}</span>
-                </div>
-                <div className="tm-approval-actions">
-                  <button type="button" className="tm-approval-btn tm-approval-approve" onClick={() => void handleApprove()}>Approve & Execute</button>
-                  <button type="button" className="tm-approval-btn tm-approval-deny" onClick={handleDeny}>Deny</button>
-                </div>
+            {/* Active tool indicator */}
+            {activeToolName && (
+              <div className="tm-tool-active">
+                <span className="tm-tool-spinner" />
+                Running <strong>{activeToolName}</strong>...
               </div>
             )}
           </div>
 
-          {/* Suggestions dropdown */}
-          {showSuggestions && (
-            <div className="tm-suggestions">
-              {suggestions.map((s, i) => (
-                <button
-                  key={s.cmd}
-                  type="button"
-                  className={`tm-suggestion ${i === selectedSuggestion ? "tm-suggestion-active" : ""}`}
-                  onClick={() => { setInput(s.cmd); setShowSuggestions(false); inputRef.current?.focus(); }}
-                  onMouseEnter={() => setSelectedSuggestion(i)}
-                >
-                  <span className="tm-suggestion-cmd">{s.cmd}</span>
-                  <span className="tm-suggestion-reason">{s.reason}</span>
-                </button>
-              ))}
-              <div className="tm-suggestion-hint">Tab to accept · ↑↓ to navigate · Esc to dismiss</div>
+          {/* ---- Consent Modal ---- */}
+          {consent && (
+            <div className="tm-consent-overlay">
+              <div className="tm-consent-modal">
+                <div className="tm-consent-header">
+                  <AlertTriangle size={18} style={{ color: consent.tier === "Tier3" ? "#ef4444" : "#f59e0b" }} />
+                  <span>CONSENT REQUIRED — {consent.tier}</span>
+                </div>
+                <div className="tm-consent-body">
+                  <div className="tm-consent-row">
+                    <span className="tm-consent-label">Tool:</span>
+                    <code>{consent.toolName}</code>
+                  </div>
+                  <div className="tm-consent-row">
+                    <span className="tm-consent-label">Action:</span>
+                    <span>{consent.details}</span>
+                  </div>
+                  <div className="tm-consent-row">
+                    <span className="tm-consent-label">Tier:</span>
+                    <span className={`tm-consent-tier tm-tier-${consent.tier.toLowerCase()}`}>{consent.tier}</span>
+                  </div>
+                </div>
+                <div className="tm-consent-actions">
+                  <button type="button" className="tm-consent-btn tm-consent-approve" onClick={() => void handleConsent(true)}>
+                    <CheckCircle size={14} /> Approve
+                  </button>
+                  <button type="button" className="tm-consent-btn tm-consent-deny" onClick={() => void handleConsent(false)}>
+                    <XCircle size={14} /> Deny
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Input line */}
+          {/* ---- Input Row ---- */}
           <div className="tm-input-row">
-            <span className="tm-prompt">
-              <span className="tm-prompt-user">nexus</span>
-              <span className="tm-prompt-sep">:</span>
-              <span className="tm-prompt-dir">{currentPane?.cwd.split("/").pop() ?? "~"}</span>
-              <span className="tm-prompt-symbol">$</span>
-            </span>
-            <input
+            <textarea
               ref={inputRef}
               className="tm-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type a command..."
+              placeholder={isRunning ? "Agent is working..." : "Ask Nexus Code anything..."}
               spellCheck={false}
               autoFocus
-              disabled={isExecuting}
+              disabled={isRunning}
+              rows={1}
             />
+            {isRunning ? (
+              <button type="button" className="tm-send-btn tm-cancel-btn" onClick={() => void handleCancel()} title="Cancel">
+                <Square size={16} />
+              </button>
+            ) : (
+              <button type="button" className="tm-send-btn" onClick={() => void handleSubmit()} disabled={!input.trim()} title="Send">
+                <Send size={16} />
+              </button>
+            )}
           </div>
         </div>
-
-        {/* ---- Sidebar ---- */}
-        {showSidebar && (
-          <aside className="tm-sidebar">
-            <div className="tm-sidebar-tabs">
-              <button type="button" className={`tm-sidebar-tab ${sidebarTab === "history" ? "tm-sidebar-tab-active" : ""}`} onClick={() => setSidebarTab("history")}>History</button>
-              <button type="button" className={`tm-sidebar-tab ${sidebarTab === "audit" ? "tm-sidebar-tab-active" : ""}`} onClick={() => setSidebarTab("audit")}>Audit</button>
-              <button type="button" className={`tm-sidebar-tab ${sidebarTab === "blocked" ? "tm-sidebar-tab-active" : ""}`} onClick={() => setSidebarTab("blocked")}>Blocked</button>
-            </div>
-
-            {/* Command history */}
-            {sidebarTab === "history" && (
-              <div className="tm-sidebar-content">
-                <div className="tm-sidebar-header">
-                  <span>COMMAND HISTORY</span>
-                  <span className="tm-sidebar-count">{commandHistory.length}</span>
-                </div>
-                <div className="tm-sidebar-list">
-                  {[...commandHistory].reverse().map((h, i) => (
-                    <button
-                      key={`${h.ts}-${i}`}
-                      type="button"
-                      className={`tm-history-item ${h.blocked ? "tm-history-blocked" : ""}`}
-                      onClick={() => { setInput(h.cmd); inputRef.current?.focus(); }}
-                    >
-                      <span className="tm-history-cmd">{h.cmd}</span>
-                      <span className="tm-history-time">{formatTime(h.ts)}</span>
-                      {h.blocked && <span className="tm-history-badge">BLOCKED</span>}
-                    </button>
-                  ))}
-                  {commandHistory.length === 0 && <p className="tm-sidebar-empty">No commands yet</p>}
-                </div>
-              </div>
-            )}
-
-            {/* Audit log */}
-            {sidebarTab === "audit" && (
-              <div className="tm-sidebar-content">
-                <div className="tm-sidebar-header">
-                  <span>AUDIT TRAIL</span>
-                  <span className="tm-sidebar-count">{auditLog.length}</span>
-                </div>
-                <div className="tm-sidebar-list">
-                  {auditLog.slice(0, 50).map((entry, i) => (
-                    <div key={`${entry.ts}-${i}`} className="tm-audit-entry">
-                      <span className="tm-audit-time">{formatTime(entry.ts)}</span>
-                      <span className={`tm-audit-event ${entry.event.includes("Blocked") || entry.event.includes("Denied") ? "tm-audit-danger" : entry.event.includes("Warn") ? "tm-audit-warn" : ""}`}>{entry.event}</span>
-                      <span className="tm-audit-detail">{entry.detail}</span>
-                    </div>
-                  ))}
-                  {auditLog.length === 0 && <p className="tm-sidebar-empty">No events yet</p>}
-                </div>
-              </div>
-            )}
-
-            {/* Blocked commands */}
-            {sidebarTab === "blocked" && (
-              <div className="tm-sidebar-content">
-                <div className="tm-sidebar-header">
-                  <span>BLOCKED COMMANDS</span>
-                  <span className="tm-sidebar-count">{BLOCKED_PATTERNS.length}</span>
-                </div>
-                <div className="tm-sidebar-list">
-                  {BLOCKED_PATTERNS.map((bp, i) => (
-                    <div key={i} className="tm-blocked-item">
-                      <span className="tm-blocked-reason">{bp.reason}</span>
-                      <span className="tm-blocked-pattern">{bp.pattern.source.slice(0, 40)}</span>
-                    </div>
-                  ))}
-                  <div className="tm-blocked-footer">
-                    <p>All blocked commands require Tier2+ HITL approval to execute.</p>
-                    <p>Warned commands (sudo, chmod, git push --force, etc.) show a caution notice but are allowed.</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Governance stats */}
-            <div className="tm-sidebar-stats">
-              <div className="tm-stat">
-                <span className="tm-stat-label">Commands</span>
-                <span className="tm-stat-value">{commandHistory.length}</span>
-              </div>
-              <div className="tm-stat">
-                <span className="tm-stat-label">Blocked</span>
-                <span className="tm-stat-value tm-stat-danger">{commandHistory.filter((h) => h.blocked).length}</span>
-              </div>
-              <div className="tm-stat">
-                <span className="tm-stat-label">Fuel Used</span>
-                <span className="tm-stat-value">{fuelUsed}</span>
-              </div>
-              <div className="tm-stat">
-                <span className="tm-stat-label">Panes</span>
-                <span className="tm-stat-value">{panes.length}</span>
-              </div>
-            </div>
-          </aside>
-        )}
       </div>
     </section>
   );
