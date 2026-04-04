@@ -655,6 +655,7 @@ mod tests {
                 token_count: 10,
                 model_name: model.to_string(),
                 tool_calls: Vec::new(),
+                input_tokens: None,
             })
         }
 

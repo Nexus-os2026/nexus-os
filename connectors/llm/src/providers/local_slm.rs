@@ -1419,6 +1419,7 @@ impl LlmProvider for LocalSlmProvider {
                     token_count: generated.len() as u32,
                     model_name: model.to_string(),
                     tool_calls: Vec::new(),
+                    input_tokens: None,
                 });
             }
         }
@@ -1432,6 +1433,7 @@ impl LlmProvider for LocalSlmProvider {
             token_count,
             model_name: model.to_string(),
             tool_calls: Vec::new(),
+            input_tokens: None,
         })
     }
 

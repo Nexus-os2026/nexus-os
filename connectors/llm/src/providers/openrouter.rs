@@ -8,12 +8,16 @@ use std::env;
 /// Popular OpenRouter models — access 200+ models from every major provider.
 pub const OPENROUTER_MODELS: &[(&str, &str)] = &[
     (
-        "meta-llama/llama-3.3-70b-instruct",
-        "Llama 3.3 70B — Free tier, strong all-round",
+        "qwen/qwen3.6-plus:free",
+        "Qwen 3.6 Plus — Free, 1M ctx, best for agentic coding & web builds",
     ),
     (
         "meta-llama/llama-3.3-70b-instruct:free",
         "Llama 3.3 70B Free — Zero cost, rate-limited",
+    ),
+    (
+        "meta-llama/llama-3.3-70b-instruct",
+        "Llama 3.3 70B — Free tier, strong all-round",
     ),
     (
         "deepseek/deepseek-coder-v3",
@@ -27,10 +31,16 @@ pub const OPENROUTER_MODELS: &[(&str, &str)] = &[
         "xiaomi/mimo-v2-pro",
         "MiMo V2 Pro — Advanced reasoning + math",
     ),
+    ("openai/gpt-4.1-mini", "GPT-4.1 Mini — Strong mid-tier"),
+    ("openai/gpt-4.1", "GPT-4.1 — Best coder"),
     ("openai/gpt-4o-mini", "GPT-4o Mini — Fast, affordable"),
-    ("openai/gpt-4o", "GPT-4o — Most capable OpenAI"),
+    ("openai/gpt-4o", "GPT-4o — Capable multi-modal"),
     (
-        "anthropic/claude-sonnet-4",
+        "anthropic/claude-sonnet-4-6",
+        "Claude Sonnet 4.6 — Latest, best value",
+    ),
+    (
+        "anthropic/claude-sonnet-4-20250514",
         "Claude Sonnet 4 — Balanced intelligence",
     ),
     (
@@ -45,7 +55,8 @@ pub fn resolve_alias(alias: &str) -> &str {
         "fast" => "xiaomi/mimo-v2-flash",
         "smart" => "xiaomi/mimo-v2-pro",
         "code" => "deepseek/deepseek-coder-v3",
-        "free" => "meta-llama/llama-3.3-70b-instruct:free",
+        "free" => "qwen/qwen3.6-plus:free",
+        "llama" => "meta-llama/llama-3.3-70b-instruct:free",
         other => other,
     }
 }

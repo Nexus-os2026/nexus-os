@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo fmt:*)",
+      "Bash(rustfmt --check /home/nexus/NEXUS/nexus-os/agents/coder/src/context.rs /home/nexus/NEXUS/nexus-os/agents/coder/tests/coder_agent.rs /home/nexus/NEXUS/nexus-os/agents/web-builder/src/llm_codegen.rs)",
+      "WebFetch(domain:openrouter.ai)",
+      "WebSearch",
+      "WebFetch(domain:costgoat.com)",
+      "Bash(cargo check:*)",
+      "Bash(npx tsc:*)",
+      "Bash(grep -oP '-->\\\\s*\\\\K\\\\S+')",
+      "Bash(grep \"missing field \\\\`input_tokens\\\\`\")",
+      "Bash(grep \"missing field \\\\`input_tokens\\\\`\" -B 2)",
+      "Read(//home/nexus/NEXUS/nexus-os/**)",
+      "Read(//home/nexus/.nexus/**)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}

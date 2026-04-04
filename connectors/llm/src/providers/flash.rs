@@ -145,6 +145,7 @@ impl FlashProvider {
             token_count: tokens,
             model_name: self.model_path.clone(),
             tool_calls: Vec::new(),
+            input_tokens: None,
         })
     }
 }
@@ -208,6 +209,7 @@ impl FlashProvider {
                 token_count: tokens,
                 model_name: self.model_path.clone(),
                 tool_calls: Vec::new(),
+                input_tokens: None,
             })
         }
         #[cfg(not(feature = "flash-infer"))]
@@ -276,6 +278,7 @@ impl LlmProvider for FlashProvider {
                 token_count: tokens,
                 model_name: model_display.to_string(),
                 tool_calls: Vec::new(),
+                input_tokens: None,
             })
         }
 

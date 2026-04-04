@@ -6,8 +6,9 @@
   background: #0b1120;
   color: #e2e8f0;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  overflow: hidden;
+  overflow: auto;
   position: relative;
+  min-width: 0;
 }
 
 /* ─── Sidebar ─── */

@@ -8,7 +8,7 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const MAX_FILES_IN_CONTEXT: usize = 32;
+const MAX_FILES_IN_CONTEXT: usize = 48;
 const MAX_FILE_CHARS: usize = 10_000;
 const RECENT_WINDOW_SECS: u64 = 60 * 60 * 24 * 30;
 

@@ -104,7 +104,7 @@ impl DesignInterpreter {
         let runtime = AgentRuntimeContext {
             agent_id: Uuid::new_v4(),
             capabilities,
-            fuel_remaining: 4_000,
+            fuel_remaining: 50_000,
         };
         Self { gateway, runtime }
     }

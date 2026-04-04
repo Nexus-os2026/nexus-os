@@ -767,7 +767,7 @@ export default function Documents() {
   /* ── render ── */
 
   return (
-    <div style={{ padding: 24, color: textPrimary, height: "100%", display: "flex", flexDirection: "column", background: bgPage }}>
+    <div style={{ padding: 24, color: textPrimary, height: "100%", minHeight: "calc(100vh - 11rem)", display: "flex", flexDirection: "column", background: bgPage, overflow: "hidden" }}>
       {/* Error banner */}
       {error && (
         <div
@@ -803,7 +803,7 @@ export default function Documents() {
       </div>
 
       {/* Main 3-panel layout */}
-      <div style={{ display: "flex", gap: 16, flex: 1, minHeight: 0 }}>
+      <div style={{ display: "flex", gap: 16, flex: 1, minHeight: 0, overflow: "hidden" }}>
         {/* Left panel — Document Management */}
         <div
           style={{
@@ -812,6 +812,7 @@ export default function Documents() {
             flexDirection: "column",
             gap: 12,
             minHeight: 0,
+            overflow: "auto",
           }}
         >
           {/* Drop zone */}
@@ -1122,6 +1123,7 @@ export default function Documents() {
             borderRadius: 8,
             border: `1px solid ${borderColor}`,
             minHeight: 0,
+            overflow: "auto",
           }}
         >
           <div

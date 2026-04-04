@@ -16,8 +16,9 @@ use nexus_connectors_llm::model_hub::{self, DownloadProgress, DownloadStatus};
 use nexus_connectors_llm::model_registry::ModelRegistry;
 use nexus_connectors_llm::nexus_link::NexusLink;
 use nexus_connectors_llm::providers::{
-    groq::GROQ_MODELS, nvidia::NVIDIA_MODELS, ClaudeProvider, DeepSeekProvider, GeminiProvider,
-    GroqProvider, LlmProvider, NvidiaProvider, OllamaProvider, OpenAiProvider,
+    groq::GROQ_MODELS, nvidia::NVIDIA_MODELS, openrouter::OPENROUTER_MODELS, ClaudeProvider,
+    DeepSeekProvider, GeminiProvider, GroqProvider, LlmProvider, NvidiaProvider, OllamaProvider,
+    OpenAiProvider, OpenRouterProvider,
 };
 use nexus_connectors_llm::rag::{RagConfig, RagPipeline};
 use nexus_connectors_llm::whisper::WhisperTranscriber;
@@ -1959,8 +1960,9 @@ pub(crate) fn list_provider_models() -> Result<Vec<ProviderModel>, String> {
     // ── Anthropic (Claude) ──
     if has_provider_key(&prov_config.anthropic_api_key) {
         for (id, name) in [
+            ("claude-sonnet-4-6", "Claude Sonnet 4.6"),
             ("claude-sonnet-4-20250514", "Claude Sonnet 4"),
-            ("claude-haiku-4-5-20251001", "Claude Haiku 4.5"),
+            ("claude-haiku-4-5", "Claude Haiku 4.5"),
             ("claude-opus-4-6", "Claude Opus 4.6"),
         ] {
             models.push(ProviderModel {
@@ -1978,6 +1980,11 @@ pub(crate) fn list_provider_models() -> Result<Vec<ProviderModel>, String> {
     // ── OpenAI ──
     if has_provider_key(&prov_config.openai_api_key) {
         for (id, name) in [
+            ("gpt-4.1-nano", "GPT-4.1 Nano"),
+            ("gpt-4.1-mini", "GPT-4.1 Mini"),
+            ("gpt-4.1", "GPT-4.1"),
+            ("gpt-5-mini", "GPT-5 Mini"),
+            ("gpt-5", "GPT-5"),
             ("gpt-4o", "GPT-4o"),
             ("gpt-4o-mini", "GPT-4o Mini"),
             ("o3-mini", "o3 Mini"),
@@ -2053,6 +2060,21 @@ pub(crate) fn list_provider_models() -> Result<Vec<ProviderModel>, String> {
                 id: format!("groq/{id}"),
                 name: name.into(),
                 provider: "groq".into(),
+                local: false,
+                requires_key: true,
+                size_gb: None,
+                installed: true,
+            });
+        }
+    }
+
+    // ── OpenRouter (free models available!) ──
+    if has_provider_key(&prov_config.openrouter_api_key) {
+        for (id, name) in OPENROUTER_MODELS.iter().copied() {
+            models.push(ProviderModel {
+                id: format!("openrouter/{id}"),
+                name: name.into(),
+                provider: "openrouter".into(),
                 local: false,
                 requires_key: true,
                 size_gb: None,
@@ -2365,6 +2387,9 @@ pub(crate) fn provider_from_prefixed_model(
                 Box::new(NvidiaProvider::new(prov_config.nvidia_api_key.clone()))
             }
             "groq" => Box::new(GroqProvider::new(prov_config.groq_api_key.clone())),
+            "openrouter" => Box::new(OpenRouterProvider::new(
+                prov_config.openrouter_api_key.clone(),
+            )),
             #[cfg(feature = "flash-infer")]
             #[allow(unexpected_cfgs)]
             "flash" => {
@@ -2733,17 +2758,11 @@ pub(crate) fn check_llm_status() -> Result<LlmStatusResponse, String> {
     // Claude / Anthropic
     {
         let has_key = key_present(&prov_config.anthropic_api_key);
-        #[cfg(feature = "real-claude")]
-        let feature_ok = true;
-        #[cfg(not(feature = "real-claude"))]
-        let feature_ok = false;
-        let available = has_key && feature_ok;
+        let available = has_key;
         let reason = if !has_key {
             "no API key configured (~$3/M tokens)".to_string()
-        } else if !feature_ok {
-            "real-claude feature not enabled in build".to_string()
         } else {
-            "API key configured, feature enabled".to_string()
+            "API key configured".to_string()
         };
         providers.push(LlmProviderStatusEntry {
             name: "claude".to_string(),
@@ -2751,9 +2770,7 @@ pub(crate) fn check_llm_status() -> Result<LlmStatusResponse, String> {
             is_paid: true,
             reason,
             latency_ms: None,
-            error_hint: if !feature_ok && has_key {
-                Some("Feature gate".to_string())
-            } else if !has_key {
+            error_hint: if !has_key {
                 Some("No API key".to_string())
             } else {
                 None
@@ -2986,8 +3003,19 @@ pub(crate) fn test_llm_connection(provider_name: String) -> Result<TestConnectio
     test_config.provider = Some(provider_name.clone());
     let provider = select_provider(&test_config).map_err(|e| e.to_string())?;
 
+    // Pick an appropriate test model for the provider
+    let test_model = match provider_name.as_str() {
+        "nvidia" => "meta/llama-3.1-8b-instruct".to_string(),
+        "deepseek" => "deepseek-chat".to_string(),
+        "gemini" => "gemini-2.5-flash".to_string(),
+        "anthropic" | "claude" => "claude-sonnet-4-20250514".to_string(),
+        "openai" => "gpt-4o-mini".to_string(),
+        "openrouter" => "qwen/qwen3.6-plus:free".to_string(),
+        _ => config.llm.default_model.clone(),
+    };
+
     let start = std::time::Instant::now();
-    let result = provider.query("Reply with exactly: ok", 10, &config.llm.default_model);
+    let result = provider.query("Reply with exactly: ok", 10, &test_model);
     let latency = start.elapsed().as_millis() as u64;
 
     match result {

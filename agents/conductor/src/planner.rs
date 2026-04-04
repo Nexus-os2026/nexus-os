@@ -110,7 +110,14 @@ fn plan_with_rules(request: &UserRequest) -> ConductorPlan {
         || lower.contains("landing page")
         || lower.contains("portfolio")
         || lower.contains("html")
-        || lower.contains("3d scene");
+        || lower.contains("css")
+        || lower.contains("blog")
+        || lower.contains("homepage")
+        || lower.contains("web page")
+        || lower.contains("webpage")
+        || lower.contains("3d scene")
+        || lower.contains("index.html")
+        || lower.contains("build a website");
 
     // Detect code generation
     let is_code = lower.contains("app")

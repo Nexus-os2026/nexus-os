@@ -11,15 +11,15 @@ const NVIDIA_NIM_ENDPOINT: &str = "https://integrate.api.nvidia.com/v1/chat/comp
 pub const NVIDIA_MODELS: &[(&str, &str)] = &[
     // ═══ DeepSeek (10 models) ═══
     (
-        "deepseek-ai/deepseek-v3_1-terminus",
+        "deepseek-ai/deepseek-v3.1-terminus",
         "DeepSeek V3.1 Terminus 671B — Best for agents, hybrid Think/Non-Think, 128K ctx",
     ),
     (
-        "deepseek-ai/deepseek-v3_1",
+        "deepseek-ai/deepseek-v3.1",
         "DeepSeek V3.1 — Hybrid thinking, smarter tool calling, 128K ctx",
     ),
     (
-        "deepseek-ai/deepseek-v3",
+        "deepseek-ai/deepseek-v3.2",
         "DeepSeek V3 — Coding specialist, 128K ctx",
     ),
     (
@@ -134,7 +134,7 @@ pub const NVIDIA_MODELS: &[(&str, &str)] = &[
     ),
     // ═══ Qwen (12 models) ═══
     (
-        "qwen/qwen3.5-vl-400b",
+        "qwen/qwen3.5-397b-a17b",
         "Qwen 3.5 VLM 400B MoE — Vision, chat, RAG, agentic",
     ),
     (
@@ -257,13 +257,10 @@ pub const NVIDIA_MODELS: &[(&str, &str)] = &[
     ),
     // ═══ Zhipu GLM (4 models) ═══
     (
-        "zhipuai/glm-4.7",
+        "z-ai/glm4.7",
         "GLM-4.7 — Multilingual agentic coding, tool use, UI skills",
     ),
-    (
-        "zhipuai/glm-5-744b",
-        "GLM-5 744B MoE — Complex reasoning, 205K ctx, MIT",
-    ),
+    ("z-ai/glm5", "GLM-5 — Complex reasoning, MIT license"),
     (
         "zhipuai/glm-4-9b-chat",
         "GLM-4 9B — Lightweight Chinese/English chat",
@@ -393,7 +390,7 @@ pub const NVIDIA_MODELS: &[(&str, &str)] = &[
 pub const NVIDIA_VISION_MODELS: &[&str] = &[
     "meta/llama-3.2-90b-vision-instruct",
     "meta/llama-3.2-11b-vision-instruct",
-    "qwen/qwen3.5-vl-400b",
+    "qwen/qwen3.5-397b-a17b",
     "qwen/qwen2-vl-72b-instruct",
     "qwen/qwen2-vl-7b-instruct",
     "microsoft/phi-3.5-vision-instruct",
@@ -519,16 +516,31 @@ impl LlmProvider for NvidiaProvider {
         };
         let request = NvidiaProvider::new(Some(api_key)).build_request(prompt, max_tokens, model);
 
-        // NVIDIA NIM can be slow for large models — use 120s timeout
+        // NVIDIA NIM can be slow for large models (671B+ may need 3-5 min cold start)
+        let timeout = if model.contains("671b")
+            || model.contains("405b")
+            || model.contains("340b")
+            || model.contains("744b")
+        {
+            300 // 5 min for very large models
+        } else {
+            120 // 2 min for normal models
+        };
         let (status, payload) = curl_post_json_with_timeout(
             request.endpoint.as_str(),
             &request.headers,
             &request.body,
-            120,
+            timeout,
         )?;
         if !(200..300).contains(&status) {
+            let detail = payload
+                .get("detail")
+                .and_then(Value::as_str)
+                .or_else(|| payload.get("title").and_then(Value::as_str))
+                .or_else(|| payload.get("error").and_then(Value::as_str))
+                .unwrap_or("unknown error");
             return Err(AgentError::SupervisorError(format!(
-                "nvidia nim request failed with status {status}"
+                "nvidia nim request failed with status {status}: {detail} (model={model})"
             )));
         }
 
@@ -554,6 +566,7 @@ impl LlmProvider for NvidiaProvider {
             token_count,
             model_name: model.to_string(),
             tool_calls: Vec::new(),
+            input_tokens: None,
         })
     }
 

@@ -418,6 +418,29 @@ export function conductBuild(
   });
 }
 
+export function conductBuildStreaming(
+  prompt: string,
+  outputDir?: string,
+  model?: string,
+  approvedPlan?: string,
+  acceptanceCriteria?: string,
+): Promise<void> {
+  return invokeDesktop<void>("conduct_build_streaming", {
+    prompt,
+    outputDir,
+    output_dir: outputDir,
+    model,
+    approvedPlan: approvedPlan ?? null,
+    approved_plan: approvedPlan ?? null,
+    acceptanceCriteria: acceptanceCriteria ?? null,
+    acceptance_criteria: acceptanceCriteria ?? null,
+  });
+}
+
+export function readBuildFile(path: string): Promise<string> {
+  return invokeDesktop<string>("read_build_file", { path });
+}
+
 export function getTrustOverview(): Promise<TrustOverviewAgent[]> {
   return invokeDesktop<TrustOverviewAgent[]>("get_trust_overview");
 }
@@ -4287,3 +4310,165 @@ export function migrateReport(source: string, agentsYaml?: string, tasksYaml?: s
   return invokeDesktop("migrate_report", { source, agents_yaml: agentsYaml, tasks_yaml: tasksYaml, python_source: pythonSource });
 }
 
+// ─── Nexus Code (nx) Bridge ───
+
+export interface NxGovernanceStatus {
+  session_id: string;
+  provider: string;
+  model: string;
+  fuel_remaining: number;
+  fuel_total: number;
+  fuel_consumed: number;
+  fuel_percentage: number;
+  audit_entries: number;
+  audit_chain_valid: boolean;
+  tool_count: number;
+  tools: string[];
+  is_running: boolean;
+  memory_count: number;
+}
+
+export interface NxDiagnosticResult {
+  has_any_provider: boolean;
+  configured_providers: string[];
+  unconfigured_providers: { name: string; env_var: string }[];
+  has_git: boolean;
+  has_ripgrep: boolean;
+  has_nexuscode_md: boolean;
+  ready: boolean;
+}
+
+export function nxStatus(): Promise<NxGovernanceStatus> {
+  return invokeDesktop<NxGovernanceStatus>("nx_status");
+}
+
+export function nxChat(message: string): Promise<void> {
+  return invokeDesktop<void>("nx_chat", { message });
+}
+
+export function nxChatCancel(): Promise<void> {
+  return invokeDesktop<void>("nx_chat_cancel");
+}
+
+export function nxConsentRespond(requestId: string, granted: boolean): Promise<void> {
+  return invokeDesktop<void>("nx_consent_respond", { requestId, granted });
+}
+
+export function nxTool(toolName: string, input: Record<string, unknown>): Promise<any> {
+  return invokeDesktop<any>("nx_tool", { toolName, input: JSON.stringify(input) });
+}
+
+export function nxDoctor(): Promise<NxDiagnosticResult> {
+  return invokeDesktop<NxDiagnosticResult>("nx_doctor");
+}
+
+export function nxProviders(): Promise<any[]> {
+  return invokeDesktop<any[]>("nx_providers");
+}
+
+export function nxTools(): Promise<{ name: string; description: string }[]> {
+  return invokeDesktop<{ name: string; description: string }[]>("nx_tools");
+}
+
+export function nxSessionSave(name: string): Promise<string> {
+  return invokeDesktop<string>("nx_session_save", { name });
+}
+
+export function nxSessionList(): Promise<any[]> {
+  return invokeDesktop<any[]>("nx_session_list");
+}
+
+export function nxSwitchProvider(provider: string): Promise<NxGovernanceStatus> {
+  return invokeDesktop<NxGovernanceStatus>("nx_switch_provider", { provider });
+}
+
+// ============ BUILDER BUDGET ============
+
+export function builderGetBudget(): Promise<any> {
+  return invokeDesktop<any>("builder_get_budget");
+}
+
+export function builderSetBudget(provider: string, amount: number): Promise<void> {
+  return invokeDesktop<void>("builder_set_budget", { provider, amount });
+}
+
+export function builderSetRemaining(provider: string, remaining: number): Promise<void> {
+  return invokeDesktop<void>("builder_set_remaining", { provider, remaining });
+}
+
+export function builderListProjects(): Promise<any[]> {
+  return invokeDesktop<any[]>("builder_list_projects");
+}
+
+export function builderLoadProject(projectId: string): Promise<any> {
+  return invokeDesktop<any>("builder_load_project", { projectId });
+}
+
+export function builderDeleteProject(projectId: string): Promise<void> {
+  return invokeDesktop<void>("builder_delete_project", { projectId });
+}
+
+export function builderGetHistory(): Promise<any[]> {
+  return invokeDesktop<any[]>("builder_get_history");
+}
+
+export function builderRecordBuild(build: Record<string, unknown>): Promise<void> {
+  return invokeDesktop<void>("builder_record_build", {
+    buildJson: JSON.stringify(build),
+    build_json: JSON.stringify(build),
+  });
+}
+
+// ============ BUILDER PREVIEW ============
+
+export function builderReadPreview(projectDir: string): Promise<string> {
+  return invokeDesktop<string>("builder_read_preview", { projectDir, project_dir: projectDir });
+}
+
+// ============ BUILDER CHECKPOINTS ============
+
+export function builderListCheckpoints(projectDir: string): Promise<any[]> {
+  return invokeDesktop<any[]>("builder_list_checkpoints", { projectDir, project_dir: projectDir });
+}
+
+export function builderRollback(projectDir: string, checkpointId: string): Promise<any> {
+  return invokeDesktop<any>("builder_rollback", { projectDir, checkpointId, project_dir: projectDir, checkpoint_id: checkpointId });
+}
+
+export function builderInitCheckpoint(projectDir: string, buildOutputDir: string, cost: number): Promise<any> {
+  return invokeDesktop<any>("builder_init_checkpoint", { projectDir, buildOutputDir, cost, project_dir: projectDir, build_output_dir: buildOutputDir });
+}
+
+export function builderIterate(projectDir: string, changeRequest: string, model?: string): Promise<any> {
+  return invokeDesktop<any>("builder_iterate", { projectDir, changeRequest, model, project_dir: projectDir, change_request: changeRequest });
+}
+
+// ============ BUILDER PLAN ============
+
+export function builderGeneratePlan(prompt: string, projectId: string): Promise<any> {
+  return invokeDesktop<any>("builder_generate_plan", { prompt, projectId, project_id: projectId });
+}
+
+export function builderLoadPlan(projectId: string): Promise<any> {
+  return invokeDesktop<any>("builder_load_plan", { projectId, project_id: projectId });
+}
+
+export function builderArchiveProject(projectId: string): Promise<void> {
+  return invokeDesktop<void>("builder_archive_project", { projectId, project_id: projectId });
+}
+
+export function builderUnarchiveProject(projectId: string): Promise<void> {
+  return invokeDesktop<void>("builder_unarchive_project", { projectId, project_id: projectId });
+}
+
+export function builderExportProject(projectId: string): Promise<{ path: string; filename: string; size_bytes: number }> {
+  return invokeDesktop<{ path: string; filename: string; size_bytes: number }>("builder_export_project", { projectId, project_id: projectId });
+}
+
+export function builderSaveState(projectId: string, stateJson: string): Promise<void> {
+  return invokeDesktop<void>("builder_save_state", { projectId, stateJson, project_id: projectId, state_json: stateJson });
+}
+
+export function builderLoadState(projectId: string): Promise<any> {
+  return invokeDesktop<any>("builder_load_state", { projectId, project_id: projectId });
+}

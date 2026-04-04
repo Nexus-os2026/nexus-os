@@ -10,9 +10,13 @@ import {
   swfListProjects,
   swfStartPipeline,
 } from "../api/backend";
+import BudgetPanel from "../components/BudgetPanel";
+import { IterationPanel } from "../components/IterationPanel";
+import { WebPreview } from "../components/WebPreview";
 import { alpha, commandPageStyle } from "./commandCenterUi";
+import { BuildProgress } from "../components/BuildProgress";
 
-const ACCENT = "#ec4899";
+const ACCENT = "#10b981";
 const GREEN = "#22c55e";
 const RED = "#ef4444";
 const BLUE = "#3b82f6";
@@ -23,7 +27,7 @@ const STAGE_COLORS: Record<string, string> = {
   Architecture: "#3b82f6",
   Implementation: "#22c55e",
   Testing: "#f59e0b",
-  Review: "#ec4899",
+  Review: "#06b6d4",
   Deployment: "#06b6d4",
   Verification: "#64748b",
 };
@@ -80,6 +84,8 @@ export default function SoftwareFactory() {
   const [autonomy, setAutonomy] = useState(4);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
+  const [buildOutputDir, setBuildOutputDir] = useState<string | null>(null);
+  const [previewReloadKey, setPreviewReloadKey] = useState(0);
 
   useEffect(() => {
     Promise.all([
@@ -192,10 +198,32 @@ export default function SoftwareFactory() {
               </div>
             </div>
           )}
+
+          <BudgetPanel />
         </div>
 
         {/* Right: Project detail */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* Build progress stream */}
+          <BuildProgress onBuildComplete={(dir) => {
+            setBuildOutputDir(dir);
+            setPreviewReloadKey((k) => k + 1);
+          }} />
+
+          {/* Preview + Iteration (shown after a build completes) */}
+          {buildOutputDir && (
+            <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 12 }}>
+              <IterationPanel
+                projectDir={buildOutputDir}
+                onPreviewRefresh={() => setPreviewReloadKey((k) => k + 1)}
+              />
+              <WebPreview
+                projectDir={buildOutputDir}
+                reloadKey={previewReloadKey}
+              />
+            </div>
+          )}
+
           {!selectedProject ? (
             <div style={{ ...cardStyle, textAlign: "center", padding: 40, color: "#555" }}>Select or create a project</div>
           ) : (

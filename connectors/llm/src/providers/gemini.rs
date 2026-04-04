@@ -103,6 +103,7 @@ impl LlmProvider for GeminiProvider {
             token_count,
             model_name: model.to_string(),
             tool_calls: Vec::new(),
+            input_tokens: None,
         })
     }
 

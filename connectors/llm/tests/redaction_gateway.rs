@@ -35,6 +35,7 @@ impl LlmProvider for CaptureProvider {
             token_count: 1,
             model_name: model.to_string(),
             tool_calls: Vec::new(),
+            input_tokens: None,
         })
     }
 

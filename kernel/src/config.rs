@@ -50,6 +50,8 @@ pub struct LlmConfig {
     pub gemini_api_key: String,
     #[serde(default)]
     pub nvidia_api_key: String,
+    #[serde(default)]
+    pub openrouter_api_key: String,
     pub ollama_url: String,
     #[serde(default)]
     pub routing_strategy: String,
@@ -229,6 +231,7 @@ impl Default for NexusConfig {
                 deepseek_api_key: String::new(),
                 gemini_api_key: String::new(),
                 nvidia_api_key: String::new(),
+                openrouter_api_key: String::new(),
                 ollama_url: "http://localhost:11434".to_string(),
                 routing_strategy: String::new(),
                 providers: Vec::new(),

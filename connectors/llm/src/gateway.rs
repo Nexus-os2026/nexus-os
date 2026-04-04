@@ -134,11 +134,6 @@ pub fn select_provider(
         return explicit_provider(explicit, config);
     }
 
-    // ── Priority 1: Local Ollama (free, no API key, private) ────────────
-    if let Some(url) = config.ollama_url.as_deref() {
-        return Ok(Box::new(OllamaProvider::new(url.to_string())));
-    }
-
     // Flash Inference: local GGUF model (free, private, often smarter than small Ollama models)
     #[cfg(feature = "flash-infer")]
     if let Some(ref model_path) = config.flash_model_path {
@@ -163,14 +158,13 @@ pub fn select_provider(
         }
     }
 
-    // Auto-detect Ollama on default port (before cloud providers)
-    let ollama_default = OllamaProvider::from_env();
-    if ollama_default.health_check().is_ok() {
-        eprintln!("[nexus-llm] auto-detected Ollama at localhost:11434, using as default provider");
-        return Ok(Box::new(ollama_default));
-    }
+    // ── Priority 1: Cloud providers with API keys (user explicitly configured) ──
+    //
+    // Cloud providers with keys take priority over Ollama auto-detection.
+    // If the user configured an API key, they want to use that provider —
+    // NOT silently fall back to a local model that produces inferior output.
 
-    // ── Priority 2: Groq (free tier, ultra-fast inference) ──────────────
+    // ── Groq (free tier, ultra-fast inference) ──────────────────────────
     if has_key(&config.groq_api_key) {
         eprintln!("[nexus-llm] using Groq (free tier, fast inference)");
         return Ok(Box::new(GroqProvider::new(config.groq_api_key.clone())));
@@ -235,20 +229,32 @@ pub fn select_provider(
         return Ok(Box::new(GeminiProvider::new(config.gemini_api_key.clone())));
     }
 
-    #[cfg(feature = "real-claude")]
     if has_key(&config.anthropic_api_key) {
         return Ok(Box::new(ClaudeProvider::new(
             config.anthropic_api_key.clone(),
         )));
     }
 
+    // ── Last resort: Ollama (local, no API key needed) ─────────────────
+    // Only used when NO cloud provider keys are configured.
+    // If a user explicitly configured Ollama URL, honour it.
+    if let Some(url) = config.ollama_url.as_deref() {
+        return Ok(Box::new(OllamaProvider::new(url.to_string())));
+    }
+    // Auto-detect Ollama on default port
+    let ollama_default = OllamaProvider::from_env();
+    if ollama_default.health_check().is_ok() {
+        eprintln!("[nexus-llm] no cloud API keys configured; using auto-detected Ollama at localhost:11434");
+        return Ok(Box::new(ollama_default));
+    }
+
     Err(AgentError::SupervisorError(
         "No LLM provider configured. Please either:\n\
-         1. Install and start Ollama (ollama serve)\n\
-         2. Set NVIDIA_NIM_API_KEY (free at build.nvidia.com)\n\
-         3. Set OPENAI_API_KEY in Settings\n\
-         4. Set ANTHROPIC_API_KEY in Settings\n\
-         5. Set any supported provider API key in Settings\n\
+         1. Set ANTHROPIC_API_KEY in Settings (recommended)\n\
+         2. Set OPENAI_API_KEY in Settings\n\
+         3. Set NVIDIA_NIM_API_KEY (free at build.nvidia.com)\n\
+         4. Set any supported provider API key in Settings\n\
+         5. Install and start Ollama (ollama serve) for local models\n\
          6. Set LLM_PROVIDER=mock to explicitly use mock responses"
             .to_string(),
     ))

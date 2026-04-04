@@ -75,6 +75,17 @@ summary {
   cursor: pointer;
 }
 
+select {
+  background-color: rgba(5, 11, 21, 0.9);
+  color: #e2e8f0;
+  border: 1px solid rgba(118, 190, 255, 0.18);
+}
+
+select option {
+  background: #0a0f1a;
+  color: #e2e8f0;
+}
+
 button:focus-visible,
 [role="button"]:focus-visible,
 input:focus-visible,
@@ -104,8 +115,9 @@ summary:focus-visible {
 
 @layer components {
   .nexus-shell {
-    @apply relative flex min-h-screen;
+    @apply relative flex h-screen;
     isolation: isolate;
+    overflow: hidden;
   }
 
   .nexus-shell::before {
@@ -169,6 +181,7 @@ summary:focus-visible {
 
   .nexus-page-panel {
     min-height: 100%;
+    height: 100%;
     border-radius: calc(var(--radius-panel-lg) + 0.15rem);
     display: flex;
     flex-direction: column;

@@ -48,6 +48,190 @@ pub fn generate_code_with_llm<P: LlmProvider>(
     Ok(created)
 }
 
+/// Strip markdown fences from LLM output.
+fn strip_markdown_fences(input: &str) -> String {
+    let trimmed = input.trim();
+    if trimmed.starts_with("```") && trimmed.ends_with("```") {
+        let without_end = &trimmed[..trimmed.len() - 3];
+        if let Some(first_newline) = without_end.find('\n') {
+            let inner = without_end[first_newline + 1..].trim();
+            if !inner.is_empty() {
+                return inner.to_string();
+            }
+        }
+    }
+    trimmed.to_string()
+}
+
+/// Generate code using decomposed per-file LLM calls.
+///
+/// First asks the LLM to plan which files are needed, then generates each
+/// file in a separate call with max_tokens=1024. Retries once on empty.
+/// Continues on individual task failure.
+pub fn generate_code_decomposed<P: LlmProvider>(
+    task: &str,
+    output_dir: &Path,
+    gateway: &mut GovernedLlmGateway<P>,
+    context: &mut AgentRuntimeContext,
+    model: &str,
+) -> Result<Vec<PathBuf>, AgentError> {
+    // Step 1: Ask LLM to plan which files we need
+    let plan_prompt = format!(
+        "List the files needed for this task. Return ONLY a JSON array of objects with \
+         \"filename\" and \"description\" keys. No commentary.\n\nTask: {task}"
+    );
+
+    let plan_response = gateway.query(context, &plan_prompt, 512, model)?;
+    let plan_text = strip_markdown_fences(&plan_response.output_text);
+
+    #[derive(serde::Deserialize)]
+    struct FilePlan {
+        filename: String,
+        description: String,
+    }
+
+    let file_plans: Vec<FilePlan> = serde_json::from_str(&plan_text).unwrap_or_else(|_| {
+        // Fallback: infer files from the task description
+        let lower = task.to_lowercase();
+        let mut plans = vec![FilePlan {
+            filename: "src/main.rs".into(),
+            description: task.to_string(),
+        }];
+        if lower.contains("api") || lower.contains("server") {
+            plans.push(FilePlan {
+                filename: "src/routes.rs".into(),
+                description: "API route handlers".into(),
+            });
+        }
+        if lower.contains("auth") {
+            plans.push(FilePlan {
+                filename: "src/auth.rs".into(),
+                description: "Authentication logic".into(),
+            });
+        }
+        if lower.contains("database") || lower.contains("db") {
+            plans.push(FilePlan {
+                filename: "src/db.rs".into(),
+                description: "Database models and queries".into(),
+            });
+        }
+        plans
+    });
+
+    if file_plans.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    eprintln!("[conductor] Code gen plan: {} files", file_plans.len());
+
+    // Step 2: Generate each file in a separate call
+    let system_prompt = "You are a code generator. Output ONLY the file content. \
+                         No explanations, no markdown fences, no commentary.";
+
+    let mut accumulated: Vec<(String, String)> = Vec::new();
+
+    for (i, plan) in file_plans.iter().enumerate() {
+        eprintln!(
+            "[conductor] Generating file {}/{}: {}",
+            i + 1,
+            file_plans.len(),
+            plan.filename
+        );
+
+        let file_context: String = accumulated
+            .iter()
+            .map(|(name, content)| {
+                let preview: String = content.lines().take(3).collect::<Vec<_>>().join("\n");
+                format!(
+                    "- {} ({} lines): {}",
+                    name,
+                    content.lines().count(),
+                    preview
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let user_prompt = format!(
+            "{system_prompt}\n\n\
+             Generate the code for: {desc}\n\
+             File to create: {filename}\n\n\
+             Files already created:\n{ctx}\n\n\
+             Output ONLY the raw file content for {filename}. Nothing else.",
+            desc = plan.description,
+            filename = plan.filename,
+            ctx = if file_context.is_empty() {
+                "(none yet)".to_string()
+            } else {
+                file_context
+            },
+        );
+
+        let result = gateway.query(context, &user_prompt, 1024, model);
+
+        let content = match result {
+            Ok(resp) if !resp.output_text.trim().is_empty() => resp.output_text,
+            _ => {
+                eprintln!(
+                    "[conductor] File {} returned empty, retrying",
+                    plan.filename
+                );
+                let simple = format!(
+                    "Write the complete content of '{}'. It should: {}. Output ONLY the code.",
+                    plan.filename, plan.description,
+                );
+                match gateway.query(context, &simple, 1024, model) {
+                    Ok(resp) if !resp.output_text.trim().is_empty() => resp.output_text,
+                    _ => {
+                        eprintln!(
+                            "[conductor] File {} failed after retry, skipping",
+                            plan.filename
+                        );
+                        continue;
+                    }
+                }
+            }
+        };
+
+        let cleaned = strip_markdown_fences(&content);
+        eprintln!(
+            "[conductor] File {}/{} complete: {} ({} lines)",
+            i + 1,
+            file_plans.len(),
+            plan.filename,
+            cleaned.lines().count()
+        );
+        accumulated.push((plan.filename.clone(), cleaned));
+    }
+
+    // Write all accumulated files
+    std::fs::create_dir_all(output_dir)
+        .map_err(|e| AgentError::ManifestError(format!("failed to create output dir: {e}")))?;
+
+    let mut created = Vec::new();
+    for (filename, content) in &accumulated {
+        let path = output_dir.join(filename);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| AgentError::ManifestError(format!("failed to create dir: {e}")))?;
+        }
+        std::fs::write(&path, content)
+            .map_err(|e| AgentError::ManifestError(format!("failed to write {filename}: {e}")))?;
+        created.push(path);
+    }
+
+    eprintln!(
+        "[conductor] Code gen complete: {} files, {} total lines",
+        created.len(),
+        accumulated
+            .iter()
+            .map(|(_, c)| c.lines().count())
+            .sum::<usize>()
+    );
+
+    Ok(created)
+}
+
 /// Parse a multi-file LLM response into (filename, content) pairs.
 ///
 /// Looks for fenced code blocks with the pattern ````language:filename`

@@ -59,6 +59,7 @@ const Firewall = React.lazy(() => import("./pages/Firewall"));
 const DeveloperPortal = React.lazy(() => import("./pages/DeveloperPortal"));
 const AgentBrowser = React.lazy(() => import("./pages/AgentBrowser").then(m => ({ default: m.AgentBrowser })));
 const CodeEditor = React.lazy(() => import("./pages/CodeEditor"));
+const NexusCode = React.lazy(() => import("./pages/NexusCode"));
 const Terminal = React.lazy(() => import("./pages/Terminal"));
 const SchedulerPage = React.lazy(() => import("./pages/Scheduler"));
 const FileManager = React.lazy(() => import("./pages/FileManager"));
@@ -122,7 +123,7 @@ const PerceptionPage = React.lazy(() => import("./pages/Perception"));
 const AgentMemoryPage = React.lazy(() => import("./pages/AgentMemory"));
 const ExternalToolsPage = React.lazy(() => import("./pages/ExternalTools"));
 const CollaborationPage = React.lazy(() => import("./pages/Collaboration"));
-const SoftwareFactoryPage = React.lazy(() => import("./pages/SoftwareFactory"));
+const NexusBuilderPage = React.lazy(() => import("./pages/NexusBuilder"));
 const MeasurementBatteries = React.lazy(() => import("./pages/MeasurementBatteries"));
 import type {
   AgentStatusEvent,
@@ -140,7 +141,7 @@ import type {
 import { createDefaultConfig, normalizeConfig } from "./utils/config";
 import { PushToTalk } from "./voice/PushToTalk";
 
-type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler" | "flash-inference" | "measurement" | "measurement-session" | "measurement-compare" | "measurement-batteries" | "capability-boundaries" | "model-routing" | "ab-validation" | "browser-agent" | "governance-oracle" | "token-economy" | "governed-control" | "world-sim" | "perception" | "agent-memory" | "external-tools" | "collab-protocol" | "software-factory" | "memory-dashboard" | "self-improvement";
+type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler" | "flash-inference" | "measurement" | "measurement-session" | "measurement-compare" | "measurement-batteries" | "capability-boundaries" | "model-routing" | "ab-validation" | "browser-agent" | "governance-oracle" | "token-economy" | "governed-control" | "world-sim" | "perception" | "agent-memory" | "external-tools" | "collab-protocol" | "software-factory" | "nexus-builder" | "memory-dashboard" | "self-improvement" | "nexus-code";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -156,6 +157,15 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "approvals", label: "Approvals", icon: "CheckCircle", shortcut: "" },
   { id: "terminal", label: "Terminal", icon: "TerminalSquare", shortcut: "" },
   { id: "settings", label: "Settings", icon: "Settings", shortcut: "" },
+  // ── DEVELOPER ──
+  { id: "nexus-builder", label: "Nexus Builder", icon: "Hammer", shortcut: "", section: "DEVELOPER" },
+  { id: "nexus-code", label: "Nexus Code", icon: "Terminal", shortcut: "", section: "DEVELOPER" },
+  { id: "code-editor", label: "Code Editor", icon: "FileCode", shortcut: "", section: "DEVELOPER" },
+  { id: "api-client", label: "API Client", icon: "Zap", shortcut: "", section: "DEVELOPER" },
+  { id: "database", label: "Database", icon: "Database", shortcut: "", section: "DEVELOPER" },
+  { id: "developer-portal", label: "Developer Portal", icon: "Code", shortcut: "", section: "DEVELOPER" },
+  { id: "deploy-pipeline", label: "Deploy Pipeline", icon: "Rocket", shortcut: "", section: "DEVELOPER" },
+  { id: "protocols", label: "Protocols", icon: "Layers", shortcut: "", section: "DEVELOPER" },
   // ── COMMUNICATION ──
   { id: "email-client", label: "Email", icon: "Mail", shortcut: "", section: "COMMUNICATION" },
   { id: "voice-assistant", label: "Voice", icon: "Mic", shortcut: "", section: "COMMUNICATION" },
@@ -189,7 +199,6 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "agent-memory", label: "Agent Memory", icon: "BookOpen", shortcut: "", section: "AGENT LAB" },
   { id: "external-tools", label: "External Tools", icon: "Wrench", shortcut: "", section: "AGENT LAB" },
   { id: "collab-protocol", label: "Collaboration", icon: "Users", shortcut: "", section: "AGENT LAB" },
-  { id: "software-factory", label: "Software Factory", icon: "Factory", shortcut: "", section: "AGENT LAB" },
   { id: "self-rewrite", label: "Self-Rewrite Lab", icon: "Code2", shortcut: "", section: "AGENT LAB" },
   { id: "self-improvement", label: "Self-Improvement", icon: "Sparkles", shortcut: "", section: "AGENT LAB" },
   { id: "consciousness", label: "Consciousness", icon: "Brain", shortcut: "", section: "AGENT LAB" },
@@ -198,13 +207,6 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "media-studio", label: "Media Studio", icon: "Play", shortcut: "", section: "CREATIVE" },
   { id: "dreams", label: "DreamForge", icon: "Moon", shortcut: "", section: "CREATIVE" },
   { id: "notes", label: "Notes", icon: "StickyNote", shortcut: "", section: "CREATIVE" },
-  // ── DEVELOPER ──
-  { id: "code-editor", label: "Code Editor", icon: "FileCode", shortcut: "", section: "DEVELOPER" },
-  { id: "api-client", label: "API Client", icon: "Zap", shortcut: "", section: "DEVELOPER" },
-  { id: "database", label: "Database", icon: "Database", shortcut: "", section: "DEVELOPER" },
-  { id: "developer-portal", label: "Developer Portal", icon: "Code", shortcut: "", section: "DEVELOPER" },
-  { id: "deploy-pipeline", label: "Deploy Pipeline", icon: "Rocket", shortcut: "", section: "DEVELOPER" },
-  { id: "protocols", label: "Protocols", icon: "Layers", shortcut: "", section: "DEVELOPER" },
   // ── AUTOMATION ──
   { id: "workflows", label: "Workflows", icon: "Workflow", shortcut: "", section: "AUTOMATION" },
   { id: "time-machine", label: "Time Machine", icon: "History", shortcut: "", section: "AUTOMATION" },
@@ -338,6 +340,7 @@ const PAGE_SUMMARIES: Partial<Record<Page, string>> = {
   "agent-memory": "Persistent agent memory — episodic, semantic, procedural, relational memory across sessions.",
   "external-tools": "Governed external tool integrations — GitHub, Slack, Jira, search, webhooks, databases.",
   "collab-protocol": "Multi-agent collaboration — debate, review, brainstorm, vote, and converge on decisions.",
+  "nexus-builder": "Build websites with AI — describe what you want, preview live, iterate with changes, deploy.",
   "software-factory": "Autonomous SDLC pipeline — agents handle requirements, architecture, implementation, testing, and deployment.",
 };
 
@@ -1460,7 +1463,7 @@ export default function App(): JSX.Element {
               Select an agent to manage its permissions.
             </p>
             <div style={{ display: "grid", gap: "0.6rem" }}>
-              {agents.map((a) => (
+              {agents.filter((a, i, arr) => arr.findIndex((x) => x.id === a.id) === i).map((a) => (
                 <button
                   key={a.id}
                   onClick={() => setPermissionAgentId(a.id)}
@@ -1530,6 +1533,9 @@ export default function App(): JSX.Element {
     }
     if (page === "identity") {
       return <Identity agents={agents.map((a) => ({ id: a.id, name: a.name }))} />;
+    }
+    if (page === "nexus-code") {
+      return <NexusCode />;
     }
     if (page === "code-editor") {
       return <CodeEditor />;
@@ -1669,8 +1675,8 @@ export default function App(): JSX.Element {
     if (page === "collab-protocol") {
       return <CollaborationPage />;
     }
-    if (page === "software-factory") {
-      return <SoftwareFactoryPage />;
+    if (page === "nexus-builder") {
+      return <NexusBuilderPage />;
     }
     if (page === "world-sim") {
       return <WorldSimulation2Page />;

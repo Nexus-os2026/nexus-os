@@ -13,7 +13,7 @@ import {
   ShieldAlert, UserCog, Boxes, ScrollText, ClipboardCheck, HeartPulse,
   PlugZap, Timer, Gauge, LogIn, Building2, BarChart3, Receipt, Server, Zap,
   Target, FileSearch, GitCompare, GitCompareArrows, FlaskConical, Map, Route,
-  Coins, Eye, Wrench, Factory,
+  Coins, Eye, Wrench, Factory, Sparkles, Hammer,
   type LucideIcon
 } from "lucide-react";
 import "./sidebar.css";
@@ -32,7 +32,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   ShieldAlert, UserCog, Boxes, ScrollText, ClipboardCheck, HeartPulse,
   PlugZap, Timer, Gauge, LogIn, Building2, BarChart3, Receipt, Server, Zap,
   Target, FileSearch, GitCompare, GitCompareArrows, FlaskConical, Map, Route,
-  Coins, Eye, Wrench, Factory,
+  Coins, Eye, Wrench, Factory, Sparkles, Hammer,
 };
 
 export interface SidebarItem {
@@ -155,7 +155,7 @@ export function Sidebar({ items, activeId, onSelect, version }: SidebarProps): J
                       <span className="nexus-sidebar-icon-wrap">
                         {IconComponent
                           ? <IconComponent size={15} aria-hidden="true" />
-                          : <span className="nexus-sidebar-icon">{item.icon}</span>
+                          : <span className="nexus-sidebar-icon" style={{ overflow: "hidden", maxWidth: 26, display: "inline-block" }}>{item.icon.slice(0, 2)}</span>
                         }
                       </span>
                       {item.badge && item.badge > 0 ? (

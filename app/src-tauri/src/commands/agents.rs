@@ -866,7 +866,9 @@ pub(crate) fn build_provider_config(config: &NexusConfig) -> ProviderSelectionCo
         fireworks_api_key: std::env::var("FIREWORKS_API_KEY").ok(),
         perplexity_api_key: std::env::var("PERPLEXITY_API_KEY").ok(),
         cohere_api_key: std::env::var("COHERE_API_KEY").ok(),
-        openrouter_api_key: std::env::var("OPENROUTER_API_KEY").ok(),
+        openrouter_api_key: std::env::var("OPENROUTER_API_KEY")
+            .ok()
+            .or_else(|| non_empty(&config.llm.openrouter_api_key)),
         nvidia_api_key: std::env::var("NVIDIA_NIM_API_KEY")
             .ok()
             .or_else(|| non_empty(&config.llm.nvidia_api_key)),

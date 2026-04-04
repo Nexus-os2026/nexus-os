@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-const REQUEST_TIMEOUT_SECS: u64 = 20;
+const REQUEST_TIMEOUT_SECS: u64 = 120;
 
 pub(crate) struct OpenAiCompatibleQuery<'a> {
     pub provider_name: &'a str,
@@ -92,9 +92,20 @@ pub(crate) fn execute_openai_compatible_query(
         AgentError::SupervisorError(format!("{} request failed: {error}", query.provider_name))
     })?;
     let status = response.status();
-    let payload = response.json::<Value>().map_err(|error| {
+    let raw_text = response.text().map_err(|error| {
         AgentError::SupervisorError(format!(
-            "{} response parse failed: {error}",
+            "{} response read failed: {error}",
+            query.provider_name
+        ))
+    })?;
+    let payload: Value = serde_json::from_str(&raw_text).map_err(|error| {
+        let preview = if raw_text.len() > 200 {
+            &raw_text[..200]
+        } else {
+            &raw_text
+        };
+        AgentError::SupervisorError(format!(
+            "{} response parse failed: {error}. Raw (200 chars): {preview}",
             query.provider_name
         ))
     })?;
@@ -111,6 +122,7 @@ pub(crate) fn execute_openai_compatible_query(
         token_count: extract_total_tokens(&payload).unwrap_or(query.max_tokens.min(256)),
         model_name: query.model.to_string(),
         tool_calls: Vec::new(),
+        input_tokens: None,
     })
 }
 

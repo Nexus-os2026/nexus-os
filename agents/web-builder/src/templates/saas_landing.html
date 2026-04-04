@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{SITE_NAME}} — {{TAGLINE}}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family={{HEADING_FONT}}:wght@600;700;800&family={{BODY_FONT}}:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    /* ── Design Tokens ── */
+    :root {
+      --primary: #6366f1;
+      --primary-light: #818cf8;
+      --primary-dark: #4f46e5;
+      --accent: #06b6d4;
+      --bg: #0f0f1a;
+      --bg-card: rgba(255,255,255,0.05);
+      --bg-card-hover: rgba(255,255,255,0.08);
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --heading-font: var(--heading-font-family, 'Inter', sans-serif);
+      --body-font: var(--body-font-family, 'Inter', sans-serif);
+      --section-padding: 5rem 1.5rem;
+      --card-radius: 1rem;
+      --border-subtle: rgba(255,255,255,0.1);
+    }
+
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--body-font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    a { color: var(--primary-light); text-decoration: none; }
+    img { max-width: 100%; height: auto; }
+
+    /* ── Navigation ── */
+    .nav { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 1rem 2rem; background: rgba(15,15,26,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border-subtle); }
+    .nav__brand { font-family: var(--heading-font); font-weight: 800; font-size: 1.25rem; color: var(--text); }
+    .nav__links { display: flex; gap: 2rem; list-style: none; }
+    .nav__links a { color: var(--text-muted); font-size: 0.9rem; transition: color 0.3s ease; }
+    .nav__links a:hover { color: var(--text); }
+    .nav__cta { padding: 0.5rem 1.25rem; background: var(--primary); color: #fff; border: none; border-radius: 0.5rem; font-size: 0.9rem; cursor: pointer; transition: background 0.3s ease; }
+    .nav__cta:hover { background: var(--primary-dark); }
+
+    /* ── Hero ── */
+    .hero { padding: 8rem 2rem 6rem; text-align: center; background: radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.15) 0%, transparent 70%); }
+    .hero h1 { font-family: var(--heading-font); font-size: clamp(2.5rem, 5vw, 4rem); font-weight: 800; line-height: 1.1; margin-bottom: 1.5rem; }
+    .hero h1 span { background: linear-gradient(135deg, var(--primary-light), var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero p { max-width: 38rem; margin: 0 auto 2rem; color: var(--text-muted); font-size: 1.15rem; }
+    .hero__actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn-primary { padding: 0.75rem 2rem; background: var(--primary); color: #fff; border: none; border-radius: 0.5rem; font-size: 1rem; font-weight: 600; cursor: pointer; transition: transform 0.3s ease, box-shadow 0.3s ease; }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(99,102,241,0.3); }
+    .btn-secondary { padding: 0.75rem 2rem; background: transparent; color: var(--text); border: 1px solid var(--border-subtle); border-radius: 0.5rem; font-size: 1rem; cursor: pointer; transition: border-color 0.3s ease; }
+    .btn-secondary:hover { border-color: var(--primary-light); }
+
+    /* ── Features ── */
+    .features { padding: var(--section-padding); max-width: 72rem; margin: 0 auto; }
+    .features__header { text-align: center; margin-bottom: 3rem; }
+    .features__header h2 { font-family: var(--heading-font); font-size: 2rem; font-weight: 700; }
+    .features__header p { color: var(--text-muted); margin-top: 0.5rem; }
+    .features__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+    .feature-card { padding: 2rem; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--card-radius); backdrop-filter: blur(8px); transition: background 0.3s ease, transform 0.3s ease; }
+    .feature-card:hover { background: var(--bg-card-hover); transform: translateY(-4px); }
+    .feature-card__icon { font-size: 2rem; margin-bottom: 1rem; }
+    .feature-card h3 { font-family: var(--heading-font); font-size: 1.15rem; margin-bottom: 0.5rem; }
+    .feature-card p { color: var(--text-muted); font-size: 0.9rem; }
+
+    /* ── Pricing ── */
+    .pricing { padding: var(--section-padding); max-width: 72rem; margin: 0 auto; }
+    .pricing__header { text-align: center; margin-bottom: 3rem; }
+    .pricing__header h2 { font-family: var(--heading-font); font-size: 2rem; font-weight: 700; }
+    .pricing__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+    .pricing-card { padding: 2.5rem 2rem; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--card-radius); text-align: center; transition: transform 0.3s ease; }
+    .pricing-card--featured { border-color: var(--primary); background: rgba(99,102,241,0.08); transform: scale(1.03); }
+    .pricing-card h3 { font-family: var(--heading-font); font-size: 1.15rem; margin-bottom: 0.5rem; }
+    .pricing-card .price { font-size: 2.5rem; font-weight: 800; margin: 1rem 0; }
+    .pricing-card .price span { font-size: 1rem; font-weight: 400; color: var(--text-muted); }
+    .pricing-card ul { list-style: none; margin: 1.5rem 0; text-align: left; }
+    .pricing-card li { padding: 0.4rem 0; color: var(--text-muted); font-size: 0.9rem; }
+    .pricing-card li::before { content: "✓ "; color: var(--accent); }
+
+    /* ── Testimonials ── */
+    .testimonials { padding: var(--section-padding); max-width: 72rem; margin: 0 auto; }
+    .testimonials__header { text-align: center; margin-bottom: 3rem; }
+    .testimonials__header h2 { font-family: var(--heading-font); font-size: 2rem; font-weight: 700; }
+    .testimonials__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+    .testimonial-card { padding: 2rem; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--card-radius); }
+    .testimonial-card blockquote { font-style: italic; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.7; }
+    .testimonial-card .author { font-weight: 600; font-size: 0.9rem; }
+    .testimonial-card .role { color: var(--text-muted); font-size: 0.8rem; }
+
+    /* ── CTA ── */
+    .cta { padding: var(--section-padding); text-align: center; background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(6,182,212,0.1)); border-radius: var(--card-radius); max-width: 60rem; margin: 3rem auto; }
+    .cta h2 { font-family: var(--heading-font); font-size: 2rem; font-weight: 700; margin-bottom: 1rem; }
+    .cta p { color: var(--text-muted); margin-bottom: 2rem; max-width: 32rem; margin-left: auto; margin-right: auto; }
+
+    /* ── Footer ── */
+    .footer { padding: 3rem 2rem; border-top: 1px solid var(--border-subtle); text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+    .footer__links { display: flex; justify-content: center; gap: 2rem; margin-bottom: 1rem; list-style: none; }
+    .footer__links a { color: var(--text-muted); transition: color 0.3s ease; }
+    .footer__links a:hover { color: var(--text); }
+
+    /* ── Responsive ── */
+    @media (max-width: 1024px) {
+      .features__grid, .pricing__grid, .testimonials__grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 768px) {
+      .nav__links { display: none; }
+      .features__grid, .pricing__grid, .testimonials__grid { grid-template-columns: 1fr; }
+      .pricing-card--featured { transform: none; }
+      .hero { padding: 5rem 1.5rem 3rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav class="nav" aria-label="Main navigation">
+    <div class="nav__brand" data-nexus-slot="brand">{{SITE_NAME}}</div>
+    <ul class="nav__links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="#testimonials">Testimonials</a></li>
+    </ul>
+    <button class="nav__cta" aria-label="Get started with {{SITE_NAME}}">Get Started</button>
+  </nav>
+
+  <!-- Hero Section -->
+  <section id="hero" data-nexus-section="hero" data-nexus-editable="true" class="hero">
+    <h1 data-nexus-slot="hero_headline">{{HERO_HEADLINE}}</h1>
+    <p data-nexus-slot="hero_subtitle">{{HERO_SUBTITLE}}</p>
+    <div class="hero__actions">
+      <button class="btn-primary" data-nexus-slot="hero_cta" aria-label="Primary call to action">{{HERO_CTA}}</button>
+      <button class="btn-secondary" aria-label="Learn more">Learn More</button>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" data-nexus-section="features" data-nexus-editable="true" class="features">
+    <div class="features__header">
+      <h2>{{FEATURES_HEADING}}</h2>
+      <p>{{FEATURES_SUBHEADING}}</p>
+    </div>
+    <div class="features__grid" data-nexus-slot="feature_cards">
+      <div class="feature-card">
+        <div class="feature-card__icon">{{FEATURE_1_ICON}}</div>
+        <h3>{{FEATURE_1_TITLE}}</h3>
+        <p>{{FEATURE_1_DESC}}</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card__icon">{{FEATURE_2_ICON}}</div>
+        <h3>{{FEATURE_2_TITLE}}</h3>
+        <p>{{FEATURE_2_DESC}}</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-card__icon">{{FEATURE_3_ICON}}</div>
+        <h3>{{FEATURE_3_TITLE}}</h3>
+        <p>{{FEATURE_3_DESC}}</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing Section -->
+  <section id="pricing" data-nexus-section="pricing" data-nexus-editable="true" class="pricing">
+    <div class="pricing__header">
+      <h2>{{PRICING_HEADING}}</h2>
+    </div>
+    <div class="pricing__grid" data-nexus-slot="pricing_tiers">
+      <div class="pricing-card">
+        <h3>{{TIER_1_NAME}}</h3>
+        <div class="price">{{TIER_1_PRICE}}<span>/mo</span></div>
+        <ul>
+          <li>{{TIER_1_FEATURE_1}}</li>
+          <li>{{TIER_1_FEATURE_2}}</li>
+          <li>{{TIER_1_FEATURE_3}}</li>
+        </ul>
+        <button class="btn-primary" aria-label="Choose {{TIER_1_NAME}} plan">Choose Plan</button>
+      </div>
+      <div class="pricing-card pricing-card--featured">
+        <h3>{{TIER_2_NAME}}</h3>
+        <div class="price">{{TIER_2_PRICE}}<span>/mo</span></div>
+        <ul>
+          <li>{{TIER_2_FEATURE_1}}</li>
+          <li>{{TIER_2_FEATURE_2}}</li>
+          <li>{{TIER_2_FEATURE_3}}</li>
+          <li>{{TIER_2_FEATURE_4}}</li>
+        </ul>
+        <button class="btn-primary" aria-label="Choose {{TIER_2_NAME}} plan">Choose Plan</button>
+      </div>
+      <div class="pricing-card">
+        <h3>{{TIER_3_NAME}}</h3>
+        <div class="price">{{TIER_3_PRICE}}<span>/mo</span></div>
+        <ul>
+          <li>{{TIER_3_FEATURE_1}}</li>
+          <li>{{TIER_3_FEATURE_2}}</li>
+          <li>{{TIER_3_FEATURE_3}}</li>
+          <li>{{TIER_3_FEATURE_4}}</li>
+          <li>{{TIER_3_FEATURE_5}}</li>
+        </ul>
+        <button class="btn-primary" aria-label="Choose {{TIER_3_NAME}} plan">Choose Plan</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Testimonials Section -->
+  <section id="testimonials" data-nexus-section="testimonials" data-nexus-editable="true" class="testimonials">
+    <div class="testimonials__header">
+      <h2>{{TESTIMONIALS_HEADING}}</h2>
+    </div>
+    <div class="testimonials__grid" data-nexus-slot="testimonial_cards">
+      <div class="testimonial-card">
+        <blockquote>{{TESTIMONIAL_1_QUOTE}}</blockquote>
+        <div class="author">{{TESTIMONIAL_1_AUTHOR}}</div>
+        <div class="role">{{TESTIMONIAL_1_ROLE}}</div>
+      </div>
+      <div class="testimonial-card">
+        <blockquote>{{TESTIMONIAL_2_QUOTE}}</blockquote>
+        <div class="author">{{TESTIMONIAL_2_AUTHOR}}</div>
+        <div class="role">{{TESTIMONIAL_2_ROLE}}</div>
+      </div>
+      <div class="testimonial-card">
+        <blockquote>{{TESTIMONIAL_3_QUOTE}}</blockquote>
+        <div class="author">{{TESTIMONIAL_3_AUTHOR}}</div>
+        <div class="role">{{TESTIMONIAL_3_ROLE}}</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section id="cta" data-nexus-section="cta" data-nexus-editable="true" class="cta">
+    <h2 data-nexus-slot="cta_headline">{{CTA_HEADLINE}}</h2>
+    <p data-nexus-slot="cta_body">{{CTA_BODY}}</p>
+    <button class="btn-primary" aria-label="Get started now">{{CTA_BUTTON}}</button>
+  </section>
+
+  <!-- Footer -->
+  <footer id="footer" data-nexus-section="footer" data-nexus-editable="true" class="footer">
+    <ul class="footer__links">
+      <li><a href="#" aria-label="Privacy policy">Privacy</a></li>
+      <li><a href="#" aria-label="Terms of service">Terms</a></li>
+      <li><a href="#" aria-label="Contact us">Contact</a></li>
+    </ul>
+    <p data-nexus-slot="copyright">{{COPYRIGHT}}</p>
+  </footer>
+
+</body>
+</html>

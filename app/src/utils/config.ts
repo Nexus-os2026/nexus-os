@@ -9,6 +9,7 @@ export function createDefaultConfig(): NexusConfig {
       deepseek_api_key: "",
       gemini_api_key: "",
       nvidia_api_key: "",
+      openrouter_api_key: "",
       ollama_url: "http://localhost:11434",
     },
     search: {

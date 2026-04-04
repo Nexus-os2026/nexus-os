@@ -166,3 +166,135 @@
   - Graceful shutdown: 5 agents registered → shutdown within 5s timeout → agents_active=0 verified via health endpoint
   - WASM module cache: cache miss → cache hit performance, different modules cached separately, clear works
 - [x] **PHASE 7 COMPLETE** — Full production-ready web API stack with A2A+MCP protocols, EdDSA JWT identity, prompt firewall, EU AI Act compliance, SQLite marketplace, developer SDK, and comprehensive integration test coverage
+
+## Phase 8: Nexus Builder v2 — Beyond Lovable
+
+> **Goal:** Transform the Build tab into a full split-pane visual builder that is
+> visibly more advanced than Lovable. Chat on the left, live preview on the right,
+> real-time agent progress, time-machine undo, governed deployment.
+> 
+> **Why this wins:** Lovable is 1 LLM call → iframe. Nexus Builder is multi-agent
+> Conductor orchestration with real-time progress, governed audit trail, time-machine
+> undo, remix classification, and local-first privacy. Built by Claude the brain.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Build Tab (view === "build")                 │
+├──────────────────────────┬──────────────────────────────────────────┤
+│   LEFT: Chat + Progress  │   RIGHT: Live Preview + Tools           │
+│   (40% width)            │   (60% width)                           │
+│                          │                                          │
+│  ┌────────────────────┐  │  ┌──────────────────────────────────┐   │
+│  │ Agent Progress Bar  │  │  │  [📱 375] [📱 768] [🖥 100%]  │   │
+│  │ ████████░░ 65%     │  │  │  [↻ Refresh] [<> Code] [Deploy] │   │
+│  │ 🔨 WebBuilder done │  │  ├──────────────────────────────────┤   │
+│  │ 🎨 Designer active │  │  │                                  │   │
+│  │ 🔧 Fixer queued    │  │  │       Live iframe preview        │   │
+│  └────────────────────┘  │  │       of generated website        │   │
+│                          │  │                                  │   │
+│  ┌────────────────────┐  │  │       (auto-refreshes as          │   │
+│  │ Chat Messages      │  │  │        files are written)         │   │
+│  │                    │  │  │                                  │   │
+│  │ User: I want to    │  │  ├──────────────────────────────────┤   │
+│  │ sell t-shirts...   │  │  │  Files: index.html | styles.css  │   │
+│  │                    │  │  │  [⟲ Time Machine: 3 checkpoints] │   │
+│  │ AI: Building now!  │  │  └──────────────────────────────────┘   │
+│  └────────────────────┘  │                                          │
+│                          │                                          │
+│  ┌────────────────────┐  │                                          │
+│  │ [Make header blue] │  │                                          │
+│  │        [Send ➤]    │  │                                          │
+│  └────────────────────┘  │                                          │
+├──────────────────────────┴──────────────────────────────────────────┤
+│ Status: qwen3.5:4b · 3 agents · 2500 fuel · checkpoint #3          │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Files to Modify
+
+| File | Changes | Complexity |
+|------|---------|------------|
+| `app/src/pages/AiChatHub.tsx` | Split Build view into 2-pane, preview state, progress tracking, deploy UI, code viewer | HIGH |
+| `app/src/pages/ai-chat-hub.css` | New CSS for split pane, preview toolbar, progress bar, file tabs, deploy modal, code view | MEDIUM |
+| `agents/conductor/src/lib.rs` | Emit Tauri events during task execution (plan, agent-start, agent-done, file-written) | MEDIUM |
+| `app/src-tauri/src/commands/tools_infra.rs` | Pass AppHandle for event emission, add file-read + serve commands | MEDIUM |
+| `app/src/types.ts` | New event types for streaming build progress | LOW |
+| `app/src/api/backend.ts` | Add readBuildFile helper | LOW |
+
+### Implementation Tasks
+
+#### Phase 8.1: Split-Pane Layout + Static Preview
+- [ ] 8.1.1 Restructure Build view: left chat pane (40%) + right preview pane (60%)
+- [ ] 8.1.2 Add builder state: `previewHtml`, `previewFiles`, `buildOutputDir`, `buildPhase`, `previewMode`
+- [ ] 8.1.3 Render iframe in right pane with srcdoc (inline HTML from generated files)
+- [ ] 8.1.4 Preview toolbar: responsive toggles (Mobile 375px / Tablet 768px / Desktop 100%)
+- [ ] 8.1.5 File tabs bar below preview showing generated files
+- [ ] 8.1.6 Code view toggle: switch between live preview and raw source code
+- [ ] 8.1.7 CSS classes: `.nb-split`, `.nb-chat`, `.nb-preview`, `.nb-toolbar`, `.nb-iframe`, `.nb-tabs`
+
+#### Phase 8.2: Real-Time Build Progress Streaming
+- [ ] 8.2.1 Conductor `run()`: emit Tauri events — `builder:plan-ready`, `builder:agent-start`, `builder:file-written`, `builder:agent-done`, `builder:complete`
+- [ ] 8.2.2 `conduct_build` in tools_infra.rs: pass AppHandle to conductor for event emission
+- [ ] 8.2.3 Frontend: listen for builder events, update progress in real-time
+- [ ] 8.2.4 Agent progress panel: show each agent status (queued → active → done) with role icons
+- [ ] 8.2.5 Progress bar: animate 0-100% based on completed/total tasks
+- [ ] 8.2.6 Auto-refresh preview when `builder:file-written` fires for HTML/CSS/JS
+
+#### Phase 8.3: Iteration & Remix Loop
+- [ ] 8.3.1 After build: keep preview live, chat input active for changes
+- [ ] 8.3.2 User types change → LLM modifies specific files → re-render preview
+- [ ] 8.3.3 RemixEngine classification badge: Cosmetic (instant) / Minor / Major / Structural
+- [ ] 8.3.4 Time Machine panel: list checkpoints, click to restore any previous version
+- [ ] 8.3.5 Iteration counter: "Version 3 of 5 changes"
+
+#### Phase 8.4: Deploy & Export
+- [ ] 8.4.1 "Deploy" button in toolbar (visible after successful build)
+- [ ] 8.4.2 Deploy modal: Local preview (xdg-open) / Export ZIP / Deploy to hosting
+- [ ] 8.4.3 Governed deployment: audit event, fuel deduction, HITL gate for production
+- [ ] 8.4.4 Share: local network preview URL via built-in HTTP server
+
+#### Phase 8.5: Polish — What Makes This Better Than Lovable
+- [ ] 8.5.1 Skeleton loading animation in preview during build
+- [ ] 8.5.2 Console panel: build logs, agent communications, errors
+- [ ] 8.5.3 Agent DNA badges on file tabs (which agent generated each file)
+- [ ] 8.5.4 Governance sidebar: fuel consumed, audit trail, permissions used
+- [ ] 8.5.5 Template gallery: e-commerce, portfolio, landing page, dashboard, blog
+
+### What Makes This Better Than Lovable
+
+| Feature | Lovable | Nexus Builder |
+|---------|---------|---------------|
+| Build engine | Single LLM call | Multi-agent Conductor (WebBuilder + Coder + Designer + Fixer) |
+| Progress | Spinner → done | Real-time agent-by-agent with task breakdown |
+| Undo/rollback | Git-style | Time Machine with instant checkpoint restoration |
+| Change classification | None | Cosmetic/Minor/Major/Structural with time estimates |
+| Governance | None | Full audit trail, fuel metering, HITL gates |
+| Agent transparency | Hidden | See which agent built which file, autonomy levels |
+| Security | Trust the cloud | WASM sandbox, PII redaction, capability-gated agents |
+| Privacy | Cloud only | Local-first — your machine, your models, your data |
+| Deploy options | Vercel only | Local / ZIP / multi-provider deploy |
+| Cost | $20/month | Free (local models) or bring your own API key |
+
+### Complexity Estimate
+
+- **Phase 8.1**: ~350 lines TSX + ~200 lines CSS — split layout + preview
+- **Phase 8.2**: ~120 lines Rust + ~180 lines TSX — event streaming + progress
+- **Phase 8.3**: ~250 lines TSX — iteration with remix + time machine
+- **Phase 8.4**: ~180 lines TSX + modal — deploy options
+- **Phase 8.5**: ~250 lines TSX/CSS — polish and superiority features
+- **Total**: ~1530 lines across 6 files
+
+### Tests Needed
+- [ ] Build view renders split pane at various screen sizes
+- [ ] Preview iframe loads generated HTML via srcdoc
+- [ ] Responsive toggles change iframe container width
+- [ ] Progress bar updates in real-time during build
+- [ ] File tabs list all generated files
+- [ ] Code view shows raw source
+- [ ] Iteration changes refresh preview
+- [ ] Time Machine restore works
+- [ ] Deploy modal opens correctly
+- [ ] `npm run build` passes
+- [ ] `cargo check -p nexus-conductor -p nexus-desktop-backend` passes

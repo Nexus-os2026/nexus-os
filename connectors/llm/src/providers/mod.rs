@@ -2,7 +2,7 @@ use nexus_kernel::errors::AgentError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 
 pub mod claude;
@@ -55,6 +55,9 @@ pub struct LlmResponse {
     pub token_count: u32,
     pub model_name: String,
     pub tool_calls: Vec<String>,
+    /// Input token count from the API response (if available).
+    #[serde(default)]
+    pub input_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -170,9 +173,19 @@ pub(crate) fn curl_get_status(endpoint: &str) -> Result<u16, AgentError> {
         .output()
         .map_err(|error| AgentError::SupervisorError(format!("curl execution failed: {error}")))?;
     if !output.status.success() {
-        return Err(AgentError::SupervisorError(
-            "curl request failed".to_string(),
-        ));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout_preview = String::from_utf8_lossy(&output.stdout);
+        let stdout_short = if stdout_preview.len() > 300 {
+            &stdout_preview[..300]
+        } else {
+            &stdout_preview
+        };
+        return Err(AgentError::SupervisorError(format!(
+            "curl request failed (exit {:?}): stderr={}, response={}",
+            output.status.code(),
+            stderr.trim(),
+            stdout_short.trim()
+        )));
     }
     let status_raw = String::from_utf8_lossy(&output.stdout);
     status_raw.trim().parse::<u16>().map_err(|error| {
@@ -209,18 +222,43 @@ pub(crate) fn curl_post_json_with_timeout(
     }
     command
         .arg("-d")
-        .arg(encoded_body)
+        .arg("@-")
         .arg("-w")
         .arg(format!("\n{marker}%{{http_code}}"))
-        .arg(endpoint);
+        .arg(endpoint)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
-    let output = command
-        .output()
+    let mut child = command
+        .spawn()
+        .map_err(|error| AgentError::SupervisorError(format!("curl execution failed: {error}")))?;
+
+    // Pipe body via stdin to avoid OS ARG_MAX limits with large payloads (e.g. base64 images)
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        stdin.write_all(encoded_body.as_bytes()).map_err(|error| {
+            AgentError::SupervisorError(format!("failed to write body to curl stdin: {error}"))
+        })?;
+    }
+
+    let output = child
+        .wait_with_output()
         .map_err(|error| AgentError::SupervisorError(format!("curl execution failed: {error}")))?;
     if !output.status.success() {
-        return Err(AgentError::SupervisorError(
-            "curl request failed".to_string(),
-        ));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout_preview = String::from_utf8_lossy(&output.stdout);
+        let stdout_short = if stdout_preview.len() > 300 {
+            &stdout_preview[..300]
+        } else {
+            &stdout_preview
+        };
+        return Err(AgentError::SupervisorError(format!(
+            "curl request failed (exit {:?}): stderr={}, response={}",
+            output.status.code(),
+            stderr.trim(),
+            stdout_short.trim()
+        )));
     }
 
     let raw = String::from_utf8(output.stdout).map_err(|error| {
@@ -232,11 +270,20 @@ pub(crate) fn curl_post_json_with_timeout(
     let status = status_raw.trim().parse::<u16>().map_err(|error| {
         AgentError::SupervisorError(format!("invalid HTTP status from curl: {error}"))
     })?;
-    let response_json = if body_raw.trim().is_empty() {
+    let trimmed_body = body_raw.trim();
+    let response_json = if trimmed_body.is_empty() {
         Value::Null
     } else {
-        serde_json::from_str::<Value>(body_raw).map_err(|error| {
-            AgentError::SupervisorError(format!("failed to parse JSON response: {error}"))
+        serde_json::from_str::<Value>(trimmed_body).map_err(|error| {
+            // Show first 200 chars of the raw response for debugging
+            let preview = if trimmed_body.len() > 200 {
+                format!("{}...", &trimmed_body[..200])
+            } else {
+                trimmed_body.to_string()
+            };
+            AgentError::SupervisorError(format!(
+                "failed to parse JSON response: {error}\nRaw response (first 200 chars): {preview}"
+            ))
         })?
     };
     Ok((status, response_json))

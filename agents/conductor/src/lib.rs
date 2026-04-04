@@ -21,13 +21,16 @@ use nexus_kernel::time_machine::UndoAction;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
+use web_builder_agent::build_stream::BuildStreamEvent;
 use web_builder_agent::codegen::{generate_website, FileChange};
 use web_builder_agent::interpreter::interpret;
-use web_builder_agent::llm_codegen::generate_site_with_llm;
+use web_builder_agent::llm_codegen::{
+    generate_site_decomposed, generate_site_v2_streaming, generate_site_with_llm,
+};
 
 use coder_agent::context::build_context;
 use coder_agent::fix_loop::{fix_until_pass, FixResult};
-use coder_agent::llm_codegen::generate_code_with_llm;
+use coder_agent::llm_codegen::{generate_code_decomposed, generate_code_with_llm};
 use coder_agent::scanner::{scan_project, ProjectMap};
 use coder_agent::test_runner::run_tests;
 use coder_agent::writer::{write_code, FileChange as CoderFileChange};
@@ -60,7 +63,8 @@ impl<P: LlmProvider> Conductor<P> {
         self.planner.plan(request, &mut self.gateway)
     }
 
-    /// Execute a web-build task: try LLM-enhanced generation first, fall back to rule-based.
+    /// Execute a web-build task: try decomposed per-file LLM generation first,
+    /// fall back to single-shot LLM, then rule-based.
     pub fn execute_web_build(
         &mut self,
         task: &PlannedTask,
@@ -68,7 +72,7 @@ impl<P: LlmProvider> Conductor<P> {
         audit: &mut AuditTrail,
         agent_id: Uuid,
     ) -> Result<Vec<PathBuf>, AgentError> {
-        // Try LLM-enhanced path first — produces higher-quality output
+        // Try decomposed LLM path first — generates each file in a separate call
         {
             use nexus_connectors_llm::gateway::AgentRuntimeContext;
             use std::collections::HashSet;
@@ -78,9 +82,38 @@ impl<P: LlmProvider> Conductor<P> {
                 capabilities: ["llm.query".to_string()]
                     .into_iter()
                     .collect::<HashSet<_>>(),
-                fuel_remaining: 5_000,
+                fuel_remaining: 50_000,
             };
 
+            match generate_site_decomposed(
+                &task.description,
+                output_dir,
+                &mut self.gateway,
+                &mut runtime,
+                &self.model_name,
+            ) {
+                Ok(paths) if !paths.is_empty() => {
+                    for path in &paths {
+                        let _ = audit.append_event(
+                            agent_id,
+                            EventType::ToolCall,
+                            json!({ "event": "file.created", "path": path.display().to_string() }),
+                        );
+                    }
+                    return Ok(paths);
+                }
+                Ok(_) => {
+                    eprintln!("[conductor] Decomposed codegen returned empty, trying single-shot");
+                }
+                Err(e) => {
+                    eprintln!("[conductor] Decomposed codegen failed: {e}, trying single-shot");
+                }
+            }
+
+            // Reset fuel for single-shot fallback
+            runtime.fuel_remaining = 50_000;
+
+            // Try single-shot LLM generation as secondary fallback
             match generate_site_with_llm(
                 &task.description,
                 output_dir,
@@ -99,10 +132,14 @@ impl<P: LlmProvider> Conductor<P> {
                     return Ok(paths);
                 }
                 Ok(_) => {
-                    eprintln!("[conductor] LLM codegen returned empty, falling back");
+                    eprintln!(
+                        "[conductor] Single-shot LLM codegen returned empty, falling back to rules"
+                    );
                 }
                 Err(e) => {
-                    eprintln!("[conductor] LLM codegen failed: {e}, falling back");
+                    eprintln!(
+                        "[conductor] Single-shot LLM codegen failed: {e}, falling back to rules"
+                    );
                 }
             }
         }
@@ -155,7 +192,7 @@ impl<P: LlmProvider> Conductor<P> {
     }
 
     /// Execute a code-generation task using the coder agent.
-    /// Tries LLM-enhanced generation first, falls back to rule-based.
+    /// Tries decomposed LLM generation first, then single-shot, then rule-based.
     pub fn execute_code_gen(
         &mut self,
         task: &PlannedTask,
@@ -163,7 +200,7 @@ impl<P: LlmProvider> Conductor<P> {
         audit: &mut AuditTrail,
         agent_id: Uuid,
     ) -> Result<Vec<PathBuf>, AgentError> {
-        // Try LLM-enhanced path first — produces higher-quality output
+        // Try decomposed LLM path first — generates each file separately
         {
             use nexus_connectors_llm::gateway::AgentRuntimeContext;
             use std::collections::HashSet;
@@ -173,9 +210,38 @@ impl<P: LlmProvider> Conductor<P> {
                 capabilities: ["llm.query".to_string()]
                     .into_iter()
                     .collect::<HashSet<_>>(),
-                fuel_remaining: 5_000,
+                fuel_remaining: 50_000,
             };
 
+            match generate_code_decomposed(
+                &task.description,
+                output_dir,
+                &mut self.gateway,
+                &mut runtime,
+                &self.model_name,
+            ) {
+                Ok(paths) if !paths.is_empty() => {
+                    for path in &paths {
+                        let _ = audit.append_event(
+                            agent_id,
+                            EventType::ToolCall,
+                            json!({ "event": "codegen.decomposed_file_written", "path": path.display().to_string() }),
+                        );
+                    }
+                    return Ok(paths);
+                }
+                Ok(_) => {
+                    eprintln!("[conductor] Decomposed code-gen returned empty, trying single-shot");
+                }
+                Err(e) => {
+                    eprintln!("[conductor] Decomposed code-gen failed: {e}, trying single-shot");
+                }
+            }
+
+            // Reset fuel for single-shot fallback
+            runtime.fuel_remaining = 50_000;
+
+            // Try single-shot LLM generation as secondary fallback
             match generate_code_with_llm(
                 &task.description,
                 output_dir,
@@ -194,10 +260,14 @@ impl<P: LlmProvider> Conductor<P> {
                     return Ok(paths);
                 }
                 Ok(_) => {
-                    eprintln!("[conductor] LLM code-gen returned empty, falling back");
+                    eprintln!(
+                        "[conductor] Single-shot code-gen returned empty, falling back to rules"
+                    );
                 }
                 Err(e) => {
-                    eprintln!("[conductor] LLM code-gen failed: {e}, falling back");
+                    eprintln!(
+                        "[conductor] Single-shot code-gen failed: {e}, falling back to rules"
+                    );
                 }
             }
         }
@@ -888,6 +958,53 @@ impl<P: LlmProvider> Conductor<P> {
             checkpoint_id,
         })
     }
+    /// Execute a web-build task with streaming progress events.
+    ///
+    /// Uses [`StreamingLlmProvider`] for token-by-token streaming and calls
+    /// `emit_event` with [`BuildStreamEvent`] variants for real-time progress.
+    /// Falls back to the non-streaming `execute_web_build` if streaming fails.
+    pub fn execute_web_build_streaming<S: nexus_connectors_llm::streaming::StreamingLlmProvider>(
+        &mut self,
+        task: &PlannedTask,
+        output_dir: &Path,
+        audit: &mut AuditTrail,
+        agent_id: Uuid,
+        streaming_provider: &S,
+        emit_event: &dyn Fn(BuildStreamEvent),
+    ) -> Result<Vec<PathBuf>, AgentError> {
+        // Try streaming V2 generation first
+        eprintln!("[conductor] Attempting streaming web build...");
+        match generate_site_v2_streaming(
+            &task.description,
+            output_dir,
+            streaming_provider,
+            &self.model_name,
+            emit_event,
+        ) {
+            Ok(paths) if !paths.is_empty() => {
+                for path in &paths {
+                    let _ = audit.append_event(
+                        agent_id,
+                        EventType::ToolCall,
+                        json!({ "event": "file.created.streaming", "path": path.display().to_string() }),
+                    );
+                }
+                return Ok(paths);
+            }
+            Ok(_) => {
+                eprintln!("[conductor] Streaming generation returned empty, falling back to non-streaming");
+            }
+            Err(e) => {
+                eprintln!(
+                    "[conductor] Streaming generation failed: {e}, falling back to non-streaming"
+                );
+            }
+        }
+
+        // Fallback to non-streaming path
+        self.execute_web_build(task, output_dir, audit, agent_id)
+    }
+
     /// Rollback an entire conductor run by undoing its time machine checkpoint.
     pub fn rollback(
         &self,
@@ -959,6 +1076,7 @@ mod tests {
                 token_count: 10,
                 model_name: model.to_string(),
                 tool_calls: Vec::new(),
+                input_tokens: None,
             })
         }
 

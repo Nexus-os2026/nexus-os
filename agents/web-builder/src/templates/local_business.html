@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{BUSINESS_NAME}} — {{TAGLINE}}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family={{HEADING_FONT}}:wght@600;700;800&family={{BODY_FONT}}:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ── Design Tokens ── */
+    :root {
+      --primary: #d97706;
+      --primary-light: #fbbf24;
+      --primary-dark: #b45309;
+      --accent: #059669;
+      --bg: #fffbf5;
+      --bg-card: #ffffff;
+      --text: #1c1917;
+      --text-muted: #78716c;
+      --heading-font: var(--heading-font-family, 'DM Serif Display', serif);
+      --body-font: var(--body-font-family, 'Inter', sans-serif);
+      --section-padding: 5rem 2rem;
+      --card-radius: 0.75rem;
+      --border-subtle: #e7e5e4;
+    }
+
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--body-font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+    }
+    a { color: var(--primary); text-decoration: none; }
+
+    /* ── Navigation ── */
+    .nav { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 1rem 2.5rem; background: rgba(255,251,245,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border-subtle); }
+    .nav__brand { font-family: var(--heading-font); font-weight: 700; font-size: 1.3rem; color: var(--text); }
+    .nav__links { display: flex; gap: 2rem; list-style: none; }
+    .nav__links a { color: var(--text-muted); font-size: 0.9rem; transition: color 0.3s ease; }
+    .nav__links a:hover { color: var(--text); }
+    .nav__cta { padding: 0.5rem 1.25rem; background: var(--primary); color: #fff; border: none; border-radius: 0.5rem; font-size: 0.9rem; cursor: pointer; transition: background 0.3s ease; }
+    .nav__cta:hover { background: var(--primary-dark); }
+
+    /* ── Hero ── */
+    .hero { padding: 6rem 2rem; text-align: center; background: linear-gradient(180deg, rgba(217,119,6,0.06) 0%, transparent 60%); }
+    .hero h1 { font-family: var(--heading-font); font-size: clamp(2.25rem, 4.5vw, 3.5rem); font-weight: 700; margin-bottom: 1rem; }
+    .hero p { color: var(--text-muted); font-size: 1.15rem; max-width: 36rem; margin: 0 auto 2rem; }
+    .hero__actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn-primary { padding: 0.75rem 2rem; background: var(--primary); color: #fff; border: none; border-radius: 0.5rem; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.3s ease, transform 0.3s ease; }
+    .btn-primary:hover { background: var(--primary-dark); transform: translateY(-2px); }
+    .btn-outline { padding: 0.75rem 2rem; background: transparent; color: var(--primary); border: 2px solid var(--primary); border-radius: 0.5rem; font-size: 1rem; cursor: pointer; transition: background 0.3s ease; }
+    .btn-outline:hover { background: rgba(217,119,6,0.08); }
+
+    /* ── Services ── */
+    .services { padding: var(--section-padding); max-width: 72rem; margin: 0 auto; }
+    .services h2 { font-family: var(--heading-font); font-size: 2rem; text-align: center; margin-bottom: 3rem; }
+    .services__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+    .service-card { padding: 2rem; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--card-radius); text-align: center; transition: transform 0.3s ease, box-shadow 0.3s ease; }
+    .service-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.06); }
+    .service-card__icon { font-size: 2.5rem; margin-bottom: 1rem; }
+    .service-card h3 { font-family: var(--heading-font); font-size: 1.15rem; margin-bottom: 0.5rem; }
+    .service-card p { color: var(--text-muted); font-size: 0.9rem; }
+
+    /* ── Gallery ── */
+    .gallery { padding: var(--section-padding); max-width: 72rem; margin: 0 auto; }
+    .gallery h2 { font-family: var(--heading-font); font-size: 2rem; text-align: center; margin-bottom: 3rem; }
+    .gallery__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    .gallery__item { aspect-ratio: 4/3; background: linear-gradient(135deg, #fef3c7, #fde68a); border-radius: var(--card-radius); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.85rem; overflow: hidden; transition: transform 0.3s ease; }
+    .gallery__item:hover { transform: scale(1.03); }
+
+    /* ── Testimonials ── */
+    .testimonials { padding: var(--section-padding); max-width: 60rem; margin: 0 auto; }
+    .testimonials h2 { font-family: var(--heading-font); font-size: 2rem; text-align: center; margin-bottom: 3rem; }
+    .testimonials__grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; }
+    .testimonial-card { padding: 2rem; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--card-radius); }
+    .testimonial-card blockquote { font-style: italic; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.7; }
+    .testimonial-card .author { font-weight: 600; font-size: 0.9rem; }
+    .testimonial-card .stars { color: var(--primary-light); margin-bottom: 0.75rem; }
+
+    /* ── Map & Hours ── */
+    .info-bar { padding: var(--section-padding); max-width: 72rem; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+    .map-placeholder { background: #e5e7eb; border-radius: var(--card-radius); min-height: 300px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.9rem; }
+    .hours-card { padding: 2rem; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--card-radius); }
+    .hours-card h3 { font-family: var(--heading-font); font-size: 1.25rem; margin-bottom: 1.5rem; }
+    .hours-card table { width: 100%; border-collapse: collapse; }
+    .hours-card td { padding: 0.5rem 0; font-size: 0.9rem; }
+    .hours-card td:first-child { font-weight: 500; }
+    .hours-card td:last-child { text-align: right; color: var(--text-muted); }
+    .hours-card .contact-info { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-subtle); }
+    .hours-card .contact-info p { margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-muted); }
+
+    /* ── Footer ── */
+    .footer { padding: 3rem 2rem; text-align: center; color: var(--text-muted); font-size: 0.85rem; border-top: 1px solid var(--border-subtle); }
+
+    /* ── Responsive ── */
+    @media (max-width: 1024px) {
+      .services__grid { grid-template-columns: repeat(2, 1fr); }
+      .gallery__grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 768px) {
+      .nav__links { display: none; }
+      .services__grid, .testimonials__grid { grid-template-columns: 1fr; }
+      .gallery__grid { grid-template-columns: repeat(2, 1fr); }
+      .info-bar { grid-template-columns: 1fr; }
+      .hero { padding: 4rem 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav class="nav" aria-label="Main navigation">
+    <div class="nav__brand" data-nexus-slot="business_name">{{BUSINESS_NAME}}</div>
+    <ul class="nav__links">
+      <li><a href="#services">Services</a></li>
+      <li><a href="#gallery">Gallery</a></li>
+      <li><a href="#testimonials">Reviews</a></li>
+      <li><a href="#hours">Hours</a></li>
+    </ul>
+    <button class="nav__cta" aria-label="Call {{BUSINESS_NAME}}">{{PHONE}}</button>
+  </nav>
+
+  <!-- Hero Section -->
+  <section id="hero" data-nexus-section="hero" data-nexus-editable="true" class="hero">
+    <h1 data-nexus-slot="business_name">{{BUSINESS_NAME}}</h1>
+    <p data-nexus-slot="tagline">{{TAGLINE}}</p>
+    <div class="hero__actions">
+      <button class="btn-primary" aria-label="Book an appointment">{{HERO_CTA}}</button>
+      <button class="btn-outline" aria-label="View our menu or services">{{HERO_SECONDARY_CTA}}</button>
+    </div>
+  </section>
+
+  <!-- Services Section -->
+  <section id="services" data-nexus-section="services" data-nexus-editable="true" class="services">
+    <h2>Our Services</h2>
+    <div class="services__grid" data-nexus-slot="service_cards">
+      <div class="service-card">
+        <div class="service-card__icon">{{SERVICE_1_ICON}}</div>
+        <h3>{{SERVICE_1_NAME}}</h3>
+        <p>{{SERVICE_1_DESC}}</p>
+      </div>
+      <div class="service-card">
+        <div class="service-card__icon">{{SERVICE_2_ICON}}</div>
+        <h3>{{SERVICE_2_NAME}}</h3>
+        <p>{{SERVICE_2_DESC}}</p>
+      </div>
+      <div class="service-card">
+        <div class="service-card__icon">{{SERVICE_3_ICON}}</div>
+        <h3>{{SERVICE_3_NAME}}</h3>
+        <p>{{SERVICE_3_DESC}}</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Gallery Section -->
+  <section id="gallery" data-nexus-section="gallery" data-nexus-editable="true" class="gallery">
+    <h2>Gallery</h2>
+    <div class="gallery__grid" data-nexus-slot="gallery_images">
+      <div class="gallery__item">{{GALLERY_1}}</div>
+      <div class="gallery__item">{{GALLERY_2}}</div>
+      <div class="gallery__item">{{GALLERY_3}}</div>
+      <div class="gallery__item">{{GALLERY_4}}</div>
+      <div class="gallery__item">{{GALLERY_5}}</div>
+      <div class="gallery__item">{{GALLERY_6}}</div>
+    </div>
+  </section>
+
+  <!-- Testimonials Section -->
+  <section id="testimonials" data-nexus-section="testimonials" data-nexus-editable="true" class="testimonials">
+    <h2>What Our Customers Say</h2>
+    <div class="testimonials__grid" data-nexus-slot="testimonial_cards">
+      <div class="testimonial-card">
+        <div class="stars">★★★★★</div>
+        <blockquote>{{TESTIMONIAL_1_QUOTE}}</blockquote>
+        <div class="author">{{TESTIMONIAL_1_AUTHOR}}</div>
+      </div>
+      <div class="testimonial-card">
+        <div class="stars">★★★★★</div>
+        <blockquote>{{TESTIMONIAL_2_QUOTE}}</blockquote>
+        <div class="author">{{TESTIMONIAL_2_AUTHOR}}</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Map & Hours Section -->
+  <section id="map" data-nexus-section="map" data-nexus-editable="true" class="info-bar">
+    <div class="map-placeholder" data-nexus-slot="map">Map — {{ADDRESS}}</div>
+    <div id="hours" data-nexus-section="hours" data-nexus-editable="true" class="hours-card">
+      <h3>Hours & Location</h3>
+      <table data-nexus-slot="hours">
+        <tr><td>Monday - Friday</td><td>{{WEEKDAY_HOURS}}</td></tr>
+        <tr><td>Saturday</td><td>{{SATURDAY_HOURS}}</td></tr>
+        <tr><td>Sunday</td><td>{{SUNDAY_HOURS}}</td></tr>
+      </table>
+      <div class="contact-info">
+        <p data-nexus-slot="address">{{ADDRESS}}</p>
+        <p data-nexus-slot="phone">{{PHONE}}</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer id="footer" data-nexus-section="footer" data-nexus-editable="true" class="footer">
+    <p data-nexus-slot="copyright">{{COPYRIGHT}}</p>
+  </footer>
+
+</body>
+</html>

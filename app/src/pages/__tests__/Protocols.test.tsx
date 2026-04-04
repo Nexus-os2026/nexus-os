@@ -59,9 +59,12 @@ describe("Protocols", () => {
     render(<Protocols />);
     await waitFor(() => expectInvoked("get_protocols_status"));
 
+    // Wait for loading to complete and form to render
+    await waitFor(() => screen.getAllByPlaceholderText(/name/i));
+
     mockCommandError("mcp_host_add_server", "connection refused");
     // Fill in the add server form
-    const nameInputs = screen.getAllByPlaceholderText(/Name/i);
+    const nameInputs = screen.getAllByPlaceholderText(/name/i);
     const urlInputs = screen.getAllByPlaceholderText(/URL/i);
     if (nameInputs.length > 0 && urlInputs.length > 0) {
       fireEvent.change(nameInputs[0], { target: { value: "test-server" } });

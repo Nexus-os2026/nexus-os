@@ -269,7 +269,9 @@ export default function Messaging(): JSX.Element {
             className="rounded-xl border border-cyan-500/20 bg-slate-950/60 px-3 py-2 text-cyan-50"
           >
             <option value="">Select agent</option>
-            {agents.map((agent) => (
+            {agents
+              .filter((agent, i, arr) => arr.findIndex((a) => a.id === agent.id || (a.name && agent.name && a.name === agent.name)) === i)
+              .map((agent) => (
               <option key={agent.id} value={agent.id}>
                 {agent.name}
               </option>

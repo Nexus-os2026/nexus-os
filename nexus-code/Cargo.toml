@@ -5,6 +5,10 @@ edition = "2021"
 description = "The world's first governed terminal coding agent"
 license = "MIT"
 
+[lib]
+name = "nexus_code"
+path = "src/lib.rs"
+
 [[bin]]
 name = "nx"
 path = "src/main.rs"

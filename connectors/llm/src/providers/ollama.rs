@@ -276,11 +276,22 @@ impl OllamaProvider {
             .arg("-H")
             .arg("content-type: application/json")
             .arg("-d")
-            .arg(&encoded)
+            .arg("@-")
             .arg(&endpoint)
+            .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .spawn()
             .map_err(|e| AgentError::SupervisorError(format!("curl spawn failed: {e}")))?;
+
+        // Write the JSON body via stdin to avoid OS argument length limits
+        // (base64-encoded images can exceed ARG_MAX).
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            stdin.write_all(encoded.as_bytes()).map_err(|e| {
+                AgentError::SupervisorError(format!("failed to write request body to curl: {e}"))
+            })?;
+            // stdin is dropped here, closing the pipe so curl proceeds
+        }
 
         let stdout = child
             .stdout
@@ -461,6 +472,7 @@ impl LlmProvider for OllamaProvider {
             token_count,
             model_name: model.to_string(),
             tool_calls: Vec::new(),
+            input_tokens: None,
         })
     }
 

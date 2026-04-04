@@ -3,12 +3,14 @@
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   gap: 0.75rem;
-  height: calc(100vh - 10rem);
+  min-height: 0;
+  flex: 1;
   border: 1px solid rgba(0, 255, 157, 0.2);
   background: linear-gradient(155deg, rgba(5, 10, 18, 0.95), rgba(10, 22, 40, 0.86));
   backdrop-filter: blur(12px);
   overflow-y: auto;
   overflow-x: hidden;
+  padding-bottom: 2rem;
 }
 
 .st-header {
@@ -657,6 +659,7 @@
   height: auto;
   min-height: calc(100vh - 12rem);
   padding: 0.35rem;
+  padding-bottom: 4rem;
   border: none;
   background: transparent;
   backdrop-filter: none;

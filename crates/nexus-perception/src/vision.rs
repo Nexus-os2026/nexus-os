@@ -177,19 +177,32 @@ impl ApiVisionProvider {
         let encoded = serde_json::to_string(&body).map_err(|e| format!("json: {e}"))?;
 
         let marker = "__NX_P__:";
-        let out = std::process::Command::new("curl")
+        let mut child = std::process::Command::new("curl")
             .args(["-sS", "-L", "-m", "60"])
             .arg("-H")
             .arg(format!("authorization: Bearer {}", self.api_key))
             .arg("-H")
             .arg("content-type: application/json")
             .arg("-d")
-            .arg(&encoded)
+            .arg("@-")
             .arg("-w")
             .arg(format!("\n{marker}%{{http_code}}"))
             .arg(&self.endpoint)
-            .output()
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
             .map_err(|e| format!("curl: {e}"))?;
+
+        // Pipe body via stdin to avoid ARG_MAX limits with large base64 images
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            stdin
+                .write_all(encoded.as_bytes())
+                .map_err(|e| format!("curl stdin: {e}"))?;
+        }
+
+        let out = child.wait_with_output().map_err(|e| format!("curl: {e}"))?;
 
         if !out.status.success() {
             return Err("curl failed".into());

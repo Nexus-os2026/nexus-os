@@ -70,6 +70,7 @@ export interface LlmConfig {
   deepseek_api_key: string;
   gemini_api_key: string;
   nvidia_api_key: string;
+  openrouter_api_key: string;
   ollama_url: string;
   routing_strategy?: string;
   providers?: LlmProviderEntry[];

@@ -4502,6 +4502,7 @@ version = "10.6.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "dirs 5.0.1",
  "nexus-a2a",
  "nexus-adaptation",
  "nexus-agent-memory",
@@ -4509,6 +4510,7 @@ dependencies = [
  "nexus-auth",
  "nexus-browser-agent",
  "nexus-capability-measurement",
+ "nexus-code",
  "nexus-collab-protocol",
  "nexus-computer-control",
  "nexus-conductor",
@@ -4555,9 +4557,12 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-global-shortcut",
  "tokio",
+ "tokio-util",
  "toml 0.8.2",
  "urlencoding",
  "uuid",
+ "web-builder-agent",
+ "zip",
 ]
 
 [[package]]
@@ -9665,12 +9670,14 @@ dependencies = [
 name = "web-builder-agent"
 version = "10.6.0"
 dependencies = [
+ "chrono",
  "nexus-connectors-llm",
  "nexus-sdk",
  "serde",
  "serde_json",
  "tracing",
  "uuid",
+ "zip",
 ]
 
 [[package]]
@@ -10783,6 +10790,7 @@ dependencies = [
  "crc32fast",
  "crossbeam-utils",
  "displaydoc",
+ "flate2",
  "indexmap 2.13.0",
  "num_enum",
  "thiserror 1.0.69",

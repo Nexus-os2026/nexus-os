@@ -174,7 +174,9 @@ export default function AgentMemory() {
           style={{ ...inputStyle, width: 240 }}
         >
           <option value="">Select Agent</option>
-          {agents.map((a) => (
+          {agents
+            .filter((a, i, arr) => arr.findIndex((x) => x.id === a.id || x.name === a.name) === i)
+            .map((a) => (
             <option key={a.id} value={a.id}>{a.name}</option>
           ))}
         </select>

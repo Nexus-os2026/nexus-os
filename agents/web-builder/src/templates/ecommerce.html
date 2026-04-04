@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{STORE_NAME}} — Shop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family={{HEADING_FONT}}:wght@600;700;800&family={{BODY_FONT}}:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    /* ── Design Tokens ── */
+    :root {
+      --primary: #111827;
+      --primary-light: #374151;
+      --accent: #dc2626;
+      --accent-light: #ef4444;
+      --bg: #ffffff;
+      --bg-card: #ffffff;
+      --bg-muted: #f9fafb;
+      --text: #111827;
+      --text-muted: #6b7280;
+      --heading-font: var(--heading-font-family, 'Inter', sans-serif);
+      --body-font: var(--body-font-family, 'Inter', sans-serif);
+      --section-padding: 4rem 2rem;
+      --card-radius: 0.5rem;
+      --border-subtle: #e5e7eb;
+      --star-color: #f59e0b;
+    }
+
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--body-font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    a { color: var(--text); text-decoration: none; }
+
+    /* ── Navigation ── */
+    .nav { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 1rem 2.5rem; background: var(--bg); border-bottom: 1px solid var(--border-subtle); }
+    .nav__brand { font-family: var(--heading-font); font-weight: 800; font-size: 1.35rem; letter-spacing: -0.02em; }
+    .nav__links { display: flex; gap: 2rem; list-style: none; }
+    .nav__links a { color: var(--text-muted); font-size: 0.9rem; transition: color 0.3s ease; }
+    .nav__links a:hover { color: var(--text); }
+    .nav__actions { display: flex; gap: 1rem; align-items: center; }
+    .nav__cart { position: relative; padding: 0.5rem; background: none; border: none; cursor: pointer; font-size: 1.25rem; }
+    .nav__cart-count { position: absolute; top: -2px; right: -6px; background: var(--accent); color: #fff; font-size: 0.65rem; font-weight: 700; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+
+    /* ── Hero Banner ── */
+    .hero { padding: 5rem 2rem; text-align: center; background: var(--bg-muted); }
+    .hero h1 { font-family: var(--heading-font); font-size: clamp(2rem, 4vw, 3rem); font-weight: 800; margin-bottom: 1rem; }
+    .hero p { color: var(--text-muted); font-size: 1.1rem; max-width: 32rem; margin: 0 auto 2rem; }
+    .btn-dark { padding: 0.75rem 2rem; background: var(--primary); color: #fff; border: none; border-radius: var(--card-radius); font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.3s ease; }
+    .btn-dark:hover { background: var(--primary-light); }
+
+    /* ── Categories ── */
+    .categories { padding: var(--section-padding); max-width: 72rem; margin: 0 auto; }
+    .categories h2 { font-family: var(--heading-font); font-size: 1.75rem; text-align: center; margin-bottom: 2.5rem; }
+    .categories__grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; }
+    .category-card { position: relative; aspect-ratio: 1; background: var(--bg-muted); border-radius: var(--card-radius); overflow: hidden; display: flex; align-items: flex-end; justify-content: center; padding: 1.5rem; transition: transform 0.3s ease; cursor: pointer; }
+    .category-card:hover { transform: translateY(-4px); }
+    .category-card__label { font-family: var(--heading-font); font-weight: 700; font-size: 1rem; background: var(--bg); padding: 0.5rem 1.25rem; border-radius: 2rem; }
+
+    /* ── Products ── */
+    .products { padding: var(--section-padding); max-width: 72rem; margin: 0 auto; }
+    .products h2 { font-family: var(--heading-font); font-size: 1.75rem; text-align: center; margin-bottom: 2.5rem; }
+    .products__grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
+    .product-card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--card-radius); overflow: hidden; transition: box-shadow 0.3s ease; }
+    .product-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+    .product-card__image { width: 100%; aspect-ratio: 1; background: var(--bg-muted); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.8rem; }
+    .product-card__body { padding: 1rem; }
+    .product-card h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.25rem; }
+    .product-card__price { font-weight: 700; font-size: 1.05rem; margin-bottom: 0.25rem; }
+    .product-card__price .original { text-decoration: line-through; color: var(--text-muted); font-weight: 400; font-size: 0.85rem; margin-left: 0.5rem; }
+    .product-card__stars { color: var(--star-color); font-size: 0.8rem; margin-bottom: 0.5rem; }
+    .product-card__stars span { color: var(--text-muted); font-size: 0.75rem; margin-left: 0.25rem; }
+    .btn-add { width: 100%; padding: 0.5rem; background: var(--primary); color: #fff; border: none; border-radius: var(--card-radius); font-size: 0.85rem; cursor: pointer; transition: background 0.3s ease; }
+    .btn-add:hover { background: var(--primary-light); }
+
+    /* ── Reviews ── */
+    .reviews { padding: var(--section-padding); max-width: 60rem; margin: 0 auto; background: var(--bg-muted); border-radius: var(--card-radius); }
+    .reviews h2 { font-family: var(--heading-font); font-size: 1.75rem; text-align: center; margin-bottom: 2.5rem; }
+    .reviews__grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; }
+    .review-card { padding: 1.5rem; background: var(--bg-card); border-radius: var(--card-radius); }
+    .review-card__stars { color: var(--star-color); font-size: 0.85rem; margin-bottom: 0.5rem; }
+    .review-card p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.75rem; line-height: 1.6; }
+    .review-card .author { font-weight: 600; font-size: 0.85rem; }
+
+    /* ── Newsletter ── */
+    .newsletter { padding: var(--section-padding); text-align: center; max-width: 36rem; margin: 0 auto; }
+    .newsletter h2 { font-family: var(--heading-font); font-size: 1.75rem; margin-bottom: 0.5rem; }
+    .newsletter p { color: var(--text-muted); margin-bottom: 1.5rem; }
+    .newsletter form { display: flex; gap: 0.5rem; }
+    .newsletter input { flex: 1; padding: 0.75rem 1rem; border: 1px solid var(--border-subtle); border-radius: var(--card-radius); font-size: 0.9rem; }
+    .newsletter input:focus { outline: none; border-color: var(--primary); }
+    .newsletter button { padding: 0.75rem 1.5rem; background: var(--primary); color: #fff; border: none; border-radius: var(--card-radius); font-weight: 600; cursor: pointer; }
+
+    /* ── Footer ── */
+    .footer { padding: 3rem 2rem; border-top: 1px solid var(--border-subtle); max-width: 72rem; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2rem; font-size: 0.85rem; }
+    .footer h4 { font-family: var(--heading-font); font-size: 0.9rem; margin-bottom: 1rem; }
+    .footer ul { list-style: none; }
+    .footer li { margin-bottom: 0.5rem; }
+    .footer a { color: var(--text-muted); transition: color 0.3s ease; }
+    .footer a:hover { color: var(--text); }
+    .footer__bottom { grid-column: 1 / -1; padding-top: 1.5rem; border-top: 1px solid var(--border-subtle); color: var(--text-muted); text-align: center; }
+
+    /* ── Responsive ── */
+    @media (max-width: 1024px) {
+      .products__grid { grid-template-columns: repeat(3, 1fr); }
+      .categories__grid { grid-template-columns: repeat(2, 1fr); }
+      .footer { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 768px) {
+      .nav__links { display: none; }
+      .products__grid { grid-template-columns: repeat(2, 1fr); }
+      .categories__grid { grid-template-columns: repeat(2, 1fr); }
+      .reviews__grid { grid-template-columns: 1fr; }
+      .newsletter form { flex-direction: column; }
+      .footer { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav class="nav" aria-label="Main navigation">
+    <div class="nav__brand" data-nexus-slot="store_name">{{STORE_NAME}}</div>
+    <ul class="nav__links">
+      <li><a href="#categories">Categories</a></li>
+      <li><a href="#products">Products</a></li>
+      <li><a href="#reviews">Reviews</a></li>
+    </ul>
+    <div class="nav__actions">
+      <button class="nav__cart" aria-label="Shopping cart with 0 items">
+        🛒<span class="nav__cart-count">0</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section id="hero" data-nexus-section="hero" data-nexus-editable="true" class="hero">
+    <h1 data-nexus-slot="hero_headline">{{HERO_HEADLINE}}</h1>
+    <p data-nexus-slot="hero_subtitle">{{HERO_SUBTITLE}}</p>
+    <button class="btn-dark" aria-label="Shop now">Shop Now</button>
+  </section>
+
+  <!-- Categories Section -->
+  <section id="categories" data-nexus-section="categories" data-nexus-editable="true" class="categories">
+    <h2>Shop by Category</h2>
+    <div class="categories__grid" data-nexus-slot="category_cards">
+      <div class="category-card" role="button" aria-label="Browse {{CATEGORY_1}}">
+        <span class="category-card__label">{{CATEGORY_1}}</span>
+      </div>
+      <div class="category-card" role="button" aria-label="Browse {{CATEGORY_2}}">
+        <span class="category-card__label">{{CATEGORY_2}}</span>
+      </div>
+      <div class="category-card" role="button" aria-label="Browse {{CATEGORY_3}}">
+        <span class="category-card__label">{{CATEGORY_3}}</span>
+      </div>
+      <div class="category-card" role="button" aria-label="Browse {{CATEGORY_4}}">
+        <span class="category-card__label">{{CATEGORY_4}}</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Products Section -->
+  <section id="products" data-nexus-section="products" data-nexus-editable="true" class="products">
+    <h2>Featured Products</h2>
+    <div class="products__grid" data-nexus-slot="product_cards">
+      <article class="product-card">
+        <div class="product-card__image">{{PRODUCT_1_IMAGE}}</div>
+        <div class="product-card__body">
+          <h3>{{PRODUCT_1_NAME}}</h3>
+          <div class="product-card__stars">★★★★★ <span>({{PRODUCT_1_REVIEWS}})</span></div>
+          <div class="product-card__price">{{PRODUCT_1_PRICE}}</div>
+          <button class="btn-add" aria-label="Add {{PRODUCT_1_NAME}} to cart">Add to Cart</button>
+        </div>
+      </article>
+      <article class="product-card">
+        <div class="product-card__image">{{PRODUCT_2_IMAGE}}</div>
+        <div class="product-card__body">
+          <h3>{{PRODUCT_2_NAME}}</h3>
+          <div class="product-card__stars">★★★★☆ <span>({{PRODUCT_2_REVIEWS}})</span></div>
+          <div class="product-card__price">{{PRODUCT_2_PRICE}}</div>
+          <button class="btn-add" aria-label="Add {{PRODUCT_2_NAME}} to cart">Add to Cart</button>
+        </div>
+      </article>
+      <article class="product-card">
+        <div class="product-card__image">{{PRODUCT_3_IMAGE}}</div>
+        <div class="product-card__body">
+          <h3>{{PRODUCT_3_NAME}}</h3>
+          <div class="product-card__stars">★★★★★ <span>({{PRODUCT_3_REVIEWS}})</span></div>
+          <div class="product-card__price">{{PRODUCT_3_PRICE}}</div>
+          <button class="btn-add" aria-label="Add {{PRODUCT_3_NAME}} to cart">Add to Cart</button>
+        </div>
+      </article>
+      <article class="product-card">
+        <div class="product-card__image">{{PRODUCT_4_IMAGE}}</div>
+        <div class="product-card__body">
+          <h3>{{PRODUCT_4_NAME}}</h3>
+          <div class="product-card__stars">★★★★☆ <span>({{PRODUCT_4_REVIEWS}})</span></div>
+          <div class="product-card__price">{{PRODUCT_4_PRICE}}</div>
+          <button class="btn-add" aria-label="Add {{PRODUCT_4_NAME}} to cart">Add to Cart</button>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- Reviews Section -->
+  <section id="reviews" data-nexus-section="reviews" data-nexus-editable="true" class="reviews">
+    <h2>Customer Reviews</h2>
+    <div class="reviews__grid" data-nexus-slot="review_cards">
+      <div class="review-card">
+        <div class="review-card__stars">★★★★★</div>
+        <p>{{REVIEW_1_TEXT}}</p>
+        <div class="author">{{REVIEW_1_AUTHOR}}</div>
+      </div>
+      <div class="review-card">
+        <div class="review-card__stars">★★★★★</div>
+        <p>{{REVIEW_2_TEXT}}</p>
+        <div class="author">{{REVIEW_2_AUTHOR}}</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Newsletter Section -->
+  <section id="newsletter" data-nexus-section="newsletter" data-nexus-editable="true" class="newsletter">
+    <h2>Stay Updated</h2>
+    <p>Subscribe for exclusive deals and new arrivals.</p>
+    <form aria-label="Newsletter signup">
+      <input type="email" placeholder="Enter your email" aria-label="Email address" required />
+      <button type="submit" aria-label="Subscribe to newsletter">Subscribe</button>
+    </form>
+  </section>
+
+  <!-- Footer -->
+  <footer id="footer" data-nexus-section="footer" data-nexus-editable="true" class="footer">
+    <div>
+      <h4 data-nexus-slot="store_name">{{STORE_NAME}}</h4>
+      <p style="color: var(--text-muted);">{{STORE_DESCRIPTION}}</p>
+    </div>
+    <div>
+      <h4>Shop</h4>
+      <ul>
+        <li><a href="#" aria-label="All products">All Products</a></li>
+        <li><a href="#" aria-label="New arrivals">New Arrivals</a></li>
+        <li><a href="#" aria-label="Best sellers">Best Sellers</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Support</h4>
+      <ul>
+        <li><a href="#" aria-label="Contact us">Contact</a></li>
+        <li><a href="#" aria-label="Shipping information">Shipping</a></li>
+        <li><a href="#" aria-label="Return policy">Returns</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Legal</h4>
+      <ul>
+        <li><a href="#" aria-label="Privacy policy">Privacy</a></li>
+        <li><a href="#" aria-label="Terms of service">Terms</a></li>
+      </ul>
+    </div>
+    <div class="footer__bottom">
+      <p data-nexus-slot="copyright">{{COPYRIGHT}}</p>
+    </div>
+  </footer>
+
+</body>
+</html>

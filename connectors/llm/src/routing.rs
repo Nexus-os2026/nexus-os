@@ -299,6 +299,7 @@ mod tests {
                     token_count: 10,
                     model_name: "test".to_string(),
                     tool_calls: vec![],
+                    input_tokens: None,
                 })
             }
         }

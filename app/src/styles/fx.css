@@ -140,6 +140,8 @@
 
 .nexus-page-panel .holo-panel__content {
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .holo-panel-foreground .holo-panel__content {

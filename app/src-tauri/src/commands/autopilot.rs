@@ -372,31 +372,43 @@ pub(crate) fn freelance_get_revenue(state: &AppState) -> Result<String, String> 
 // ---------------------------------------------------------------------------
 
 pub(crate) fn start_conversational_build(
-    state: &AppState,
+    _state: &AppState,
     message: String,
 ) -> Result<String, String> {
-    let mut builder = state
-        .conversational_builder
-        .lock()
-        .unwrap_or_else(|p| p.into_inner());
-    *builder = ConversationalBuilder::new();
-    // First message: LLM not yet called, produce a stub response to kick off.
-    let resp = builder.process_message(
-        &message,
-        "Great idea! A few quick questions:\n1. Who is your target audience?\n2. What's your budget?\n  • $0 (free tools only)\n  • Under $50/month\n  • Under $200/month",
-    );
-    serde_json::to_string(&resp).map_err(|e| format!("serialize error: {e}"))
+    // Return requirements + project_id immediately — no blocking LLM call.
+    // The frontend drives the conversation via chatWithOllama (async).
+    let project_id = uuid::Uuid::new_v4().to_string();
+    let resp = serde_json::json!({
+        "state": "Clarifying",
+        "message": format!(
+            "Great idea! I'll help you build that. A few quick questions:\n\n\
+             1. **Who is your target audience?**\n\
+             2. **What's your budget?**\n\
+                • $0 (free tools only)\n\
+                • Under $50/month\n\
+                • Under $200/month\n\
+             3. **Any must-have features?** (e.g., payments, blog, contact form)"
+        ),
+        "questions": ["Who is your target audience?", "What's your budget?", "Any must-have features?"],
+        "plan": null,
+        "project_id": project_id,
+        "user_goal": message,
+    });
+    Ok(resp.to_string())
 }
 
-pub(crate) fn builder_respond(state: &AppState, message: String) -> Result<String, String> {
-    let mut builder = state
-        .conversational_builder
-        .lock()
-        .unwrap_or_else(|p| p.into_inner());
-    let resp = builder.process_message(
-        &message, &message, // In production, this would be the LLM response
-    );
-    serde_json::to_string(&resp).map_err(|e| format!("serialize error: {e}"))
+pub(crate) fn builder_respond(_state: &AppState, _message: String) -> Result<String, String> {
+    // This is now a no-op stub — the frontend drives the conversation
+    // directly via chatWithOllama, which is async and non-blocking.
+    // Kept for API compatibility.
+    let resp = serde_json::json!({
+        "state": "Building",
+        "message": "Ready to build!",
+        "questions": [],
+        "plan": null,
+        "project_id": null,
+    });
+    Ok(resp.to_string())
 }
 
 pub(crate) fn get_live_preview(state: &AppState, project_id: String) -> Result<String, String> {

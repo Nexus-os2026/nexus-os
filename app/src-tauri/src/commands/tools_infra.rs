@@ -729,7 +729,7 @@ pub(crate) fn conduct_build(
     // Ensure output directory exists
     std::fs::create_dir_all(&out_dir).map_err(|e| format!("failed to create output dir: {e}"))?;
 
-    let full_model = model.unwrap_or_else(|| "mistral".to_string());
+    let full_model = model.unwrap_or_else(|| "openrouter/qwen/qwen3.6-plus:free".to_string());
 
     // Route to the correct provider based on prefix (e.g. "anthropic/claude-sonnet-4-20250514")
     let config = load_config().map_err(agent_error)?;
@@ -747,16 +747,29 @@ pub(crate) fn conduct_build(
     let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
 
     // Preview plan first (for event emission by caller)
+    eprintln!("[conductor] Planning with model={model_name}, provider={full_model}");
     let plan = conductor
         .preview_plan(&UserRequest::new(&prompt, &out_dir))
-        .map_err(|e| format!("planning failed: {e}"))?;
+        .map_err(|e| {
+            let msg = format!("planning failed (model={model_name}): {e}");
+            eprintln!("[conductor] {msg}");
+            msg
+        })?;
     let plan_json = serde_json::to_value(&plan).unwrap_or_default();
 
     // Run full orchestration
     let start = std::time::Instant::now();
-    let mut result = conductor
-        .run(request, &mut supervisor)
-        .map_err(|e| format!("conductor failed: {e}"))?;
+    eprintln!("[conductor] Running orchestration...");
+    let mut result = conductor.run(request, &mut supervisor).map_err(|e| {
+        let msg = format!("conductor failed: {e}");
+        eprintln!("[conductor] {msg}");
+        msg
+    })?;
+    eprintln!(
+        "[conductor] Build finished: {:?}, {} files",
+        result.status,
+        result.output_files.len()
+    );
     result.duration_secs = start.elapsed().as_secs_f64();
 
     drop(supervisor);

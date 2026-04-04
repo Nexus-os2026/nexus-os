@@ -426,7 +426,8 @@ fn test_select_provider_explicit_flash() {
 #[test]
 fn test_select_provider_priority_deepseek_over_ollama() {
     // When both DeepSeek key and Ollama URL are set (without explicit provider),
-    // the env-based Ollama should come first (line 111-113 in gateway.rs)
+    // the cloud provider with an API key takes priority — the user explicitly
+    // configured a cloud key, so they want cloud inference, not local Ollama.
     let config = ProviderSelectionConfig {
         ollama_url: Some("http://127.0.0.1:19999".into()),
         deepseek_api_key: Some("test-key".into()),
@@ -434,14 +435,15 @@ fn test_select_provider_priority_deepseek_over_ollama() {
     };
     let result = select_provider(&config);
     assert!(result.is_ok());
-    // OLLAMA_URL explicitly set takes priority
-    assert_eq!(result.unwrap().name(), "ollama");
+    // Cloud provider with key takes priority over Ollama
+    assert_eq!(result.unwrap().name(), "deepseek");
 }
 
 #[test]
 fn test_select_provider_deepseek_without_ollama_url() {
-    // Local-first routing: Ollama auto-detect runs before cloud providers.
-    // If a local Ollama is reachable, it wins over DeepSeek.
+    // Cloud-first routing: cloud providers with keys take priority.
+    // DeepSeek key is set, so DeepSeek should be selected.
+    // Ollama auto-detect only kicks in as last resort (no keys at all).
     let config = ProviderSelectionConfig {
         deepseek_api_key: Some("test-key".into()),
         ..Default::default()

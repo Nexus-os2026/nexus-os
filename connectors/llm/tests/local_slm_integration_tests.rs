@@ -60,6 +60,7 @@ impl LlmProvider for ScriptedProvider {
             token_count: 10,
             model_name: "scripted-model".to_string(),
             tool_calls: vec![],
+            input_tokens: None,
         })
     }
 

@@ -1,13 +1,11 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import RequiresLlm from "../components/RequiresLlm";
-import { Hammer, Clock, Lock, Pin, MapPin, StickyNote, Trash2, Mic, MicOff, ClipboardList, Image, Zap, GraduationCap, Rocket, Hexagon, Play, Pause, Square, X, AlertTriangle, Check, FolderOpen, ChevronUp, ChevronDown, RefreshCw } from "lucide-react";
+import { Clock, Lock, Pin, MapPin, StickyNote, Trash2, Mic, MicOff, ClipboardList, Image, Zap, Hexagon, Play, Pause, Square, X, AlertTriangle, Check, FolderOpen, ChevronUp, ChevronDown, RefreshCw, Paperclip } from "lucide-react";
 import {
-  sendChat, chatWithOllama, conductBuild, listAgents, hasDesktopRuntime,
+  sendChat, chatWithOllama, conductBuild, hasDesktopRuntime,
   listProviderModels, getProviderStatus, saveApiKey, getPreinstalledAgents,
   startAgent, stopAgent, pauseAgent, resumeAgent, getAuditLog,
   approveConsentRequest, denyConsentRequest,
-  startConversationalBuild, builderRespond, remixProject, analyzeProblem,
-  startTeachMode, teachModeRespond,
 } from "../api/backend";
 import type {
   ChatTokenEvent, ConductorPlanEvent, ConductorAgentCompletedEvent,
@@ -17,7 +15,7 @@ import type {
 import "./ai-chat-hub.css";
 
 /* ─── types ─── */
-type View = "chat" | "compare" | "history" | "build";
+type View = "chat" | "compare" | "history";
 
 interface Model {
   id: string;
@@ -37,6 +35,14 @@ interface BuildResultData {
   result: ConductorBuildResponse["result"];
 }
 
+interface ChatAttachment {
+  name: string;
+  type: string;        // MIME type
+  size: number;
+  dataUrl: string;     // base64 data URL for images, text content for text files
+  isImage: boolean;
+}
+
 interface ChatMsg {
   id: string;
   role: "user" | "assistant" | "system" | "agent" | "approval";
@@ -45,6 +51,7 @@ interface ChatMsg {
   agent?: string;
   timestamp: number;
   imageUrl?: string;
+  attachments?: ChatAttachment[];
   codeBlock?: { lang: string; code: string; output?: string };
   streaming?: boolean;
   buildResult?: BuildResultData;
@@ -84,23 +91,39 @@ const PROVIDER_META: Record<string, { icon: string; color: string; label: string
   deepseek: { icon: "◈", color: "#a78bfa", label: "DeepSeek", fuelCost: 3 },
   google: { icon: "◈", color: "#ffd700", label: "Google", fuelCost: 10 },
   nvidia: { icon: "◈", color: "#76b900", label: "NVIDIA NIM", fuelCost: 1 },
+  openrouter: { icon: "◈", color: "#f97316", label: "OpenRouter", fuelCost: 0 },
+  qwen: { icon: "◈", color: "#6366f1", label: "Qwen", fuelCost: 0 },
 };
 
 // Cloud models to show as locked when no API key is configured
 const LOCKED_CLOUD_MODELS: Array<{ id: string; name: string; provider: string }> = [
+  // Anthropic
+  { id: "anthropic/claude-sonnet-4-6", name: "Claude Sonnet 4.6", provider: "anthropic" },
   { id: "anthropic/claude-sonnet-4-20250514", name: "Claude Sonnet 4", provider: "anthropic" },
+  { id: "anthropic/claude-haiku-4-5", name: "Claude Haiku 4.5", provider: "anthropic" },
   { id: "anthropic/claude-opus-4-6", name: "Claude Opus 4.6", provider: "anthropic" },
+  // OpenAI
+  { id: "openai/gpt-4.1-nano", name: "GPT-4.1 Nano", provider: "openai" },
+  { id: "openai/gpt-4.1-mini", name: "GPT-4.1 Mini", provider: "openai" },
+  { id: "openai/gpt-4.1", name: "GPT-4.1", provider: "openai" },
+  { id: "openai/gpt-5-mini", name: "GPT-5 Mini", provider: "openai" },
+  { id: "openai/gpt-5", name: "GPT-5", provider: "openai" },
   { id: "openai/gpt-4o", name: "GPT-4o", provider: "openai" },
   { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "openai" },
+  // DeepSeek
   { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", provider: "deepseek" },
   { id: "deepseek/deepseek-coder", name: "DeepSeek Coder", provider: "deepseek" },
+  // Google
   { id: "google/gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "google" },
   { id: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "google" },
+  // OpenRouter (free tier)
+  { id: "openrouter/qwen/qwen3.6-plus:free", name: "Qwen 3.6 Plus (Free, 1M ctx)", provider: "openrouter" },
+  { id: "openrouter/meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B (Free)", provider: "openrouter" },
   // NVIDIA NIM (free tier)
-  { id: "nvidia/deepseek-v3.1-terminus", name: "DeepSeek V3.1 Terminus 671B", provider: "nvidia" },
-  { id: "nvidia/nemotron-ultra-253b", name: "Nemotron Ultra 253B", provider: "nvidia" },
-  { id: "nvidia/glm-4.7", name: "GLM-4.7 Agentic Coding", provider: "nvidia" },
-  { id: "nvidia/llama-3.3-70b", name: "Llama 3.3 70B (NIM)", provider: "nvidia" },
+  { id: "nvidia/deepseek-ai/deepseek-v3.1-terminus", name: "DeepSeek V3.1 Terminus 671B", provider: "nvidia" },
+  { id: "nvidia/meta/llama-3.3-70b-instruct", name: "Llama 3.3 70B (NIM)", provider: "nvidia" },
+  { id: "nvidia/qwen/qwen3.5-397b-a17b", name: "Qwen 3.5 397B", provider: "nvidia" },
+  { id: "nvidia/z-ai/glm4.7", name: "GLM-4.7 Agentic Coding", provider: "nvidia" },
 ];
 
 const AUTONOMY_LABELS: Record<number, string> = {
@@ -137,9 +160,6 @@ function normalizeAgentRunStatus(status: string): AgentRunStatus {
   }
   return "Idle";
 }
-
-const BUILD_ACTION_KEYWORDS = ["build", "create", "generate", "make me", "design", "fix", "clone"];
-const BUILD_TARGET_KEYWORDS = ["website", "site", "app", "page", "project", "component", "landing", "portfolio", "dashboard", "frontend"];
 
 function isBuildRequest(msg: string): boolean {
   // Only route to Conductor (file-generating build) when the message starts with
@@ -301,17 +321,24 @@ export default function AiChatHub() {
     try {
       const saved = localStorage.getItem("nexus-chat-conversations");
       if (saved) {
-        return (JSON.parse(saved) as Conversation[]).map((conversation) =>
-          conversation.messages.length === 0
-            ? {
-                ...conversation,
-                messages: [createWelcomeMessage(conversation.model)],
-                updatedAt: Date.now(),
-              }
-            : conversation,
-        );
+        const parsed = JSON.parse(saved) as Conversation[];
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+          .filter((c) => c && typeof c.id === "string" && Array.isArray(c.messages))
+          .map((conversation) => ({
+            ...conversation,
+            // Ensure every message has a string content field
+            messages: (conversation.messages.length === 0
+              ? [createWelcomeMessage(conversation.model)]
+              : conversation.messages
+            ).map((m) => ({ ...m, content: m.content ?? "" })),
+            updatedAt: conversation.updatedAt ?? Date.now(),
+          }));
       }
-    } catch { /* ignore corrupt data */ }
+    } catch {
+      // Corrupt data — wipe it to prevent repeated crashes
+      try { localStorage.removeItem("nexus-chat-conversations"); } catch { /* ignore */ }
+    }
     return [];
   });
   const [activeConvId, setActiveConvId] = useState(() => {
@@ -330,6 +357,8 @@ export default function AiChatHub() {
   );
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
   const [input, setInput] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<ChatAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [historySearch, setHistorySearch] = useState("");
@@ -358,14 +387,6 @@ export default function AiChatHub() {
   const [comparePrompt, setComparePrompt] = useState("");
   const [compareResults, setCompareResults] = useState<[string, string]>(["", ""]);
   const [comparing, setComparing] = useState(false);
-
-  // builder state (Experience Layer)
-  const [builderMessages, setBuilderMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
-  const [builderInput, setBuilderInput] = useState("");
-  const [builderSending, setBuilderSending] = useState(false);
-  const [builderStarted, setBuilderStarted] = useState(false);
-  const [builderProjectId, setBuilderProjectId] = useState<string | null>(null);
-  const [teachModeActive, setTeachModeActive] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -778,6 +799,7 @@ export default function AiChatHub() {
   };
 
   const highlightCode = (content: string) => {
+    if (!content) return "";
     return content.replace(/```(\w+)?\n([\s\S]*?)```/g, (_match, lang: string, code: string) => {
       const l = lang || "text";
       return `<div class="ch-code-block"><div class="ch-code-header"><span>${l}</span><button class="ch-code-run" data-code="${encodeURIComponent(code.trim())}">▶ Run</button></div><pre class="ch-code-pre"><code>${code.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></pre></div>`;
@@ -785,6 +807,7 @@ export default function AiChatHub() {
   };
 
   const renderContent = (content: string) => {
+    if (!content) return "";
     let html = content;
     html = highlightCode(html);
     html = html
@@ -797,7 +820,7 @@ export default function AiChatHub() {
   const updateStreamingMsg = useCallback((convId: string, msgId: string, content: string, done: boolean) => {
     setConversations(prev => prev.map(c => c.id === convId ? {
       ...c,
-      messages: c.messages.map(m => m.id === msgId ? { ...m, content, streaming: !done } : m),
+      messages: c.messages.map(m => m.id === msgId ? { ...m, content: content ?? "", streaming: !done } : m),
       updatedAt: Date.now(),
     } : c));
   }, []);
@@ -838,26 +861,84 @@ export default function AiChatHub() {
     }
   }, [selectedModel, logAudit, updateStreamingMsg, appendBuildResult]);
 
+  /* ─── file attachment helpers ─── */
+  const processFiles = useCallback((files: FileList | File[]) => {
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    const fileArray = Array.from(files);
+    fileArray.forEach(file => {
+      if (file.size > MAX_FILE_SIZE) return;
+      const isImage = file.type.startsWith("image/");
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        setPendingFiles(prev => {
+          if (prev.some(f => f.name === file.name && f.size === file.size)) return prev;
+          return [...prev, { name: file.name, type: file.type, size: file.size, dataUrl, isImage }];
+        });
+      };
+      if (isImage) {
+        reader.readAsDataURL(file);
+      } else {
+        reader.readAsText(file);
+      }
+    });
+  }, []);
+
+  const removeFile = useCallback((name: string) => {
+    setPendingFiles(prev => prev.filter(f => f.name !== name));
+  }, []);
+
+  const handleFileDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.files.length > 0) processFiles(e.dataTransfer.files);
+  }, [processFiles]);
+
+  const handleFilePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const file = items[i].getAsFile();
+      if (file) files.push(file);
+    }
+    if (files.length > 0) processFiles(files);
+  }, [processFiles]);
+
   /* ─── send message (real backend, multi-provider) ─── */
   const sendMessage = useCallback(async () => {
-    if (!input.trim() || sending) return;
+    if ((!input.trim() && pendingFiles.length === 0) || sending) return;
     const model = models.find(m => m.id === selectedModel);
     if (model?.locked) {
       setShowApiKeyModal(selectedModel.split("/")[0]);
       return;
     }
-    const userMsg: ChatMsg = { id: `m-${Date.now()}`, role: "user", content: input, timestamp: Date.now() };
-    const currentInput = input;
+    // Build message content with file context
+    const attachedFiles = [...pendingFiles];
+    let messageContent = input;
+    const textFiles = attachedFiles.filter(f => !f.isImage);
+    if (textFiles.length > 0) {
+      const fileContext = textFiles.map(f => `--- ${f.name} ---\n${f.dataUrl}`).join("\n\n");
+      messageContent = messageContent ? `${messageContent}\n\n${fileContext}` : fileContext;
+    }
+
+    const userMsg: ChatMsg = {
+      id: `m-${Date.now()}`, role: "user", content: input || `[Attached ${attachedFiles.length} file${attachedFiles.length > 1 ? "s" : ""}]`,
+      timestamp: Date.now(),
+      attachments: attachedFiles.length > 0 ? attachedFiles : undefined,
+    };
+    const currentInput = messageContent;
     const currentConvId = activeConvId;
     const isOllamaModel = selectedModel.startsWith("ollama/");
     const ollamaModelName = isOllamaModel ? selectedModel.slice("ollama/".length) : selectedModel;
 
     setConversations(prev => prev.map(c => c.id === currentConvId ? {
       ...c, messages: [...c.messages, userMsg], updatedAt: Date.now(),
-      title: c.messages.length === 0 ? currentInput.slice(0, 50) : c.title,
+      title: c.messages.length === 0 ? (input || attachedFiles[0]?.name || "File upload").slice(0, 50) : c.title,
     } : c));
 
     setInput("");
+    setPendingFiles([]);
     setSending(true);
     setFuelUsed(f => f + (model?.fuelCost ?? 5));
     logAudit(`Sent to ${model?.name ?? selectedModel} via ${providerDisplayName(selectedModel)}`);
@@ -894,7 +975,12 @@ export default function AiChatHub() {
             updateStreamingMsg(currentConvId, assistantMsgId, full, done);
           });
 
-          const messages = [{ role: "user" as const, content: currentInput }];
+          const imageAttachments = attachedFiles.filter(f => f.isImage);
+          const ollamaMsg: Record<string, unknown> = { role: "user", content: currentInput };
+          if (imageAttachments.length > 0) {
+            ollamaMsg.images = imageAttachments.map(f => f.dataUrl.replace(/^data:image\/\w+;base64,/, ""));
+          }
+          const messages = [ollamaMsg as { role: string; content: string }];
           await chatWithOllama(messages, ollamaModelName);
         } catch (streamErr) {
           const errMsg = String(streamErr);
@@ -934,7 +1020,7 @@ export default function AiChatHub() {
       setSending(false);
       streamingMsgIdRef.current = null;
     }
-  }, [input, sending, selectedModel, activeConvId, models, logAudit, updateStreamingMsg, sendBuildRequest]);
+  }, [input, sending, selectedModel, activeConvId, models, logAudit, updateStreamingMsg, sendBuildRequest, pendingFiles]);
 
   const newConversation = useCallback(() => {
     const conv = createConversation(selectedModel);
@@ -988,61 +1074,8 @@ export default function AiChatHub() {
     setComparing(false);
   }, [comparePrompt, compareModels, models, logAudit]);
 
-  // ── Builder handler ──
-  const handleBuilderSend = useCallback(async () => {
-    const text = builderInput.trim();
-    if (!text) return;
-    setBuilderMessages(prev => [...prev, { role: "user", content: text }]);
-    setBuilderInput("");
-    setBuilderSending(true);
-    try {
-      let raw: string;
-      if (teachModeActive && builderProjectId) {
-        raw = await teachModeRespond(builderProjectId, text);
-        const step = JSON.parse(raw);
-        setBuilderMessages(prev => [...prev, {
-          role: "assistant",
-          content: `**Step ${step.step_number}/${step.total_steps}: ${step.title}**\n\n${step.explanation}${step.analogy ? `\n\n[Tip] *${step.analogy}*` : ""}${step.implementation_preview ? `\n\n\`\`\`\n${step.implementation_preview}\n\`\`\`` : ""}`,
-        }]);
-      } else if (!builderStarted) {
-        raw = await startConversationalBuild(text);
-        setBuilderStarted(true);
-        const resp = JSON.parse(raw);
-        if (resp.project_id) setBuilderProjectId(resp.project_id);
-        setBuilderMessages(prev => [...prev, { role: "assistant", content: resp.message }]);
-        if (teachModeActive && resp.project_id) {
-          const teachRaw = await startTeachMode(resp.project_id);
-          const step = JSON.parse(teachRaw);
-          setBuilderMessages(prev => [...prev, { role: "assistant", content: `**Teach Mode Active**\n\n**${step.title}**: ${step.explanation}${step.analogy ? `\n\n[Tip] *${step.analogy}*` : ""}` }]);
-        }
-      } else if (builderProjectId) {
-        // Check if this is a remix request
-        const lower = text.toLowerCase();
-        if (lower.startsWith("change ") || lower.startsWith("make ") || lower.startsWith("add ") || lower.startsWith("remove ")) {
-          raw = await remixProject(builderProjectId, text);
-          const result = JSON.parse(raw);
-          const statusEmoji = result.applied ? "[Done]" : "[Pending]";
-          setBuilderMessages(prev => [...prev, {
-            role: "assistant",
-            content: `${statusEmoji} **${result.classification}** change: ${result.description}\n\n${result.applied ? "Done!" : `This will take ~${result.estimated_minutes} minutes. Ready to build?`}`,
-          }]);
-        } else {
-          raw = await builderRespond(text);
-          const resp = JSON.parse(raw);
-          if (resp.project_id) setBuilderProjectId(resp.project_id);
-          setBuilderMessages(prev => [...prev, { role: "assistant", content: resp.message }]);
-        }
-      } else {
-        raw = await builderRespond(text);
-        const resp = JSON.parse(raw);
-        if (resp.project_id) setBuilderProjectId(resp.project_id);
-        setBuilderMessages(prev => [...prev, { role: "assistant", content: resp.message }]);
-      }
-    } catch (err) {
-      setBuilderMessages(prev => [...prev, { role: "assistant", content: `Error: ${err}` }]);
-    }
-    setBuilderSending(false);
-  }, [builderInput, builderStarted, builderProjectId, teachModeActive]);
+
+
 
   const generateImage = useCallback(() => {
     if (!input.trim()) return;
@@ -1095,9 +1128,9 @@ export default function AiChatHub() {
 
         {/* views */}
         <div className="ch-views">
-          {([["chat", "chat", "Chat"], ["build", "build", "Build"], ["compare", "compare", "Compare"], ["history", "history", "History"]] as const).map(([id, icon, label]) => (
+          {([["chat", "chat", "Chat"], ["compare", "compare", "Compare"], ["history", "history", "History"]] as const).map(([id, icon, label]) => (
             <button key={id} className={`ch-view-btn cursor-pointer ${view === id ? "active" : ""}`} onClick={() => setView(id)}>
-              <span>{icon === "chat" ? "\u2301" : icon === "build" ? <Hammer size={14} aria-hidden="true" /> : icon === "compare" ? "\u21D4" : <Clock size={14} aria-hidden="true" />}</span> {label}
+              <span>{icon === "chat" ? "\u2301" : icon === "compare" ? "\u21D4" : <Clock size={14} aria-hidden="true" />}</span> {label}
             </button>
           ))}
         </div>
@@ -1465,6 +1498,19 @@ export default function AiChatHub() {
                     {msg.imageUrl && (
                       <div className="ch-msg-image" style={{ background: msg.imageUrl }} />
                     )}
+                    {msg.attachments && msg.attachments.length > 0 && (
+                      <div className="ch-msg-attachments">
+                        {msg.attachments.filter(a => a.isImage).map(a => (
+                          <img key={a.name} src={a.dataUrl} alt={a.name} className="ch-msg-attach-img" title={a.name} />
+                        ))}
+                        {msg.attachments.filter(a => !a.isImage).map(a => (
+                          <div key={a.name} className="ch-msg-attach-file">
+                            <span>📄 {a.name}</span>
+                            <span className="ch-msg-attach-size">{(a.size / 1024).toFixed(1)} KB</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {/* HITL Approval card */}
                     {msg.approval ? (
                       <div className={`ch-approval-card ch-approval-${msg.approvalStatus}`}>
@@ -1537,12 +1583,46 @@ export default function AiChatHub() {
             </div>
 
             {/* input */}
-            <div className="ch-input-bar">
+            <div
+              className="ch-input-bar"
+              onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+              onDrop={handleFileDrop}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,.txt,.md,.rs,.py,.js,.ts,.json,.toml,.yaml,.yml,.csv,.log,.sh,.sql,.go,.java,.c,.cpp,.h,.css,.html"
+                onChange={e => { if (e.target.files) processFiles(e.target.files); e.target.value = ""; }}
+                style={{ display: "none" }}
+              />
+              {pendingFiles.length > 0 && (
+                <div className="ch-attach-preview">
+                  {pendingFiles.map(f => (
+                    <div key={f.name} className="ch-attach-chip">
+                      {f.isImage ? (
+                        <img src={f.dataUrl} alt={f.name} className="ch-attach-thumb" />
+                      ) : (
+                        <span className="ch-attach-file-icon">📄</span>
+                      )}
+                      <span className="ch-attach-name">{f.name}</span>
+                      <button className="ch-attach-remove" onClick={() => removeFile(f.name)} title="Remove">×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="ch-input-row">
-                <textarea ref={inputRef} className="ch-input" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder={`Message ${activeModel?.name ?? "AI"}...`} rows={1} />
+                <button
+                  className="ch-input-btn cursor-pointer"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Attach files or images"
+                >
+                  <Paperclip size={16} aria-hidden="true" />
+                </button>
+                <textarea ref={inputRef} className="ch-input" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} onPaste={handleFilePaste} placeholder={`Message ${activeModel?.name ?? "AI"}... (drop files here)`} rows={1} />
                 <div className="ch-input-actions">
                   <button className="ch-input-btn cursor-pointer" onClick={generateImage} title="Generate image" disabled={!input.trim()}><Image size={16} aria-hidden="true" /></button>
-                  <button className="ch-send-btn" onClick={sendMessage} disabled={!input.trim() || sending}>
+                  <button className="ch-send-btn" onClick={sendMessage} disabled={(!input.trim() && pendingFiles.length === 0) || sending}>
                     {sending ? "..." : "→"}
                   </button>
                 </div>
@@ -1602,91 +1682,6 @@ export default function AiChatHub() {
                 })}
               </div>
             )}
-          </div>
-        )}
-
-        {/* ═══ BUILD VIEW (Conversational Builder) ═══ */}
-        {view === "build" && (
-          <div className="ch-compare" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <div className="ch-cmp-header">
-              <h3 className="ch-cmp-title"><Hammer size={18} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} /> Build Anything — Just Describe It</h3>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  className={`ch-view-btn ${teachModeActive ? "active" : ""}`}
-                  style={{ fontSize: 12, padding: "4px 10px" }}
-                  onClick={() => setTeachModeActive(!teachModeActive)}
-                >
-                  {teachModeActive ? <><GraduationCap size={14} aria-hidden="true" /> Teach Mode ON</> : <><GraduationCap size={14} aria-hidden="true" /> Teach Me</>}
-                </button>
-              </div>
-            </div>
-
-            {/* Builder chat messages */}
-            <div style={{ flex: 1, overflow: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 12 }}>
-              {builderMessages.length === 0 && (
-                <div style={{ textAlign: "center", padding: "40px 20px", opacity: 0.6 }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}><Rocket size={48} aria-hidden="true" /></div>
-                  <h3 style={{ margin: "0 0 8px", color: "#e2e8f0" }}>What do you want to build?</h3>
-                  <p style={{ margin: 0, color: "#94a3b8", fontSize: 14 }}>
-                    Describe your idea in plain English. No coding required.
-                  </p>
-                  <div style={{ marginTop: 20, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
-                    {["I want to sell t-shirts online", "Build me a portfolio website", "I need a customer support bot", "Help me automate my invoicing"].map(suggestion => (
-                      <button
-                        key={suggestion}
-                        style={{ background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", borderRadius: 8, padding: "8px 14px", color: "#a5b4fc", cursor: "pointer", fontSize: 13 }}
-                        onClick={() => { setBuilderInput(suggestion); }}
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {builderMessages.map((msg, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
-                  <div style={{
-                    maxWidth: "80%",
-                    padding: "12px 16px",
-                    borderRadius: 12,
-                    background: msg.role === "user" ? "rgba(99,102,241,0.25)" : "rgba(30,41,59,0.8)",
-                    border: msg.role === "user" ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(51,65,85,0.5)",
-                    color: "#e2e8f0",
-                    fontSize: 14,
-                    lineHeight: 1.6,
-                    whiteSpace: "pre-wrap",
-                  }}>
-                    {msg.content}
-                  </div>
-                </div>
-              ))}
-              {builderSending && (
-                <div style={{ display: "flex", justifyContent: "flex-start" }}>
-                  <div style={{ padding: "12px 16px", borderRadius: 12, background: "rgba(30,41,59,0.8)", border: "1px solid rgba(51,65,85,0.5)", color: "#94a3b8" }}>
-                    Thinking...
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Builder input */}
-            <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(51,65,85,0.5)", display: "flex", gap: 8 }}>
-              <textarea
-                value={builderInput}
-                onChange={e => setBuilderInput(e.target.value)}
-                placeholder={builderStarted ? "Describe what you want to change..." : "Describe what you want to build..."}
-                rows={2}
-                style={{ flex: 1, background: "rgba(15,23,42,0.6)", border: "1px solid rgba(51,65,85,0.5)", borderRadius: 8, padding: "10px 12px", color: "#e2e8f0", fontSize: 14, resize: "none" }}
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleBuilderSend(); } }}
-              />
-              <button
-                style={{ background: "rgba(99,102,241,0.3)", border: "1px solid rgba(99,102,241,0.4)", borderRadius: 8, padding: "10px 16px", color: "#a5b4fc", cursor: "pointer", fontWeight: 600 }}
-                onClick={handleBuilderSend}
-                disabled={!builderInput.trim() || builderSending}
-              >
-                {builderStarted ? "Send" : "Build It"}
-              </button>
-            </div>
           </div>
         )}
 

@@ -204,35 +204,35 @@ export default function Scheduler(): JSX.Element {
   };
 
   return (
-    <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
+    <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto", color: "#e2e8f0" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>Background Scheduler</h1>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => void refresh()} style={btnStyle}>Refresh</button>
-          <button onClick={() => setShowCreate(!showCreate)} style={{ ...btnStyle, background: "#2563eb", color: "#fff" }}>
+          <button onClick={() => setShowCreate(!showCreate)} style={{ ...btnStyle, background: "rgba(37,99,235,0.3)", border: "1px solid rgba(37,99,235,0.5)", color: "#60a5fa" }}>
             {showCreate ? "Cancel" : "+ New Schedule"}
           </button>
         </div>
       </div>
 
       {error && (
-        <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 6, padding: 12, marginBottom: 12, color: "#991b1b" }}>
+        <div style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, padding: 12, marginBottom: 12, color: "#f87171" }}>
           {error}
-          <button onClick={() => setError(null)} style={{ marginLeft: 8, cursor: "pointer", background: "none", border: "none", color: "#991b1b", fontWeight: 700 }}>×</button>
+          <button onClick={() => setError(null)} style={{ marginLeft: 8, cursor: "pointer", background: "none", border: "none", color: "#f87171", fontWeight: 700 }}>×</button>
         </div>
       )}
 
       {runResult && (
-        <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 6, padding: 12, marginBottom: 12, fontFamily: "monospace", fontSize: 13, whiteSpace: "pre-wrap", maxHeight: 200, overflow: "auto" }}>
+        <div style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 6, padding: 12, marginBottom: 12, fontFamily: "monospace", fontSize: 13, whiteSpace: "pre-wrap", maxHeight: 200, overflow: "auto", color: "#86efac" }}>
           {runResult}
-          <button onClick={() => setRunResult(null)} style={{ float: "right", cursor: "pointer", background: "none", border: "none", fontWeight: 700 }}>×</button>
+          <button onClick={() => setRunResult(null)} style={{ float: "right", cursor: "pointer", background: "none", border: "none", fontWeight: 700, color: "#86efac" }}>×</button>
         </div>
       )}
 
       {/* ── Create Form ── */}
       {showCreate && (
-        <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: 20, marginBottom: 20 }}>
-          <h3 style={{ marginTop: 0 }}>Create Schedule</h3>
+        <div style={{ background: "rgba(30,41,59,0.6)", border: "1px solid rgba(100,116,139,0.3)", borderRadius: 8, padding: 20, marginBottom: 20 }}>
+          <h3 style={{ marginTop: 0, color: "#e2e8f0" }}>Create Schedule</h3>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <label>
               Name
@@ -310,7 +310,7 @@ export default function Scheduler(): JSX.Element {
               Require HITL Approval
             </label>
           </div>
-          <button onClick={() => void handleCreate()} style={{ ...btnStyle, background: "#16a34a", color: "#fff", marginTop: 12 }}>
+          <button onClick={() => void handleCreate()} style={{ ...btnStyle, background: "rgba(22,163,74,0.3)", border: "1px solid rgba(22,163,74,0.5)", color: "#4ade80", marginTop: 12 }}>
             Create Schedule
           </button>
         </div>
@@ -328,7 +328,7 @@ export default function Scheduler(): JSX.Element {
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
             <thead>
-              <tr style={{ borderBottom: "2px solid #e2e8f0", textAlign: "left" }}>
+              <tr style={{ borderBottom: "2px solid rgba(100,116,139,0.3)", textAlign: "left" }}>
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>Agent</th>
                 <th style={thStyle}>Trigger</th>
@@ -342,7 +342,7 @@ export default function Scheduler(): JSX.Element {
             </thead>
             <tbody>
               {entries.map((e) => (
-                <tr key={e.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <tr key={e.id} style={{ borderBottom: "1px solid rgba(100,116,139,0.2)" }}>
                   <td style={tdStyle}>
                     <strong>{e.name}</strong>
                     {e.requires_hitl && <span style={{ marginLeft: 4, color: "#f59e0b", fontSize: 11 }}>[HITL]</span>}
@@ -362,10 +362,10 @@ export default function Scheduler(): JSX.Element {
                       <button onClick={() => void handleToggle(e)} style={smallBtnStyle}>
                         {e.enabled ? "Disable" : "Enable"}
                       </button>
-                      <button onClick={() => void handleRunNow(e.id)} style={{ ...smallBtnStyle, background: "#dbeafe", color: "#1e40af" }}>
+                      <button onClick={() => void handleRunNow(e.id)} style={{ ...smallBtnStyle, background: "rgba(59,130,246,0.15)", color: "#60a5fa" }}>
                         Run Now
                       </button>
-                      <button onClick={() => void handleDelete(e.id)} style={{ ...smallBtnStyle, background: "#fee2e2", color: "#991b1b" }}>
+                      <button onClick={() => void handleDelete(e.id)} style={{ ...smallBtnStyle, background: "rgba(239,68,68,0.15)", color: "#f87171" }}>
                         Delete
                       </button>
                     </div>
@@ -383,20 +383,22 @@ export default function Scheduler(): JSX.Element {
 const btnStyle: React.CSSProperties = {
   padding: "8px 16px",
   borderRadius: 6,
-  border: "1px solid #e2e8f0",
+  border: "1px solid rgba(100,116,139,0.3)",
   cursor: "pointer",
   fontWeight: 600,
   fontSize: 14,
-  background: "#fff",
+  background: "rgba(30,41,59,0.6)",
+  color: "#e2e8f0",
 };
 
 const smallBtnStyle: React.CSSProperties = {
   padding: "4px 8px",
   borderRadius: 4,
-  border: "1px solid #e2e8f0",
+  border: "1px solid rgba(100,116,139,0.3)",
   cursor: "pointer",
   fontSize: 12,
-  background: "#f8fafc",
+  background: "rgba(30,41,59,0.6)",
+  color: "#e2e8f0",
 };
 
 const inputStyle: React.CSSProperties = {
@@ -404,11 +406,13 @@ const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "8px 10px",
   borderRadius: 6,
-  border: "1px solid #cbd5e1",
+  border: "1px solid rgba(100,116,139,0.4)",
   marginTop: 4,
   fontSize: 14,
   boxSizing: "border-box",
+  background: "rgba(15,23,42,0.8)",
+  color: "#e2e8f0",
 };
 
-const thStyle: React.CSSProperties = { padding: "8px 12px", fontWeight: 600, fontSize: 13, color: "#475569" };
+const thStyle: React.CSSProperties = { padding: "8px 12px", fontWeight: 600, fontSize: 13, color: "#94a3b8" };
 const tdStyle: React.CSSProperties = { padding: "10px 12px" };

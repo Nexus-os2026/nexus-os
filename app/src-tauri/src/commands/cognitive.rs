@@ -695,14 +695,12 @@ impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
                         .to_string(),
                 ));
             } else {
-                provider_from_prefixed_model(&route_model, &prov_config).unwrap_or_else(|_| {
-                    (
-                        select_provider(&prov_config).unwrap_or_else(|_| {
-                            Box::new(OllamaProvider::from_env()) as Box<dyn LlmProvider>
-                        }),
-                        route_model,
-                    )
-                })
+                provider_from_prefixed_model(&route_model, &prov_config).map_err(|e| {
+                    nexus_kernel::errors::AgentError::SupervisorError(format!(
+                        "Cannot resolve model '{}': {}. Please select a different model.",
+                        route_model, e
+                    ))
+                })?
             }
         } else {
             let provider = select_provider(&prov_config)?;

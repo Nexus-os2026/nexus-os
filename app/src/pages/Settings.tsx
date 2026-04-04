@@ -192,7 +192,7 @@ export function Settings({
             "anthropic-version": "2023-06-01",
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
+          body: JSON.stringify({ model: "claude-haiku-4-5", max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
         });
         setStatuses((prev) => ({ ...prev, [id]: (res.ok || res.status === 400) ? "ok" : "error" }));
       } else {
@@ -527,6 +527,7 @@ export function Settings({
             {/* API Key Inputs */}
             <h3 className="st-card-title" style={{ marginTop: "1rem" }}><Key size={16} className="inline-icon" /> API Keys</h3>
             {[
+              { label: "OpenRouter", key: "openrouter_api_key" as const, hint: "FREE models — Llama 3.3 70B, Gemma 3 27B, GPT-OSS 120B (openrouter.ai)" },
               { label: "DeepSeek", key: "deepseek_api_key" as const, hint: "~$0.14/M tokens (cheapest)" },
               { label: "NVIDIA NIM", key: "nvidia_api_key" as const, hint: "42 free models — DeepSeek V3.1, GLM-4.7, Nemotron, Llama 4, Qwen 3.5" },
               { label: "OpenAI", key: "openai_api_key" as const, hint: "~$5/M tokens" },

@@ -1,5 +1,5 @@
 use crate::interpreter::{Framework, PageSpec, SectionKind, WebsiteSpec};
-use crate::styles::generate_theme;
+use crate::styles::{generate_theme, select_design_tokens};
 use crate::templates::default_template_engine;
 use crate::threejs::{generate_3d_scene, scene_component_name};
 use nexus_sdk::errors::AgentError;
@@ -26,6 +26,9 @@ pub fn generate_website(spec: &WebsiteSpec) -> Result<Vec<FileChange>, AgentErro
 
     let mut changes = Vec::new();
     let theme = generate_theme(spec.theme.mood.as_str(), None);
+    // Also select v2 design tokens for enhanced CSS output
+    let description = spec.pages.first().map(|p| p.content.as_str()).unwrap_or("");
+    let design_tokens = select_design_tokens(description);
     let template_engine = default_template_engine();
 
     changes.push(FileChange::Create(
@@ -57,9 +60,45 @@ pub fn generate_website(spec: &WebsiteSpec) -> Result<Vec<FileChange>, AgentErro
         "import React from 'react';\nimport ReactDOM from 'react-dom/client';\nimport App from './App';\nimport './styles/theme.css';\n\nReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(\n  <React.StrictMode>\n    <App />\n  </React.StrictMode>,\n);\n"
             .to_string(),
     ));
+
+    // Enhanced theme CSS with v2 design tokens, animations, and texture overlay
+    let enhanced_css = format!(
+        "{legacy_css}\n\n\
+         /* === Phase 0c Design Token System === */\n\
+         {v2_css}\n\n\
+         /* === Animations === */\n\
+         @keyframes fadeInUp {{\n\
+         \x20 from {{ opacity: 0; transform: translateY(20px); }}\n\
+         \x20 to {{ opacity: 1; transform: translateY(0); }}\n\
+         }}\n\n\
+         .animate-in {{\n\
+         \x20 opacity: 0;\n\
+         \x20 animation: fadeInUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;\n\
+         }}\n\n\
+         /* === Texture Overlay === */\n\
+         {texture_css}\n",
+        legacy_css = theme.css,
+        v2_css = design_tokens.to_css_variables(),
+        texture_css = if design_tokens.texture.css_overlay().is_empty() {
+            "/* no texture */".to_string()
+        } else {
+            format!(
+                "body::before {{\n\
+                 \x20 content: '';\n\
+                 \x20 position: fixed;\n\
+                 \x20 inset: 0;\n\
+                 \x20 pointer-events: none;\n\
+                 \x20 z-index: 9999;\n\
+                 \x20 {}\n\
+                 }}",
+                design_tokens.texture.css_overlay()
+            )
+        },
+    );
+
     changes.push(FileChange::Create(
         "src/styles/theme.css".to_string(),
-        theme.css,
+        enhanced_css,
     ));
 
     let mut page_imports = Vec::new();
@@ -93,7 +132,7 @@ pub fn generate_website(spec: &WebsiteSpec) -> Result<Vec<FileChange>, AgentErro
     }
 
     let app_tsx = format!(
-        "import React, {{ useMemo, useState }} from 'react';\n\
+        "import React, {{ useEffect, useMemo, useState }} from 'react';\n\
 {imports}\n\
 \n\
 type RouteDef = {{ key: string; label: string; component: () => JSX.Element }};\n\
@@ -105,16 +144,32 @@ export default function App(): JSX.Element {{\n\
   const current = useMemo(() => routes.find((route) => route.key === active) ?? routes[0], [active]);\n\
   const CurrentComponent = current.component;\n\
 \n\
+  // Scroll-triggered reveal animations\n\
+  useEffect(() => {{\n\
+    const observer = new IntersectionObserver((entries) => {{\n\
+      entries.forEach((entry, i) => {{\n\
+        if (entry.isIntersecting) {{\n\
+          (entry.target as HTMLElement).style.animationDelay = `${{i * 100}}ms`;\n\
+          entry.target.classList.add('animate-in');\n\
+          observer.unobserve(entry.target);\n\
+        }}\n\
+      }});\n\
+    }}, {{ threshold: 0.1 }});\n\
+    document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));\n\
+    return () => observer.disconnect();\n\
+  }}, [active]);\n\
+\n\
   return (\n\
-    <div className=\"min-h-screen bg-bg text-text\">\n\
-      <header className=\"sticky top-0 z-20 border-b border-white/10 bg-surface/80 backdrop-blur\">\n\
-        <nav aria-label=\"page navigation\" className=\"mx-auto flex max-w-6xl gap-2 px-4 py-3\">\n\
+    <div className=\"min-h-screen\" style={{{{ background: 'var(--color-bg, var(--bg))', color: 'var(--color-text, var(--text))' }}}}>\n\
+      <header className=\"sticky top-0 z-20 border-b border-white/10\" style={{{{ background: 'var(--color-surface, var(--surface))', backdropFilter: 'blur(12px)', opacity: 0.95 }}}}>\n\
+        <nav aria-label=\"page navigation\" className=\"mx-auto flex max-w-6xl gap-2 px-4 py-3\" style={{{{ fontFamily: 'var(--font-body, var(--font-body, sans-serif))' }}}}>\n\
           {{routes.map((route) => (\n\
             <button\n\
               key={{route.key}}\n\
               type=\"button\"\n\
               onClick={{() => setActive(route.key)}}\n\
-              className={{`rounded-full px-4 py-2 text-sm transition-colors ${{active === route.key ? 'bg-accent text-black' : 'bg-black/20 text-white'}}`}}\n\
+              className={{`rounded-full px-4 py-2 text-sm font-medium transition-all duration-200`}}\n\
+              style={{active === route.key ? {{ background: 'var(--color-accent, var(--accent))', color: 'white' }} : {{ background: 'transparent', color: 'var(--color-text-secondary, var(--text))' }}}}\n\
             >\n\
               {{route.label}}\n\
             </button>\n\
@@ -188,7 +243,7 @@ fn tsconfig_content() -> String {
 }
 
 fn index_html_content() -> String {
-    "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>Nexus Web Builder</title>\n  </head>\n  <body>\n    <div id=\"root\"></div>\n    <script type=\"module\" src=\"/src/main.tsx\"></script>\n  </body>\n</html>\n"
+    "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>Nexus Web Builder</title>\n    <style>*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; } html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }</style>\n  </head>\n  <body>\n    <div id=\"root\"></div>\n    <script type=\"module\" src=\"/src/main.tsx\"></script>\n  </body>\n</html>\n"
         .to_string()
 }
 

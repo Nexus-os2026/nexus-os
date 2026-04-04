@@ -382,6 +382,7 @@ mod tests {
                 token_count: max_tokens.min(42),
                 model_name: model.to_string(),
                 tool_calls: Vec::new(),
+                input_tokens: None,
             })
         }
 
@@ -408,6 +409,7 @@ mod tests {
                 token_count: max_tokens.min(8),
                 model_name: model.to_string(),
                 tool_calls: Vec::new(),
+                input_tokens: None,
             })
         }
 
