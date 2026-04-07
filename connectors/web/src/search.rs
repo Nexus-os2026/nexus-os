@@ -4,17 +4,21 @@ use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::config::load_config;
 use nexus_kernel::errors::AgentError;
 use nexus_kernel::firewall::{ContentOrigin, SemanticBoundary};
-use reqwest::blocking::Client;
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashSet;
-use std::time::Duration;
+use std::process::{Command, Stdio};
 use url::Url;
 
 const BRAVE_SEARCH_ENDPOINT: &str = "https://api.search.brave.com/res/v1/web/search";
 const DUCKDUCKGO_HTML_ENDPOINT: &str = "https://html.duckduckgo.com/html/";
+
+/// Timeout for HTTP requests in seconds.
+const REQUEST_TIMEOUT_SECS: u32 = 15;
+
+/// User-Agent header for fallback DuckDuckGo requests.
+const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchResult {
@@ -43,7 +47,6 @@ pub struct WebSearchConnector {
     brave_api_key: Option<String>,
     pub audit_trail: AuditTrail,
     rate_limiter: RateLimiter,
-    http_client: Client,
 }
 
 impl WebSearchConnector {
@@ -56,20 +59,13 @@ impl WebSearchConnector {
         brave_api_key: Option<String>,
     ) -> Self {
         let limiter = RateLimiter::new();
-        // Brave free tier safe default: 1 request per second.
         limiter.configure("web.search.brave", 1, 1);
-
-        let client = Client::builder()
-            .timeout(Duration::from_secs(10))
-            .build()
-            .unwrap_or_else(|_| Client::new());
 
         Self {
             fallback_provider,
             brave_api_key,
             audit_trail: AuditTrail::new(),
             rate_limiter: limiter,
-            http_client: client,
         }
     }
 
@@ -160,37 +156,44 @@ impl WebSearchConnector {
         &self,
         request: &BraveSearchRequest,
     ) -> Result<Vec<SearchResult>, AgentError> {
-        let mut headers = HeaderMap::new();
-        for (name, value) in &request.headers {
-            let lower = name.to_ascii_lowercase();
-            let header_name =
-                reqwest::header::HeaderName::from_bytes(lower.as_bytes()).map_err(|error| {
-                    AgentError::SupervisorError(format!("invalid header name '{name}': {error}"))
-                })?;
-            let header_value = HeaderValue::from_str(value).map_err(|error| {
-                AgentError::SupervisorError(format!("invalid header value for '{name}': {error}"))
-            })?;
-            headers.insert(header_name, header_value);
+        // Build URL with query params
+        let mut url = request.endpoint.clone();
+        if !request.query.is_empty() {
+            url.push('?');
+            let params: Vec<String> = request
+                .query
+                .iter()
+                .map(|(k, v)| format!("{}={}", urlencoded(k), urlencoded(v)))
+                .collect();
+            url.push_str(&params.join("&"));
         }
-        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
 
-        let response = self
-            .http_client
-            .get(request.endpoint.as_str())
-            .headers(headers)
-            .query(&request.query)
-            .send()
-            .map_err(|error| {
-                AgentError::SupervisorError(format!("brave request failed: {error}"))
-            })?;
-        if !response.status().is_success() {
+        let timeout_str = REQUEST_TIMEOUT_SECS.to_string();
+        let mut cmd = Command::new("curl");
+        cmd.args(["-sS", "-L", "--max-time", &timeout_str]);
+        for (name, value) in &request.headers {
+            cmd.arg("-H").arg(format!("{name}: {value}"));
+        }
+        cmd.arg(&url)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        let output = cmd.output().map_err(|error| {
+            AgentError::SupervisorError(format!("curl execution failed: {error}"))
+        })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(AgentError::SupervisorError(format!(
-                "brave request failed with status {}",
-                response.status()
+                "brave request failed: curl exit {}: {}",
+                output.status.code().unwrap_or(-1),
+                stderr.trim()
             )));
         }
 
-        let payload = response.json::<BraveSearchResponse>().map_err(|error| {
+        let body = String::from_utf8_lossy(&output.stdout);
+        let payload: BraveSearchResponse = serde_json::from_str(&body).map_err(|error| {
             AgentError::SupervisorError(format!("brave response parse failed: {error}"))
         })?;
 
@@ -232,25 +235,8 @@ impl WebSearchConnector {
         query: &str,
         max_results: usize,
     ) -> Result<Vec<SearchResult>, AgentError> {
-        let response = self
-            .http_client
-            .get(DUCKDUCKGO_HTML_ENDPOINT)
-            .query(&[("q", query)])
-            .send()
-            .map_err(|error| {
-                AgentError::SupervisorError(format!("duckduckgo fallback request failed: {error}"))
-            })?;
-        if !response.status().is_success() {
-            return Err(AgentError::SupervisorError(format!(
-                "duckduckgo fallback returned status {}",
-                response.status()
-            )));
-        }
-
-        let body = response.text().map_err(|error| {
-            AgentError::SupervisorError(format!("duckduckgo fallback response failed: {error}"))
-        })?;
-
+        let url = format!("{}?q={}", DUCKDUCKGO_HTML_ENDPOINT, urlencoded(query));
+        let body = curl_get(&url)?;
         Ok(parse_duckduckgo_results(&body, max_results))
     }
 
@@ -279,6 +265,58 @@ impl WebSearchConnector {
         }
         Ok(trimmed.to_string())
     }
+}
+
+/// Perform a GET request via curl subprocess. Safe in async tokio contexts.
+fn curl_get(url: &str) -> Result<String, AgentError> {
+    let timeout_str = REQUEST_TIMEOUT_SECS.to_string();
+    let output = Command::new("curl")
+        .args([
+            "-sS",
+            "-L",
+            "--max-time",
+            &timeout_str,
+            "-A",
+            USER_AGENT,
+            url,
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| AgentError::SupervisorError(format!("curl execution failed: {error}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("timed out") || stderr.contains("Timeout") {
+            return Err(AgentError::SupervisorError("Timeout".to_string()));
+        }
+        return Err(AgentError::SupervisorError(format!(
+            "web request failed: curl exit {}: {}",
+            output.status.code().unwrap_or(-1),
+            stderr.trim()
+        )));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Minimal percent-encoding for URL query parameters.
+fn urlencoded(input: &str) -> String {
+    let mut encoded = String::with_capacity(input.len() * 3);
+    for byte in input.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char);
+            }
+            b' ' => encoded.push('+'),
+            _ => {
+                encoded.push('%');
+                encoded.push_str(&format!("{byte:02X}"));
+            }
+        }
+    }
+    encoded
 }
 
 pub fn normalize_query(input: &str) -> String {

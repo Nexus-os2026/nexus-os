@@ -344,6 +344,8 @@ fn test_select_provider_no_config_and_no_ollama_returns_error() {
         openrouter_api_key: None,
         nvidia_api_key: None,
         flash_model_path: None,
+        claude_code_enabled: false,
+        codex_cli_enabled: false,
     };
     // This might succeed if Ollama is running on localhost, so we check both cases
     let result = select_provider(&config);

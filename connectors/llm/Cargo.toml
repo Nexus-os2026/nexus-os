@@ -47,3 +47,4 @@ nexus-llama-bridge = { path = "../../llama-bridge", features = ["real-llama"], o
 
 [dev-dependencies]
 nexus-sdk = { path = "../../sdk" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process"] }

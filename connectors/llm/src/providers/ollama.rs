@@ -270,6 +270,7 @@ impl OllamaProvider {
         let encoded = serde_json::to_string(&body)
             .map_err(|e| AgentError::SupervisorError(format!("failed to encode chat body: {e}")))?;
 
+        eprintln!("[nexus-llm][governance] ollama::chat_stream endpoint={endpoint} model={model}");
         let timeout_str = self.streaming_timeout_secs.to_string();
         let mut child = Command::new("curl")
             .args(["-sS", "-N", "-X", "POST", "-m", &timeout_str])
@@ -349,6 +350,9 @@ impl OllamaProvider {
         let encoded_body = serde_json::to_string(&body)
             .map_err(|e| AgentError::SupervisorError(format!("failed to encode pull body: {e}")))?;
 
+        eprintln!(
+            "[nexus-llm][governance] ollama::pull_model endpoint={endpoint} model={model_name}"
+        );
         let timeout_str = self.streaming_timeout_secs.to_string();
         let mut child = Command::new("curl")
             .args(["-sS", "-N", "-X", "POST", "-m", &timeout_str])
@@ -396,6 +400,7 @@ impl OllamaProvider {
 
 /// GET request using curl (returns status + json body).
 fn curl_get_json(endpoint: &str) -> Result<(u16, Value), AgentError> {
+    eprintln!("[nexus-llm][governance] ollama::curl_get_json endpoint={endpoint}");
     let marker = "__NEXUS_STATUS__:";
     let output = Command::new("curl")
         .args(["-sS", "-L", "-m", "10"])

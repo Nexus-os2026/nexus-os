@@ -995,6 +995,10 @@ pub fn execute_self_improve_command(command: SelfImproveCommand) -> Result<Strin
 
 fn run_voice_python(subcommand: &str) -> Result<String, String> {
     let voice_dir = resolve_voice_dir()?;
+    eprintln!(
+        "[nexus-cli][governance] voice_python subcommand={subcommand} dir={}",
+        voice_dir.display()
+    );
     let output = Command::new("python3")
         .arg("jarvis.py")
         .arg(subcommand)

@@ -33,6 +33,7 @@ pub mod errors;
 pub mod experience;
 pub mod fairness;
 pub mod firewall;
+pub mod free_api_registry;
 pub mod fuel_hardening;
 pub mod genesis;
 pub mod genome;

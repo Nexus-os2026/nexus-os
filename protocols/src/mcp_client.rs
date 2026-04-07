@@ -297,6 +297,10 @@ impl McpClient {
 
     /// Send a JSON-RPC request via HTTP POST using curl.
     fn send_http(&self, request: &JsonRpcRequest) -> Result<JsonRpcResponse, String> {
+        eprintln!(
+            "[nexus-mcp][governance] send_http url={} method={}",
+            self.config.url, request.method
+        );
         let body = serde_json::to_string(request)
             .map_err(|e| format!("Failed to serialize request: {e}"))?;
 
@@ -416,8 +420,11 @@ impl McpHostManager {
         self.clients.values().flat_map(|c| c.list_tools()).collect()
     }
 
-    /// Call a tool by name, routing to the correct server.
-    pub fn call_tool(
+    /// Route a tool call to the correct server (no governance enforcement).
+    ///
+    /// **Internal**: used by [`GovernedMcpHost`] which enforces its own governance.
+    /// Production code should prefer the governed [`call_tool`] or [`GovernedMcpHost`].
+    pub(crate) fn call_tool_internal(
         &mut self,
         tool_name: &str,
         arguments: serde_json::Value,
@@ -434,6 +441,52 @@ impl McpHostManager {
             .ok_or_else(|| format!("Server '{server_id}' not connected"))?;
 
         client.call_tool(tool_name, arguments)
+    }
+
+    /// Governed tool call — enforces capability check and audit logging.
+    ///
+    /// The agent must hold `mcp.call` (or alias `api.call`) to proceed.
+    pub fn call_tool(
+        &mut self,
+        tool_name: &str,
+        arguments: serde_json::Value,
+        agent_id: Uuid,
+        capabilities: &[&str],
+        audit: &mut AuditTrail,
+    ) -> Result<McpToolResult, String> {
+        if self.governance_enabled
+            && !nexus_kernel::capabilities::has_capability(capabilities.iter().copied(), "mcp.call")
+        {
+            let _ = audit.append_event(
+                agent_id,
+                EventType::StateChange,
+                json!({
+                    "event": "mcp.call_denied",
+                    "tool": tool_name,
+                    "reason": "missing_capability_mcp.call",
+                }),
+            );
+            return Err(format!(
+                "Agent {} lacks 'mcp.call' capability required for MCP tool calls",
+                agent_id
+            ));
+        }
+
+        let result = self.call_tool_internal(tool_name, arguments)?;
+
+        let _ = audit.append_event(
+            agent_id,
+            EventType::UserAction,
+            json!({
+                "event": "mcp.call_completed",
+                "tool": tool_name,
+                "server_id": result.server_id,
+                "is_error": result.is_error,
+                "execution_ms": result.execution_ms,
+            }),
+        );
+
+        Ok(result)
     }
 
     /// Find a tool definition by name.
@@ -523,7 +576,22 @@ impl std::fmt::Debug for StdioMcpClient {
 
 impl StdioMcpClient {
     /// Spawn a child process and set up stdin/stdout communication.
-    pub fn spawn(command: &str, args: &[&str], server_id: &str) -> Result<Self, String> {
+    ///
+    /// Requires `process.exec` capability — spawns an external process.
+    pub fn spawn(
+        command: &str,
+        args: &[&str],
+        server_id: &str,
+        capabilities: &[&str],
+    ) -> Result<Self, String> {
+        if !nexus_kernel::capabilities::has_capability(capabilities.iter().copied(), "process.exec")
+        {
+            return Err(format!(
+                "Spawning MCP server '{}' requires 'process.exec' capability",
+                server_id
+            ));
+        }
+        eprintln!("[nexus-mcp][governance] spawn_stdio command={command} server_id={server_id}");
         let mut child = Command::new(command)
             .args(args)
             .stdin(Stdio::piped())
@@ -868,8 +936,8 @@ impl GovernedMcpHost {
         // 3. PII redaction on outbound arguments
         let redacted_args = redact_json_values(&arguments);
 
-        // 4. Call the tool
-        let result = self.host.call_tool(tool_name, redacted_args);
+        // 4. Call the tool (use internal — governance already enforced above)
+        let result = self.host.call_tool_internal(tool_name, redacted_args);
 
         // 5. Audit
         match &result {
@@ -1203,7 +1271,12 @@ mod tests {
 
     #[test]
     fn test_stdio_spawn_nonexistent_binary() {
-        let result = StdioMcpClient::spawn("__nonexistent_mcp_binary__", &[], "test-stdio");
+        let result = StdioMcpClient::spawn(
+            "__nonexistent_mcp_binary__",
+            &[],
+            "test-stdio",
+            &["process.exec"],
+        );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Failed to spawn"));
     }
@@ -1211,7 +1284,7 @@ mod tests {
     #[test]
     fn test_stdio_spawn_and_shutdown() {
         // Use `cat` as a simple echo-like process for stdio transport testing
-        let mut client = StdioMcpClient::spawn("cat", &[], "test-cat").unwrap();
+        let mut client = StdioMcpClient::spawn("cat", &[], "test-cat", &["process.exec"]).unwrap();
         assert_eq!(client.server_id, "test-cat");
         assert!(client.available_tools.is_empty());
         assert!(client.shutdown().is_ok());

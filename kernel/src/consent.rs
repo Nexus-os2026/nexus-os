@@ -954,12 +954,15 @@ impl ConsentRuntime {
         payload: &[u8],
         audit: &mut AuditTrail,
     ) -> Result<(), ConsentError> {
-        // HARDCODED: SovereignPromotion (L5) and TranscendentCreation (L6)
-        // ALWAYS require Tier3 HITL. No Cedar policy, no override, no
-        // exception.
+        // HARDCODED: Critical operations ALWAYS require Tier3 HITL.
+        // No Cedar policy, no override, no exception.
         if matches!(
             operation,
-            GovernedOperation::SovereignPromotion | GovernedOperation::TranscendentCreation
+            GovernedOperation::SovereignPromotion
+                | GovernedOperation::TranscendentCreation
+                | GovernedOperation::GovernancePolicyModify
+                | GovernedOperation::SelfMutationApply
+                | GovernedOperation::AgentLifecycleManage
         ) {
             return self.enforce_with_tier(operation, agent_id, payload, HitlTier::Tier3, audit);
         }
@@ -972,9 +975,33 @@ impl ConsentRuntime {
                 let decision = cedar.evaluate(&agent_id.to_string(), operation.as_str(), "*", &ctx);
                 match decision {
                     PolicyDecision::Allow => {
-                        // Cedar Allow downgrades to Tier0 (auto-approve with audit)
-                        // instead of bypassing the entire approval hierarchy.
-                        // Always log the decision for governance transparency.
+                        // SECURITY: Cedar Allow may ONLY auto-approve operations
+                        // whose default tier is Tier0 or Tier1. Tier2+ operations
+                        // ALWAYS require human consent — Cedar cannot override.
+                        let default_tier = self.policy_engine.required_tier(operation);
+                        if default_tier >= HitlTier::Tier2 {
+                            audit
+                                .append_event(
+                                    agent_id,
+                                    EventType::StateChange,
+                                    json!({
+                                        "event": "consent.cedar_allow_blocked",
+                                        "operation": operation.as_str(),
+                                        "decision": "allow",
+                                        "default_tier": default_tier.as_str(),
+                                        "reason": "cedar_allow_cannot_override_tier2_plus",
+                                    }),
+                                )
+                                .map_err(|e| ConsentError::AuditFailed(e.to_string()))?;
+                            return self.enforce_with_tier(
+                                operation,
+                                agent_id,
+                                payload,
+                                default_tier,
+                                audit,
+                            );
+                        }
+                        // Tier0/Tier1: Cedar Allow auto-approves with audit.
                         audit
                             .append_event(
                                 agent_id,

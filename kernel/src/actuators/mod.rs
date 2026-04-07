@@ -46,7 +46,7 @@ pub use types::{
     ActionResult, ActionReviewDecision, ActionReviewEngine, Actuator, ActuatorContext,
     ActuatorError, SideEffect,
 };
-pub use web::GovernedWeb;
+pub use web::{CurlWebBackend, GovernedWeb, WebSearchBackend, WebSearchResult};
 
 use crate::audit::{AuditTrail, EventType};
 use crate::capabilities::has_capability;
@@ -89,7 +89,7 @@ impl ActuatorRegistry {
         registry.register(Box::new(GovernedFilesystem));
         registry.register(Box::new(GovernedShell));
         registry.register(Box::new(DockerActuator));
-        registry.register(Box::new(GovernedWeb));
+        registry.register(Box::new(GovernedWeb::new()));
         registry.register(Box::new(GovernedApiClient));
         registry.register(Box::new(ImageGenActuator));
         registry.register(Box::new(TtsActuator));

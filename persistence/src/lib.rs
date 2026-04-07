@@ -2926,10 +2926,12 @@ impl StateStore for NexusDatabase {
     }
 }
 
+#[cfg(any(test, feature = "testing"))]
 impl NexusDatabase {
-    /// Execute raw SQL — intended for testing purposes (e.g., simulating tampering).
+    /// Execute raw SQL — **test-only** (e.g., simulating audit tampering).
     ///
-    /// Production code should use `StateStore` trait methods instead.
+    /// Gated behind `#[cfg(any(test, feature = "testing"))]` to prevent
+    /// production code from bypassing governed `StateStore` trait methods.
     pub fn execute_raw(&self, sql: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
         conn.execute(sql, [])?;

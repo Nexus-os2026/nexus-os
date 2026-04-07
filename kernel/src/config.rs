@@ -57,6 +57,19 @@ pub struct LlmConfig {
     pub routing_strategy: String,
     #[serde(default)]
     pub providers: Vec<LlmProviderEntry>,
+    /// Persisted CLI provider states (enabled/disabled, last detection results).
+    #[serde(default)]
+    pub cli_providers: Vec<CliProviderEntry>,
+}
+
+/// Persisted state for a CLI-based LLM provider (e.g. Claude Code, Codex CLI).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CliProviderEntry {
+    pub id: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub last_detected: String,
 }
 
 /// A user-configured LLM provider entry for the priority list.
@@ -235,6 +248,7 @@ impl Default for NexusConfig {
                 ollama_url: "http://localhost:11434".to_string(),
                 routing_strategy: String::new(),
                 providers: Vec::new(),
+                cli_providers: Vec::new(),
             },
             search: SearchConfig {
                 brave_api_key: String::new(),

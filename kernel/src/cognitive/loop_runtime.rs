@@ -13,6 +13,7 @@ use super::types::{
 use crate::actuators::{ActuatorContext, ActuatorRegistry};
 use crate::audit::{AuditTrail, EventType};
 use crate::autonomy::AutonomyLevel;
+use crate::capabilities::has_capability;
 use crate::errors::AgentError;
 use crate::protocols::a2a_client::A2aClient;
 use crate::supervisor::Supervisor;
@@ -156,6 +157,21 @@ impl RegistryExecutor {
             memory_manager: None,
             event_emitter: None,
         }
+    }
+
+    /// Replace the web actuator's backend with a governed implementation.
+    ///
+    /// By default, `ActuatorRegistry::with_defaults()` uses `CurlWebBackend`.
+    /// Call this to inject the full governed connectors (Brave Search, scraper
+    /// reader, etc.) from the app layer.
+    pub fn with_web_backend(
+        mut self,
+        backend: Arc<dyn crate::actuators::WebSearchBackend>,
+    ) -> Self {
+        use crate::actuators::GovernedWeb;
+        self.registry
+            .register(Box::new(GovernedWeb::with_backend(backend)));
+        self
     }
 
     /// Attach an LLM handler for executing `PlannedAction::LlmQuery` steps.
@@ -793,6 +809,27 @@ impl CognitiveRuntime {
 
         // Check max cycles
         if state.cycle_count >= overrides.max_cycles_per_goal {
+            let succeeded = state
+                .steps
+                .iter()
+                .filter(|s| s.status == StepStatus::Succeeded)
+                .count();
+            let failed = state
+                .steps
+                .iter()
+                .filter(|s| s.status == StepStatus::Failed)
+                .count();
+            let last_error = state
+                .steps
+                .iter()
+                .rev()
+                .find(|s| s.status == StepStatus::Failed)
+                .and_then(|s| s.result.as_deref())
+                .unwrap_or("none");
+            let reason = format!(
+                "max cycles reached ({}/{}): {} steps succeeded, {} failed. Last error: {}",
+                state.cycle_count, overrides.max_cycles_per_goal, succeeded, failed, last_error
+            );
             state.goal.status = GoalStatus::Failed;
             state.phase = CognitivePhase::Learn;
             return Ok(CycleResult {
@@ -800,7 +837,7 @@ impl CognitiveRuntime {
                 steps_executed: 0,
                 fuel_consumed: 0.0,
                 should_continue: false,
-                blocked_reason: Some("max cycles reached".into()),
+                blocked_reason: Some(reason),
             });
         }
         state.cycle_count += 1;
@@ -1014,6 +1051,17 @@ impl CognitiveRuntime {
             self.record_phase_model_selection(agent_id, state.phase, memory_mgr, audit);
             self.emit_phase_change(agent_id, state);
 
+            // Collect results from previous succeeded steps for context injection
+            let prior_step_results: Vec<(String, String)> = state.steps[..state.current_step_index]
+                .iter()
+                .filter(|s| s.status == StepStatus::Succeeded)
+                .filter_map(|s| {
+                    s.result
+                        .as_ref()
+                        .map(|r| (s.action.action_type().to_string(), r.clone()))
+                })
+                .collect();
+
             let step = &mut state.steps[state.current_step_index];
             step.status = StepStatus::Executing;
             step.attempts += 1;
@@ -1040,10 +1088,11 @@ impl CognitiveRuntime {
                 }
             }
 
-            // Capability check
+            // Capability check — use has_capability() which handles implicit
+            // capabilities (e.g. llm.query is always allowed) and canonical aliases.
             let required_caps = step.action.required_capabilities();
             for cap in &required_caps {
-                if !capabilities.contains(&cap.to_string()) {
+                if !has_capability(capabilities.iter().map(String::as_str), cap) {
                     step.status = StepStatus::Failed;
                     step.result = Some(format!("capability '{cap}' not granted"));
                     state.consecutive_failures += 1;
@@ -1191,7 +1240,18 @@ impl CognitiveRuntime {
                 // Skip general executor for A2A actions
             } else {
                 // Execute the action
-                let action_clone = step.action.clone();
+                let mut action_clone = step.action.clone();
+
+                // Inject accumulated results from previous steps into LlmQuery context
+                if let PlannedAction::LlmQuery {
+                    ref mut context, ..
+                } = action_clone
+                {
+                    for (action_type, result) in &prior_step_results {
+                        context.push(format!("[{} result]: {}", action_type, result));
+                    }
+                }
+
                 eprintln!(
                     "[agent:{}] dispatching to executor: {} (step {}/{})",
                     agent_id,
@@ -1730,7 +1790,11 @@ impl CognitiveRuntime {
 /// Determine if an action requires HITL approval based on autonomy level.
 fn action_requires_hitl(action: &PlannedAction, autonomy_level: u8) -> bool {
     match action {
-        // High-risk actions require L3+ or HITL
+        // ApiCall to known free APIs (CoinGecko, Wikipedia, etc.) is safe at L2
+        PlannedAction::ApiCall { url, .. } if crate::free_api_registry::is_known_free_api(url) => {
+            autonomy_level < 2
+        }
+        // Other high-risk actions require L3+ or HITL
         PlannedAction::FileWrite { .. }
         | PlannedAction::ShellCommand { .. }
         | PlannedAction::DockerCommand { .. }

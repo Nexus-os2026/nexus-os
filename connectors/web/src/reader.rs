@@ -4,19 +4,20 @@ use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::errors::AgentError;
 use nexus_kernel::firewall::{ContentOrigin, SemanticBoundary};
 use regex::Regex;
-use reqwest::blocking::Client;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
+use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use url::Url;
 
 const DEFAULT_MAX_CONTENT_CHARS: usize = 50_000;
-const DEFAULT_TIMEOUT_SECONDS: u64 = 10;
+const DEFAULT_TIMEOUT_SECONDS: u64 = 15;
 const TRUNCATION_MARKER: &str = "[truncated]";
 const ROBOTS_BLOCKED_ERROR: &str = "RobotsTxtBlocked";
 const TIMEOUT_ERROR: &str = "Timeout";
+const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CleanContent {
@@ -29,13 +30,12 @@ pub struct CleanContent {
 
 pub struct WebReaderConnector {
     max_content_chars: usize,
-    timeout: Duration,
+    timeout_secs: u64,
     mock_pages: HashMap<String, String>,
     mock_robots: HashMap<String, String>,
     mock_delays: HashMap<String, Duration>,
     pub audit_trail: AuditTrail,
     rate_limiter: RateLimiter,
-    http_client: Client,
 }
 
 impl WebReaderConnector {
@@ -46,22 +46,15 @@ impl WebReaderConnector {
     pub fn with_timeout_seconds(max_content_chars: Option<usize>, timeout_seconds: u64) -> Self {
         let limiter = RateLimiter::new();
         limiter.configure("web.read", 30, 60);
-        let timeout = Duration::from_secs(timeout_seconds);
-
-        let client = Client::builder()
-            .timeout(timeout)
-            .build()
-            .unwrap_or_else(|_| Client::new());
 
         Self {
             max_content_chars: max_content_chars.unwrap_or(DEFAULT_MAX_CONTENT_CHARS),
-            timeout,
+            timeout_secs: timeout_seconds,
             mock_pages: HashMap::new(),
             mock_robots: HashMap::new(),
             mock_delays: HashMap::new(),
             audit_trail: AuditTrail::new(),
             rate_limiter: limiter,
-            http_client: client,
         }
     }
 
@@ -142,7 +135,8 @@ impl WebReaderConnector {
 
     fn fetch_page_html(&self, url: &str) -> Result<String, AgentError> {
         if let Some(delay) = self.mock_delays.get(url) {
-            if *delay > self.timeout {
+            let timeout = Duration::from_secs(self.timeout_secs);
+            if *delay > timeout {
                 return Err(AgentError::SupervisorError(TIMEOUT_ERROR.to_string()));
             }
             std::thread::sleep(*delay);
@@ -152,20 +146,7 @@ impl WebReaderConnector {
             return Ok(mock.clone());
         }
 
-        let response = self
-            .http_client
-            .get(url)
-            .send()
-            .map_err(map_request_error)?;
-        if !response.status().is_success() {
-            return Err(AgentError::SupervisorError(format!(
-                "web fetch failed with status {}",
-                response.status()
-            )));
-        }
-        response.text().map_err(|error| {
-            AgentError::SupervisorError(format!("failed to read page body: {error}"))
-        })
+        curl_get(url, self.timeout_secs)
     }
 
     fn ensure_robots_allowed(&self, target_url: &str) -> Result<(), AgentError> {
@@ -181,16 +162,9 @@ impl WebReaderConnector {
         let robots_text = if let Some(mock) = self.mock_robots.get(base.as_str()) {
             Some(mock.clone())
         } else {
-            match self.http_client.get(robots_url).send() {
-                Ok(response) if response.status().is_success() => response.text().ok(),
-                Ok(_) => None,
-                Err(error) => {
-                    if error.is_timeout() {
-                        return Err(AgentError::SupervisorError(TIMEOUT_ERROR.to_string()));
-                    }
-                    None
-                }
-            }
+            // Best-effort robots.txt check — don't fail the entire request if
+            // robots.txt itself is unreachable (many sites don't have one).
+            curl_get(&robots_url, 5).ok()
         };
 
         if let Some(robots) = robots_text {
@@ -205,11 +179,38 @@ impl WebReaderConnector {
     }
 }
 
-fn map_request_error(error: reqwest::Error) -> AgentError {
-    if error.is_timeout() {
-        return AgentError::SupervisorError(TIMEOUT_ERROR.to_string());
+/// Perform a GET request via curl subprocess. Safe in async tokio contexts.
+fn curl_get(url: &str, timeout_secs: u64) -> Result<String, AgentError> {
+    let timeout_str = timeout_secs.to_string();
+    let output = Command::new("curl")
+        .args([
+            "-sS",
+            "-L",
+            "--max-time",
+            &timeout_str,
+            "-A",
+            USER_AGENT,
+            url,
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| AgentError::SupervisorError(format!("curl execution failed: {error}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("timed out") || stderr.contains("Timeout") {
+            return Err(AgentError::SupervisorError(TIMEOUT_ERROR.to_string()));
+        }
+        return Err(AgentError::SupervisorError(format!(
+            "web fetch failed: curl exit {}: {}",
+            output.status.code().unwrap_or(-1),
+            stderr.trim()
+        )));
     }
-    AgentError::SupervisorError(format!("web request failed: {error}"))
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 fn robots_disallow_path(robots_txt: &str, path: &str) -> bool {
@@ -454,7 +455,6 @@ mod tests {
         assert!(result.is_ok());
 
         if let Ok(content) = result {
-            // Content is wrapped with semantic boundary delimiters after truncation.
             assert!(content.text.contains("[truncated]"));
             assert!(content
                 .text

@@ -1,7 +1,8 @@
 use crate::providers::{
-    ClaudeProvider, CohereProvider, DeepSeekProvider, FireworksProvider, FlashProvider,
-    GeminiProvider, GroqProvider, LlmProvider, LlmResponse, MistralProvider, NvidiaProvider,
-    OllamaProvider, OpenAiProvider, OpenRouterProvider, PerplexityProvider, TogetherProvider,
+    ClaudeCodeProvider, ClaudeProvider, CodexCliProvider, CohereProvider, DeepSeekProvider,
+    FireworksProvider, FlashProvider, GeminiProvider, GroqProvider, LlmProvider, LlmResponse,
+    MistralProvider, NvidiaProvider, OllamaProvider, OpenAiProvider, OpenRouterProvider,
+    PerplexityProvider, TogetherProvider,
 };
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::errors::AgentError;
@@ -62,6 +63,10 @@ pub struct ProviderSelectionConfig {
     pub nvidia_api_key: Option<String>,
     /// Path to a local GGUF model file for the flash provider.
     pub flash_model_path: Option<String>,
+    /// Whether to enable the Claude Code CLI provider (local subprocess).
+    pub claude_code_enabled: bool,
+    /// Whether to enable the OpenAI Codex CLI provider (local subprocess).
+    pub codex_cli_enabled: bool,
 }
 
 impl ProviderSelectionConfig {
@@ -83,6 +88,12 @@ impl ProviderSelectionConfig {
             openrouter_api_key: env::var("OPENROUTER_API_KEY").ok(),
             nvidia_api_key: env::var("NVIDIA_NIM_API_KEY").ok(),
             flash_model_path: env::var("FLASH_MODEL_PATH").ok(),
+            claude_code_enabled: env::var("CLAUDE_CODE_ENABLED")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
+            codex_cli_enabled: env::var("CODEX_CLI_ENABLED")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
         }
     }
 }
@@ -248,6 +259,24 @@ pub fn select_provider(
         return Ok(Box::new(ollama_default));
     }
 
+    // ── Claude Code CLI (local subprocess, uses user's subscription) ──
+    if config.claude_code_enabled {
+        let status = crate::providers::claude_code::detect_claude_code();
+        if status.installed && status.authenticated {
+            eprintln!("[nexus-llm] using Claude Code CLI (local subprocess)");
+            return Ok(Box::new(ClaudeCodeProvider::new()));
+        }
+    }
+
+    // ── Codex CLI (local subprocess, uses ChatGPT Plus/Pro subscription) ──
+    if config.codex_cli_enabled {
+        let status = crate::providers::codex_cli::detect_codex_cli();
+        if status.installed && status.authenticated {
+            eprintln!("[nexus-llm] using Codex CLI (local subprocess)");
+            return Ok(Box::new(CodexCliProvider::new()));
+        }
+    }
+
     Err(AgentError::SupervisorError(
         "No LLM provider configured. Please either:\n\
          1. Set ANTHROPIC_API_KEY in Settings (recommended)\n\
@@ -255,7 +284,9 @@ pub fn select_provider(
          3. Set NVIDIA_NIM_API_KEY (free at build.nvidia.com)\n\
          4. Set any supported provider API key in Settings\n\
          5. Install and start Ollama (ollama serve) for local models\n\
-         6. Set LLM_PROVIDER=mock to explicitly use mock responses"
+         6. Set LLM_PROVIDER=claude-code to use Claude Code CLI\n\
+         7. Set LLM_PROVIDER=codex-cli to use OpenAI Codex CLI\n\
+         8. Set LLM_PROVIDER=mock to explicitly use mock responses"
             .to_string(),
     ))
 }
@@ -291,6 +322,8 @@ fn explicit_provider(
         "openai" => Ok(Box::new(OpenAiProvider::new(config.openai_api_key.clone()))),
         "gemini" | "google" => Ok(Box::new(GeminiProvider::new(config.gemini_api_key.clone()))),
         "claude" | "anthropic" => Ok(Box::new(ClaudeProvider::new(config.anthropic_api_key.clone()))),
+        "claude-code" => Ok(Box::new(ClaudeCodeProvider::new())),
+        "codex-cli" | "codex" => Ok(Box::new(CodexCliProvider::new())),
         "flash" | "flash-infer" | "local-gguf" => {
             let model_path = config
                 .flash_model_path
@@ -321,10 +354,10 @@ fn explicit_provider(
             }
         }
         "mock" => Err(AgentError::SupervisorError(
-            "Mock provider is for testing only. Configure a real provider: ollama, openai, claude, gemini, nvidia, deepseek, groq, mistral, together, fireworks, perplexity, cohere, openrouter, or flash.".to_string(),
+            "Mock provider is for testing only. Configure a real provider: ollama, openai, claude, claude-code, codex-cli, gemini, nvidia, deepseek, groq, mistral, together, fireworks, perplexity, cohere, openrouter, or flash.".to_string(),
         )),
         _ => Err(AgentError::SupervisorError(
-            format!("Unknown LLM provider '{explicit}'. Supported: ollama, deepseek, groq, mistral, together, fireworks, perplexity, cohere, openrouter, nvidia, openai, gemini, claude, flash"),
+            format!("Unknown LLM provider '{explicit}'. Supported: ollama, deepseek, groq, mistral, together, fireworks, perplexity, cohere, openrouter, nvidia, openai, gemini, claude, claude-code, codex-cli, flash"),
         )),
     }
 }

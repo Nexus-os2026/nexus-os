@@ -99,6 +99,8 @@ pub struct NexusLink {
     encryption_key: Option<[u8; 32]>,
     /// Optional shared secret for HMAC-SHA256 challenge-response authentication.
     shared_secret: Option<String>,
+    /// Optional allowlist of peer addresses. If non-empty, only these peers can connect.
+    allowed_peers: Vec<String>,
 }
 
 impl NexusLink {
@@ -113,6 +115,28 @@ impl NexusLink {
             chunk_size: 1_048_576, // 1 MB
             encryption_key: None,
             shared_secret: None,
+            allowed_peers: Vec::new(),
+        }
+    }
+
+    /// Set allowed peer addresses. If non-empty, only listed addresses can connect.
+    pub fn set_allowed_peers(&mut self, peers: Vec<String>) {
+        self.allowed_peers = peers;
+    }
+
+    /// Governance: check if a peer address is permitted for connection.
+    fn check_peer_allowed(&self, address: &str) -> Result<(), String> {
+        if self.allowed_peers.is_empty() {
+            return Ok(());
+        }
+        // Extract host part (strip port if present)
+        let host = address.split(':').next().unwrap_or(address);
+        if self.allowed_peers.iter().any(|p| p == address || p == host) {
+            Ok(())
+        } else {
+            Err(format!(
+                "Governance denied: peer address '{address}' not in allowed_peers list"
+            ))
         }
     }
 
@@ -354,6 +378,10 @@ impl NexusLink {
         } else {
             let cs = Self::compute_file_checksum(&path.display().to_string())?;
             // Cache the checksum for future use
+            eprintln!(
+                "[nexus-link][governance] write_checksum path={}",
+                checksum_path.display()
+            );
             // Best-effort: cache checksum for faster future scans
             let _ = std::fs::write(&checksum_path, &cs);
             cs
@@ -417,6 +445,11 @@ impl NexusLink {
 
     /// Query a peer for its available models over TCP.
     pub fn discover_peer_models(&self, peer: &PeerDevice) -> Result<Vec<SharedModelInfo>, String> {
+        self.check_peer_allowed(&peer.address)?;
+        eprintln!(
+            "[nexus-link][governance] tcp_connect peer={} op=discover_models",
+            peer.address
+        );
         let mut stream = TcpStream::connect(&peer.address)
             .map_err(|e| format!("Failed to connect to peer {}: {e}", peer.address))?;
         stream
@@ -446,6 +479,7 @@ impl NexusLink {
         filename: &str,
         progress_callback: impl Fn(TransferProgress),
     ) -> Result<(), String> {
+        self.check_peer_allowed(peer_address)?;
         let file_path = std::path::Path::new(&self.models_dir).join(filename);
         if !file_path.exists() {
             // Try subdirectory matching model_id
@@ -494,6 +528,9 @@ impl NexusLink {
             peer_name: peer_address.to_string(),
         });
 
+        eprintln!(
+            "[nexus-link][governance] tcp_connect peer={peer_address} op=send_model model_id={model_id}"
+        );
         let mut stream = TcpStream::connect(peer_address)
             .map_err(|e| format!("Failed to connect to peer: {e}"))?;
         stream
@@ -596,6 +633,19 @@ impl NexusLink {
             _ => return Err("Expected TransferRequest message".to_string()),
         };
 
+        // Governance: reject filenames with path traversal components
+        if filename.contains("..") || filename.starts_with('/') || filename.contains('\\') {
+            let reject = self.serialize_message(&LinkMessage::TransferRejected {
+                reason: "Filename contains path traversal characters".to_string(),
+            })?;
+            connection
+                .write_all(&reject)
+                .map_err(|e| format!("Failed to send rejection: {e}"))?;
+            return Err(format!(
+                "Governance denied: filename '{filename}' contains path traversal"
+            ));
+        }
+
         // Check if model already exists
         let target_path = std::path::Path::new(&self.models_dir).join(&filename);
         if target_path.exists() {
@@ -616,6 +666,10 @@ impl NexusLink {
 
         // Write to a temp file
         let temp_path = std::path::Path::new(&self.models_dir).join(format!(".{}.tmp", filename));
+        eprintln!(
+            "[nexus-link][governance] receive_model temp_file={} model_id={model_id}",
+            temp_path.display()
+        );
         let mut temp_file = std::fs::File::create(&temp_path)
             .map_err(|e| format!("Failed to create temp file: {e}"))?;
 
@@ -687,6 +741,10 @@ impl NexusLink {
         let toml_path = target_path.with_extension("toml");
         let toml_content = format!(
             "[model]\nmodel_id = \"{model_id}\"\nfilename = \"{filename}\"\nsource = \"nexus-link\"\n"
+        );
+        eprintln!(
+            "[nexus-link][governance] write_model_metadata path={}",
+            toml_path.display()
         );
         // Best-effort: write model metadata for registry discovery
         let _ = std::fs::write(toml_path, toml_content);

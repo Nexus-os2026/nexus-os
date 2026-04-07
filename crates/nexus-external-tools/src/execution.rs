@@ -56,11 +56,14 @@ impl ToolExecutionEngine {
 
         self.check_rate_limit(&tool)?;
 
-        // URL denylist check for webhook/rest_api
+        // URL denylist check for webhook/rest_api — fail-closed: missing URL is denied.
         if tool.id == "webhook" || tool.id == "rest_api" {
-            if let Some(url) = params.get("url").and_then(|v| v.as_str()) {
-                self.check_url_allowed(url)?;
-            }
+            let url = params.get("url").and_then(|v| v.as_str()).ok_or_else(|| {
+                ToolError::GovernanceDenied(
+                    "webhook/rest_api requires a 'url' parameter for denylist check".to_string(),
+                )
+            })?;
+            self.check_url_allowed(url)?;
         }
 
         let auth_token = tool

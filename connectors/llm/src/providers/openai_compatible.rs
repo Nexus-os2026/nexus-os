@@ -83,6 +83,10 @@ pub(crate) fn execute_openai_compatible_query(
             ))
         })?;
 
+    eprintln!(
+        "[nexus-llm][governance] {}::complete endpoint={}",
+        query.provider_name, request.endpoint
+    );
     let mut call = client.post(request.endpoint.clone());
     for (header_name, header_value) in &request.headers {
         call = call.header(header_name, header_value);

@@ -104,6 +104,8 @@ PREVIOUS OUTCOMES:
 ALLOWED ACTIONS (you MUST only use these):
 {allowed_actions}
 
+{free_apis}
+
 RULES:
 1. Respond with ONLY a JSON array. No markdown, no prose, no explanations.
 2. Use ABSOLUTE file paths based on the workspace directory above.
@@ -156,6 +158,17 @@ Do NOT include any text outside the JSON array."#,
             memories = memories_str,
             outcomes = outcomes_str,
             allowed_actions = allowed_actions,
+            free_apis = if has_capability(
+                context.agent_capabilities.iter().map(String::as_str),
+                "mcp.call",
+            ) || has_capability(
+                context.agent_capabilities.iter().map(String::as_str),
+                "web.search",
+            ) {
+                crate::free_api_registry::registry_prompt_section()
+            } else {
+                String::new()
+            },
             action_types = self.allowed_action_types(&context.agent_capabilities),
         )
     }

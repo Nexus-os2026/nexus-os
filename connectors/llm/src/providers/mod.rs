@@ -24,7 +24,11 @@ pub mod openrouter;
 pub mod perplexity;
 pub mod together;
 
+pub mod claude_code;
+pub mod codex_cli;
 pub use claude::ClaudeProvider;
+pub use claude_code::ClaudeCodeProvider;
+pub use codex_cli::CodexCliProvider;
 pub use cohere::CohereProvider;
 pub use deepseek::DeepSeekProvider;
 pub use fireworks::FireworksProvider;
@@ -158,6 +162,7 @@ impl<T: LlmProvider + ?Sized> LlmProvider for Arc<T> {
 }
 
 pub(crate) fn curl_get_status(endpoint: &str) -> Result<u16, AgentError> {
+    eprintln!("[nexus-llm][governance] curl_get_status endpoint={endpoint}");
     let output = Command::new("curl")
         .args([
             "-sS",
@@ -207,6 +212,7 @@ pub(crate) fn curl_post_json_with_timeout(
     body: &Value,
     timeout_secs: u32,
 ) -> Result<(u16, Value), AgentError> {
+    eprintln!("[nexus-llm][governance] curl_post_json endpoint={endpoint} timeout={timeout_secs}s");
     let marker = "__NEXUS_STATUS__:";
     let encoded_body = serde_json::to_string(body).map_err(|error| {
         AgentError::SupervisorError(format!("failed to encode request body: {error}"))

@@ -963,7 +963,9 @@ impl<P: LlmProvider> Conductor<P> {
     /// Uses [`StreamingLlmProvider`] for token-by-token streaming and calls
     /// `emit_event` with [`BuildStreamEvent`] variants for real-time progress.
     /// Falls back to the non-streaming `execute_web_build` if streaming fails.
-    pub fn execute_web_build_streaming<S: nexus_connectors_llm::streaming::StreamingLlmProvider>(
+    pub fn execute_web_build_streaming<
+        S: nexus_connectors_llm::streaming::StreamingLlmProvider + ?Sized,
+    >(
         &mut self,
         task: &PlannedTask,
         output_dir: &Path,

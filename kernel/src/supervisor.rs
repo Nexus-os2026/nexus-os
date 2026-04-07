@@ -1517,8 +1517,12 @@ mod tests {
     fn custom_policy_overrides_default_consent_tier() {
         use crate::policy_engine::{Policy, PolicyConditions, PolicyEffect, PolicyEngine};
 
+        // SECURITY INVARIANT: Cedar Allow can only auto-approve Tier0/Tier1
+        // operations. Tier2+ (e.g., TerminalCommand) ALWAYS require human
+        // consent — Cedar Allow cannot override this.
+
         // TerminalCommand defaults to Tier2 (requires approval).
-        // Create a policy that explicitly allows it for all agents.
+        // Even with a Cedar Allow policy, Tier2 must still require approval.
         let allow_terminal = Policy {
             policy_id: "allow-terminal".to_string(),
             description: String::new(),
@@ -1530,16 +1534,39 @@ mod tests {
             conditions: PolicyConditions::default(),
         };
 
-        let pe = PolicyEngine::with_policies(vec![allow_terminal]);
+        let pe = PolicyEngine::with_policies(vec![allow_terminal.clone()]);
         let mut sup = Supervisor::new();
         sup.set_policy_engine(pe);
         let id = sup.start_agent(test_manifest()).unwrap();
 
-        // With the policy, TerminalCommand should be auto-allowed (no approval needed).
+        // Tier2 operations CANNOT be auto-approved by Cedar Allow.
         let result = sup.require_consent(id, GovernedOperation::TerminalCommand, b"echo hello");
         assert!(
-            result.is_ok(),
-            "policy should override default Tier2 to Allow: {result:?}"
+            result.is_err(),
+            "Cedar Allow must NOT auto-approve Tier2 operations: {result:?}"
+        );
+
+        // But Cedar Allow CAN auto-approve Tier1 operations (e.g., ToolCall).
+        let allow_tool = Policy {
+            policy_id: "allow-tool".to_string(),
+            description: String::new(),
+            effect: PolicyEffect::Allow,
+            principal: "*".to_string(),
+            action: "tool_call".to_string(),
+            resource: "*".to_string(),
+            priority: 10,
+            conditions: PolicyConditions::default(),
+        };
+
+        let pe2 = PolicyEngine::with_policies(vec![allow_terminal, allow_tool]);
+        let mut sup2 = Supervisor::new();
+        sup2.set_policy_engine(pe2);
+        let id2 = sup2.start_agent(test_manifest()).unwrap();
+
+        let result2 = sup2.require_consent(id2, GovernedOperation::ToolCall, b"test");
+        assert!(
+            result2.is_ok(),
+            "Cedar Allow should auto-approve Tier1 ToolCall: {result2:?}"
         );
     }
 

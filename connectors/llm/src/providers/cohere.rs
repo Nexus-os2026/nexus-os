@@ -75,6 +75,10 @@ impl LlmProvider for CohereProvider {
                 ))
             })?;
 
+        eprintln!(
+            "[nexus-llm][governance] cohere::complete endpoint={}",
+            request.endpoint
+        );
         let mut call = client.post(request.endpoint.clone());
         for (header_name, header_value) in &request.headers {
             call = call.header(header_name, header_value);

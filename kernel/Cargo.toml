@@ -42,6 +42,9 @@ chrono = { version = "0.4", features = ["serde"] }
 tokio = { version = "1", features = ["rt", "time", "sync", "macros"] }
 rand = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+readability = "0.3"
+htmd = "0.5"
+url = "2"
 nexus-persistence = { path = "../persistence" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -50,3 +53,4 @@ nix = { version = "0.29", features = ["signal", "resource", "process"] }
 [dev-dependencies]
 tempfile = "3"
 nexus-kernel = { path = ".", features = ["test-utils"] }
+nexus-persistence = { path = "../persistence", features = ["testing"] }

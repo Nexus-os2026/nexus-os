@@ -276,6 +276,7 @@ impl RagPipeline {
     }
 
     pub fn save(&self, dir_path: &str) -> Result<(), String> {
+        eprintln!("[nexus-rag][governance] save dir={dir_path}");
         std::fs::create_dir_all(dir_path)
             .map_err(|e| format!("failed to create directory: {e}"))?;
 

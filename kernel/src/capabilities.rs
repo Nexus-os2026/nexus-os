@@ -11,10 +11,18 @@ pub fn capability_matches(granted: &str, required: &str) -> bool {
     canonical_capability(granted) == canonical_capability(required)
 }
 
+/// Capabilities that are always allowed regardless of manifest.
+/// `llm.query` is the agent's ability to reason — without it no agent can function.
+const IMPLICIT_CAPABILITIES: &[&str] = &["llm.query"];
+
 pub fn has_capability<'a, I>(capabilities: I, required: &str) -> bool
 where
     I: IntoIterator<Item = &'a str>,
 {
+    let canonical = canonical_capability(required);
+    if IMPLICIT_CAPABILITIES.contains(&canonical) {
+        return true;
+    }
     capabilities
         .into_iter()
         .any(|capability| capability_matches(capability, required))
@@ -44,5 +52,16 @@ mod tests {
         assert!(has_capability(caps.iter().copied(), "web.read"));
         assert!(has_capability(caps.iter().copied(), "mcp.call"));
         assert!(!has_capability(caps.iter().copied(), "process.exec"));
+    }
+
+    #[test]
+    fn llm_query_is_implicitly_allowed() {
+        // llm.query is the agent's ability to reason — always allowed even with
+        // an empty capability set.
+        let empty: [&str; 0] = [];
+        assert!(has_capability(empty.iter().copied(), "llm.query"));
+
+        let basic = ["fs.read", "web.search"];
+        assert!(has_capability(basic.iter().copied(), "llm.query"));
     }
 }
