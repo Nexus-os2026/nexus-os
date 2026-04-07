@@ -4,11 +4,21 @@
 //! NEXUS_UI_REPAIR v1.1 design (see
 //! `docs/roadmaps/NEXUS_UI_REPAIR_v1.1_scout_repair_split.md`).
 //!
-//! **Phase 1.1 status:** skeleton only. Every module compiles to a stub
-//! and passes one trivial test, with the single exception of
-//! `tests/acl.rs` which exercises invariant I-2 for real. No specialists
-//! are wired, no `nexus-computer-use` integration, no `nexus-memory`
-//! coupling, no provider calls. Phase 1.2 begins wiring real behavior.
+//! **Phase 1.3 status:** structural gates landed for Hole A Layer 2
+//! (per-app input governance via [`governance::InputSandbox`]) and
+//! Hole B Layers 2+3 (modal handler via
+//! [`specialists::modal_handler::ModalHandler`] and page-descriptor
+//! opt-in validation via [`descriptors::PageDescriptor::validate`]).
+//! The vision-judge calibration log ([`governance::CalibrationLog`])
+//! and the I-5 output-capture seam ([`specialists::SpecialistCall`]
+//! plus [`governance::audit::AuditLog::record_specialist_call`]) are
+//! also wired. The crate now imports `nexus-computer-use` for
+//! governance TYPES ONLY — no screen capture or input event code
+//! path is exercised in Phase 1.3.
+//!
+//! **Still gated to Phase 1.3.5:** Xvfb isolation, real input events,
+//! real screen capture, and a live DOM path for the enumerator. The
+//! driver loop remains a Phase 1.2 stub.
 //!
 //! This crate is **read-only by design.** It cannot modify Nexus OS
 //! source code. Repairs are performed interactively by a human +
@@ -16,6 +26,7 @@
 
 use std::path::PathBuf;
 
+pub mod descriptors;
 pub mod driver;
 pub mod governance;
 pub mod ledger;

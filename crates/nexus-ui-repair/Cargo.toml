@@ -15,6 +15,7 @@ sha2 = "0.10"
 tracing = "0.1"
 scraper = { workspace = true }
 regex = { workspace = true }
+nexus-computer-use = { path = "../nexus-computer-use" }
 
 [dev-dependencies]
 tempfile = "3"

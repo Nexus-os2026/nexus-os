@@ -5642,6 +5642,7 @@ name = "nexus-ui-repair"
 version = "10.6.0"
 dependencies = [
  "ed25519-dalek",
+ "nexus-computer-use",
  "rand 0.8.5",
  "regex",
  "scraper 0.20.0",

@@ -1,8 +1,12 @@
 //! Hash-chained, append-only session audit log.
 //!
-//! Phase 1.1 ships the file format and the chain. Real signing with the
-//! session keypair lands in Phase 1.2; for now `prev_hash` and `hash`
-//! cover I-5 (replayability) by themselves.
+//! Phase 1.1 shipped the file format and the chain. Phase 1.3 ships
+//! the `SpecialistCall` API and [`AuditLog::record_specialist_call`],
+//! which is the entry point the driver loop will use to append one
+//! entry per specialist invocation. Phase 1.4 wires the driver loop
+//! to actually call this for every specialist invocation. Real
+//! signing with the session keypair is still deferred — for now
+//! `prev_hash` and `hash` cover I-5 (replayability) by themselves.
 
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -10,6 +14,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+
+use crate::specialists::specialist_call::SpecialistCall;
 
 /// One entry in the audit log.
 ///
@@ -102,6 +108,28 @@ impl AuditLog {
 
         self.last_hash = hash_hex;
         Ok(())
+    }
+
+    /// Record a [`SpecialistCall`] as an audit entry.
+    ///
+    /// Builds an `AuditEntry` whose `state` is `"specialist_call"` and
+    /// whose `action`/`specialist` both carry the specialist name,
+    /// then forwards to [`AuditLog::append`]. This is the Phase 1.3
+    /// seam for I-5: Phase 1.4 will have the driver loop call this
+    /// method for every specialist invocation, capturing both inputs
+    /// and output so replay can reconstruct the session byte-identically.
+    pub fn record_specialist_call(&mut self, call: SpecialistCall) -> crate::Result<()> {
+        let entry = AuditEntry {
+            timestamp: call.timestamp.clone(),
+            state: "specialist_call".to_string(),
+            action: call.specialist_name.clone(),
+            specialist: Some(call.specialist_name),
+            inputs: call.inputs,
+            output: call.output,
+            prev_hash: String::new(),
+            hash: String::new(),
+        };
+        self.append(entry)
     }
 
     /// The hash of the most recently appended entry, or the genesis

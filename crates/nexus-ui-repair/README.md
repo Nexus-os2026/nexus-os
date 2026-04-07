@@ -23,6 +23,40 @@ ACL for real. No specialists are wired, no `nexus-computer-use` integration,
 no `nexus-memory` coupling, no provider calls. Phase 1.2 begins wiring real
 behavior.
 
+## Phase 1.3 status
+
+**Phase 1.3 = structural gates wired.** The crate now imports
+`nexus-computer-use` for **governance types only** — no screen capture or
+input event code paths are exercised by the scout in Phase 1.3. Phase 1.3.5
+wires Xvfb and real input.
+
+Landed in 1.3:
+
+- **Hole A Layer 2 — InputSandbox** (`governance/input_sandbox.rs`). Wraps
+  `AppGrantManager` and validates target windows by probing with a benign
+  `AgentAction::Click`; the negative test exercises the real
+  `find_grant` + category fallback code path, not a string compare.
+- **Hole B Layer 2 — ModalHandler** (`specialists/modal_handler.rs`).
+  Classifies `Login | Confirmation | Error | Info | Unrecognized` modals
+  and decides `ClickCancel | Hitl | Halt`. Three unrecognized modals in a
+  session triggers HALT.
+- **Hole B Layer 3 — PageDescriptor opt-ins** (`descriptors/page_descriptor.rs`).
+  Destructive opt-ins must (1) not target `/settings|/governance|/memory`,
+  (2) set `fixture_required = true`, (3) reference a present fixture,
+  (4) the fixture must be `FixtureKind::Throwaway`.
+- **Calibration recording** (`governance/calibration.rs`). JSONL
+  append-only log for `vision_judge` similarity scores + ground truth.
+  Recompute lands in Phase 1.4.
+- **SpecialistCall + `AuditLog::record_specialist_call`**. The I-5
+  output-capture seam. Phase 1.4 wires the driver loop to call this on
+  every specialist invocation.
+
+Still gated to **Phase 1.3.5**: Xvfb isolation, real input events, real
+screen capture, live DOM path for the enumerator.
+
+Still gated to **Phase 1.4**: chrono timestamps, dry-run flags, heartbeat
+files, vision_judge LLM integration, driver loop wiring.
+
 ## The five invariants (v1.1 §3)
 
 | # | Name | What |
