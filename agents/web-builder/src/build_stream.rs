@@ -154,6 +154,11 @@ pub fn estimate_cost(model_id: &str, est_input: usize, est_output: usize) -> f64
 fn model_token_rates(model_id: &str) -> (f64, f64) {
     let m = model_id.to_lowercase();
 
+    // ── CLI providers (subscription-covered, $0) ──
+    if m.contains("via codex cli") || m.contains("via cli") {
+        return (0.0, 0.0);
+    }
+
     // ── Anthropic ──
     if m.contains("opus") {
         return (5.0, 25.0);
@@ -308,6 +313,25 @@ mod tests {
     fn test_calculate_cost_free_model() {
         let cost = calculate_cost("ollama/llama3", 2000, 8000);
         assert_eq!(cost, 0.0);
+    }
+
+    #[test]
+    fn test_calculate_cost_codex_cli_is_zero() {
+        let cost = calculate_cost("gpt-5.4 (via Codex CLI)", 2500, 16000);
+        assert_eq!(cost, 0.0);
+    }
+
+    #[test]
+    fn test_calculate_cost_claude_code_cli_is_zero() {
+        let cost = calculate_cost("claude-sonnet-4-6 (via CLI)", 2500, 16000);
+        assert_eq!(cost, 0.0);
+    }
+
+    #[test]
+    fn test_calculate_cost_gpt5_api_is_paid() {
+        // GPT-5 via API (not CLI) should have a cost
+        let cost = calculate_cost("gpt-5.4", 2000, 8000);
+        assert!(cost > 0.0);
     }
 
     #[test]

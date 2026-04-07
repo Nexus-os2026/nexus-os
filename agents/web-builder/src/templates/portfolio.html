@@ -1,218 +1,782 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{NAME}} — {{TITLE}}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family={{HEADING_FONT}}:wght@300;600;700&family={{BODY_FONT}}:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family={{HEADING_FONT}}:wght@300;500;600;700;800&family={{BODY_FONT}}:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    /* ── Design Tokens ── */
+    /* ========== FOUNDATION TOKENS ========== */
     :root {
-      --primary: #8b5cf6;
-      --primary-light: #a78bfa;
-      --accent: #f472b6;
-      --bg: #fafafa;
-      --bg-card: #ffffff;
-      --text: #1a1a2e;
-      --text-muted: #6b7280;
-      --heading-font: var(--heading-font-family, 'Playfair Display', serif);
-      --body-font: var(--body-font-family, 'Inter', sans-serif);
-      --section-padding: 5rem 2rem;
-      --card-radius: 0.75rem;
-      --border-subtle: #e5e7eb;
+      color-scheme: light dark;
+
+      /* Colors */
+      --color-primary: #18181b;
+      --color-secondary: #3f3f46;
+      --color-accent: #a1a1aa;
+      --color-bg: #fafafa;
+      --color-bg-secondary: #f4f4f5;
+      --color-text: #18181b;
+      --color-text-secondary: #71717a;
+      --color-border: #e4e4e7;
+
+      /* Typography */
+      --font-heading: var(--heading-font-family, 'Playfair Display', Georgia, serif);
+      --font-body: var(--body-font-family, 'Inter', system-ui, sans-serif);
+      --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+      /* Type scale — fluid */
+      --text-xs: clamp(0.75rem, 0.7rem + 0.15vw, 0.8rem);
+      --text-sm: clamp(0.875rem, 0.8rem + 0.25vw, 1rem);
+      --text-base: clamp(1rem, 0.925rem + 0.3vw, 1.125rem);
+      --text-lg: clamp(1.125rem, 1rem + 0.4vw, 1.25rem);
+      --text-xl: clamp(1.25rem, 1.1rem + 0.5vw, 1.5rem);
+      --text-2xl: clamp(1.5rem, 1.25rem + 0.75vw, 2rem);
+      --text-3xl: clamp(1.875rem, 1.5rem + 1.2vw, 2.5rem);
+      --text-4xl: clamp(2.25rem, 1.75rem + 1.5vw, 3.5rem);
+
+      /* Spacing */
+      --space-xs: 0.25rem;
+      --space-sm: 0.5rem;
+      --space-md: 1rem;
+      --space-lg: 1.5rem;
+      --space-xl: 2rem;
+      --space-2xl: 3rem;
+      --space-section: 5rem;
+
+      /* Radii */
+      --radius-sm: 0.25rem;
+      --radius-md: 0.5rem;
+      --radius-lg: 0.75rem;
+      --radius-xl: 1rem;
+      --radius-full: 9999px;
+
+      /* Shadows */
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+      --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+      --shadow-lg: 0 10px 15px rgba(0,0,0,0.15);
+      --shadow-xl: 0 20px 25px rgba(0,0,0,0.2);
+
+      /* Motion */
+      --duration-fast: 150ms;
+      --duration-normal: 300ms;
+      --duration-slow: 500ms;
+      --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+
+      /* Semantic tokens */
+      --btn-bg: var(--color-primary);
+      --btn-text: var(--color-bg);
+      --btn-border: var(--color-primary);
+      --btn-hover-bg: var(--color-accent);
+      --card-bg: var(--color-bg-secondary);
+      --card-border: var(--color-border);
+      --card-shadow: var(--shadow-md);
+      --hero-bg: var(--color-bg);
+      --hero-text: var(--color-text);
+      --hero-accent: var(--color-primary);
+      --nav-bg: var(--color-bg);
+      --nav-text: var(--color-text);
+      --nav-border: var(--color-border);
+      --footer-bg: var(--color-bg-secondary);
+      --footer-text: var(--color-text-secondary);
+      --section-bg: var(--color-bg);
+      --section-text: var(--color-text);
+      --input-bg: var(--color-bg-secondary);
+      --input-border: var(--color-border);
+      --input-text: var(--color-text);
+      --badge-bg: var(--color-accent);
+      --badge-text: var(--color-bg);
+
+      /* Compat aliases */
+      --primary: var(--color-primary);
+      --primary-light: var(--color-secondary);
+      --primary-dark: var(--color-primary);
+      --accent: var(--color-accent);
+      --bg: var(--color-bg);
+      --text: var(--color-text);
+      --text-muted: var(--color-text-secondary);
     }
 
-    /* ── Reset & Base ── */
+    /* ========== BASE RESET ========== */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
+    html { scroll-behavior: smooth; font-size: 100%; }
     body {
-      font-family: var(--body-font);
-      background: var(--bg);
-      color: var(--text);
+      font-family: var(--font-body);
+      background: var(--color-bg);
+      color: var(--color-text);
       line-height: 1.7;
+      font-size: var(--text-base);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
-    a { color: var(--primary); text-decoration: none; }
+    a { color: var(--color-primary); text-decoration: none; transition: color var(--duration-fast) var(--ease-default); }
+    a:hover { color: var(--color-secondary); }
+    img { max-width: 100%; height: auto; display: block; }
+    button { font-family: inherit; cursor: pointer; }
 
-    /* ── Navigation ── */
-    .nav { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 1rem 2.5rem; background: rgba(250,250,250,0.9); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border-subtle); }
-    .nav__brand { font-family: var(--heading-font); font-weight: 700; font-size: 1.25rem; }
-    .nav__links { display: flex; gap: 2rem; list-style: none; }
-    .nav__links a { color: var(--text-muted); font-size: 0.9rem; transition: color 0.3s ease; }
-    .nav__links a:hover { color: var(--text); }
+    /* Skip link */
+    .skip-link {
+      position: absolute; top: calc(-1 * var(--space-section)); left: var(--space-md);
+      padding: var(--space-sm) var(--space-md); background: var(--color-primary); color: var(--color-bg);
+      border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 600; z-index: 100;
+      transition: top var(--duration-fast) var(--ease-default);
+    }
+    .skip-link:focus { top: var(--space-md); }
 
-    /* ── Hero ── */
-    .hero { padding: 8rem 2rem 5rem; max-width: 48rem; margin: 0 auto; text-align: center; }
-    .hero__avatar { width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--accent)); margin: 0 auto 2rem; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; color: #fff; font-family: var(--heading-font); }
-    .hero h1 { font-family: var(--heading-font); font-size: clamp(2rem, 4vw, 3rem); font-weight: 700; margin-bottom: 0.5rem; }
-    .hero h2 { font-family: var(--body-font); font-weight: 400; font-size: 1.15rem; color: var(--text-muted); margin-bottom: 1.5rem; }
-    .hero p { color: var(--text-muted); max-width: 32rem; margin: 0 auto 2rem; }
-    .hero__social { display: flex; gap: 1rem; justify-content: center; }
-    .hero__social a { padding: 0.5rem 1.25rem; border: 1px solid var(--border-subtle); border-radius: 2rem; font-size: 0.85rem; color: var(--text-muted); transition: border-color 0.3s ease, color 0.3s ease; }
-    .hero__social a:hover { border-color: var(--primary); color: var(--primary); }
+    /* Container */
+    .container { max-width: 72rem; margin: 0 auto; padding-left: var(--space-xl); padding-right: var(--space-xl); }
+    .container--narrow { max-width: 48rem; }
 
-    /* ── Projects ── */
-    .projects { padding: var(--section-padding); max-width: 72rem; margin: 0 auto; }
-    .projects h2 { font-family: var(--heading-font); font-size: 2rem; text-align: center; margin-bottom: 3rem; }
-    .projects__grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem; }
-    .project-card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--card-radius); overflow: hidden; transition: transform 0.3s ease, box-shadow 0.3s ease; }
-    .project-card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(0,0,0,0.08); }
-    .project-card__image { width: 100%; height: 200px; background: linear-gradient(135deg, #e0e7ff, #fce7f3); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.85rem; }
-    .project-card__body { padding: 1.5rem; }
-    .project-card h3 { font-family: var(--heading-font); font-size: 1.15rem; margin-bottom: 0.5rem; }
-    .project-card p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem; }
-    .project-card__tags { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-    .project-card__tag { padding: 0.2rem 0.6rem; background: #f3f4f6; border-radius: 1rem; font-size: 0.75rem; color: var(--text-muted); }
+    /* ========== NAVIGATION ========== */
+    .nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--space-lg) var(--space-xl);
+      background: transparent;
+      transition: background var(--duration-normal) var(--ease-default),
+                  border-color var(--duration-normal) var(--ease-default);
+      border-bottom: 1px solid transparent;
+    }
+    .nav.is-scrolled {
+      background: color-mix(in srgb, var(--nav-bg) 92%, transparent);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border-bottom-color: var(--nav-border);
+    }
+    @supports not (backdrop-filter: blur(12px)) {
+      .nav.is-scrolled { background: var(--nav-bg); }
+    }
+    .nav__brand {
+      font-family: var(--font-heading); font-weight: 700;
+      font-size: var(--text-lg); color: var(--nav-text);
+      letter-spacing: -0.02em;
+    }
+    .nav__links { display: flex; gap: var(--space-xl); list-style: none; }
+    .nav__links a {
+      color: var(--color-text-secondary); font-size: var(--text-sm); font-weight: 500;
+      padding: var(--space-xs) 0; position: relative;
+      transition: color var(--duration-fast) var(--ease-default);
+    }
+    .nav__links a::after {
+      content: ''; position: absolute; bottom: -2px; left: 0; width: 0; height: 1px;
+      background: var(--color-primary); transition: width var(--duration-normal) var(--ease-default);
+    }
+    .nav__links a:hover { color: var(--color-text); }
+    .nav__links a:hover::after { width: 100%; }
+    .nav__hamburger {
+      display: none; background: none; border: none; padding: var(--space-sm);
+      color: var(--color-text); cursor: pointer;
+    }
+    .nav__hamburger svg { width: 24px; height: 24px; }
+    .nav__mobile {
+      display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--color-bg); z-index: 60; flex-direction: column;
+      align-items: center; justify-content: center; gap: var(--space-xl);
+    }
+    .nav__mobile.is-open { display: flex; }
+    .nav__mobile a {
+      font-family: var(--font-heading); font-size: var(--text-2xl); font-weight: 600;
+      color: var(--color-text); transition: color var(--duration-fast) var(--ease-default);
+    }
+    .nav__mobile a:hover { color: var(--color-primary); }
+    .nav__mobile-close {
+      position: absolute; top: var(--space-lg); right: var(--space-xl);
+      background: none; border: none; color: var(--color-text); cursor: pointer;
+    }
+    .nav__mobile-close svg { width: 24px; height: 24px; }
 
-    /* ── About ── */
-    .about { padding: var(--section-padding); max-width: 48rem; margin: 0 auto; text-align: center; }
-    .about h2 { font-family: var(--heading-font); font-size: 2rem; margin-bottom: 1.5rem; }
-    .about p { color: var(--text-muted); line-height: 1.8; }
+    /* ========== HERO SECTION ========== */
+    .hero {
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; text-align: center;
+      padding: calc(var(--space-section) * 2) var(--space-xl) var(--space-section);
+      background: var(--hero-bg); position: relative;
+    }
+    .hero__avatar {
+      width: 6rem; height: 6rem; border-radius: var(--radius-full);
+      background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+      display: flex; align-items: center; justify-content: center;
+      font-size: var(--text-2xl); color: var(--color-bg); font-family: var(--font-heading);
+      font-weight: 700; margin-bottom: var(--space-xl);
+    }
+    .hero h1 {
+      font-family: var(--font-heading); font-size: var(--text-4xl); font-weight: 700;
+      line-height: 1.08; letter-spacing: -0.03em;
+      color: var(--hero-text); margin-bottom: var(--space-sm);
+    }
+    .hero__title {
+      font-family: var(--font-body); font-size: var(--text-xl); font-weight: 400;
+      color: var(--color-text-secondary); margin-bottom: var(--space-lg);
+    }
+    .hero__bio {
+      font-size: var(--text-lg); color: var(--color-text-secondary);
+      max-width: 32rem; margin: 0 auto var(--space-2xl); line-height: 1.7;
+    }
+    .hero__actions {
+      display: flex; gap: var(--space-md); justify-content: center; flex-wrap: wrap;
+    }
+    .hero__scroll-hint {
+      position: absolute; bottom: var(--space-2xl); left: 50%; transform: translateX(-50%);
+      color: var(--color-text-secondary); opacity: 0.5;
+      animation: hero-bounce 2s var(--ease-default) infinite;
+    }
+    @keyframes hero-bounce {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50% { transform: translateX(-50%) translateY(8px); }
+    }
 
-    /* ── Skills ── */
-    .skills { padding: var(--section-padding); max-width: 48rem; margin: 0 auto; text-align: center; }
-    .skills h2 { font-family: var(--heading-font); font-size: 2rem; margin-bottom: 2rem; }
-    .skills__tags { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; }
-    .skill-tag { padding: 0.5rem 1.25rem; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 2rem; font-size: 0.875rem; color: var(--text); transition: border-color 0.3s ease, background 0.3s ease; }
-    .skill-tag:hover { border-color: var(--primary); background: rgba(139,92,246,0.05); }
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; gap: var(--space-sm);
+      padding: var(--space-sm) var(--space-xl); border-radius: var(--radius-md);
+      font-size: var(--text-base); font-weight: 600; border: none;
+      transition: transform var(--duration-fast) var(--ease-default),
+                  box-shadow var(--duration-fast) var(--ease-default),
+                  background var(--duration-fast) var(--ease-default);
+    }
+    .btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+    .btn--primary {
+      background: var(--btn-bg); color: var(--btn-text);
+    }
+    .btn--primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px color-mix(in srgb, var(--color-primary) 25%, transparent);
+    }
+    .btn--secondary {
+      background: transparent; color: var(--color-text);
+      border: 1px solid var(--card-border);
+    }
+    .btn--secondary:hover {
+      border-color: var(--color-primary);
+      background: color-mix(in srgb, var(--color-primary) 5%, transparent);
+    }
 
-    /* ── Contact ── */
-    .contact { padding: var(--section-padding); max-width: 36rem; margin: 0 auto; }
-    .contact h2 { font-family: var(--heading-font); font-size: 2rem; text-align: center; margin-bottom: 2rem; }
-    .contact form { display: flex; flex-direction: column; gap: 1rem; }
-    .contact input, .contact textarea { padding: 0.75rem 1rem; border: 1px solid var(--border-subtle); border-radius: 0.5rem; font-family: var(--body-font); font-size: 0.9rem; background: var(--bg-card); transition: border-color 0.3s ease; }
-    .contact input:focus, .contact textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(139,92,246,0.1); }
-    .contact textarea { min-height: 120px; resize: vertical; }
-    .contact button { padding: 0.75rem 2rem; background: var(--primary); color: #fff; border: none; border-radius: 0.5rem; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.3s ease; }
-    .contact button:hover { background: #7c3aed; }
+    /* ========== PROJECTS SECTION ========== */
+    .projects {
+      padding: var(--space-section) 0;
+      background: var(--section-bg);
+    }
+    .section-header {
+      text-align: center; margin-bottom: var(--space-2xl);
+    }
+    .section-header h2 {
+      font-family: var(--font-heading); font-size: var(--text-3xl); font-weight: 700;
+      line-height: 1.15; letter-spacing: -0.02em; color: var(--section-text);
+    }
+    .projects__grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      grid-auto-rows: minmax(18rem, auto);
+      gap: var(--space-lg);
+    }
+    /* Bento-style: first and last cards span taller */
+    .project-card:nth-child(1) { grid-row: span 2; }
+    .project-card:nth-child(4) { grid-row: span 2; }
 
-    /* ── Footer ── */
-    .footer { padding: 3rem 2rem; text-align: center; color: var(--text-muted); font-size: 0.85rem; border-top: 1px solid var(--border-subtle); }
+    .project-card {
+      position: relative; overflow: hidden;
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--card-border);
+      background: var(--card-bg);
+      transition: transform var(--duration-normal) var(--ease-default),
+                  box-shadow var(--duration-normal) var(--ease-default);
+    }
+    .project-card:hover {
+      transform: translateY(-4px); box-shadow: var(--shadow-xl);
+    }
+    .project-card:focus-visible {
+      outline: 2px solid var(--color-primary); outline-offset: 2px;
+    }
+    .project-card__image {
+      width: 100%; height: 100%; min-height: 18rem;
+      background: color-mix(in srgb, var(--color-bg-secondary) 80%, var(--color-primary));
+      display: flex; align-items: center; justify-content: center;
+      color: var(--color-text-secondary); font-size: var(--text-sm);
+      object-fit: cover;
+    }
+    .project-card__overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(to top,
+        color-mix(in srgb, var(--color-bg) 90%, transparent) 0%,
+        color-mix(in srgb, var(--color-bg) 40%, transparent) 50%,
+        transparent 100%);
+      display: flex; flex-direction: column; justify-content: flex-end;
+      padding: var(--space-xl);
+      opacity: 0;
+      transition: opacity var(--duration-normal) var(--ease-default);
+    }
+    .project-card:hover .project-card__overlay,
+    .project-card:focus-visible .project-card__overlay {
+      opacity: 1;
+    }
+    .project-card__overlay h3 {
+      font-family: var(--font-heading); font-size: var(--text-xl); font-weight: 700;
+      color: var(--color-text); margin-bottom: var(--space-xs);
+    }
+    .project-card__overlay p {
+      font-size: var(--text-sm); color: var(--color-text-secondary);
+      margin-bottom: var(--space-md); line-height: 1.6;
+    }
+    .project-card__tags {
+      display: flex; gap: var(--space-sm); flex-wrap: wrap; margin-bottom: var(--space-md);
+    }
+    .project-card__tag {
+      padding: var(--space-xs) var(--space-md);
+      background: color-mix(in srgb, var(--color-bg-secondary) 70%, transparent);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-full); font-size: var(--text-xs);
+      color: var(--color-text-secondary);
+    }
+    .project-card__link {
+      font-size: var(--text-sm); font-weight: 600; color: var(--color-primary);
+      display: inline-flex; align-items: center; gap: var(--space-xs);
+      transition: gap var(--duration-fast) var(--ease-default);
+    }
+    .project-card__link:hover { gap: var(--space-sm); }
+    .project-card__link::after { content: '\2192'; }
 
-    /* ── Responsive ── */
+    /* ========== ABOUT SECTION ========== */
+    .about {
+      padding: var(--space-section) 0;
+      background: var(--color-bg-secondary);
+    }
+    .about__inner {
+      max-width: 48rem; margin: 0 auto; text-align: center;
+    }
+    .about h2 {
+      font-family: var(--font-heading); font-size: var(--text-3xl); font-weight: 700;
+      letter-spacing: -0.02em; color: var(--section-text);
+      margin-bottom: var(--space-xl);
+    }
+    .about__bio {
+      font-size: var(--text-lg); color: var(--color-text-secondary);
+      line-height: 1.8;
+    }
+
+    /* ========== SKILLS SECTION ========== */
+    .skills {
+      padding: var(--space-section) 0;
+      background: var(--section-bg);
+    }
+    .skills h2 {
+      font-family: var(--font-heading); font-size: var(--text-3xl); font-weight: 700;
+      letter-spacing: -0.02em; color: var(--section-text);
+      text-align: center; margin-bottom: var(--space-2xl);
+    }
+    .skills__tags {
+      display: flex; flex-wrap: wrap; gap: var(--space-md); justify-content: center;
+      max-width: 48rem; margin: 0 auto;
+    }
+    .skill-tag {
+      padding: var(--space-sm) var(--space-lg);
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-full);
+      font-size: var(--text-sm); font-weight: 500; color: var(--color-text);
+      transition: border-color var(--duration-fast) var(--ease-default),
+                  background var(--duration-fast) var(--ease-default),
+                  transform var(--duration-fast) var(--ease-default);
+    }
+    .skill-tag:hover {
+      border-color: var(--color-primary);
+      background: color-mix(in srgb, var(--color-primary) 5%, transparent);
+      transform: translateY(-2px);
+    }
+
+    /* ========== CONTACT SECTION ========== */
+    .contact {
+      padding: var(--space-section) 0;
+      background: var(--color-bg-secondary);
+    }
+    .contact__inner {
+      max-width: 36rem; margin: 0 auto; text-align: center;
+    }
+    .contact h2 {
+      font-family: var(--font-heading); font-size: var(--text-3xl); font-weight: 700;
+      letter-spacing: -0.02em; color: var(--section-text);
+      margin-bottom: var(--space-md);
+    }
+    .contact__subtext {
+      font-size: var(--text-lg); color: var(--color-text-secondary);
+      margin-bottom: var(--space-2xl); line-height: 1.6;
+    }
+    .contact__email {
+      display: inline-flex; align-items: center; gap: var(--space-sm);
+      font-family: var(--font-heading); font-size: var(--text-xl); font-weight: 600;
+      color: var(--color-primary); padding: var(--space-md) var(--space-xl);
+      border: 1px solid var(--card-border); border-radius: var(--radius-lg);
+      transition: border-color var(--duration-fast) var(--ease-default),
+                  background var(--duration-fast) var(--ease-default),
+                  transform var(--duration-fast) var(--ease-default);
+    }
+    .contact__email:hover {
+      border-color: var(--color-primary);
+      background: color-mix(in srgb, var(--color-primary) 5%, transparent);
+      transform: translateY(-2px);
+    }
+    .contact__email:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+    /* ========== FOOTER ========== */
+    .site-footer {
+      padding: var(--space-2xl) 0;
+      background: var(--footer-bg);
+      border-top: 1px solid var(--nav-border);
+      text-align: center;
+    }
+    .footer__social {
+      display: flex; gap: var(--space-lg); justify-content: center;
+      list-style: none; margin-bottom: var(--space-lg);
+    }
+    .footer__social a {
+      color: var(--footer-text); font-size: var(--text-sm); font-weight: 500;
+      transition: color var(--duration-fast) var(--ease-default);
+    }
+    .footer__social a:hover { color: var(--color-primary); }
+    .footer__copyright {
+      font-size: var(--text-xs); color: var(--footer-text);
+    }
+
+    /* ========== SCROLL ANIMATIONS ========== */
+    .nexus-reveal {
+      opacity: 0; transform: translateY(20px);
+      transition: opacity var(--duration-normal) var(--ease-default),
+                  transform var(--duration-normal) var(--ease-default);
+    }
+    .nexus-reveal.is-visible { opacity: 1; transform: translateY(0); }
+
+    .nexus-stagger > * {
+      opacity: 0; transform: translateY(16px);
+      transition: opacity var(--duration-normal) var(--ease-default),
+                  transform var(--duration-normal) var(--ease-default);
+    }
+    .nexus-stagger.is-visible > *:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: 0ms; }
+    .nexus-stagger.is-visible > *:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 100ms; }
+    .nexus-stagger.is-visible > *:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 200ms; }
+    .nexus-stagger.is-visible > *:nth-child(4) { opacity: 1; transform: translateY(0); transition-delay: 300ms; }
+    .nexus-stagger.is-visible > *:nth-child(5) { opacity: 1; transform: translateY(0); transition-delay: 400ms; }
+    .nexus-stagger.is-visible > *:nth-child(6) { opacity: 1; transform: translateY(0); transition-delay: 500ms; }
+    .nexus-stagger.is-visible > *:nth-child(7) { opacity: 1; transform: translateY(0); transition-delay: 600ms; }
+    .nexus-stagger.is-visible > *:nth-child(8) { opacity: 1; transform: translateY(0); transition-delay: 700ms; }
+
+    /* ========== DARK MODE ========== */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-primary: #fafafa;
+        --color-secondary: #d4d4d8;
+        --color-accent: #71717a;
+        --color-bg: #09090b;
+        --color-bg-secondary: #18181b;
+        --color-text: #fafafa;
+        --color-text-secondary: #a1a1aa;
+        --color-border: #27272a;
+      }
+    }
+    [data-theme="dark"] {
+      --color-primary: #fafafa;
+      --color-secondary: #d4d4d8;
+      --color-accent: #71717a;
+      --color-bg: #09090b;
+      --color-bg-secondary: #18181b;
+      --color-text: #fafafa;
+      --color-text-secondary: #a1a1aa;
+      --color-border: #27272a;
+    }
+    [data-theme="light"] {
+      --color-primary: #18181b;
+      --color-secondary: #3f3f46;
+      --color-accent: #a1a1aa;
+      --color-bg: #fafafa;
+      --color-bg-secondary: #f4f4f5;
+      --color-text: #18181b;
+      --color-text-secondary: #71717a;
+      --color-border: #e4e4e7;
+    }
+
+    /* Mobile overlay on project cards — always show on touch */
+    @media (hover: none) {
+      .project-card__overlay { opacity: 1; }
+    }
+
+    /* ========== REDUCED MOTION ========== */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* ========== RESPONSIVE ========== */
     @media (max-width: 1024px) {
-      .projects__grid { grid-template-columns: repeat(2, 1fr); }
+      .projects__grid { grid-template-columns: repeat(2, 1fr); grid-auto-rows: minmax(16rem, auto); }
+      .project-card:nth-child(1),
+      .project-card:nth-child(4) { grid-row: auto; }
     }
     @media (max-width: 768px) {
       .nav__links { display: none; }
-      .projects__grid { grid-template-columns: 1fr; }
-      .hero { padding: 5rem 1.5rem 3rem; }
+      .nav__hamburger { display: block; }
+      .projects__grid { grid-template-columns: 1fr; grid-auto-rows: minmax(14rem, auto); }
+      .project-card:nth-child(1),
+      .project-card:nth-child(4) { grid-row: auto; }
+      .hero { min-height: auto; padding: calc(var(--space-section) * 1.5) var(--space-md) var(--space-section); }
+      .hero h1 { font-size: var(--text-3xl); }
+      .hero__actions { flex-direction: column; align-items: center; }
+      .about__inner { text-align: left; }
+    }
+    @media (max-width: 480px) {
+      .container { padding-left: var(--space-md); padding-right: var(--space-md); }
+      .skills__tags { gap: var(--space-sm); }
     }
   </style>
 </head>
 <body>
 
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
   <!-- Navigation -->
   <nav class="nav" aria-label="Main navigation">
     <div class="nav__brand" data-nexus-slot="name">{{NAME}}</div>
     <ul class="nav__links">
-      <li><a href="#projects">Projects</a></li>
+      <li><a href="#projects">Work</a></li>
       <li><a href="#about">About</a></li>
       <li><a href="#skills">Skills</a></li>
       <li><a href="#contact">Contact</a></li>
     </ul>
+    <button class="nav__hamburger" aria-label="Open navigation" aria-expanded="false" aria-controls="mobile-nav">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
   </nav>
 
-  <!-- Hero Section -->
-  <section id="hero" data-nexus-section="hero" data-nexus-editable="true" class="hero">
-    <div class="hero__avatar" data-nexus-slot="avatar">{{AVATAR_INITIAL}}</div>
-    <h1 data-nexus-slot="name">{{NAME}}</h1>
-    <h2 data-nexus-slot="title">{{TITLE}}</h2>
-    <p data-nexus-slot="bio">{{BIO}}</p>
-    <div class="hero__social">
-      <a href="#" aria-label="GitHub profile">GitHub</a>
-      <a href="#" aria-label="LinkedIn profile">LinkedIn</a>
-      <a href="#" aria-label="Email contact">Email</a>
-    </div>
-  </section>
+  <!-- Mobile Navigation Overlay -->
+  <div id="mobile-nav" class="nav__mobile" role="dialog" aria-label="Mobile navigation">
+    <button class="nav__mobile-close" aria-label="Close navigation">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <a href="#projects">Work</a>
+    <a href="#about">About</a>
+    <a href="#skills">Skills</a>
+    <a href="#contact">Contact</a>
+  </div>
 
-  <!-- Projects Section -->
-  <section id="projects" data-nexus-section="projects" data-nexus-editable="true" class="projects">
-    <h2>Selected Work</h2>
-    <div class="projects__grid" data-nexus-slot="project_cards">
-      <article class="project-card">
-        <div class="project-card__image">{{PROJECT_1_IMAGE}}</div>
-        <div class="project-card__body">
-          <h3>{{PROJECT_1_TITLE}}</h3>
-          <p>{{PROJECT_1_DESC}}</p>
-          <div class="project-card__tags">
-            <span class="project-card__tag">{{PROJECT_1_TAG_1}}</span>
-            <span class="project-card__tag">{{PROJECT_1_TAG_2}}</span>
-          </div>
-        </div>
-      </article>
-      <article class="project-card">
-        <div class="project-card__image">{{PROJECT_2_IMAGE}}</div>
-        <div class="project-card__body">
-          <h3>{{PROJECT_2_TITLE}}</h3>
-          <p>{{PROJECT_2_DESC}}</p>
-          <div class="project-card__tags">
-            <span class="project-card__tag">{{PROJECT_2_TAG_1}}</span>
-            <span class="project-card__tag">{{PROJECT_2_TAG_2}}</span>
-          </div>
-        </div>
-      </article>
-      <article class="project-card">
-        <div class="project-card__image">{{PROJECT_3_IMAGE}}</div>
-        <div class="project-card__body">
-          <h3>{{PROJECT_3_TITLE}}</h3>
-          <p>{{PROJECT_3_DESC}}</p>
-          <div class="project-card__tags">
-            <span class="project-card__tag">{{PROJECT_3_TAG_1}}</span>
-            <span class="project-card__tag">{{PROJECT_3_TAG_2}}</span>
-          </div>
-        </div>
-      </article>
-      <article class="project-card">
-        <div class="project-card__image">{{PROJECT_4_IMAGE}}</div>
-        <div class="project-card__body">
-          <h3>{{PROJECT_4_TITLE}}</h3>
-          <p>{{PROJECT_4_DESC}}</p>
-          <div class="project-card__tags">
-            <span class="project-card__tag">{{PROJECT_4_TAG_1}}</span>
-            <span class="project-card__tag">{{PROJECT_4_TAG_2}}</span>
-          </div>
-        </div>
-      </article>
-    </div>
-  </section>
+  <main id="main-content">
 
-  <!-- About Section -->
-  <section id="about" data-nexus-section="about" data-nexus-editable="true" class="about">
-    <h2>About Me</h2>
-    <p data-nexus-slot="bio">{{ABOUT_BIO}}</p>
-  </section>
+    <!-- Hero Section -->
+    <section id="hero" data-nexus-section="hero" data-nexus-editable="true" class="hero">
+      <div class="hero__avatar" data-nexus-slot="avatar" aria-hidden="true">{{AVATAR}}</div>
+      <h1 data-nexus-slot="name">{{NAME}}</h1>
+      <div class="hero__title" data-nexus-slot="title">{{TITLE}}</div>
+      <p class="hero__bio" data-nexus-slot="bio">{{BIO}}</p>
+      <div class="hero__actions">
+        <a href="#contact" class="btn btn--primary" data-nexus-slot="cta_primary" aria-label="Primary action">{{CTA_PRIMARY}}</a>
+        <a href="#projects" class="btn btn--secondary" data-nexus-slot="cta_secondary" aria-label="View work">{{CTA_SECONDARY}}</a>
+      </div>
+      <div class="hero__scroll-hint" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+    </section>
 
-  <!-- Skills Section -->
-  <section id="skills" data-nexus-section="skills" data-nexus-editable="true" class="skills">
-    <h2>Skills & Technologies</h2>
-    <div class="skills__tags" data-nexus-slot="skill_tags">
-      <span class="skill-tag">{{SKILL_1}}</span>
-      <span class="skill-tag">{{SKILL_2}}</span>
-      <span class="skill-tag">{{SKILL_3}}</span>
-      <span class="skill-tag">{{SKILL_4}}</span>
-      <span class="skill-tag">{{SKILL_5}}</span>
-      <span class="skill-tag">{{SKILL_6}}</span>
-      <span class="skill-tag">{{SKILL_7}}</span>
-      <span class="skill-tag">{{SKILL_8}}</span>
-    </div>
-  </section>
+    <!-- Projects Section -->
+    <section id="projects" data-nexus-section="projects" data-nexus-editable="true" class="projects">
+      <div class="container">
+        <div class="section-header nexus-reveal">
+          <h2 data-nexus-slot="projects_heading">{{PROJECTS_HEADING}}</h2>
+        </div>
+        <div class="projects__grid nexus-stagger" data-nexus-slot="project_cards" aria-label="Project gallery">
+          <article class="project-card" tabindex="0">
+            <div class="project-card__image" data-nexus-slot="project_1_image" role="img" aria-label="Project 1 image">{{PROJECT_1_IMAGE}}</div>
+            <div class="project-card__overlay">
+              <h3 data-nexus-slot="project_1_title">{{PROJECT_1_TITLE}}</h3>
+              <p data-nexus-slot="project_1_desc">{{PROJECT_1_DESC}}</p>
+              <div class="project-card__tags">
+                <span class="project-card__tag" data-nexus-slot="project_1_tag_1">{{PROJECT_1_TAG_1}}</span>
+                <span class="project-card__tag" data-nexus-slot="project_1_tag_2">{{PROJECT_1_TAG_2}}</span>
+              </div>
+              <a href="{{PROJECT_1_URL}}" class="project-card__link" data-nexus-slot="project_1_url" aria-label="View {{PROJECT_1_TITLE}}">View Project</a>
+            </div>
+          </article>
+          <article class="project-card" tabindex="0">
+            <div class="project-card__image" data-nexus-slot="project_2_image" role="img" aria-label="Project 2 image">{{PROJECT_2_IMAGE}}</div>
+            <div class="project-card__overlay">
+              <h3 data-nexus-slot="project_2_title">{{PROJECT_2_TITLE}}</h3>
+              <p data-nexus-slot="project_2_desc">{{PROJECT_2_DESC}}</p>
+              <div class="project-card__tags">
+                <span class="project-card__tag" data-nexus-slot="project_2_tag_1">{{PROJECT_2_TAG_1}}</span>
+                <span class="project-card__tag" data-nexus-slot="project_2_tag_2">{{PROJECT_2_TAG_2}}</span>
+              </div>
+              <a href="{{PROJECT_2_URL}}" class="project-card__link" data-nexus-slot="project_2_url" aria-label="View {{PROJECT_2_TITLE}}">View Project</a>
+            </div>
+          </article>
+          <article class="project-card" tabindex="0">
+            <div class="project-card__image" data-nexus-slot="project_3_image" role="img" aria-label="Project 3 image">{{PROJECT_3_IMAGE}}</div>
+            <div class="project-card__overlay">
+              <h3 data-nexus-slot="project_3_title">{{PROJECT_3_TITLE}}</h3>
+              <p data-nexus-slot="project_3_desc">{{PROJECT_3_DESC}}</p>
+              <div class="project-card__tags">
+                <span class="project-card__tag" data-nexus-slot="project_3_tag_1">{{PROJECT_3_TAG_1}}</span>
+                <span class="project-card__tag" data-nexus-slot="project_3_tag_2">{{PROJECT_3_TAG_2}}</span>
+              </div>
+              <a href="{{PROJECT_3_URL}}" class="project-card__link" data-nexus-slot="project_3_url" aria-label="View {{PROJECT_3_TITLE}}">View Project</a>
+            </div>
+          </article>
+          <article class="project-card" tabindex="0">
+            <div class="project-card__image" data-nexus-slot="project_4_image" role="img" aria-label="Project 4 image">{{PROJECT_4_IMAGE}}</div>
+            <div class="project-card__overlay">
+              <h3 data-nexus-slot="project_4_title">{{PROJECT_4_TITLE}}</h3>
+              <p data-nexus-slot="project_4_desc">{{PROJECT_4_DESC}}</p>
+              <div class="project-card__tags">
+                <span class="project-card__tag" data-nexus-slot="project_4_tag_1">{{PROJECT_4_TAG_1}}</span>
+                <span class="project-card__tag" data-nexus-slot="project_4_tag_2">{{PROJECT_4_TAG_2}}</span>
+              </div>
+              <a href="{{PROJECT_4_URL}}" class="project-card__link" data-nexus-slot="project_4_url" aria-label="View {{PROJECT_4_TITLE}}">View Project</a>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
 
-  <!-- Contact Section -->
-  <section id="contact" data-nexus-section="contact" data-nexus-editable="true" class="contact">
-    <h2>Get in Touch</h2>
-    <form data-nexus-slot="contact_form" aria-label="Contact form">
-      <input type="text" placeholder="Your Name" aria-label="Your name" required />
-      <input type="email" placeholder="Your Email" aria-label="Your email" required />
-      <textarea placeholder="Your Message" aria-label="Your message" required></textarea>
-      <button type="submit" aria-label="Send message">Send Message</button>
-    </form>
-  </section>
+    <!-- About Section -->
+    <section id="about" data-nexus-section="about" data-nexus-editable="true" class="about nexus-reveal">
+      <div class="container">
+        <div class="about__inner">
+          <h2 data-nexus-slot="about_heading">{{ABOUT_HEADING}}</h2>
+          <div class="about__bio" data-nexus-slot="about_bio">{{ABOUT_BIO}}</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Skills Section -->
+    <section id="skills" data-nexus-section="skills" data-nexus-editable="true" class="skills">
+      <div class="container">
+        <h2 class="nexus-reveal" data-nexus-slot="skills_heading">{{SKILLS_HEADING}}</h2>
+        <div class="skills__tags nexus-stagger" data-nexus-slot="skill_tags">
+          <span class="skill-tag" data-nexus-slot="skill_1">{{SKILL_1}}</span>
+          <span class="skill-tag" data-nexus-slot="skill_2">{{SKILL_2}}</span>
+          <span class="skill-tag" data-nexus-slot="skill_3">{{SKILL_3}}</span>
+          <span class="skill-tag" data-nexus-slot="skill_4">{{SKILL_4}}</span>
+          <span class="skill-tag" data-nexus-slot="skill_5">{{SKILL_5}}</span>
+          <span class="skill-tag" data-nexus-slot="skill_6">{{SKILL_6}}</span>
+          <span class="skill-tag" data-nexus-slot="skill_7">{{SKILL_7}}</span>
+          <span class="skill-tag" data-nexus-slot="skill_8">{{SKILL_8}}</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" data-nexus-section="contact" data-nexus-editable="true" class="contact nexus-reveal">
+      <div class="container">
+        <div class="contact__inner">
+          <h2 data-nexus-slot="contact_heading">{{CONTACT_HEADING}}</h2>
+          <p class="contact__subtext" data-nexus-slot="contact_subtext">{{CONTACT_SUBTEXT}}</p>
+          <a href="{{CONTACT_EMAIL}}" class="contact__email" data-nexus-slot="contact_email" aria-label="Send email">{{CONTACT_EMAIL}}</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
 
   <!-- Footer -->
-  <footer id="footer" data-nexus-section="footer" data-nexus-editable="true" class="footer">
-    <p data-nexus-slot="copyright">{{COPYRIGHT}}</p>
+  <footer id="footer" data-nexus-section="footer" data-nexus-editable="true" class="site-footer">
+    <div class="container">
+      <ul class="footer__social" data-nexus-slot="social_links" aria-label="Social links">
+        <li><a href="#" aria-label="GitHub">GitHub</a></li>
+        <li><a href="#" aria-label="LinkedIn">LinkedIn</a></li>
+        <li><a href="#" aria-label="Twitter">Twitter</a></li>
+      </ul>
+      <p class="footer__copyright" data-nexus-slot="copyright">{{COPYRIGHT}}</p>
+    </div>
   </footer>
+
+  <script>
+    /* ========== SCROLL REVEAL ========== */
+    (function() {
+      var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (prefersReduced) {
+        document.querySelectorAll('.nexus-reveal, .nexus-stagger > *').forEach(function(el) {
+          el.style.opacity = '1';
+          el.style.transform = 'none';
+        });
+        return;
+      }
+      var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+      document.querySelectorAll('.nexus-reveal, .nexus-stagger').forEach(function(el) {
+        observer.observe(el);
+      });
+    })();
+
+    /* ========== NAV SCROLL EFFECT ========== */
+    (function() {
+      var nav = document.querySelector('.nav');
+      var hero = document.getElementById('hero');
+      if (!nav || !hero) return;
+      var navObserver = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            nav.classList.remove('is-scrolled');
+          } else {
+            nav.classList.add('is-scrolled');
+          }
+        });
+      }, { threshold: 0, rootMargin: '-80px 0px 0px 0px' });
+      navObserver.observe(hero);
+    })();
+
+    /* ========== DARK MODE TOGGLE ========== */
+    (function() {
+      var html = document.documentElement;
+      var stored = localStorage.getItem('nexus-theme');
+      if (stored) {
+        html.setAttribute('data-theme', stored);
+      } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        html.setAttribute('data-theme', 'dark');
+      }
+      window.__nexusToggleTheme = function() {
+        var current = html.getAttribute('data-theme');
+        var next = current === 'dark' ? 'light' : 'dark';
+        html.setAttribute('data-theme', next);
+        localStorage.setItem('nexus-theme', next);
+      };
+    })();
+
+    /* ========== MOBILE NAVIGATION ========== */
+    (function() {
+      var hamburger = document.querySelector('.nav__hamburger');
+      var mobileNav = document.getElementById('mobile-nav');
+      var closeBtn = document.querySelector('.nav__mobile-close');
+      if (!hamburger || !mobileNav) return;
+
+      function openNav() {
+        mobileNav.classList.add('is-open');
+        hamburger.setAttribute('aria-expanded', 'true');
+        closeBtn.focus();
+        document.body.style.overflow = 'hidden';
+      }
+      function closeNav() {
+        mobileNav.classList.remove('is-open');
+        hamburger.setAttribute('aria-expanded', 'false');
+        hamburger.focus();
+        document.body.style.overflow = '';
+      }
+      hamburger.addEventListener('click', openNav);
+      closeBtn.addEventListener('click', closeNav);
+      mobileNav.querySelectorAll('a').forEach(function(link) {
+        link.addEventListener('click', closeNav);
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && mobileNav.classList.contains('is-open')) {
+          closeNav();
+        }
+      });
+    })();
+  </script>
 
 </body>
 </html>

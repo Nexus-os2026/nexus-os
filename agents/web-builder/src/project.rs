@@ -57,6 +57,9 @@ pub struct ProjectState {
     pub current_checkpoint: Option<String>,
     pub approved_plan_version: Option<u32>,
     pub selected_template: Option<String>,
+    /// Output mode: "Html" (default) or "React".
+    #[serde(default)]
+    pub output_mode: Option<String>,
     pub iteration_count: u32,
     pub total_cost: f64,
     pub plan_cost: f64,
@@ -82,6 +85,7 @@ pub fn create_project(project_id: &str, prompt: &str) -> ProjectState {
         current_checkpoint: None,
         approved_plan_version: None,
         selected_template: None,
+        output_mode: None,
         iteration_count: 0,
         total_cost: 0.0,
         plan_cost: 0.0,
@@ -362,11 +366,12 @@ fn system_time_to_iso8601(t: std::time::SystemTime) -> String {
 
 /// Build export metadata JSON for a project.
 pub fn build_export_metadata(state: &ProjectState) -> serde_json::Value {
+    let cfg = crate::model_config::load_config();
     serde_json::json!({
         "project_id": state.project_id,
         "project_name": state.project_name.as_deref().unwrap_or("Untitled"),
-        "model_build": "claude-sonnet-4-6",
-        "model_plan": "claude-haiku-4-5-20251001",
+        "model_build": cfg.full_build.model_id,
+        "model_plan": cfg.planning.model_id,
         "template": state.selected_template,
         "total_cost": state.total_cost,
         "plan_cost": state.plan_cost,
@@ -624,8 +629,9 @@ mod tests {
 
         let meta = build_export_metadata(&state);
         assert_eq!(meta["project_name"], "Test Site");
-        assert_eq!(meta["model_build"], "claude-sonnet-4-6");
-        assert_eq!(meta["model_plan"], "claude-haiku-4-5-20251001");
+        // model_build and model_plan are now dynamic from BuildModelConfig
+        assert!(meta["model_build"].is_string());
+        assert!(meta["model_plan"].is_string());
         assert_eq!(meta["template"], "local_business");
         assert_eq!(meta["iteration_count"], 3);
         assert!(meta["exported_at"].as_str().unwrap().contains('T'));
@@ -739,7 +745,7 @@ mod tests {
         .unwrap();
 
         // Override HOME for the test — use the parent of .nexus/builds
-        let nexus_dir = builds.parent().unwrap();
+        let _nexus_dir = builds.parent().unwrap();
         // We can't easily override HOME in this test, so test the helper directly
         // by checking the HTML exists and line count works
         let html = fs::read_to_string(proj.join("index.html")).unwrap();

@@ -1024,7 +1024,7 @@ pub struct StreamingGenerationResult {
 /// - `BuildStarted` at the beginning
 /// - `GenerationProgress` every 500ms during streaming
 /// - `BuildCompleted` or `BuildFailed` at the end
-pub fn generate_site_v2_streaming<S: StreamingLlmProvider>(
+pub fn generate_site_v2_streaming<S: StreamingLlmProvider + ?Sized>(
     brief: &str,
     output_dir: &Path,
     streaming_provider: &S,
@@ -1073,13 +1073,41 @@ pub fn generate_site_v2_streaming<S: StreamingLlmProvider>(
     // Step 3: Derive site name from brief
     let site_name = extract_site_name(brief);
 
-    // Step 4: Build prompt — user's description is DOMINANT, design tokens for styling only
-    let prompt = build_generation_prompt(brief, &site_name, &style_guide);
+    // Step 4: Build prompt — skip double-wrapping if brief is already a planned prompt
+    let is_planned = brief.contains("Expert web developer building")
+        || brief.contains("Build a website according to this plan");
+    let prompt = if is_planned {
+        // Brief already contains the full planned prompt with quality directives,
+        // acceptance criteria, and template scaffold. Just prepend the style guide.
+        format!("{style_guide}\n\n{brief}")
+    } else {
+        build_generation_prompt(brief, &site_name, &style_guide)
+    };
+
+    // Log prompt size for optimization tracking
+    let prompt_chars = prompt.len();
+    let est_prompt_tokens = prompt_chars / 4; // rough estimate: 1 token ≈ 4 chars
+    if est_prompt_tokens > 5000 {
+        eprintln!(
+            "[conductor-v2-stream] WARNING: prompt is ~{} tokens ({} chars) — target is < 5,000. Consider prompt optimization.",
+            est_prompt_tokens, prompt_chars
+        );
+    } else {
+        eprintln!(
+            "[conductor-v2-stream] Prompt: ~{} tokens ({} chars)",
+            est_prompt_tokens, prompt_chars
+        );
+    }
 
     let system_prompt = CONDUCTOR_SYSTEM_V2;
 
-    // Step 5: Emit BuildStarted
-    let estimated_cost = estimate_cost(model, ESTIMATED_INPUT_TOKENS, ESTIMATED_TOTAL_TOKENS);
+    // Step 5: Emit BuildStarted — use actual prompt size for cost estimate
+    let est_input = if est_prompt_tokens > ESTIMATED_INPUT_TOKENS {
+        est_prompt_tokens
+    } else {
+        ESTIMATED_INPUT_TOKENS
+    };
+    let estimated_cost = estimate_cost(model, est_input, ESTIMATED_TOTAL_TOKENS);
     emit_event(BuildStreamEvent::BuildStarted {
         project_name: site_name.clone(),
         estimated_cost,

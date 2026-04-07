@@ -1,115 +1,552 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{BUSINESS_NAME}} — {{TAGLINE}}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family={{HEADING_FONT}}:wght@600;700;800&family={{BODY_FONT}}:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family={{HEADING_FONT}}:wght@400;600;700;800&family={{BODY_FONT}}:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    /* ── Design Tokens ── */
+    /* ========== FOUNDATION TOKENS ========== */
     :root {
-      --primary: #d97706;
-      --primary-light: #fbbf24;
-      --primary-dark: #b45309;
-      --accent: #059669;
-      --bg: #fffbf5;
-      --bg-card: #ffffff;
-      --text: #1c1917;
-      --text-muted: #78716c;
-      --heading-font: var(--heading-font-family, 'DM Serif Display', serif);
-      --body-font: var(--body-font-family, 'Inter', sans-serif);
-      --section-padding: 5rem 2rem;
-      --card-radius: 0.75rem;
-      --border-subtle: #e7e5e4;
+      color-scheme: light dark;
+
+      /* Colors */
+      --color-primary: #c2410c;
+      --color-secondary: #ea580c;
+      --color-accent: #16a34a;
+      --color-bg: #faf6f1;
+      --color-bg-secondary: #fff8f0;
+      --color-text: #1a1410;
+      --color-text-secondary: #6b5e50;
+      --color-border: #e5ddd3;
+
+      /* Typography */
+      --font-heading: var(--heading-font-family, 'Playfair Display', Georgia, serif);
+      --font-body: var(--body-font-family, 'Source Sans 3', system-ui, sans-serif);
+      --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+      /* Type scale — fluid */
+      --text-xs: clamp(0.75rem, 0.7rem + 0.15vw, 0.8rem);
+      --text-sm: clamp(0.875rem, 0.8rem + 0.25vw, 1rem);
+      --text-base: clamp(1rem, 0.925rem + 0.3vw, 1.125rem);
+      --text-lg: clamp(1.125rem, 1rem + 0.4vw, 1.25rem);
+      --text-xl: clamp(1.25rem, 1.1rem + 0.5vw, 1.5rem);
+      --text-2xl: clamp(1.5rem, 1.25rem + 0.75vw, 2rem);
+      --text-3xl: clamp(1.875rem, 1.5rem + 1.2vw, 2.5rem);
+      --text-4xl: clamp(2.25rem, 1.75rem + 1.5vw, 3.5rem);
+
+      /* Spacing */
+      --space-xs: 0.25rem;
+      --space-sm: 0.5rem;
+      --space-md: 1rem;
+      --space-lg: 1.5rem;
+      --space-xl: 2rem;
+      --space-2xl: 3rem;
+      --space-section: 5rem;
+
+      /* Radii */
+      --radius-sm: 0.25rem;
+      --radius-md: 0.5rem;
+      --radius-lg: 0.75rem;
+      --radius-xl: 1rem;
+      --radius-full: 9999px;
+
+      /* Shadows */
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+      --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+      --shadow-lg: 0 10px 15px rgba(0,0,0,0.15);
+      --shadow-xl: 0 20px 25px rgba(0,0,0,0.2);
+
+      /* Motion */
+      --duration-fast: 150ms;
+      --duration-normal: 300ms;
+      --duration-slow: 500ms;
+      --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+
+      /* Semantic tokens */
+      --btn-bg: var(--color-primary);
+      --btn-text: var(--color-bg);
+      --btn-border: var(--color-primary);
+      --btn-hover-bg: var(--color-accent);
+      --card-bg: var(--color-bg-secondary);
+      --card-border: var(--color-border);
+      --card-shadow: var(--shadow-md);
+      --hero-bg: var(--color-bg);
+      --hero-text: var(--color-text);
+      --hero-accent: var(--color-primary);
+      --nav-bg: var(--color-bg);
+      --nav-text: var(--color-text);
+      --nav-border: var(--color-border);
+      --footer-bg: var(--color-bg-secondary);
+      --footer-text: var(--color-text-secondary);
+      --section-bg: var(--color-bg);
+      --section-text: var(--color-text);
+      --input-bg: var(--color-bg-secondary);
+      --input-border: var(--color-border);
+      --input-text: var(--color-text);
+      --badge-bg: var(--color-accent);
+      --badge-text: var(--color-bg);
+
+      /* Compat aliases */
+      --primary: var(--color-primary);
+      --primary-light: var(--color-secondary);
+      --primary-dark: var(--color-primary);
+      --accent: var(--color-accent);
+      --bg: var(--color-bg);
+      --text: var(--color-text);
+      --text-muted: var(--color-text-secondary);
     }
 
-    /* ── Reset & Base ── */
+    /* ========== BASE RESET ========== */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
+    html { scroll-behavior: smooth; font-size: 100%; }
     body {
-      font-family: var(--body-font);
-      background: var(--bg);
-      color: var(--text);
+      font-family: var(--font-body);
+      background: var(--color-bg);
+      color: var(--color-text);
       line-height: 1.7;
+      font-size: var(--text-base);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
-    a { color: var(--primary); text-decoration: none; }
+    a { color: var(--color-primary); text-decoration: none; transition: color var(--duration-fast) var(--ease-default); }
+    a:hover { color: var(--color-secondary); }
+    img { max-width: 100%; height: auto; display: block; }
+    button { font-family: inherit; cursor: pointer; }
 
-    /* ── Navigation ── */
-    .nav { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 1rem 2.5rem; background: rgba(255,251,245,0.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border-subtle); }
-    .nav__brand { font-family: var(--heading-font); font-weight: 700; font-size: 1.3rem; color: var(--text); }
-    .nav__links { display: flex; gap: 2rem; list-style: none; }
-    .nav__links a { color: var(--text-muted); font-size: 0.9rem; transition: color 0.3s ease; }
-    .nav__links a:hover { color: var(--text); }
-    .nav__cta { padding: 0.5rem 1.25rem; background: var(--primary); color: #fff; border: none; border-radius: 0.5rem; font-size: 0.9rem; cursor: pointer; transition: background 0.3s ease; }
-    .nav__cta:hover { background: var(--primary-dark); }
+    /* Skip link */
+    .skip-link {
+      position: absolute; top: calc(-1 * var(--space-section)); left: var(--space-md);
+      padding: var(--space-sm) var(--space-md); background: var(--color-primary); color: var(--color-bg);
+      border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 600; z-index: 100;
+      transition: top var(--duration-fast) var(--ease-default);
+    }
+    .skip-link:focus { top: var(--space-md); }
 
-    /* ── Hero ── */
-    .hero { padding: 6rem 2rem; text-align: center; background: linear-gradient(180deg, rgba(217,119,6,0.06) 0%, transparent 60%); }
-    .hero h1 { font-family: var(--heading-font); font-size: clamp(2.25rem, 4.5vw, 3.5rem); font-weight: 700; margin-bottom: 1rem; }
-    .hero p { color: var(--text-muted); font-size: 1.15rem; max-width: 36rem; margin: 0 auto 2rem; }
-    .hero__actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
-    .btn-primary { padding: 0.75rem 2rem; background: var(--primary); color: #fff; border: none; border-radius: 0.5rem; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.3s ease, transform 0.3s ease; }
-    .btn-primary:hover { background: var(--primary-dark); transform: translateY(-2px); }
-    .btn-outline { padding: 0.75rem 2rem; background: transparent; color: var(--primary); border: 2px solid var(--primary); border-radius: 0.5rem; font-size: 1rem; cursor: pointer; transition: background 0.3s ease; }
-    .btn-outline:hover { background: rgba(217,119,6,0.08); }
+    /* Container */
+    .container { max-width: 72rem; margin: 0 auto; padding-left: var(--space-xl); padding-right: var(--space-xl); }
+    .container--narrow { max-width: 48rem; }
 
-    /* ── Services ── */
-    .services { padding: var(--section-padding); max-width: 72rem; margin: 0 auto; }
-    .services h2 { font-family: var(--heading-font); font-size: 2rem; text-align: center; margin-bottom: 3rem; }
-    .services__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
-    .service-card { padding: 2rem; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--card-radius); text-align: center; transition: transform 0.3s ease, box-shadow 0.3s ease; }
-    .service-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.06); }
-    .service-card__icon { font-size: 2.5rem; margin-bottom: 1rem; }
-    .service-card h3 { font-family: var(--heading-font); font-size: 1.15rem; margin-bottom: 0.5rem; }
-    .service-card p { color: var(--text-muted); font-size: 0.9rem; }
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; gap: var(--space-sm);
+      padding: var(--space-sm) var(--space-xl); border-radius: var(--radius-md);
+      font-size: var(--text-base); font-weight: 600; border: none;
+      transition: transform var(--duration-fast) var(--ease-default),
+                  box-shadow var(--duration-fast) var(--ease-default),
+                  background var(--duration-fast) var(--ease-default);
+    }
+    .btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+    .btn--primary { background: var(--btn-bg); color: var(--btn-text); }
+    .btn--primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px color-mix(in srgb, var(--color-primary) 25%, transparent);
+    }
+    .btn--secondary {
+      background: transparent; color: var(--color-primary);
+      border: 2px solid var(--color-primary);
+    }
+    .btn--secondary:hover {
+      background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+    }
 
-    /* ── Gallery ── */
-    .gallery { padding: var(--section-padding); max-width: 72rem; margin: 0 auto; }
-    .gallery h2 { font-family: var(--heading-font); font-size: 2rem; text-align: center; margin-bottom: 3rem; }
-    .gallery__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
-    .gallery__item { aspect-ratio: 4/3; background: linear-gradient(135deg, #fef3c7, #fde68a); border-radius: var(--card-radius); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.85rem; overflow: hidden; transition: transform 0.3s ease; }
-    .gallery__item:hover { transform: scale(1.03); }
+    /* Section header */
+    .section-header {
+      text-align: center; margin-bottom: var(--space-2xl);
+    }
+    .section-header h2 {
+      font-family: var(--font-heading); font-size: var(--text-3xl); font-weight: 700;
+      line-height: 1.2; color: var(--section-text);
+    }
 
-    /* ── Testimonials ── */
-    .testimonials { padding: var(--section-padding); max-width: 60rem; margin: 0 auto; }
-    .testimonials h2 { font-family: var(--heading-font); font-size: 2rem; text-align: center; margin-bottom: 3rem; }
-    .testimonials__grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; }
-    .testimonial-card { padding: 2rem; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--card-radius); }
-    .testimonial-card blockquote { font-style: italic; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.7; }
-    .testimonial-card .author { font-weight: 600; font-size: 0.9rem; }
-    .testimonial-card .stars { color: var(--primary-light); margin-bottom: 0.75rem; }
+    /* ========== NAVIGATION ========== */
+    .nav {
+      position: sticky; top: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--space-md) var(--space-xl);
+      background: color-mix(in srgb, var(--nav-bg) 92%, transparent);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--nav-border);
+      transition: background var(--duration-fast) var(--ease-default);
+    }
+    @supports not (backdrop-filter: blur(12px)) {
+      .nav { background: var(--nav-bg); }
+    }
+    .nav__brand {
+      font-family: var(--font-heading); font-weight: 700;
+      font-size: var(--text-lg); color: var(--nav-text);
+    }
+    .nav__links { display: flex; gap: var(--space-xl); list-style: none; }
+    .nav__links a {
+      color: var(--color-text-secondary); font-size: var(--text-sm); font-weight: 500;
+      transition: color var(--duration-fast) var(--ease-default);
+    }
+    .nav__links a:hover { color: var(--color-text); }
+    .nav__cta {
+      padding: var(--space-sm) var(--space-lg); background: var(--btn-bg); color: var(--btn-text);
+      border: none; border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 600;
+      transition: transform var(--duration-fast) var(--ease-default), box-shadow var(--duration-fast) var(--ease-default);
+    }
+    .nav__cta:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+    .nav__cta:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+    .nav__hamburger {
+      display: none; background: none; border: none; padding: var(--space-sm);
+      color: var(--color-text); cursor: pointer;
+    }
+    .nav__hamburger svg { width: 24px; height: 24px; }
+    .nav__mobile {
+      display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--color-bg); z-index: 60; flex-direction: column;
+      align-items: center; justify-content: center; gap: var(--space-xl);
+    }
+    .nav__mobile.is-open { display: flex; }
+    .nav__mobile a {
+      font-family: var(--font-heading); font-size: var(--text-2xl); font-weight: 600;
+      color: var(--color-text); transition: color var(--duration-fast) var(--ease-default);
+    }
+    .nav__mobile a:hover { color: var(--color-primary); }
+    .nav__mobile-close {
+      position: absolute; top: var(--space-lg); right: var(--space-xl);
+      background: none; border: none; color: var(--color-text); cursor: pointer;
+    }
+    .nav__mobile-close svg { width: 24px; height: 24px; }
 
-    /* ── Map & Hours ── */
-    .info-bar { padding: var(--section-padding); max-width: 72rem; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
-    .map-placeholder { background: #e5e7eb; border-radius: var(--card-radius); min-height: 300px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.9rem; }
-    .hours-card { padding: 2rem; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--card-radius); }
-    .hours-card h3 { font-family: var(--heading-font); font-size: 1.25rem; margin-bottom: 1.5rem; }
-    .hours-card table { width: 100%; border-collapse: collapse; }
-    .hours-card td { padding: 0.5rem 0; font-size: 0.9rem; }
-    .hours-card td:first-child { font-weight: 500; }
-    .hours-card td:last-child { text-align: right; color: var(--text-muted); }
-    .hours-card .contact-info { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-subtle); }
-    .hours-card .contact-info p { margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-muted); }
+    /* ========== HERO SECTION ========== */
+    .hero {
+      min-height: 85vh; display: flex; align-items: center; justify-content: center;
+      text-align: center; position: relative; overflow: hidden;
+      padding: calc(var(--space-section) * 2) var(--space-xl) var(--space-section);
+      background: var(--hero-bg);
+    }
+    .hero::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 50% 80%,
+        color-mix(in srgb, var(--color-primary) 6%, transparent) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .hero__inner { position: relative; z-index: 1; max-width: 40rem; }
+    .hero h1 {
+      font-family: var(--font-heading); font-size: var(--text-4xl); font-weight: 700;
+      line-height: 1.1; color: var(--hero-text); margin-bottom: var(--space-md);
+    }
+    .hero__tagline {
+      font-size: var(--text-lg); color: var(--color-text-secondary);
+      max-width: 32rem; margin: 0 auto var(--space-xl); line-height: 1.7;
+    }
+    .hero__actions {
+      display: flex; gap: var(--space-md); justify-content: center; flex-wrap: wrap;
+      margin-bottom: var(--space-lg);
+    }
+    .hero__phone {
+      font-size: var(--text-sm); color: var(--color-text-secondary);
+    }
+    .hero__phone a {
+      color: var(--color-primary); font-weight: 600;
+    }
+    .hero__image {
+      position: absolute; inset: 0; z-index: 0;
+      background: color-mix(in srgb, var(--color-bg-secondary) 50%, var(--color-border));
+      display: flex; align-items: center; justify-content: center;
+      color: var(--color-text-secondary); font-size: var(--text-xs);
+    }
+    .hero.has-image .hero__inner {
+      text-shadow: 0 1px 3px color-mix(in srgb, var(--color-bg) 30%, transparent);
+    }
 
-    /* ── Footer ── */
-    .footer { padding: 3rem 2rem; text-align: center; color: var(--text-muted); font-size: 0.85rem; border-top: 1px solid var(--border-subtle); }
+    /* ========== SERVICES SECTION ========== */
+    .services {
+      padding: var(--space-section) 0;
+      background: var(--color-bg-secondary);
+    }
+    .services__grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-lg);
+    }
+    .service-card {
+      padding: var(--space-xl); text-align: center;
+      background: var(--color-bg); border: 1px solid var(--card-border);
+      border-radius: var(--radius-xl);
+      transition: transform var(--duration-fast) var(--ease-default),
+                  box-shadow var(--duration-fast) var(--ease-default);
+    }
+    .service-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+    .service-card__icon {
+      width: 3rem; height: 3rem; display: flex; align-items: center; justify-content: center;
+      margin: 0 auto var(--space-md);
+      border-radius: var(--radius-lg);
+      background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+      color: var(--color-primary); font-size: var(--text-xl);
+    }
+    .service-card h3 {
+      font-family: var(--font-heading); font-size: var(--text-lg); font-weight: 600;
+      margin-bottom: var(--space-sm); color: var(--section-text);
+    }
+    .service-card p {
+      font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.7;
+    }
 
-    /* ── Responsive ── */
+    /* ========== GALLERY SECTION ========== */
+    .gallery {
+      padding: var(--space-section) 0;
+      background: var(--section-bg);
+    }
+    .gallery__grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-auto-rows: minmax(14rem, auto);
+      gap: var(--space-md);
+    }
+    .gallery__grid > *:nth-child(1) { grid-row: span 2; }
+    .gallery__grid > *:nth-child(4) { grid-column: span 2; }
+    .gallery__item {
+      position: relative; overflow: hidden;
+      border-radius: var(--radius-xl);
+      background: color-mix(in srgb, var(--color-bg-secondary) 80%, var(--color-primary));
+      display: flex; align-items: center; justify-content: center;
+      color: var(--color-text-secondary); font-size: var(--text-xs);
+      cursor: pointer;
+      transition: transform var(--duration-fast) var(--ease-default);
+    }
+    .gallery__item:hover { transform: scale(1.02); }
+    .gallery__item:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+    /* Lightbox */
+    .gallery-lightbox {
+      position: fixed; inset: 0; z-index: 100;
+      background: color-mix(in srgb, var(--color-bg) 95%, transparent);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none;
+      transition: opacity var(--duration-normal) var(--ease-default);
+    }
+    .gallery-lightbox.is-active { opacity: 1; pointer-events: auto; }
+    .gallery-lightbox__close {
+      position: absolute; top: var(--space-xl); right: var(--space-xl);
+      background: none; border: none; color: var(--color-text);
+      font-size: var(--text-2xl); cursor: pointer;
+    }
+    .gallery-lightbox__close:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+    .gallery-lightbox__image {
+      max-width: 90vw; max-height: 85vh;
+      border-radius: var(--radius-xl);
+      background: var(--card-bg);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--color-text-secondary); font-size: var(--text-sm);
+      padding: var(--space-xl);
+    }
+
+    /* ========== TESTIMONIALS SECTION ========== */
+    .testimonials {
+      padding: var(--space-section) 0;
+      background: var(--color-bg-secondary);
+    }
+    .testimonials__grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-lg);
+      max-width: 56rem; margin: 0 auto;
+    }
+    .testimonial-card {
+      padding: var(--space-xl); border-radius: var(--radius-xl);
+      border: 1px solid var(--card-border); background: var(--color-bg);
+      transition: transform var(--duration-fast) var(--ease-default),
+                  box-shadow var(--duration-fast) var(--ease-default);
+    }
+    .testimonial-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+    .testimonial-card__stars {
+      display: flex; gap: 1px; margin-bottom: var(--space-md);
+    }
+    .testimonial-card__stars svg {
+      width: 16px; height: 16px; fill: var(--color-primary);
+    }
+    .testimonial-card blockquote {
+      font-size: var(--text-base); color: var(--color-text-secondary);
+      line-height: 1.7; margin-bottom: var(--space-md); font-style: italic;
+    }
+    .testimonial-card__author {
+      font-weight: 600; font-size: var(--text-sm); color: var(--section-text);
+    }
+
+    /* ========== MAP SECTION ========== */
+    .map-section {
+      padding: var(--space-section) 0;
+      background: var(--section-bg);
+    }
+    .map-container {
+      border-radius: var(--radius-xl); overflow: hidden;
+      border: 1px solid var(--card-border);
+      box-shadow: var(--shadow-lg);
+      position: relative;
+    }
+    .map-placeholder {
+      aspect-ratio: 16 / 9;
+      background: color-mix(in srgb, var(--color-bg-secondary) 80%, var(--color-border));
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: var(--space-md); color: var(--color-text-secondary); font-size: var(--text-sm);
+    }
+    .map-placeholder__address {
+      padding: var(--space-sm) var(--space-lg);
+      background: color-mix(in srgb, var(--color-bg) 90%, transparent);
+      border-radius: var(--radius-full); font-size: var(--text-xs);
+    }
+
+    /* ========== HOURS SECTION ========== */
+    .hours-section {
+      padding: var(--space-section) 0;
+      background: var(--color-bg-secondary);
+    }
+    .hours-card {
+      max-width: 36rem; margin: 0 auto;
+      padding: var(--space-2xl);
+      background: var(--color-bg); border: 1px solid var(--card-border);
+      border-radius: var(--radius-xl); box-shadow: var(--shadow-md);
+    }
+    .hours-card h2 {
+      font-family: var(--font-heading); font-size: var(--text-2xl); font-weight: 700;
+      color: var(--section-text); text-align: center; margin-bottom: var(--space-xl);
+    }
+    .hours-table { width: 100%; border-collapse: collapse; }
+    .hours-table td {
+      padding: var(--space-sm) 0; font-size: var(--text-sm);
+      border-bottom: 1px solid color-mix(in srgb, var(--card-border) 50%, transparent);
+    }
+    .hours-table td:first-child { font-weight: 500; color: var(--section-text); }
+    .hours-table td:last-child { text-align: right; color: var(--color-text-secondary); }
+    .hours-table tr:last-child td { border-bottom: none; }
+    .hours-contact {
+      margin-top: var(--space-xl); padding-top: var(--space-xl);
+      border-top: 1px solid var(--card-border);
+    }
+    .hours-contact__item {
+      display: flex; align-items: center; gap: var(--space-md);
+      margin-bottom: var(--space-md); font-size: var(--text-sm);
+      color: var(--color-text-secondary);
+    }
+    .hours-contact__item a {
+      color: var(--color-primary); font-weight: 500;
+    }
+    .hours-contact__item:last-child { margin-bottom: 0; }
+
+    /* ========== FOOTER ========== */
+    .site-footer {
+      padding: var(--space-2xl) 0 var(--space-xl);
+      background: var(--footer-bg);
+      border-top: 1px solid var(--nav-border);
+    }
+    .footer__inner {
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .footer__brand {
+      font-family: var(--font-heading); font-weight: 700;
+      font-size: var(--text-lg); color: var(--color-text);
+    }
+    .footer__copyright {
+      font-size: var(--text-xs); color: var(--footer-text);
+    }
+
+    /* ========== STICKY BOOKING CTA ========== */
+    .sticky-cta {
+      display: none; position: fixed; bottom: 0; left: 0; right: 0;
+      z-index: 40; padding: var(--space-md) var(--space-xl);
+      background: color-mix(in srgb, var(--color-bg) 95%, transparent);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border-top: 1px solid var(--card-border);
+      transform: translateY(100%);
+      transition: transform var(--duration-normal) var(--ease-default);
+    }
+    .sticky-cta.is-visible { transform: translateY(0); }
+    .sticky-cta .btn { width: 100%; }
+
+    /* ========== SCROLL ANIMATIONS ========== */
+    .nexus-reveal {
+      opacity: 0; transform: translateY(20px);
+      transition: opacity var(--duration-normal) var(--ease-default),
+                  transform var(--duration-normal) var(--ease-default);
+    }
+    .nexus-reveal.is-visible { opacity: 1; transform: translateY(0); }
+
+    .nexus-stagger > * {
+      opacity: 0; transform: translateY(16px);
+      transition: opacity var(--duration-normal) var(--ease-default),
+                  transform var(--duration-normal) var(--ease-default);
+    }
+    .nexus-stagger.is-visible > *:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: 0ms; }
+    .nexus-stagger.is-visible > *:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 80ms; }
+    .nexus-stagger.is-visible > *:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 160ms; }
+    .nexus-stagger.is-visible > *:nth-child(4) { opacity: 1; transform: translateY(0); transition-delay: 240ms; }
+    .nexus-stagger.is-visible > *:nth-child(5) { opacity: 1; transform: translateY(0); transition-delay: 320ms; }
+    .nexus-stagger.is-visible > *:nth-child(6) { opacity: 1; transform: translateY(0); transition-delay: 400ms; }
+
+    /* ========== DARK MODE ========== */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-primary: #fb923c;
+        --color-secondary: #fdba74;
+        --color-accent: #4ade80;
+        --color-bg: #1c1210;
+        --color-bg-secondary: #2a1c18;
+        --color-text: #fde8d8;
+        --color-text-secondary: #b8976e;
+        --color-border: #3a2820;
+      }
+    }
+    [data-theme="dark"] {
+      --color-primary: #fb923c;
+      --color-secondary: #fdba74;
+      --color-accent: #4ade80;
+      --color-bg: #1c1210;
+      --color-bg-secondary: #2a1c18;
+      --color-text: #fde8d8;
+      --color-text-secondary: #b8976e;
+      --color-border: #3a2820;
+    }
+    [data-theme="light"] {
+      --color-primary: #c2410c;
+      --color-secondary: #ea580c;
+      --color-accent: #16a34a;
+      --color-bg: #faf6f1;
+      --color-bg-secondary: #fff8f0;
+      --color-text: #1a1410;
+      --color-text-secondary: #6b5e50;
+      --color-border: #e5ddd3;
+    }
+
+    /* ========== REDUCED MOTION ========== */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* ========== RESPONSIVE ========== */
     @media (max-width: 1024px) {
       .services__grid { grid-template-columns: repeat(2, 1fr); }
-      .gallery__grid { grid-template-columns: repeat(2, 1fr); }
+      .gallery__grid { grid-template-columns: repeat(2, 1fr); grid-auto-rows: minmax(12rem, auto); }
+      .gallery__grid > *:nth-child(1) { grid-row: auto; }
+      .gallery__grid > *:nth-child(4) { grid-column: auto; }
     }
     @media (max-width: 768px) {
       .nav__links { display: none; }
-      .services__grid, .testimonials__grid { grid-template-columns: 1fr; }
-      .gallery__grid { grid-template-columns: repeat(2, 1fr); }
-      .info-bar { grid-template-columns: 1fr; }
-      .hero { padding: 4rem 1.5rem; }
+      .nav__hamburger { display: block; }
+      .services__grid { grid-template-columns: 1fr; }
+      .testimonials__grid { grid-template-columns: 1fr; }
+      .gallery__grid { grid-template-columns: repeat(2, 1fr); grid-auto-rows: minmax(10rem, auto); }
+      .hero { min-height: auto; padding: var(--space-section) var(--space-md) var(--space-2xl); }
+      .hero h1 { font-size: var(--text-3xl); }
+      .hero__actions { flex-direction: column; align-items: center; }
+      .footer__inner { flex-direction: column; gap: var(--space-md); text-align: center; }
+      .sticky-cta { display: block; }
+    }
+    @media (max-width: 480px) {
+      .container { padding-left: var(--space-md); padding-right: var(--space-md); }
+      .gallery__grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
+
+  <a href="#main-content" class="skip-link">Skip to main content</a>
 
   <!-- Navigation -->
   <nav class="nav" aria-label="Main navigation">
@@ -120,92 +557,301 @@
       <li><a href="#testimonials">Reviews</a></li>
       <li><a href="#hours">Hours</a></li>
     </ul>
-    <button class="nav__cta" aria-label="Call {{BUSINESS_NAME}}">{{PHONE}}</button>
+    <button class="nav__cta" data-nexus-slot="hero_cta_primary" aria-label="Book now">{{CTA_PRIMARY}}</button>
+    <button class="nav__hamburger" aria-label="Open navigation" aria-expanded="false" aria-controls="mobile-nav">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
   </nav>
 
-  <!-- Hero Section -->
-  <section id="hero" data-nexus-section="hero" data-nexus-editable="true" class="hero">
-    <h1 data-nexus-slot="business_name">{{BUSINESS_NAME}}</h1>
-    <p data-nexus-slot="tagline">{{TAGLINE}}</p>
-    <div class="hero__actions">
-      <button class="btn-primary" aria-label="Book an appointment">{{HERO_CTA}}</button>
-      <button class="btn-outline" aria-label="View our menu or services">{{HERO_SECONDARY_CTA}}</button>
-    </div>
-  </section>
+  <!-- Mobile Navigation Overlay -->
+  <div id="mobile-nav" class="nav__mobile" role="dialog" aria-label="Mobile navigation">
+    <button class="nav__mobile-close" aria-label="Close navigation">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <a href="#services">Services</a>
+    <a href="#gallery">Gallery</a>
+    <a href="#testimonials">Reviews</a>
+    <a href="#hours">Hours</a>
+    <a href="tel:{{PHONE}}">Call Us</a>
+  </div>
 
-  <!-- Services Section -->
-  <section id="services" data-nexus-section="services" data-nexus-editable="true" class="services">
-    <h2>Our Services</h2>
-    <div class="services__grid" data-nexus-slot="service_cards">
-      <div class="service-card">
-        <div class="service-card__icon">{{SERVICE_1_ICON}}</div>
-        <h3>{{SERVICE_1_NAME}}</h3>
-        <p>{{SERVICE_1_DESC}}</p>
-      </div>
-      <div class="service-card">
-        <div class="service-card__icon">{{SERVICE_2_ICON}}</div>
-        <h3>{{SERVICE_2_NAME}}</h3>
-        <p>{{SERVICE_2_DESC}}</p>
-      </div>
-      <div class="service-card">
-        <div class="service-card__icon">{{SERVICE_3_ICON}}</div>
-        <h3>{{SERVICE_3_NAME}}</h3>
-        <p>{{SERVICE_3_DESC}}</p>
-      </div>
-    </div>
-  </section>
+  <main id="main-content">
 
-  <!-- Gallery Section -->
-  <section id="gallery" data-nexus-section="gallery" data-nexus-editable="true" class="gallery">
-    <h2>Gallery</h2>
-    <div class="gallery__grid" data-nexus-slot="gallery_images">
-      <div class="gallery__item">{{GALLERY_1}}</div>
-      <div class="gallery__item">{{GALLERY_2}}</div>
-      <div class="gallery__item">{{GALLERY_3}}</div>
-      <div class="gallery__item">{{GALLERY_4}}</div>
-      <div class="gallery__item">{{GALLERY_5}}</div>
-      <div class="gallery__item">{{GALLERY_6}}</div>
-    </div>
-  </section>
+    <!-- Hero Section -->
+    <section id="hero" data-nexus-section="hero" data-nexus-editable="true" class="hero">
+      <div class="hero__image" data-nexus-slot="hero_image" role="img" aria-label="Business hero image">{{HERO_IMAGE}}</div>
+      <div class="hero__inner">
+        <h1 data-nexus-slot="business_name">{{BUSINESS_NAME}}</h1>
+        <p class="hero__tagline" data-nexus-slot="tagline">{{TAGLINE}}</p>
+        <div class="hero__actions">
+          <button class="btn btn--primary" data-nexus-slot="cta_primary" aria-label="Book now">{{CTA_PRIMARY}}</button>
+          <button class="btn btn--secondary" data-nexus-slot="cta_secondary" aria-label="View services">{{CTA_SECONDARY}}</button>
+        </div>
+        <div class="hero__phone">
+          <a href="tel:{{PHONE}}" data-nexus-slot="phone" aria-label="Call us">{{PHONE}}</a>
+        </div>
+      </div>
+    </section>
 
-  <!-- Testimonials Section -->
-  <section id="testimonials" data-nexus-section="testimonials" data-nexus-editable="true" class="testimonials">
-    <h2>What Our Customers Say</h2>
-    <div class="testimonials__grid" data-nexus-slot="testimonial_cards">
-      <div class="testimonial-card">
-        <div class="stars">★★★★★</div>
-        <blockquote>{{TESTIMONIAL_1_QUOTE}}</blockquote>
-        <div class="author">{{TESTIMONIAL_1_AUTHOR}}</div>
+    <!-- Services Section -->
+    <section id="services" data-nexus-section="services" data-nexus-editable="true" class="services">
+      <div class="container">
+        <div class="section-header nexus-reveal">
+          <h2 data-nexus-slot="services_heading">{{SERVICES_HEADING}}</h2>
+        </div>
+        <div class="services__grid nexus-stagger" data-nexus-slot="service_cards">
+          <div class="service-card nexus-reveal">
+            <div class="service-card__icon" data-nexus-slot="service_1_icon">{{SERVICE_1_ICON}}</div>
+            <h3 data-nexus-slot="service_1_name">{{SERVICE_1_NAME}}</h3>
+            <p data-nexus-slot="service_1_desc">{{SERVICE_1_DESC}}</p>
+          </div>
+          <div class="service-card nexus-reveal">
+            <div class="service-card__icon" data-nexus-slot="service_2_icon">{{SERVICE_2_ICON}}</div>
+            <h3 data-nexus-slot="service_2_name">{{SERVICE_2_NAME}}</h3>
+            <p data-nexus-slot="service_2_desc">{{SERVICE_2_DESC}}</p>
+          </div>
+          <div class="service-card nexus-reveal">
+            <div class="service-card__icon" data-nexus-slot="service_3_icon">{{SERVICE_3_ICON}}</div>
+            <h3 data-nexus-slot="service_3_name">{{SERVICE_3_NAME}}</h3>
+            <p data-nexus-slot="service_3_desc">{{SERVICE_3_DESC}}</p>
+          </div>
+        </div>
       </div>
-      <div class="testimonial-card">
-        <div class="stars">★★★★★</div>
-        <blockquote>{{TESTIMONIAL_2_QUOTE}}</blockquote>
-        <div class="author">{{TESTIMONIAL_2_AUTHOR}}</div>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Map & Hours Section -->
-  <section id="map" data-nexus-section="map" data-nexus-editable="true" class="info-bar">
-    <div class="map-placeholder" data-nexus-slot="map">Map — {{ADDRESS}}</div>
-    <div id="hours" data-nexus-section="hours" data-nexus-editable="true" class="hours-card">
-      <h3>Hours & Location</h3>
-      <table data-nexus-slot="hours">
-        <tr><td>Monday - Friday</td><td>{{WEEKDAY_HOURS}}</td></tr>
-        <tr><td>Saturday</td><td>{{SATURDAY_HOURS}}</td></tr>
-        <tr><td>Sunday</td><td>{{SUNDAY_HOURS}}</td></tr>
-      </table>
-      <div class="contact-info">
-        <p data-nexus-slot="address">{{ADDRESS}}</p>
-        <p data-nexus-slot="phone">{{PHONE}}</p>
+    <!-- Gallery Section -->
+    <section id="gallery" data-nexus-section="gallery" data-nexus-editable="true" class="gallery">
+      <div class="container">
+        <div class="section-header nexus-reveal">
+          <h2 data-nexus-slot="gallery_heading">{{GALLERY_HEADING}}</h2>
+        </div>
+        <div class="gallery__grid nexus-stagger" data-nexus-slot="gallery_images" aria-label="Photo gallery">
+          <div class="gallery__item" tabindex="0" data-nexus-slot="gallery_1" role="img" aria-label="Gallery photo 1">{{GALLERY_1}}</div>
+          <div class="gallery__item" tabindex="0" data-nexus-slot="gallery_2" role="img" aria-label="Gallery photo 2">{{GALLERY_2}}</div>
+          <div class="gallery__item" tabindex="0" data-nexus-slot="gallery_3" role="img" aria-label="Gallery photo 3">{{GALLERY_3}}</div>
+          <div class="gallery__item" tabindex="0" data-nexus-slot="gallery_4" role="img" aria-label="Gallery photo 4">{{GALLERY_4}}</div>
+          <div class="gallery__item" tabindex="0" data-nexus-slot="gallery_5" role="img" aria-label="Gallery photo 5">{{GALLERY_5}}</div>
+          <div class="gallery__item" tabindex="0" data-nexus-slot="gallery_6" role="img" aria-label="Gallery photo 6">{{GALLERY_6}}</div>
+        </div>
       </div>
+    </section>
+
+    <!-- Gallery Lightbox -->
+    <div class="gallery-lightbox" role="dialog" aria-label="Image lightbox" aria-hidden="true">
+      <button class="gallery-lightbox__close" aria-label="Close lightbox">&times;</button>
+      <div class="gallery-lightbox__image">Image preview</div>
     </div>
-  </section>
+
+    <!-- Testimonials Section -->
+    <section id="testimonials" data-nexus-section="testimonials" data-nexus-editable="true" class="testimonials">
+      <div class="container">
+        <div class="section-header nexus-reveal">
+          <h2 data-nexus-slot="testimonials_heading">{{TESTIMONIALS_HEADING}}</h2>
+        </div>
+        <div class="testimonials__grid nexus-stagger" data-nexus-slot="testimonial_cards">
+          <div class="testimonial-card nexus-reveal">
+            <div class="testimonial-card__stars" aria-label="5 out of 5 stars">
+              <svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
+              <svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
+              <svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
+              <svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
+              <svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
+            </div>
+            <blockquote data-nexus-slot="testimonial_1_quote">{{TESTIMONIAL_1_QUOTE}}</blockquote>
+            <div class="testimonial-card__author" data-nexus-slot="testimonial_1_author">{{TESTIMONIAL_1_AUTHOR}}</div>
+          </div>
+          <div class="testimonial-card nexus-reveal">
+            <div class="testimonial-card__stars" aria-label="5 out of 5 stars">
+              <svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
+              <svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
+              <svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
+              <svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
+              <svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
+            </div>
+            <blockquote data-nexus-slot="testimonial_2_quote">{{TESTIMONIAL_2_QUOTE}}</blockquote>
+            <div class="testimonial-card__author" data-nexus-slot="testimonial_2_author">{{TESTIMONIAL_2_AUTHOR}}</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Map Section -->
+    <section id="map" data-nexus-section="map" data-nexus-editable="true" class="map-section">
+      <div class="container">
+        <div class="map-container nexus-reveal">
+          <div class="map-placeholder" data-nexus-slot="map_embed_url" role="img" aria-label="Map showing business location">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <address class="map-placeholder__address" data-nexus-slot="address">{{ADDRESS}}</address>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Hours Section -->
+    <section id="hours" data-nexus-section="hours" data-nexus-editable="true" class="hours-section">
+      <div class="container">
+        <div class="hours-card nexus-reveal">
+          <h2 data-nexus-slot="hours_heading">{{HOURS_HEADING}}</h2>
+          <table class="hours-table" data-nexus-slot="hours_table" aria-label="Business hours">
+            <tbody>
+              <tr><td>Monday – Friday</td><td><time data-nexus-slot="weekday_hours">{{WEEKDAY_HOURS}}</time></td></tr>
+              <tr><td>Saturday</td><td><time data-nexus-slot="saturday_hours">{{SATURDAY_HOURS}}</time></td></tr>
+              <tr><td>Sunday</td><td><time data-nexus-slot="sunday_hours">{{SUNDAY_HOURS}}</time></td></tr>
+            </tbody>
+          </table>
+          <div class="hours-contact">
+            <address>
+              <div class="hours-contact__item">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                <span data-nexus-slot="hours_address">{{HOURS_ADDRESS}}</span>
+              </div>
+              <div class="hours-contact__item">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                <a href="tel:{{PHONE}}" data-nexus-slot="hours_phone">{{HOURS_PHONE}}</a>
+              </div>
+            </address>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Sticky Booking CTA (mobile) -->
+  <div class="sticky-cta" aria-hidden="true">
+    <button class="btn btn--primary" aria-label="Book now">{{CTA_PRIMARY}}</button>
+  </div>
 
   <!-- Footer -->
-  <footer id="footer" data-nexus-section="footer" data-nexus-editable="true" class="footer">
-    <p data-nexus-slot="copyright">{{COPYRIGHT}}</p>
+  <footer id="footer" data-nexus-section="footer" data-nexus-editable="true" class="site-footer">
+    <div class="container">
+      <div class="footer__inner">
+        <div class="footer__brand" data-nexus-slot="footer_business_name">{{FOOTER_BUSINESS_NAME}}</div>
+        <p class="footer__copyright" data-nexus-slot="copyright">{{COPYRIGHT}}</p>
+      </div>
+    </div>
   </footer>
+
+  <script>
+    /* ========== SCROLL REVEAL ========== */
+    (function() {
+      var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (prefersReduced) {
+        document.querySelectorAll('.nexus-reveal, .nexus-stagger > *').forEach(function(el) {
+          el.style.opacity = '1';
+          el.style.transform = 'none';
+        });
+        return;
+      }
+      var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+      document.querySelectorAll('.nexus-reveal, .nexus-stagger').forEach(function(el) {
+        observer.observe(el);
+      });
+    })();
+
+    /* ========== STICKY BOOKING CTA ========== */
+    (function() {
+      var hero = document.getElementById('hero');
+      var stickyCta = document.querySelector('.sticky-cta');
+      if (!hero || !stickyCta) return;
+      var stickyObserver = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            stickyCta.classList.remove('is-visible');
+          } else {
+            stickyCta.classList.add('is-visible');
+          }
+        });
+      }, { threshold: 0 });
+      stickyObserver.observe(hero);
+    })();
+
+    /* ========== GALLERY LIGHTBOX ========== */
+    (function() {
+      var lightbox = document.querySelector('.gallery-lightbox');
+      var closeBtn = document.querySelector('.gallery-lightbox__close');
+      var items = document.querySelectorAll('.gallery__item');
+      if (!lightbox || !closeBtn) return;
+
+      function openLightbox() {
+        lightbox.classList.add('is-active');
+        lightbox.setAttribute('aria-hidden', 'false');
+        closeBtn.focus();
+        document.body.style.overflow = 'hidden';
+      }
+      function closeLightbox() {
+        lightbox.classList.remove('is-active');
+        lightbox.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+      }
+      items.forEach(function(item) {
+        item.addEventListener('click', openLightbox);
+        item.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') openLightbox();
+        });
+      });
+      closeBtn.addEventListener('click', closeLightbox);
+      lightbox.addEventListener('click', function(e) {
+        if (e.target === lightbox) closeLightbox();
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && lightbox.classList.contains('is-active')) closeLightbox();
+      });
+    })();
+
+    /* ========== DARK MODE TOGGLE ========== */
+    (function() {
+      var html = document.documentElement;
+      var stored = localStorage.getItem('nexus-theme');
+      if (stored) {
+        html.setAttribute('data-theme', stored);
+      } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        html.setAttribute('data-theme', 'dark');
+      }
+      window.__nexusToggleTheme = function() {
+        var current = html.getAttribute('data-theme');
+        var next = current === 'dark' ? 'light' : 'dark';
+        html.setAttribute('data-theme', next);
+        localStorage.setItem('nexus-theme', next);
+      };
+    })();
+
+    /* ========== MOBILE NAVIGATION ========== */
+    (function() {
+      var hamburger = document.querySelector('.nav__hamburger');
+      var mobileNav = document.getElementById('mobile-nav');
+      var closeBtn = document.querySelector('.nav__mobile-close');
+      if (!hamburger || !mobileNav) return;
+
+      function openNav() {
+        mobileNav.classList.add('is-open');
+        hamburger.setAttribute('aria-expanded', 'true');
+        closeBtn.focus();
+        document.body.style.overflow = 'hidden';
+      }
+      function closeNav() {
+        mobileNav.classList.remove('is-open');
+        hamburger.setAttribute('aria-expanded', 'false');
+        hamburger.focus();
+        document.body.style.overflow = '';
+      }
+      hamburger.addEventListener('click', openNav);
+      closeBtn.addEventListener('click', closeNav);
+      mobileNav.querySelectorAll('a').forEach(function(link) {
+        link.addEventListener('click', closeNav);
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && mobileNav.classList.contains('is-open')) closeNav();
+      });
+    })();
+  </script>
 
 </body>
 </html>

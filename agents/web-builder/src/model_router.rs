@@ -33,6 +33,10 @@ pub enum ProviderType {
     Ollama,
     Anthropic,
     OpenAI,
+    /// Codex CLI — uses ChatGPT Plus/Pro subscription, $0 per build.
+    CodexCli,
+    /// Claude Code CLI — uses Claude subscription, $0 per build.
+    ClaudeCode,
 }
 
 impl std::fmt::Display for ProviderType {
@@ -41,6 +45,8 @@ impl std::fmt::Display for ProviderType {
             Self::Ollama => write!(f, "ollama"),
             Self::Anthropic => write!(f, "anthropic"),
             Self::OpenAI => write!(f, "openai"),
+            Self::CodexCli => write!(f, "codex-cli"),
+            Self::ClaudeCode => write!(f, "claude-code"),
         }
     }
 }
@@ -63,18 +69,26 @@ pub struct RoutingBudget {
     pub anthropic_remaining: f64,
     pub openai_remaining: f64,
     pub ollama_available: bool,
+    /// Codex CLI (GPT-5.4) detected and authenticated — $0, fast builds.
+    pub codex_cli_available: bool,
+    /// Claude Code CLI detected and authenticated — $0, streaming builds.
+    pub claude_code_available: bool,
 }
 
 impl RoutingBudget {
-    /// Build from the budget tracker.
+    /// Build from the budget tracker and local provider detection.
     pub fn from_budget_tracker() -> Self {
         let tracker = crate::budget::BudgetTracker::new();
         let status = tracker.get_budget_status();
         let ollama_available = check_ollama_available();
+        let codex_cli_available = check_codex_cli_available();
+        let claude_code_available = check_claude_code_available();
         Self {
             anthropic_remaining: status.anthropic_remaining,
             openai_remaining: status.openai_remaining,
             ollama_available,
+            codex_cli_available,
+            claude_code_available,
         }
     }
 }
@@ -87,6 +101,8 @@ pub const HAIKU: &str = "claude-haiku-4-5-20251001";
 pub const SONNET: &str = "claude-sonnet-4-6";
 pub const GPT4O_MINI: &str = "gpt-4o-mini";
 pub const GPT4O: &str = "gpt-4o";
+/// GPT-5.4 via Codex CLI — subscription-covered, $0 per build.
+pub const CODEX_GPT5: &str = "gpt-5.4";
 
 /// Minimum Anthropic budget before we consider switching to OpenAI.
 const ANTHROPIC_LOW_BUDGET: f64 = 0.50;
@@ -97,6 +113,18 @@ const ANTHROPIC_LOW_BUDGET: f64 = 0.50;
 pub fn check_ollama_available() -> bool {
     let ollama = OllamaProvider::from_env();
     ollama.health_check().unwrap_or(false)
+}
+
+/// Check if Codex CLI is installed and authenticated.
+pub fn check_codex_cli_available() -> bool {
+    let status = nexus_connectors_llm::providers::codex_cli::detect_codex_cli();
+    status.installed && status.authenticated
+}
+
+/// Check if Claude Code CLI is installed and authenticated.
+pub fn check_claude_code_available() -> bool {
+    let status = nexus_connectors_llm::providers::claude_code::detect_claude_code();
+    status.installed && status.authenticated
 }
 
 // ─── Model Selection ────────────────────────────────────────────────────────
@@ -174,6 +202,17 @@ fn select_section_edit_model(budget: &RoutingBudget) -> ModelSelection {
 }
 
 fn select_full_gen_model(budget: &RoutingBudget) -> ModelSelection {
+    // Priority 1: Codex CLI (GPT-5.4) — fastest + $0 (subscription-covered)
+    if budget.codex_cli_available {
+        return ModelSelection {
+            provider: ProviderType::CodexCli,
+            model_id: CODEX_GPT5.to_string(),
+            display_name: "GPT-5.4 (Codex CLI)".to_string(),
+            estimated_cost: 0.0,
+            is_local: false,
+        };
+    }
+    // Priority 2: Anthropic API (fast + paid)
     if budget.anthropic_remaining > ANTHROPIC_LOW_BUDGET {
         return ModelSelection {
             provider: ProviderType::Anthropic,
@@ -183,6 +222,17 @@ fn select_full_gen_model(budget: &RoutingBudget) -> ModelSelection {
             is_local: false,
         };
     }
+    // Priority 3: Claude Code CLI (slow but $0)
+    if budget.claude_code_available {
+        return ModelSelection {
+            provider: ProviderType::ClaudeCode,
+            model_id: SONNET.to_string(),
+            display_name: "Sonnet 4.6 (CLI)".to_string(),
+            estimated_cost: 0.0,
+            is_local: false,
+        };
+    }
+    // Priority 4: OpenAI API
     if budget.openai_remaining > 0.50 {
         return ModelSelection {
             provider: ProviderType::OpenAI,
@@ -279,9 +329,47 @@ pub fn failover_model(
                 None
             }
         }
-        // Full gen/iter: Anthropic failed → OpenAI → Ollama
+        // Full gen/iter: CodexCli failed → Anthropic API → Claude CLI → OpenAI → Ollama
+        (BuilderTask::FullGeneration | BuilderTask::FullIteration, ProviderType::CodexCli) => {
+            if budget.anthropic_remaining > ANTHROPIC_LOW_BUDGET {
+                Some(ModelSelection {
+                    provider: ProviderType::Anthropic,
+                    model_id: SONNET.to_string(),
+                    display_name: "Sonnet 4.6".to_string(),
+                    estimated_cost: 0.20,
+                    is_local: false,
+                })
+            } else if budget.claude_code_available {
+                Some(ModelSelection {
+                    provider: ProviderType::ClaudeCode,
+                    model_id: SONNET.to_string(),
+                    display_name: "Sonnet 4.6 (CLI)".to_string(),
+                    estimated_cost: 0.0,
+                    is_local: false,
+                })
+            } else if budget.openai_remaining > 0.50 {
+                Some(ModelSelection {
+                    provider: ProviderType::OpenAI,
+                    model_id: GPT4O.to_string(),
+                    display_name: "GPT-4o".to_string(),
+                    estimated_cost: 0.10,
+                    is_local: false,
+                })
+            } else {
+                None
+            }
+        }
+        // Anthropic failed → Claude CLI → OpenAI → Ollama
         (BuilderTask::FullGeneration | BuilderTask::FullIteration, ProviderType::Anthropic) => {
-            if budget.openai_remaining > 0.50 {
+            if budget.claude_code_available {
+                Some(ModelSelection {
+                    provider: ProviderType::ClaudeCode,
+                    model_id: SONNET.to_string(),
+                    display_name: "Sonnet 4.6 (CLI)".to_string(),
+                    estimated_cost: 0.0,
+                    is_local: false,
+                })
+            } else if budget.openai_remaining > 0.50 {
                 Some(ModelSelection {
                     provider: ProviderType::OpenAI,
                     model_id: GPT4O.to_string(),
@@ -472,6 +560,8 @@ pub struct ProviderSet {
     pub ollama: Option<Box<dyn LlmProvider>>,
     pub anthropic: Option<Box<dyn LlmProvider>>,
     pub openai: Option<Box<dyn LlmProvider>>,
+    pub codex_cli: Option<Box<dyn LlmProvider>>,
+    pub claude_code: Option<Box<dyn LlmProvider>>,
 }
 
 impl ProviderSet {
@@ -480,6 +570,8 @@ impl ProviderSet {
             ProviderType::Ollama => &self.ollama,
             ProviderType::Anthropic => &self.anthropic,
             ProviderType::OpenAI => &self.openai,
+            ProviderType::CodexCli => &self.codex_cli,
+            ProviderType::ClaudeCode => &self.claude_code,
         }
     }
 }
@@ -495,6 +587,8 @@ mod tests {
             anthropic_remaining: 5.0,
             openai_remaining: 10.0,
             ollama_available: true,
+            codex_cli_available: false,
+            claude_code_available: false,
         }
     }
 
@@ -503,6 +597,8 @@ mod tests {
             anthropic_remaining: 5.0,
             openai_remaining: 10.0,
             ollama_available: false,
+            codex_cli_available: false,
+            claude_code_available: false,
         }
     }
 
@@ -511,6 +607,8 @@ mod tests {
             anthropic_remaining: 0.20,
             openai_remaining: 10.0,
             ollama_available: false,
+            codex_cli_available: false,
+            claude_code_available: false,
         }
     }
 
@@ -519,6 +617,8 @@ mod tests {
             anthropic_remaining: 0.0,
             openai_remaining: 0.0,
             ollama_available: true,
+            codex_cli_available: false,
+            claude_code_available: false,
         }
     }
 
@@ -527,6 +627,28 @@ mod tests {
             anthropic_remaining: 0.10,
             openai_remaining: 8.0,
             ollama_available: false,
+            codex_cli_available: false,
+            claude_code_available: false,
+        }
+    }
+
+    fn budget_with_codex_cli() -> RoutingBudget {
+        RoutingBudget {
+            anthropic_remaining: 5.0,
+            openai_remaining: 10.0,
+            ollama_available: true,
+            codex_cli_available: true,
+            claude_code_available: false,
+        }
+    }
+
+    fn budget_with_claude_code() -> RoutingBudget {
+        RoutingBudget {
+            anthropic_remaining: 0.10,
+            openai_remaining: 0.10,
+            ollama_available: false,
+            codex_cli_available: false,
+            claude_code_available: true,
         }
     }
 
@@ -665,6 +787,8 @@ mod tests {
             anthropic_remaining: 0.0,
             openai_remaining: 0.0,
             ollama_available: false,
+            codex_cli_available: false,
+            claude_code_available: false,
         };
         let f = failover_model(&BuilderTask::PlanGeneration, &ProviderType::Ollama, &b);
         assert!(f.is_none());
@@ -678,6 +802,86 @@ mod tests {
         let iter = select_model(&BuilderTask::FullIteration, &budget_all_available());
         assert_eq!(gen.provider, iter.provider);
         assert_eq!(gen.model_id, iter.model_id);
+    }
+
+    // ── Codex CLI Routing ──
+
+    #[test]
+    fn test_full_gen_prefers_codex_cli_when_available() {
+        let sel = select_model(&BuilderTask::FullGeneration, &budget_with_codex_cli());
+        assert_eq!(sel.provider, ProviderType::CodexCli);
+        assert_eq!(sel.model_id, CODEX_GPT5);
+        assert_eq!(sel.estimated_cost, 0.0);
+    }
+
+    #[test]
+    fn test_full_gen_codex_cli_over_anthropic_api() {
+        // Even with Anthropic budget, Codex CLI wins (faster + free)
+        let b = budget_with_codex_cli();
+        assert!(b.anthropic_remaining > ANTHROPIC_LOW_BUDGET);
+        let sel = select_model(&BuilderTask::FullGeneration, &b);
+        assert_eq!(sel.provider, ProviderType::CodexCli);
+    }
+
+    #[test]
+    fn test_full_gen_falls_back_to_claude_code_cli() {
+        let sel = select_model(&BuilderTask::FullGeneration, &budget_with_claude_code());
+        assert_eq!(sel.provider, ProviderType::ClaudeCode);
+        assert_eq!(sel.model_id, SONNET);
+        assert_eq!(sel.estimated_cost, 0.0);
+    }
+
+    #[test]
+    fn test_failover_codex_cli_to_anthropic() {
+        let f = failover_model(
+            &BuilderTask::FullGeneration,
+            &ProviderType::CodexCli,
+            &budget_with_codex_cli(),
+        );
+        assert!(f.is_some());
+        let f = f.unwrap();
+        assert_eq!(f.provider, ProviderType::Anthropic);
+        assert_eq!(f.model_id, SONNET);
+    }
+
+    #[test]
+    fn test_failover_anthropic_to_claude_code_cli() {
+        let b = RoutingBudget {
+            anthropic_remaining: 0.10,
+            openai_remaining: 0.10,
+            ollama_available: false,
+            codex_cli_available: false,
+            claude_code_available: true,
+        };
+        let f = failover_model(&BuilderTask::FullGeneration, &ProviderType::Anthropic, &b);
+        assert!(f.is_some());
+        assert_eq!(f.unwrap().provider, ProviderType::ClaudeCode);
+    }
+
+    #[test]
+    fn test_plan_still_prefers_ollama_not_codex() {
+        // Codex CLI is for full gen, not cheap planning tasks
+        let sel = select_model(&BuilderTask::PlanGeneration, &budget_with_codex_cli());
+        assert_eq!(sel.provider, ProviderType::Ollama);
+    }
+
+    #[test]
+    fn test_codex_cost_is_zero() {
+        let sel = select_model(&BuilderTask::FullGeneration, &budget_with_codex_cli());
+        assert_eq!(sel.estimated_cost, 0.0);
+        assert_eq!(sel.display_name, "GPT-5.4 (Codex CLI)");
+    }
+
+    #[test]
+    fn test_failover_fullgen_anthropic_to_claude_code_to_openai() {
+        // Anthropic failed, Claude Code not available → OpenAI
+        let f = failover_model(
+            &BuilderTask::FullGeneration,
+            &ProviderType::Anthropic,
+            &budget_only_openai(),
+        );
+        assert!(f.is_some());
+        assert_eq!(f.unwrap().provider, ProviderType::OpenAI);
     }
 
     // ── Normalized Response ──

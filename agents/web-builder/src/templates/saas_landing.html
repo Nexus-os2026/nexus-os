@@ -1,122 +1,599 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{SITE_NAME}} — {{TAGLINE}}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family={{HEADING_FONT}}:wght@600;700;800&family={{BODY_FONT}}:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family={{HEADING_FONT}}:wght@500;600;700;800&family={{BODY_FONT}}:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    /* ── Design Tokens ── */
+    /* ========== FOUNDATION TOKENS ========== */
     :root {
-      --primary: #6366f1;
-      --primary-light: #818cf8;
-      --primary-dark: #4f46e5;
-      --accent: #06b6d4;
-      --bg: #0f0f1a;
-      --bg-card: rgba(255,255,255,0.05);
-      --bg-card-hover: rgba(255,255,255,0.08);
-      --text: #e2e8f0;
-      --text-muted: #94a3b8;
-      --heading-font: var(--heading-font-family, 'Inter', sans-serif);
-      --body-font: var(--body-font-family, 'Inter', sans-serif);
-      --section-padding: 5rem 1.5rem;
-      --card-radius: 1rem;
-      --border-subtle: rgba(255,255,255,0.1);
+      color-scheme: light dark;
+
+      /* Colors */
+      --color-primary: #6366f1;
+      --color-secondary: #8b5cf6;
+      --color-accent: #06b6d4;
+      --color-bg: #0a0a0f;
+      --color-bg-secondary: #12121a;
+      --color-text: #f0f0f5;
+      --color-text-secondary: #8888a0;
+      --color-border: #1e1e2e;
+
+      /* Typography */
+      --font-heading: var(--heading-font-family, 'Inter', system-ui, sans-serif);
+      --font-body: var(--body-font-family, 'Inter', system-ui, sans-serif);
+      --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+      /* Type scale — fluid */
+      --text-xs: clamp(0.75rem, 0.7rem + 0.15vw, 0.8rem);
+      --text-sm: clamp(0.875rem, 0.8rem + 0.25vw, 1rem);
+      --text-base: clamp(1rem, 0.925rem + 0.3vw, 1.125rem);
+      --text-lg: clamp(1.125rem, 1rem + 0.4vw, 1.25rem);
+      --text-xl: clamp(1.25rem, 1.1rem + 0.5vw, 1.5rem);
+      --text-2xl: clamp(1.5rem, 1.25rem + 0.75vw, 2rem);
+      --text-3xl: clamp(1.875rem, 1.5rem + 1.2vw, 2.5rem);
+      --text-4xl: clamp(2.25rem, 1.75rem + 1.5vw, 3.5rem);
+
+      /* Spacing */
+      --space-xs: 0.25rem;
+      --space-sm: 0.5rem;
+      --space-md: 1rem;
+      --space-lg: 1.5rem;
+      --space-xl: 2rem;
+      --space-2xl: 3rem;
+      --space-section: 5rem;
+
+      /* Radii */
+      --radius-sm: 0.25rem;
+      --radius-md: 0.5rem;
+      --radius-lg: 0.75rem;
+      --radius-xl: 1rem;
+      --radius-full: 9999px;
+
+      /* Shadows */
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+      --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+      --shadow-lg: 0 10px 15px rgba(0,0,0,0.15);
+      --shadow-xl: 0 20px 25px rgba(0,0,0,0.2);
+
+      /* Motion */
+      --duration-fast: 150ms;
+      --duration-normal: 300ms;
+      --duration-slow: 500ms;
+      --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+
+      /* Semantic tokens */
+      --btn-bg: var(--color-primary);
+      --btn-text: var(--color-bg);
+      --btn-border: var(--color-primary);
+      --btn-hover-bg: var(--color-accent);
+      --card-bg: var(--color-bg-secondary);
+      --card-border: var(--color-border);
+      --card-shadow: var(--shadow-md);
+      --hero-bg: var(--color-bg);
+      --hero-text: var(--color-text);
+      --hero-accent: var(--color-primary);
+      --nav-bg: var(--color-bg);
+      --nav-text: var(--color-text);
+      --nav-border: var(--color-border);
+      --footer-bg: var(--color-bg-secondary);
+      --footer-text: var(--color-text-secondary);
+      --section-bg: var(--color-bg);
+      --section-text: var(--color-text);
+      --input-bg: var(--color-bg-secondary);
+      --input-border: var(--color-border);
+      --input-text: var(--color-text);
+      --badge-bg: var(--color-accent);
+      --badge-text: var(--color-bg);
+
+      /* Compat aliases (smart_iterate Tier 1 reads these) */
+      --primary: var(--color-primary);
+      --primary-light: var(--color-secondary);
+      --primary-dark: var(--color-primary);
+      --accent: var(--color-accent);
+      --bg: var(--color-bg);
+      --text: var(--color-text);
+      --text-muted: var(--color-text-secondary);
     }
 
-    /* ── Reset & Base ── */
+    /* ========== BASE RESET ========== */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
+    html { scroll-behavior: smooth; font-size: 100%; }
     body {
-      font-family: var(--body-font);
-      background: var(--bg);
-      color: var(--text);
+      font-family: var(--font-body);
+      background: var(--color-bg);
+      color: var(--color-text);
       line-height: 1.6;
+      font-size: var(--text-base);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
-    a { color: var(--primary-light); text-decoration: none; }
-    img { max-width: 100%; height: auto; }
+    a { color: var(--color-primary); text-decoration: none; transition: color var(--duration-fast) var(--ease-default); }
+    a:hover { color: var(--color-secondary); }
+    img { max-width: 100%; height: auto; display: block; }
+    button { font-family: inherit; cursor: pointer; }
 
-    /* ── Navigation ── */
-    .nav { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 1rem 2rem; background: rgba(15,15,26,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border-subtle); }
-    .nav__brand { font-family: var(--heading-font); font-weight: 800; font-size: 1.25rem; color: var(--text); }
-    .nav__links { display: flex; gap: 2rem; list-style: none; }
-    .nav__links a { color: var(--text-muted); font-size: 0.9rem; transition: color 0.3s ease; }
-    .nav__links a:hover { color: var(--text); }
-    .nav__cta { padding: 0.5rem 1.25rem; background: var(--primary); color: #fff; border: none; border-radius: 0.5rem; font-size: 0.9rem; cursor: pointer; transition: background 0.3s ease; }
-    .nav__cta:hover { background: var(--primary-dark); }
+    /* Skip link */
+    .skip-link {
+      position: absolute; top: calc(-1 * var(--space-section)); left: var(--space-md);
+      padding: var(--space-sm) var(--space-md); background: var(--color-primary); color: var(--color-bg);
+      border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 600; z-index: 100;
+      transition: top var(--duration-fast) var(--ease-default);
+    }
+    .skip-link:focus { top: var(--space-md); }
 
-    /* ── Hero ── */
-    .hero { padding: 8rem 2rem 6rem; text-align: center; background: radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.15) 0%, transparent 70%); }
-    .hero h1 { font-family: var(--heading-font); font-size: clamp(2.5rem, 5vw, 4rem); font-weight: 800; line-height: 1.1; margin-bottom: 1.5rem; }
-    .hero h1 span { background: linear-gradient(135deg, var(--primary-light), var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .hero p { max-width: 38rem; margin: 0 auto 2rem; color: var(--text-muted); font-size: 1.15rem; }
-    .hero__actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
-    .btn-primary { padding: 0.75rem 2rem; background: var(--primary); color: #fff; border: none; border-radius: 0.5rem; font-size: 1rem; font-weight: 600; cursor: pointer; transition: transform 0.3s ease, box-shadow 0.3s ease; }
-    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(99,102,241,0.3); }
-    .btn-secondary { padding: 0.75rem 2rem; background: transparent; color: var(--text); border: 1px solid var(--border-subtle); border-radius: 0.5rem; font-size: 1rem; cursor: pointer; transition: border-color 0.3s ease; }
-    .btn-secondary:hover { border-color: var(--primary-light); }
+    /* Container */
+    .container { max-width: 72rem; margin: 0 auto; padding-left: var(--space-lg); padding-right: var(--space-lg); }
+    .container--narrow { max-width: 48rem; }
 
-    /* ── Features ── */
-    .features { padding: var(--section-padding); max-width: 72rem; margin: 0 auto; }
-    .features__header { text-align: center; margin-bottom: 3rem; }
-    .features__header h2 { font-family: var(--heading-font); font-size: 2rem; font-weight: 700; }
-    .features__header p { color: var(--text-muted); margin-top: 0.5rem; }
-    .features__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
-    .feature-card { padding: 2rem; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--card-radius); backdrop-filter: blur(8px); transition: background 0.3s ease, transform 0.3s ease; }
-    .feature-card:hover { background: var(--bg-card-hover); transform: translateY(-4px); }
-    .feature-card__icon { font-size: 2rem; margin-bottom: 1rem; }
-    .feature-card h3 { font-family: var(--heading-font); font-size: 1.15rem; margin-bottom: 0.5rem; }
-    .feature-card p { color: var(--text-muted); font-size: 0.9rem; }
+    /* ========== NAVIGATION ========== */
+    .nav {
+      position: sticky; top: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--space-md) var(--space-xl);
+      background: color-mix(in srgb, var(--nav-bg) 85%, transparent);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--nav-border);
+      transition: background var(--duration-fast) var(--ease-default);
+    }
+    @supports not (backdrop-filter: blur(12px)) {
+      .nav { background: var(--nav-bg); }
+    }
+    .nav__brand {
+      font-family: var(--font-heading); font-weight: 800;
+      font-size: var(--text-lg); color: var(--nav-text);
+      letter-spacing: -0.02em;
+    }
+    .nav__links { display: flex; gap: var(--space-xl); list-style: none; }
+    .nav__links a {
+      color: var(--color-text-secondary); font-size: var(--text-sm); font-weight: 500;
+      padding: var(--space-xs) 0; position: relative;
+      transition: color var(--duration-fast) var(--ease-default);
+    }
+    .nav__links a::after {
+      content: ''; position: absolute; bottom: -2px; left: 0; width: 0; height: 2px;
+      background: var(--color-primary); border-radius: var(--radius-full);
+      transition: width var(--duration-normal) var(--ease-default);
+    }
+    .nav__links a:hover { color: var(--color-text); }
+    .nav__links a:hover::after { width: 100%; }
+    .nav__cta {
+      padding: var(--space-sm) var(--space-lg); background: var(--btn-bg); color: var(--btn-text);
+      border: none; border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 600;
+      transition: transform var(--duration-fast) var(--ease-default), box-shadow var(--duration-fast) var(--ease-default);
+    }
+    .nav__cta:hover { transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+    .nav__cta:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+    .nav__hamburger {
+      display: none; background: none; border: none; padding: var(--space-sm);
+      color: var(--color-text); cursor: pointer;
+    }
+    .nav__hamburger svg { width: 24px; height: 24px; }
+    .nav__mobile {
+      display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--color-bg); z-index: 60; flex-direction: column;
+      align-items: center; justify-content: center; gap: var(--space-xl);
+    }
+    .nav__mobile.is-open { display: flex; }
+    .nav__mobile a {
+      font-size: var(--text-2xl); font-weight: 600; color: var(--color-text);
+      transition: color var(--duration-fast) var(--ease-default);
+    }
+    .nav__mobile a:hover { color: var(--color-primary); }
+    .nav__mobile-close {
+      position: absolute; top: var(--space-lg); right: var(--space-xl);
+      background: none; border: none; color: var(--color-text); cursor: pointer;
+    }
+    .nav__mobile-close svg { width: 24px; height: 24px; }
 
-    /* ── Pricing ── */
-    .pricing { padding: var(--section-padding); max-width: 72rem; margin: 0 auto; }
-    .pricing__header { text-align: center; margin-bottom: 3rem; }
-    .pricing__header h2 { font-family: var(--heading-font); font-size: 2rem; font-weight: 700; }
-    .pricing__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
-    .pricing-card { padding: 2.5rem 2rem; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--card-radius); text-align: center; transition: transform 0.3s ease; }
-    .pricing-card--featured { border-color: var(--primary); background: rgba(99,102,241,0.08); transform: scale(1.03); }
-    .pricing-card h3 { font-family: var(--heading-font); font-size: 1.15rem; margin-bottom: 0.5rem; }
-    .pricing-card .price { font-size: 2.5rem; font-weight: 800; margin: 1rem 0; }
-    .pricing-card .price span { font-size: 1rem; font-weight: 400; color: var(--text-muted); }
-    .pricing-card ul { list-style: none; margin: 1.5rem 0; text-align: left; }
-    .pricing-card li { padding: 0.4rem 0; color: var(--text-muted); font-size: 0.9rem; }
-    .pricing-card li::before { content: "✓ "; color: var(--accent); }
+    /* ========== HERO SECTION ========== */
+    .hero {
+      padding: calc(var(--space-section) * 2) var(--space-xl) var(--space-section);
+      text-align: center; position: relative; overflow: hidden;
+      background: var(--hero-bg);
+    }
+    .hero::before {
+      content: ''; position: absolute; top: -50%; left: 50%; transform: translateX(-50%);
+      width: 120%; height: 100%; border-radius: 50%;
+      background: radial-gradient(ellipse, color-mix(in srgb, var(--color-primary) 12%, transparent) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero__inner { position: relative; z-index: 1; max-width: 48rem; margin: 0 auto; }
+    .hero__badge {
+      display: inline-flex; align-items: center; gap: var(--space-sm);
+      padding: var(--space-xs) var(--space-md);
+      background: color-mix(in srgb, var(--badge-bg) 15%, transparent);
+      color: var(--color-accent);
+      border: 1px solid color-mix(in srgb, var(--badge-bg) 30%, transparent);
+      border-radius: var(--radius-full); font-size: var(--text-xs); font-weight: 600;
+      margin-bottom: var(--space-lg); letter-spacing: 0.02em;
+    }
+    .hero h1 {
+      font-family: var(--font-heading); font-size: var(--text-4xl); font-weight: 800;
+      line-height: 1.08; letter-spacing: -0.03em; margin-bottom: var(--space-lg);
+      color: var(--hero-text);
+    }
+    .hero h1 .gradient-text {
+      background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero__subtitle {
+      font-size: var(--text-lg); color: var(--color-text-secondary);
+      max-width: 36rem; margin: 0 auto var(--space-2xl); line-height: 1.7;
+    }
+    .hero__actions {
+      display: flex; gap: var(--space-md); justify-content: center; flex-wrap: wrap;
+    }
+    .hero__media {
+      margin-top: var(--space-2xl); border-radius: var(--radius-xl);
+      border: 1px solid var(--card-border);
+      background: var(--card-bg); padding: var(--space-sm);
+      box-shadow: var(--shadow-xl);
+      aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center;
+      color: var(--color-text-secondary); font-size: var(--text-sm);
+      max-width: 56rem; margin-left: auto; margin-right: auto;
+    }
 
-    /* ── Testimonials ── */
-    .testimonials { padding: var(--section-padding); max-width: 72rem; margin: 0 auto; }
-    .testimonials__header { text-align: center; margin-bottom: 3rem; }
-    .testimonials__header h2 { font-family: var(--heading-font); font-size: 2rem; font-weight: 700; }
-    .testimonials__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
-    .testimonial-card { padding: 2rem; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--card-radius); }
-    .testimonial-card blockquote { font-style: italic; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.7; }
-    .testimonial-card .author { font-weight: 600; font-size: 0.9rem; }
-    .testimonial-card .role { color: var(--text-muted); font-size: 0.8rem; }
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; gap: var(--space-sm);
+      padding: var(--space-sm) var(--space-xl); border-radius: var(--radius-md);
+      font-size: var(--text-base); font-weight: 600; border: none;
+      transition: transform var(--duration-fast) var(--ease-default),
+                  box-shadow var(--duration-fast) var(--ease-default),
+                  background var(--duration-fast) var(--ease-default);
+    }
+    .btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+    .btn--primary {
+      background: var(--btn-bg); color: var(--btn-text);
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-primary) 30%, transparent);
+    }
+    .btn--primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px color-mix(in srgb, var(--color-primary) 30%, transparent);
+    }
+    .btn--secondary {
+      background: transparent; color: var(--color-text);
+      border: 1px solid var(--card-border);
+    }
+    .btn--secondary:hover {
+      border-color: var(--color-primary);
+      background: color-mix(in srgb, var(--color-primary) 5%, transparent);
+    }
 
-    /* ── CTA ── */
-    .cta { padding: var(--section-padding); text-align: center; background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(6,182,212,0.1)); border-radius: var(--card-radius); max-width: 60rem; margin: 3rem auto; }
-    .cta h2 { font-family: var(--heading-font); font-size: 2rem; font-weight: 700; margin-bottom: 1rem; }
-    .cta p { color: var(--text-muted); margin-bottom: 2rem; max-width: 32rem; margin-left: auto; margin-right: auto; }
+    /* ========== FEATURES SECTION ========== */
+    .features {
+      padding: var(--space-section) 0;
+      background: var(--section-bg);
+    }
+    .section-header {
+      text-align: center; margin-bottom: var(--space-2xl); max-width: 36rem; margin-left: auto; margin-right: auto;
+    }
+    .section-header h2 {
+      font-family: var(--font-heading); font-size: var(--text-3xl); font-weight: 700;
+      line-height: 1.15; letter-spacing: -0.02em; color: var(--section-text);
+      margin-bottom: var(--space-sm);
+    }
+    .section-header p {
+      font-size: var(--text-lg); color: var(--color-text-secondary); line-height: 1.6;
+    }
+    .features__grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-lg);
+    }
+    .feature-card {
+      padding: var(--space-xl); border-radius: var(--radius-xl);
+      border: 1px solid var(--card-border);
+      transition: transform var(--duration-fast) var(--ease-default),
+                  box-shadow var(--duration-fast) var(--ease-default),
+                  background var(--duration-fast) var(--ease-default);
+    }
+    @supports (backdrop-filter: blur(10px)) {
+      .feature-card {
+        background: color-mix(in srgb, var(--card-bg) 60%, transparent);
+        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      }
+    }
+    @supports not (backdrop-filter: blur(10px)) {
+      .feature-card { background: var(--card-bg); }
+    }
+    .feature-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-lg);
+      background: color-mix(in srgb, var(--card-bg) 80%, transparent);
+    }
+    .feature-card__icon {
+      width: 3rem; height: 3rem; display: flex; align-items: center; justify-content: center;
+      border-radius: var(--radius-lg);
+      background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+      color: var(--color-primary); font-size: var(--text-xl);
+      margin-bottom: var(--space-md);
+    }
+    .feature-card h3 {
+      font-family: var(--font-heading); font-size: var(--text-lg); font-weight: 600;
+      margin-bottom: var(--space-sm); color: var(--section-text);
+    }
+    .feature-card p {
+      font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.7;
+    }
 
-    /* ── Footer ── */
-    .footer { padding: 3rem 2rem; border-top: 1px solid var(--border-subtle); text-align: center; color: var(--text-muted); font-size: 0.85rem; }
-    .footer__links { display: flex; justify-content: center; gap: 2rem; margin-bottom: 1rem; list-style: none; }
-    .footer__links a { color: var(--text-muted); transition: color 0.3s ease; }
-    .footer__links a:hover { color: var(--text); }
+    /* ========== PRICING SECTION ========== */
+    .pricing {
+      padding: var(--space-section) 0;
+      background: var(--color-bg-secondary);
+    }
+    .pricing__grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-lg);
+      align-items: start;
+    }
+    .pricing-card {
+      padding: var(--space-2xl) var(--space-xl);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--card-border);
+      background: var(--card-bg);
+      text-align: center; position: relative;
+      transition: transform var(--duration-fast) var(--ease-default),
+                  box-shadow var(--duration-fast) var(--ease-default);
+    }
+    .pricing-card:hover {
+      transform: translateY(-4px); box-shadow: var(--shadow-lg);
+    }
+    .pricing-card--featured {
+      border-color: var(--color-primary);
+      background: color-mix(in srgb, var(--color-primary) 5%, var(--card-bg));
+      box-shadow: 0 0 0 1px var(--color-primary), var(--shadow-lg);
+      transform: scale(1.02);
+    }
+    .pricing-card--featured:hover {
+      transform: scale(1.02) translateY(-4px);
+    }
+    .pricing__badge {
+      position: absolute; top: calc(-1 * var(--space-sm)); left: 50%; transform: translateX(-50%);
+      padding: var(--space-xs) var(--space-md);
+      background: var(--color-primary); color: var(--btn-text);
+      border-radius: var(--radius-full); font-size: var(--text-xs); font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+    .pricing-card h3 {
+      font-family: var(--font-heading); font-size: var(--text-lg); font-weight: 600;
+      color: var(--section-text); margin-bottom: var(--space-md);
+    }
+    .pricing-card .price {
+      font-family: var(--font-heading); font-size: var(--text-3xl); font-weight: 800;
+      color: var(--section-text); margin-bottom: var(--space-lg);
+    }
+    .pricing-card .price span {
+      font-size: var(--text-sm); font-weight: 400; color: var(--color-text-secondary);
+    }
+    .pricing-card__features {
+      list-style: none; text-align: left; margin-bottom: var(--space-xl);
+    }
+    .pricing-card__features li {
+      padding: var(--space-sm) 0; color: var(--color-text-secondary);
+      font-size: var(--text-sm); display: flex; align-items: flex-start; gap: var(--space-sm);
+      border-bottom: 1px solid color-mix(in srgb, var(--card-border) 50%, transparent);
+    }
+    .pricing-card__features li:last-child { border-bottom: none; }
+    .pricing-card__features li::before {
+      content: '\2713'; color: var(--color-accent); font-weight: 700; flex-shrink: 0;
+    }
 
-    /* ── Responsive ── */
+    /* ========== TESTIMONIALS SECTION ========== */
+    .testimonials {
+      padding: var(--space-section) 0;
+      background: var(--section-bg);
+    }
+    .testimonials__grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-lg);
+    }
+    .testimonial-card {
+      padding: var(--space-xl);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--card-border);
+      background: var(--card-bg);
+      transition: transform var(--duration-fast) var(--ease-default),
+                  box-shadow var(--duration-fast) var(--ease-default);
+    }
+    .testimonial-card:hover {
+      transform: translateY(-2px); box-shadow: var(--shadow-md);
+    }
+    .testimonial-card__stars {
+      display: flex; gap: 1px; margin-bottom: var(--space-md);
+    }
+    .testimonial-card__stars svg {
+      width: 16px; height: 16px; fill: var(--color-accent);
+    }
+    .testimonial-card blockquote {
+      font-size: var(--text-base); color: var(--color-text-secondary);
+      line-height: 1.7; margin-bottom: var(--space-lg); font-style: normal;
+    }
+    .testimonial-card__author {
+      display: flex; align-items: center; gap: var(--space-md);
+    }
+    .testimonial-card__avatar {
+      width: 2.5rem; height: 2.5rem; border-radius: var(--radius-full);
+      background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: var(--text-sm); color: var(--color-primary);
+    }
+    .testimonial-card__info .author-name {
+      font-weight: 600; font-size: var(--text-sm); color: var(--section-text);
+    }
+    .testimonial-card__info .author-role {
+      font-size: var(--text-xs); color: var(--color-text-secondary);
+    }
+
+    /* ========== CTA SECTION ========== */
+    .cta-section {
+      padding: var(--space-section) 0; text-align: center; position: relative; overflow: hidden;
+    }
+    .cta-section__inner {
+      padding: var(--space-section) var(--space-xl);
+      border-radius: var(--radius-xl);
+      background: linear-gradient(135deg,
+        color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-secondary)),
+        color-mix(in srgb, var(--color-accent) 10%, var(--color-bg-secondary)));
+      border: 1px solid var(--card-border);
+      position: relative; overflow: hidden;
+    }
+    .cta-section__inner::before {
+      content: ''; position: absolute; top: -50%; right: -20%; width: 60%; height: 200%;
+      background: radial-gradient(ellipse, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent 70%);
+      pointer-events: none;
+    }
+    .cta-section h2 {
+      font-family: var(--font-heading); font-size: var(--text-3xl); font-weight: 700;
+      line-height: 1.15; letter-spacing: -0.02em; color: var(--section-text);
+      margin-bottom: var(--space-md); position: relative;
+    }
+    .cta-section p {
+      font-size: var(--text-lg); color: var(--color-text-secondary);
+      max-width: 32rem; margin: 0 auto var(--space-xl); line-height: 1.6;
+      position: relative;
+    }
+    .cta-section .btn { position: relative; }
+
+    /* ========== FOOTER ========== */
+    .site-footer {
+      padding: var(--space-2xl) 0 var(--space-xl);
+      background: var(--footer-bg);
+      border-top: 1px solid var(--nav-border);
+      color: var(--footer-text);
+    }
+    .footer__top {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding-bottom: var(--space-xl);
+      border-bottom: 1px solid var(--card-border);
+      margin-bottom: var(--space-lg);
+    }
+    .footer__brand {
+      font-family: var(--font-heading); font-weight: 800;
+      font-size: var(--text-lg); color: var(--color-text);
+    }
+    .footer__nav {
+      display: flex; gap: var(--space-2xl); list-style: none;
+    }
+    .footer__nav a {
+      color: var(--footer-text); font-size: var(--text-sm);
+      transition: color var(--duration-fast) var(--ease-default);
+    }
+    .footer__nav a:hover { color: var(--color-text); }
+    .footer__bottom {
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .footer__copyright {
+      font-size: var(--text-xs); color: var(--footer-text);
+    }
+    .footer__social {
+      display: flex; gap: var(--space-md); list-style: none;
+    }
+    .footer__social a {
+      color: var(--footer-text); font-size: var(--text-lg);
+      transition: color var(--duration-fast) var(--ease-default);
+    }
+    .footer__social a:hover { color: var(--color-primary); }
+
+    /* ========== SCROLL ANIMATIONS ========== */
+    .nexus-reveal {
+      opacity: 0; transform: translateY(20px);
+      transition: opacity var(--duration-normal) var(--ease-default),
+                  transform var(--duration-normal) var(--ease-default);
+    }
+    .nexus-reveal.is-visible { opacity: 1; transform: translateY(0); }
+
+    /* Stagger children */
+    .nexus-stagger > * { opacity: 0; transform: translateY(16px);
+      transition: opacity var(--duration-normal) var(--ease-default),
+                  transform var(--duration-normal) var(--ease-default);
+    }
+    .nexus-stagger.is-visible > *:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: 0ms; }
+    .nexus-stagger.is-visible > *:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 80ms; }
+    .nexus-stagger.is-visible > *:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 160ms; }
+    .nexus-stagger.is-visible > *:nth-child(4) { opacity: 1; transform: translateY(0); transition-delay: 240ms; }
+    .nexus-stagger.is-visible > *:nth-child(5) { opacity: 1; transform: translateY(0); transition-delay: 320ms; }
+    .nexus-stagger.is-visible > *:nth-child(6) { opacity: 1; transform: translateY(0); transition-delay: 400ms; }
+
+    /* ========== DARK MODE ========== */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-primary: #818cf8;
+        --color-secondary: #a78bfa;
+        --color-accent: #22d3ee;
+        --color-bg: #0a0a0f;
+        --color-bg-secondary: #12121a;
+        --color-text: #f0f0f5;
+        --color-text-secondary: #8888a0;
+        --color-border: #1e1e2e;
+      }
+    }
+    [data-theme="dark"] {
+      --color-primary: #818cf8;
+      --color-secondary: #a78bfa;
+      --color-accent: #22d3ee;
+      --color-bg: #0a0a0f;
+      --color-bg-secondary: #12121a;
+      --color-text: #f0f0f5;
+      --color-text-secondary: #8888a0;
+      --color-border: #1e1e2e;
+    }
+    [data-theme="light"] {
+      --color-primary: #4f46e5;
+      --color-secondary: #7c3aed;
+      --color-accent: #06b6d4;
+      --color-bg: #f8fafc;
+      --color-bg-secondary: #f1f5f9;
+      --color-text: #0f172a;
+      --color-text-secondary: #475569;
+      --color-border: #e2e8f0;
+    }
+
+    /* ========== REDUCED MOTION ========== */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* ========== RESPONSIVE ========== */
     @media (max-width: 1024px) {
-      .features__grid, .pricing__grid, .testimonials__grid { grid-template-columns: repeat(2, 1fr); }
+      .features__grid { grid-template-columns: repeat(2, 1fr); }
+      .pricing__grid { grid-template-columns: repeat(2, 1fr); }
+      .pricing-card:last-child { grid-column: 1 / -1; max-width: 24rem; margin: 0 auto; }
+      .testimonials__grid { grid-template-columns: repeat(2, 1fr); }
+      .testimonial-card:last-child { grid-column: 1 / -1; max-width: 32rem; margin: 0 auto; }
     }
     @media (max-width: 768px) {
       .nav__links { display: none; }
-      .features__grid, .pricing__grid, .testimonials__grid { grid-template-columns: 1fr; }
+      .nav__cta { display: none; }
+      .nav__hamburger { display: block; }
+      .features__grid { grid-template-columns: 1fr; }
+      .pricing__grid { grid-template-columns: 1fr; }
+      .pricing-card:last-child { grid-column: auto; max-width: none; }
       .pricing-card--featured { transform: none; }
-      .hero { padding: 5rem 1.5rem 3rem; }
+      .pricing-card--featured:hover { transform: translateY(-4px); }
+      .testimonials__grid { grid-template-columns: 1fr; }
+      .testimonial-card:last-child { grid-column: auto; max-width: none; }
+      .hero { padding: var(--space-section) var(--space-md) var(--space-2xl); }
+      .hero h1 { font-size: var(--text-3xl); }
+      .hero__actions { flex-direction: column; align-items: center; }
+      .footer__top { flex-direction: column; gap: var(--space-lg); }
+      .footer__bottom { flex-direction: column; gap: var(--space-md); text-align: center; }
+    }
+    @media (max-width: 480px) {
+      .container { padding-left: var(--space-md); padding-right: var(--space-md); }
+      .hero__media { aspect-ratio: 4 / 3; }
     }
   </style>
 </head>
 <body>
+
+  <a href="#main-content" class="skip-link">Skip to main content</a>
 
   <!-- Navigation -->
   <nav class="nav" aria-label="Main navigation">
@@ -126,126 +603,242 @@
       <li><a href="#pricing">Pricing</a></li>
       <li><a href="#testimonials">Testimonials</a></li>
     </ul>
-    <button class="nav__cta" aria-label="Get started with {{SITE_NAME}}">Get Started</button>
+    <button class="nav__cta" aria-label="Get started with {{SITE_NAME}}">{{HERO_CTA}}</button>
+    <button class="nav__hamburger" aria-label="Open navigation" aria-expanded="false" aria-controls="mobile-nav">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
   </nav>
 
-  <!-- Hero Section -->
-  <section id="hero" data-nexus-section="hero" data-nexus-editable="true" class="hero">
-    <h1 data-nexus-slot="hero_headline">{{HERO_HEADLINE}}</h1>
-    <p data-nexus-slot="hero_subtitle">{{HERO_SUBTITLE}}</p>
-    <div class="hero__actions">
-      <button class="btn-primary" data-nexus-slot="hero_cta" aria-label="Primary call to action">{{HERO_CTA}}</button>
-      <button class="btn-secondary" aria-label="Learn more">Learn More</button>
-    </div>
-  </section>
+  <!-- Mobile Navigation Overlay -->
+  <div id="mobile-nav" class="nav__mobile" role="dialog" aria-label="Mobile navigation">
+    <button class="nav__mobile-close" aria-label="Close navigation">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <a href="#features">Features</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#testimonials">Testimonials</a>
+    <a href="#cta">Get Started</a>
+  </div>
 
-  <!-- Features Section -->
-  <section id="features" data-nexus-section="features" data-nexus-editable="true" class="features">
-    <div class="features__header">
-      <h2>{{FEATURES_HEADING}}</h2>
-      <p>{{FEATURES_SUBHEADING}}</p>
-    </div>
-    <div class="features__grid" data-nexus-slot="feature_cards">
-      <div class="feature-card">
-        <div class="feature-card__icon">{{FEATURE_1_ICON}}</div>
-        <h3>{{FEATURE_1_TITLE}}</h3>
-        <p>{{FEATURE_1_DESC}}</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-card__icon">{{FEATURE_2_ICON}}</div>
-        <h3>{{FEATURE_2_TITLE}}</h3>
-        <p>{{FEATURE_2_DESC}}</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-card__icon">{{FEATURE_3_ICON}}</div>
-        <h3>{{FEATURE_3_TITLE}}</h3>
-        <p>{{FEATURE_3_DESC}}</p>
-      </div>
-    </div>
-  </section>
+  <main id="main-content">
 
-  <!-- Pricing Section -->
-  <section id="pricing" data-nexus-section="pricing" data-nexus-editable="true" class="pricing">
-    <div class="pricing__header">
-      <h2>{{PRICING_HEADING}}</h2>
-    </div>
-    <div class="pricing__grid" data-nexus-slot="pricing_tiers">
-      <div class="pricing-card">
-        <h3>{{TIER_1_NAME}}</h3>
-        <div class="price">{{TIER_1_PRICE}}<span>/mo</span></div>
-        <ul>
-          <li>{{TIER_1_FEATURE_1}}</li>
-          <li>{{TIER_1_FEATURE_2}}</li>
-          <li>{{TIER_1_FEATURE_3}}</li>
-        </ul>
-        <button class="btn-primary" aria-label="Choose {{TIER_1_NAME}} plan">Choose Plan</button>
+    <!-- Hero Section -->
+    <section id="hero" data-nexus-section="hero" data-nexus-editable="true" class="hero">
+      <div class="hero__inner">
+        <div class="hero__badge" data-nexus-slot="badge">{{BADGE}}</div>
+        <h1 data-nexus-slot="hero_headline"><span class="gradient-text">{{HEADLINE}}</span></h1>
+        <p class="hero__subtitle" data-nexus-slot="hero_subtitle">{{SUBTITLE}}</p>
+        <div class="hero__actions">
+          <button class="btn btn--primary" data-nexus-slot="hero_cta_primary" aria-label="Primary call to action">{{CTA_PRIMARY}}</button>
+          <button class="btn btn--secondary" data-nexus-slot="hero_cta_secondary" aria-label="Secondary call to action">{{CTA_SECONDARY}}</button>
+        </div>
+        <div class="hero__media" data-nexus-slot="hero_media" aria-label="Product screenshot">{{MEDIA}}</div>
       </div>
-      <div class="pricing-card pricing-card--featured">
-        <h3>{{TIER_2_NAME}}</h3>
-        <div class="price">{{TIER_2_PRICE}}<span>/mo</span></div>
-        <ul>
-          <li>{{TIER_2_FEATURE_1}}</li>
-          <li>{{TIER_2_FEATURE_2}}</li>
-          <li>{{TIER_2_FEATURE_3}}</li>
-          <li>{{TIER_2_FEATURE_4}}</li>
-        </ul>
-        <button class="btn-primary" aria-label="Choose {{TIER_2_NAME}} plan">Choose Plan</button>
-      </div>
-      <div class="pricing-card">
-        <h3>{{TIER_3_NAME}}</h3>
-        <div class="price">{{TIER_3_PRICE}}<span>/mo</span></div>
-        <ul>
-          <li>{{TIER_3_FEATURE_1}}</li>
-          <li>{{TIER_3_FEATURE_2}}</li>
-          <li>{{TIER_3_FEATURE_3}}</li>
-          <li>{{TIER_3_FEATURE_4}}</li>
-          <li>{{TIER_3_FEATURE_5}}</li>
-        </ul>
-        <button class="btn-primary" aria-label="Choose {{TIER_3_NAME}} plan">Choose Plan</button>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Testimonials Section -->
-  <section id="testimonials" data-nexus-section="testimonials" data-nexus-editable="true" class="testimonials">
-    <div class="testimonials__header">
-      <h2>{{TESTIMONIALS_HEADING}}</h2>
-    </div>
-    <div class="testimonials__grid" data-nexus-slot="testimonial_cards">
-      <div class="testimonial-card">
-        <blockquote>{{TESTIMONIAL_1_QUOTE}}</blockquote>
-        <div class="author">{{TESTIMONIAL_1_AUTHOR}}</div>
-        <div class="role">{{TESTIMONIAL_1_ROLE}}</div>
+    <!-- Features Section -->
+    <section id="features" data-nexus-section="features" data-nexus-editable="true" class="features">
+      <div class="container">
+        <div class="section-header">
+          <h2 data-nexus-slot="features_heading">{{FEATURES_HEADING}}</h2>
+          <p data-nexus-slot="features_subheading">{{FEATURES_SUBHEADING}}</p>
+        </div>
+        <div class="features__grid nexus-stagger" data-nexus-slot="feature_cards">
+          <div class="feature-card nexus-reveal">
+            <div class="feature-card__icon" data-nexus-slot="feature_1_icon">{{FEATURE_1_ICON}}</div>
+            <h3 data-nexus-slot="feature_1_title">{{FEATURE_1_TITLE}}</h3>
+            <p data-nexus-slot="feature_1_desc">{{FEATURE_1_DESC}}</p>
+          </div>
+          <div class="feature-card nexus-reveal">
+            <div class="feature-card__icon" data-nexus-slot="feature_2_icon">{{FEATURE_2_ICON}}</div>
+            <h3 data-nexus-slot="feature_2_title">{{FEATURE_2_TITLE}}</h3>
+            <p data-nexus-slot="feature_2_desc">{{FEATURE_2_DESC}}</p>
+          </div>
+          <div class="feature-card nexus-reveal">
+            <div class="feature-card__icon" data-nexus-slot="feature_3_icon">{{FEATURE_3_ICON}}</div>
+            <h3 data-nexus-slot="feature_3_title">{{FEATURE_3_TITLE}}</h3>
+            <p data-nexus-slot="feature_3_desc">{{FEATURE_3_DESC}}</p>
+          </div>
+        </div>
       </div>
-      <div class="testimonial-card">
-        <blockquote>{{TESTIMONIAL_2_QUOTE}}</blockquote>
-        <div class="author">{{TESTIMONIAL_2_AUTHOR}}</div>
-        <div class="role">{{TESTIMONIAL_2_ROLE}}</div>
-      </div>
-      <div class="testimonial-card">
-        <blockquote>{{TESTIMONIAL_3_QUOTE}}</blockquote>
-        <div class="author">{{TESTIMONIAL_3_AUTHOR}}</div>
-        <div class="role">{{TESTIMONIAL_3_ROLE}}</div>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- CTA Section -->
-  <section id="cta" data-nexus-section="cta" data-nexus-editable="true" class="cta">
-    <h2 data-nexus-slot="cta_headline">{{CTA_HEADLINE}}</h2>
-    <p data-nexus-slot="cta_body">{{CTA_BODY}}</p>
-    <button class="btn-primary" aria-label="Get started now">{{CTA_BUTTON}}</button>
-  </section>
+    <!-- Pricing Section -->
+    <section id="pricing" data-nexus-section="pricing" data-nexus-editable="true" class="pricing">
+      <div class="container">
+        <div class="section-header">
+          <h2 data-nexus-slot="pricing_heading">{{PRICING_HEADING}}</h2>
+        </div>
+        <div class="pricing__grid nexus-stagger" data-nexus-slot="pricing_tiers">
+          <div class="pricing-card nexus-reveal">
+            <h3 data-nexus-slot="tier_1_name">{{TIER_1_NAME}}</h3>
+            <div class="price" data-nexus-slot="tier_1_price">{{TIER_1_PRICE}}<span>/mo</span></div>
+            <ul class="pricing-card__features" data-nexus-slot="tier_1_features">{{TIER_1_FEATURES}}</ul>
+            <button class="btn btn--secondary" aria-label="Choose {{TIER_1_NAME}} plan">Get Started</button>
+          </div>
+          <div class="pricing-card pricing-card--featured nexus-reveal">
+            <div class="pricing__badge" data-nexus-slot="tier_2_badge">{{TIER_2_BADGE}}</div>
+            <h3 data-nexus-slot="tier_2_name">{{TIER_2_NAME}}</h3>
+            <div class="price" data-nexus-slot="tier_2_price">{{TIER_2_PRICE}}<span>/mo</span></div>
+            <ul class="pricing-card__features" data-nexus-slot="tier_2_features">{{TIER_2_FEATURES}}</ul>
+            <button class="btn btn--primary" aria-label="Choose {{TIER_2_NAME}} plan">Get Started</button>
+          </div>
+          <div class="pricing-card nexus-reveal">
+            <h3 data-nexus-slot="tier_3_name">{{TIER_3_NAME}}</h3>
+            <div class="price" data-nexus-slot="tier_3_price">{{TIER_3_PRICE}}<span>/mo</span></div>
+            <ul class="pricing-card__features" data-nexus-slot="tier_3_features">{{TIER_3_FEATURES}}</ul>
+            <button class="btn btn--secondary" aria-label="Choose {{TIER_3_NAME}} plan">Get Started</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Testimonials Section -->
+    <section id="testimonials" data-nexus-section="testimonials" data-nexus-editable="true" class="testimonials">
+      <div class="container">
+        <div class="section-header">
+          <h2 data-nexus-slot="testimonials_heading">{{TESTIMONIALS_HEADING}}</h2>
+        </div>
+        <div class="testimonials__grid nexus-stagger" data-nexus-slot="testimonial_cards">
+          <div class="testimonial-card nexus-reveal">
+            <div class="testimonial-card__stars" aria-label="5 out of 5 stars"><svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg><svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg><svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg><svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg><svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg></div>
+            <blockquote data-nexus-slot="testimonial_1_quote">{{TESTIMONIAL_1_QUOTE}}</blockquote>
+            <div class="testimonial-card__author">
+              <div class="testimonial-card__avatar" aria-hidden="true">A</div>
+              <div class="testimonial-card__info">
+                <div class="author-name" data-nexus-slot="testimonial_1_author">{{TESTIMONIAL_1_AUTHOR}}</div>
+                <div class="author-role" data-nexus-slot="testimonial_1_role">{{TESTIMONIAL_1_ROLE}}</div>
+              </div>
+            </div>
+          </div>
+          <div class="testimonial-card nexus-reveal">
+            <div class="testimonial-card__stars" aria-label="5 out of 5 stars"><svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg><svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg><svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg><svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg><svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg></div>
+            <blockquote data-nexus-slot="testimonial_2_quote">{{TESTIMONIAL_2_QUOTE}}</blockquote>
+            <div class="testimonial-card__author">
+              <div class="testimonial-card__avatar" aria-hidden="true">B</div>
+              <div class="testimonial-card__info">
+                <div class="author-name" data-nexus-slot="testimonial_2_author">{{TESTIMONIAL_2_AUTHOR}}</div>
+                <div class="author-role" data-nexus-slot="testimonial_2_role">{{TESTIMONIAL_2_ROLE}}</div>
+              </div>
+            </div>
+          </div>
+          <div class="testimonial-card nexus-reveal">
+            <div class="testimonial-card__stars" aria-label="5 out of 5 stars"><svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg><svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg><svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg><svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg><svg viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg></div>
+            <blockquote data-nexus-slot="testimonial_3_quote">{{TESTIMONIAL_3_QUOTE}}</blockquote>
+            <div class="testimonial-card__author">
+              <div class="testimonial-card__avatar" aria-hidden="true">C</div>
+              <div class="testimonial-card__info">
+                <div class="author-name" data-nexus-slot="testimonial_3_author">{{TESTIMONIAL_3_AUTHOR}}</div>
+                <div class="author-role" data-nexus-slot="testimonial_3_role">{{TESTIMONIAL_3_ROLE}}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section id="cta" data-nexus-section="cta" data-nexus-editable="true" class="cta-section">
+      <div class="container">
+        <div class="cta-section__inner nexus-reveal">
+          <h2 data-nexus-slot="cta_headline">{{CTA_HEADLINE}}</h2>
+          <p data-nexus-slot="cta_body">{{CTA_BODY}}</p>
+          <button class="btn btn--primary" data-nexus-slot="cta_button" aria-label="Get started now">{{CTA_BUTTON}}</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
 
   <!-- Footer -->
-  <footer id="footer" data-nexus-section="footer" data-nexus-editable="true" class="footer">
-    <ul class="footer__links">
-      <li><a href="#" aria-label="Privacy policy">Privacy</a></li>
-      <li><a href="#" aria-label="Terms of service">Terms</a></li>
-      <li><a href="#" aria-label="Contact us">Contact</a></li>
-    </ul>
-    <p data-nexus-slot="copyright">{{COPYRIGHT}}</p>
+  <footer id="footer" data-nexus-section="footer" data-nexus-editable="true" class="site-footer">
+    <div class="container">
+      <div class="footer__top">
+        <div class="footer__brand" data-nexus-slot="footer_brand">{{FOOTER_BRAND}}</div>
+        <ul class="footer__nav" data-nexus-slot="footer_links">
+          <li><a href="#" aria-label="Privacy policy">Privacy</a></li>
+          <li><a href="#" aria-label="Terms of service">Terms</a></li>
+          <li><a href="#" aria-label="Contact us">Contact</a></li>
+        </ul>
+      </div>
+      <div class="footer__bottom">
+        <p class="footer__copyright" data-nexus-slot="copyright">{{COPYRIGHT}}</p>
+      </div>
+    </div>
   </footer>
+
+  <script>
+    /* ========== SCROLL REVEAL ========== */
+    (function() {
+      var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (prefersReduced) {
+        document.querySelectorAll('.nexus-reveal, .nexus-stagger > *').forEach(function(el) {
+          el.style.opacity = '1';
+          el.style.transform = 'none';
+        });
+        return;
+      }
+      var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+      document.querySelectorAll('.nexus-reveal, .nexus-stagger').forEach(function(el) {
+        observer.observe(el);
+      });
+    })();
+
+    /* ========== DARK MODE TOGGLE ========== */
+    (function() {
+      var html = document.documentElement;
+      var stored = localStorage.getItem('nexus-theme');
+      if (stored) {
+        html.setAttribute('data-theme', stored);
+      } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+        html.setAttribute('data-theme', 'light');
+      }
+      window.__nexusToggleTheme = function() {
+        var current = html.getAttribute('data-theme');
+        var next = current === 'dark' ? 'light' : 'dark';
+        html.setAttribute('data-theme', next);
+        localStorage.setItem('nexus-theme', next);
+      };
+    })();
+
+    /* ========== MOBILE NAVIGATION ========== */
+    (function() {
+      var hamburger = document.querySelector('.nav__hamburger');
+      var mobileNav = document.getElementById('mobile-nav');
+      var closeBtn = document.querySelector('.nav__mobile-close');
+      if (!hamburger || !mobileNav) return;
+
+      function openNav() {
+        mobileNav.classList.add('is-open');
+        hamburger.setAttribute('aria-expanded', 'true');
+        closeBtn.focus();
+        document.body.style.overflow = 'hidden';
+      }
+      function closeNav() {
+        mobileNav.classList.remove('is-open');
+        hamburger.setAttribute('aria-expanded', 'false');
+        hamburger.focus();
+        document.body.style.overflow = '';
+      }
+      hamburger.addEventListener('click', openNav);
+      closeBtn.addEventListener('click', closeNav);
+      mobileNav.querySelectorAll('a').forEach(function(link) {
+        link.addEventListener('click', closeNav);
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && mobileNav.classList.contains('is-open')) {
+          closeNav();
+        }
+      });
+    })();
+  </script>
 
 </body>
 </html>

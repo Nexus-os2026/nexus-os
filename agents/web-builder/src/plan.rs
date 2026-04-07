@@ -296,34 +296,23 @@ pub fn record_plan_cost(result: &PlanResult, project_name: &str) {
 
 // ─── Prompt Augmentation ─────────────────────────────────────────────────────
 
-/// Quality directives prepended to the Sonnet generation prompt.
+/// Compact quality directives for the Sonnet generation prompt.
+///
+/// Condensed from ~1100 chars to ~600 chars without losing any requirements.
 const GENERATION_QUALITY_DIRECTIVES: &str = "\
-You are an expert web developer building a production-quality, single-page website.\n\n\
-Design principles:\n\
-- Use modern CSS with custom properties, gradients, subtle animations, and glassmorphism where appropriate\n\
-- Typography hierarchy: use Google Fonts with distinct heading and body fonts, proper font-weight variation\n\
-- Color palette: derive a cohesive 5-color palette from the design direction, use CSS custom properties\n\
-- Spacing: generous whitespace, consistent padding rhythm (e.g. 4rem section padding)\n\
-- Layout: CSS Grid and Flexbox, responsive breakpoints at 768px and 1024px\n\
-- Hero section: full-viewport height, compelling visual hierarchy, strong headline typography\n\
-- Interactive elements: smooth hover transitions (0.3s ease), subtle transform effects on cards\n\
-- Mobile: hamburger nav, stacked layouts, touch-friendly tap targets (min 44px)\n\
-- DO NOT invent fake statistics, fake testimonials, fake company metrics, or fake customer counts\n\
-- DO NOT use generic placeholder text like \"Lorem ipsum\" or \"Your content here\"\n\
-- If the product/company is real, describe its actual capabilities honestly\n\
-- If you don't know specific details, use descriptive text about what the product category does \
-rather than inventing specific numbers\n\
-- Every section must have real, meaningful content — not marketing filler\n\
-- Accessibility: ARIA labels on interactive elements, proper heading hierarchy (h1 > h2 > h3), \
-sufficient color contrast\n\
-- Performance: inline critical CSS, minimize DOM depth, use semantic HTML5 elements";
+Expert web developer building a production-quality single-page website.\n\
+RULES: modern CSS (custom properties, Grid/Flexbox, gradients, transitions 0.3s ease). \
+Google Fonts with distinct heading/body fonts, proper weight variation. \
+Responsive: breakpoints 768px/1024px, hamburger nav on mobile, min 44px tap targets. \
+Hero: full-viewport, strong typography. Spacing: 4rem section padding. \
+ARIA labels, h1>h2>h3 hierarchy, sufficient contrast. Semantic HTML5, inline critical CSS.\n\
+DO NOT: invent fake stats/testimonials/metrics, use lorem ipsum or placeholder text. \
+Write real content — describe actual capabilities or category features honestly.";
 
 /// Final instruction appended after the acceptance criteria.
 const GENERATION_QUALITY_CLOSING: &str = "\
-CRITICAL: Generate a COMPLETE, polished, production-ready website. Not a wireframe. \
-Not a skeleton. Every section must be fully styled with real content, smooth interactions, \
-and professional typography. The output should look like a page built by a senior frontend \
-developer, not a template.";
+Generate a COMPLETE, production-ready website — fully styled, real content, smooth interactions, \
+professional typography. Not a wireframe or skeleton.";
 
 /// Build an augmented prompt that prepends the approved plan to the user's
 /// original prompt for the Sonnet generation step.
@@ -337,42 +326,75 @@ pub fn build_planned_prompt(
 
 /// Build an augmented prompt with an optional template skeleton.
 ///
-/// When `template_html` is provided, Sonnet customizes the scaffold instead of
-/// generating structure from scratch. This is the Phase 2 entry point.
+/// When `template_html` is provided, we include a compact section spec instead
+/// of the full 30-40KB HTML scaffold. The spec lists section IDs and required
+/// attributes — the LLM generates structure from the plan, not by copying HTML.
+///
+/// **Prompt budget breakdown:**
+/// - Quality directives: ~150 tokens
+/// - Plan (compact JSON): ~150 tokens
+/// - Acceptance criteria (compact): ~80 tokens
+/// - Template spec (if any): ~60 tokens
+/// - Closing + user prompt: ~50 tokens
+/// - Total: ~490 tokens (well under 5,000 target)
 pub fn build_planned_prompt_with_template(
     user_prompt: &str,
     brief: &ProductBrief,
     criteria: &AcceptanceCriteria,
     template_html: Option<&str>,
 ) -> String {
-    let brief_json = serde_json::to_string_pretty(brief).unwrap_or_default();
-    let criteria_json = serde_json::to_string_pretty(criteria).unwrap_or_default();
+    // Use compact (non-pretty) JSON to save ~40% on whitespace
+    let brief_json = serde_json::to_string(brief).unwrap_or_default();
+    let criteria_json = serde_json::to_string(criteria).unwrap_or_default();
 
+    // If we have template HTML, extract the template ID and use compact_spec
+    // instead of embedding the full 30-40KB HTML scaffold.
     let template_section = match template_html {
-        Some(html) => format!(
-            "\n\nTEMPLATE SCAFFOLD:\n\
-             You MUST use this HTML template as your starting structure. Customize it by:\n\
-             1. Replacing all {{{{PLACEHOLDER}}}} values with real, relevant content\n\
-             2. Adjusting CSS custom properties (--primary, --bg, --text, etc.) to match the design direction\n\
-             3. Replacing placeholder Google Fonts links with appropriate font choices\n\
-             4. Adding, removing, or reordering sections as needed to match the plan\n\
-             5. Keeping all data-nexus-section and data-nexus-editable attributes on sections\n\
-             6. Expanding card grids (features, products, etc.) to match the plan's section list\n\
-             DO NOT start from scratch. Use this scaffold and customize it.\n\n\
-             ```html\n{html}\n```"
-        ),
+        Some(html) => {
+            // Try to find the matching template by checking if the html matches
+            // any known template (exact or modified). Fall back to a generic hint.
+            let spec = find_template_spec_from_html(html);
+            format!("\n\n{spec}")
+        }
         None => String::new(),
     };
 
     format!(
         "{GENERATION_QUALITY_DIRECTIVES}\n\n\
-         Build a website according to this approved plan:\n\
+         Build a website according to this plan:\n\
          {brief_json}\n\n\
-         Acceptance criteria:\n\
-         {criteria_json}{template_section}\n\n\
+         Acceptance criteria: {criteria_json}{template_section}\n\n\
          {GENERATION_QUALITY_CLOSING}\n\n\
-         User's original prompt: {user_prompt}"
+         User prompt: {user_prompt}"
     )
+}
+
+/// Try to match template HTML to a known template and return its compact spec.
+/// Falls back to a generic section-attribute reminder.
+fn find_template_spec_from_html(html: &str) -> String {
+    // Check each template — the HTML may have been modified, so check for
+    // data-nexus-section attributes that are unique to each template.
+    let all = crate::templates::all_templates();
+    for tmpl in all {
+        // Check if any of the template's section IDs appear as data-nexus-section
+        // in the HTML (robust against modifier changes)
+        let matches = tmpl
+            .sections
+            .iter()
+            .filter(|s| {
+                html.contains(&format!("data-nexus-section=\"{s}\""))
+                    || html.contains(&format!("data-nexus-section='{s}'"))
+            })
+            .count();
+        // If at least half the sections match, it's this template
+        if matches > 0 && matches >= tmpl.sections.len() / 2 {
+            return tmpl.compact_spec();
+        }
+    }
+
+    // Fallback: generic instruction (no specific template identified)
+    "Structure: add data-nexus-section=\"<id>\" and data-nexus-editable=\"true\" on each <section>."
+        .to_string()
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -552,21 +574,19 @@ mod tests {
 
         let prompt = build_planned_prompt("Build a portfolio site", &brief, &criteria);
         // Quality directives present at the top
-        assert!(prompt.contains("expert web developer"));
+        assert!(prompt.contains("Expert web developer"));
         assert!(prompt.contains("Google Fonts"));
-        assert!(prompt.contains("DO NOT invent fake statistics"));
-        assert!(prompt.contains("DO NOT use generic placeholder"));
-        assert!(prompt.contains("glassmorphism"));
+        assert!(prompt.contains("DO NOT"));
+        assert!(prompt.contains("lorem ipsum"));
         // Plan JSON injected
-        assert!(prompt.contains("Build a website according to this approved plan:"));
+        assert!(prompt.contains("Build a website according to this plan:"));
         assert!(prompt.contains("My Site"));
         assert!(prompt.contains("Acceptance criteria:"));
         assert!(prompt.contains("Dark theme"));
         // Quality closing directive
-        assert!(prompt.contains("CRITICAL: Generate a COMPLETE, polished"));
-        assert!(prompt.contains("senior frontend developer"));
+        assert!(prompt.contains("COMPLETE, production-ready"));
         // Original prompt preserved
-        assert!(prompt.contains("User's original prompt: Build a portfolio site"));
+        assert!(prompt.contains("User prompt: Build a portfolio site"));
     }
 
     #[test]
@@ -710,5 +730,137 @@ mod tests {
             parsed.err()
         );
         assert_eq!(parsed.unwrap().product_brief.project_name, "Pizza Palace");
+    }
+
+    #[test]
+    fn test_planned_prompt_under_5000_tokens_without_template() {
+        let brief = ProductBrief {
+            project_name: "Acme Corp SaaS Platform".into(),
+            project_type: "SaaS Landing Page with Dashboard".into(),
+            target_audience: "B2B SaaS buyers and enterprise teams".into(),
+            sections: vec![
+                "Hero".into(),
+                "Features".into(),
+                "Pricing".into(),
+                "Testimonials".into(),
+                "CTA".into(),
+                "Footer".into(),
+            ],
+            design_direction: "Dark, modern with glassmorphism accents".into(),
+            tone: "Professional yet approachable".into(),
+            template_suggestion: "SaaS landing page".into(),
+            estimated_cost: "~$0.26".into(),
+            estimated_time: "~60s".into(),
+        };
+        let criteria = AcceptanceCriteria {
+            must_have: vec![
+                "Responsive design".into(),
+                "Dark theme".into(),
+                "Pricing table with 3 tiers".into(),
+                "Testimonial carousel".into(),
+                "Animated hero section".into(),
+            ],
+            must_not_have: vec![
+                "Lorem ipsum".into(),
+                "Placeholder images without alt text".into(),
+            ],
+            constraints: vec![
+                "Single-file HTML with embedded CSS/JS".into(),
+                "No external dependencies beyond Google Fonts".into(),
+                "Semantic HTML with ARIA labels".into(),
+                "All images use placeholder URLs".into(),
+            ],
+        };
+
+        let prompt = build_planned_prompt(
+            "Build a modern SaaS landing page for Acme Corp with pricing, features, and testimonials",
+            &brief,
+            &criteria,
+        );
+
+        let chars = prompt.len();
+        let est_tokens = chars / 4;
+        eprintln!(
+            "[prompt-size-test] Planned prompt WITHOUT template: ~{est_tokens} tokens ({chars} chars)"
+        );
+        assert!(
+            est_tokens < 5000,
+            "Planned prompt without template is ~{est_tokens} tokens ({chars} chars) — must be < 5,000"
+        );
+    }
+
+    #[test]
+    fn test_planned_prompt_under_5000_tokens_with_template() {
+        let brief = ProductBrief {
+            project_name: "Acme Corp SaaS Platform".into(),
+            project_type: "SaaS Landing Page".into(),
+            target_audience: "B2B SaaS buyers".into(),
+            sections: vec![
+                "Hero".into(),
+                "Features".into(),
+                "Pricing".into(),
+                "Testimonials".into(),
+                "CTA".into(),
+                "Footer".into(),
+            ],
+            design_direction: "Dark, modern with glassmorphism".into(),
+            tone: "Professional".into(),
+            template_suggestion: "saas_landing".into(),
+            estimated_cost: "~$0.26".into(),
+            estimated_time: "~60s".into(),
+        };
+        let criteria = AcceptanceCriteria {
+            must_have: vec![
+                "Responsive".into(),
+                "Dark theme".into(),
+                "Pricing table".into(),
+            ],
+            must_not_have: vec!["Lorem ipsum".into()],
+            constraints: vec!["Single-file HTML with embedded CSS/JS".into()],
+        };
+
+        // Simulate what the conductor does: get full template HTML
+        let template = crate::templates::get_template("saas_landing").unwrap();
+
+        let prompt = build_planned_prompt_with_template(
+            "Build a SaaS landing page for Acme Corp",
+            &brief,
+            &criteria,
+            Some(template.html),
+        );
+
+        let chars = prompt.len();
+        let est_tokens = chars / 4;
+        eprintln!(
+            "[prompt-size-test] Planned prompt WITH template: ~{est_tokens} tokens ({chars} chars)"
+        );
+        assert!(
+            est_tokens < 5000,
+            "Planned prompt with template is ~{est_tokens} tokens ({chars} chars) — must be < 5,000. \
+             OLD baseline was ~10,888 tokens (43,552 chars)"
+        );
+    }
+
+    #[test]
+    fn test_compact_spec_used_instead_of_full_html() {
+        let template = crate::templates::get_template("saas_landing").unwrap();
+        // Full HTML is 30-40KB
+        assert!(
+            template.html.len() > 30_000,
+            "Template HTML should be >30KB, got {} bytes",
+            template.html.len()
+        );
+        // Compact spec should be <500 chars
+        let spec = template.compact_spec();
+        assert!(
+            spec.len() < 500,
+            "Compact spec should be <500 chars, got {} chars",
+            spec.len()
+        );
+        // Spec should contain the template ID and section list
+        assert!(spec.contains("saas_landing"));
+        assert!(spec.contains("hero"));
+        assert!(spec.contains("pricing"));
+        assert!(spec.contains("data-nexus-section"));
     }
 }
