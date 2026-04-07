@@ -55,6 +55,7 @@ pub async fn run_task(
         model_slot: crate::llm::router::ModelSlot::Execution,
         auto_approve_tier2: true,
         auto_approve_tier3: false,
+        computer_use_active: false,
     };
 
     let tool_ctx = crate::tools::ToolContext {

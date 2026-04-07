@@ -49,6 +49,10 @@ impl NxConfig {
     pub fn load() -> Result<Self, NxError> {
         let mut config = NxConfig::default();
 
+        // Auto-detect best provider if user hasn't explicitly configured one.
+        // Priority: claude_cli > anthropic > openai > ollama
+        config.auto_detect_provider();
+
         // Try NEXUSCODE.md in current directory
         let nexuscode_path = Path::new("NEXUSCODE.md");
         if nexuscode_path.exists() {
@@ -93,6 +97,23 @@ impl NxConfig {
         }
 
         Ok(config)
+    }
+
+    /// Auto-detect the best available provider.
+    /// Priority: claude_cli > anthropic > openai > ollama
+    fn auto_detect_provider(&mut self) {
+        if crate::setup::check_claude_cli_available() {
+            self.default_provider = "claude_cli".to_string();
+            self.default_model = "claude-cli".to_string();
+        } else if std::env::var("ANTHROPIC_API_KEY").is_ok() {
+            // Keep defaults (anthropic / claude-sonnet-4-20250514)
+        } else if std::env::var("OPENAI_API_KEY").is_ok() {
+            self.default_provider = "openai".to_string();
+            self.default_model = "gpt-4o".to_string();
+        } else if crate::setup::check_command_exists("ollama") {
+            self.default_provider = "ollama".to_string();
+            self.default_model = "qwen3:8b".to_string();
+        }
     }
 
     /// Parse a NEXUSCODE.md file for governance configuration.

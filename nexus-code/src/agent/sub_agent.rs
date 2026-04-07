@@ -102,6 +102,7 @@ pub async fn spawn_sub_agent(
         model_slot: crate::llm::router::ModelSlot::Execution,
         auto_approve_tier2: true,
         auto_approve_tier3: false,
+        computer_use_active: false,
     };
 
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();

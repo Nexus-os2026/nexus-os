@@ -91,7 +91,13 @@ fn test_denied_capability_audit() {
 fn test_config_load_defaults() {
     let config = NxConfig::load().unwrap();
     assert_eq!(config.fuel_budget, 50_000);
-    assert_eq!(config.default_provider, "anthropic");
+    // Provider is auto-detected: claude_cli if available, then anthropic, openai, ollama
+    let valid_providers = ["claude_cli", "anthropic", "openai", "ollama"];
+    assert!(
+        valid_providers.contains(&config.default_provider.as_str()),
+        "unexpected default provider: {}",
+        config.default_provider
+    );
 }
 
 #[test]

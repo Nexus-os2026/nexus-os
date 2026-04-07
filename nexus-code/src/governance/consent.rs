@@ -77,8 +77,12 @@ impl ConsentGate {
             ConsentTier::Tier1
         } else {
             match tool_name {
-                "file_write" | "file_edit" | "git_commit" => ConsentTier::Tier2,
-                "bash" | "shell" | "file_delete" | "git_push" => ConsentTier::Tier3,
+                "file_write" | "file_edit" | "git_commit" | "screen_capture" | "screen_analyze" => {
+                    ConsentTier::Tier2
+                }
+                "bash" | "shell" | "file_delete" | "git_push" | "screen_interact" => {
+                    ConsentTier::Tier3
+                }
                 _ => ConsentTier::Tier2,
             }
         }

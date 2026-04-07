@@ -6,6 +6,7 @@ use crate::config::NxConfig;
 use crate::error::NxError;
 use crate::governance::GovernanceKernel;
 use crate::llm::providers::anthropic::AnthropicProvider;
+use crate::llm::providers::claude_cli::ClaudeCliProvider;
 use crate::llm::providers::google::GoogleProvider;
 use crate::llm::{ModelRouter, ModelSlot, ProviderRegistry, SlotConfig};
 
@@ -36,6 +37,7 @@ impl App {
 
         // Build provider registry
         let mut registry = ProviderRegistry::new();
+        registry.register(Box::new(ClaudeCliProvider::new()));
         registry.register(Box::new(AnthropicProvider::new()));
         registry.register(Box::new(crate::llm::providers::create_openai_provider()));
         registry.register(Box::new(GoogleProvider::new()));
@@ -84,6 +86,32 @@ impl App {
             memory,
             mcp_manager,
         })
+    }
+
+    /// Enable computer use capabilities: register 3 screen tools + grant ComputerUse capability.
+    pub fn enable_computer_use(&mut self) {
+        self.tool_registry.register_computer_use_tools();
+        self.governance.capabilities.grant(
+            crate::governance::Capability::ComputerUse,
+            crate::governance::CapabilityScope::Full,
+        );
+    }
+
+    /// Disable computer use capabilities: remove 3 screen tools + revoke ComputerUse capability.
+    pub fn disable_computer_use(&mut self) {
+        self.tool_registry.unregister_computer_use_tools();
+        self.governance
+            .capabilities
+            .revoke(crate::governance::Capability::ComputerUse);
+    }
+
+    /// Check if computer use is active (ComputerUse capability granted).
+    pub fn is_computer_use_active(&self) -> bool {
+        self.governance
+            .capabilities
+            .granted()
+            .iter()
+            .any(|g| g.capability == crate::governance::Capability::ComputerUse)
     }
 
     /// Run the init command — create NEXUSCODE.md in the current directory.
@@ -169,7 +197,7 @@ Additional capabilities must be granted via the REPL.
         println!("    Est. Cost:  ${:.4}", fuel.cost_usd);
         println!();
         println!("  {}", "Capabilities".bold());
-        println!("    Granted:    {} / 12", caps.len());
+        println!("    Granted:    {} / 13", caps.len());
         for grant in &caps {
             println!("    - {} ({:?})", grant.capability.as_str(), grant.scope);
         }
@@ -178,7 +206,9 @@ Additional capabilities must be granted via the REPL.
 
     /// Print available providers and their configuration status.
     pub fn print_providers(&self) {
+        let claude_cli_available = crate::setup::check_command_exists("claude");
         let providers: Vec<(&str, bool, &str)> = vec![
+            ("claude_cli", claude_cli_available, "claude-cli"),
             (
                 "anthropic",
                 std::env::var("ANTHROPIC_API_KEY").is_ok(),
@@ -217,7 +247,9 @@ Additional capabilities must be granted via the REPL.
             } else {
                 "✗".red().to_string()
             };
-            let label = if *configured {
+            let label = if *name == "claude_cli" && *configured {
+                "configured (Max plan, $0)"
+            } else if *configured {
                 "configured"
             } else {
                 "not configured"
@@ -244,7 +276,7 @@ Additional capabilities must be granted via the REPL.
             "  Governance: Ed25519 identity, hash-chained audit, capability ACL, HITL consent"
         );
         println!("  Tools: {} registered", self.tool_registry.list().len());
-        println!("  Providers: 7 (Anthropic, OpenAI, Google, Ollama, OpenRouter, Groq, DeepSeek)");
+        println!("  Providers: 8 (Claude CLI, Anthropic, OpenAI, Google, Ollama, OpenRouter, Groq, DeepSeek)");
         println!("  Slots: 5 (Execution, Thinking, Critique, Compact, Vision)");
         println!();
     }

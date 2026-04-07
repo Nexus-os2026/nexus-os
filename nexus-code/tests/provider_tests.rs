@@ -1,4 +1,5 @@
 use nexus_code::llm::providers::anthropic::AnthropicProvider;
+use nexus_code::llm::providers::claude_cli::ClaudeCliProvider;
 use nexus_code::llm::providers::google::GoogleProvider;
 use nexus_code::llm::{LlmProvider, ModelRouter, ModelSlot, ProviderRegistry, SlotConfig};
 use std::sync::Arc;
@@ -6,6 +7,7 @@ use std::sync::Arc;
 #[test]
 fn test_provider_registry_creation() {
     let mut registry = ProviderRegistry::new();
+    registry.register(Box::new(ClaudeCliProvider::new()));
     registry.register(Box::new(AnthropicProvider::new()));
     registry.register(Box::new(
         nexus_code::llm::providers::create_openai_provider(),
@@ -23,7 +25,41 @@ fn test_provider_registry_creation() {
     ));
 
     let list = registry.list();
-    assert_eq!(list.len(), 7);
+    assert_eq!(list.len(), 8);
+}
+
+#[test]
+fn test_claude_cli_provider() {
+    let provider = ClaudeCliProvider::new();
+    assert_eq!(provider.name(), "claude_cli");
+    assert_eq!(provider.available_models(), vec!["claude-cli"]);
+    // is_configured depends on whether `claude` binary is on PATH
+}
+
+#[test]
+fn test_claude_cli_registered_and_resolvable() {
+    let mut registry = ProviderRegistry::new();
+    registry.register(Box::new(ClaudeCliProvider::new()));
+    let registry = Arc::new(registry);
+
+    let mut router = ModelRouter::new(registry);
+    router.set_slot(
+        ModelSlot::Execution,
+        SlotConfig {
+            provider: "claude_cli".to_string(),
+            model: "claude-cli".to_string(),
+        },
+    );
+
+    let result = router.resolve(ModelSlot::Execution);
+    assert!(
+        result.is_ok(),
+        "claude_cli should be resolvable after registration: {:?}",
+        result.err()
+    );
+    let (provider, model) = result.unwrap();
+    assert_eq!(provider.name(), "claude_cli");
+    assert_eq!(model, "claude-cli");
 }
 
 #[test]

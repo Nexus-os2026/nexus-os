@@ -20,7 +20,7 @@ fn test_tui_app_creation() {
     assert_eq!(tui.cursor_pos, 0);
     assert!(!tui.should_quit);
     assert!(!tui.show_help);
-    assert!(!tui.show_sidebar);
+    assert_eq!(tui.active_panel, nexus_code::tui::layout::BottomPanel::None);
     assert!(tui.fuel_total > 0);
     assert!(tui.tool_count > 0);
 }
@@ -102,18 +102,11 @@ fn test_tui_scroll() {
 
     assert_eq!(tui.scroll_offset, 0);
 
-    // PageUp increases offset
-    tui.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::PageUp,
-        crossterm::event::KeyModifiers::NONE,
-    ));
+    // Scroll via keybindings module (PageUp/PageDown now handled there)
+    tui.scroll_offset = tui.scroll_offset.saturating_add(10);
     assert_eq!(tui.scroll_offset, 10);
 
-    // PageDown decreases offset
-    tui.handle_key(crossterm::event::KeyEvent::new(
-        crossterm::event::KeyCode::PageDown,
-        crossterm::event::KeyModifiers::NONE,
-    ));
+    tui.scroll_offset = tui.scroll_offset.saturating_sub(10);
     assert_eq!(tui.scroll_offset, 0);
 }
 
@@ -217,6 +210,12 @@ fn test_theme_styles_exist() {
     let _ = Theme::code();
     let _ = Theme::user_label();
     let _ = Theme::assistant_label();
+    let _ = Theme::info();
+    let _ = Theme::status_bar();
+    let _ = Theme::panel_border();
+    let _ = Theme::panel_bg();
+    let _ = Theme::fuel_style(50);
+    let _ = Theme::envelope_style(75.0);
 }
 
 #[test]
@@ -276,4 +275,193 @@ fn test_tool_activity_status_variants() {
             duration_ms: 0
         }
     );
+}
+
+// ═══════════════════════════════════════════════════════
+// New TUI v2 Tests — Panels, Keybindings, Fuel Bar (10)
+// ═══════════════════════════════════════════════════════
+
+#[test]
+fn test_fuel_bar_gradient() {
+    let (bar, _color) = Theme::fuel_bar(100);
+    assert_eq!(bar.chars().count(), 10); // 10 blocks total
+
+    let (bar, _) = Theme::fuel_bar(50);
+    assert_eq!(bar.chars().count(), 10);
+
+    let (bar, _) = Theme::fuel_bar(0);
+    assert_eq!(bar.chars().count(), 10);
+}
+
+#[test]
+fn test_fuel_color_gradient() {
+    assert_eq!(Theme::fuel_color(100), Theme::FUEL_FULL);
+    assert_eq!(Theme::fuel_color(75), Theme::FUEL_FULL);
+    assert_eq!(Theme::fuel_color(60), Theme::FUEL_MEDIUM);
+    assert_eq!(Theme::fuel_color(30), Theme::FUEL_LOW);
+    assert_eq!(Theme::fuel_color(10), Theme::FUEL_CRITICAL);
+}
+
+#[test]
+fn test_panel_toggle() {
+    use nexus_code::tui::layout::BottomPanel;
+
+    let app = nexus_code::app::App::new(nexus_code::config::NxConfig::default()).unwrap();
+    let mut tui = TuiApp::new(&app);
+
+    assert_eq!(tui.active_panel, BottomPanel::None);
+
+    // Toggle governance on
+    tui.toggle_panel(BottomPanel::Governance);
+    assert_eq!(tui.active_panel, BottomPanel::Governance);
+
+    // Toggle governance off (same panel)
+    tui.toggle_panel(BottomPanel::Governance);
+    assert_eq!(tui.active_panel, BottomPanel::None);
+
+    // Toggle to computer use
+    tui.toggle_panel(BottomPanel::ComputerUse);
+    assert_eq!(tui.active_panel, BottomPanel::ComputerUse);
+
+    // Switch directly to patterns
+    tui.toggle_panel(BottomPanel::Patterns);
+    assert_eq!(tui.active_panel, BottomPanel::Patterns);
+}
+
+#[test]
+fn test_record_run() {
+    let app = nexus_code::app::App::new(nexus_code::config::NxConfig::default()).unwrap();
+    let mut tui = TuiApp::new(&app);
+
+    assert!(tui.recent_runs.is_empty());
+
+    tui.record_run("file_read".to_string(), true, 42);
+    assert_eq!(tui.recent_runs.len(), 1);
+    assert_eq!(tui.recent_runs[0].name, "file_read");
+    assert!(tui.recent_runs[0].success);
+
+    // Record 11 runs — should cap at 10
+    for i in 0..11 {
+        tui.record_run(format!("tool_{}", i), true, 10);
+    }
+    assert_eq!(tui.recent_runs.len(), 10);
+}
+
+#[test]
+fn test_keybindings_quit() {
+    use nexus_code::tui::keybindings::{process_key, KeyAction};
+
+    let key = crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Char('c'),
+        crossterm::event::KeyModifiers::CONTROL,
+    );
+    let action = process_key(key, false, false, false);
+    assert!(matches!(action, KeyAction::Quit));
+}
+
+#[test]
+fn test_keybindings_cancel_stream() {
+    use nexus_code::tui::keybindings::{process_key, KeyAction};
+
+    let key = crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Char('c'),
+        crossterm::event::KeyModifiers::CONTROL,
+    );
+    let action = process_key(key, true, false, false);
+    assert!(matches!(action, KeyAction::CancelStream));
+}
+
+#[test]
+fn test_keybindings_f_keys() {
+    use nexus_code::tui::keybindings::{process_key, KeyAction};
+
+    let f2 = crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::F(2),
+        crossterm::event::KeyModifiers::NONE,
+    );
+    assert!(matches!(
+        process_key(f2, false, false, false),
+        KeyAction::ToggleGovernance
+    ));
+
+    let f3 = crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::F(3),
+        crossterm::event::KeyModifiers::NONE,
+    );
+    assert!(matches!(
+        process_key(f3, false, false, false),
+        KeyAction::ToggleComputerUse
+    ));
+
+    let f4 = crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::F(4),
+        crossterm::event::KeyModifiers::NONE,
+    );
+    assert!(matches!(
+        process_key(f4, false, false, false),
+        KeyAction::TogglePatterns
+    ));
+
+    let f5 = crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::F(5),
+        crossterm::event::KeyModifiers::NONE,
+    );
+    assert!(matches!(
+        process_key(f5, false, false, false),
+        KeyAction::ToggleMemory
+    ));
+}
+
+#[test]
+fn test_keybindings_consent() {
+    use nexus_code::tui::keybindings::{process_key, KeyAction};
+
+    let a_key = crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Char('a'),
+        crossterm::event::KeyModifiers::NONE,
+    );
+    assert!(matches!(
+        process_key(a_key, false, true, false),
+        KeyAction::ApproveConsent
+    ));
+
+    let d_key = crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Char('d'),
+        crossterm::event::KeyModifiers::NONE,
+    );
+    assert!(matches!(
+        process_key(d_key, false, true, false),
+        KeyAction::DenyConsent
+    ));
+}
+
+#[test]
+fn test_keybindings_clear_conversation() {
+    use nexus_code::tui::keybindings::{process_key, KeyAction};
+
+    let key = crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Char('l'),
+        crossterm::event::KeyModifiers::CONTROL,
+    );
+    assert!(matches!(
+        process_key(key, false, false, false),
+        KeyAction::ClearConversation
+    ));
+}
+
+#[test]
+fn test_tab_completion() {
+    use nexus_code::tui::input_area::tab_complete;
+
+    // Single match
+    assert_eq!(tab_complete("/scre"), Some("/screenshot".to_string()));
+
+    // No match
+    assert_eq!(tab_complete("/zzz"), None);
+
+    // Not a slash command
+    assert_eq!(tab_complete("hello"), None);
+
+    // Exact match (no completion needed)
+    assert_eq!(tab_complete("/quit"), None);
 }

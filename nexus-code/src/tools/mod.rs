@@ -10,6 +10,9 @@ pub mod file_write;
 pub mod git;
 pub mod glob;
 pub mod project_index;
+pub mod screen_analyze;
+pub mod screen_capture;
+pub mod screen_interact;
 pub mod search;
 pub mod sub_agent_tool;
 pub mod test_runner;
@@ -247,6 +250,26 @@ impl ToolRegistry {
         self.tools.push(tool);
     }
 
+    /// Register the 3 computer use tools (screen_capture, screen_interact, screen_analyze).
+    /// Called when --computer-use flag is active or /computer-use on command is issued.
+    pub fn register_computer_use_tools(&mut self) {
+        self.tools.push(Box::new(screen_capture::ScreenCaptureTool));
+        self.tools
+            .push(Box::new(screen_interact::ScreenInteractTool));
+        self.tools.push(Box::new(screen_analyze::ScreenAnalyzeTool));
+    }
+
+    /// Unregister the 3 computer use tools.
+    /// Called when /computer-use off command is issued.
+    pub fn unregister_computer_use_tools(&mut self) {
+        self.tools.retain(|t| {
+            !matches!(
+                t.name(),
+                "screen_capture" | "screen_interact" | "screen_analyze"
+            )
+        });
+    }
+
     /// Get all tools (for building LLM system prompt).
     pub fn all(&self) -> &[Box<dyn NxTool>] {
         &self.tools
@@ -300,6 +323,9 @@ pub fn create_tool(name: &str) -> Option<Box<dyn NxTool>> {
         "sub_agent" => Some(Box::new(sub_agent_tool::SubAgentTool)),
         "project_index" => Some(Box::new(project_index::ProjectIndexTool)),
         "web_fetch" => Some(Box::new(web_fetch::WebFetchTool)),
+        "screen_capture" => Some(Box::new(screen_capture::ScreenCaptureTool)),
+        "screen_interact" => Some(Box::new(screen_interact::ScreenInteractTool)),
+        "screen_analyze" => Some(Box::new(screen_analyze::ScreenAnalyzeTool)),
         _ => None,
     }
 }
@@ -339,6 +365,27 @@ fn extract_context(input: &serde_json::Value, tool_name: &str) -> String {
             .unwrap_or("<sub-agent>")
             .to_string(),
         "project_index" => "project scan".to_string(),
+        "screen_capture" => {
+            let window = input
+                .get("window")
+                .and_then(|v| v.as_str())
+                .unwrap_or("full screen");
+            format!("screenshot: {}", window)
+        }
+        "screen_interact" => {
+            let action = input
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+            format!("screen: {}", action)
+        }
+        "screen_analyze" => {
+            let question = input
+                .get("question")
+                .and_then(|v| v.as_str())
+                .unwrap_or("<vision query>");
+            format!("vision: {}", question)
+        }
         _ => serde_json::to_string(input).unwrap_or_else(|_| "<unknown>".to_string()),
     }
 }

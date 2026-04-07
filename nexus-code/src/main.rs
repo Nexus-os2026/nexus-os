@@ -53,6 +53,10 @@ struct Cli {
     /// MCP server configuration (JSON string or path to JSON file)
     #[arg(long)]
     mcp_config: Option<String>,
+
+    /// Enable computer use capabilities (screen capture, interaction, vision)
+    #[arg(long)]
+    computer_use: bool,
 }
 
 #[derive(Subcommand)]
@@ -161,6 +165,7 @@ async fn run_headless(
         model_slot: nexus_code::llm::router::ModelSlot::Execution,
         auto_approve_tier2: auto_approve || dangerously_approve_all,
         auto_approve_tier3: dangerously_approve_all,
+        computer_use_active: app.is_computer_use_active(),
     };
 
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -275,6 +280,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut app = App::new(config)?;
+
+    // Enable computer use if requested
+    if cli.computer_use {
+        app.enable_computer_use();
+    }
 
     // Connect to MCP servers if configured
     if let Some(ref mcp_config_str) = cli.mcp_config {

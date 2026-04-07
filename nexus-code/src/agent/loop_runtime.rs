@@ -22,6 +22,8 @@ pub struct AgentConfig {
     pub auto_approve_tier2: bool,
     /// Whether to auto-approve Tier3 tools (DANGEROUS — headless mode only).
     pub auto_approve_tier3: bool,
+    /// Whether computer use mode is active (appends autonomous developer prompt).
+    pub computer_use_active: bool,
 }
 
 impl Default for AgentConfig {
@@ -32,6 +34,7 @@ impl Default for AgentConfig {
             model_slot: crate::llm::router::ModelSlot::Execution,
             auto_approve_tier2: false,
             auto_approve_tier3: false,
+            computer_use_active: false,
         }
     }
 }
@@ -84,8 +87,12 @@ pub async fn run_agent_loop(
         .unwrap_or_else(|| "openai".to_string());
     let protocol = ToolProtocol::for_provider(&provider_name);
 
-    // Build full system prompt with tool descriptions
-    let system_prompt = super::build_system_prompt(&config.system_prompt, tool_registry);
+    // Build full system prompt with tool descriptions (and computer use section if active)
+    let system_prompt = super::build_system_prompt_with_computer_use(
+        &config.system_prompt,
+        tool_registry,
+        config.computer_use_active,
+    );
 
     let mut last_text = String::new();
 

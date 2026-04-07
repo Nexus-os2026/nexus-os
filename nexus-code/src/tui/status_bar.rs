@@ -1,4 +1,7 @@
-//! Live governance metrics status bar.
+//! 2-line status bar with fuel gradient and governance indicators.
+//!
+//! Line 1: nx version | provider (cost) | fuel bar (visual gradient) | model
+//! Line 2: audit count | envelope % | computer use status | tools count
 
 use super::theme::Theme;
 use super::TuiApp;
@@ -14,59 +17,77 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &TuiApp) {
         0
     };
 
-    let fuel_style = if fuel_pct > 50 {
-        Theme::success()
-    } else if fuel_pct > 20 {
-        Theme::warning()
-    } else {
-        Theme::error()
-    };
+    let (fuel_bar, fuel_color) = Theme::fuel_bar(fuel_pct);
 
-    let envelope_style = if state.envelope_similarity > 70.0 {
-        Theme::success()
-    } else if state.envelope_similarity > 50.0 {
-        Theme::warning()
-    } else {
-        Theme::error()
-    };
-
-    let mut spans = vec![
+    // ─── Line 1: version | provider | fuel bar | model ───
+    let line1 = Line::from(vec![
         Span::styled(
             " nx ",
             ratatui::style::Style::default()
                 .fg(ratatui::style::Color::Black)
                 .bg(Theme::BRAND),
         ),
-        Span::raw(" "),
-        Span::styled(&state.session_id_short, Theme::dim()),
+        Span::styled(format!(" v{} ", env!("CARGO_PKG_VERSION")), Theme::dim()),
+        Span::styled("\u{2502} ", Theme::muted()),
+        Span::styled(
+            if state.provider == "claude_cli" {
+                "claude_cli ($0)".to_string()
+            } else {
+                state.provider.clone()
+            },
+            Theme::text(),
+        ),
         Span::styled(" \u{2502} ", Theme::muted()),
-        Span::styled(format!("{}/{}", state.provider, state.model), Theme::text()),
+        Span::styled("fuel ", Theme::dim()),
+        Span::styled(fuel_bar, ratatui::style::Style::default().fg(fuel_color)),
+        Span::styled(format!(" {}%", fuel_pct), Theme::fuel_style(fuel_pct)),
         Span::styled(" \u{2502} ", Theme::muted()),
-        Span::styled("Fuel:", Theme::dim()),
-        Span::styled(format!("{}%", fuel_pct), fuel_style),
-        Span::styled(" \u{2502} ", Theme::muted()),
-        Span::styled("Audit:", Theme::dim()),
+        Span::styled(&state.model, Theme::text()),
+    ]);
+
+    // ─── Line 2: audit | envelope | computer use | tools ───
+    let envelope_style = Theme::envelope_style(state.envelope_similarity);
+
+    let computer_use_status = if state.computer_use_active {
+        Span::styled(
+            "\u{25cf} active",
+            ratatui::style::Style::default()
+                .fg(Theme::BRAND)
+                .add_modifier(ratatui::style::Modifier::BOLD),
+        )
+    } else {
+        Span::styled("\u{25cb} off", Theme::muted())
+    };
+
+    let mut line2_spans = vec![
+        Span::styled("  ", Theme::muted()),
+        Span::styled("audit:", Theme::dim()),
         Span::styled(format!("{}", state.audit_len), Theme::text()),
         Span::styled(" \u{2502} ", Theme::muted()),
-        Span::styled("Env:", Theme::dim()),
+        Span::styled("env:", Theme::dim()),
         Span::styled(format!("{:.0}%", state.envelope_similarity), envelope_style),
+        Span::styled(" \u{2502} ", Theme::muted()),
+        Span::styled("screen:", Theme::dim()),
+        computer_use_status,
         Span::styled(" \u{2502} ", Theme::muted()),
         Span::styled(format!("{}tools", state.tool_count), Theme::dim()),
     ];
 
+    // Temporary status message (fades after 5 seconds)
     if let Some((ref msg, ref time)) = state.status_message {
         if chrono::Utc::now()
             .signed_duration_since(*time)
             .num_seconds()
             < 5
         {
-            spans.push(Span::styled(" \u{2502} ", Theme::muted()));
-            spans.push(Span::styled(msg.clone(), Theme::warning()));
+            line2_spans.push(Span::styled(" \u{2502} ", Theme::muted()));
+            line2_spans.push(Span::styled(msg.clone(), Theme::warning()));
         }
     }
 
-    let line = Line::from(spans);
-    let bar = Paragraph::new(line)
-        .style(ratatui::style::Style::default().bg(ratatui::style::Color::Rgb(30, 30, 46)));
+    let line2 = Line::from(line2_spans);
+
+    let lines = vec![line1, line2];
+    let bar = Paragraph::new(lines).style(Theme::status_bar());
     frame.render_widget(bar, area);
 }

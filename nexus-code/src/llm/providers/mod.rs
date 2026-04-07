@@ -1,6 +1,7 @@
 //! LLM provider implementations.
 
 pub mod anthropic;
+pub mod claude_cli;
 pub mod google;
 pub mod openai_compat;
 

@@ -4,16 +4,20 @@
 //! The rustyline REPL is still available via `nx chat --no-tui`.
 
 pub mod chat_panel;
+pub mod computer_use_panel;
 pub mod consent_modal;
+pub mod governance_panel;
 pub mod help_overlay;
 pub mod input_area;
+pub mod keybindings;
 pub mod layout;
 pub mod markdown;
+pub mod patterns_panel;
 pub mod status_bar;
 pub mod theme;
 pub mod tool_activity;
 
-use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use crossterm::event::{self, Event};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io::Stdout;
@@ -65,6 +69,21 @@ pub enum ToolActivityStatus {
     Denied { reason: String },
 }
 
+/// A learned pattern for the patterns panel.
+#[derive(Debug, Clone)]
+pub struct PatternEntry {
+    pub name: String,
+    pub confidence: f64,
+}
+
+/// A recent run entry for the patterns panel.
+#[derive(Debug, Clone)]
+pub struct RecentRun {
+    pub name: String,
+    pub success: bool,
+    pub duration_ms: u64,
+}
+
 /// The TUI application state.
 pub struct TuiApp {
     pub messages: Vec<ChatMessage>,
@@ -78,12 +97,13 @@ pub struct TuiApp {
     pub pending_consent: Option<PendingConsent>,
     pub active_tools: Vec<ToolActivityEntry>,
     pub show_help: bool,
-    pub show_sidebar: bool,
+    pub active_panel: layout::BottomPanel,
     pub should_quit: bool,
     pub status_message: Option<(String, chrono::DateTime<chrono::Utc>)>,
 
     // Governance state (synced from App)
     pub session_id_short: String,
+    pub public_key_short: String,
     pub provider: String,
     pub model: String,
     pub fuel_remaining: u64,
@@ -91,11 +111,34 @@ pub struct TuiApp {
     pub audit_len: usize,
     pub envelope_similarity: f64,
     pub tool_count: usize,
+
+    // Computer use state
+    pub computer_use_active: bool,
+    pub computer_use_backend: String,
+    pub computer_use_resolution: String,
+    pub last_screenshot_hash: String,
+    pub cu_screenshots: u32,
+    pub cu_interactions: u32,
+    pub cu_analyses: u32,
+    pub cu_fixes_verified: u32,
+    pub cu_fixes_total: u32,
+    pub cu_current_page: String,
+    pub cu_last_action: String,
+    pub cu_last_action_time: String,
+
+    // Patterns state
+    pub patterns: Vec<PatternEntry>,
+    pub recent_runs: Vec<RecentRun>,
+
+    // Memory state
+    pub memory_entries: usize,
+    pub memory_fuel_used: u64,
 }
 
 impl TuiApp {
     pub fn new(app: &crate::app::App) -> Self {
         let session_id = app.governance.identity.session_id();
+        let pubkey = hex::encode(app.governance.identity.public_key_bytes());
         Self {
             messages: Vec::new(),
             streaming_text: String::new(),
@@ -108,10 +151,15 @@ impl TuiApp {
             pending_consent: None,
             active_tools: Vec::new(),
             show_help: false,
-            show_sidebar: false,
+            active_panel: layout::BottomPanel::None,
             should_quit: false,
             status_message: None,
             session_id_short: session_id[..8.min(session_id.len())].to_string(),
+            public_key_short: if pubkey.len() >= 16 {
+                format!("{}...{}", &pubkey[..8], &pubkey[pubkey.len() - 8..])
+            } else {
+                pubkey
+            },
             provider: app.config.default_provider.clone(),
             model: app.config.default_model.clone(),
             fuel_remaining: app.governance.fuel.remaining(),
@@ -119,6 +167,22 @@ impl TuiApp {
             audit_len: app.governance.audit.len(),
             envelope_similarity: 100.0,
             tool_count: app.tool_registry.list().len(),
+            computer_use_active: app.is_computer_use_active(),
+            computer_use_backend: "none".to_string(),
+            computer_use_resolution: "n/a".to_string(),
+            last_screenshot_hash: "n/a".to_string(),
+            cu_screenshots: 0,
+            cu_interactions: 0,
+            cu_analyses: 0,
+            cu_fixes_verified: 0,
+            cu_fixes_total: 0,
+            cu_current_page: "n/a".to_string(),
+            cu_last_action: "n/a".to_string(),
+            cu_last_action_time: "n/a".to_string(),
+            patterns: Vec::new(),
+            recent_runs: Vec::new(),
+            memory_entries: app.memory.len(),
+            memory_fuel_used: 0,
         }
     }
 
@@ -139,6 +203,9 @@ impl TuiApp {
         self.fuel_remaining = app.governance.fuel.remaining();
         self.fuel_total = app.governance.fuel.budget().total;
         self.audit_len = app.governance.audit.len();
+        self.memory_entries = app.memory.len();
+        self.tool_count = app.tool_registry.list().len();
+        self.computer_use_active = app.is_computer_use_active();
     }
 
     /// Finalize streaming — move streaming_text into a completed message.
@@ -153,10 +220,37 @@ impl TuiApp {
         self.is_streaming = false;
     }
 
+    /// Toggle a bottom panel. If already showing that panel, close it.
+    pub fn toggle_panel(&mut self, panel: layout::BottomPanel) {
+        if self.active_panel == panel {
+            self.active_panel = layout::BottomPanel::None;
+        } else {
+            self.active_panel = panel;
+        }
+    }
+
+    /// Record a completed run for the patterns panel.
+    pub fn record_run(&mut self, name: String, success: bool, duration_ms: u64) {
+        self.recent_runs.push(RecentRun {
+            name,
+            success,
+            duration_ms,
+        });
+        // Keep only last 10 runs
+        if self.recent_runs.len() > 10 {
+            self.recent_runs.remove(0);
+        }
+    }
+
     /// Handle a key event for input editing.
     pub fn handle_key(&mut self, key: event::KeyEvent) {
+        use crossterm::event::KeyCode;
         match key.code {
-            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+            KeyCode::Char(c)
+                if !key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::CONTROL) =>
+            {
                 self.input.insert(self.cursor_pos, c);
                 self.cursor_pos += 1;
             }
@@ -207,18 +301,6 @@ impl TuiApp {
                     }
                     self.cursor_pos = self.input.len();
                 }
-            }
-            KeyCode::PageUp => {
-                self.scroll_offset = self.scroll_offset.saturating_add(10);
-            }
-            KeyCode::PageDown => {
-                self.scroll_offset = self.scroll_offset.saturating_sub(10);
-            }
-            KeyCode::F(1) => {
-                self.show_help = !self.show_help;
-            }
-            KeyCode::Tab => {
-                self.show_sidebar = !self.show_sidebar;
             }
             _ => {}
         }
@@ -300,29 +382,49 @@ async fn run_event_loop(
             let mut state = tui_state.lock().await;
 
             if let Event::Key(key) = evt {
-                // Ctrl+C
-                if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                    if state.is_streaming {
-                        state.finalize_streaming();
-                    } else {
+                let action = keybindings::process_key(
+                    key,
+                    state.is_streaming,
+                    state.pending_consent.is_some(),
+                    state.show_help,
+                );
+
+                match action {
+                    keybindings::KeyAction::Quit => {
                         state.should_quit = true;
                     }
-                }
-                // Escape
-                else if key.code == KeyCode::Esc {
-                    if state.show_help {
-                        state.show_help = false;
-                    } else if let Some(mut consent) = state.pending_consent.take() {
-                        if let Some(tx) = consent.response_tx.take() {
-                            let _ = tx.send(false);
-                        }
-                    } else if state.is_streaming {
+                    keybindings::KeyAction::CancelStream => {
                         state.finalize_streaming();
                     }
-                }
-                // Enter
-                else if key.code == KeyCode::Enter && !state.is_streaming {
-                    if state.pending_consent.is_none() {
+                    keybindings::KeyAction::CloseOverlay => {
+                        if state.show_help {
+                            state.show_help = false;
+                        } else if let Some(mut consent) = state.pending_consent.take() {
+                            if let Some(tx) = consent.response_tx.take() {
+                                let _ = tx.send(false);
+                            }
+                        }
+                    }
+                    keybindings::KeyAction::ToggleHelp => {
+                        state.show_help = !state.show_help;
+                    }
+                    keybindings::KeyAction::ToggleGovernance => {
+                        state.toggle_panel(layout::BottomPanel::Governance);
+                    }
+                    keybindings::KeyAction::ToggleComputerUse => {
+                        state.toggle_panel(layout::BottomPanel::ComputerUse);
+                    }
+                    keybindings::KeyAction::TogglePatterns => {
+                        state.toggle_panel(layout::BottomPanel::Patterns);
+                    }
+                    keybindings::KeyAction::ToggleMemory => {
+                        state.toggle_panel(layout::BottomPanel::Memory);
+                    }
+                    keybindings::KeyAction::ClearConversation => {
+                        state.messages.clear();
+                        state.scroll_offset = 0;
+                    }
+                    keybindings::KeyAction::Submit => {
                         let input = state.take_input();
                         if !input.is_empty() {
                             if input == "/quit" || input == "/exit" {
@@ -348,7 +450,6 @@ async fn run_event_loop(
                                     timestamp: chrono::Utc::now(),
                                 });
                             } else {
-                                // Add user message and mark as streaming
                                 state.messages.push(ChatMessage {
                                     role: MessageRole::User,
                                     content: input.clone(),
@@ -357,7 +458,6 @@ async fn run_event_loop(
                                 state.is_streaming = true;
                                 state.scroll_offset = 0;
 
-                                // Spawn agent task
                                 let app_clone = app.clone();
                                 let tui_clone = tui_state.clone();
                                 tokio::spawn(async move {
@@ -366,35 +466,44 @@ async fn run_event_loop(
                             }
                         }
                     }
-                }
-                // Consent keys
-                else if state.pending_consent.is_some() {
-                    match key.code {
-                        KeyCode::Char('a') | KeyCode::Char('A') => {
-                            if let Some(mut consent) = state.pending_consent.take() {
-                                if let Some(tx) = consent.response_tx.take() {
-                                    let _ = tx.send(true);
-                                }
+                    keybindings::KeyAction::ApproveConsent => {
+                        if let Some(mut consent) = state.pending_consent.take() {
+                            if let Some(tx) = consent.response_tx.take() {
+                                let _ = tx.send(true);
                             }
                         }
-                        KeyCode::Char('d') | KeyCode::Char('D') => {
-                            if let Some(mut consent) = state.pending_consent.take() {
-                                if let Some(tx) = consent.response_tx.take() {
-                                    let _ = tx.send(false);
-                                }
-                            }
-                        }
-                        _ => {}
                     }
-                }
-                // Normal key handling
-                else {
-                    state.handle_key(key);
+                    keybindings::KeyAction::DenyConsent => {
+                        if let Some(mut consent) = state.pending_consent.take() {
+                            if let Some(tx) = consent.response_tx.take() {
+                                let _ = tx.send(false);
+                            }
+                        }
+                    }
+                    keybindings::KeyAction::TabComplete => {
+                        if let Some(completed) = input_area::tab_complete(&state.input) {
+                            state.input = completed;
+                            state.cursor_pos = state.input.len();
+                        }
+                    }
+                    keybindings::KeyAction::ScrollUp(n) => {
+                        state.scroll_offset = state.scroll_offset.saturating_add(n);
+                    }
+                    keybindings::KeyAction::ScrollDown(n) => {
+                        state.scroll_offset = state.scroll_offset.saturating_sub(n);
+                    }
+                    keybindings::KeyAction::InputKey(k) => {
+                        state.handle_key(k);
+                    }
+                    keybindings::KeyAction::Paste | keybindings::KeyAction::Handled => {
+                        // Paste: crossterm delivers pasted text as individual Char events,
+                        // so Shift+Ctrl+V is handled by the terminal itself.
+                    }
+                    keybindings::KeyAction::None => {}
                 }
             }
 
             if state.should_quit {
-                // End session gracefully
                 let mut app_lock = app.lock().await;
                 app_lock.governance.end_session("user exit");
                 break;
@@ -432,6 +541,7 @@ async fn run_event_loop(
                             duration_ms,
                         };
                     }
+                    state.record_run(name.clone(), success, duration_ms);
                     state.messages.push(ChatMessage {
                         role: MessageRole::Tool {
                             name,
@@ -553,6 +663,7 @@ async fn run_agent_for_input(
         model_slot: crate::llm::router::ModelSlot::Execution,
         auto_approve_tier2: false,
         auto_approve_tier3: false,
+        computer_use_active: app_lock.is_computer_use_active(),
     };
 
     let tool_ctx = crate::tools::ToolContext {
@@ -598,6 +709,7 @@ async fn run_agent_for_input(
                 duration_ms,
                 summary,
             } => {
+                state.record_run(name.clone(), success, duration_ms);
                 state.messages.push(ChatMessage {
                     role: MessageRole::Tool {
                         name,

@@ -233,6 +233,7 @@ fn test_agent_config_defaults() {
     assert_eq!(config.max_turns, 10);
     assert!(!config.auto_approve_tier2);
     assert!(!config.auto_approve_tier3);
+    assert!(!config.computer_use_active);
     assert!(config.system_prompt.is_empty());
 }
 

@@ -462,6 +462,10 @@ impl ChatRepl {
         });
 
         // Build agent config
+        let computer_use_active = {
+            let app = self.app.lock().await;
+            app.is_computer_use_active()
+        };
         let agent_config = crate::agent::AgentConfig {
             max_turns: 10,
             system_prompt: "You are Nexus Code, a governed terminal coding agent. \
@@ -470,6 +474,7 @@ impl ChatRepl {
             model_slot: crate::llm::ModelSlot::Execution,
             auto_approve_tier2: false,
             auto_approve_tier3: false,
+            computer_use_active,
         };
 
         // Create event channel

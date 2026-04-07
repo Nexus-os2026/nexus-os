@@ -34,6 +34,16 @@ pub fn diagnose() -> SetupStatus {
         }
     }
 
+    // Claude CLI — uses Claude Code binary (Max plan = $0 cost)
+    if check_claude_cli_available() {
+        configured.push("claude_cli".to_string());
+    } else {
+        unconfigured.push((
+            "claude_cli".to_string(),
+            "Install Claude Code CLI (npm install -g @anthropic-ai/claude-code)".to_string(),
+        ));
+    }
+
     // Ollama is always available if installed
     if check_command_exists("ollama") {
         configured.push("ollama".to_string());
@@ -52,6 +62,41 @@ pub fn diagnose() -> SetupStatus {
         has_ripgrep: check_command_exists("rg"),
         has_nexuscode_md: std::path::Path::new("NEXUSCODE.md").exists(),
     }
+}
+
+/// Check if the Claude CLI binary is available and is version 2.x+.
+pub fn check_claude_cli_available() -> bool {
+    if !check_command_exists("claude") {
+        return false;
+    }
+    // Verify version is 2.x+ (Claude Code CLI)
+    std::process::Command::new("claude")
+        .arg("--version")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()
+        .and_then(|o| {
+            if !o.status.success() {
+                return None;
+            }
+            let version = String::from_utf8_lossy(&o.stdout).to_string();
+            // Version string contains a major version number >= 2
+            version
+                .trim()
+                .split('.')
+                .next()
+                .and_then(|major| {
+                    major
+                        .chars()
+                        .filter(|c| c.is_ascii_digit())
+                        .collect::<String>()
+                        .parse::<u32>()
+                        .ok()
+                })
+                .filter(|&major| major >= 2)
+        })
+        .is_some()
 }
 
 /// Check if a command exists on PATH.
@@ -132,7 +177,11 @@ pub fn print_doctor(status: &SetupStatus) {
 
     println!("  {}", "LLM Providers:".bold());
     for name in &status.configured_providers {
-        println!("    {} {}", "\u{2713}".green(), name);
+        if name == "claude_cli" {
+            println!("    {} {} (Claude Code Max plan)", "\u{2713}".green(), name);
+        } else {
+            println!("    {} {}", "\u{2713}".green(), name);
+        }
     }
     for (name, env_var) in &status.unconfigured_providers {
         println!("    {} {} (set {})", "\u{2717}".red(), name, env_var);

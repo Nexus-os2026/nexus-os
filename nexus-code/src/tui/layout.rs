@@ -1,44 +1,66 @@
-//! Panel layout — status bar, chat, input, optional sidebar.
+//! Panel layout — 2-line status bar, conversation, toggleable bottom panels, input.
+//!
+//! Layout:
+//!   [Status Bar — 2 lines]
+//!   [Conversation area — fills remaining space]
+//!   [Bottom panel (F2/F3/F4) — 12 lines, if toggled]
+//!   [Input area — 3 lines]
 
 use super::theme::Theme;
 use super::TuiApp;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
+
+/// Which bottom panel is currently shown (if any).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BottomPanel {
+    None,
+    Governance,
+    ComputerUse,
+    Patterns,
+    Memory,
+}
 
 /// Draw the complete TUI layout.
 pub fn draw(frame: &mut Frame, state: &TuiApp) {
     let size = frame.area();
 
-    // Main layout: status bar (1) + chat (min 5) + input (3)
-    let main_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(1),
-            Constraint::Min(5),
-            Constraint::Length(3),
-        ])
-        .split(size);
+    // Determine constraints based on whether a bottom panel is shown
+    let has_panel = state.active_panel != BottomPanel::None;
 
-    // Split chat area if sidebar is shown
-    let (chat_area, sidebar_area) = if state.show_sidebar {
-        let h_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
-            .split(main_chunks[1]);
-        (h_chunks[0], Some(h_chunks[1]))
+    let main_chunks = if has_panel {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(2),  // status bar (2 lines)
+                Constraint::Min(5),     // conversation
+                Constraint::Length(14), // bottom panel
+                Constraint::Length(3),  // input
+            ])
+            .split(size)
     } else {
-        (main_chunks[1], None)
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(2), // status bar (2 lines)
+                Constraint::Min(5),    // conversation
+                Constraint::Length(3), // input
+            ])
+            .split(size)
     };
 
-    // Draw components
+    // Draw status bar (always)
     super::status_bar::draw(frame, main_chunks[0], state);
-    super::chat_panel::draw(frame, chat_area, state);
-    super::input_area::draw(frame, main_chunks[2], state);
 
-    if let Some(sidebar) = sidebar_area {
-        draw_sidebar(frame, sidebar, state);
+    // Draw conversation area
+    super::chat_panel::draw(frame, main_chunks[1], state);
+
+    // Draw bottom panel if active
+    if has_panel {
+        draw_bottom_panel(frame, main_chunks[2], state);
+        super::input_area::draw(frame, main_chunks[3], state);
+    } else {
+        super::input_area::draw(frame, main_chunks[2], state);
     }
 
     // Overlays (drawn last, on top)
@@ -51,53 +73,68 @@ pub fn draw(frame: &mut Frame, state: &TuiApp) {
     }
 }
 
-/// Governance sidebar panel.
-fn draw_sidebar(frame: &mut Frame, area: Rect, state: &TuiApp) {
+/// Draw the active bottom panel.
+fn draw_bottom_panel(frame: &mut Frame, area: Rect, state: &TuiApp) {
+    match state.active_panel {
+        BottomPanel::Governance => {
+            super::governance_panel::draw(frame, area, state);
+        }
+        BottomPanel::ComputerUse => {
+            super::computer_use_panel::draw(frame, area, state);
+        }
+        BottomPanel::Patterns => {
+            super::patterns_panel::draw(frame, area, state);
+        }
+        BottomPanel::Memory => {
+            draw_memory_panel(frame, area, state);
+        }
+        BottomPanel::None => {}
+    }
+}
+
+/// F5 — Memory panel (inline, simple).
+fn draw_memory_panel(frame: &mut Frame, area: Rect, state: &TuiApp) {
+    use ratatui::text::{Line, Span};
+    use ratatui::widgets::{Block, Borders, Paragraph};
+
     let block = Block::default()
-        .title(Span::styled(" Governance ", Theme::title()))
+        .title(Span::styled(" Memory [F5] ", Theme::title()))
         .borders(Borders::ALL)
-        .border_style(Theme::dim());
+        .border_style(Theme::panel_border())
+        .style(Theme::panel_bg());
 
-    let envelope_style = if state.envelope_similarity > 70.0 {
-        Theme::success()
-    } else if state.envelope_similarity > 50.0 {
-        Theme::warning()
-    } else {
-        Theme::error()
-    };
-
-    let lines = vec![
+    let mut lines = vec![
+        Line::from(""),
         Line::from(vec![
-            Span::styled("Session: ", Theme::dim()),
-            Span::styled(state.session_id_short.clone(), Theme::text()),
+            Span::styled(" Entries: ", Theme::dim()),
+            Span::styled(format!("{}", state.memory_entries), Theme::text()),
         ]),
         Line::from(vec![
-            Span::styled("Provider: ", Theme::dim()),
-            Span::styled(format!("{}/{}", state.provider, state.model), Theme::text()),
+            Span::styled(" Fuel used: ", Theme::dim()),
+            Span::styled(format!("{}", state.memory_fuel_used), Theme::text()),
         ]),
         Line::from(""),
-        Line::from(Span::styled("\u{2500} Fuel \u{2500}", Theme::bold())),
-        Line::from(vec![
-            Span::styled("  Remaining: ", Theme::dim()),
-            Span::styled(format!("{}", state.fuel_remaining), Theme::text()),
-        ]),
-        Line::from(vec![
-            Span::styled("  Total: ", Theme::dim()),
-            Span::styled(format!("{}", state.fuel_total), Theme::text()),
-        ]),
-        Line::from(""),
-        Line::from(Span::styled("\u{2500} Audit \u{2500}", Theme::bold())),
-        Line::from(vec![
-            Span::styled("  Entries: ", Theme::dim()),
-            Span::styled(format!("{}", state.audit_len), Theme::text()),
-        ]),
-        Line::from(""),
-        Line::from(Span::styled("\u{2500} Envelope \u{2500}", Theme::bold())),
-        Line::from(vec![
-            Span::styled("  Similarity: ", Theme::dim()),
-            Span::styled(format!("{:.0}%", state.envelope_similarity), envelope_style),
-        ]),
+        Line::from(Span::styled(
+            " \u{2500} Cross-session Memory \u{2500}",
+            Theme::bold(),
+        )),
     ];
+
+    if state.memory_entries == 0 {
+        lines.push(Line::from(Span::styled(
+            "  No memories stored yet",
+            Theme::muted(),
+        )));
+        lines.push(Line::from(Span::styled(
+            "  Use /memory to manage",
+            Theme::muted(),
+        )));
+    } else {
+        lines.push(Line::from(Span::styled(
+            "  Use /memory to view entries",
+            Theme::dim(),
+        )));
+    }
 
     let paragraph = Paragraph::new(lines).block(block);
     frame.render_widget(paragraph, area);

@@ -1,13 +1,15 @@
 //! Slash commands — /commit, /diff, /test, /fix, /compact, /search, /session, /explain,
-//! /review, /refactor, /memory, /rollback.
+//! /review, /refactor, /memory, /rollback, /qa, /computer-use.
 
 pub mod commit;
 pub mod compact;
+pub mod computer_use_cmd;
 pub mod coordinate;
 pub mod diff;
 pub mod explain;
 pub mod fix;
 pub mod memory_cmd;
+pub mod qa;
 pub mod refactor;
 pub mod review;
 pub mod rollback;
@@ -49,6 +51,8 @@ pub async fn execute_command(input: &str, app: &mut crate::app::App) -> Option<C
         "/memory" => Some(memory_cmd::execute(args)),
         "/rollback" => Some(rollback::execute(args)),
         "/coordinate" => Some(coordinate::execute(args)),
+        "/qa" => Some(qa::execute(args, app.is_computer_use_active())),
+        "/computer-use" => Some(computer_use_cmd::execute(args, app).await),
         _ => None,
     }
 }

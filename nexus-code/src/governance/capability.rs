@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::NxError;
 
-/// The 12 permission types controlling what the agent can do.
+/// The 13 permission types controlling what the agent can do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Capability {
     /// Read files from the filesystem.
@@ -32,6 +32,8 @@ pub enum Capability {
     EnvWrite,
     /// Make LLM API calls.
     LlmCall,
+    /// Computer use — screen capture, interaction, and vision analysis.
+    ComputerUse,
 }
 
 impl Capability {
@@ -47,6 +49,7 @@ impl Capability {
             "git_commit" | "git_push" => Some(Self::GitWrite),
             "lsp_query" => Some(Self::FileRead),
             "llm_call" => Some(Self::LlmCall),
+            "screen_capture" | "screen_interact" | "screen_analyze" => Some(Self::ComputerUse),
             _ => None,
         }
     }
@@ -66,6 +69,7 @@ impl Capability {
             Self::EnvRead => "env.read",
             Self::EnvWrite => "env.write",
             Self::LlmCall => "llm.call",
+            Self::ComputerUse => "computer.use",
         }
     }
 }
