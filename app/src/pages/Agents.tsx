@@ -14,6 +14,7 @@ import type { AgentSummary, AuditEventRow, PreinstalledAgent, SlmStatus } from "
 import { Play, Pause, Square, Trash2, Plus, Search, Shield, Settings, Users, Zap, Fuel, MemoryStick, ChevronDown, ChevronUp, Eye, Send, Loader2 } from "lucide-react";
 import AgentOutputPanel from "../components/AgentOutputPanel";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import "./agents.css";
 
 /* ─── constants ─── */
@@ -30,6 +31,24 @@ const AUTONOMY_COLORS: Record<number, string> = {
 const AUTONOMY_LABELS: Record<number, string> = {
   0: "Inert", 1: "Suggest", 2: "Act-with-approval", 3: "Act-then-report",
   4: "Autonomous-bounded", 5: "Full autonomy", 6: "Transcendent",
+};
+
+const AUTONOMY_DESCRIPTIONS: Record<number, string> = {
+  1: "Observes and recommends. Never modifies anything.",
+  2: "Takes action only after your explicit approval.",
+  3: "Acts independently, then reports what it did.",
+  4: "Works within defined boundaries without asking.",
+  5: "Complete independence within governance limits.",
+  6: "Self-improving agents with maximum capability.",
+};
+
+const LEVEL_PERMISSIONS: Record<number, Array<{ name: string; mode: "auto" | "approval" | "restricted" }>> = {
+  1: [{ name: "fs.read", mode: "auto" }, { name: "web.search", mode: "auto" }],
+  2: [{ name: "fs.read", mode: "auto" }, { name: "fs.write", mode: "approval" }, { name: "web.search", mode: "auto" }, { name: "process.exec", mode: "approval" }],
+  3: [{ name: "fs.read", mode: "auto" }, { name: "fs.write", mode: "auto" }, { name: "process.exec", mode: "auto" }, { name: "web.search", mode: "auto" }, { name: "deploy", mode: "approval" }],
+  4: [{ name: "fs.read", mode: "auto" }, { name: "fs.write", mode: "auto" }, { name: "process.exec", mode: "auto" }, { name: "web.search", mode: "auto" }, { name: "deploy", mode: "auto" }, { name: "agent.spawn", mode: "auto" }, { name: "agent.delegate", mode: "auto" }],
+  5: [{ name: "fs.read", mode: "auto" }, { name: "fs.write", mode: "auto" }, { name: "process.exec", mode: "auto" }, { name: "web.search", mode: "auto" }, { name: "deploy", mode: "auto" }, { name: "agent.spawn", mode: "auto" }, { name: "system.config", mode: "approval" }, { name: "governance.propose", mode: "approval" }],
+  6: [{ name: "fs.read", mode: "auto" }, { name: "fs.write", mode: "auto" }, { name: "process.exec", mode: "auto" }, { name: "web.search", mode: "auto" }, { name: "deploy", mode: "auto" }, { name: "agent.spawn", mode: "auto" }, { name: "system.config", mode: "auto" }, { name: "self.improve", mode: "auto" }, { name: "governance.evolve", mode: "restricted" }],
 };
 
 const CATEGORY_KEYWORDS: Record<Exclude<CategoryFilter, "all">, string[]> = {
@@ -158,6 +177,7 @@ export function Agents({
   const [goalSteps, setGoalSteps] = useState(0);
   const [goalFuel, setGoalFuel] = useState(0);
   const goalInputRef = useRef<HTMLInputElement>(null);
+  const dispatchedAgentIdRef = useRef<string | null>(null);
   const [pendingConsents, setPendingConsents] = useState<ConsentNotification[]>([]);
   const [goalStepDetails, setGoalStepDetails] = useState<Array<{action: string; status: string; result: string; fuel_cost: number}>>([]);
   const [goalQuery, setGoalQuery] = useState("");
@@ -171,6 +191,8 @@ export function Agents({
 
   const startGoalExecution = useCallback(async () => {
     if (!selectedAgentId || !goalInput.trim() || goalRunning) return;
+    dispatchedAgentIdRef.current = selectedAgentId;
+    console.log("[AgentOutput] dispatching with agent_id:", dispatchedAgentIdRef.current);
     setGoalRunning(true);
     setGoalPhase("Starting...");
     setGoalSteps(0);
@@ -191,91 +213,147 @@ export function Agents({
   }, [selectedAgentId, goalInput, goalRunning]);
 
   /* ─── listen for cognitive loop events ─── */
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
+  /* ─── TEMPORARY DIAGNOSTIC: standalone test listener ─── */
+  useEffect(() => {
+    console.log("[TEST] attaching standalone test listener");
+    const p = listen("agent-cognitive-cycle", (e) => {
+      console.log("[TEST] STANDALONE listener received event:", e);
+    });
+    p.then(() => console.log("[TEST] standalone listener attached ok"))
+     .catch(err => console.error("[TEST] standalone listen failed:", err));
+    return () => { p.then(fn => fn()).catch(() => {}); };
+  }, []);
+
   useEffect(() => {
     if (!hasDesktopRuntime()) return;
-    const unlistenCycle = listen<{
-      agent_id: string; phase: string; steps_executed: number;
-      fuel_consumed: number; should_continue: boolean;
-      blocked_reason?: string;
-      steps?: Array<{action: string; status: string; result: string; fuel_cost: number}>;
-    }>("agent-cognitive-cycle", (event) => {
+
+    // Throttle: skip rapid-fire cycle events (doom loop protection).
+    // If >10 events arrive within 1s, batch into a single update.
+    let cycleEventCount = 0;
+    let cycleResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+    let cancelled = false;
+    const unlistenFns: Array<() => void> = [];
+
+    (async () => {
       try {
-        if (event.payload.agent_id !== selectedAgentId) return;
-        setGoalPhase(String(event.payload.phase ?? ""));
-        if (!event.payload.should_continue) {
-          setGoalSteps(Number(event.payload.steps_executed) || 0);
-          setGoalFuel(Number(event.payload.fuel_consumed) || 0);
-          setGoalRunning(false);
-          setGoalPhase("Complete");
-        } else {
-          setGoalSteps(prev => prev + (Number(event.payload.steps_executed) || 0));
-          setGoalFuel(prev => prev + (Number(event.payload.fuel_consumed) || 0));
-        }
-        if (Array.isArray(event.payload.steps) && event.payload.steps.length > 0) {
-          // Sanitize each step to ensure all fields are strings/numbers
-          const safeSteps = event.payload.steps.map(s => ({
-            action: String(s?.action ?? "unknown"),
-            status: String(s?.status ?? "unknown"),
-            result: String(s?.result ?? ""),
-            fuel_cost: Number(s?.fuel_cost) || 0,
-          }));
-          setGoalStepDetails(prev => {
-            const updated = [...prev, ...safeSteps];
-            return updated.length > 200 ? updated.slice(-200) : updated;
+        const u1 = await listen<{
+          agent_id: string; phase: string; steps_executed: number;
+          fuel_consumed: number; should_continue: boolean;
+          blocked_reason?: string;
+          steps?: Array<{action: string; status: string; result: string; fuel_cost: number}>;
+        }>("agent-cognitive-cycle", (event) => {
+          try {
+            if (!mountedRef.current) return;
+            console.log("[AgentOutput] cycle event", event.payload?.agent_id, "filter:", dispatchedAgentIdRef.current, "match:", event.payload?.agent_id === dispatchedAgentIdRef.current);
+            if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
+
+            // Throttle rapid events to prevent React re-render storm
+            cycleEventCount++;
+            if (!cycleResetTimer) {
+              cycleResetTimer = setTimeout(() => { cycleEventCount = 0; cycleResetTimer = null; }, 1000);
+            }
+            if (cycleEventCount > 10) return; // skip — too many in 1s
+
+            setGoalPhase(String(event.payload.phase ?? ""));
+            if (!event.payload.should_continue) {
+              setGoalSteps(Number(event.payload.steps_executed) || 0);
+              setGoalFuel(Number(event.payload.fuel_consumed) || 0);
+              setGoalRunning(false);
+              setGoalPhase("Complete");
+            } else {
+              setGoalSteps(prev => prev + (Number(event.payload.steps_executed) || 0));
+              setGoalFuel(prev => prev + (Number(event.payload.fuel_consumed) || 0));
+            }
+            if (Array.isArray(event.payload.steps) && event.payload.steps.length > 0) {
+              const safeSteps = event.payload.steps.map(s => ({
+                action: String(s?.action ?? "unknown"),
+                status: String(s?.status ?? "unknown"),
+                result: String(s?.result ?? ""),
+                fuel_cost: Number(s?.fuel_cost) || 0,
+              }));
+              setGoalStepDetails(prev => {
+                const updated = [...prev, ...safeSteps];
+                return updated.length > 200 ? updated.slice(-200) : updated;
+              });
+            }
+            if (event.payload.blocked_reason) {
+              setGoalPhase(`Blocked: ${String(event.payload.blocked_reason)}`);
+            }
+          } catch (err) {
+            console.error("[agent-ui] error processing cycle event:", err);
+          }
+        });
+        if (cancelled) { u1(); return; }
+        unlistenFns.push(u1);
+
+        const u2 = await listen("agent-goal-completed", (event: any) => {
+          try {
+            if (!mountedRef.current) return;
+            console.log("[AgentOutput] completed event", event.payload?.agent_id);
+            if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
+            setGoalRunning(false);
+            if (event.payload?.success === false) {
+              const reason = String(event.payload?.reason ?? event.payload?.result_summary ?? "Unknown error");
+              setGoalPhase(`Error: ${reason}`);
+            } else {
+              setGoalPhase("Complete");
+            }
+          } catch (err) {
+            console.error("[agent-ui] error processing completion event:", err);
+            setGoalRunning(false);
+            setGoalPhase("Complete");
+          }
+        });
+        if (cancelled) { u2(); return; }
+        unlistenFns.push(u2);
+
+        const u3 = await listen("agent-blocked", (event: any) => {
+          if (!mountedRef.current) return;
+          console.log("[AgentOutput] blocked event", event.payload?.agent_id);
+          if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
+          listPendingConsents().then(consents => {
+            if (!mountedRef.current) return;
+            const agentConsents = consents.filter(c => c.agent_id === dispatchedAgentIdRef.current);
+            setPendingConsents(agentConsents);
+          }).catch((err) => {
+            console.error("[agent-ui] Failed to fetch consent requests:", err);
           });
-        }
-        if (event.payload.blocked_reason) {
-          setGoalPhase(`Blocked: ${String(event.payload.blocked_reason)}`);
-        }
-      } catch (err) {
-        console.error("[agent-ui] error processing cycle event:", err);
-      }
-    });
-    const unlistenComplete = listen("agent-goal-completed", (event: any) => {
-      try {
-        if (event.payload?.agent_id !== selectedAgentId) return;
-        setGoalRunning(false);
-        if (event.payload?.success === false) {
-          const reason = String(event.payload?.reason ?? event.payload?.result_summary ?? "Unknown error");
-          setGoalPhase(`Error: ${reason}`);
-        } else {
-          setGoalPhase("Complete");
-        }
-      } catch (err) {
-        console.error("[agent-ui] error processing completion event:", err);
-        setGoalRunning(false);
-        setGoalPhase("Complete");
-      }
-    });
-    // Listen for blocked events — fetch pending consents
-    const unlistenBlocked = listen("agent-blocked", (event: any) => {
-      if (event.payload?.agent_id === selectedAgentId) {
-        listPendingConsents().then(consents => {
-          const agentConsents = consents.filter(c => c.agent_id === selectedAgentId);
-          setPendingConsents(agentConsents);
-        }).catch((err) => {
-          console.error("[agent-ui] Failed to fetch consent requests:", err);
         });
-      }
-    });
-    // Also listen for direct consent-request-pending events (emitted alongside agent-blocked)
-    const unlistenConsentPending = listen("consent-request-pending", (event: any) => {
-      if (event.payload?.agent_id === selectedAgentId) {
-        listPendingConsents().then(consents => {
-          const agentConsents = consents.filter(c => c.agent_id === selectedAgentId);
-          setPendingConsents(agentConsents);
-        }).catch((err) => {
-          console.error("[agent-ui] Failed to fetch consent requests on pending event:", err);
+        if (cancelled) { u3(); return; }
+        unlistenFns.push(u3);
+
+        const u4 = await listen("consent-request-pending", (event: any) => {
+          if (!mountedRef.current) return;
+          if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
+          listPendingConsents().then(consents => {
+            if (!mountedRef.current) return;
+            const agentConsents = consents.filter(c => c.agent_id === dispatchedAgentIdRef.current);
+            setPendingConsents(agentConsents);
+          }).catch((err) => {
+            console.error("[agent-ui] Failed to fetch consent requests on pending event:", err);
+          });
         });
+        if (cancelled) { u4(); return; }
+        unlistenFns.push(u4);
+
+        console.log("[AgentOutput] all listeners attached:", unlistenFns.length);
+      } catch (err) {
+        console.error("[AgentOutput] listen() failed:", err);
       }
-    });
+    })();
+
     return () => {
-      unlistenCycle.then(f => f());
-      unlistenComplete.then(f => f());
-      unlistenBlocked.then(f => f());
-      unlistenConsentPending.then(f => f());
+      cancelled = true;
+      if (cycleResetTimer) clearTimeout(cycleResetTimer);
+      unlistenFns.forEach(fn => {
+        try { fn(); } catch (e) { console.error("[AgentOutput] unlisten failed:", e); }
+      });
     };
-  }, [selectedAgentId]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- filters via dispatchedAgentIdRef (stable ref), not state
 
   /* ─── load preinstalled agents + model count ─── */
   useEffect(() => {
@@ -478,13 +556,39 @@ export function Agents({
       <header className="mission-header">
         <div>
           <h2 className="mission-title">AGENT CONTROL // {activeCount} ACTIVE</h2>
-          <p className="mission-subtitle">Mission-control view of governed runtime operations</p>
+          <p className="mission-subtitle">Supervise autonomous agents, permissions, and runtime health</p>
         </div>
         <div className="mission-header-actions">
           <div className="mission-active-counter">
             <span className="mission-active-hex">{activeCount}</span>
             <span className="mission-active-value">ACTIVE</span>
           </div>
+          {/* TEMPORARY DIAGNOSTIC: test button for IPC event delivery */}
+          <button
+            type="button"
+            style={{
+              background: "#ff00aa",
+              color: "#fff",
+              border: "1px solid #ff00aa",
+              borderRadius: 6,
+              padding: "6px 14px",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+              marginRight: 8,
+            }}
+            onClick={async () => {
+              console.log("[TEST] calling test_emit_event");
+              try {
+                await invoke("test_emit_event");
+                console.log("[TEST] invoke returned ok");
+              } catch (e) {
+                console.error("[TEST] invoke failed:", e);
+              }
+            }}
+          >
+            TEST EMIT
+          </button>
           <button type="button" className="create-btn cursor-pointer" onClick={() => setShowCreate(true)}>
             <Plus size={16} /> CREATE AGENT
           </button>
@@ -533,7 +637,7 @@ export function Agents({
             <span className="mission-stat-label">Available Models</span>
           </div>
         </div>
-        <SlmStatusBadge status={slmStatus} />
+        {/* SlmStatusBadge removed — moved to Settings for debugging */}
       </div>}
 
       {/* ─── Level Selector ─── */}
@@ -670,8 +774,9 @@ export function Agents({
                   onMouseLeave={e => { (e.target as HTMLElement).style.transform = "scale(1)"; (e.target as HTMLElement).style.boxShadow = "none"; }}
                 >
                   <span style={{ fontSize: 28, fontWeight: 800, color: AUTONOMY_COLORS[level] }}>L{level}</span>
-                  <span style={{ fontSize: 12, color: "#e2e8f0", fontWeight: 500 }}>{AUTONOMY_LABELS[level]}</span>
-                  <span style={{ fontSize: 11, color: "#64748b" }}>{count} agent{count !== 1 ? "s" : ""}</span>
+                  <span style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 600 }}>{AUTONOMY_LABELS[level]}</span>
+                  <span style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4, maxWidth: 160, textAlign: "center" }}>{AUTONOMY_DESCRIPTIONS[level]}</span>
+                  <span style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{count} agent{count !== 1 ? "s" : ""}</span>
                 </button>
               );
             })}
@@ -700,7 +805,9 @@ export function Agents({
             fontWeight: 700,
             color: AUTONOMY_COLORS[autonomyFilter as number] ?? "#e2e8f0",
           }}>
-            L{autonomyFilter} — {AUTONOMY_LABELS[autonomyFilter as number] ?? "Unknown"}
+            {autonomyFilter === "all"
+              ? `All Agents \u2014 ${filteredAgents.length} registered`
+              : `L${autonomyFilter} \u2014 ${AUTONOMY_LABELS[autonomyFilter as number] ?? "Unknown"}`}
           </span>
           <span style={{ fontSize: 13, color: "#64748b" }}>
             {filteredAgents.length} agent{filteredAgents.length !== 1 ? "s" : ""}
@@ -727,9 +834,9 @@ export function Agents({
           </div>
         ) : (
           <div style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 8,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+            gap: 10,
           }}>
             {filteredAgents.map(({ preinstalled: pa, runtime }) => {
               const agentId = runtime?.id ?? pa.agent_id;
@@ -743,45 +850,47 @@ export function Agents({
                   key={agentId}
                   onClick={() => setSelectedAgentId(isSelected ? null : agentId)}
                   style={{
-                    background: isSelected ? `${levelColor}22` : "#161b22",
-                    border: `1px solid ${isSelected ? levelColor : "#30363d"}`,
-                    borderRadius: 8,
-                    padding: "8px 14px",
+                    background: isSelected ? `${levelColor}15` : "#0d1117",
+                    border: `1px solid ${isSelected ? levelColor : "#1e293b"}`,
+                    borderRadius: 10,
+                    padding: "12px 16px",
                     cursor: "pointer",
                     display: "flex",
-                    alignItems: "center",
-                    gap: 8,
+                    flexDirection: "column",
+                    gap: 6,
+                    textAlign: "left",
                     transition: "all 0.15s",
-                    boxShadow: isSelected ? `0 0 12px ${levelColor}33` : "none",
+                    boxShadow: isSelected ? `0 0 12px ${levelColor}22` : "none",
                   }}
                 >
-                  <span style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    background: statusLabel === "Running" ? "#22c55e"
-                      : statusLabel === "Paused" ? "#f59e0b"
-                      : statusLabel === "Error" ? "#ef4444"
-                      : "#64748b",
-                    flexShrink: 0,
-                  }} />
-                  <span style={{
-                    color: isSelected ? "#e2e8f0" : "#94a3b8",
-                    fontSize: 13,
-                    fontWeight: isSelected ? 600 : 400,
-                    whiteSpace: "nowrap",
-                  }}>
-                    {pa.name}
-                  </span>
-                  {pa.llm_model && pa.llm_model !== "auto" ? (
-                    <span style={{ fontSize: 10, color: "#22d3ee", opacity: 0.7 }} title={pa.llm_model}>
-                      {pa.llm_model.startsWith("flash") ? "\u26A1" : pa.llm_model.startsWith("ollama") ? "\uD83E\uDD99" : "\u2601\uFE0F"}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{
+                      width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                      background: statusLabel === "Running" ? "#22c55e"
+                        : statusLabel === "Paused" ? "#f59e0b"
+                        : statusLabel === "Error" ? "#ef4444"
+                        : "#475569",
+                    }} />
+                    <span style={{ color: isSelected ? "#e2e8f0" : "#c9d1d9", fontSize: 14, fontWeight: 600 }}>
+                      {pa.name}
                     </span>
-                  ) : (
-                    <span style={{ fontSize: 10, color: "#a78bfa", opacity: 0.5 }} title="Auto — best available">
-                      {"\u2B50"}
+                    <span style={{ fontSize: 10, fontWeight: 700, color: levelColor, marginLeft: "auto", background: `${levelColor}18`, padding: "1px 6px", borderRadius: 4 }}>
+                      L{pa.autonomy_level}
                     </span>
-                  )}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
+                    {pa.description.length > 90 ? pa.description.slice(0, 90) + "\u2026" : pa.description}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                    <span style={{ fontSize: 10, color: "#475569" }}>{pa.capabilities.length} tools</span>
+                    {pa.llm_model && pa.llm_model !== "auto" ? (
+                      <span style={{ fontSize: 10, color: "#22d3ee", opacity: 0.7 }} title={`Model: ${pa.llm_model}`}>
+                        {pa.llm_model.startsWith("flash") ? "\u25B8" : pa.llm_model.startsWith("ollama") ? "\u25C9" : "\u25CE"} {pa.llm_model.length > 20 ? pa.llm_model.slice(0, 20) + "\u2026" : pa.llm_model}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 10, color: "#6366f1", opacity: 0.6 }} title="Auto routing">{"\u25C7"} auto</span>
+                    )}
+                  </div>
                 </button>
               );
             })}
@@ -794,53 +903,30 @@ export function Agents({
             marginTop: 12,
             background: "#0d1117",
             border: `1px solid ${AUTONOMY_COLORS[selectedPreinstalled.autonomy_level] ?? "#30363d"}44`,
-            borderRadius: 8,
-            padding: "10px 16px",
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            flexWrap: "wrap",
+            borderRadius: 10,
+            padding: "12px 16px",
           }}>
-            <span style={{ color: "#e2e8f0", fontWeight: 600, fontSize: 14 }}>
-              {selectedPreinstalled.name}
-            </span>
-            <span style={{
-              fontSize: 11,
-              color: AUTONOMY_COLORS[selectedPreinstalled.autonomy_level],
-              fontWeight: 700,
-            }}>
-              L{selectedPreinstalled.autonomy_level}
-            </span>
-            <span style={{
-              fontSize: 11,
-              color: selectedProvider === "auto" ? "#a78bfa" : "#22d3ee",
-              background: selectedProvider === "auto" ? "rgba(167,139,250,0.1)" : "rgba(34,211,238,0.1)",
-              border: `1px solid ${selectedProvider === "auto" ? "rgba(167,139,250,0.2)" : "rgba(34,211,238,0.2)"}`,
-              borderRadius: 4,
-              padding: "1px 8px",
-            }}>
-              {selectedProvider === "auto"
-                ? "Auto — best available"
-                : `${selectedProvider === "flash" ? "\u26A1" : selectedProvider === "ollama" ? "\uD83E\uDD99" : "\u2601\uFE0F"} ${availableProviders.find(p => p.id === selectedProvider)?.name ?? selectedProvider}`
-              }
-            </span>
-            <span style={{ fontSize: 11, color: "#64748b" }}>
-              Fuel {selectedPreinstalled.fuel_budget.toLocaleString()}
-            </span>
-            <span style={{ fontSize: 12, color: "#94a3b8", flex: 1, minWidth: 200 }}>
-              {truncateDescription(selectedPreinstalled.description)}
-            </span>
-            {selectedPreinstalled.capabilities.slice(0, 4).map(cap => (
-              <span key={cap} style={{
-                fontSize: 10,
-                color: "#8b949e",
-                background: "rgba(139,148,158,0.1)",
-                borderRadius: 4,
-                padding: "1px 6px",
-              }}>
-                {cap}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <span style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 15 }}>
+                {selectedPreinstalled.name}
               </span>
-            ))}
+              <span style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: AUTONOMY_COLORS[selectedPreinstalled.autonomy_level],
+                background: `${AUTONOMY_COLORS[selectedPreinstalled.autonomy_level]}18`,
+                padding: "1px 8px",
+                borderRadius: 4,
+              }}>
+                L{selectedPreinstalled.autonomy_level}
+              </span>
+              <span style={{ fontSize: 11, color: "#64748b", marginLeft: "auto" }}>
+                Fuel {selectedPreinstalled.fuel_budget.toLocaleString()}
+              </span>
+            </div>
+            <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.5 }}>
+              {selectedPreinstalled.description}
+            </div>
           </div>
         )}
       </div>
@@ -863,249 +949,209 @@ export function Agents({
         onResume={onStart}
       />
 
-      {/* ─── Permissions Preview (shown when agent first selected) ─── */}
-      {selectedPreinstalled && !goalRunning && !goalPhase && (
+      {/* ─── Compact Provider + Permissions Bar ─── */}
+      {selectedAgentId && selectedPreinstalled && !goalRunning && (
         <div style={{
           background: "#0d1117",
           border: "1px solid #1e3a5f",
-          borderRadius: 8,
-          padding: "12px 16px",
+          borderRadius: 10,
+          padding: "14px 16px",
           marginBottom: 12,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <Shield size={14} color="#f59e0b" />
-            <span style={{ color: "#e0e0e0", fontWeight: 600, fontSize: 13 }}>
-              Permissions — {selectedPreinstalled.name}
-            </span>
-            <span style={{
-              fontSize: 11,
-              color: AUTONOMY_COLORS[selectedPreinstalled.autonomy_level],
-              fontWeight: 700,
-            }}>
-              L{selectedPreinstalled.autonomy_level}
-            </span>
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-            {selectedPreinstalled.capabilities.map(cap => (
-              <span key={cap} style={{
-                fontSize: 12,
-                color: "#e2e8f0",
-                background: "rgba(34,211,238,0.08)",
-                border: "1px solid rgba(34,211,238,0.2)",
-                borderRadius: 6,
-                padding: "3px 10px",
-              }}>
-                {cap}
-              </span>
-            ))}
-          </div>
-          <div style={{ fontSize: 11, color: "#64748b" }}>
-            {selectedPreinstalled.autonomy_level >= 3
-              ? "This agent requires HITL approval for Tier1+ operations."
-              : "Standard capability checks apply. Actions are logged to the audit trail."}
-          </div>
-        </div>
-      )}
-
-      {/* ─── Provider Selector ─── */}
-      {selectedAgentId && !goalRunning && availableProviders.length > 0 && (
-        <div style={{
-          background: "#0d1117",
-          border: "1px solid #1e3a5f",
-          borderRadius: 8,
-          padding: "12px 16px",
-          marginBottom: 12,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <Zap size={14} color="#a78bfa" />
-            <span style={{ color: "#e0e0e0", fontWeight: 600, fontSize: 13 }}>LLM Provider</span>
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {/* Auto option */}
-            <button
-              onClick={() => {
-                setSelectedProvider("auto");
-                if (selectedAgentId) {
-                  setAgentLlmProvider(selectedAgentId, "auto", true, 0, 0).catch((e) => { if (import.meta.env.DEV) console.warn("[Agents]", e); });
-                }
-              }}
-              style={{
-                background: selectedProvider === "auto" ? "rgba(167,139,250,0.15)" : "#161b22",
-                border: `1px solid ${selectedProvider === "auto" ? "#a78bfa" : "#30363d"}`,
-                borderRadius: 8,
-                padding: "8px 14px",
-                cursor: "pointer",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "flex-start",
-                gap: 2,
-                minWidth: 100,
-              }}
-            >
-              <span style={{ fontSize: 13, fontWeight: 600, color: selectedProvider === "auto" ? "#a78bfa" : "#e2e8f0" }}>
-                Auto
-              </span>
-              <span style={{ fontSize: 10, color: "#64748b" }}>Best available</span>
-            </button>
-
-            {availableProviders.map(p => {
-              const isSelected = selectedProvider === p.id;
-              const icon = p.id === "flash" ? "\u26A1" : p.id === "ollama" ? "\uD83E\uDD99" : "\u2601\uFE0F";
-              const statusColor = p.status === "ready" || p.status === "running" || p.status === "configured" || p.status === "models_on_disk" ? "#22c55e"
-                : p.status === "busy" ? "#f59e0b"
-                : p.status === "stopped" ? "#ef4444"
-                : "#64748b";
-              return (
+          {/* Provider row */}
+          {availableProviders.length > 0 && (
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <Zap size={13} color="#a78bfa" />
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#94a3b8", letterSpacing: "0.04em", textTransform: "uppercase" }}>Provider</span>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 <button
-                  key={p.id}
                   onClick={() => {
-                    if (!p.available) return;
-                    setSelectedProvider(p.id);
-                    // Auto-select first model when switching to a provider with models
-                    const firstModel = p.model ?? p.models[0] ?? null;
-                    setSelectedModel(firstModel);
+                    setSelectedProvider("auto");
                     if (selectedAgentId) {
-                      const modelPart = firstModel ? `/${firstModel}` : "";
-                      setAgentLlmProvider(selectedAgentId, `${p.id}${modelPart}`, p.id === "flash" || p.id === "ollama", 0, 0).catch((e) => { if (import.meta.env.DEV) console.warn("[Agents]", e); });
+                      setAgentLlmProvider(selectedAgentId, "auto", true, 0, 0).catch((e) => { if (import.meta.env.DEV) console.warn("[Agents]", e); });
                     }
                   }}
                   style={{
-                    background: isSelected ? "rgba(34,211,238,0.1)" : "#161b22",
-                    border: `1px solid ${isSelected ? "#22d3ee" : "#30363d"}`,
-                    borderRadius: 8,
-                    padding: "8px 14px",
-                    cursor: p.available ? "pointer" : "not-allowed",
-                    opacity: p.available ? 1 : 0.5,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "flex-start",
-                    gap: 2,
-                    minWidth: 100,
+                    background: selectedProvider === "auto" ? "rgba(167,139,250,0.15)" : "#161b22",
+                    border: `1px solid ${selectedProvider === "auto" ? "#a78bfa" : "#30363d"}`,
+                    borderRadius: 6,
+                    padding: "5px 12px",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: selectedProvider === "auto" ? "#a78bfa" : "#94a3b8",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 14 }}>{icon}</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: isSelected ? "#22d3ee" : "#e2e8f0" }}>
-                      {p.name}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: statusColor }} />
-                    <span style={{ fontSize: 10, color: "#64748b" }}>
-                      {p.status === "ready" ? (p.model ?? "Ready")
-                        : p.status === "busy" ? `${p.model ?? "Generating"}...`
-                        : p.status === "running" ? (p.model ?? "Running")
-                        : p.status === "models_on_disk" ? `${p.models.length} model${p.models.length !== 1 ? "s" : ""} on disk`
-                        : p.status === "configured" ? "API key set"
-                        : p.status === "stopped" ? "Not running"
-                        : p.status === "no_model" ? "No models"
-                        : "Not configured"}
-                    </span>
-                  </div>
+                  Auto
                 </button>
-              );
-            })}
-          </div>
-
-          {/* ─── Model selector + Load button ─── */}
-          {(() => {
-            const prov = availableProviders.find(p => p.id === selectedProvider);
-            if (!prov || prov.models.length === 0) return null;
-            const currentModel = selectedModel ?? prov.model ?? prov.models[0] ?? "";
-            const currentModelIdx = prov.models.indexOf(currentModel);
-            const currentModelPath = currentModelIdx >= 0 && currentModelIdx < prov.model_paths.length
-              ? prov.model_paths[currentModelIdx]
-              : "";
-            const needsLoad = selectedProvider === "flash" && (prov.status === "models_on_disk");
-            const isLoaded = selectedProvider === "flash" && (prov.status === "ready" || prov.status === "busy");
-            return (
-              <div style={{ marginTop: 10 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, color: "#94a3b8" }}>Model:</span>
-                  <select
-                    value={currentModel}
-                    onChange={(e) => {
-                      const model = e.target.value;
-                      setSelectedModel(model);
-                      setFlashLoadError(null);
-                      if (selectedAgentId) {
-                        setAgentLlmProvider(selectedAgentId, `${selectedProvider}/${model}`, selectedProvider === "flash" || selectedProvider === "ollama", 0, 0).catch((e) => { if (import.meta.env.DEV) console.warn("[Agents]", e); });
-                      }
-                    }}
-                    style={{
-                      background: "#161b22",
-                      color: "#e2e8f0",
-                      border: "1px solid #30363d",
-                      borderRadius: 6,
-                      padding: "4px 10px",
-                      fontSize: 12,
-                      flex: 1,
-                      maxWidth: 400,
-                    }}
-                  >
-                    {prov.models.map(m => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                  {isLoaded && (
-                    <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e" }} />
-                      Loaded
-                    </span>
-                  )}
-                  {prov.status === "busy" && (
-                    <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 600 }}>Busy</span>
-                  )}
-                  {needsLoad && !flashLoading && (
+                {availableProviders.map(p => {
+                  const isSelected = selectedProvider === p.id;
+                  const statusColor = p.status === "ready" || p.status === "running" || p.status === "configured" || p.status === "models_on_disk" ? "#22c55e"
+                    : p.status === "busy" ? "#f59e0b"
+                    : p.status === "stopped" ? "#ef4444"
+                    : "#64748b";
+                  return (
                     <button
-                      onClick={async () => {
-                        if (!currentModelPath) {
-                          setFlashLoadError("No model path found");
-                          return;
-                        }
-                        setFlashLoading(true);
-                        setFlashLoadError(null);
-                        try {
-                          await flashCreateSession(currentModelPath, 8192, "balanced");
-                          // Refresh providers to get updated status
-                          const updated = await getAvailableProviders();
-                          setAvailableProviders(updated);
-                        } catch (err) {
-                          setFlashLoadError(err instanceof Error ? err.message : String(err));
-                        } finally {
-                          setFlashLoading(false);
+                      key={p.id}
+                      onClick={() => {
+                        if (!p.available) return;
+                        setSelectedProvider(p.id);
+                        const firstModel = p.model ?? p.models[0] ?? null;
+                        setSelectedModel(firstModel);
+                        if (selectedAgentId) {
+                          const modelPart = firstModel ? `/${firstModel}` : "";
+                          setAgentLlmProvider(selectedAgentId, `${p.id}${modelPart}`, p.id === "flash" || p.id === "ollama", 0, 0).catch((e) => { if (import.meta.env.DEV) console.warn("[Agents]", e); });
                         }
                       }}
                       style={{
-                        background: "rgba(34,211,238,0.15)",
-                        border: "1px solid #22d3ee",
+                        background: isSelected ? "rgba(34,211,238,0.1)" : "#161b22",
+                        border: `1px solid ${isSelected ? "#22d3ee" : "#30363d"}`,
                         borderRadius: 6,
-                        padding: "4px 14px",
-                        color: "#22d3ee",
+                        padding: "5px 12px",
+                        cursor: p.available ? "pointer" : "not-allowed",
+                        opacity: p.available ? 1 : 0.5,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 5,
                         fontSize: 12,
                         fontWeight: 600,
-                        cursor: "pointer",
-                        whiteSpace: "nowrap",
+                        color: isSelected ? "#22d3ee" : "#94a3b8",
                       }}
                     >
-                      Load Model
+                      <div style={{ width: 5, height: 5, borderRadius: "50%", background: statusColor, flexShrink: 0 }} />
+                      {p.name}
                     </button>
-                  )}
-                  {flashLoading && (
-                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <Loader2 size={14} color="#22d3ee" style={{ animation: "spin 1s linear infinite" }} />
-                      <span style={{ fontSize: 11, color: "#22d3ee" }}>Loading model...</span>
-                    </span>
-                  )}
-                </div>
-                {flashLoadError && (
-                  <div style={{ fontSize: 11, color: "#ef4444", marginTop: 4 }}>
-                    Failed to load: {flashLoadError}
-                  </div>
-                )}
+                  );
+                })}
               </div>
-            );
-          })()}
+
+              {/* Model selector (only when a provider with models is selected) */}
+              {(() => {
+                const prov = availableProviders.find(p => p.id === selectedProvider);
+                if (!prov || prov.models.length === 0) return null;
+                const currentModel = selectedModel ?? prov.model ?? prov.models[0] ?? "";
+                const currentModelIdx = prov.models.indexOf(currentModel);
+                const currentModelPath = currentModelIdx >= 0 && currentModelIdx < prov.model_paths.length
+                  ? prov.model_paths[currentModelIdx]
+                  : "";
+                const needsLoad = selectedProvider === "flash" && (prov.status === "models_on_disk");
+                const isLoaded = selectedProvider === "flash" && (prov.status === "ready" || prov.status === "busy");
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                    <span style={{ fontSize: 11, color: "#64748b" }}>Model:</span>
+                    <select
+                      value={currentModel}
+                      onChange={(e) => {
+                        const model = e.target.value;
+                        setSelectedModel(model);
+                        setFlashLoadError(null);
+                        if (selectedAgentId) {
+                          setAgentLlmProvider(selectedAgentId, `${selectedProvider}/${model}`, selectedProvider === "flash" || selectedProvider === "ollama", 0, 0).catch((e) => { if (import.meta.env.DEV) console.warn("[Agents]", e); });
+                        }
+                      }}
+                      style={{
+                        background: "rgba(0,20,40,0.95)",
+                        color: "#e0f0ff",
+                        border: "1px solid rgba(6,182,212,0.2)",
+                        borderRadius: 6,
+                        padding: "4px 8px",
+                        fontSize: 11,
+                        maxWidth: 320,
+                      }}
+                    >
+                      {prov.models.map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                    {isLoaded && (
+                      <span style={{ fontSize: 10, color: "#22c55e", fontWeight: 600, display: "flex", alignItems: "center", gap: 3 }}>
+                        <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e" }} />
+                        Loaded
+                      </span>
+                    )}
+                    {prov.status === "busy" && (
+                      <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 600 }}>Busy</span>
+                    )}
+                    {needsLoad && !flashLoading && (
+                      <button
+                        onClick={async () => {
+                          if (!currentModelPath) { setFlashLoadError("No model path found"); return; }
+                          setFlashLoading(true);
+                          setFlashLoadError(null);
+                          try {
+                            await flashCreateSession(currentModelPath, 8192, "balanced");
+                            const updated = await getAvailableProviders();
+                            setAvailableProviders(updated);
+                          } catch (err) {
+                            setFlashLoadError(err instanceof Error ? err.message : String(err));
+                          } finally {
+                            setFlashLoading(false);
+                          }
+                        }}
+                        style={{
+                          background: "rgba(34,211,238,0.15)",
+                          border: "1px solid #22d3ee",
+                          borderRadius: 5,
+                          padding: "3px 10px",
+                          color: "#22d3ee",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Load
+                      </button>
+                    )}
+                    {flashLoading && (
+                      <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <Loader2 size={12} color="#22d3ee" style={{ animation: "spin 1s linear infinite" }} />
+                        <span style={{ fontSize: 10, color: "#22d3ee" }}>Loading...</span>
+                      </span>
+                    )}
+                    {flashLoadError && (
+                      <span style={{ fontSize: 10, color: "#ef4444" }}>
+                        {flashLoadError}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* Permissions row */}
+          {!goalPhase && (
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <Shield size={13} color="#f59e0b" />
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#94a3b8", letterSpacing: "0.04em", textTransform: "uppercase" }}>Permissions</span>
+                <span style={{ fontSize: 10, color: "#64748b" }}>
+                  {selectedPreinstalled.autonomy_level >= 3
+                    ? "HITL approval for Tier1+ operations"
+                    : "Standard capability checks · audit-logged"}
+                </span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {selectedPreinstalled.capabilities.map(cap => (
+                  <span key={cap} style={{
+                    fontSize: 11,
+                    color: "#c9d1d9",
+                    background: "rgba(34,211,238,0.06)",
+                    border: "1px solid rgba(34,211,238,0.15)",
+                    borderRadius: 4,
+                    padding: "2px 8px",
+                  }}>
+                    {cap}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1132,7 +1178,7 @@ export function Agents({
               padding: "1px 8px",
               fontWeight: 500,
             }}>
-              {selectedProvider === "auto" ? "Auto" : `${selectedProvider === "flash" ? "\u26A1" : selectedProvider === "ollama" ? "\uD83E\uDD99" : "\u2601\uFE0F"} ${selectedModel ?? selectedProvider}`}
+              {selectedProvider === "auto" ? "Auto" : `${selectedProvider === "flash" ? "\u25B8" : selectedProvider === "ollama" ? "\u25C9" : "\u25CE"} ${selectedModel ?? selectedProvider}`}
             </span>
             {goalPhase && (
               <span style={{
@@ -1191,6 +1237,18 @@ export function Agents({
             </button>
           </div>
         </div>
+      )}
+
+      {/* ─── Agent Output Panel ─── */}
+      {selectedAgentId && (
+        <AgentOutputPanel
+          steps={goalStepDetails}
+          phase={goalPhase}
+          running={goalRunning}
+          totalSteps={goalSteps}
+          fuelConsumed={goalFuel}
+          query={goalQuery}
+        />
       )}
 
       {/* ─── Inline Approval Panel ─── */}
@@ -1312,15 +1370,34 @@ export function Agents({
         </div>
       )}
 
-      {/* ─── Permission Gate (pre-run approval) ─── */}
+      {/* ─── Permission Gate (pre-run approval — centered overlay) ─── */}
       {showPermissionGate && selectedPreinstalled && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(2, 6, 23, 0.7)",
+          backdropFilter: "blur(6px)",
+          zIndex: 100,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+          onClick={() => setShowPermissionGate(false)}
+        >
         <div style={{
           background: "#0d1117",
           border: "1px solid #1e3a5f",
-          borderRadius: 10,
-          padding: "16px 20px",
-          marginBottom: 12,
-        }}>
+          borderRadius: 12,
+          padding: "20px 24px",
+          maxWidth: 520,
+          width: "100%",
+          maxHeight: "80vh",
+          overflowY: "auto",
+          boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
+        }}
+          onClick={e => e.stopPropagation()}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
             <Shield size={18} color="#f59e0b" />
             <span style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 15 }}>
@@ -1354,7 +1431,7 @@ export function Agents({
                   borderRadius: 5,
                   padding: "3px 10px",
                 }}>
-                  {cap === "process.exec" ? "\uD83D\uDD27" : cap === "fs.read" ? "\uD83D\uDCC4" : cap === "llm.query" ? "\uD83E\uDD16" : cap === "fs.write" ? "\u270F\uFE0F" : "\uD83D\uDD12"} {cap}
+                  {cap}
                 </span>
               ))}
             </div>
@@ -1452,130 +1529,6 @@ export function Agents({
             }
           </div>
         </div>
-      )}
-
-      {/* ─── Chat-style Agent Output ─── */}
-      {selectedAgentId && (
-        <div style={{
-          background: "#0d1117",
-          border: "1px solid #30363d",
-          borderRadius: 8,
-          overflow: "hidden",
-        }}>
-          <div style={{ maxHeight: 500, overflowY: "auto", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
-            {!goalQuery && !goalRunning && !goalPhase && (
-              <div style={{ padding: 32, textAlign: "center", opacity: 0.4, fontSize: 13 }}>
-                Give the agent a goal to see it work.
-              </div>
-            )}
-            {goalQuery && (
-              <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px 0" }}>
-                <div style={{
-                  background: "#1e3a5f",
-                  border: "1px solid #2563eb44",
-                  borderRadius: "12px 12px 4px 12px",
-                  padding: "8px 14px",
-                  maxWidth: "80%",
-                  fontSize: 13,
-                  color: "#e2e8f0",
-                  lineHeight: 1.5,
-                }}>
-                  {goalQuery}
-                </div>
-              </div>
-            )}
-            {goalStepDetails.length === 0 && goalRunning && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 0" }}>
-                <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#1e3a5f", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <Loader2 size={14} color="#00e5ff" style={{ animation: "spin 1s linear infinite" }} />
-                </div>
-                <span style={{ color: "#94a3b8", fontSize: 13, fontStyle: "italic" }}>Thinking...</span>
-              </div>
-            )}
-            {goalStepDetails.map((step, i) => {
-              const act = String(step.action ?? "unknown");
-              const status = String(step.status ?? "unknown");
-              const result = String(step.result ?? "");
-              const fuelCost = Number(step.fuel_cost) || 0;
-              const isLlm = act === "llm_query";
-              const isShell = act === "shell_command";
-              const isRead = act === "file_read";
-              const isWrite = act === "file_write";
-              const isWeb = act === "web_search" || act === "web_fetch";
-              const isCode = act === "code_execute";
-              const icon = isLlm ? "🧠" : isShell ? "⚡" : isRead ? "📄" : isWrite ? "✏️" : isWeb ? "🌐" : isCode ? "💻" : "🔧";
-              const label = isLlm ? "Querying LLM"
-                : isShell ? "Running command"
-                : isRead ? "Reading file"
-                : isWrite ? "Writing file"
-                : isWeb ? "Web search"
-                : isCode ? "Running code"
-                : act.replace(/_/g, " ");
-              const hasResult = result.trim().length > 0;
-              const succeeded = status === "succeeded" || status === "ok";
-
-              return (
-                <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                  <div style={{
-                    width: 28, height: 28, borderRadius: "50%",
-                    background: succeeded ? "#0d2818" : "#2d0a0a",
-                    border: `1px solid ${succeeded ? "#22c55e33" : "#ef444433"}`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    flexShrink: 0, fontSize: 13,
-                  }}>
-                    {icon}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                      <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>{label}</span>
-                      {fuelCost > 0 && (
-                        <span style={{ fontSize: 10, color: "#64748b" }}>{fuelCost} fuel</span>
-                      )}
-                    </div>
-                    {hasResult && (
-                      <div style={{
-                        background: isLlm ? "#0a1628" : "#161b22",
-                        border: `1px solid ${isLlm ? "#1e3a5f" : "#30363d"}`,
-                        borderRadius: 8,
-                        padding: "8px 12px",
-                        fontSize: 13,
-                        lineHeight: 1.6,
-                        color: isLlm ? "#e2e8f0" : "#94a3b8",
-                        whiteSpace: "pre-wrap",
-                        wordBreak: "break-word",
-                        maxHeight: isLlm ? "none" : 200,
-                        overflow: isLlm ? "visible" : "auto",
-                      }}>
-                        {isLlm ? result : (
-                          result.length > 500
-                            ? result.slice(0, 500) + "..."
-                            : result
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {goalRunning && goalStepDetails.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0" }}>
-                <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#1e3a5f", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <Loader2 size={14} color="#00e5ff" style={{ animation: "spin 1s linear infinite" }} />
-                </div>
-                <span style={{ color: "#64748b", fontSize: 12, fontStyle: "italic" }}>Working...</span>
-              </div>
-            )}
-            {goalPhase === "Complete" && goalStepDetails.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: "1px solid #30363d" }}>
-                <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#0d2818", border: "1px solid #22c55e33", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13 }}>
-                  ✅
-                </div>
-                <span style={{ color: "#22c55e", fontSize: 13, fontWeight: 600 }}>
-                  Goal complete — {goalSteps} steps, {goalFuel.toFixed(0)} fuel used
-                </span>
-              </div>
-            )}
-          </div>
         </div>
       )}
 

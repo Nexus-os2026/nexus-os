@@ -11,6 +11,16 @@ import "./index.css";
 // Last-resort crash handler — if React completely fails, show recovery UI
 window.addEventListener("error", (e) => {
   console.error("[Nexus OS] Uncaught error:", e.error);
+  try {
+    const invoke = (window as any).__TAURI_INTERNALS__?.invoke;
+    if (invoke) {
+      invoke("log_frontend_error", {
+        message: `[GLOBAL] ${e.error?.message ?? e.message ?? "Unknown"}`,
+        stack: e.error?.stack ?? "",
+        componentStack: "",
+      }).catch(() => {});
+    }
+  } catch { /* */ }
   const root = document.getElementById("root");
   if (root && root.innerHTML.trim() === "") {
     root.innerHTML = `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0a0e1a;color:#e2e8f0;font-family:system-ui;padding:32px">
@@ -30,6 +40,18 @@ window.addEventListener("error", (e) => {
 
 window.addEventListener("unhandledrejection", (e) => {
   console.error("[Nexus OS] Unhandled promise rejection:", e.reason);
+  e.preventDefault(); // Prevent silent swallowing in Tauri WebView
+  try {
+    const invoke = (window as any).__TAURI_INTERNALS__?.invoke;
+    if (invoke) {
+      const reason = e.reason instanceof Error ? e.reason : { message: String(e.reason), stack: "" };
+      invoke("log_frontend_error", {
+        message: `[PROMISE] ${reason.message ?? String(e.reason)}`,
+        stack: reason.stack ?? "",
+        componentStack: "",
+      }).catch(() => {});
+    }
+  } catch { /* */ }
 });
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

@@ -162,7 +162,7 @@ pub(crate) fn redact_pii(text: &str) -> String {
     use nexus_kernel::firewall::prompt_firewall::{FirewallAction, InputFilter};
 
     let mut filter = InputFilter::default();
-    let agent_id = Uuid::nil();
+    let agent_id = SYSTEM_UUID;
     let mut audit = AuditTrail::new();
     match filter.check(agent_id, text, &mut audit) {
         FirewallAction::Redacted { redacted_text, .. } => redacted_text,
@@ -1334,7 +1334,7 @@ pub(crate) fn navigate_to(state: &AppState, url: String) -> Result<BrowserNaviga
         );
 
         // Audit the blocked attempt
-        let system_id = Uuid::nil();
+        let system_id = SYSTEM_UUID;
         state.log_event(
             system_id,
             EventType::ToolCall,
@@ -1373,7 +1373,7 @@ pub(crate) fn navigate_to(state: &AppState, url: String) -> Result<BrowserNaviga
     );
 
     // Audit the page visit
-    let system_id = Uuid::nil();
+    let system_id = SYSTEM_UUID;
     state.log_event(
         system_id,
         EventType::ToolCall,

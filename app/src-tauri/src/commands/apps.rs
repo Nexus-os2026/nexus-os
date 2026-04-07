@@ -158,7 +158,7 @@ pub(crate) fn nexus_data_dir() -> Result<PathBuf, String> {
 
 pub(crate) fn db_connect(state: &AppState, connection_string: String) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "db_connect", "connection_string": connection_string}),
     );
@@ -207,7 +207,7 @@ pub(crate) fn db_execute_query(
     db_check_governance(&query)?;
 
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "db_execute_query", "query": query}),
     );
@@ -289,7 +289,7 @@ pub(crate) fn db_list_tables(
     connection_string: String,
 ) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "db_list_tables", "path": connection_string}),
     );
@@ -363,7 +363,7 @@ pub(crate) fn db_list_tables(
 
 pub(crate) fn db_disconnect(state: &AppState, db_path: String) -> Result<(), String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "db_disconnect", "path": db_path}),
     );
@@ -378,7 +378,7 @@ pub(crate) fn db_export_table(
     format: String,
 ) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "db_export", "table": table_name, "format": format}),
     );
@@ -465,7 +465,7 @@ pub(crate) fn api_client_request(
     body: String,
 ) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "api_client_request", "method": method, "url": url}),
     );
@@ -727,7 +727,7 @@ pub(crate) fn notes_dir() -> Result<PathBuf, String> {
 
 pub(crate) fn notes_list(state: &AppState) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "notes_list"}),
     );
@@ -755,7 +755,7 @@ pub(crate) fn notes_list(state: &AppState) -> Result<String, String> {
 
 pub(crate) fn notes_get(state: &AppState, id: String) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "notes_get", "id": id}),
     );
@@ -776,7 +776,7 @@ pub(crate) fn notes_save(
     tags_json: String,
 ) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "notes_save", "id": id, "title": title}),
     );
@@ -822,7 +822,7 @@ pub(crate) fn notes_save(
 
 pub(crate) fn notes_delete(state: &AppState, id: String) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "notes_delete", "id": id}),
     );
@@ -846,7 +846,7 @@ pub(crate) fn emails_dir() -> Result<PathBuf, String> {
 
 pub(crate) fn email_list(state: &AppState) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "email_list"}),
     );
@@ -875,7 +875,7 @@ pub(crate) fn email_save(
     data_json: String,
 ) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "email_save", "id": id}),
     );
@@ -890,7 +890,7 @@ pub(crate) fn email_save(
 
 pub(crate) fn email_delete(state: &AppState, id: String) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "email_delete", "id": id}),
     );
@@ -945,7 +945,7 @@ pub(crate) fn read_oauth_setting(key: &str) -> Result<String, String> {
 
 pub(crate) fn email_start_oauth(state: &AppState, provider: String) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "email_start_oauth", "provider": provider}),
     );
@@ -1107,7 +1107,7 @@ pub(crate) fn email_start_oauth(state: &AppState, provider: String) -> Result<St
 
 pub(crate) fn email_oauth_status(state: &AppState) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "email_oauth_status"}),
     );
@@ -1162,7 +1162,7 @@ pub(crate) fn email_fetch_messages(
     page: u32,
 ) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "email_fetch_messages", "provider": provider, "folder": folder}),
     );
@@ -1359,7 +1359,7 @@ pub(crate) fn email_send_message(
     body: String,
 ) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "email_send", "provider": provider, "to": to}),
     );
@@ -1426,7 +1426,7 @@ pub(crate) fn email_search_messages(
     query: String,
 ) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "email_search", "provider": provider, "query": query}),
     );
@@ -1468,7 +1468,7 @@ pub(crate) fn email_search_messages(
 
 pub(crate) fn email_disconnect(state: &AppState, provider: String) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "email_disconnect", "provider": provider}),
     );
@@ -1487,7 +1487,7 @@ pub(crate) fn messaging_connect_platform(
     token_value: String,
 ) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "messaging_connect", "platform": platform}),
     );
@@ -1611,7 +1611,7 @@ pub(crate) fn messaging_send(
     text: String,
 ) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "messaging_send", "platform": platform, "channel": channel}),
     );
@@ -1667,7 +1667,7 @@ pub(crate) fn messaging_poll_messages(
     last_id: String,
 ) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "messaging_poll", "platform": platform}),
     );
@@ -1725,7 +1725,7 @@ pub(crate) fn integration_start_oauth(
     provider_id: String,
 ) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "integration_start_oauth", "provider": provider_id}),
     );
@@ -1921,13 +1921,13 @@ pub(crate) fn get_agent_outputs(
     limit: u32,
 ) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "get_agent_outputs", "agent_id": agent_id}),
     );
 
     // Pull recent outputs from audit trail for this agent
-    let agent_uuid = uuid::Uuid::parse_str(&agent_id).unwrap_or(uuid::Uuid::nil());
+    let agent_uuid = uuid::Uuid::parse_str(&agent_id).unwrap_or(SYSTEM_UUID);
     let guard = state.audit.lock().map_err(|e| format!("lock: {e}"))?;
     let all_events = guard.events();
     let filtered: Vec<serde_json::Value> = all_events
@@ -1967,7 +1967,7 @@ pub(crate) fn projects_dir() -> Result<PathBuf, String> {
 
 pub(crate) fn project_list(state: &AppState) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "project_list"}),
     );
@@ -1992,7 +1992,7 @@ pub(crate) fn project_list(state: &AppState) -> Result<String, String> {
 
 pub(crate) fn project_get(state: &AppState, id: String) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "project_get", "id": id}),
     );
@@ -2009,7 +2009,7 @@ pub(crate) fn project_save(
     data_json: String,
 ) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "project_save", "id": id}),
     );
@@ -2023,7 +2023,7 @@ pub(crate) fn project_save(
 
 pub(crate) fn project_delete(state: &AppState, id: String) -> Result<String, String> {
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "project_delete", "id": id}),
     );

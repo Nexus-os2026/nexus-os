@@ -2,7 +2,25 @@ import { useEffect, useRef, useState } from "react";
 import { Settings as SettingsIcon, Cpu, Volume2, VolumeX, Key, Save, RefreshCw, Trash2, Check, X, Server, Cloud, TestTube } from "lucide-react";
 import "./settings.css";
 import type { LlmProviderStatusEntry, LlmRecommendation, NexusConfig, OllamaModelInfo, RoutingStrategy, TestConnectionResult } from "../types";
-import { checkLlmStatus, getLlmRecommendations, testLlmConnection, hasDesktopRuntime, listTools, executeTool } from "../api/backend";
+import { checkLlmStatus, getLlmRecommendations, testLlmConnection, hasDesktopRuntime, listTools, executeTool, detectClaudeCodeCli, triggerClaudeCodeLogin, detectCodexCli, triggerCodexCliLogin, loadLlmProviderSettings, saveLlmProviderSettings, detectCliProvider, builderAuthenticateCli } from "../api/backend";
+import type { ClaudeCodeCliStatus, CodexCliCliStatus, LlmProviderSettings, CliProviderSetting } from "../api/backend";
+import { listen } from "@tauri-apps/api/event";
+
+/** Format a timestamp into "verified Xm ago" or "verified Xh ago" */
+function verifiedAgoLabel(ts: number | null): string {
+  if (!ts) return "";
+  const mins = Math.floor((Date.now() - ts) / 60000);
+  if (mins < 1) return "verified just now";
+  if (mins < 60) return `verified ${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  return `verified ${hrs}h ago`;
+}
+
+/** True if the timestamp is older than 10 minutes */
+function isVerificationStale(ts: number | null): boolean {
+  if (!ts) return true;
+  return Date.now() - ts > 10 * 60 * 1000;
+}
 
 interface SettingsProps {
   config: NexusConfig;
@@ -89,6 +107,24 @@ export function Settings({
   const [llmRecsCanLocal, setLlmRecsCanLocal] = useState(false);
   const [testResults, setTestResults] = useState<Record<string, TestConnectionResult>>({});
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
+
+  // ── Claude Code CLI state ──
+  const [claudeCodeStatus, setClaudeCodeStatus] = useState<ClaudeCodeCliStatus | null>(null);
+  const [claudeCodeDetecting, setClaudeCodeDetecting] = useState(false);
+  const [claudeCodeLoginMsg, setClaudeCodeLoginMsg] = useState<string | null>(null);
+  const [claudeCodeVerifiedAt, setClaudeCodeVerifiedAt] = useState<number | null>(null);
+
+  // ── Codex CLI state ──
+  const [codexCliStatus, setCodexCliStatus] = useState<CodexCliCliStatus | null>(null);
+  const [codexCliDetecting, setCodexCliDetecting] = useState(false);
+  const [codexCliLoginMsg, setCodexCliLoginMsg] = useState<string | null>(null);
+  const [codexCliVerifiedAt, setCodexCliVerifiedAt] = useState<number | null>(null);
+  const [codexCliLoggingIn, setCodexCliLoggingIn] = useState(false);
+
+  // ── Persisted provider settings ──
+  const [providerSettings, setProviderSettings] = useState<LlmProviderSettings | null>(null);
+  const [providerSettingsLoading, setProviderSettingsLoading] = useState(false);
+  const [providerSettingsSaving, setProviderSettingsSaving] = useState(false);
 
   // ── Tools state ──
   const [tools, setTools] = useState<{ name: string; description: string; schema?: string }[]>([]);
@@ -238,6 +274,114 @@ export function Settings({
       setLlmRecsCanLocal(recs.can_run_local);
     }).catch((e) => { if (import.meta.env.DEV) console.warn("[Settings]", e); });
   }, [section]);
+
+  // Load persisted provider settings on mount + listen for startup auto-detect event
+  useEffect(() => {
+    if (!hasDesktopRuntime()) return;
+    setProviderSettingsLoading(true);
+    loadLlmProviderSettings().then((settings) => {
+      setProviderSettings(settings);
+      // Hydrate legacy CLI state from persisted settings
+      applyCliSettingsToLegacyState(settings);
+      setProviderSettingsLoading(false);
+    }).catch(() => {
+      // Initialize with defaults so toggles work even without backend
+      setProviderSettings({
+        api_providers: ["openrouter", "deepseek", "nvidia", "openai", "gemini", "anthropic"].map((id) => ({
+          id, enabled: false, has_key: false,
+        })),
+        cli_providers: [
+          { id: "claude_code", enabled: false, installed: false, authenticated: false, version: null, binary_path: null, last_detected: "" },
+          { id: "codex_cli", enabled: false, installed: false, authenticated: false, version: null, binary_path: null, last_detected: "" },
+        ],
+      });
+      setProviderSettingsLoading(false);
+    });
+
+    let unlisten: (() => void) | null = null;
+    listen<LlmProviderSettings>("llm-providers-ready", (event) => {
+      setProviderSettings(event.payload);
+      applyCliSettingsToLegacyState(event.payload);
+    }).then((fn) => { unlisten = fn; });
+
+    // Listen for CLI auth success events (emitted after browser OAuth completes)
+    let unlistenAuth: (() => void) | null = null;
+    listen<{ cli: string }>("cli-auth-success", (event) => {
+      const { cli } = event.payload;
+      if (cli === "codex") {
+        setCodexCliLoggingIn(false);
+        setCodexCliLoginMsg(null);
+        // Auto re-detect to update status
+        setCodexCliDetecting(true);
+        detectCliProvider("codex_cli").then((s) => {
+          setCodexCliStatus({ installed: s.installed, version: s.version, authenticated: s.authenticated, binary_path: s.binary_path, auth_mode: s.auth_mode ?? null });
+          setCodexCliVerifiedAt(Date.now());
+          setProviderSettings((prev) => {
+            if (!prev) return prev;
+            return { ...prev, cli_providers: prev.cli_providers.map((p) => p.id === "codex_cli" ? { ...p, ...s } : p) };
+          });
+        }).catch(() => {}).finally(() => setCodexCliDetecting(false));
+      } else if (cli === "claude") {
+        setClaudeCodeDetecting(true);
+        detectCliProvider("claude_code").then((s) => {
+          setClaudeCodeStatus({ installed: s.installed, version: s.version, authenticated: s.authenticated, binary_path: s.binary_path });
+          setClaudeCodeVerifiedAt(Date.now());
+          setProviderSettings((prev) => {
+            if (!prev) return prev;
+            return { ...prev, cli_providers: prev.cli_providers.map((p) => p.id === "claude_code" ? { ...p, ...s } : p) };
+          });
+        }).catch(() => {}).finally(() => setClaudeCodeDetecting(false));
+      }
+    }).then((fn) => { unlistenAuth = fn; });
+
+    // Listen for auth progress messages
+    let unlistenProgress: (() => void) | null = null;
+    listen<{ cli: string; message: string }>("cli-auth-progress", (event) => {
+      if (event.payload.cli === "codex") {
+        setCodexCliLoginMsg(event.payload.message);
+      } else if (event.payload.cli === "claude") {
+        setClaudeCodeLoginMsg(event.payload.message);
+      }
+    }).then((fn) => { unlistenProgress = fn; });
+
+    // Listen for auth failure
+    let unlistenFailed: (() => void) | null = null;
+    listen<{ cli: string; reason: string }>("cli-auth-failed", (event) => {
+      if (event.payload.cli === "codex") {
+        setCodexCliLoggingIn(false);
+        setCodexCliLoginMsg("Authentication timed out. Please try again.");
+      } else if (event.payload.cli === "claude") {
+        setClaudeCodeLoginMsg("Authentication timed out. Please try again.");
+      }
+    }).then((fn) => { unlistenFailed = fn; });
+
+    return () => { unlisten?.(); unlistenAuth?.(); unlistenProgress?.(); unlistenFailed?.(); };
+  }, []);
+
+  function applyCliSettingsToLegacyState(settings: LlmProviderSettings): void {
+    const now = Date.now();
+    for (const cp of settings.cli_providers) {
+      if (cp.id === "claude_code" && cp.installed) {
+        setClaudeCodeStatus({
+          installed: cp.installed,
+          version: cp.version,
+          authenticated: cp.authenticated,
+          binary_path: cp.binary_path,
+        });
+        setClaudeCodeVerifiedAt(now);
+      }
+      if (cp.id === "codex_cli" && cp.installed) {
+        setCodexCliStatus({
+          installed: cp.installed,
+          version: cp.version,
+          authenticated: cp.authenticated,
+          binary_path: cp.binary_path,
+          auth_mode: cp.auth_mode ?? null,
+        });
+        setCodexCliVerifiedAt(now);
+      }
+    }
+  }
 
   // Fetch tools when the tools section is active
   useEffect(() => {
@@ -524,37 +668,327 @@ export function Settings({
               );
             })}
 
-            {/* API Key Inputs */}
-            <h3 className="st-card-title" style={{ marginTop: "1rem" }}><Key size={16} className="inline-icon" /> API Keys</h3>
+            {/* API Key Providers with Enable/Disable Toggles */}
+            <h3 className="st-card-title" style={{ marginTop: "1rem" }}><Key size={16} className="inline-icon" /> API Key Providers</h3>
             {[
-              { label: "OpenRouter", key: "openrouter_api_key" as const, hint: "FREE models — Llama 3.3 70B, Gemma 3 27B, GPT-OSS 120B (openrouter.ai)" },
-              { label: "DeepSeek", key: "deepseek_api_key" as const, hint: "~$0.14/M tokens (cheapest)" },
-              { label: "NVIDIA NIM", key: "nvidia_api_key" as const, hint: "42 free models — DeepSeek V3.1, GLM-4.7, Nemotron, Llama 4, Qwen 3.5" },
-              { label: "OpenAI", key: "openai_api_key" as const, hint: "~$5/M tokens" },
-              { label: "Gemini", key: "gemini_api_key" as const, hint: "~$3.50/M tokens" },
-              { label: "Anthropic", key: "anthropic_api_key" as const, hint: "~$3/M tokens" },
-            ].map((entry) => (
-              <div key={entry.key} className="st-row" style={{ flexWrap: "wrap" }}>
-                <div style={{ flex: 1, minWidth: 140 }}>
-                  <p className="st-row-label">{entry.label}</p>
-                  <p className="st-row-hint">{entry.hint}</p>
+              { id: "openrouter", label: "OpenRouter", key: "openrouter_api_key" as const, hint: "FREE models — Llama 3.3 70B, Gemma 3 27B, GPT-OSS 120B (openrouter.ai)" },
+              { id: "deepseek", label: "DeepSeek", key: "deepseek_api_key" as const, hint: "~$0.14/M tokens (cheapest)" },
+              { id: "nvidia", label: "NVIDIA NIM", key: "nvidia_api_key" as const, hint: "42 free models — DeepSeek V3.1, GLM-4.7, Nemotron, Llama 4, Qwen 3.5" },
+              { id: "openai", label: "OpenAI", key: "openai_api_key" as const, hint: "~$5/M tokens" },
+              { id: "gemini", label: "Gemini", key: "gemini_api_key" as const, hint: "~$3.50/M tokens" },
+              { id: "anthropic", label: "Anthropic", key: "anthropic_api_key" as const, hint: "~$3/M tokens" },
+            ].map((entry) => {
+              const ap = providerSettings?.api_providers.find((p) => p.id === entry.id);
+              const isEnabled = ap?.enabled ?? !!config.llm[entry.key];
+              return (
+                <div key={entry.key} className="st-row" style={{ flexWrap: "wrap", gap: "0.5rem", opacity: isEnabled ? 1 : 0.55 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 140 }}>
+                    <label className="st-toggle" style={{ flexShrink: 0 }}>
+                      <input
+                        type="checkbox"
+                        checked={isEnabled}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          setProviderSettings((prev) => {
+                            if (!prev) return prev;
+                            return {
+                              ...prev,
+                              api_providers: prev.api_providers.map((p) =>
+                                p.id === entry.id ? { ...p, enabled: next } : p
+                              ),
+                            };
+                          });
+                        }}
+                      />
+                      <span className="st-toggle-track"><span className="st-toggle-thumb" /></span>
+                    </label>
+                    <div>
+                      <p className="st-row-label">
+                        {entry.label}
+                        {isEnabled && config.llm[entry.key] ? (
+                          <span style={{ color: "#00e676", marginLeft: 6, fontSize: "0.72rem" }}>Configured</span>
+                        ) : isEnabled ? (
+                          <span style={{ color: "#ffa500", marginLeft: 6, fontSize: "0.72rem" }}>No key</span>
+                        ) : null}
+                      </p>
+                      <p className="st-row-hint">{entry.hint}</p>
+                    </div>
+                  </div>
+                  {isEnabled && (
+                    <input
+                      type={showKeys ? "text" : "password"}
+                      className="st-api-input"
+                      style={{ flex: 2, minWidth: 200 }}
+                      value={config.llm[entry.key]}
+                      onChange={(e) => onChange({ ...config, llm: { ...config.llm, [entry.key]: e.target.value } })}
+                      placeholder={`Enter ${entry.label} API key`}
+                    />
+                  )}
                 </div>
-                <input
-                  type={showKeys ? "text" : "password"}
-                  className="st-api-input"
-                  style={{ flex: 2, minWidth: 200 }}
-                  value={config.llm[entry.key]}
-                  onChange={(e) => onChange({ ...config, llm: { ...config.llm, [entry.key]: e.target.value } })}
-                  placeholder={`Enter ${entry.label} API key`}
-                />
-              </div>
-            ))}
+              );
+            })}
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
               <button type="button" className="st-btn st-btn-ghost cursor-pointer" onClick={() => setShowKeys((p) => !p)}>
                 <Key size={14} className="inline-icon" /> {showKeys ? "Hide Keys" : "Show Keys"}
               </button>
-              <button type="button" className="st-btn st-btn-blue cursor-pointer" onClick={onSave} disabled={saving}>
-                {saving ? "Saving..." : <><Save size={14} className="inline-icon" /> Save Keys</>}
+            </div>
+
+            {/* CLI Providers with Enable/Disable Toggles */}
+            <h3 className="st-card-title" style={{ marginTop: "1.5rem" }}><Cpu size={16} className="inline-icon" /> CLI Providers (Local)</h3>
+
+            {/* Claude Code CLI */}
+            {(() => {
+              const cp = providerSettings?.cli_providers.find((p) => p.id === "claude_code");
+              const isEnabled = cp?.enabled ?? false;
+              const status = claudeCodeStatus;
+              return (
+                <div className="st-row" style={{ flexWrap: "wrap", gap: 8, alignItems: "center", opacity: isEnabled ? 1 : 0.55 }}>
+                  <label className="st-toggle" style={{ flexShrink: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={isEnabled}
+                      onChange={(e) => {
+                        const next = e.target.checked;
+                        setProviderSettings((prev) => {
+                          if (!prev) return prev;
+                          return {
+                            ...prev,
+                            cli_providers: prev.cli_providers.map((p) =>
+                              p.id === "claude_code" ? { ...p, enabled: next } : p
+                            ),
+                          };
+                        });
+                        if (next && !status) {
+                          // Auto-detect on enable
+                          setClaudeCodeDetecting(true);
+                          detectCliProvider("claude_code").then((s) => {
+                            setClaudeCodeStatus({ installed: s.installed, version: s.version, authenticated: s.authenticated, binary_path: s.binary_path });
+                            setProviderSettings((prev) => {
+                              if (!prev) return prev;
+                              return { ...prev, cli_providers: prev.cli_providers.map((p) => p.id === "claude_code" ? { ...p, ...s, enabled: true } : p) };
+                            });
+                          }).catch(() => {}).finally(() => setClaudeCodeDetecting(false));
+                        }
+                      }}
+                    />
+                    <span className="st-toggle-track"><span className="st-toggle-thumb" /></span>
+                  </label>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <p className="st-row-label">
+                      Claude Code (Local CLI)
+                      {status?.installed && status?.authenticated && (
+                        <span style={{ color: isVerificationStale(claudeCodeVerifiedAt) ? "#ffa500" : "#00e676", marginLeft: 6, fontSize: "0.72rem" }}>
+                          {isVerificationStale(claudeCodeVerifiedAt) ? "Ready (unverified \u2014 click Re-detect)" : `Ready (${verifiedAgoLabel(claudeCodeVerifiedAt)})`}
+                        </span>
+                      )}
+                      {status?.installed && !status?.authenticated && <span style={{ color: "#ffa500", marginLeft: 6, fontSize: "0.72rem" }}>Not logged in</span>}
+                      {isEnabled && !status && !claudeCodeDetecting && <span style={{ color: "#666", marginLeft: 6, fontSize: "0.72rem" }}>Not detected</span>}
+                      {isEnabled && !status && !claudeCodeDetecting && cp?.last_detected && <span style={{ color: "#ffa500", marginLeft: 6, fontSize: "0.72rem" }}> — enabled but not found</span>}
+                    </p>
+                    <p className="st-row-hint">Uses your authenticated Claude Code session. No API key needed — burns Extra Usage credits.</p>
+                    {status?.installed && status?.authenticated && (
+                      <p style={{ color: "#00e676", fontSize: "0.82rem", marginTop: 2 }}>
+                        v{status.version ?? "?"} — Models: Sonnet 4.6, Haiku 4.5, Opus 4.6
+                      </p>
+                    )}
+                    {status?.installed && !status?.authenticated && (
+                      <>
+                        <p style={{ color: "#ffa500", fontSize: "0.82rem", marginTop: 2 }}>
+                          Installed (v{status.version ?? "?"}) — not logged in
+                        </p>
+                        <button
+                          type="button"
+                          className="st-btn st-btn-blue cursor-pointer"
+                          style={{ marginTop: 4, fontSize: "0.78rem", padding: "3px 10px" }}
+                          onClick={async () => {
+                            try {
+                              const msg = await triggerClaudeCodeLogin();
+                              setClaudeCodeLoginMsg(msg);
+                            } catch (e) {
+                              setClaudeCodeLoginMsg(String(e));
+                            }
+                          }}
+                        >
+                          Login with Claude Code
+                        </button>
+                        {claudeCodeLoginMsg && <p className="st-row-hint">{claudeCodeLoginMsg}</p>}
+                      </>
+                    )}
+                    {isEnabled && !status?.installed && !claudeCodeDetecting && (
+                      <code className="st-row-hint" style={{ display: "block", marginTop: 4, color: "#80cbc4", fontSize: "0.78rem", userSelect: "all" }}>
+                        $ npm install -g @anthropic-ai/claude-code
+                      </code>
+                    )}
+                  </div>
+                  {isEnabled && (
+                    <button
+                      type="button"
+                      className="st-btn st-btn-ghost cursor-pointer"
+                      style={{ marginLeft: "auto", fontSize: "0.75rem", padding: "3px 10px" }}
+                      disabled={claudeCodeDetecting}
+                      onClick={async () => {
+                        setClaudeCodeDetecting(true);
+                        try {
+                          const s = await detectCliProvider("claude_code");
+                          setClaudeCodeStatus({ installed: s.installed, version: s.version, authenticated: s.authenticated, binary_path: s.binary_path });
+                          setClaudeCodeVerifiedAt(Date.now());
+                          setProviderSettings((prev) => {
+                            if (!prev) return prev;
+                            return { ...prev, cli_providers: prev.cli_providers.map((p) => p.id === "claude_code" ? { ...p, ...s } : p) };
+                          });
+                        } catch { /* ignore */ }
+                        setClaudeCodeDetecting(false);
+                      }}
+                    >
+                      <RefreshCw size={12} className="inline-icon" /> {claudeCodeDetecting ? "Detecting..." : "Re-detect"}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Codex CLI */}
+            {(() => {
+              const cp = providerSettings?.cli_providers.find((p) => p.id === "codex_cli");
+              const isEnabled = cp?.enabled ?? false;
+              const status = codexCliStatus;
+              return (
+                <div className="st-row" style={{ flexWrap: "wrap", gap: 8, alignItems: "center", opacity: isEnabled ? 1 : 0.55 }}>
+                  <label className="st-toggle" style={{ flexShrink: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={isEnabled}
+                      onChange={(e) => {
+                        const next = e.target.checked;
+                        setProviderSettings((prev) => {
+                          if (!prev) return prev;
+                          return {
+                            ...prev,
+                            cli_providers: prev.cli_providers.map((p) =>
+                              p.id === "codex_cli" ? { ...p, enabled: next } : p
+                            ),
+                          };
+                        });
+                        if (next && !status) {
+                          setCodexCliDetecting(true);
+                          detectCliProvider("codex_cli").then((s) => {
+                            setCodexCliStatus({ installed: s.installed, version: s.version, authenticated: s.authenticated, binary_path: s.binary_path, auth_mode: s.auth_mode ?? null });
+                            setProviderSettings((prev) => {
+                              if (!prev) return prev;
+                              return { ...prev, cli_providers: prev.cli_providers.map((p) => p.id === "codex_cli" ? { ...p, ...s, enabled: true } : p) };
+                            });
+                          }).catch(() => {}).finally(() => setCodexCliDetecting(false));
+                        }
+                      }}
+                    />
+                    <span className="st-toggle-track"><span className="st-toggle-thumb" /></span>
+                  </label>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <p className="st-row-label">
+                      OpenAI Codex CLI (Local)
+                      {status?.installed && status?.authenticated && (
+                        <span style={{ color: isVerificationStale(codexCliVerifiedAt) ? "#ffa500" : "#00e676", marginLeft: 6, fontSize: "0.72rem" }}>
+                          {isVerificationStale(codexCliVerifiedAt) ? "Ready (unverified \u2014 click Re-detect)" : `Ready (${verifiedAgoLabel(codexCliVerifiedAt)})`}
+                        </span>
+                      )}
+                      {status?.installed && !status?.authenticated && <span style={{ color: "#ffa500", marginLeft: 6, fontSize: "0.72rem" }}>Not logged in</span>}
+                      {isEnabled && !status && !codexCliDetecting && <span style={{ color: "#666", marginLeft: 6, fontSize: "0.72rem" }}>Not detected</span>}
+                    </p>
+                    <p className="st-row-hint">Uses your ChatGPT Plus/Pro subscription. No API key needed — usage limits per your plan.</p>
+                    {status?.installed && status?.authenticated && (
+                      <p style={{ color: "#00e676", fontSize: "0.82rem", marginTop: 2 }}>
+                        v{status.version ?? "?"} — Models: GPT-5 Codex, GPT-5.4, GPT-5.3
+                        {status.auth_mode && (
+                          <span style={{ color: "#80cbc4", marginLeft: 8 }}>
+                            ({status.auth_mode === "chatgpt" ? "ChatGPT Plus/Pro subscription"
+                              : status.auth_mode === "openai" ? "OpenAI API account"
+                              : status.auth_mode === "apikey" ? "API key auth"
+                              : status.auth_mode})
+                          </span>
+                        )}
+                      </p>
+                    )}
+                    {status?.installed && !status?.authenticated && (
+                      <>
+                        <p style={{ color: "#ffa500", fontSize: "0.82rem", marginTop: 2 }}>
+                          Installed (v{status.version ?? "?"}) — not logged in
+                        </p>
+                        <button
+                          type="button"
+                          className="st-btn st-btn-blue cursor-pointer"
+                          style={{ marginTop: 4, fontSize: "0.78rem", padding: "3px 10px" }}
+                          disabled={codexCliLoggingIn}
+                          onClick={async () => {
+                            setCodexCliLoggingIn(true);
+                            setCodexCliLoginMsg("Starting login... check your browser.");
+                            try {
+                              await builderAuthenticateCli("codex");
+                            } catch (e) {
+                              setCodexCliLoginMsg(String(e));
+                              setCodexCliLoggingIn(false);
+                            }
+                          }}
+                        >
+                          {codexCliLoggingIn ? "Authenticating..." : "Login with Codex CLI"}
+                        </button>
+                        {codexCliLoginMsg && <p className="st-row-hint">{codexCliLoginMsg}</p>}
+                      </>
+                    )}
+                    {isEnabled && !status?.installed && !codexCliDetecting && (
+                      <code className="st-row-hint" style={{ display: "block", marginTop: 4, color: "#80cbc4", fontSize: "0.78rem", userSelect: "all" }}>
+                        $ npm install -g @openai/codex
+                      </code>
+                    )}
+                  </div>
+                  {isEnabled && (
+                    <button
+                      type="button"
+                      className="st-btn st-btn-ghost cursor-pointer"
+                      style={{ marginLeft: "auto", fontSize: "0.75rem", padding: "3px 10px" }}
+                      disabled={codexCliDetecting}
+                      onClick={async () => {
+                        setCodexCliDetecting(true);
+                        try {
+                          const s = await detectCliProvider("codex_cli");
+                          setCodexCliStatus({ installed: s.installed, version: s.version, authenticated: s.authenticated, binary_path: s.binary_path, auth_mode: s.auth_mode ?? null });
+                          setCodexCliVerifiedAt(Date.now());
+                          setProviderSettings((prev) => {
+                            if (!prev) return prev;
+                            return { ...prev, cli_providers: prev.cli_providers.map((p) => p.id === "codex_cli" ? { ...p, ...s } : p) };
+                          });
+                        } catch { /* ignore */ }
+                        setCodexCliDetecting(false);
+                      }}
+                    >
+                      <RefreshCw size={12} className="inline-icon" /> {codexCliDetecting ? "Detecting..." : "Re-detect"}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Save Provider Settings */}
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                className="st-btn st-btn-blue cursor-pointer"
+                disabled={providerSettingsSaving || !providerSettings}
+                onClick={async () => {
+                  if (!providerSettings) return;
+                  setProviderSettingsSaving(true);
+                  try {
+                    await saveLlmProviderSettings(providerSettings);
+                    onSave();
+                  } catch (e) {
+                    if (import.meta.env.DEV) console.warn("[Settings] save provider settings:", e);
+                  }
+                  setProviderSettingsSaving(false);
+                }}
+              >
+                {providerSettingsSaving ? "Saving..." : <><Save size={14} className="inline-icon" /> Save Settings</>}
+              </button>
+              <button type="button" className="st-btn st-btn-ghost cursor-pointer" onClick={() => setShowKeys((p) => !p)}>
+                <Key size={14} className="inline-icon" /> {showKeys ? "Hide Keys" : "Show Keys"}
               </button>
             </div>
 
@@ -967,7 +1401,7 @@ export function Settings({
             <div className="st-about-grid">
               <div className="st-about-field">
                 <span className="st-about-label">Version</span>
-                <span className="st-about-value">v9.0.0</span>
+                <span className="st-about-value">v10.6.0</span>
               </div>
               <div className="st-about-field">
                 <span className="st-about-label">Build</span>
@@ -989,7 +1423,7 @@ export function Settings({
                 if (updateCheckTimerRef.current) clearTimeout(updateCheckTimerRef.current);
                 updateCheckTimerRef.current = window.setTimeout(() => setUpdateCheck("up-to-date"), 800);
               }}>
-                {updateCheck === "checking" ? "Checking..." : updateCheck === "up-to-date" ? <><Check size={14} className="inline-icon" /> v9.0.0 — You are running the latest version.</> : <><Cloud size={14} className="inline-icon" /> Check for Updates</>}
+                {updateCheck === "checking" ? "Checking..." : updateCheck === "up-to-date" ? <><Check size={14} className="inline-icon" /> v10.6.0 — You are running the latest version.</> : <><Cloud size={14} className="inline-icon" /> Check for Updates</>}
               </button>
             </div>
           </div>

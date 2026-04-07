@@ -267,7 +267,7 @@ pub fn approve_consent_request(
                 // Best-effort: remove pending placeholder; new agent already created
                 let _ = state.db.delete_agent(&agent_id_str);
                 state.log_event(
-                    Uuid::nil(),
+                    SYSTEM_UUID,
                     EventType::UserAction,
                     json!({
                         "action": "transcendent_creation_approved",
@@ -300,7 +300,7 @@ pub fn approve_consent_request(
 
     // 3. Log audit event
     state.log_event(
-        Uuid::parse_str(&agent_id_str).unwrap_or(Uuid::nil()),
+        Uuid::parse_str(&agent_id_str).unwrap_or(SYSTEM_UUID),
         EventType::UserAction,
         json!({
             "action": "consent_approved",
@@ -365,7 +365,7 @@ pub(crate) fn deny_consent_request(
 
     // 3. Log audit event
     state.log_event(
-        Uuid::parse_str(&agent_id_str).unwrap_or(Uuid::nil()),
+        Uuid::parse_str(&agent_id_str).unwrap_or(SYSTEM_UUID),
         EventType::UserAction,
         json!({
             "action": "consent_denied",
@@ -420,7 +420,7 @@ pub(crate) fn batch_approve_consents(
     }
 
     state.log_event(
-        Uuid::parse_str(&agent_id).unwrap_or(Uuid::nil()),
+        Uuid::parse_str(&agent_id).unwrap_or(SYSTEM_UUID),
         EventType::UserAction,
         json!({
             "action": "consent_batch_approved",
@@ -459,7 +459,7 @@ pub(crate) fn review_consent_batch(
     state.wake_blocked_consent_wait(&consent_row.agent_id, &consent_id);
 
     state.log_event(
-        Uuid::parse_str(&consent_row.agent_id).unwrap_or(Uuid::nil()),
+        Uuid::parse_str(&consent_row.agent_id).unwrap_or(SYSTEM_UUID),
         EventType::UserAction,
         json!({
             "action": "consent_batch_review_each",
@@ -507,7 +507,7 @@ pub(crate) fn batch_deny_consents(
     }
 
     state.log_event(
-        Uuid::parse_str(&agent_id).unwrap_or(Uuid::nil()),
+        Uuid::parse_str(&agent_id).unwrap_or(SYSTEM_UUID),
         EventType::UserAction,
         json!({
             "action": "consent_batch_denied",
@@ -820,7 +820,7 @@ pub(crate) fn create_simulation(
         )
         .map_err(|error| format!("db error: {error}"))?;
     state.log_event(
-        Uuid::parse_str(&world_id).unwrap_or_else(|_| Uuid::nil()),
+        Uuid::parse_str(&world_id).unwrap_or(SYSTEM_UUID),
         EventType::UserAction,
         json!({
             "action": "create_simulation",

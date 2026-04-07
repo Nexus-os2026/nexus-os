@@ -7,11 +7,11 @@ import {
   normalizeArray,
 } from "./commandCenterUi";
 
-const ACCENT = "#a855f7";
+const ACCENT = "#14b8a6";
 const GREEN = "#22c55e";
 const RED = "#ef4444";
 const YELLOW = "#eab308";
-const BLUE = "#3b82f6";
+const BLUE = "#0ea5e9";
 
 interface ScenarioSummary {
   id: string;

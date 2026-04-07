@@ -418,7 +418,14 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(6, 182, 212, 0.3) transparent;
 }
+
+.ch-messages::-webkit-scrollbar { width: 6px; }
+.ch-messages::-webkit-scrollbar-track { background: transparent; }
+.ch-messages::-webkit-scrollbar-thumb { background: rgba(6, 182, 212, 0.3); border-radius: 3px; }
+.ch-messages::-webkit-scrollbar-thumb:hover { background: rgba(6, 182, 212, 0.5); }
 
 .ch-messages::before {
   content: "";
@@ -875,22 +882,16 @@
 }
 
 .ch-cmp-select select {
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 4px;
-  padding: 8px;
-  color: #e2e8f0;
-  font-family: inherit;
-  font-size: 12px;
-  outline: none;
+  width: 100%;
 }
-.ch-cmp-select select:focus { border-color: var(--nexus-accent)44; }
 
 .ch-cmp-vs {
-  font-size: 14px;
-  font-weight: 700;
-  color: #f59e0b;
-  padding-top: 16px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #00ffc8;
+  padding: 0 8px;
+  margin-top: 16px;
+  flex-shrink: 0;
 }
 
 .ch-cmp-prompt {
@@ -1084,6 +1085,11 @@
 
 .ch-status-item {
   white-space: nowrap;
+}
+
+.ch-status-sep {
+  color: #334155;
+  font-size: 8px;
 }
 
 .ch-status-voice {
@@ -1689,7 +1695,7 @@
   width: 100%;
   height: 100%;
   border: none;
-  background: #fff;
+  background: #0d1520;
   border-radius: 0;
 }
 

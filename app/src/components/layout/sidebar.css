@@ -76,17 +76,19 @@
 }
 
 .nexus-sidebar-nav::-webkit-scrollbar-thumb {
-  background: rgba(0, 255, 157, 0.2);
+  background: rgba(0, 255, 157, 0.35);
   border-radius: 2px;
 }
 
 .nexus-sidebar-nav::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 255, 157, 0.35);
+  background: rgba(0, 255, 157, 0.55);
 }
 
 .nexus-sidebar-nav {
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 255, 157, 0.2) transparent;
+  scrollbar-color: rgba(0, 255, 157, 0.35) transparent;
+  mask-image: linear-gradient(to bottom, transparent 0px, #000 12px, #000 calc(100% - 12px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0px, #000 12px, #000 calc(100% - 12px), transparent 100%);
 }
 
 .nexus-sidebar-section {

@@ -14,7 +14,7 @@ import {
   normalizeArray,
 } from "./commandCenterUi";
 
-const ACCENT = "#f97316";
+const ACCENT = "#06b6d4";
 const GREEN = "#22c55e";
 const RED = "#ef4444";
 const YELLOW = "#eab308";

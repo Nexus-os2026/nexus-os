@@ -127,7 +127,13 @@ export default function TimelineViewer(): JSX.Element {
         <div style={panelStyle}>
           <h3 style={headStyle}>Timeline Tree</h3>
           {forks.length === 0 ? (
-            <div style={{ color: "#64748b", fontSize: "0.82rem" }}>No temporal forks active</div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "32px 16px", textAlign: "center" }}>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: "rgba(34,211,238,0.06)", border: "1px solid rgba(34,211,238,0.12)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+                <RefreshCw size={22} color="#475569" />
+              </div>
+              <div style={{ fontSize: 14, color: "#e2e8f0", marginBottom: 6 }}>No temporal forks active</div>
+              <div style={{ fontSize: 12, color: "#64748b", maxWidth: 280, lineHeight: 1.5 }}>Start an agent task with speculative execution enabled to see branching timelines appear here.</div>
+            </div>
           ) : (
             <div>
               {roots.map((root) => (
@@ -204,7 +210,13 @@ export default function TimelineViewer(): JSX.Element {
               ) : null}
             </div>
           ) : (
-            <div style={{ color: "#64748b", fontSize: "0.82rem" }}>Select a fork to view details</div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "32px 16px", textAlign: "center" }}>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: "rgba(34,211,238,0.06)", border: "1px solid rgba(34,211,238,0.12)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+                <GitCommit size={22} color="#475569" />
+              </div>
+              <div style={{ fontSize: 14, color: "#e2e8f0", marginBottom: 6 }}>Select a fork to view details</div>
+              <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>Click a timeline branch to inspect its steps, score, and commit options.</div>
+            </div>
           )}
         </div>
       </div>

@@ -27,7 +27,19 @@ export default class PageErrorBoundary extends Component<
     };
   }
 
-  public componentDidCatch(_error: unknown, _info: ErrorInfo): void {}
+  public componentDidCatch(error: unknown, info: ErrorInfo): void {
+    const msg = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? (error.stack ?? "") : "";
+    const componentStack = info.componentStack ?? "";
+    console.error(`[PageErrorBoundary] ${this.props.pageLabel}:`, msg, stack);
+    // Log to backend (fire-and-forget)
+    try {
+      const invoke = (window as any).__TAURI_INTERNALS__?.invoke;
+      if (invoke) {
+        invoke("log_frontend_error", { message: `[${this.props.pageLabel}] ${msg}`, stack, componentStack }).catch(() => {});
+      }
+    } catch { /* */ }
+  }
 
   public render(): ReactNode {
     if (!this.state.hasError) {
@@ -35,25 +47,32 @@ export default class PageErrorBoundary extends Component<
     }
 
     return (
-      <section className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-8 sm:px-6">
-        <div className="rounded-3xl border border-rose-400/35 bg-rose-500/10 p-6">
-          <p className="text-xs uppercase tracking-[0.24em] text-rose-200/75">Page Recovery</p>
-          <h2 className="mt-2 text-2xl text-rose-50">{this.props.pageLabel} failed to render</h2>
-          <p className="mt-3 text-sm text-rose-100/75">
+      <section style={{ maxWidth: 896, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16, padding: "32px 16px" }}>
+        <div style={{ borderRadius: 24, border: "1px solid rgba(251,113,133,0.35)", background: "rgba(244,63,94,0.10)", padding: 24 }}>
+          <p style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.24em", color: "rgba(255,200,210,0.75)" }}>Page Recovery</p>
+          <h2 style={{ marginTop: 8, fontSize: 24, color: "#fff1f2" }}>{this.props.pageLabel} failed to render</h2>
+          <p style={{ marginTop: 12, fontSize: 14, color: "rgba(255,225,230,0.75)" }}>
             The page hit a runtime error before it could finish loading. The app shell is still healthy.
           </p>
           {this.state.message ? (
-            <pre className="mt-4 overflow-x-auto rounded-2xl border border-rose-300/20 bg-slate-950/55 p-4 text-xs text-rose-100/80">
+            <pre style={{ marginTop: 16, overflowX: "auto", borderRadius: 16, border: "1px solid rgba(253,164,175,0.2)", background: "rgba(2,6,23,0.55)", padding: 16, fontSize: 12, color: "rgba(255,225,230,0.8)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
               {this.state.message}
             </pre>
           ) : null}
-          <div className="mt-5 flex flex-wrap gap-3">
+          <div style={{ marginTop: 20, display: "flex", flexWrap: "wrap", gap: 12 }}>
             <button
               type="button"
               onClick={this.props.onOpenSafePage}
-              className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100"
+              style={{ borderRadius: 9999, border: "1px solid rgba(34,211,238,0.3)", background: "rgba(6,182,212,0.10)", padding: "8px 16px", fontSize: 14, color: "#cffafe", cursor: "pointer" }}
             >
               Open Chat
+            </button>
+            <button
+              type="button"
+              onClick={() => this.setState({ hasError: false, message: null })}
+              style={{ borderRadius: 9999, border: "1px solid rgba(148,163,184,0.3)", background: "rgba(100,116,139,0.10)", padding: "8px 16px", fontSize: 14, color: "#e2e8f0", cursor: "pointer" }}
+            >
+              Retry
             </button>
           </div>
         </div>

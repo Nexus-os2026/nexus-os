@@ -341,7 +341,7 @@
 .ce-tab-label:hover { color: #a5f3fc; }
 .ce-tab-active .ce-tab-label { color: var(--nexus-accent); border-bottom-color: var(--nexus-accent); }
 .ce-tab-icon { font-size: 0.6rem; }
-.ce-tab-dirty { color: #f59e0b; font-size: 0.5rem; margin-left: 0.1rem; }
+.ce-tab-dirty { color: #f59e0b; font-size: 0.65rem; margin-left: 0.1rem; }
 .ce-tab-close {
   background: transparent; border: none;
   color: rgba(165, 243, 252, 0.25); cursor: pointer;

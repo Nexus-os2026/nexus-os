@@ -106,7 +106,7 @@ pub(crate) fn backup_create(
     use nexus_kernel::crypto::EncryptionKey;
 
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "backup_create", "encrypt": encrypt}),
     );
@@ -140,7 +140,7 @@ pub(crate) fn backup_restore(state: &AppState, archive_path: String) -> Result<S
     use nexus_kernel::crypto::EncryptionKey;
 
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "backup_restore", "archive": &archive_path}),
     );
@@ -340,7 +340,7 @@ pub(crate) fn admin_user_create(
         },
     ));
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "admin_user_created", "email": email, "role": role}),
     );
@@ -364,7 +364,7 @@ pub(crate) fn admin_user_update_role(
     role: String,
 ) -> Result<(), String> {
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "admin_user_role_changed", "user_id": user_id, "role": role}),
     );
@@ -377,7 +377,7 @@ pub(crate) fn admin_user_deactivate(state: &AppState, user_id: String) -> Result
         block_on_async(state.session_manager.remove_session(sid));
     }
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "admin_user_deactivated", "user_id": user_id}),
     );
@@ -445,7 +445,7 @@ pub(crate) fn admin_agent_stop_all(state: &AppState, workspace_id: String) -> Re
     let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
     // Best-effort: audit trail for admin action; stop operation already completed
     let _ = audit.append_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "admin_agent_stop_all", "stopped": stopped}),
     );
@@ -461,7 +461,7 @@ pub(crate) fn admin_agent_bulk_update(
     let count = agent_dids.len();
     // Best-effort: audit trail for admin action; bulk update proceeds regardless
     let _ = audit.append_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "admin_agent_bulk_update", "count": count, "update": update}),
     );
@@ -517,7 +517,7 @@ pub(crate) fn admin_policy_update(
     let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
     // Best-effort: audit trail for policy update; operation succeeds regardless
     let _ = audit.append_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "admin_policy_updated", "scope": scope}),
     );
@@ -565,7 +565,7 @@ pub(crate) fn admin_compliance_export(state: &AppState, format: String) -> Resul
     let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
     // Best-effort: audit trail for compliance export; report generation proceeds regardless
     let _ = audit.append_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "admin_compliance_export", "format": format}),
     );
@@ -809,7 +809,7 @@ pub(crate) fn integration_configure(
     settings: serde_json::Value,
 ) -> Result<String, String> {
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({
             "action": "integration_configure",
@@ -831,7 +831,7 @@ pub(crate) fn auth_login(state: &AppState) -> Result<String, String> {
     // In local/desktop mode, create a local session
     let user = block_on_async(nexus_auth::create_local_session(&state.session_manager));
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "auth_login", "user_id": user.id, "provider": "local"}),
     );
@@ -869,7 +869,7 @@ pub(crate) fn auth_logout(state: &AppState, session_id: String) -> Result<(), St
     let sid = Uuid::parse_str(&session_id).map_err(|e| format!("invalid UUID: {e}"))?;
     block_on_async(state.session_manager.remove_session(sid));
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "auth_logout", "session_id": session_id}),
     );
@@ -928,7 +928,7 @@ pub(crate) fn workspace_create(state: &AppState, name: String) -> Result<String,
         .unwrap_or_else(|p| p.into_inner());
     let workspace = wm.create_workspace(config).map_err(|e| format!("{e}"))?;
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "workspace_created", "workspace_id": workspace.id, "name": name}),
     );
@@ -1021,7 +1021,7 @@ pub(crate) fn workspace_set_policy(
     wm.set_policy(&workspace_id, policy)
         .map_err(|e| format!("{e}"))?;
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "workspace_policy_updated", "workspace_id": workspace_id}),
     );
@@ -1106,7 +1106,7 @@ pub(crate) fn telemetry_config_update(state: &AppState, config_json: String) -> 
         .unwrap_or_else(|p| p.into_inner());
     *config = new_config;
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "telemetry_config_updated"}),
     );

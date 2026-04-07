@@ -16,9 +16,13 @@ use nexus_connectors_llm::model_hub::{self, DownloadProgress, DownloadStatus};
 use nexus_connectors_llm::model_registry::ModelRegistry;
 use nexus_connectors_llm::nexus_link::NexusLink;
 use nexus_connectors_llm::providers::{
-    groq::GROQ_MODELS, nvidia::NVIDIA_MODELS, openrouter::OPENROUTER_MODELS, ClaudeProvider,
-    DeepSeekProvider, GeminiProvider, GroqProvider, LlmProvider, NvidiaProvider, OllamaProvider,
-    OpenAiProvider, OpenRouterProvider,
+    claude_code::{self, ClaudeCodeProvider, CLAUDE_CODE_MODELS},
+    codex_cli::{self, CodexCliProvider, CODEX_CLI_MODELS},
+    groq::GROQ_MODELS,
+    nvidia::NVIDIA_MODELS,
+    openrouter::OPENROUTER_MODELS,
+    ClaudeProvider, DeepSeekProvider, GeminiProvider, GroqProvider, LlmProvider, NvidiaProvider,
+    OllamaProvider, OpenAiProvider, OpenRouterProvider,
 };
 use nexus_connectors_llm::rag::{RagConfig, RagPipeline};
 use nexus_connectors_llm::whisper::WhisperTranscriber;
@@ -1450,6 +1454,7 @@ pub(crate) fn register_manifest_schedule(
 
 /// Seed the ScheduleRunner's ScheduleStore from agent manifests that have schedule + default_goal.
 /// This bridges prebuilt agents with the background scheduler on startup.
+#[allow(dead_code)]
 pub(crate) fn seed_manifests_to_runner(state: &AppState) {
     let agents = match state.db.list_agents() {
         Ok(rows) => rows,
@@ -1929,6 +1934,8 @@ pub struct ProviderStatus {
     pub gemini: bool,
     pub nvidia: bool,
     pub groq: bool,
+    pub claude_code: bool,
+    pub codex_cli: bool,
 }
 
 /// List models from ALL configured providers (Ollama + cloud).
@@ -2105,6 +2112,9 @@ pub(crate) fn get_provider_status() -> Result<ProviderStatus, String> {
     let ollama = OllamaProvider::new(&ollama_url);
     let ollama_ok = ollama.health_check().unwrap_or(false);
 
+    let cc_status = claude_code::detect_claude_code();
+    let cx_status = codex_cli::detect_codex_cli();
+
     Ok(ProviderStatus {
         ollama: ollama_ok,
         anthropic: has_provider_key(&prov_config.anthropic_api_key),
@@ -2113,6 +2123,8 @@ pub(crate) fn get_provider_status() -> Result<ProviderStatus, String> {
         gemini: has_provider_key(&prov_config.gemini_api_key),
         nvidia: has_provider_key(&prov_config.nvidia_api_key),
         groq: has_provider_key(&prov_config.groq_api_key),
+        claude_code: cc_status.installed && cc_status.authenticated,
+        codex_cli: cx_status.installed && cx_status.authenticated,
     })
 }
 
@@ -2324,6 +2336,64 @@ pub(crate) async fn get_available_providers(
         });
     }
 
+    // ── Claude Code CLI (local subprocess) ──
+    {
+        let cli_status = claude_code::detect_claude_code();
+        let models: Vec<String> = CLAUDE_CODE_MODELS
+            .iter()
+            .map(|(id, _)| id.to_string())
+            .collect();
+        let status_str = if !cli_status.installed {
+            "not_installed"
+        } else if !cli_status.authenticated {
+            "not_authenticated"
+        } else {
+            "ready"
+        };
+        providers.push(AvailableProvider {
+            id: "claude-code".into(),
+            name: "Claude Code (Local)".into(),
+            status: status_str.into(),
+            available: cli_status.installed && cli_status.authenticated,
+            model: if cli_status.authenticated {
+                Some(claude_code::CLAUDE_CODE_DEFAULT_MODEL.to_string())
+            } else {
+                None
+            },
+            models: if cli_status.installed { models } else { vec![] },
+            model_paths: vec![],
+        });
+    }
+
+    // ── Codex CLI (local subprocess, ChatGPT Plus/Pro subscription) ──
+    {
+        let cli_status = codex_cli::detect_codex_cli();
+        let models: Vec<String> = CODEX_CLI_MODELS
+            .iter()
+            .map(|(id, _)| id.to_string())
+            .collect();
+        let status_str = if !cli_status.installed {
+            "not_installed"
+        } else if !cli_status.authenticated {
+            "not_authenticated"
+        } else {
+            "ready"
+        };
+        providers.push(AvailableProvider {
+            id: "codex-cli".into(),
+            name: "Codex CLI (Local)".into(),
+            status: status_str.into(),
+            available: cli_status.installed && cli_status.authenticated,
+            model: if cli_status.authenticated {
+                Some(codex_cli::CODEX_CLI_DEFAULT_MODEL.to_string())
+            } else {
+                None
+            },
+            models: if cli_status.installed { models } else { vec![] },
+            model_paths: vec![],
+        });
+    }
+
     Ok(providers)
 }
 
@@ -2362,6 +2432,313 @@ pub(crate) fn save_provider_api_key(provider: String, api_key: String) -> Result
     save_nexus_config(&config).map_err(agent_error)
 }
 
+/// Status of the Claude Code CLI, returned to the frontend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaudeCodeCliStatus {
+    pub installed: bool,
+    pub version: Option<String>,
+    pub authenticated: bool,
+    pub binary_path: Option<String>,
+}
+
+/// Detect the local Claude Code CLI installation and auth status.
+pub(crate) fn detect_claude_code_cli() -> ClaudeCodeCliStatus {
+    let status = claude_code::detect_claude_code();
+    ClaudeCodeCliStatus {
+        installed: status.installed,
+        version: status.version,
+        authenticated: status.authenticated,
+        binary_path: status.binary_path,
+    }
+}
+
+/// Trigger Claude Code CLI login (opens browser for OAuth).
+/// NEXUS never sees or stores credentials.
+pub(crate) fn trigger_claude_code_login() -> Result<String, String> {
+    claude_code::trigger_login().map_err(|e| e.to_string())
+}
+
+/// Status of the Codex CLI, returned to the frontend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodexCliCliStatus {
+    pub installed: bool,
+    pub version: Option<String>,
+    pub authenticated: bool,
+    pub binary_path: Option<String>,
+    /// How the user authenticated: `"chatgpt"`, `"openai"`, `"apikey"`, or `null`.
+    pub auth_mode: Option<String>,
+}
+
+/// Detect the local Codex CLI installation and auth status.
+pub(crate) fn detect_codex_cli_cmd() -> CodexCliCliStatus {
+    let status = codex_cli::detect_codex_cli();
+    CodexCliCliStatus {
+        installed: status.installed,
+        version: status.version,
+        authenticated: status.authenticated,
+        binary_path: status.binary_path,
+        auth_mode: status.auth_mode,
+    }
+}
+
+/// Trigger Codex CLI login (opens browser for ChatGPT OAuth).
+/// NEXUS never sees or stores credentials.
+pub(crate) fn trigger_codex_cli_login() -> Result<String, String> {
+    codex_cli::trigger_codex_login().map_err(|e| e.to_string())
+}
+
+// ── LLM Provider Settings Persistence ──────────────────────────────────
+
+/// Combined provider settings returned to / received from the frontend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmProviderSettings {
+    /// API-key provider enabled states (keyed by provider id).
+    pub api_providers: Vec<ApiProviderSetting>,
+    /// CLI provider states.
+    pub cli_providers: Vec<CliProviderSetting>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiProviderSetting {
+    pub id: String,
+    pub enabled: bool,
+    /// Masked key for display — we never send raw keys to the frontend.
+    pub has_key: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CliProviderSetting {
+    pub id: String,
+    pub enabled: bool,
+    pub installed: bool,
+    pub authenticated: bool,
+    pub version: Option<String>,
+    pub binary_path: Option<String>,
+    pub last_detected: String,
+    /// How the user authenticated (codex only): `"chatgpt"`, `"openai"`, `"apikey"`, or `null`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_mode: Option<String>,
+}
+
+/// Known API-key provider ids and their config field accessors.
+const API_PROVIDER_IDS: &[&str] = &[
+    "openrouter",
+    "deepseek",
+    "nvidia",
+    "openai",
+    "gemini",
+    "anthropic",
+];
+
+const CLI_PROVIDER_IDS: &[&str] = &["claude_code", "codex_cli"];
+
+fn api_key_for_provider(config: &NexusConfig, id: &str) -> String {
+    match id {
+        "openrouter" => config.llm.openrouter_api_key.clone(),
+        "deepseek" => config.llm.deepseek_api_key.clone(),
+        "nvidia" => config.llm.nvidia_api_key.clone(),
+        "openai" => config.llm.openai_api_key.clone(),
+        "gemini" => config.llm.gemini_api_key.clone(),
+        "anthropic" => config.llm.anthropic_api_key.clone(),
+        _ => String::new(),
+    }
+}
+
+fn is_api_provider_enabled(config: &NexusConfig, id: &str) -> bool {
+    // If provider entry exists in providers list, use its enabled flag.
+    // Otherwise default to enabled if API key is present.
+    if let Some(entry) = config.llm.providers.iter().find(|p| p.id == id) {
+        return entry.enabled;
+    }
+    !api_key_for_provider(config, id).is_empty()
+}
+
+fn cli_entry_for<'a>(
+    config: &'a NexusConfig,
+    id: &str,
+) -> Option<&'a nexus_kernel::config::CliProviderEntry> {
+    config.llm.cli_providers.iter().find(|e| e.id == id)
+}
+
+/// Load persisted provider settings from config, optionally running CLI detection.
+pub(crate) fn load_llm_provider_settings(detect_clis: bool) -> Result<LlmProviderSettings, String> {
+    let config = load_config().map_err(agent_error)?;
+
+    let api_providers: Vec<ApiProviderSetting> = API_PROVIDER_IDS
+        .iter()
+        .map(|&id| ApiProviderSetting {
+            id: id.to_string(),
+            enabled: is_api_provider_enabled(&config, id),
+            has_key: !api_key_for_provider(&config, id).is_empty(),
+        })
+        .collect();
+
+    let cli_providers: Vec<CliProviderSetting> = CLI_PROVIDER_IDS
+        .iter()
+        .map(|&id| {
+            let persisted = cli_entry_for(&config, id);
+            let enabled = persisted.is_some_and(|e| e.enabled);
+            let last_detected = persisted.map_or_else(String::new, |e| e.last_detected.clone());
+
+            if detect_clis && enabled {
+                // Run live detection
+                let (installed, authenticated, version, binary_path, auth_mode) = match id {
+                    "claude_code" => {
+                        let s = claude_code::detect_claude_code();
+                        (s.installed, s.authenticated, s.version, s.binary_path, None)
+                    }
+                    "codex_cli" => {
+                        let s = codex_cli::detect_codex_cli();
+                        (
+                            s.installed,
+                            s.authenticated,
+                            s.version,
+                            s.binary_path,
+                            s.auth_mode,
+                        )
+                    }
+                    _ => (false, false, None, None, None),
+                };
+                CliProviderSetting {
+                    id: id.to_string(),
+                    enabled,
+                    installed,
+                    authenticated,
+                    version,
+                    binary_path,
+                    last_detected: chrono::Utc::now().to_rfc3339(),
+                    auth_mode,
+                }
+            } else {
+                // Return persisted state without re-detecting
+                CliProviderSetting {
+                    id: id.to_string(),
+                    enabled,
+                    installed: false,
+                    authenticated: false,
+                    version: None,
+                    binary_path: None,
+                    last_detected,
+                    auth_mode: None,
+                }
+            }
+        })
+        .collect();
+
+    Ok(LlmProviderSettings {
+        api_providers,
+        cli_providers,
+    })
+}
+
+/// Save provider enabled/disabled states to config.
+pub(crate) fn save_llm_provider_settings(settings: LlmProviderSettings) -> Result<(), String> {
+    let mut config = load_config().map_err(agent_error)?;
+
+    // Update API provider enabled flags in the providers list
+    for ap in &settings.api_providers {
+        if let Some(entry) = config.llm.providers.iter_mut().find(|p| p.id == ap.id) {
+            entry.enabled = ap.enabled;
+        } else {
+            // Create a new entry if it doesn't exist
+            config
+                .llm
+                .providers
+                .push(nexus_kernel::config::LlmProviderEntry {
+                    id: ap.id.clone(),
+                    provider_type: "api_key".to_string(),
+                    display_name: ap.id.clone(),
+                    api_key: String::new(),
+                    base_url: String::new(),
+                    enabled: ap.enabled,
+                    priority: 0,
+                });
+        }
+    }
+
+    // Update CLI provider entries
+    for cp in &settings.cli_providers {
+        if let Some(entry) = config.llm.cli_providers.iter_mut().find(|e| e.id == cp.id) {
+            entry.enabled = cp.enabled;
+            if !cp.last_detected.is_empty() {
+                entry.last_detected = cp.last_detected.clone();
+            }
+        } else {
+            config
+                .llm
+                .cli_providers
+                .push(nexus_kernel::config::CliProviderEntry {
+                    id: cp.id.clone(),
+                    enabled: cp.enabled,
+                    last_detected: cp.last_detected.clone(),
+                });
+        }
+    }
+
+    save_nexus_config(&config).map_err(agent_error)
+}
+
+/// Detect a single CLI provider and update its persisted state.
+pub(crate) fn detect_single_cli_provider(provider_id: &str) -> Result<CliProviderSetting, String> {
+    let (installed, authenticated, version, binary_path, auth_mode) = match provider_id {
+        "claude_code" => {
+            let s = claude_code::detect_claude_code();
+            (s.installed, s.authenticated, s.version, s.binary_path, None)
+        }
+        "codex_cli" => {
+            let s = codex_cli::detect_codex_cli();
+            (
+                s.installed,
+                s.authenticated,
+                s.version,
+                s.binary_path,
+                s.auth_mode,
+            )
+        }
+        _ => return Err(format!("Unknown CLI provider: {provider_id}")),
+    };
+
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // Persist the detection result and ensure enabled
+    let mut config = load_config().map_err(agent_error)?;
+    if let Some(entry) = config
+        .llm
+        .cli_providers
+        .iter_mut()
+        .find(|e| e.id == provider_id)
+    {
+        entry.enabled = true;
+        entry.last_detected = now.clone();
+    } else {
+        config
+            .llm
+            .cli_providers
+            .push(nexus_kernel::config::CliProviderEntry {
+                id: provider_id.to_string(),
+                enabled: true,
+                last_detected: now.clone(),
+            });
+    }
+    save_nexus_config(&config).map_err(agent_error)?;
+
+    Ok(CliProviderSetting {
+        id: provider_id.to_string(),
+        enabled: true,
+        installed,
+        authenticated,
+        version,
+        binary_path,
+        last_detected: now,
+        auth_mode,
+    })
+}
+
+/// Auto-detect all enabled CLI providers. Called on app startup.
+pub(crate) fn auto_detect_enabled_providers() -> Result<LlmProviderSettings, String> {
+    load_llm_provider_settings(true)
+}
+
 /// Create an LLM provider from a "provider/model" string.
 /// Returns `(Box<dyn LlmProvider>, model_name)`.
 pub(crate) fn provider_from_prefixed_model(
@@ -2377,7 +2754,32 @@ pub(crate) fn provider_from_prefixed_model(
                     .unwrap_or_else(|| "http://localhost:11434".to_string());
                 Box::new(OllamaProvider::new(&url))
             }
-            "anthropic" => Box::new(ClaudeProvider::new(prov_config.anthropic_api_key.clone())),
+            "anthropic" => {
+                let has_key = prov_config
+                    .anthropic_api_key
+                    .as_deref()
+                    .map(|k| !k.trim().is_empty())
+                    .unwrap_or(false);
+                if has_key {
+                    Box::new(ClaudeProvider::new(prov_config.anthropic_api_key.clone()))
+                } else {
+                    // No API key — fall back to Claude Code CLI
+                    let status = nexus_connectors_llm::providers::claude_code::detect_claude_code();
+                    if status.installed && status.authenticated {
+                        eprintln!(
+                            "[provider] No ANTHROPIC_API_KEY, falling back to Claude Code CLI \
+                             for model '{model_name}'"
+                        );
+                        Box::new(ClaudeCodeProvider::new())
+                    } else {
+                        return Err(
+                            "No ANTHROPIC_API_KEY set and Claude Code CLI not available. \
+                             Set the API key or install/authenticate the Claude CLI."
+                                .to_string(),
+                        );
+                    }
+                }
+            }
             "openai" => Box::new(OpenAiProvider::new(prov_config.openai_api_key.clone())),
             "deepseek" => Box::new(DeepSeekProvider::new(prov_config.deepseek_api_key.clone())),
             "google" | "gemini" => {
@@ -2387,6 +2789,8 @@ pub(crate) fn provider_from_prefixed_model(
                 Box::new(NvidiaProvider::new(prov_config.nvidia_api_key.clone()))
             }
             "groq" => Box::new(GroqProvider::new(prov_config.groq_api_key.clone())),
+            "claude-code" => Box::new(ClaudeCodeProvider::new()),
+            "codex-cli" | "codex" => Box::new(CodexCliProvider::new()),
             "openrouter" => Box::new(OpenRouterProvider::new(
                 prov_config.openrouter_api_key.clone(),
             )),
@@ -2416,9 +2820,196 @@ pub(crate) fn provider_from_prefixed_model(
         };
         Ok((provider, model_name.to_string()))
     } else {
-        // No prefix — use legacy select_provider behavior
+        // No prefix — detect provider from model name patterns.
+
+        // Ollama models use name:tag format (e.g., gemma4:e4b, qwen3:8b).
+        // Route directly to Ollama to avoid falling through to NVIDIA NIM
+        // or other cloud providers that don't host these models.
+        if full_model.contains(':') && !full_model.contains("://") {
+            let url = prov_config
+                .ollama_url
+                .clone()
+                .unwrap_or_else(|| "http://localhost:11434".to_string());
+            return Ok((Box::new(OllamaProvider::new(&url)), full_model.to_string()));
+        }
+
+        // Claude model names — try Claude Code CLI when no API key
+        let m = full_model.to_lowercase();
+        let is_claude = m.contains("claude")
+            || m.contains("sonnet")
+            || m.contains("haiku")
+            || m.contains("opus");
+        let has_anthropic_key = prov_config
+            .anthropic_api_key
+            .as_deref()
+            .map(|k| !k.trim().is_empty())
+            .unwrap_or(false);
+
+        if is_claude && !has_anthropic_key {
+            let status = nexus_connectors_llm::providers::claude_code::detect_claude_code();
+            if status.installed && status.authenticated {
+                eprintln!(
+                    "[provider] No ANTHROPIC_API_KEY, using Claude Code CLI for '{full_model}'"
+                );
+                return Ok((
+                    Box::new(ClaudeCodeProvider::new()),
+                    format!("{full_model} (via CLI)"),
+                ));
+            }
+        }
+
         let provider = select_provider(prov_config).map_err(|e| e.to_string())?;
         Ok((provider, full_model.to_string()))
+    }
+}
+
+/// Select a streaming provider from a "provider/model" string.
+///
+/// Returns `(streaming_provider, model_name)`.  Supports `anthropic/…` and
+/// `claude-code/…`.  Other prefixes fall back to the non-streaming path
+/// (the conductor will use its own non-streaming fallback).
+pub(crate) fn streaming_provider_from_prefixed_model(
+    full_model: &str,
+    prov_config: &ProviderSelectionConfig,
+) -> Result<
+    (
+        Box<dyn nexus_connectors_llm::streaming::StreamingLlmProvider>,
+        String,
+    ),
+    String,
+> {
+    use nexus_connectors_llm::streaming::StreamingLlmProvider;
+
+    let (prefix, model_name) = full_model.split_once('/').unwrap_or(("", full_model));
+
+    match prefix {
+        "codex-cli" | "codex" => {
+            let status = nexus_connectors_llm::providers::codex_cli::detect_codex_cli();
+            if status.installed && status.authenticated {
+                let p = nexus_connectors_llm::providers::codex_cli::CodexCliProvider::new();
+                Ok((Box::new(p), format!("{model_name} (via Codex CLI)")))
+            } else {
+                Err(format!(
+                    "Codex CLI not available (installed={}, authenticated={}). \
+                     Install: npm install -g @openai/codex && codex login",
+                    status.installed, status.authenticated
+                ))
+            }
+        }
+        "claude-code" => {
+            let p = ClaudeCodeProvider::new();
+            Ok((Box::new(p), model_name.to_string()))
+        }
+        // Any Anthropic-family model (explicit prefix or bare claude/sonnet/haiku/opus name).
+        // If no API key is available, fall back to Claude Code CLI adapter.
+        "anthropic" => {
+            let has_key = prov_config
+                .anthropic_api_key
+                .as_deref()
+                .map(|k| !k.trim().is_empty())
+                .unwrap_or(false);
+            if has_key {
+                let p = ClaudeProvider::new(prov_config.anthropic_api_key.clone());
+                Ok((Box::new(p), model_name.to_string()))
+            } else {
+                // No API key — try Claude Code CLI as a fallback
+                let status = nexus_connectors_llm::providers::claude_code::detect_claude_code();
+                if status.installed && status.authenticated {
+                    eprintln!(
+                        "[streaming-provider] No ANTHROPIC_API_KEY set, \
+                         falling back to Claude Code CLI for model '{model_name}'"
+                    );
+                    Ok((
+                        Box::new(ClaudeCodeProvider::new()),
+                        format!("{model_name} (via CLI)"),
+                    ))
+                } else {
+                    Err(format!(
+                        "No ANTHROPIC_API_KEY set and Claude Code CLI not available. \
+                         Set the API key or install/authenticate the Claude CLI \
+                         (provider 'claude-code/{model_name}')."
+                    ))
+                }
+            }
+        }
+        // Ollama models — streaming not supported through this interface,
+        // caller should use the non-streaming fallback path.
+        "ollama" => Err(format!(
+            "Ollama model '{model_name}' does not support streaming. \
+             Use the non-streaming path."
+        )),
+        // OpenAI API models — streaming not supported through this interface
+        "openai" => Err(format!(
+            "OpenAI model '{model_name}' does not support streaming via this interface."
+        )),
+        // No prefix — infer from model name
+        "" => {
+            let m = full_model.to_lowercase();
+
+            // GPT-5.x models — route to Codex CLI if available
+            if m.contains("gpt-5") {
+                let status = nexus_connectors_llm::providers::codex_cli::detect_codex_cli();
+                if status.installed && status.authenticated {
+                    return Ok((
+                        Box::new(
+                            nexus_connectors_llm::providers::codex_cli::CodexCliProvider::new(),
+                        ),
+                        format!("{full_model} (via Codex CLI)"),
+                    ));
+                }
+                return Err(format!(
+                    "Codex CLI not available for model '{full_model}'. \
+                     Install: npm install -g @openai/codex && codex login"
+                ));
+            }
+
+            if m.contains("claude")
+                || m.contains("sonnet")
+                || m.contains("haiku")
+                || m.contains("opus")
+            {
+                // Looks like a Claude model — try Claude Code first if enabled, then API key
+                if prov_config.claude_code_enabled {
+                    let status = nexus_connectors_llm::providers::claude_code::detect_claude_code();
+                    if status.installed && status.authenticated {
+                        return Ok((
+                            Box::new(ClaudeCodeProvider::new()),
+                            format!("{full_model} (via CLI)"),
+                        ));
+                    }
+                }
+                if prov_config
+                    .anthropic_api_key
+                    .as_deref()
+                    .map(|k| !k.trim().is_empty())
+                    .unwrap_or(false)
+                {
+                    return Ok((
+                        Box::new(ClaudeProvider::new(prov_config.anthropic_api_key.clone())),
+                        full_model.to_string(),
+                    ));
+                }
+                // Last resort: try Claude Code even if not explicitly enabled
+                let status = nexus_connectors_llm::providers::claude_code::detect_claude_code();
+                if status.installed && status.authenticated {
+                    return Ok((
+                        Box::new(ClaudeCodeProvider::new()),
+                        format!("{full_model} (via CLI)"),
+                    ));
+                }
+                Err(format!(
+                    "No streaming provider available for model '{full_model}'. \
+                     Set ANTHROPIC_API_KEY or enable Claude Code CLI (provider 'claude-code/{full_model}')."
+                ))
+            } else {
+                Err(format!(
+                    "Model '{full_model}' does not support streaming. Use the non-streaming path."
+                ))
+            }
+        }
+        other => Err(format!(
+            "Provider '{other}' does not support streaming. Use the non-streaming path."
+        )),
     }
 }
 

@@ -36,10 +36,10 @@ const DEFAULT_SOURCES: LearningSource[] = [
 ];
 
 const CATEGORY_ICONS: Record<string, string> = {
-  documentation: "📖",
-  github: "🔗",
-  blog: "📝",
-  changelog: "📋",
+  documentation: "\u25A3",
+  github: "\u25CE",
+  blog: "\u25C7",
+  changelog: "\u25A1",
 };
 
 
@@ -271,9 +271,9 @@ export function LearnMode({ onActivity }: LearnModeProps): JSX.Element {
           </span>
         </div>
         <div className="learn-controls-right">
-          <span className="learn-stat">⚡ {fuelUsed} fuel</span>
-          <span className="learn-stat">📄 {pagesVisited} pages</span>
-          <span className="learn-stat">🧠 {knowledge.length} entries</span>
+          <span className="learn-stat">{"\u25B8"} {fuelUsed} fuel</span>
+          <span className="learn-stat">{"\u25A1"} {pagesVisited} pages</span>
+          <span className="learn-stat">{"\u25C9"} {knowledge.length} entries</span>
         </div>
       </div>
 
@@ -285,7 +285,7 @@ export function LearnMode({ onActivity }: LearnModeProps): JSX.Element {
             className={`learn-panel-tab${activePanel === p ? " learn-panel-tab--active" : ""}`}
             onClick={() => setActivePanel(p)}
           >
-            {p === "browser" ? "🌐 Browser" : p === "feed" ? "📡 Feed" : "🧠 Knowledge"}
+            {p === "browser" ? "\u25CE Browser" : p === "feed" ? "\u25C7 Feed" : "\u25C9 Knowledge"}
             {p === "knowledge" && knowledge.length > 0 && (
               <span className="learn-panel-tab-count">{knowledge.length}</span>
             )}
@@ -313,7 +313,7 @@ export function LearnMode({ onActivity }: LearnModeProps): JSX.Element {
                   className={`learn-source-item${currentUrl === src.url ? " learn-source-item--active" : ""}`}
                 >
                   <span className="learn-source-icon">
-                    {CATEGORY_ICONS[src.category] || "📄"}
+                    {CATEGORY_ICONS[src.category] || "\u25A1"}
                   </span>
                   <div className="learn-source-info">
                     <span className="learn-source-label">{src.label}</span>
@@ -339,7 +339,7 @@ export function LearnMode({ onActivity }: LearnModeProps): JSX.Element {
               {currentUrl ? (
                 <div className="learn-browser-active">
                   <div className="learn-browser-urlbar">
-                    <span className="learn-browser-urlbar-icon">🔒</span>
+                    <span className="learn-browser-urlbar-icon">{"\u25A0"}</span>
                     <span className="learn-browser-urlbar-url">{currentUrl}</span>
                   </div>
                   <div className="learn-browser-content">

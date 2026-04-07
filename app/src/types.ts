@@ -373,6 +373,8 @@ export interface ProviderStatus {
   deepseek: boolean;
   gemini: boolean;
   nvidia: boolean;
+  claude_code: boolean;
+  codex_cli: boolean;
 }
 
 export interface ChatTokenEvent {

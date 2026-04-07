@@ -303,22 +303,97 @@ export function MetricBar({
   );
 }
 
+export function EmptyStateIcon(): JSX.Element {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M8 12h8" />
+    </svg>
+  );
+}
+
 export function EmptyState({
   text,
   compact,
+  icon,
+  cta,
+  onAction,
 }: {
   text: string;
   compact?: boolean;
+  icon?: ReactNode;
+  cta?: string;
+  onAction?: () => void;
 }): JSX.Element {
+  if (compact) {
+    return (
+      <div style={{ ...commandMutedStyle, padding: 0, textAlign: "left" }}>
+        {text}
+      </div>
+    );
+  }
   return (
     <div
       style={{
-        ...commandMutedStyle,
-        padding: compact ? 0 : "18px 0",
-        textAlign: compact ? "left" : "center",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "48px 24px",
+        textAlign: "center",
+        minHeight: 200,
       }}
     >
-      {text}
+      <div
+        style={{
+          width: 64,
+          height: 64,
+          borderRadius: 16,
+          background: "rgba(6, 182, 212, 0.06)",
+          border: "1px solid rgba(6, 182, 212, 0.12)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 28,
+          marginBottom: 20,
+          color: "#64748b",
+        }}
+      >
+        {icon || <EmptyStateIcon />}
+      </div>
+      <div
+        style={{
+          fontSize: 15,
+          fontWeight: 500,
+          color: "#e2e8f0",
+          marginBottom: 8,
+          letterSpacing: "0.01em",
+        }}
+      >
+        {text}
+      </div>
+      {cta && (
+        <button
+          onClick={onAction}
+          style={{
+            marginTop: 16,
+            borderRadius: 8,
+            border: "1px solid rgba(6, 182, 212, 0.5)",
+            background: "rgba(6, 182, 212, 0.1)",
+            color: "#06b6d4",
+            fontFamily: "monospace",
+            fontSize: "0.8rem",
+            fontWeight: 600,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            padding: "10px 20px",
+            cursor: "pointer",
+            transition: "all 0.18s ease",
+          }}
+        >
+          {cta}
+        </button>
+      )}
     </div>
   );
 }

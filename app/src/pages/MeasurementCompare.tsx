@@ -15,7 +15,7 @@ import {
   toTitleCase,
 } from "./commandCenterUi";
 
-const ACCENT = "#a78bfa";
+const ACCENT = "#06b6d4";
 
 const VECTOR_COLORS: Record<string, string> = {
   ReasoningDepth: "#818cf8",

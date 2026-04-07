@@ -2,7 +2,7 @@
 //!
 //! Bridges the `nexus-self-improve` crate into the desktop frontend.
 
-use crate::AppState;
+use crate::{AppState, SYSTEM_UUID};
 use nexus_self_improve::envelope::BehavioralEnvelope;
 use nexus_self_improve::guardian::SimplexGuardian;
 use nexus_self_improve::invariants::{HardInvariant, InvariantCheckState};
@@ -305,7 +305,7 @@ pub(crate) fn self_improve_approve_proposal(
     {
         let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
         let _ = audit.append_event(
-            uuid::Uuid::nil(),
+            SYSTEM_UUID,
             nexus_kernel::audit::EventType::StateChange,
             json!({
                 "type": "self_improvement_applied",
@@ -341,7 +341,7 @@ pub(crate) fn self_improve_reject_proposal(
     {
         let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
         let _ = audit.append_event(
-            uuid::Uuid::nil(),
+            SYSTEM_UUID,
             nexus_kernel::audit::EventType::UserAction,
             json!({
                 "type": "self_improvement_rejected",
@@ -386,7 +386,7 @@ pub(crate) fn self_improve_rollback(
     {
         let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
         let _ = audit.append_event(
-            uuid::Uuid::nil(),
+            SYSTEM_UUID,
             nexus_kernel::audit::EventType::StateChange,
             json!({
                 "type": "self_improvement_rolled_back",
@@ -490,7 +490,7 @@ pub(crate) fn self_improve_force_baseline(state: &AppState) -> Result<serde_json
     {
         let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
         let _ = audit.append_event(
-            uuid::Uuid::nil(),
+            SYSTEM_UUID,
             nexus_kernel::audit::EventType::StateChange,
             json!({
                 "type": "guardian_force_baseline",
@@ -518,7 +518,7 @@ pub(crate) fn self_improve_promote_baseline(state: &AppState) -> Result<(), Stri
     {
         let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
         let _ = audit.append_event(
-            uuid::Uuid::nil(),
+            SYSTEM_UUID,
             nexus_kernel::audit::EventType::StateChange,
             json!({ "type": "guardian_promote_baseline" }),
         );

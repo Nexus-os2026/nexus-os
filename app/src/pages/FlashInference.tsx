@@ -443,14 +443,14 @@ export default function FlashInference() {
     <div style={{ display:"flex", flexDirection:"column", flex:"1 1 auto", minHeight:0, width:"100%", overflow:"hidden", background:"#080e1a" }}>
       {/* Header bar */}
       <div style={{ flexShrink:0, minHeight:"48px", display:"flex", alignItems:"center", gap:"10px", padding:"0 16px", background:"#0a1628", borderBottom:"1px solid #1e3a5f" }}>
-        <span style={{ color:"#5eead4", fontSize:"14px", fontWeight:600, whiteSpace:"nowrap" }}>⚡ Flash Inference</span>
+        <span style={{ color:"#5eead4", fontSize:"14px", fontWeight:600, whiteSpace:"nowrap", display:"inline-flex", alignItems:"center", gap:"6px" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5eead4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Flash Inference</span>
 
         {/* Loaded model pills */}
         {slots.map(slot => (
           <span key={slot.tier} style={{ display:"inline-flex", alignItems:"center", gap:"6px", background:"#0d1117", border:`1px solid ${TIER_COLORS[slot.tier]}`, borderRadius:"12px", padding:"3px 10px", fontSize:"11px", color: TIER_COLORS[slot.tier] }}>
             <span style={{ fontWeight:600, textTransform:"uppercase", fontSize:"9px", opacity:0.7 }}>{TIER_LABELS[slot.tier]}</span>
             <span style={{ color:"#e5e7eb", maxWidth:"140px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{slot.name}</span>
-            <button onClick={() => handleUnloadSlot(slot.tier)} style={{ background:"none", border:"none", color:"#f87171", cursor:"pointer", fontSize:"12px", padding:0, lineHeight:1 }}>✕</button>
+            <button onClick={() => handleUnloadSlot(slot.tier)} style={{ background:"none", border:"none", color:"#f87171", cursor:"pointer", fontSize:"12px", padding:0, lineHeight:1 }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
           </span>
         ))}
 
@@ -573,14 +573,14 @@ export default function FlashInference() {
       <div ref={chatRef} style={{ flex:1, minHeight:0, overflowY:"auto", padding:"16px", display:"flex", flexDirection:"column", gap:"12px" }}>
         {!hasAnyModel && messages.length === 0 && (
           <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", color:"#6b7280", fontSize:"14px", gap:"12px" }}>
-            <span style={{ fontSize:"40px", opacity:0.3 }}>⚡</span>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3 }}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
             <span>Load models to start chatting.</span>
             <span style={{ fontSize:"12px", color:"#4b5563" }}>Load a Fast model for quick answers, Balanced for medium tasks, Max Power for deep reasoning.</span>
           </div>
         )}
         {hasAnyModel && messages.length === 0 && !generating && (
           <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", color:"#6b7280", fontSize:"14px", gap:"12px" }}>
-            <span style={{ fontSize:"40px", opacity:0.3 }}>⚡</span>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3 }}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
             <span>{slots.length === 1 ? "Model loaded." : `${slots.length} models loaded.`} Type a message to begin.</span>
             {slots.length > 1 && mode === "auto" && <span style={{ fontSize:"12px", color:"#4b5563" }}>Auto mode routes to the best model for each question.</span>}
           </div>
@@ -624,7 +624,7 @@ export default function FlashInference() {
       {error && (
         <div style={{ flexShrink:0, padding:"8px 16px", background:"#2d1b1b", borderTop:"1px solid #5f2020", color:"#f87171", fontSize:"12px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <span>{error}</span>
-          <button onClick={() => setError("")} style={{ background:"none", border:"none", color:"#f87171", cursor:"pointer", fontSize:"14px" }}>✕</button>
+          <button onClick={() => setError("")} style={{ background:"none", border:"none", color:"#f87171", cursor:"pointer", fontSize:"14px" }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
         </div>
       )}
 

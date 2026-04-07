@@ -48,6 +48,8 @@ interface BuildPlanCardProps {
   onApprove: (brief: ProductBrief, criteria: AcceptanceCriteria) => void;
   onCancel: () => void;
   disabled?: boolean;
+  /** Overrides the LLM-generated estimated_cost with the actual configured model cost */
+  buildCostLabel?: string;
 }
 
 export default function BuildPlanCard({
@@ -59,6 +61,7 @@ export default function BuildPlanCard({
   onApprove,
   onCancel,
   disabled,
+  buildCostLabel,
 }: BuildPlanCardProps) {
   const [editing, setEditing] = useState(false);
   const [editBrief, setEditBrief] = useState<ProductBrief>({ ...brief });
@@ -377,7 +380,7 @@ export default function BuildPlanCard({
 
       {/* Estimates */}
       <div style={{ display: "flex", gap: 16, marginBottom: 12, fontSize: 10, color: C.dim }}>
-        <span>Est. build cost: <span style={{ fontFamily: C.mono, color: C.muted }}>{activeBrief.estimated_cost}</span></span>
+        <span>Est. build cost: <span style={{ fontFamily: C.mono, color: C.muted }}>{buildCostLabel || activeBrief.estimated_cost}</span></span>
         <span>Est. time: <span style={{ fontFamily: C.mono, color: C.muted }}>{activeBrief.estimated_time}</span></span>
       </div>
 

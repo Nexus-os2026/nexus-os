@@ -67,13 +67,56 @@ export default function AdminDashboard() {
   }
 
   if (error || !overview) {
+    const demoMetrics = [
+      { label: "Total Agents", value: "—", sub: "— active" },
+      { label: "Users", value: "—", sub: "— online" },
+      { label: "Workspaces", value: "—" },
+      { label: "Fuel (24h)", value: "—" },
+      { label: "HITL Pending", value: "—" },
+      { label: "Security Events", value: "—" },
+    ];
     return (
       <div className="admin-shell">
         <h1>Admin Console</h1>
-        <p className="admin-subtitle" style={{ color: "var(--nexus-danger)" }}>
-          {error ?? "No data available"}
-        </p>
-        <button className="admin-btn" onClick={refresh}>Retry</button>
+        <p className="admin-subtitle">System-wide health, metrics, and management</p>
+        <div className="admin-metrics">
+          {demoMetrics.map(m => (
+            <div className="admin-metric" key={m.label}>
+              <span className="admin-metric__label">{m.label}</span>
+              <span className="admin-metric__value" style={{ color: "#334155" }}>{m.value}</span>
+              {m.sub && <span className="admin-metric__sub" style={{ color: "#1e293b" }}>{m.sub}</span>}
+            </div>
+          ))}
+        </div>
+        <div className="admin-grid-2">
+          <div className="admin-card">
+            <div className="admin-card__title">System Health</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
+              {["CPU", "Memory", "Disk"].map(l => (
+                <div key={l}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", marginBottom: "0.25rem" }}>
+                    <span style={{ color: "var(--text-secondary, #94a3b8)" }}>{l}</span>
+                    <span style={{ color: "#334155" }}>—</span>
+                  </div>
+                  <div className="admin-bar"><div className="admin-bar__fill admin-bar__fill--ok" style={{ width: "0%" }} /></div>
+                </div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "#475569" }}>
+                <span>Status: <span style={{ color: "#475569" }}>Offline</span></span>
+                <span>Uptime: —</span>
+              </div>
+            </div>
+          </div>
+          <div className="admin-card">
+            <div className="admin-card__title">Connection Status</div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem 1rem", textAlign: "center" }}>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: "rgba(6, 182, 212, 0.06)", border: "1px solid rgba(6, 182, 212, 0.12)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+              <p style={{ fontSize: 14, color: "#e2e8f0", marginBottom: 6 }}>Desktop runtime required</p>
+              <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16, lineHeight: 1.5 }}>Connect to the Nexus OS kernel for live fleet monitoring, health checks, and system metrics.</p>
+              <button className="admin-btn" onClick={refresh}>Retry Connection</button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

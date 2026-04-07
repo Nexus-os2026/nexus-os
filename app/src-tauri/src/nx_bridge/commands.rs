@@ -388,6 +388,275 @@ pub async fn nx_switch_provider(
     })
 }
 
+// ─── Computer Use Response Types ───
+
+#[derive(Debug, Serialize)]
+pub struct NxScreenshot {
+    pub base64: String,
+    pub width: u32,
+    pub height: u32,
+    pub backend: String,
+    pub file_size_bytes: usize,
+    pub audit_hash: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ComputerUseStatus {
+    pub display_server: Option<String>,
+    pub capture_tool: Option<String>,
+    pub input_tool: Option<String>,
+    pub capture_ready: bool,
+    pub input_ready: bool,
+    pub safety_guard_active: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AgentRunResult {
+    pub task: String,
+    pub completed: bool,
+    pub summary: String,
+    pub steps_executed: u32,
+    pub fuel_consumed: u64,
+    pub total_duration_ms: u64,
+    pub audit_hash: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AppGrantInfo {
+    pub id: String,
+    pub app_wm_class: String,
+    pub app_category: String,
+    pub grant_level: String,
+    pub permissions: Vec<String>,
+    pub granted_at: String,
+    pub revoked: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PatternInfo {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub trigger: String,
+    pub success_count: u32,
+    pub failure_count: u32,
+    pub confidence: f32,
+    pub last_used: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LearningStats {
+    pub pattern_count: usize,
+    pub memory_entries: usize,
+    pub total_fuel_consumed: u64,
+    pub avg_success_rate: f32,
+}
+
+// ─── Computer Use Commands ───
+
+/// Take a screenshot via the governed computer-use pipeline.
+#[command]
+pub async fn nx_computer_use_screenshot() -> Result<NxScreenshot, String> {
+    let opts = nexus_computer_use::capture::ScreenshotOptions::default();
+    let shot = nexus_computer_use::capture::screenshot::take_screenshot(opts)
+        .await
+        .map_err(|e| format!("Screenshot failed: {}", e))?;
+
+    Ok(NxScreenshot {
+        base64: shot.base64,
+        width: shot.width,
+        height: shot.height,
+        backend: shot.backend,
+        file_size_bytes: shot.file_size_bytes,
+        audit_hash: shot.audit_hash,
+    })
+}
+
+/// Check computer-use system readiness: display server, capture, input.
+#[command]
+pub async fn nx_computer_use_status() -> Result<ComputerUseStatus, String> {
+    let reqs = nexus_computer_use::capability::check_system_requirements();
+    Ok(ComputerUseStatus {
+        display_server: reqs.display_server,
+        capture_tool: reqs.capture_tool,
+        input_tool: reqs.input_tool,
+        capture_ready: reqs.all_capture_ready,
+        input_ready: reqs.all_input_ready,
+        safety_guard_active: true, // always active when computer-use is loaded
+    })
+}
+
+/// Run the full computer-use agent loop, streaming progress via events.
+#[command]
+pub async fn nx_agent_run(
+    task: String,
+    auto_approve: bool,
+    max_steps: Option<u32>,
+    app_handle: AppHandle,
+    state: State<'_, NxState>,
+) -> Result<AgentRunResult, String> {
+    if state.is_running.load(std::sync::atomic::Ordering::Relaxed) {
+        return Err("Agent is already running. Cancel the current run first.".to_string());
+    }
+    state
+        .is_running
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+
+    let is_running = state.is_running.clone();
+    let handle = app_handle.clone();
+
+    let config = nexus_computer_use::agent::AgentConfig {
+        task: task.clone(),
+        max_steps: max_steps.unwrap_or(20),
+        confidence_threshold: 0.6_f64,
+        require_user_approval: !auto_approve,
+        dry_run: false,
+        screenshot_max_width: Some(1280),
+        session: None,
+    };
+
+    let result = tokio::spawn(async move {
+        let run_result = run_computer_use_agent(config, handle.clone()).await;
+        is_running.store(false, std::sync::atomic::Ordering::Relaxed);
+        run_result
+    })
+    .await
+    .map_err(|e| format!("Agent task panicked: {}", e))?;
+
+    result
+}
+
+/// Approve or deny a pending HITL consent request during an agent run.
+#[command]
+pub async fn nx_agent_approve(
+    request_id: String,
+    approved: bool,
+    state: State<'_, NxState>,
+) -> Result<(), String> {
+    // Re-use the existing consent infrastructure
+    let mut consents = state.pending_consents.lock().await;
+    if let Some(pending) = consents.remove(&request_id) {
+        pending
+            .response_tx
+            .send(approved)
+            .map_err(|_| "Approval channel closed".to_string())?;
+        Ok(())
+    } else {
+        Err(format!("No pending approval with ID: {}", request_id))
+    }
+}
+
+/// List current app grants with categories.
+#[command]
+pub async fn nx_app_grants() -> Result<Vec<AppGrantInfo>, String> {
+    let manager = nexus_computer_use::governance::AppGrantManager::new();
+    let grants: Vec<AppGrantInfo> = manager
+        .active_grants()
+        .into_iter()
+        .map(|g| AppGrantInfo {
+            id: g.id.clone(),
+            app_wm_class: g.app_wm_class.clone(),
+            app_category: format!("{:?}", g.app_category),
+            grant_level: format!("{}", g.grant_level),
+            permissions: g.permissions.iter().map(|p| format!("{:?}", p)).collect(),
+            granted_at: g.granted_at.to_rfc3339(),
+            revoked: g.revoked,
+        })
+        .collect();
+    Ok(grants)
+}
+
+/// List learned UI patterns.
+#[command]
+pub async fn nx_learned_patterns() -> Result<Vec<PatternInfo>, String> {
+    let mut library = nexus_computer_use::learning::PatternLibrary::with_default_path();
+    library
+        .load()
+        .map_err(|e| format!("Failed to load patterns: {}", e))?;
+
+    let patterns: Vec<PatternInfo> = library
+        .patterns()
+        .iter()
+        .map(|p| PatternInfo {
+            id: p.id.clone(),
+            name: p.name.clone(),
+            description: p.description.clone(),
+            trigger: p.trigger.clone(),
+            success_count: p.success_count,
+            failure_count: p.failure_count,
+            confidence: p.confidence,
+            last_used: p.last_used.to_rfc3339(),
+        })
+        .collect();
+    Ok(patterns)
+}
+
+/// Learning statistics: pattern count, memory entries, total fuel, success rate.
+#[command]
+pub async fn nx_learning_stats() -> Result<LearningStats, String> {
+    let mut library = nexus_computer_use::learning::PatternLibrary::with_default_path();
+    library.load().ok();
+
+    let mut memory = nexus_computer_use::learning::ActionMemory::with_default_path();
+    memory.load().ok();
+
+    let entries = memory.entries();
+    let total_fuel: u64 = entries.iter().map(|e| e.fuel_consumed).sum();
+    let success_count = entries.iter().filter(|e| e.success).count();
+    let avg_success_rate = if entries.is_empty() {
+        0.0
+    } else {
+        success_count as f32 / entries.len() as f32
+    };
+
+    Ok(LearningStats {
+        pattern_count: library.len(),
+        memory_entries: memory.len(),
+        total_fuel_consumed: total_fuel,
+        avg_success_rate,
+    })
+}
+
+// ─── Internal: Computer Use Agent Loop ───
+
+async fn run_computer_use_agent(
+    config: nexus_computer_use::agent::AgentConfig,
+    app_handle: AppHandle,
+) -> Result<AgentRunResult, String> {
+    let max_steps = config.max_steps;
+    let task = config.task.clone();
+
+    // Emit step started
+    let _ = app_handle.emit(
+        "nx:agent:step_started",
+        super::events::NxAgentStepStarted { step: 1, max_steps },
+    );
+
+    let result = nexus_computer_use::agent::loop_controller::run_agent_loop(config)
+        .await
+        .map_err(|e| format!("Agent error: {}", e))?;
+
+    // Emit completion
+    let _ = app_handle.emit(
+        "nx:agent:complete",
+        super::events::NxAgentComplete {
+            summary: result.summary.clone(),
+            steps: result.steps_executed,
+            fuel: result.fuel_consumed,
+        },
+    );
+
+    Ok(AgentRunResult {
+        task,
+        completed: result.completed,
+        summary: result.summary,
+        steps_executed: result.steps_executed,
+        fuel_consumed: result.fuel_consumed,
+        total_duration_ms: result.total_duration_ms,
+        audit_hash: result.audit_hash,
+    })
+}
+
 // ─── Internal: Agent Loop with Event Emission ───
 
 async fn run_agent_with_events(
@@ -412,6 +681,7 @@ async fn run_agent_with_events(
         model_slot: nexus_code::llm::router::ModelSlot::Execution,
         auto_approve_tier2: false,
         auto_approve_tier3: false,
+        computer_use_active: false,
     };
 
     let tool_ctx = nexus_code::tools::ToolContext {

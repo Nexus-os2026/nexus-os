@@ -20,8 +20,8 @@ max_fuel_cost = 500
 `;
 
 const EFFECT_COLORS: Record<string, string> = {
-  Allow: "#00ff9d",
-  Deny: "#ff4444",
+  Allow: "#10b981",
+  Deny: "#ef4444",
 };
 
 export default function PolicyManagement() {
@@ -97,9 +97,9 @@ export default function PolicyManagement() {
   );
 
   return (
-    <div style={{ padding: 32, color: "#e0e0e0", maxWidth: 1100, margin: "0 auto" }}>
-      <h1 style={{ color: "#00ff9d", marginBottom: 8 }}>Policy Management</h1>
-      <p style={{ color: "#888", marginBottom: 24 }}>
+    <div style={{ padding: 24, color: "#f1f5f9", maxWidth: 1100, margin: "0 auto" }}>
+      <h1 style={{ color: "#06b6d4", fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Policy Management</h1>
+      <p style={{ color: "#94a3b8", marginBottom: 24, fontSize: 13 }}>
         Cedar-inspired governance policies. Default-deny; deny overrides allow.
       </p>
 
@@ -111,9 +111,9 @@ export default function PolicyManagement() {
             onClick={() => setTab(t)}
             style={{
               padding: "8px 20px",
-              background: tab === t ? "#00ff9d22" : "#1a1a2e",
-              color: tab === t ? "#00ff9d" : "#888",
-              border: `1px solid ${tab === t ? "#00ff9d44" : "#333"}`,
+              background: tab === t ? "rgba(6,182,212,0.1)" : "rgba(15,23,42,0.7)",
+              color: tab === t ? "#06b6d4" : "#94a3b8",
+              border: `1px solid ${tab === t ? "rgba(6,182,212,0.3)" : "rgba(255,255,255,0.06)"}`,
               borderRadius: 6,
               cursor: "pointer",
               fontWeight: tab === t ? 600 : 400,
@@ -134,9 +134,9 @@ export default function PolicyManagement() {
               onClick={refresh}
               style={{
                 padding: "6px 16px",
-                background: "#1a1a2e",
-                color: "#00ff9d",
-                border: "1px solid #00ff9d44",
+                background: "rgba(6,182,212,0.08)",
+                color: "#06b6d4",
+                border: "1px solid rgba(6,182,212,0.3)",
                 borderRadius: 4,
                 cursor: "pointer",
               }}
@@ -145,15 +145,17 @@ export default function PolicyManagement() {
             </button>
           </div>
           {loading ? (
-            <p style={{ color: "#666" }}>Loading...</p>
+            <p style={{ color: "#64748b" }}>Loading...</p>
           ) : policies.length === 0 ? (
-            <p style={{ color: "#666" }}>
-              No policies loaded. Place .toml files in ~/.nexus/policies/ or use the editor.
-            </p>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "48px 24px", textAlign: "center" }}>
+              <div style={{ width: 56, height: 56, borderRadius: 14, background: "rgba(6,182,212,0.06)", border: "1px solid rgba(6,182,212,0.12)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15h6"/></svg></div>
+              <div style={{ fontSize: 15, color: "#e2e8f0", marginBottom: 8 }}>No policies loaded</div>
+              <div style={{ fontSize: 13, color: "#64748b", maxWidth: 380, lineHeight: 1.5 }}>Place .toml files in ~/.nexus/policies/ or switch to the Editor tab to create one.</div>
+            </div>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ borderBottom: "1px solid #333", color: "#888", textAlign: "left" }}>
+                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#94a3b8", textAlign: "left" }}>
                   <th style={{ padding: "8px 12px" }}>ID</th>
                   <th style={{ padding: "8px 12px" }}>Description</th>
                   <th style={{ padding: "8px 12px" }}>Effect</th>
@@ -165,8 +167,8 @@ export default function PolicyManagement() {
                 {policies
                   .sort((a, b) => b.priority - a.priority)
                   .map((p) => (
-                    <tr key={p.policy_id} style={{ borderBottom: "1px solid #222" }}>
-                      <td style={{ padding: "8px 12px", fontFamily: "monospace", color: "#7ecbff" }}>
+                    <tr key={p.policy_id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                      <td style={{ padding: "8px 12px", fontFamily: "monospace", color: "#06b6d4" }}>
                         {p.policy_id}
                       </td>
                       <td style={{ padding: "8px 12px" }}>{p.description}</td>
@@ -199,7 +201,7 @@ export default function PolicyManagement() {
               minHeight: 300,
               background: "#0d0d1a",
               color: "#c8e6c9",
-              border: "1px solid #333",
+              border: "1px solid rgba(255,255,255,0.06)",
               borderRadius: 6,
               padding: 16,
               fontFamily: "'Fira Code', 'Cascadia Code', monospace",
@@ -214,9 +216,9 @@ export default function PolicyManagement() {
               onClick={handleValidate}
               style={{
                 padding: "8px 20px",
-                background: "#00ff9d22",
-                color: "#00ff9d",
-                border: "1px solid #00ff9d44",
+                background: "#10b98122",
+                color: "#10b981",
+                border: "1px solid #10b98144",
                 borderRadius: 4,
                 cursor: "pointer",
               }}
@@ -229,10 +231,10 @@ export default function PolicyManagement() {
               style={{
                 marginTop: 12,
                 padding: 12,
-                background: validateOk ? "#00ff9d11" : "#ff444411",
-                border: `1px solid ${validateOk ? "#00ff9d33" : "#ff444433"}`,
+                background: validateOk ? "#10b98111" : "#ef444411",
+                border: `1px solid ${validateOk ? "#10b98133" : "#ef444433"}`,
                 borderRadius: 4,
-                color: validateOk ? "#00ff9d" : "#ff4444",
+                color: validateOk ? "#10b981" : "#ef4444",
                 fontFamily: "monospace",
                 fontSize: 13,
               }}
@@ -247,12 +249,12 @@ export default function PolicyManagement() {
       {tab === "test" && (
         <div>
           <h2 style={{ marginTop: 0 }}>Dry-Run Policy Test</h2>
-          <p style={{ color: "#888", marginBottom: 16 }}>
+          <p style={{ color: "#94a3b8", marginBottom: 16 }}>
             Evaluate the editor TOML against a simulated request.
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
             <div>
-              <label style={{ color: "#888", fontSize: 12 }}>Principal</label>
+              <label style={{ color: "#94a3b8", fontSize: 12 }}>Principal</label>
               <input
                 value={testPrincipal}
                 onChange={(e) => setTestPrincipal(e.target.value)}
@@ -261,14 +263,14 @@ export default function PolicyManagement() {
                   padding: "8px 12px",
                   background: "#0d0d1a",
                   color: "#e0e0e0",
-                  border: "1px solid #333",
+                  border: "1px solid rgba(255,255,255,0.06)",
                   borderRadius: 4,
                   fontFamily: "monospace",
                 }}
               />
             </div>
             <div>
-              <label style={{ color: "#888", fontSize: 12 }}>Action</label>
+              <label style={{ color: "#94a3b8", fontSize: 12 }}>Action</label>
               <input
                 value={testAction}
                 onChange={(e) => setTestAction(e.target.value)}
@@ -277,14 +279,14 @@ export default function PolicyManagement() {
                   padding: "8px 12px",
                   background: "#0d0d1a",
                   color: "#e0e0e0",
-                  border: "1px solid #333",
+                  border: "1px solid rgba(255,255,255,0.06)",
                   borderRadius: 4,
                   fontFamily: "monospace",
                 }}
               />
             </div>
             <div>
-              <label style={{ color: "#888", fontSize: 12 }}>Resource</label>
+              <label style={{ color: "#94a3b8", fontSize: 12 }}>Resource</label>
               <input
                 value={testResource}
                 onChange={(e) => setTestResource(e.target.value)}
@@ -293,7 +295,7 @@ export default function PolicyManagement() {
                   padding: "8px 12px",
                   background: "#0d0d1a",
                   color: "#e0e0e0",
-                  border: "1px solid #333",
+                  border: "1px solid rgba(255,255,255,0.06)",
                   borderRadius: 4,
                   fontFamily: "monospace",
                 }}
@@ -304,9 +306,9 @@ export default function PolicyManagement() {
             onClick={handleTest}
             style={{
               padding: "8px 20px",
-              background: "#7ecbff22",
-              color: "#7ecbff",
-              border: "1px solid #7ecbff44",
+              background: "#06b6d422",
+              color: "#06b6d4",
+              border: "1px solid #06b6d444",
               borderRadius: 4,
               cursor: "pointer",
             }}
@@ -319,7 +321,7 @@ export default function PolicyManagement() {
                 marginTop: 16,
                 padding: 16,
                 background: "#0d0d1a",
-                border: "1px solid #333",
+                border: "1px solid rgba(255,255,255,0.06)",
                 borderRadius: 6,
               }}
             >
@@ -327,20 +329,20 @@ export default function PolicyManagement() {
                 <strong>Decision:</strong>{" "}
                 <span
                   style={{
-                    color: testResult.decision === "Allow" ? "#00ff9d" : "#ff4444",
+                    color: testResult.decision === "Allow" ? "#10b981" : "#ef4444",
                     fontWeight: 600,
                   }}
                 >
                   {testResult.decision}
                 </span>
               </p>
-              <p style={{ margin: 0, color: "#888", fontSize: 13 }}>
+              <p style={{ margin: 0, color: "#94a3b8", fontSize: 13 }}>
                 Matched: {testResult.matched_policies.length > 0 ? testResult.matched_policies.join(", ") : "none"}
               </p>
             </div>
           )}
           {testError && (
-            <p style={{ color: "#ff4444", marginTop: 12, fontFamily: "monospace", fontSize: 13 }}>
+            <p style={{ color: "#ef4444", marginTop: 12, fontFamily: "monospace", fontSize: 13 }}>
               {testError}
             </p>
           )}
@@ -352,7 +354,7 @@ export default function PolicyManagement() {
         <div>
           <h2 style={{ marginTop: 0 }}>Policy Conflicts</h2>
           {conflicts.length === 0 ? (
-            <p style={{ color: "#00ff9d" }}>No conflicts detected.</p>
+            <p style={{ color: "#10b981" }}>No conflicts detected.</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {conflicts.map((c, i) => (
@@ -360,8 +362,8 @@ export default function PolicyManagement() {
                   key={i}
                   style={{
                     padding: 16,
-                    background: "#ff444411",
-                    border: "1px solid #ff444433",
+                    background: "#ef444411",
+                    border: "1px solid #ef444433",
                     borderRadius: 6,
                   }}
                 >

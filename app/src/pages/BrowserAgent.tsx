@@ -103,7 +103,9 @@ export default function BrowserAgent() {
                 {a.name}
               </button>
             ))}
-            {agents.length === 0 && <span style={commandMutedStyle}>No agents available</span>}
+            {agents.length === 0 && (
+              <EmptyState icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>} text="No agents available. Create an L3+ agent to start browser automation." />
+            )}
           </div>
         </Panel>
       ) : (

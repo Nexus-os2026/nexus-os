@@ -57,6 +57,7 @@ nexus-migrate = { path = "../../crates/nexus-migrate" }
 nexus-crypto = { path = "../../crates/nexus-crypto" }
 nexus-self-improve = { path = "../../crates/nexus-self-improve" }
 nexus-code = { path = "../../nexus-code" }
+nexus-computer-use = { path = "../../crates/nexus-computer-use" }
 dirs = "5"
 zip = { version = "1.1", default-features = false, features = ["deflate"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -67,6 +68,7 @@ uuid = { version = "1.10", features = ["v4", "serde"] }
 sysinfo = "0.32"
 rusqlite = { version = "0.31", features = ["bundled"] }
 sha2 = "0.10"
+hex = "0.4"
 chrono = "0.4"
 tokio = { version = "1", features = ["rt", "sync", "time"] }
 tokio-util = { version = "0.7", features = ["rt"] }

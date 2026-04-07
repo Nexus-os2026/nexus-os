@@ -24,8 +24,8 @@ import {
   toTitleCase,
 } from "./commandCenterUi";
 
-const ACCENT = "#a78bfa";
-const ACCENT2 = "#6366f1";
+const ACCENT = "#06b6d4";
+const ACCENT2 = "#0891b2";
 
 interface BatterySummary {
   vector: string;

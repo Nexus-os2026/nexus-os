@@ -309,7 +309,7 @@ export default function ComputerControl(): JSX.Element {
 
       {mode === 'live' && !enabled && (
         <div style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, padding: 20, marginBottom: 16, textAlign: "center" }}>
-          <h3 style={{ margin: "0 0 8px", fontSize: "0.95rem" }}>⚠️ Live Mode</h3>
+          <h3 style={{ margin: "0 0 8px", fontSize: "0.95rem", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Live Mode</h3>
           <p style={{ margin: "0 0 12px", fontSize: "0.8rem", opacity: 0.7, lineHeight: 1.5 }}>
             Live mode lets agents control your mouse and keyboard. Everything is governed — fuel limits, HITL approval on dangerous actions, full audit trail.
             Press ESC 3 times to force-stop.
@@ -339,13 +339,13 @@ export default function ComputerControl(): JSX.Element {
             <div className="rounded-2xl border border-cyan-500/15 bg-slate-950/50 p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-cyan-300/50">Status</p>
               <pre className="mt-3 whitespace-pre-wrap text-xs text-cyan-100/65">
-                {JSON.stringify(status, null, 2)}
+                {status ? JSON.stringify(status, null, 2) : "Not connected — desktop runtime required."}
               </pre>
             </div>
             <div className="rounded-2xl border border-cyan-500/15 bg-slate-950/50 p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-cyan-300/50">Input Limits</p>
               <pre className="mt-3 whitespace-pre-wrap text-xs text-cyan-100/65">
-                {JSON.stringify(inputStatus, null, 2)}
+                {inputStatus ? JSON.stringify(inputStatus, null, 2) : "Not connected — desktop runtime required."}
               </pre>
             </div>
           </div>

@@ -322,6 +322,79 @@ export function getAvailableProviders(): Promise<AvailableProvider[]> {
   return invokeDesktop<AvailableProvider[]>("get_available_providers");
 }
 
+export interface ClaudeCodeCliStatus {
+  installed: boolean;
+  version: string | null;
+  authenticated: boolean;
+  binary_path: string | null;
+}
+
+export function detectClaudeCodeCli(): Promise<ClaudeCodeCliStatus> {
+  return invokeDesktop<ClaudeCodeCliStatus>("detect_claude_code_cli");
+}
+
+export function triggerClaudeCodeLogin(): Promise<string> {
+  return invokeDesktop<string>("trigger_claude_code_login");
+}
+
+export interface CodexCliCliStatus {
+  installed: boolean;
+  version: string | null;
+  authenticated: boolean;
+  binary_path: string | null;
+  /** How the user authenticated: "chatgpt", "openai", "apikey", or null */
+  auth_mode: string | null;
+}
+
+export function detectCodexCli(): Promise<CodexCliCliStatus> {
+  return invokeDesktop<CodexCliCliStatus>("detect_codex_cli");
+}
+
+export function triggerCodexCliLogin(): Promise<string> {
+  return invokeDesktop<string>("trigger_codex_cli_login");
+}
+
+// ── LLM Provider Settings Persistence ──
+
+export interface ApiProviderSetting {
+  id: string;
+  enabled: boolean;
+  has_key: boolean;
+}
+
+export interface CliProviderSetting {
+  id: string;
+  enabled: boolean;
+  installed: boolean;
+  authenticated: boolean;
+  version: string | null;
+  binary_path: string | null;
+  last_detected: string;
+  /** How the user authenticated (codex only): "chatgpt", "openai", "apikey", or null */
+  auth_mode?: string | null;
+}
+
+export interface LlmProviderSettings {
+  api_providers: ApiProviderSetting[];
+  cli_providers: CliProviderSetting[];
+}
+
+export function loadLlmProviderSettings(): Promise<LlmProviderSettings> {
+  return invokeDesktop<LlmProviderSettings>("load_llm_provider_settings");
+}
+
+export function saveLlmProviderSettings(settings: LlmProviderSettings): Promise<void> {
+  return invokeDesktop<void>("save_llm_provider_settings", { settings });
+}
+
+export function detectCliProvider(providerId: string): Promise<CliProviderSetting> {
+  return invokeDesktop<CliProviderSetting>("detect_cli_provider", { providerId });
+}
+
+export function autoDetectAllEnabled(): Promise<LlmProviderSettings> {
+  return invokeDesktop<LlmProviderSettings>("auto_detect_all_enabled");
+}
+
 export function captureScreen(region?: ScreenRegion): Promise<string> {
   return invokeDesktop<string>("capture_screen", { region });
 }
@@ -4382,6 +4455,100 @@ export function nxSwitchProvider(provider: string): Promise<NxGovernanceStatus> 
   return invokeDesktop<NxGovernanceStatus>("nx_switch_provider", { provider });
 }
 
+// ============ NEXUS CODE: COMPUTER USE ============
+
+export interface NxScreenshot {
+  base64: string;
+  width: number;
+  height: number;
+  backend: string;
+  file_size_bytes: number;
+  audit_hash: string;
+}
+
+export interface NxComputerUseStatus {
+  display_server: string | null;
+  capture_tool: string | null;
+  input_tool: string | null;
+  capture_ready: boolean;
+  input_ready: boolean;
+  safety_guard_active: boolean;
+}
+
+export interface NxAgentRunResult {
+  task: string;
+  completed: boolean;
+  summary: string;
+  steps_executed: number;
+  fuel_consumed: number;
+  total_duration_ms: number;
+  audit_hash: string;
+}
+
+export interface NxAppGrantInfo {
+  id: string;
+  app_wm_class: string;
+  app_category: string;
+  grant_level: string;
+  permissions: string[];
+  granted_at: string;
+  revoked: boolean;
+}
+
+export interface NxPatternInfo {
+  id: string;
+  name: string;
+  description: string;
+  trigger: string;
+  success_count: number;
+  failure_count: number;
+  confidence: number;
+  last_used: string;
+}
+
+export interface NxLearningStats {
+  pattern_count: number;
+  memory_entries: number;
+  total_fuel_consumed: number;
+  avg_success_rate: number;
+}
+
+export function nxComputerUseScreenshot(): Promise<NxScreenshot> {
+  return invokeDesktop<NxScreenshot>("nx_computer_use_screenshot");
+}
+
+export function nxComputerUseStatus(): Promise<NxComputerUseStatus> {
+  return invokeDesktop<NxComputerUseStatus>("nx_computer_use_status");
+}
+
+export function nxAgentRun(
+  task: string,
+  autoApprove: boolean,
+  maxSteps?: number,
+): Promise<NxAgentRunResult> {
+  return invokeDesktop<NxAgentRunResult>("nx_agent_run", {
+    task,
+    autoApprove,
+    maxSteps: maxSteps ?? null,
+  });
+}
+
+export function nxAgentApprove(requestId: string, approved: boolean): Promise<void> {
+  return invokeDesktop<void>("nx_agent_approve", { requestId, approved });
+}
+
+export function nxAppGrants(): Promise<NxAppGrantInfo[]> {
+  return invokeDesktop<NxAppGrantInfo[]>("nx_app_grants");
+}
+
+export function nxLearnedPatterns(): Promise<NxPatternInfo[]> {
+  return invokeDesktop<NxPatternInfo[]>("nx_learned_patterns");
+}
+
+export function nxLearningStats(): Promise<NxLearningStats> {
+  return invokeDesktop<NxLearningStats>("nx_learning_stats");
+}
+
 // ============ BUILDER BUDGET ============
 
 export function builderGetBudget(): Promise<any> {
@@ -4445,6 +4612,38 @@ export function builderIterate(projectDir: string, changeRequest: string, model?
 
 // ============ BUILDER PLAN ============
 
+// ============ BUILDER MODEL CONFIG ============
+
+export function builderGetAvailableModels(): Promise<any> {
+  return invokeDesktop<any>("builder_get_available_models");
+}
+
+export function builderGetModelConfig(): Promise<any> {
+  return invokeDesktop<any>("builder_get_model_config");
+}
+
+export function builderSaveModelConfig(config: any): Promise<void> {
+  return invokeDesktop<void>("builder_save_model_config", { configJson: JSON.stringify(config), config_json: JSON.stringify(config) });
+}
+
+export function builderResetModelConfig(): Promise<any> {
+  return invokeDesktop<any>("builder_reset_model_config");
+}
+
+export function builderGetModelChoices(): Promise<any> {
+  return invokeDesktop<any>("builder_get_model_choices");
+}
+
+export function builderCheckCliAuth(cli: "claude" | "codex"): Promise<boolean> {
+  return invokeDesktop<boolean>("builder_check_cli_auth", { cli });
+}
+
+export function builderAuthenticateCli(cli: "claude" | "codex"): Promise<void> {
+  return invokeDesktop<void>("builder_authenticate_cli", { cli });
+}
+
+// ============ BUILDER PLAN ============
+
 export function builderGeneratePlan(prompt: string, projectId: string): Promise<any> {
   return invokeDesktop<any>("builder_generate_plan", { prompt, projectId, project_id: projectId });
 }
@@ -4471,4 +4670,795 @@ export function builderSaveState(projectId: string, stateJson: string): Promise<
 
 export function builderLoadState(projectId: string): Promise<any> {
   return invokeDesktop<any>("builder_load_state", { projectId, project_id: projectId });
+}
+
+export function builderVisualEditToken(
+  projectId: string,
+  layer: number,
+  sectionId: string | null,
+  tokenName: string,
+  value: string,
+): Promise<string> {
+  return invokeDesktop<string>("builder_visual_edit_token", {
+    projectId,
+    layer,
+    sectionId,
+    tokenName,
+    value,
+    project_id: projectId,
+    section_id: sectionId,
+    token_name: tokenName,
+  });
+}
+
+export function builderVisualEditText(
+  projectId: string,
+  sectionId: string,
+  slotName: string,
+  newText: string,
+): Promise<string> {
+  return invokeDesktop<string>("builder_visual_edit_text", {
+    projectId,
+    sectionId,
+    slotName,
+    newText,
+    project_id: projectId,
+    section_id: sectionId,
+    slot_name: slotName,
+    new_text: newText,
+  });
+}
+
+export function builderDevServerStart(projectId: string): Promise<string> {
+  return invokeDesktop<string>("builder_dev_server_start", { projectId, project_id: projectId });
+}
+
+export function builderDevServerStop(projectId: string): Promise<void> {
+  return invokeDesktop<void>("builder_dev_server_stop", { projectId, project_id: projectId });
+}
+
+export function builderDevServerStatus(projectId: string): Promise<{ status: string; url?: string }> {
+  return invokeDesktop<{ status: string; url?: string }>("builder_dev_server_status", { projectId, project_id: projectId });
+}
+
+export function builderDevServerWriteFile(projectId: string, relativePath: string, content: string): Promise<void> {
+  return invokeDesktop<void>("builder_dev_server_write_file", {
+    projectId,
+    relativePath,
+    content,
+    project_id: projectId,
+    relative_path: relativePath,
+  });
+}
+
+// ── Builder Deploy (Phase 7A) ──
+
+export interface DeployResult {
+  deploy_id: string;
+  url: string;
+  provider: string;
+  site_id: string;
+  build_hash: string;
+  duration_ms: number;
+  file_count: number;
+}
+
+export interface SiteInfo {
+  id: string;
+  name: string;
+  url: string;
+  provider: string;
+}
+
+export function builderDeploy(
+  projectId: string,
+  provider: string,
+  siteId?: string,
+  siteName?: string,
+): Promise<DeployResult> {
+  return invokeDesktop<DeployResult>("builder_deploy", {
+    project_id: projectId,
+    provider,
+    site_id: siteId ?? null,
+    site_name: siteName ?? null,
+  });
+}
+
+export function builderDeployRollback(
+  projectId: string,
+  provider: string,
+  siteId: string,
+  deployId: string,
+): Promise<{ deploy_id: string; url: string; provider: string }> {
+  return invokeDesktop("builder_deploy_rollback", {
+    project_id: projectId,
+    provider,
+    site_id: siteId,
+    deploy_id: deployId,
+  });
+}
+
+export function builderDeployStoreCredentials(
+  provider: string,
+  token: string,
+  accountId?: string,
+): Promise<void> {
+  return invokeDesktop<void>("builder_deploy_store_credentials", {
+    provider,
+    token,
+    account_id: accountId ?? null,
+  });
+}
+
+export function builderDeployCheckCredentials(provider: string): Promise<boolean> {
+  return invokeDesktop<boolean>("builder_deploy_check_credentials", { provider });
+}
+
+export function builderDeployListSites(provider: string): Promise<SiteInfo[]> {
+  return invokeDesktop<SiteInfo[]>("builder_deploy_list_sites", { provider });
+}
+
+export function builderBuildStatic(projectId: string): Promise<string> {
+  return invokeDesktop<string>("builder_build_static", { project_id: projectId });
+}
+
+// ── Deploy History (Phase 7B) ──
+
+export interface DeployHistoryEntry {
+  id: string;
+  deploy_id: string;
+  provider: string;
+  site_id: string;
+  url: string;
+  build_hash: string;
+  timestamp: string;
+  status: "Live" | "Superseded" | "RolledBack" | "Failed";
+  quality_score: number | null;
+  file_count: number;
+  total_bytes: number;
+  cost: number;
+  model_attribution: string[];
+  files_manifest: { path: string; hash: string; size: number }[];
+  signature: string | null;
+}
+
+export interface DeployDiffResult {
+  from_id: string;
+  to_id: string;
+  added: string[];
+  removed: string[];
+  modified: string[];
+  unchanged: number;
+  from_hash: string;
+  to_hash: string;
+}
+
+export interface ShareInfo {
+  url: string;
+  qr_svg: string;
+  provider: string;
+  deployed_at: string;
+  build_hash: string;
+  is_current: boolean;
+}
+
+export function builderDeployHistory(projectId: string): Promise<DeployHistoryEntry[]> {
+  return invokeDesktop<string>("builder_deploy_history", { project_id: projectId })
+    .then((json) => JSON.parse(json));
+}
+
+export function builderDeployDiff(projectId: string, fromId: string, toId: string): Promise<DeployDiffResult> {
+  return invokeDesktop<string>("builder_deploy_diff", {
+    project_id: projectId,
+    from_id: fromId,
+    to_id: toId,
+  }).then((json) => JSON.parse(json));
+}
+
+export function builderDeployRollbackTo(projectId: string, entryId: string): Promise<DeployResult> {
+  return invokeDesktop<string>("builder_deploy_rollback_to", {
+    project_id: projectId,
+    entry_id: entryId,
+  }).then((json) => JSON.parse(json));
+}
+
+export function builderDeployQrCode(url: string): Promise<string> {
+  return invokeDesktop<string>("builder_deploy_qr_code", { url });
+}
+
+export function builderDeployShareInfo(projectId: string): Promise<ShareInfo> {
+  return invokeDesktop<string>("builder_deploy_share_info", { project_id: projectId })
+    .then((json) => JSON.parse(json));
+}
+
+export function builderDeployDrift(projectId: string, currentBuildHash: string): Promise<string> {
+  return invokeDesktop<string>("builder_deploy_drift", {
+    project_id: projectId,
+    current_build_hash: currentBuildHash,
+  });
+}
+
+// ── Builder Self-Improvement (Phase 16) ──
+
+export interface ImprovementStatus {
+  projects_analyzed: number;
+  proposals_pending: number;
+  proposals_applied: number;
+  proposals_rejected: number;
+  proposals_rolled_back: number;
+  defaults_modified: number;
+  store_version: number;
+}
+
+export interface ImprovementProposal {
+  id: string;
+  opportunity_id: string;
+  target: Record<string, unknown>;
+  description: string;
+  before_value: string;
+  after_value: string;
+  evidence_summary: string;
+  confidence: number;
+  reversible: boolean;
+  auto_apply: boolean;
+  status: string;
+}
+
+export interface ValidationResult {
+  passed: boolean;
+  quality_before: number;
+  quality_after: number;
+  conversion_before: number;
+  conversion_after: number;
+  regression_detected: boolean;
+}
+
+export interface AnalysisResult {
+  opportunities: Array<{
+    id: string;
+    target: Record<string, unknown>;
+    description: string;
+    evidence: { metric: string; value: number; sample_size: number; threshold: number };
+    estimated_impact: string;
+  }>;
+  sample_size: number;
+  confidence: number;
+}
+
+export async function builderImprovementStatus(): Promise<ImprovementStatus> {
+  const json = await invokeDesktop<string>("builder_improvement_status", {});
+  return JSON.parse(json);
+}
+
+export async function builderImprovementRunAnalysis(): Promise<AnalysisResult> {
+  const json = await invokeDesktop<string>("builder_improvement_run_analysis", {});
+  return JSON.parse(json);
+}
+
+export async function builderImprovementGetProposals(): Promise<ImprovementProposal[]> {
+  const json = await invokeDesktop<string>("builder_improvement_get_proposals", {});
+  return JSON.parse(json);
+}
+
+export async function builderImprovementValidateProposal(proposalId: string): Promise<ValidationResult> {
+  const json = await invokeDesktop<string>("builder_improvement_validate_proposal", {
+    proposal_id: proposalId,
+  });
+  return JSON.parse(json);
+}
+
+export async function builderImprovementApplyProposal(proposalId: string): Promise<{ applied: boolean; previous_state: string }> {
+  const json = await invokeDesktop<string>("builder_improvement_apply_proposal", {
+    proposal_id: proposalId,
+  });
+  return JSON.parse(json);
+}
+
+export async function builderImprovementRollbackProposal(proposalId: string): Promise<string> {
+  return invokeDesktop<string>("builder_improvement_rollback_proposal", {
+    proposal_id: proposalId,
+  });
+}
+
+export async function builderImprovementResetDefaults(): Promise<string> {
+  return invokeDesktop<string>("builder_improvement_reset_defaults", {});
+}
+
+// ── Builder Quality Critic (Phase 9A) ──
+
+export interface QualityReport {
+  checks: QualityCheckResult[];
+  overall_score: number;
+  overall_pass: boolean;
+  total_issues: number;
+  auto_fixable_count: number;
+  timestamp: string;
+  build_hash: string;
+  signature: string | null;
+}
+
+export interface QualityCheckResult {
+  check_id: string;
+  check_name: string;
+  score: number;
+  max_score: number;
+  issues: QualityIssue[];
+  passed: boolean;
+}
+
+export interface QualityIssue {
+  severity: "Error" | "Warning" | "Info";
+  message: string;
+  section_id: string | null;
+  element: string | null;
+  fix: any | null;
+}
+
+export interface AutoFixResult {
+  fixes_applied: string[];
+  fixes_failed: string[];
+  new_report: QualityReport;
+}
+
+export function builderQualityCheck(projectId: string): Promise<QualityReport> {
+  return invokeDesktop<QualityReport>("builder_quality_check", { project_id: projectId });
+}
+
+export function builderQualityAutoFix(projectId: string, fixIndices: number[]): Promise<AutoFixResult> {
+  return invokeDesktop<AutoFixResult>("builder_quality_auto_fix", {
+    project_id: projectId,
+    fix_indices: fixIndices,
+  });
+}
+
+export function builderQualityAutoFixAll(projectId: string): Promise<AutoFixResult> {
+  return invokeDesktop<AutoFixResult>("builder_quality_auto_fix_all", { project_id: projectId });
+}
+
+// ── Builder Conversion Critic (Phase 9B) ──
+
+export interface ConversionReport {
+  checks: QualityCheckResult[];
+  overall_score: number;
+  overall_pass: boolean;
+  total_issues: number;
+  auto_fixable_count: number;
+  top_recommendation: string;
+  template_context: string;
+}
+
+export function builderConversionCheck(projectId: string): Promise<ConversionReport> {
+  return invokeDesktop<ConversionReport>("builder_conversion_check", { project_id: projectId });
+}
+
+export function builderConversionAutoFix(
+  projectId: string,
+  fixIndices: number[]
+): Promise<{ fixes_applied: string[]; fixes_failed: string[] }> {
+  return invokeDesktop<{ fixes_applied: string[]; fixes_failed: string[] }>(
+    "builder_conversion_auto_fix",
+    { project_id: projectId, fix_indices: fixIndices }
+  );
+}
+
+// ── Builder Collaboration (Phase 14) ──
+
+export interface CollabSession {
+  session_id: string;
+  project_id: string;
+  host_address: string;
+  session_token: string;
+  participants: CollabParticipant[];
+  created_at: string;
+}
+
+export interface CollabParticipant {
+  public_key: string;
+  display_name: string;
+  color: string;
+  role: "Owner" | "Editor" | "Commenter" | "Viewer";
+}
+
+export interface CollabComment {
+  id: string;
+  section_id: string | null;
+  element_path: string | null;
+  author: string;
+  author_name: string;
+  text: string;
+  timestamp: string;
+  resolved: boolean;
+  replies: CollabComment[];
+}
+
+export function builderCollabStartHosting(projectId: string, port?: number): Promise<CollabSession> {
+  return invokeDesktop<CollabSession>("builder_collab_start_hosting", {
+    project_id: projectId,
+    port: port ?? null,
+  });
+}
+
+export function builderCollabJoin(
+  serverUrl: string,
+  sessionToken: string,
+  displayName?: string
+): Promise<{ server_url: string; session_token: string; identity: CollabParticipant }> {
+  return invokeDesktop("builder_collab_join", {
+    server_url: serverUrl,
+    session_token: sessionToken,
+    display_name: displayName ?? null,
+  });
+}
+
+export function builderCollabLeave(projectId: string): Promise<void> {
+  return invokeDesktop("builder_collab_leave", { project_id: projectId });
+}
+
+export function builderCollabInvite(projectId: string, role: string): Promise<string> {
+  return invokeDesktop<string>("builder_collab_invite", {
+    project_id: projectId,
+    role,
+  });
+}
+
+export function builderCollabSetRole(projectId: string, publicKey: string, role: string): Promise<void> {
+  return invokeDesktop("builder_collab_set_role", {
+    project_id: projectId,
+    public_key: publicKey,
+    role,
+  });
+}
+
+export function builderCollabAddComment(
+  projectId: string,
+  sectionId: string | null,
+  text: string
+): Promise<CollabComment> {
+  return invokeDesktop<CollabComment>("builder_collab_add_comment", {
+    project_id: projectId,
+    section_id: sectionId,
+    text,
+  });
+}
+
+export function builderCollabGetComments(
+  projectId: string,
+  sectionId: string | null
+): Promise<CollabComment[]> {
+  return invokeDesktop<CollabComment[]>("builder_collab_get_comments", {
+    project_id: projectId,
+    section_id: sectionId,
+  });
+}
+
+export function builderCollabResolveComment(projectId: string, commentId: string): Promise<void> {
+  return invokeDesktop("builder_collab_resolve_comment", {
+    project_id: projectId,
+    comment_id: commentId,
+  });
+}
+
+// ── Variant Generation (Phase 11) ──
+
+export interface VariantPayload {
+  id: string;
+  label: string;
+  palette_id: string;
+  typography_id: string;
+  assembled_html: string;
+}
+
+export interface VariantSetPayload {
+  variants: VariantPayload[];
+  timestamp: string;
+}
+
+export function builderGenerateVariants(projectId: string, count?: number, offset?: number): Promise<VariantSetPayload> {
+  return invokeDesktop<VariantSetPayload>("builder_generate_variants", {
+    projectId, project_id: projectId,
+    count: count ?? 3,
+    offset: offset ?? 0,
+  });
+}
+
+export function builderGenerateSectionVariants(
+  projectId: string,
+  sectionId: string,
+  variantType: "layout" | "content" | "palette",
+  count?: number,
+): Promise<VariantSetPayload> {
+  return invokeDesktop<VariantSetPayload>("builder_generate_section_variants", {
+    projectId, project_id: projectId,
+    sectionId, section_id: sectionId,
+    variantType, variant_type: variantType,
+    count: count ?? 3,
+  });
+}
+
+export function builderSelectVariant(projectId: string, variantId: string): Promise<void> {
+  return invokeDesktop<void>("builder_select_variant", {
+    projectId, project_id: projectId,
+    variantId, variant_id: variantId,
+  });
+}
+
+// ── Theme Panel (Phase 12) ──
+
+export interface ThemePresetInfo {
+  name: string;
+  primary: string;
+  secondary: string;
+  accent: string;
+  bg: string;
+}
+
+export function builderThemeApply(projectId: string, themeJson: string): Promise<string> {
+  return invokeDesktop<string>("builder_theme_apply", {
+    projectId, project_id: projectId,
+    themeJson, theme_json: themeJson,
+  });
+}
+
+export function builderThemeGetCurrent(projectId: string): Promise<string> {
+  return invokeDesktop<string>("builder_theme_get_current", {
+    projectId, project_id: projectId,
+  });
+}
+
+export function builderThemeExtractFromUrl(url: string): Promise<string> {
+  return invokeDesktop<string>("builder_theme_extract_from_url", { url });
+}
+
+export function builderThemeExport(projectId: string, format: string): Promise<string> {
+  return invokeDesktop<string>("builder_theme_export", {
+    projectId, project_id: projectId,
+    format,
+  });
+}
+
+export function builderThemeImport(content: string, format: string): Promise<string> {
+  return invokeDesktop<string>("builder_theme_import", { content, format });
+}
+
+export function builderThemeListPresets(): Promise<string> {
+  return invokeDesktop<string>("builder_theme_list_presets", {});
+}
+
+export function builderThemeGetPreset(name: string): Promise<string> {
+  return invokeDesktop<string>("builder_theme_get_preset", { name });
+}
+
+// ── Enterprise Trust Pack (Phase 15) ──
+
+export interface TrustPackFile {
+  filename: string;
+  description: string;
+  size_bytes: number;
+}
+
+export interface TrustPackResult {
+  files_generated: TrustPackFile[];
+  signed: boolean;
+  total_files: number;
+}
+
+export interface AuditEvent {
+  id: string;
+  timestamp: string;
+  event_type: string;
+  description: string;
+  details: Record<string, unknown>;
+}
+
+export async function builderGenerateTrustPack(
+  projectId: string,
+): Promise<TrustPackResult> {
+  const json = await invokeDesktop<string>("builder_generate_trust_pack", {
+    project_id: projectId,
+  });
+  return JSON.parse(json);
+}
+
+export async function builderGetAuditTrail(
+  projectId: string,
+  filter?: string,
+  search?: string,
+): Promise<AuditEvent[]> {
+  const json = await invokeDesktop<string>("builder_get_audit_trail", {
+    project_id: projectId,
+    filter: filter ?? null,
+    search: search ?? null,
+  });
+  return JSON.parse(json);
+}
+
+export async function builderExportAuditTrail(
+  projectId: string,
+  format: "csv" | "json",
+): Promise<string> {
+  return invokeDesktop<string>("builder_export_audit_trail", {
+    project_id: projectId,
+    format,
+  });
+}
+
+export async function builderVerifyManifest(
+  manifestJson: string,
+): Promise<boolean> {
+  return invokeDesktop<boolean>("builder_verify_manifest", {
+    manifest_json: manifestJson,
+  });
+}
+
+// ── Image Generation (Phase 13) ──
+
+export interface ImageGenStatus {
+  local_sd_available: boolean;
+  api_available: boolean;
+  placeholder_available: boolean;
+}
+
+export interface GeneratedImage {
+  primary_path: string;
+  srcset_paths: [string, number][];
+  alt_text: string;
+  width: number;
+  height: number;
+  format: "WebP" | "Png" | "Svg";
+  generation_method: string;
+  cost: number;
+}
+
+export async function builderImageGenStatus(): Promise<ImageGenStatus> {
+  const json = await invokeDesktop<string>("builder_image_gen_status", {});
+  return JSON.parse(json);
+}
+
+export async function builderGenerateImage(
+  projectId: string,
+  slotName: string,
+  sectionId: string,
+  prompt?: string,
+): Promise<GeneratedImage> {
+  const json = await invokeDesktop<string>("builder_generate_image", {
+    project_id: projectId,
+    slot_name: slotName,
+    section_id: sectionId,
+    prompt: prompt ?? null,
+  });
+  return JSON.parse(json);
+}
+
+export async function builderGenerateAllImages(
+  projectId: string,
+): Promise<GeneratedImage[]> {
+  const json = await invokeDesktop<string>("builder_generate_all_images", {
+    project_id: projectId,
+  });
+  return JSON.parse(json);
+}
+
+// ── Backend Integration (Phase 8A) ──
+
+export interface BackendGenerationResult {
+  schema: any;
+  migrations: { filename: string; sql: string; description: string }[];
+  rls_migrations: { filename: string; sql: string; description: string }[];
+  files: { path: string; content: string }[];
+  cost_usd: number;
+  schema_hash: string;
+  rls_hash: string;
+}
+
+export function builderBackendConnect(
+  projectId: string,
+  projectUrl: string,
+  anonKey: string,
+  serviceRoleKey?: string,
+): Promise<void> {
+  return invokeDesktop<void>("builder_backend_connect", {
+    project_id: projectId,
+    project_url: projectUrl,
+    anon_key: anonKey,
+    service_role_key: serviceRoleKey,
+  });
+}
+
+export function builderBackendGenerate(
+  projectId: string,
+  description: string,
+): Promise<BackendGenerationResult> {
+  return invokeDesktop<BackendGenerationResult>("builder_backend_generate", {
+    project_id: projectId,
+    description,
+  });
+}
+
+export function builderBackendApply(projectId: string): Promise<void> {
+  return invokeDesktop<void>("builder_backend_apply", { project_id: projectId });
+}
+
+export function builderBackendPreviewSchema(
+  projectId: string,
+  description: string,
+): Promise<any> {
+  return invokeDesktop<any>("builder_backend_preview_schema", {
+    project_id: projectId,
+    description,
+  });
+}
+
+// ── Backend Multi-Provider (Phase 8B) ──
+
+export interface ProviderInfo {
+  id: string;
+  name: string;
+  description: string;
+  requires_credentials: boolean;
+  cost_hint: string;
+}
+
+export function builderBackendListProviders(): Promise<ProviderInfo[]> {
+  return invokeDesktop<ProviderInfo[]>("builder_backend_list_providers", {});
+}
+
+export function builderBackendGenerateV2(
+  projectId: string,
+  provider: string,
+  description: string,
+  config?: string,
+): Promise<BackendGenerationResult> {
+  return invokeDesktop<BackendGenerationResult>("builder_backend_generate_v2", {
+    project_id: projectId,
+    provider,
+    description,
+    config,
+  });
+}
+
+// ── Design Import (Phase 10) ──
+
+export interface DesignImportResult {
+  project_id: string;
+  sections_detected: number;
+  tokens_extracted: number;
+  sanitized_elements_removed: string[];
+  quality_score: number | null;
+  warnings: string[];
+}
+
+export function builderImportDesign(
+  projectId: string,
+  html: string,
+  css?: string,
+  designMd?: string,
+  source?: "stitch" | "figma" | "paste" | "url",
+): Promise<DesignImportResult> {
+  return invokeDesktop<DesignImportResult>("builder_import_design", {
+    project_id: projectId,
+    html,
+    css: css ?? null,
+    design_md: designMd ?? null,
+    source: source ?? "paste",
+  });
+}
+
+export function builderImportRemapSections(
+  projectId: string,
+  sectionMappings: [string, string][],
+): Promise<void> {
+  return invokeDesktop<void>("builder_import_remap_sections", {
+    project_id: projectId,
+    section_mappings: sectionMappings,
+  });
+}
+
+export function builderScaffoldBuild(brief: string, outputMode?: string, projectName?: string): Promise<any> {
+  return invokeDesktop<any>("builder_scaffold_build", {
+    brief,
+    outputMode,
+    projectName,
+    output_mode: outputMode,
+    project_name: projectName,
+  });
 }

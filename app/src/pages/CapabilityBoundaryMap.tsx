@@ -20,7 +20,7 @@ import {
   toTitleCase,
 } from "./commandCenterUi";
 
-const ACCENT = "#a78bfa";
+const ACCENT = "#06b6d4";
 
 const VECTOR_COLORS: Record<string, string> = {
   ReasoningDepth: "#818cf8",
@@ -92,7 +92,24 @@ export default function CapabilityBoundaryMap() {
 
       {uploadResult && <div style={{ background: alpha("#22c55e", 0.1), border: "1px solid #22c55e", borderRadius: 8, padding: 10, marginBottom: 16, color: "#86efac", fontSize: 12 }}>{uploadResult}</div>}
 
-      {boundaries.length === 0 && <EmptyState text="No boundary data yet — run a batch evaluation to generate the capability map." />}
+      {boundaries.length === 0 && (
+        <>
+          <EmptyState icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>} text="No boundary data yet — run a batch evaluation to generate the capability map." />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginTop: 8 }}>
+            {VECTORS.map(v => (
+              <div key={v} style={{ padding: 20, borderRadius: 12, background: alpha("#0f172a", 0.6), border: `1px solid ${alpha(VECTOR_COLORS[v], 0.2)}`, textAlign: "center" }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: VECTOR_COLORS[v], marginBottom: 12 }}>{v.replace(/([A-Z])/g, " $1").trim()}</div>
+                <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                  {LEVELS.map((l, i) => (
+                    <div key={l} style={{ width: 32, height: 20, borderRadius: 4, background: alpha(VECTOR_COLORS[v], 0.06 + i * 0.04), border: `1px solid ${alpha(VECTOR_COLORS[v], 0.1)}` }} />
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: "#475569", marginTop: 8 }}>L1 — L5</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Heatmap */}
       {boundaries.length > 0 && (

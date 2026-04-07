@@ -414,7 +414,7 @@ pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, S
                 Err(poisoned) => poisoned.into_inner(),
             };
             meta_guard.insert(
-                Uuid::parse_str(&pending_agent_id).unwrap_or(Uuid::nil()),
+                Uuid::parse_str(&pending_agent_id).unwrap_or(SYSTEM_UUID),
                 AgentMeta {
                     name: manifest.name.clone(),
                     last_action: "awaiting transcendent review".to_string(),
@@ -437,7 +437,7 @@ pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, S
             "create_new",
         )?;
         state.log_event(
-            Uuid::nil(),
+            SYSTEM_UUID,
             EventType::UserAction,
             json!({
                 "event": "transcendent_creation_requested",
@@ -873,6 +873,12 @@ pub(crate) fn build_provider_config(config: &NexusConfig) -> ProviderSelectionCo
             .ok()
             .or_else(|| non_empty(&config.llm.nvidia_api_key)),
         flash_model_path: std::env::var("FLASH_MODEL_PATH").ok(),
+        claude_code_enabled: std::env::var("CLAUDE_CODE_ENABLED")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false),
+        codex_cli_enabled: std::env::var("CODEX_CLI_ENABLED")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false),
     }
 }
 

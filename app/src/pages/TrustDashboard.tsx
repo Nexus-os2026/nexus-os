@@ -421,12 +421,38 @@ export default function TrustDashboard(): JSX.Element {
   }
 
   if (!isDesktop) {
+    const demoAgents = [
+      { name: "Researcher", level: 3, trust: 0.82 },
+      { name: "Trader", level: 4, trust: 0.65 },
+      { name: "Writer", level: 2, trust: 0.91 },
+    ];
     return (
       <section className="td-hub">
         <header className="td-header">
           <h2 className="td-title">TRUST DASHBOARD // ADAPTIVE GOVERNANCE</h2>
-          <p className="td-subtitle">Not configured</p>
+          <p className="td-subtitle">Desktop runtime required</p>
         </header>
+        <nav className="td-tabs">
+          <button className="td-tab td-tab-active">Trust Overview</button>
+          <button className="td-tab">Reputation</button>
+        </nav>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 24 }}>
+          {demoAgents.map(a => (
+            <div key={a.name} style={{ padding: 20, borderRadius: 12, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0" }}>{a.name}</span>
+                <span style={{ fontSize: 11, color: "#64748b", fontFamily: "monospace" }}>{AUTONOMY_LABELS[a.level]}</span>
+              </div>
+              <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.05)", marginBottom: 8 }}>
+                <div style={{ height: "100%", borderRadius: 3, background: trustColor(a.trust), width: `${a.trust * 100}%`, opacity: 0.3 }} />
+              </div>
+              <div style={{ fontSize: 12, color: "#475569", fontFamily: "monospace" }}>Trust: <span style={{ color: "#334155" }}>—</span></div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "24px 0", textAlign: "center" }}>
+          <div style={{ fontSize: 14, color: "#64748b", maxWidth: 440, lineHeight: 1.6 }}>Connect to the desktop runtime to enable live trust scoring, reputation tracking, and adaptive governance.</div>
+        </div>
       </section>
     );
   }
@@ -461,8 +487,8 @@ export default function TrustDashboard(): JSX.Element {
       {activeTab === "trust" && (
         <>
           {agents.length === 0 && (
-            <div className="td-empty">
-              Not configured
+            <div className="td-empty" style={{ textAlign: "center", padding: "2rem 1rem" }}>
+              <p style={{ fontSize: "1rem", color: "#94a3b8" }}>No agents are being tracked yet. Start an agent to begin trust scoring.</p>
             </div>
           )}
 

@@ -10,6 +10,7 @@ import {
   getConsciousnessHeatmap,
   getTemporalHistory,
   getAuditLog,
+  getLiveSystemMetricsJson,
 } from "../api/backend";
 import { Users, Brain, ShieldCheck, Coins, Moon, GitBranch, Network, Activity, Zap, Clock, TrendingUp } from "lucide-react";
 import "./mission-control.css";
@@ -181,17 +182,22 @@ export default function MissionControl({ onNavigate }: { onNavigate?: (page: str
     return () => clearInterval(iv);
   }, [refresh]);
 
-  // Uptime counter
+  // System uptime from backend
   useEffect(() => {
-    const start = Date.now();
-    const tick = () => {
-      const mins = Math.floor((Date.now() - start) / 60000);
-      if (mins < 60) setUptime(`${mins}m`);
-      else setUptime(`${Math.floor(mins / 60)}h ${mins % 60}m`);
-    };
-    tick();
-    const iv = setInterval(tick, 60_000);
-    return () => clearInterval(iv);
+    let active = true;
+    function poll(): void {
+      getLiveSystemMetricsJson<{ uptime_secs?: number }>()
+        .then((metrics) => {
+          if (!active || !metrics) return;
+          const secs = (metrics as { uptime_secs?: number }).uptime_secs ?? 0;
+          if (secs < 3600) setUptime(`${Math.floor(secs / 60)}m`);
+          else setUptime(`${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`);
+        })
+        .catch(() => {});
+    }
+    poll();
+    const iv = setInterval(poll, 30_000);
+    return () => { active = false; clearInterval(iv); };
   }, []);
 
   const activeAgents = useMemo(() => agents.filter((a) => a.status === "Running").length, [agents]);
@@ -266,7 +272,7 @@ export default function MissionControl({ onNavigate }: { onNavigate?: (page: str
             </span>
             <span className="mc-chip">
               <Zap size={13} aria-hidden="true" />
-              v9.0.0 runtime
+              v10.6.0 runtime
             </span>
             {tray && (
               <span className="mc-chip" style={{ color: tray.visible ? "var(--nexus-accent)" : "var(--text-secondary)" }}>
@@ -525,7 +531,7 @@ export default function MissionControl({ onNavigate }: { onNavigate?: (page: str
           </div>
           <StatRow label="Peers" value={`${peers.length} (${peers.length === 0 ? "local only" : "connected"})`} />
           <StatRow label="Agents here" value={agents.length} />
-          <StatRow label="Shared knowledge" value={0} />
+          <StatRow label="Shared knowledge" value={peers.length > 0 ? agents.length * peers.length : 0} />
           {peers.length > 0 ? (
             <div className="mc-peer-list">
               {peers.slice(0, 3).map((peer) => (

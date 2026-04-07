@@ -38,6 +38,7 @@ import PageErrorBoundary from "./components/PageErrorBoundary";
 import { VoiceOverlay, type VoiceOverlayState } from "./components/VoiceOverlay";
 import { PulseRing } from "./components/viz/PulseRing";
 import LivingBackground from "./components/LivingBackground";
+import { InlineApprovalBanner } from "./components/InlineApprovalBanner";
 import type { ConsentNotification, SystemInfo } from "./types";
 import { Agents } from "./pages/Agents";
 import { Audit } from "./pages/Audit";
@@ -60,6 +61,7 @@ const DeveloperPortal = React.lazy(() => import("./pages/DeveloperPortal"));
 const AgentBrowser = React.lazy(() => import("./pages/AgentBrowser").then(m => ({ default: m.AgentBrowser })));
 const CodeEditor = React.lazy(() => import("./pages/CodeEditor"));
 const NexusCode = React.lazy(() => import("./pages/NexusCode"));
+const NexusCodePage = React.lazy(() => import("./pages/NexusCodePage"));
 const Terminal = React.lazy(() => import("./pages/Terminal"));
 const SchedulerPage = React.lazy(() => import("./pages/Scheduler"));
 const FileManager = React.lazy(() => import("./pages/FileManager"));
@@ -125,6 +127,7 @@ const ExternalToolsPage = React.lazy(() => import("./pages/ExternalTools"));
 const CollaborationPage = React.lazy(() => import("./pages/Collaboration"));
 const NexusBuilderPage = React.lazy(() => import("./pages/NexusBuilder"));
 const MeasurementBatteries = React.lazy(() => import("./pages/MeasurementBatteries"));
+const SoftwareFactory = React.lazy(() => import("./pages/SoftwareFactory"));
 import type {
   AgentStatusEvent,
   AgentSummary,
@@ -165,6 +168,7 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "database", label: "Database", icon: "Database", shortcut: "", section: "DEVELOPER" },
   { id: "developer-portal", label: "Developer Portal", icon: "Code", shortcut: "", section: "DEVELOPER" },
   { id: "deploy-pipeline", label: "Deploy Pipeline", icon: "Rocket", shortcut: "", section: "DEVELOPER" },
+  { id: "software-factory", label: "Software Factory", icon: "Factory", shortcut: "", section: "DEVELOPER" },
   { id: "protocols", label: "Protocols", icon: "Layers", shortcut: "", section: "DEVELOPER" },
   // ── COMMUNICATION ──
   { id: "email-client", label: "Email", icon: "Mail", shortcut: "", section: "COMMUNICATION" },
@@ -193,10 +197,10 @@ const NAV_ITEMS: SidebarItem[] = [
   { id: "browser-agent", label: "Browser Agent", icon: "Globe2", shortcut: "", section: "AGENT LAB" },
   { id: "governance-oracle", label: "Governance Oracle", icon: "ShieldCheck", shortcut: "", section: "AGENT LAB" },
   { id: "token-economy", label: "Token Economy", icon: "Coins", shortcut: "", section: "AGENT LAB" },
-  { id: "governed-control", label: "Computer Control", icon: "Monitor", shortcut: "", section: "AGENT LAB" },
+  { id: "governed-control", label: "Governed Control", icon: "Monitor", shortcut: "", section: "AGENT LAB" },
   { id: "world-sim", label: "World Simulation", icon: "Globe", shortcut: "", section: "AGENT LAB" },
   { id: "perception", label: "Perception", icon: "Eye", shortcut: "", section: "AGENT LAB" },
-  { id: "agent-memory", label: "Agent Memory", icon: "BookOpen", shortcut: "", section: "AGENT LAB" },
+  { id: "agent-memory", label: "Memory Store", icon: "BookOpen", shortcut: "", section: "AGENT LAB" },
   { id: "external-tools", label: "External Tools", icon: "Wrench", shortcut: "", section: "AGENT LAB" },
   { id: "collab-protocol", label: "Collaboration", icon: "Users", shortcut: "", section: "AGENT LAB" },
   { id: "self-rewrite", label: "Self-Rewrite Lab", icon: "Code2", shortcut: "", section: "AGENT LAB" },
@@ -246,7 +250,7 @@ const NAV_ITEMS: SidebarItem[] = [
 ];
 
 const PAGE_ROUTE_OVERRIDES: Partial<Record<Page, string>> = {
-  "mission-control": "/dashboard",
+  "mission-control": "/mission-control",
   "dna-lab": "/dna-lab",
   consciousness: "/consciousness",
   dreams: "/dreams",
@@ -296,19 +300,27 @@ const PAGE_ROUTE_OVERRIDES: Partial<Record<Page, string>> = {
   messaging: "/messaging",
   simulation: "/world-simulation",
   settings: "/settings",
-  dashboard: "/legacy-dashboard",
+  dashboard: "/dashboard",
 };
 
 const ROUTE_TO_PAGE = new Map<string, Page>(
   Object.entries(PAGE_ROUTE_OVERRIDES).map(([page, route]) => [route, page as Page])
 );
 
+const ALL_PAGE_IDS = new Set<string>(NAV_ITEMS.map((item) => item.id));
+
 function pageFromLocation(pathname: string): Page | null {
   const normalized = pathname.replace(/\/+$/, "") || "/";
   if (normalized === "/" || normalized.endsWith("/index.html")) {
     return "mission-control";
   }
-  return ROUTE_TO_PAGE.get(normalized) ?? null;
+  // Check explicit route overrides first
+  const fromMap = ROUTE_TO_PAGE.get(normalized);
+  if (fromMap) return fromMap;
+  // Fall back: treat the path segment as a page ID (e.g. /nexus-builder → "nexus-builder")
+  const candidate = normalized.slice(1);
+  if (ALL_PAGE_IDS.has(candidate)) return candidate as Page;
+  return null;
 }
 
 function routeForPage(page: Page): string {
@@ -316,32 +328,94 @@ function routeForPage(page: Page): string {
 }
 
 const PAGE_SUMMARIES: Partial<Record<Page, string>> = {
+  dashboard: "Live runtime status — agents, system resources, fuel accounting, and audit trail.",
   "mission-control": "System core telemetry, agent constellation, and live governance signals.",
   chat: "Conversational control layer for routing directives through the Nexus runtime.",
   agents: "Entity grid for supervising autonomous agents, permissions, and runtime health.",
   "dna-lab": "Evolution bay for breeding, comparing, and mutating agent genomes.",
   settings: "Control panel for runtime policy, providers, privacy posture, and system tuning.",
+  audit: "Hash-chained governance trail — inspect events, actions, and tamper-proof records.",
   "audit-timeline": "Trace temporal events, decisions, and governance history across the mesh.",
+  workflows: "Automation pipelines — chain agent actions into governed, repeatable workflows.",
   "command-center": "Run direct commands against the governed operating layer.",
   approvals: "Resolve human-in-the-loop requests before protected actions execute.",
   "flash-inference": "Run AI models locally with automatic hardware-aware configuration and streaming chat.",
+  "file-manager": "Browse, upload, and manage files within the governed filesystem.",
+  "code-editor": "Full-featured code editor with syntax highlighting and governed file access.",
+  terminal: "Governed terminal emulator — execute commands within the sandbox boundary.",
+  "system-monitor": "Live CPU, RAM, disk, and process telemetry across the runtime.",
+  documents: "Document management — create, store, and search governed documents.",
+  "model-hub": "Browse, pull, and manage local AI models for agent inference.",
+  "deploy-pipeline": "CI/CD pipeline management — build, test, and deploy governed applications.",
+  "email-client": "Governed email client — read, compose, and automate email workflows.",
+  messaging: "Real-time messaging between users and agents within the mesh.",
+  "media-studio": "Create and edit media assets — images, audio, and video processing.",
+  "app-store": "Browse and install governed agent skills and extensions.",
+  "ai-chat-hub": "Multi-model AI chat — route conversations through any configured provider.",
+  "voice-assistant": "Voice-controlled agent interaction with speech-to-text and text-to-speech.",
+  "developer-portal": "API documentation, SDK guides, and developer tools for extending Nexus OS.",
+  "design-studio": "Visual design tools — layouts, themes, and component prototyping.",
+  notes: "Quick notes and scratchpad for capturing ideas and agent observations.",
+  "project-manager": "Kanban-style project tracking with agent task assignment.",
+  database: "Database browser — query, inspect, and manage structured data stores.",
+  "api-client": "HTTP client for testing and debugging API endpoints.",
+  "learning-center": "Interactive tutorials and guides for mastering Nexus OS.",
   measurement: "Capability measurement framework — evaluate agents across reasoning, planning, adaptation, and tool use.",
+  "measurement-session": "Detailed view of a single measurement session and its results.",
   "measurement-compare": "Side-by-side comparison of agent capability profiles and scorecards.",
   "measurement-batteries": "View locked test batteries, problem sets, and scoring rubrics.",
   "capability-boundaries": "Empirical capability boundary heatmap, calibration status, and gaming detection.",
   "model-routing": "Predictive model routing — selects the optimal LLM based on task difficulty and capability boundaries.",
   "ab-validation": "A/B comparison of fixed vs predictive routing across all agents.",
   "browser-agent": "Governed browser automation via browser-use — capability-gated, economically-metered.",
+  browser: "Web browser for agents — governed, metered, and audit-trailed.",
   "governance-oracle": "Three-layer governance with sealed tokens, timing normalization, and adversarial evolution.",
   "token-economy": "NXC coin economy — agents earn, burn, delegate, and get gated by balance.",
   "governed-control": "Desktop automation with governance gates, token economy, and hash-chained audit trail.",
   "world-sim": "Multi-step action scenario simulation with risk assessment and what-if branching.",
-  "perception": "Multi-modal perception — process screenshots, documents, and images through vision models.",
+  perception: "Multi-modal perception — process screenshots, documents, and images through vision models.",
   "agent-memory": "Persistent agent memory — episodic, semantic, procedural, relational memory across sessions.",
+  "memory-dashboard": "Agent memory overview — episodic, semantic, and procedural memory browser.",
   "external-tools": "Governed external tool integrations — GitHub, Slack, Jira, search, webhooks, databases.",
   "collab-protocol": "Multi-agent collaboration — debate, review, brainstorm, vote, and converge on decisions.",
   "nexus-builder": "Build websites with AI — describe what you want, preview live, iterate with changes, deploy.",
+  "nexus-code": "Governed terminal coding agent — autonomous code generation and editing.",
   "software-factory": "Autonomous SDLC pipeline — agents handle requirements, architecture, implementation, testing, and deployment.",
+  "self-rewrite": "Agent self-modification lab — governed code evolution and mutation testing.",
+  "self-improvement": "Continuous agent improvement — performance tracking and optimization.",
+  consciousness: "Monitor agent cognitive states — confidence, fatigue, curiosity, and flow.",
+  dreams: "DreamForge — overnight agent evolution, pre-solving, and strategy generation.",
+  temporal: "Temporal engine — timeline forking, what-if analysis, and decision rollback.",
+  civilization: "Multi-agent civilization simulation — economy, governance, and emergent behavior.",
+  simulation: "Scenario sandbox — run governed simulations with risk assessment.",
+  "computer-control": "Desktop automation — governed mouse, keyboard, and screen interaction.",
+  firewall: "Output firewall — content filtering, PII redaction, and safety gates.",
+  compliance: "Compliance dashboard — EU AI Act, audit readiness, and policy adherence.",
+  trust: "Trust scoring — agent reputation, reliability metrics, and trust decay.",
+  permissions: "Permission manager — capability grants, risk levels, and access control.",
+  "policy-management": "Policy editor — define and enforce governance rules across agents.",
+  "distributed-audit": "Distributed hash-chain audit — cross-node verification and tamper detection.",
+  protocols: "Agent communication protocols — A2A messaging, schemas, and routing.",
+  identity: "Cryptographic identity — Ed25519 keys, mesh peering, and agent attestation.",
+  integrations: "External service integrations — connect APIs, webhooks, and third-party tools.",
+  login: "Authentication and session management for multi-user access.",
+  workspaces: "Workspace management — isolated environments for teams and projects.",
+  "admin-console": "Admin dashboard — system-wide health, metrics, and management.",
+  "admin-users": "User administration — roles, permissions, and access control.",
+  "admin-fleet": "Fleet management — monitor and control distributed agent instances.",
+  "admin-compliance": "Compliance administration — audit reports and regulatory status.",
+  "admin-policies": "Policy administration — create and enforce system-wide governance rules.",
+  "admin-health": "System health — service status, error rates, and recovery actions.",
+  "usage-billing": "Usage tracking and billing — compute, API calls, and resource consumption.",
+  telemetry: "System telemetry — metrics collection, dashboards, and alerting.",
+  cluster: "Cluster status — node health, replication, and load distribution.",
+  "knowledge-graph": "Knowledge graph — entity relationships, semantic search, and discovery.",
+  "immune-dashboard": "Immune system — threat detection, antibodies, and security posture.",
+  "time-machine": "Time machine — browse and restore previous system states.",
+  "timeline-viewer": "Timeline viewer — visualize event sequences and decision chains.",
+  scheduler: "Task scheduler — cron jobs, recurring actions, and timed triggers.",
+  marketplace: "Publish agents — package and share governed agents with the community.",
+  "marketplace-browser": "Browse agents — discover and install community-built agents.",
 };
 
 function agentStatusRank(status: AgentSummary["status"]): number {
@@ -726,6 +800,14 @@ export default function App(): JSX.Element {
   );
   const activePageLabel = NAV_ITEMS.find((item) => item.id === page)?.label ?? "Nexus OS";
   const activePageSummary = PAGE_SUMMARIES[page] ?? "Navigate the Nexus AI operating system and monitor its living runtime.";
+  const sidebarFitness = useMemo(() => {
+    let score = 50;
+    if (runningAgents > 0) score += 15;
+    if (connectionStatus === "connected") score += 15;
+    if (uniqueAgents.length > 0) score += 10;
+    if (runningAgents >= 3) score += 10;
+    return Math.min(100, score);
+  }, [runningAgents, connectionStatus, uniqueAgents.length]);
   const [sysInfo, setSysInfo] = useState<SystemInfo | null>(null);
 
   useEffect(() => {
@@ -1541,7 +1623,7 @@ export default function App(): JSX.Element {
       return <CodeEditor />;
     }
     if (page === "terminal") {
-      return <Terminal />;
+      return <NexusCodePage />;
     }
     if (page === "file-manager") {
       return <FileManager />;
@@ -1741,6 +1823,9 @@ export default function App(): JSX.Element {
     if (page === "usage-billing") {
       return <UsageBilling />;
     }
+    if (page === "software-factory") {
+      return <SoftwareFactory />;
+    }
     return (
       <Settings
         config={config}
@@ -1785,7 +1870,9 @@ export default function App(): JSX.Element {
             setPage(id as Page);
             play("click");
           }}
-          version="v9.0.0"
+          version="v10.6.0"
+          fitnessScore={sidebarFitness}
+          connected={connectionStatus === "connected"}
         />
 
         <div className="nexus-main-column">
@@ -1909,6 +1996,9 @@ export default function App(): JSX.Element {
           setDraft(text);
         }}
       />
+
+      {/* Global inline HITL approval banner — appears on ANY page */}
+      <InlineApprovalBanner />
 
       {showSetupWizard && (
         <SetupWizard

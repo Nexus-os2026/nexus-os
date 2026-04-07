@@ -13,17 +13,17 @@ import {
 } from "../api/backend";
 import { alpha, commandPageStyle } from "./commandCenterUi";
 
-const ACCENT = "#8b5cf6";
+const ACCENT = "#14b8a6";
 const GREEN = "#22c55e";
-const BLUE = "#3b82f6";
+const BLUE = "#0ea5e9";
 const YELLOW = "#eab308";
 
 const MEMORY_TYPES = ["Episodic", "Semantic", "Procedural", "Relational"] as const;
 const TYPE_COLORS: Record<string, string> = {
   Episodic: "#f97316",
-  Semantic: "#3b82f6",
+  Semantic: "#0ea5e9",
   Procedural: "#22c55e",
-  Relational: "#a855f7",
+  Relational: "#14b8a6",
 };
 
 const cardStyle: React.CSSProperties = {

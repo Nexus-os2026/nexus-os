@@ -551,7 +551,26 @@ export default function WorldSimulation(): JSX.Element {
           <div>
             <p className="world-sim-kicker">NEXUS WORLD ENGINE</p>
             <h2>Governed Parallel World Prediction</h2>
-            <p>The desktop backend is required to create persistent, auditable world simulations.</p>
+            <p>Build worlds from live seed material, watch personas evolve in real time, inject counterfactuals, and review forecasts with an auditable trail.</p>
+          </div>
+          <div className="world-sim-hero-stats">
+            <span>Worlds 0</span>
+            <span>Live tick --</span>
+            <span>Fuel 0.0</span>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginTop: 8 }}>
+          {SEED_PRESETS.map(p => (
+            <div key={p.id} style={{ padding: 20, borderRadius: 12, background: "rgba(6, 182, 212, 0.04)", border: "1px solid rgba(6, 182, 212, 0.1)", cursor: "default" }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#06b6d4", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>{p.label}</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0", marginBottom: 8 }}>{p.worldName}</div>
+              <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.6 }}>{p.text.slice(0, 120)}...</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ textAlign: "center", marginTop: 24 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px", borderRadius: 8, background: "rgba(6, 182, 212, 0.06)", border: "1px solid rgba(6, 182, 212, 0.15)", color: "#64748b", fontSize: 13 }}>
+            Desktop runtime required to create simulations
           </div>
         </div>
       </section>

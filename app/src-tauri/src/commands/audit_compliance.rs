@@ -1193,7 +1193,7 @@ pub(crate) fn file_manager_list(state: &AppState, path: String) -> Result<String
     let canonical = file_manager_validate_path(&path)?;
 
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         serde_json::json!({"action": "file_manager_list", "path": path}),
     );
@@ -1233,7 +1233,7 @@ pub(crate) fn file_manager_read(state: &AppState, path: String) -> Result<String
     let canonical = file_manager_validate_path(&path)?;
 
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         serde_json::json!({"action": "file_manager_read", "path": path}),
     );
@@ -1251,7 +1251,7 @@ pub(crate) fn file_manager_write(
     let canonical = file_manager_validate_path(&path)?;
 
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         serde_json::json!({"action": "file_manager_write", "path": path, "size": content.len()}),
     );
@@ -1264,7 +1264,7 @@ pub(crate) fn file_manager_create_dir(state: &AppState, path: String) -> Result<
     let canonical = file_manager_validate_path(&path)?;
 
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         serde_json::json!({"action": "file_manager_create_dir", "path": path}),
     );
@@ -1281,7 +1281,7 @@ pub(crate) fn file_manager_delete(state: &AppState, path: String) -> Result<Stri
     let is_dir = canonical.is_dir();
 
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         serde_json::json!({"action": "file_manager_delete", "path": path, "is_dir": is_dir}),
     );
@@ -1303,7 +1303,7 @@ pub(crate) fn file_manager_rename(
     let to_canonical = file_manager_validate_path(&to)?;
 
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         serde_json::json!({"action": "file_manager_rename", "from": from, "to": to}),
     );

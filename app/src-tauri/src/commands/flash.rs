@@ -1,6 +1,6 @@
 //! Flash Inference Tauri commands — local LLM inference via llama.cpp.
 
-use crate::AppState;
+use crate::{AppState, SYSTEM_UUID};
 use nexus_kernel::audit::EventType;
 use serde_json::json;
 #[cfg(all(
@@ -181,7 +181,7 @@ pub async fn flash_create_session(
         let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
         // Best-effort: audit trail append; session creation succeeds regardless
         let _ = audit.append_event(
-            Uuid::nil(),
+            SYSTEM_UUID,
             EventType::UserAction,
             json!({
                 "event_kind": "flash.session_created",
@@ -264,7 +264,7 @@ pub async fn flash_generate(
         let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
         // Best-effort: audit trail for governance; inference proceeds regardless
         let _ = audit.append_event(
-            Uuid::nil(),
+            SYSTEM_UUID,
             EventType::LlmCall,
             json!({
                 "event_kind": "flash.generate_request",
@@ -332,7 +332,7 @@ pub async fn flash_generate(
                     let mut audit = audit_arc.lock().unwrap_or_else(|p| p.into_inner());
                     // Best-effort: audit trail for completed inference; response already sent
                     let _ = audit.append_event(
-                        Uuid::nil(),
+                        SYSTEM_UUID,
                         EventType::LlmCall,
                         json!({
                             "event_kind": "flash.governed_inference",
@@ -414,7 +414,7 @@ pub async fn flash_unload_session(
         let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
         // Best-effort: audit trail append; session unload succeeds regardless
         let _ = audit.append_event(
-            Uuid::nil(),
+            SYSTEM_UUID,
             EventType::UserAction,
             json!({
                 "event_kind": "flash.session_unloaded",

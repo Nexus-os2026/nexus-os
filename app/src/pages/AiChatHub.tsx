@@ -215,7 +215,7 @@ function createWelcomeMessage(model?: string): ChatMsg {
     id: `welcome-${Date.now()}`,
     role: "assistant",
     content:
-      "AI Chat Hub ready. Select a model and start chatting. This page provides direct LLM access without agent governance.",
+      "AI Chat Hub ready. Select a model and start chatting. For governed agent execution, select an agent from the dropdown above. Direct LLM mode has no tool access or governance.",
     model,
     timestamp: Date.now(),
   };
@@ -365,6 +365,8 @@ export default function AiChatHub() {
   const [fuelUsed, setFuelUsed] = useState(0);
   const [voiceActive, setVoiceActive] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [modelSearch, setModelSearch] = useState("");
+  const [agentSearch, setAgentSearch] = useState("");
   const [showAgentPanel, setShowAgentPanel] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState<string | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState("");
@@ -818,11 +820,24 @@ export default function AiChatHub() {
   };
 
   const updateStreamingMsg = useCallback((convId: string, msgId: string, content: string, done: boolean) => {
-    setConversations(prev => prev.map(c => c.id === convId ? {
-      ...c,
-      messages: c.messages.map(m => m.id === msgId ? { ...m, content: content ?? "", streaming: !done } : m),
-      updatedAt: Date.now(),
-    } : c));
+    setConversations(prev => prev.map(c => {
+      if (c.id !== convId) return c;
+      const updated = {
+        ...c,
+        messages: c.messages.map(m => m.id === msgId ? { ...m, content: content ?? "", streaming: !done } : m),
+        updatedAt: Date.now(),
+      };
+      // Auto-title: when first assistant response finishes and title is still default
+      if (done && updated.title === "New conversation") {
+        const firstUserMsg = updated.messages.find(m => m.role === "user");
+        if (firstUserMsg) {
+          const raw = firstUserMsg.content.trim();
+          const title = raw.length > 50 ? raw.slice(0, 50) + "\u2026" : raw;
+          updated.title = title.charAt(0).toUpperCase() + title.slice(1);
+        }
+      }
+      return updated;
+    }));
   }, []);
 
   const appendBuildResult = useCallback((convId: string, msgId: string, buildResult: BuildResultData) => {
@@ -1038,10 +1053,17 @@ export default function AiChatHub() {
     logAudit("Conversation deleted");
   }, [activeConvId, conversations, logAudit]);
 
-  const saveAsNote = useCallback(() => {
+  const copyConversation = useCallback(() => {
     if (!activeConv) return;
-    setFuelUsed(f => f + 3);
-    logAudit(`Saved "${activeConv.title}" as note`);
+    const text = activeConv.messages
+      .filter(m => m.role !== "system")
+      .map(m => `${m.role === "user" ? "You" : m.model ?? "Assistant"}: ${m.content}`)
+      .join("\n\n");
+    navigator.clipboard.writeText(text).then(() => {
+      logAudit("Conversation copied to clipboard");
+    }).catch(() => {
+      logAudit("Failed to copy conversation");
+    });
   }, [activeConv, logAudit]);
 
   const togglePin = useCallback((id: string) => {
@@ -1146,33 +1168,45 @@ export default function AiChatHub() {
             </div>
             <span className="ch-model-arrow">{showModelPicker ? <ChevronUp size={12} aria-hidden="true" /> : <ChevronDown size={12} aria-hidden="true" />}</span>
           </button>
-          {showModelPicker && (
+          {showModelPicker && (() => {
+            const q = modelSearch.toLowerCase();
+            const filtered = q ? models.filter(m => m.name.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : models;
+            const localFiltered = filtered.filter(m => m.local);
+            const cloudFiltered = filtered.filter(m => !m.local);
+            // Group cloud models by provider
+            const providers = [...new Set(cloudFiltered.map(m => m.provider))];
+            return (
             <div className="ch-model-list">
+              <input className="ch-search" placeholder="Search models..." value={modelSearch} onChange={e => setModelSearch(e.target.value)} autoFocus style={{ margin: "6px 8px", width: "calc(100% - 16px)" }} />
               {/* Local Models */}
-              {models.some(m => m.local) && (
+              {localFiltered.length > 0 && (
                 <>
                   <div className="ch-model-group-header">LOCAL MODELS (Ollama)</div>
-                  {models.filter(m => m.local).map(m => (
+                  {localFiltered.map(m => (
                     <button key={m.id} className={`ch-model-option ${selectedModel === m.id ? "active" : ""}`} onClick={() => {
                       setSelectedModel(m.id);
                       localStorage.setItem("nexus-selected-model", m.id);
                       setShowModelPicker(false);
+                      setModelSearch("");
                       logAudit(`Switched to ${m.name}`);
                     }}>
                       <span className="ch-model-icon" style={{ color: m.color }}>{m.icon}</span>
                       <div className="ch-model-info">
                         <span className="ch-model-name">{m.name}</span>
-                        <span className="ch-model-provider">{m.provider} · <Zap size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} />{m.fuelCost}</span>
+                        <span className="ch-model-provider">{m.provider} \u00B7 <Zap size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} />{m.fuelCost}</span>
                       </div>
                     </button>
                   ))}
                 </>
               )}
-              {/* Cloud Models */}
-              {models.some(m => !m.local) && (
-                <>
-                  <div className="ch-model-group-header">CLOUD MODELS</div>
-                  {models.filter(m => !m.local).map(m => (
+              {/* Cloud Models grouped by provider */}
+              {providers.map(prov => {
+                const provModels = cloudFiltered.filter(m => m.provider === prov);
+                const meta = PROVIDER_META[prov];
+                return (
+                <div key={prov}>
+                  <div className="ch-model-group-header" style={{ color: meta?.color }}>{(meta?.label ?? prov).toUpperCase()}</div>
+                  {provModels.map(m => (
                     <button key={m.id} className={`ch-model-option ${selectedModel === m.id ? "active" : ""} ${m.locked ? "locked" : ""}`} onClick={() => {
                       if (m.locked) {
                         setShowApiKeyModal(m.id.split("/")[0]);
@@ -1181,18 +1215,21 @@ export default function AiChatHub() {
                         setSelectedModel(m.id);
                         localStorage.setItem("nexus-selected-model", m.id);
                         setShowModelPicker(false);
+                        setModelSearch("");
                         logAudit(`Switched to ${m.name}`);
                       }
                     }}>
                       <span className="ch-model-icon" style={{ color: m.color }}>{m.locked ? <Lock size={14} aria-hidden="true" /> : m.icon}</span>
                       <div className="ch-model-info">
                         <span className="ch-model-name">{m.name}</span>
-                        <span className="ch-model-provider">{m.provider} · <Zap size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} />{m.fuelCost}{m.locked ? " · Add API key" : ""}</span>
+                        <span className="ch-model-provider">{m.provider} \u00B7 <Zap size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} />{m.fuelCost}{m.locked ? " \u00B7 Add API key" : ""}</span>
                       </div>
                     </button>
                   ))}
-                </>
-              )}
+                </div>
+                );
+              })}
+              {filtered.length === 0 && <div style={{ padding: "12px 16px", color: "#64748b", fontSize: 13 }}>No models match "{modelSearch}"</div>}
               {/* Add API Key button */}
               <button className="ch-model-option ch-add-key-btn" onClick={() => { setShowApiKeyModal(""); setShowModelPicker(false); }}>
                 <span className="ch-model-icon" style={{ color: "var(--nexus-accent)" }}>+</span>
@@ -1202,7 +1239,8 @@ export default function AiChatHub() {
                 </div>
               </button>
             </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* conversations */}
@@ -1293,13 +1331,20 @@ export default function AiChatHub() {
                       ? `${selectedAgent.name} (${autonomyShort(selectedAgent.autonomy_level)})`
                       : "All Agents"} <ChevronDown size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} />
                   </button>
-                  {showAgentDropdown && (
+                  {showAgentDropdown && (() => {
+                    const aq = agentSearch.toLowerCase();
+                    const filteredGroups = agentsByLevel.map(group => ({
+                      ...group,
+                      agents: aq ? group.agents.filter(a => a.name.toLowerCase().includes(aq) || a.description.toLowerCase().includes(aq)) : group.agents,
+                    })).filter(g => g.agents.length > 0);
+                    return (
                     <div className="ch-agent-dropdown">
+                      <input className="ch-search" placeholder="Search agents..." value={agentSearch} onChange={e => setAgentSearch(e.target.value)} autoFocus style={{ margin: "6px 8px", width: "calc(100% - 16px)" }} />
                       <div className="ch-agent-dropdown-header">Select Agent ({preinstalledAgents.length})</div>
-                      <button className="ch-agent-dropdown-item" onClick={() => { setSelectedAgent(null); setAgentStatus("Idle"); setShowAgentDropdown(false); }}>
-                        <span>—</span> No agent (direct LLM)
+                      <button className="ch-agent-dropdown-item" onClick={() => { setSelectedAgent(null); setAgentStatus("Idle"); setShowAgentDropdown(false); setAgentSearch(""); }}>
+                        <span>\u2014</span> No agent (direct LLM)
                       </button>
-                      {agentsByLevel.map(group => (
+                      {filteredGroups.map(group => (
                         <div key={group.level}>
                           <div className="ch-agent-dropdown-group" style={{ color: autonomyColor(group.level) }}>
                             {AUTONOMY_LABELS[group.level] ?? `Level ${group.level}`}
@@ -1308,23 +1353,30 @@ export default function AiChatHub() {
                             <button
                               key={a.agent_id}
                               className={`ch-agent-dropdown-item ${selectedAgent?.agent_id === a.agent_id ? "active" : ""}`}
-                              onClick={() => selectAgent(a)}
+                              onClick={() => { selectAgent(a); setAgentSearch(""); }}
+                              style={{ flexDirection: "column", alignItems: "flex-start" }}
                             >
-                              <span className="ch-agent-level-dot" style={{ background: autonomyColor(a.autonomy_level) }} />
-                              {a.name} ({autonomyShort(a.autonomy_level)})
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%" }}>
+                                <span className="ch-agent-level-dot" style={{ background: autonomyColor(a.autonomy_level) }} />
+                                <span style={{ fontWeight: 500 }}>{a.name}</span>
+                                <span style={{ color: autonomyColor(a.autonomy_level), fontSize: 11, marginLeft: "auto" }}>{autonomyShort(a.autonomy_level)}</span>
+                              </div>
+                              {a.description && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2, paddingLeft: 14 }}>{a.description.length > 80 ? a.description.slice(0, 80) + "\u2026" : a.description}</div>}
                             </button>
                           ))}
                         </div>
                       ))}
+                      {filteredGroups.length === 0 && aq && <div style={{ padding: "12px 16px", color: "#64748b", fontSize: 13 }}>No agents match "{agentSearch}"</div>}
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </div>
               <div className="ch-chat-actions">
-                <button className="ch-hdr-btn cursor-pointer" onClick={() => togglePin(activeConv.id)} title="Pin">{activeConv.pinned ? <Pin size={16} aria-hidden="true" /> : <MapPin size={16} aria-hidden="true" />}</button>
-                <button className="ch-hdr-btn cursor-pointer" onClick={saveAsNote} title="Save as note"><StickyNote size={16} aria-hidden="true" /></button>
-                <button className="ch-hdr-btn cursor-pointer" onClick={() => deleteConversation(activeConv.id)} title="Delete"><Trash2 size={16} aria-hidden="true" /></button>
-                <button className={`ch-hdr-btn ch-voice-btn cursor-pointer ${voiceActive ? "active" : ""}`} onClick={() => { setVoiceActive(!voiceActive); logAudit(voiceActive ? "Voice off" : "Voice on — Jarvis mode"); }} title="Voice">
+                <button className="ch-hdr-btn cursor-pointer" onClick={() => togglePin(activeConv.id)} title={activeConv.pinned ? "Unpin" : "Pin"}>{activeConv.pinned ? <Pin size={16} aria-hidden="true" /> : <MapPin size={16} aria-hidden="true" />}</button>
+                <button className="ch-hdr-btn cursor-pointer" onClick={copyConversation} title="Copy conversation"><ClipboardList size={16} aria-hidden="true" /></button>
+                <button className="ch-hdr-btn cursor-pointer" onClick={() => { if (window.confirm("Delete this conversation?")) deleteConversation(activeConv.id); }} title="Delete"><Trash2 size={16} aria-hidden="true" /></button>
+                <button className={`ch-hdr-btn ch-voice-btn cursor-pointer ${voiceActive ? "active" : ""}`} onClick={() => { setVoiceActive(!voiceActive); logAudit(voiceActive ? "Voice off" : "Voice on \u2014 Jarvis mode"); }} title="Voice">
                   {voiceActive ? <Mic size={16} aria-hidden="true" /> : <MicOff size={16} aria-hidden="true" />}
                 </button>
               </div>
@@ -1505,7 +1557,7 @@ export default function AiChatHub() {
                         ))}
                         {msg.attachments.filter(a => !a.isImage).map(a => (
                           <div key={a.name} className="ch-msg-attach-file">
-                            <span>📄 {a.name}</span>
+                            <span>\u25A1 {a.name}</span>
                             <span className="ch-msg-attach-size">{(a.size / 1024).toFixed(1)} KB</span>
                           </div>
                         ))}
@@ -1603,7 +1655,7 @@ export default function AiChatHub() {
                       {f.isImage ? (
                         <img src={f.dataUrl} alt={f.name} className="ch-attach-thumb" />
                       ) : (
-                        <span className="ch-attach-file-icon">📄</span>
+                        <span className="ch-attach-file-icon">\u25A1</span>
                       )}
                       <span className="ch-attach-name">{f.name}</span>
                       <button className="ch-attach-remove" onClick={() => removeFile(f.name)} title="Remove">×</button>
@@ -1648,14 +1700,14 @@ export default function AiChatHub() {
               <div className="ch-cmp-select">
                 <label>Model A</label>
                 <select value={compareModels[0]} onChange={e => setCompareModels([e.target.value, compareModels[1]])}>
-                  {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  {models.map(m => <option key={m.id} value={m.id}>{m.name} ({m.provider})</option>)}
                 </select>
               </div>
               <span className="ch-cmp-vs">VS</span>
-              <div className="ch-cmp-select">
+              <div className="ch-cmp-select" style={{ flex: 1 }}>
                 <label>Model B</label>
                 <select value={compareModels[1]} onChange={e => setCompareModels([compareModels[0], e.target.value])}>
-                  {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  {models.map(m => <option key={m.id} value={m.id}>{m.name} ({m.provider})</option>)}
                 </select>
               </div>
             </div>
@@ -1722,7 +1774,7 @@ export default function AiChatHub() {
 
         {!activeConv && view === "chat" && (
           <div className="ch-no-conv">
-            <div className="ch-empty-icon">⌁</div>
+            <div className="ch-empty-icon">{"\u25CE"}</div>
             <div>Select a conversation or start a new one</div>
             <button className="ch-new-btn" onClick={newConversation}>+ New Conversation</button>
           </div>
@@ -1731,15 +1783,16 @@ export default function AiChatHub() {
 
       {/* ─── Status Bar ─── */}
       <div className="ch-status-bar">
-        <span className="ch-status-item">{activeModel?.name ?? "No model"}</span>
-        <span className="ch-status-item">{activeModel ? `via ${activeModel.provider}` : ""}</span>
-        <span className="ch-status-item">{conversations.length} conversations</span>
+        <span className="ch-status-item">{activeModel?.icon} {activeModel?.name ?? "No model"} via {activeModel?.provider ?? "\u2014"}</span>
+        <span className="ch-status-sep">{"\u00B7"}</span>
+        <span className="ch-status-item">{conversations.length} conversation{conversations.length !== 1 ? "s" : ""}</span>
+        <span className="ch-status-sep">{"\u00B7"}</span>
         <span className="ch-status-item">{activeConv?.messages.length ?? 0} messages</span>
-        {voiceActive && <span className="ch-status-item ch-status-voice"><Mic size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> Jarvis Active</span>}
-        {selectedAgent && <span className="ch-status-item"><Hexagon size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> {selectedAgent.name} ({agentStatus})</span>}
+        <span className="ch-status-sep">{"\u00B7"}</span>
         <span className="ch-status-item">{preinstalledAgents.length} agents</span>
-        <span className="ch-status-item ch-status-right"><Zap size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> {fuelUsed} fuel</span>
-        <span className="ch-status-item">{models.filter(m => !m.locked).length} models</span>
+        {voiceActive && <><span className="ch-status-sep">{"\u00B7"}</span><span className="ch-status-item ch-status-voice"><Mic size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> Jarvis Active</span></>}
+        {selectedAgent && <><span className="ch-status-sep">{"\u00B7"}</span><span className="ch-status-item"><Hexagon size={10} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> {selectedAgent.name} ({agentStatus})</span></>}
+        <span className="ch-status-item ch-status-right"><Zap size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} /> ~{activeModel?.fuelCost ?? 0} fuel per message</span>
       </div>
 
       {/* ─── API Key Modal ─── */}

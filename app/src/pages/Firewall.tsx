@@ -38,8 +38,8 @@ export function Firewall() {
             key={t}
             onClick={() => setTab(t)}
             style={{
-              background: tab === t ? "var(--accent, #3b82f6)" : "var(--bg-secondary, #1e293b)",
-              border: `1px solid ${tab === t ? "var(--accent, #3b82f6)" : "var(--border, #334155)"}`,
+              background: tab === t ? "var(--accent, #14b8a6)" : "var(--bg-secondary, #1e293b)",
+              border: `1px solid ${tab === t ? "var(--accent, #14b8a6)" : "var(--border, #334155)"}`,
               borderRadius: 6,
               padding: "0.4rem 1rem",
               color: tab === t ? "#fff" : "var(--text-secondary, #94a3b8)",

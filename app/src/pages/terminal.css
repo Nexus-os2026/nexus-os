@@ -413,7 +413,7 @@
 .tm-history-cmd { flex: 1; color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tm-history-time { color: rgba(165, 243, 252, 0.25); font-size: 0.6rem; flex-shrink: 0; }
 .tm-history-badge {
-  font-size: 0.5rem;
+  font-size: 0.65rem;
   color: #ef4444;
   background: rgba(239, 68, 68, 0.1);
   padding: 0.05rem 0.25rem;

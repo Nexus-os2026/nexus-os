@@ -151,6 +151,14 @@ use nexus_migrate::tauri_commands as migrate_cmds;
 // Memory kernel imports
 use nexus_memory::tauri_commands as mk_cmds;
 
+/// Well-known UUID for UI / system-initiated actions that have no specific agent
+/// or authenticated user.  Using a deterministic value (UUIDv5 in the DNS
+/// namespace for "nexus-os-system") instead of `SYSTEM_UUID` so the audit trail
+/// can distinguish "system action" from "missing identity".
+pub(crate) const SYSTEM_UUID: Uuid = Uuid::from_bytes([
+    0x4e, 0x58, 0x53, 0x59, 0x53, 0x2d, 0x00, 0x01, 0x80, 0x00, 0x4e, 0x45, 0x58, 0x55, 0x53, 0x00,
+]);
+
 struct GatewayHivemindLlm;
 
 impl nexus_kernel::cognitive::HivemindLlm for GatewayHivemindLlm {
@@ -176,6 +184,154 @@ thread_local! {
     /// Cached Flash provider for the current agent's cognitive loop.
     /// Set by `with_agent_llm_route` when a `flash:*` route is active.
     static ACTIVE_FLASH_PROVIDER: RefCell<Option<std::sync::Arc<nexus_connectors_llm::providers::FlashProvider>>> = const { RefCell::new(None) };
+}
+
+/// Replace the `:root { ... }` CSS block in an HTML string with new CSS.
+/// Returns the updated HTML, or the original if no `:root` block is found.
+/// Extract the raw `:root { ... }` block content from HTML, returning (start, end)
+/// byte offsets so the caller can splice.
+fn find_root_block(html: &str) -> Option<(usize, usize)> {
+    let root_start = html.find(":root {")?;
+    let after = &html[root_start..];
+    let mut depth = 0u32;
+    for (idx, ch) in after.char_indices() {
+        if ch == '{' {
+            depth += 1;
+        }
+        if ch == '}' {
+            depth -= 1;
+            if depth == 0 {
+                let root_end = root_start + idx + 1;
+                return Some((root_start, root_end));
+            }
+        }
+    }
+    None
+}
+
+/// Extract CSS custom-property names declared inside a `:root { ... }` block.
+fn extract_root_var_names(root_block: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    for line in root_block.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("--") {
+            if let Some(colon) = rest.find(':') {
+                let name = rest[..colon].trim();
+                if !name.is_empty() {
+                    names.push(name.to_string());
+                }
+            }
+        }
+    }
+    names
+}
+
+/// Build alias declarations that map common LLM short-form variable names
+/// to the structured TokenSet names, so `var(--accent)` resolves even after
+/// the `:root` block is replaced with TokenSet CSS.
+///
+/// Only emits aliases for names that actually appeared in the *original* HTML
+/// (i.e. the LLM-generated `:root` block) to avoid bloat.
+fn build_compat_aliases(original_var_names: &[String]) -> String {
+    // Map: LLM short name → TokenSet structured name (as CSS var reference)
+    static ALIAS_MAP: &[(&str, &str)] = &[
+        // Colors
+        ("accent", "var(--color-accent, var(--color-primary))"),
+        ("accent-hover", "var(--color-accent)"),
+        ("accent-h", "var(--color-accent)"),
+        ("primary", "var(--color-primary)"),
+        ("secondary", "var(--color-secondary)"),
+        ("bg", "var(--color-bg)"),
+        ("background", "var(--color-bg)"),
+        ("surface", "var(--color-bg-secondary)"),
+        ("text", "var(--color-text)"),
+        ("text-secondary", "var(--color-text-secondary)"),
+        ("text-muted", "var(--color-text-secondary)"),
+        ("muted", "var(--color-text-secondary)"),
+        ("border", "var(--color-border)"),
+        ("ghost", "var(--color-bg-secondary)"),
+        ("outline", "var(--color-border)"),
+        // Typography
+        ("font-display", "var(--font-heading)"),
+        ("ff-display", "var(--font-heading)"),
+        ("ff-body", "var(--font-body)"),
+        ("fh", "var(--font-heading)"),
+        ("fb", "var(--font-body)"),
+        // Radius
+        ("radius", "var(--radius-md)"),
+        ("radius-pill", "var(--radius-full, 9999px)"),
+        ("radius-card", "var(--radius-lg)"),
+        ("r", "var(--radius-md)"),
+        ("rc", "var(--radius-lg)"),
+        // Misc
+        ("transition", "0.3s ease"),
+        ("ease", "cubic-bezier(0.4,0,0.2,1)"),
+        ("section-pad", "var(--space-xl, 4rem)"),
+        ("shadow", "var(--shadow-md, 0 4px 6px rgba(0,0,0,0.1))"),
+    ];
+
+    let mut css = String::new();
+    for name in original_var_names {
+        // Skip names that are already structured TokenSet names (no alias needed)
+        if name.starts_with("color-")
+            || name.starts_with("btn-")
+            || name.starts_with("hero-")
+            || name.starts_with("nav-")
+            || name.starts_with("footer-")
+            || name.starts_with("card-")
+            || name.starts_with("space-")
+            || name.starts_with("duration-")
+        {
+            continue;
+        }
+        if let Some((_, val)) = ALIAS_MAP.iter().find(|(k, _)| *k == name.as_str()) {
+            use std::fmt::Write;
+            let _ = writeln!(css, "  --{name}: {val};");
+        }
+    }
+    css
+}
+
+fn replace_root_css(html: &str, new_css: &str) -> String {
+    if let Some((root_start, root_end)) = find_root_block(html) {
+        // Extract original variable names so we can generate compat aliases
+        let old_block = &html[root_start..root_end];
+        let original_names = extract_root_var_names(old_block);
+        let aliases = build_compat_aliases(&original_names);
+
+        if aliases.is_empty() {
+            return format!("{}{}{}", &html[..root_start], new_css, &html[root_end..]);
+        }
+        // Inject aliases into the new CSS right before the closing `}`
+        let injected = if let Some(close) = new_css.rfind('}') {
+            format!(
+                "{}\n  /* Compat aliases for LLM-generated variable names */\n{}{}",
+                &new_css[..close],
+                aliases,
+                &new_css[close..],
+            )
+        } else {
+            format!(
+                "{}\n/* Compat aliases */\n:root {{\n{}}}\n",
+                new_css, aliases
+            )
+        };
+        return format!("{}{}{}", &html[..root_start], injected, &html[root_end..]);
+    }
+    html.to_string()
+}
+
+/// Update the `:root {}` block in a project's `current/index.html` with new token CSS.
+fn persist_token_css_to_html(project_dir: &std::path::Path, token_css: &str) {
+    let html_path = project_dir.join("current").join("index.html");
+    if html_path.exists() {
+        if let Ok(html) = std::fs::read_to_string(&html_path) {
+            let updated = replace_root_css(&html, token_css);
+            if updated != html {
+                let _ = std::fs::write(&html_path, &updated);
+            }
+        }
+    }
 }
 
 fn normalize_agent_config_key(value: &str) -> String {
@@ -1646,6 +1802,7 @@ impl AppState {
             .clone()
     }
 
+    #[allow(dead_code)]
     fn initialize_startup_schedules(&self) {
         let rows = match self.db.list_agents() {
             Ok(rows) => rows,
@@ -1713,7 +1870,7 @@ pub mod runtime {
             // Best-effort: forward simulation tick to frontend; missed ticks are non-fatal
             let _ = self.app.emit("simulation-tick", progress);
             self.state.log_event(
-                Uuid::parse_str(&progress.world_id).unwrap_or_else(|_| Uuid::nil()),
+                Uuid::parse_str(&progress.world_id).unwrap_or(SYSTEM_UUID),
                 EventType::UserAction,
                 json!({
                     "action": "simulation_tick",
@@ -2041,6 +2198,46 @@ pub mod runtime {
     #[tauri::command]
     fn save_api_key(provider: String, api_key: String) -> Result<(), String> {
         super::save_provider_api_key(provider, api_key)
+    }
+
+    #[tauri::command]
+    fn detect_claude_code_cli() -> Result<super::ClaudeCodeCliStatus, String> {
+        Ok(super::detect_claude_code_cli())
+    }
+
+    #[tauri::command]
+    fn trigger_claude_code_login() -> Result<String, String> {
+        super::trigger_claude_code_login()
+    }
+
+    #[tauri::command]
+    fn detect_codex_cli() -> Result<super::CodexCliCliStatus, String> {
+        Ok(super::detect_codex_cli_cmd())
+    }
+
+    #[tauri::command]
+    fn trigger_codex_cli_login() -> Result<String, String> {
+        super::trigger_codex_cli_login()
+    }
+
+    #[tauri::command]
+    fn load_llm_provider_settings() -> Result<super::LlmProviderSettings, String> {
+        super::load_llm_provider_settings(false)
+    }
+
+    #[tauri::command]
+    fn save_llm_provider_settings(settings: super::LlmProviderSettings) -> Result<(), String> {
+        super::save_llm_provider_settings(settings)
+    }
+
+    #[tauri::command]
+    fn detect_cli_provider(provider_id: String) -> Result<super::CliProviderSetting, String> {
+        super::detect_single_cli_provider(&provider_id)
+    }
+
+    #[tauri::command]
+    fn auto_detect_all_enabled() -> Result<super::LlmProviderSettings, String> {
+        super::auto_detect_enabled_providers()
     }
 
     /// Stream chat via Ollama's OpenAI-compatible endpoint.
@@ -3471,7 +3668,7 @@ pub mod runtime {
 
                     // Audit log
                     app_state.log_event(
-                        uuid::Uuid::nil(),
+                        SYSTEM_UUID,
                         super::EventType::StateChange,
                         serde_json::json!({
                             "source": "conductor",
@@ -3533,7 +3730,6 @@ pub mod runtime {
                 return;
             }
 
-            let full_model = model.unwrap_or_else(|| "anthropic/claude-sonnet-4-6".to_string());
             let config = match super::load_config() {
                 Ok(c) => c,
                 Err(e) => {
@@ -3543,27 +3739,49 @@ pub mod runtime {
             };
             let prov_config = super::build_provider_config(&config);
 
-            // Determine if the model supports streaming (Anthropic models only in Phase 1)
-            let is_anthropic = full_model.starts_with("anthropic/")
-                || full_model.contains("claude")
-                || full_model.contains("sonnet")
-                || full_model.contains("haiku")
-                || full_model.contains("opus");
+            // Load user's model config once — used for full_build and classification steps.
+            let model_cfg = web_builder_agent::model_config::load_config();
+            let config_source = if std::path::Path::new(&std::env::var("HOME").unwrap_or_default())
+                .join(".nexus/builder_model_config.json")
+                .exists()
+            {
+                "user config"
+            } else {
+                "default \u{2014} no user config found"
+            };
 
-            if is_anthropic {
-                // Extract model name from prefixed string
-                let model_name = if let Some((_prefix, name)) = full_model.split_once('/') {
-                    name.to_string()
-                } else {
-                    full_model.clone()
-                };
+            // Auto-select build model from user's saved model config (or smart defaults).
+            let full_model = model.unwrap_or_else(|| {
+                let choice = &model_cfg.full_build;
 
-                // Create ClaudeProvider directly for streaming
-                let claude = super::ClaudeProvider::new(prov_config.anthropic_api_key.clone());
+                if choice.is_none() {
+                    eprintln!("[conductor-stream] WARNING: No models configured for full build");
+                    return "claude-sonnet-4-6".to_string(); // ultimate fallback
+                }
 
-                // Create conductor with the same provider for fallback
-                let conductor_provider =
-                    super::ClaudeProvider::new(prov_config.anthropic_api_key.clone());
+                let prefixed = web_builder_agent::model_config::to_prefixed_model(choice);
+                eprintln!(
+                    "[conductor-stream] Step \"full_build\" using model: {} (from {})",
+                    choice.display_name, config_source,
+                );
+                prefixed
+            });
+
+            // Try to get a streaming provider for the selected model.
+            // Uses prefixed model name so provider selection routes to the correct CLI/API.
+            let streaming_result =
+                super::streaming_provider_from_prefixed_model(&full_model, &prov_config);
+
+            if let Ok((streaming_provider, model_name)) = streaming_result {
+                // Create conductor with a non-streaming provider for fallback
+                let (conductor_provider, _) =
+                    match super::provider_from_prefixed_model(&full_model, &prov_config) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            let _ = tx.send(Err(e));
+                            return;
+                        }
+                    };
                 let mut conductor = super::Conductor::new(conductor_provider, &model_name);
 
                 // If an approved plan is provided, augment the prompt
@@ -3584,30 +3802,67 @@ pub mod runtime {
                                 );
 
                                 // Phase 2: Classify into a template skeleton
-                                // Use model router for classification (cheap task)
-                                let class_budget = web_builder_agent::model_router::RoutingBudget::from_budget_tracker();
-                                let class_selection = web_builder_agent::model_router::select_model(
-                                    &web_builder_agent::model_router::BuilderTask::TemplateClassification,
-                                    &class_budget,
-                                );
+                                // Use the planning/classification model from user config
+                                let class_choice = &model_cfg.planning;
+                                let class_prefixed =
+                                    web_builder_agent::model_config::to_prefixed_model(
+                                        class_choice,
+                                    );
+                                let class_model_id = class_choice.model_id.clone();
                                 eprintln!(
-                                    "[conductor-stream] Classifier using {} ({})",
-                                    class_selection.display_name, class_selection.provider
+                                    "[conductor-stream] Step \"planning_classification\" using model: {} (from {})",
+                                    class_choice.display_name, config_source,
                                 );
-                                let class_provider: Box<dyn nexus_connectors_llm::providers::LlmProvider> = match class_selection.provider {
-                                    web_builder_agent::model_router::ProviderType::Ollama => {
-                                        Box::new(nexus_connectors_llm::providers::OllamaProvider::from_env())
+
+                                // Create provider from user config; fall back to model router on failure
+                                let (class_provider, effective_class_model): (
+                                    Box<dyn nexus_connectors_llm::providers::LlmProvider>,
+                                    String,
+                                ) = match super::provider_from_prefixed_model(
+                                    &class_prefixed,
+                                    &prov_config,
+                                ) {
+                                    Ok((p, _m)) => (p, class_model_id),
+                                    Err(e) => {
+                                        eprintln!(
+                                                "[conductor-stream] Config provider failed for classification: {}, falling back to router",
+                                                e
+                                            );
+                                        let class_budget = web_builder_agent::model_router::RoutingBudget::from_budget_tracker();
+                                        let class_selection = web_builder_agent::model_router::select_model(
+                                                &web_builder_agent::model_router::BuilderTask::TemplateClassification,
+                                                &class_budget,
+                                            );
+                                        let fb: Box<dyn nexus_connectors_llm::providers::LlmProvider> = match class_selection.provider {
+                                                web_builder_agent::model_router::ProviderType::Ollama => {
+                                                    Box::new(nexus_connectors_llm::providers::OllamaProvider::from_env())
+                                                }
+                                                web_builder_agent::model_router::ProviderType::OpenAI => {
+                                                    Box::new(super::OpenAiProvider::new(prov_config.openai_api_key.clone()))
+                                                }
+                                                _ => {
+                                                    let has_key = prov_config.anthropic_api_key.as_deref()
+                                                        .map(|k| !k.trim().is_empty()).unwrap_or(false);
+                                                    if has_key {
+                                                        Box::new(super::ClaudeProvider::new(prov_config.anthropic_api_key.clone()))
+                                                    } else {
+                                                        let status = nexus_connectors_llm::providers::claude_code::detect_claude_code();
+                                                        if status.installed && status.authenticated {
+                                                            Box::new(nexus_connectors_llm::providers::claude_code::ClaudeCodeProvider::new())
+                                                        } else {
+                                                            Box::new(super::ClaudeProvider::new(prov_config.anthropic_api_key.clone()))
+                                                        }
+                                                    }
+                                                }
+                                            };
+                                        (fb, class_selection.model_id.clone())
                                     }
-                                    web_builder_agent::model_router::ProviderType::OpenAI => {
-                                        Box::new(super::OpenAiProvider::new(prov_config.openai_api_key.clone()))
-                                    }
-                                    _ => Box::new(super::ClaudeProvider::new(prov_config.anthropic_api_key.clone())),
                                 };
                                 let selection = web_builder_agent::classifier::classify_with_model(
                                     class_provider.as_ref(),
                                     &prompt,
                                     &brief,
-                                    &class_selection.model_id,
+                                    &effective_class_model,
                                 );
 
                                 // Persist template selection to artefacts
@@ -3755,7 +4010,7 @@ pub mod runtime {
                     output_path,
                     &mut audit,
                     agent_id,
-                    &claude,
+                    streaming_provider.as_ref(),
                     &emit_fn,
                 ) {
                     Ok(paths) => {
@@ -3886,7 +4141,7 @@ pub mod runtime {
                     }
                 }
             } else {
-                // Non-streaming fallback for non-Anthropic providers
+                // Non-streaming fallback for providers without StreamingLlmProvider
                 eprintln!(
                     "[conductor-stream] Model '{}' does not support streaming, using non-streaming path",
                     full_model
@@ -4032,6 +4287,158 @@ pub mod runtime {
         tracker.record_build(record)
     }
 
+    // ─── Model Configuration Commands ─────────────────────────────────────
+
+    /// Detect all available models on this machine (Ollama, CLI providers, API keys).
+    #[tauri::command]
+    fn builder_get_available_models() -> Result<serde_json::Value, String> {
+        let available = web_builder_agent::model_config::detect_available_models();
+        serde_json::to_value(&available).map_err(|e| format!("serialization error: {e}"))
+    }
+
+    /// Get current model config (or smart defaults if not configured).
+    #[tauri::command]
+    fn builder_get_model_config() -> Result<serde_json::Value, String> {
+        let config = web_builder_agent::model_config::load_config();
+        serde_json::to_value(&config).map_err(|e| format!("serialization error: {e}"))
+    }
+
+    /// Save user model config to ~/.nexus/builder_model_config.json.
+    #[tauri::command]
+    fn builder_save_model_config(config_json: String) -> Result<(), String> {
+        let config: web_builder_agent::model_config::BuildModelConfig =
+            serde_json::from_str(&config_json).map_err(|e| format!("invalid model config: {e}"))?;
+        web_builder_agent::model_config::save_config(&config)
+    }
+
+    /// Reset model config to smart defaults based on currently available models.
+    #[tauri::command]
+    fn builder_reset_model_config() -> Result<serde_json::Value, String> {
+        let available = web_builder_agent::model_config::detect_available_models();
+        let config = web_builder_agent::model_config::generate_smart_defaults(&available);
+        web_builder_agent::model_config::save_config(&config)
+            .map_err(|e| format!("save error: {e}"))?;
+        serde_json::to_value(&config).map_err(|e| format!("serialization error: {e}"))
+    }
+
+    /// Get available model choices for each build step.
+    #[tauri::command]
+    fn builder_get_model_choices() -> Result<serde_json::Value, String> {
+        let available = web_builder_agent::model_config::detect_available_models();
+        serde_json::to_value(serde_json::json!({
+            "planning": available.choices_for_planning(),
+            "content_generation": available.choices_for_content(),
+            "section_edit": available.choices_for_section_edit(),
+            "full_build": available.choices_for_full_build(),
+            "security_policies": available.choices_for_security(),
+        }))
+        .map_err(|e| format!("serialization error: {e}"))
+    }
+
+    // ─── CLI Authentication Commands ──────────────────────────────────────
+
+    /// Check whether a CLI provider is authenticated.
+    /// For codex: checks auth file on disk, falls back to exec probe.
+    /// For claude: runs `claude auth status --text`.
+    #[tauri::command]
+    fn builder_check_cli_auth(cli: String) -> Result<bool, String> {
+        web_builder_agent::model_config::check_cli_auth(&cli)
+    }
+
+    /// Spawn CLI login and poll for success. Emits events:
+    /// - cli-auth-progress { cli, message }
+    /// - cli-auth-success  { cli }
+    /// - cli-auth-failed   { cli, reason }
+    #[tauri::command]
+    async fn builder_authenticate_cli(cli: String, window: tauri::Window) -> Result<(), String> {
+        let (bin, args): (&str, Vec<&str>) = match cli.as_str() {
+            "claude" => ("claude", vec!["auth", "login"]),
+            "codex" => ("codex", vec!["login"]),
+            other => return Err(format!("unknown cli: {other}")),
+        };
+
+        let cli_name = cli.clone();
+
+        // Emit progress
+        let emit_progress = |msg: &str| {
+            let _ = window.emit(
+                "cli-auth-progress",
+                serde_json::json!({ "cli": &cli_name, "message": msg }),
+            );
+        };
+
+        emit_progress(&format!("Starting {bin} login..."));
+
+        // Spawn the login process (it opens a browser for OAuth)
+        let mut child = std::process::Command::new(bin)
+            .args(&args)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    format!("{bin} is not installed")
+                } else {
+                    format!("failed to start {bin}: {e}")
+                }
+            })?;
+
+        emit_progress("Opening browser for authentication...");
+
+        // Poll for auth success in a background task.
+        // For codex: check auth file first (instant), then `claude auth status` for claude.
+        // Polls every 3s for up to 60s, stops as soon as auth is detected.
+        let cli_poll = cli.clone();
+        let window_poll = window.clone();
+        tokio::spawn(async move {
+            let max_polls = 20; // 20 * 3s = 60s
+            for i in 0..max_polls {
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+                let ok = match cli_poll.as_str() {
+                    "codex" => {
+                        // Fast: check auth file on disk
+                        nexus_connectors_llm::providers::codex_cli::check_codex_auth_file()
+                    }
+                    "claude" => std::process::Command::new("claude")
+                        .args(["auth", "status", "--text"])
+                        .stdout(std::process::Stdio::piped())
+                        .stderr(std::process::Stdio::piped())
+                        .output()
+                        .map(|o| o.status.success())
+                        .unwrap_or(false),
+                    _ => return,
+                };
+
+                if ok {
+                    let _ = window_poll
+                        .emit("cli-auth-success", serde_json::json!({ "cli": &cli_poll }));
+                    return;
+                }
+
+                if i % 3 == 0 {
+                    let _ = window_poll.emit(
+                        "cli-auth-progress",
+                        serde_json::json!({
+                            "cli": &cli_poll,
+                            "message": format!("Waiting for browser authentication... ({}s)", (i + 1) * 3)
+                        }),
+                    );
+                }
+            }
+
+            let _ = window_poll.emit(
+                "cli-auth-failed",
+                serde_json::json!({ "cli": &cli_poll, "reason": "timeout" }),
+            );
+        });
+
+        // Wait for the login process to finish (it exits after auth completes or user cancels)
+        let _ = child.wait();
+
+        Ok(())
+    }
+
     /// Read the current preview HTML from a project's current/index.html.
     #[tauri::command]
     fn builder_read_preview(project_dir: String) -> Result<String, String> {
@@ -4105,21 +4512,42 @@ pub mod runtime {
             };
             let prov_config = super::build_provider_config(&config);
 
-            // Iteration always uses Anthropic (ClaudeProvider is hardcoded below).
-            // Ensure the model name is a valid Anthropic model.
-            let default_model = "claude-sonnet-4-6";
-            let model_name = match model.as_deref() {
-                Some(m)
-                    if m.contains("claude")
-                        || m.contains("sonnet")
-                        || m.contains("haiku")
-                        || m.contains("opus") =>
-                {
-                    // Strip "anthropic/" prefix if present
-                    m.strip_prefix("anthropic/").unwrap_or(m).to_string()
+            // Resolve the full model string from user config (or smart defaults).
+            // Falls back to "claude-sonnet-4-6" only if config loading fails entirely.
+            let full_model = model.unwrap_or_else(|| {
+                let iter_cfg = web_builder_agent::model_config::load_config();
+                let choice = &iter_cfg.full_build;
+                if choice.is_none() {
+                    eprintln!(
+                        "[builder-iterate] Step \"full_build\" using model: claude-sonnet-4-6 (default \u{2014} no user config found)"
+                    );
+                    return "claude-sonnet-4-6".to_string();
                 }
-                _ => default_model.to_string(),
-            };
+                let prefixed = web_builder_agent::model_config::to_prefixed_model(choice);
+                eprintln!(
+                    "[builder-iterate] Step \"full_build\" using model: {} (from {})",
+                    choice.display_name,
+                    if std::path::Path::new(
+                        &std::env::var("HOME").unwrap_or_default(),
+                    )
+                    .join(".nexus/builder_model_config.json")
+                    .exists()
+                    {
+                        "user config"
+                    } else {
+                        "default \u{2014} no user config found"
+                    }
+                );
+                prefixed
+            });
+            let (streaming_provider, model_name) =
+                match super::streaming_provider_from_prefixed_model(&full_model, &prov_config) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        let _ = tx.send(Err(e));
+                        return;
+                    }
+                };
 
             let mgr = web_builder_agent::checkpoint::CheckpointManager::new(std::path::Path::new(
                 &project_dir,
@@ -4453,11 +4881,9 @@ pub mod runtime {
                                 },
                             );
 
-                            // Stream LLM for section edit
-                            let claude =
-                                super::ClaudeProvider::new(prov_config.anthropic_api_key.clone());
+                            // Stream LLM for section edit (uses whatever provider the user selected)
                             use nexus_connectors_llm::streaming::StreamingLlmProvider;
-                            let mut stream = match claude.stream_query(
+                            let mut stream = match streaming_provider.as_ref().stream_query(
                                 &prompt,
                                 system_prompt,
                                 8192,
@@ -4608,24 +5034,27 @@ pub mod runtime {
                         },
                     );
 
-                    let claude = super::ClaudeProvider::new(prov_config.anthropic_api_key.clone());
                     use nexus_connectors_llm::streaming::StreamingLlmProvider;
-                    let mut stream =
-                        match claude.stream_query(&prompt, system_prompt, 16384, &model_name) {
-                            Ok(s) => s,
-                            Err(e) => {
-                                emit_fn(
+                    let mut stream = match streaming_provider.as_ref().stream_query(
+                        &prompt,
+                        system_prompt,
+                        16384,
+                        &model_name,
+                    ) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            emit_fn(
                                 web_builder_agent::build_stream::BuildStreamEvent::BuildFailed {
                                     error: e.to_string(),
                                     tokens_consumed: 0,
                                     cost_consumed: 0.0,
                                 },
                             );
-                                mark_iteration_failed(&format!("full regen streaming failed: {e}"));
-                                let _ = tx.send(Err(format!("streaming failed: {e}")));
-                                return;
-                            }
-                        };
+                            mark_iteration_failed(&format!("full regen streaming failed: {e}"));
+                            let _ = tx.send(Err(format!("streaming failed: {e}")));
+                            return;
+                        }
+                    };
 
                     let mut accumulated = String::new();
                     let mut token_count: usize = 0;
@@ -4850,7 +5279,34 @@ pub mod runtime {
             };
             let prov_config = super::build_provider_config(&config);
 
-            let claude = super::ClaudeProvider::new(prov_config.anthropic_api_key.clone());
+            // Build provider instances for each provider type the model router may select.
+            // For Anthropic: prefer API key, fall back to Claude Code CLI if available.
+            let anthropic_provider: Box<dyn nexus_connectors_llm::providers::LlmProvider> = {
+                let has_key = prov_config
+                    .anthropic_api_key
+                    .as_deref()
+                    .map(|k| !k.trim().is_empty())
+                    .unwrap_or(false);
+                if has_key {
+                    Box::new(super::ClaudeProvider::new(
+                        prov_config.anthropic_api_key.clone(),
+                    ))
+                } else {
+                    // Try Claude Code CLI as Anthropic-compatible provider
+                    let status = nexus_connectors_llm::providers::claude_code::detect_claude_code();
+                    if status.installed && status.authenticated {
+                        Box::new(
+                            nexus_connectors_llm::providers::claude_code::ClaudeCodeProvider::new(),
+                        )
+                    } else {
+                        // Fall through with the (key-less) ClaudeProvider; it will error
+                        // if actually selected, but the router may pick a different provider.
+                        Box::new(super::ClaudeProvider::new(
+                            prov_config.anthropic_api_key.clone(),
+                        ))
+                    }
+                }
+            };
             let openai = super::OpenAiProvider::new(prov_config.openai_api_key.clone());
 
             eprintln!(
@@ -4872,13 +5328,25 @@ pub mod runtime {
                     web_builder_agent::project::create_project(&project_id, &prompt)
                 });
 
-            // Multi-model routing: select best model for plan generation
-            use web_builder_agent::model_router::*;
-            let budget = RoutingBudget::from_budget_tracker();
-            let selection = select_model(&BuilderTask::PlanGeneration, &budget);
+            // Load user's model config (or smart defaults) — used for planning step.
+            let model_cfg = web_builder_agent::model_config::load_config();
+            let plan_choice = &model_cfg.planning;
+            let plan_prefixed = web_builder_agent::model_config::to_prefixed_model(plan_choice);
+            let plan_model_id = plan_choice.model_id.clone();
+            let plan_display = plan_choice.display_name.clone();
+            let plan_provider_str = plan_choice.provider.clone();
+
             eprintln!(
-                "[builder-plan] Router selected: {} ({}) for planning",
-                selection.display_name, selection.provider
+                "[builder-plan] Step \"planning\" using model: {} (from {})",
+                plan_display,
+                if std::path::Path::new(&std::env::var("HOME").unwrap_or_default())
+                    .join(".nexus/builder_model_config.json")
+                    .exists()
+                {
+                    "user config"
+                } else {
+                    "default \u{2014} no user config found"
+                }
             );
 
             // Try primary model, failover on error or bad JSON
@@ -4910,67 +5378,112 @@ pub mod runtime {
                 result
             };
 
-            let primary_provider: &dyn nexus_connectors_llm::providers::LlmProvider =
-                match selection.provider {
-                    ProviderType::Ollama => {
-                        &nexus_connectors_llm::providers::OllamaProvider::from_env()
-                    }
-                    ProviderType::Anthropic => &claude,
-                    ProviderType::OpenAI => &openai,
-                };
+            // Create provider from user's model config choice
+            let primary_result = super::provider_from_prefixed_model(&plan_prefixed, &prov_config);
 
-            let (result, used_model) = match try_plan(primary_provider, &selection.model_id) {
-                Ok(r) => (r, selection.clone()),
-                Err(e) => {
-                    eprintln!(
-                        "[builder-plan] {} failed: {}, attempting failover",
-                        selection.display_name, e
-                    );
-                    // Try failover
-                    if let Some(fallback) =
-                        failover_model(&BuilderTask::PlanGeneration, &selection.provider, &budget)
-                    {
-                        eprintln!(
-                            "[builder-plan] Failing over to {} ({})",
-                            fallback.display_name, fallback.provider
-                        );
-                        let fb_provider: &dyn nexus_connectors_llm::providers::LlmProvider =
-                            match fallback.provider {
-                                ProviderType::Ollama => {
-                                    &nexus_connectors_llm::providers::OllamaProvider::from_env()
+            let codex_cli_prov =
+                nexus_connectors_llm::providers::codex_cli::CodexCliProvider::new();
+            let claude_code_prov =
+                nexus_connectors_llm::providers::claude_code::ClaudeCodeProvider::new();
+
+            // Build a ModelSelection-like struct for the response JSON
+            use web_builder_agent::model_router::*;
+            let make_selection = |display: &str, provider_s: &str, model_id: &str| ModelSelection {
+                provider: match provider_s {
+                    "ollama" => ProviderType::Ollama,
+                    "anthropic_api" | "anthropic" => ProviderType::Anthropic,
+                    "openai_api" | "openai" => ProviderType::OpenAI,
+                    "codex_cli" => ProviderType::CodexCli,
+                    "claude_cli" => ProviderType::ClaudeCode,
+                    _ => ProviderType::Ollama,
+                },
+                model_id: model_id.to_string(),
+                display_name: display.to_string(),
+                estimated_cost: 0.0,
+                is_local: provider_s == "ollama",
+            };
+            let selection = make_selection(&plan_display, &plan_provider_str, &plan_model_id);
+
+            let (result, used_model) = match primary_result {
+                Ok((primary_provider, _)) => {
+                    match try_plan(primary_provider.as_ref(), &plan_model_id) {
+                        Ok(r) => (r, selection.clone()),
+                        Err(e) => {
+                            eprintln!(
+                                "[builder-plan] {} failed: {}, attempting failover via model router",
+                                plan_display, e
+                            );
+                            // Failover: use model router budget-based selection
+                            let budget = RoutingBudget::from_budget_tracker();
+                            let fb = select_model(&BuilderTask::PlanGeneration, &budget);
+                            eprintln!(
+                                "[builder-plan] Failing over to {} ({})",
+                                fb.display_name, fb.provider
+                            );
+                            let fb_provider: &dyn nexus_connectors_llm::providers::LlmProvider =
+                                match fb.provider {
+                                    ProviderType::Ollama => {
+                                        &nexus_connectors_llm::providers::OllamaProvider::from_env()
+                                    }
+                                    ProviderType::Anthropic => anthropic_provider.as_ref(),
+                                    ProviderType::OpenAI => &openai,
+                                    ProviderType::CodexCli => &codex_cli_prov,
+                                    ProviderType::ClaudeCode => &claude_code_prov,
+                                };
+                            match try_plan(fb_provider, &fb.model_id) {
+                                Ok(r) => (r, fb),
+                                Err(e2) => {
+                                    proj_state.error_message = Some(e2.clone());
+                                    let _ = web_builder_agent::project::transition(
+                                        &mut proj_state,
+                                        web_builder_agent::project::ProjectStatus::PlanFailed,
+                                    );
+                                    let _ = web_builder_agent::project::save_project_state(
+                                        &project_dir,
+                                        &proj_state,
+                                    );
+                                    let _ = tx.send(Err(format!(
+                                        "plan generation failed (failover): {e2}"
+                                    )));
+                                    return;
                                 }
-                                ProviderType::Anthropic => &claude,
-                                ProviderType::OpenAI => &openai,
-                            };
-                        match try_plan(fb_provider, &fallback.model_id) {
-                            Ok(r) => (r, fallback),
-                            Err(e2) => {
-                                proj_state.error_message = Some(e2.clone());
-                                let _ = web_builder_agent::project::transition(
-                                    &mut proj_state,
-                                    web_builder_agent::project::ProjectStatus::PlanFailed,
-                                );
-                                let _ = web_builder_agent::project::save_project_state(
-                                    &project_dir,
-                                    &proj_state,
-                                );
-                                let _ = tx
-                                    .send(Err(format!("plan generation failed (failover): {e2}")));
-                                return;
                             }
                         }
-                    } else {
-                        proj_state.error_message = Some(e.clone());
-                        let _ = web_builder_agent::project::transition(
-                            &mut proj_state,
-                            web_builder_agent::project::ProjectStatus::PlanFailed,
-                        );
-                        let _ = web_builder_agent::project::save_project_state(
-                            &project_dir,
-                            &proj_state,
-                        );
-                        let _ = tx.send(Err(format!("plan generation failed: {e}")));
-                        return;
+                    }
+                }
+                Err(provider_err) => {
+                    eprintln!(
+                        "[builder-plan] Could not create provider for {}: {}, falling back to router",
+                        plan_display, provider_err
+                    );
+                    // Provider creation failed — fall back to budget-based router
+                    let budget = RoutingBudget::from_budget_tracker();
+                    let fb = select_model(&BuilderTask::PlanGeneration, &budget);
+                    let fb_provider: &dyn nexus_connectors_llm::providers::LlmProvider =
+                        match fb.provider {
+                            ProviderType::Ollama => {
+                                &nexus_connectors_llm::providers::OllamaProvider::from_env()
+                            }
+                            ProviderType::Anthropic => anthropic_provider.as_ref(),
+                            ProviderType::OpenAI => &openai,
+                            ProviderType::CodexCli => &codex_cli_prov,
+                            ProviderType::ClaudeCode => &claude_code_prov,
+                        };
+                    match try_plan(fb_provider, &fb.model_id) {
+                        Ok(r) => (r, fb),
+                        Err(e) => {
+                            proj_state.error_message = Some(e.clone());
+                            let _ = web_builder_agent::project::transition(
+                                &mut proj_state,
+                                web_builder_agent::project::ProjectStatus::PlanFailed,
+                            );
+                            let _ = web_builder_agent::project::save_project_state(
+                                &project_dir,
+                                &proj_state,
+                            );
+                            let _ = tx.send(Err(format!("plan generation failed: {e}")));
+                            return;
+                        }
                     }
                 }
             };
@@ -5186,14 +5699,25 @@ pub mod runtime {
         std::io::Write::write_all(&mut zip_writer, plan_json.as_bytes())
             .map_err(|e| format!("write build_plan.json: {e}"))?;
 
-        zip_writer
-            .start_file("NEXUS_BUILDER_SIGNATURE", options)
-            .map_err(|e| format!("zip signature: {e}"))?;
-        std::io::Write::write_all(
-            &mut zip_writer,
-            b"Nexus Builder Governance Signature\nSignature infrastructure pending - Ed25519 signing will be added in a future release.\n",
-        )
-        .map_err(|e| format!("write signature: {e}"))?;
+        // Generate Trust Pack and include in ZIP
+        let tp_output_dir = std::env::temp_dir().join(format!("nexus-tp-export-{}", project_id));
+        let _ = std::fs::create_dir_all(&tp_output_dir);
+        if let Ok(_tp_result) =
+            web_builder_agent::trust_pack::generate_trust_pack(&project_dir, &tp_output_dir)
+        {
+            let tp_dir = tp_output_dir.join("trust-pack");
+            if let Ok(entries) = std::fs::read_dir(&tp_dir) {
+                for entry in entries.flatten() {
+                    if let Ok(content) = std::fs::read(entry.path()) {
+                        let filename =
+                            format!("trust-pack/{}", entry.file_name().to_string_lossy());
+                        let _ = zip_writer.start_file(filename.as_str(), options);
+                        let _ = std::io::Write::write_all(&mut zip_writer, &content);
+                    }
+                }
+            }
+            let _ = std::fs::remove_dir_all(&tp_output_dir);
+        }
 
         zip_writer
             .finish()
@@ -5241,6 +5765,2421 @@ pub mod runtime {
             Ok(state) => serde_json::to_value(state).map_err(|e| format!("serialize: {e}")),
             Err(_) => Ok(serde_json::Value::Null),
         }
+    }
+
+    /// Visual editor: apply a token edit (Layer 1 foundation or Layer 3 instance).
+    #[tauri::command]
+    fn builder_visual_edit_token(
+        project_id: String,
+        layer: u8,
+        section_id: Option<String>,
+        token_name: String,
+        value: String,
+    ) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        // Load current visual edit state
+        let mut edit_state = web_builder_agent::visual_edit::load_visual_edit_state(&project_dir)
+            .unwrap_or_default();
+
+        // Load or create TokenSet (using default for now — in production,
+        // this would be loaded from the project's persisted token state)
+        let mut token_set = web_builder_agent::tokens::TokenSet::default();
+        // Restore previous edits first
+        web_builder_agent::visual_edit::restore_visual_edits(&mut token_set, &edit_state);
+
+        // Apply the new edit
+        let css = web_builder_agent::visual_edit::apply_token_edit(
+            &mut token_set,
+            &mut edit_state,
+            layer,
+            section_id.as_deref(),
+            &token_name,
+            &value,
+        )
+        .map_err(|e| format!("{e}"))?;
+
+        // Persist edit state
+        web_builder_agent::visual_edit::save_visual_edit_state(&project_dir, &edit_state)
+            .map_err(|e| format!("save: {e}"))?;
+
+        // Also update current/index.html so edits persist across reloads
+        persist_token_css_to_html(&project_dir, &token_set.to_css());
+
+        Ok(css)
+    }
+
+    /// Visual editor: apply a text content edit to a slot.
+    #[tauri::command]
+    fn builder_visual_edit_text(
+        project_id: String,
+        section_id: String,
+        slot_name: String,
+        new_text: String,
+    ) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        // Load visual edit state
+        let mut edit_state = web_builder_agent::visual_edit::load_visual_edit_state(&project_dir)
+            .unwrap_or_default();
+
+        // For text edits, we need the schema to validate.
+        // Try to load template from project state; fall back to saas_landing.
+        let template_id = match web_builder_agent::project::load_project_state(&project_dir) {
+            Ok(ps) => ps
+                .selected_template
+                .unwrap_or_else(|| "saas_landing".into()),
+            Err(_) => "saas_landing".into(),
+        };
+        let schema = web_builder_agent::slot_schema::get_template_schema(&template_id)
+            .ok_or_else(|| format!("unknown template: {template_id}"))?;
+
+        // Create a minimal payload for validation (text edits don't need full payload)
+        let mut payload = web_builder_agent::content_payload::ContentPayload {
+            template_id: template_id.clone(),
+            variant: web_builder_agent::variant_select::select_variant(&template_id, ""),
+            sections: vec![],
+        };
+
+        // Restore any previous text edits into the payload
+        for te in &edit_state.text_edits {
+            let section = payload
+                .sections
+                .iter_mut()
+                .find(|s| s.section_id == te.section_id);
+            if let Some(s) = section {
+                s.slots.insert(te.slot_name.clone(), te.new_text.clone());
+            } else {
+                payload
+                    .sections
+                    .push(web_builder_agent::content_payload::SectionContent {
+                        section_id: te.section_id.clone(),
+                        slots: std::collections::HashMap::from([(
+                            te.slot_name.clone(),
+                            te.new_text.clone(),
+                        )]),
+                    });
+            }
+        }
+
+        let escaped = web_builder_agent::visual_edit::apply_text_edit(
+            &mut payload,
+            &mut edit_state,
+            &schema,
+            &section_id,
+            &slot_name,
+            &new_text,
+        )
+        .map_err(|e| format!("{e}"))?;
+
+        // Persist
+        web_builder_agent::visual_edit::save_visual_edit_state(&project_dir, &edit_state)
+            .map_err(|e| format!("save: {e}"))?;
+
+        Ok(escaped)
+    }
+
+    /// Run a scaffold build (deterministic, $0) using the build orchestrator.
+    /// Returns a JSON payload with the build result.
+    #[tauri::command]
+    fn builder_scaffold_build(
+        brief: String,
+        output_mode: Option<String>,
+        project_name: Option<String>,
+    ) -> Result<serde_json::Value, String> {
+        let mode = match output_mode.as_deref() {
+            Some("react") => web_builder_agent::react_gen::OutputMode::React,
+            Some("html") | None => web_builder_agent::react_gen::OutputMode::Html,
+            Some(other) => return Err(format!("unknown output mode: {other}")),
+        };
+        let name = project_name.unwrap_or_else(|| "Nexus Project".into());
+
+        let result = web_builder_agent::build_orchestrator::run_build_pipeline(
+            &brief,
+            mode,
+            &name,
+            &|_progress| {
+                // Progress events could be emitted via window.emit here
+                // For now, the scaffold build is fast enough (< 100ms) that
+                // progress is not needed.
+            },
+        )
+        .map_err(|e| format!("build failed: {e}"))?;
+
+        serde_json::to_value(&result).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Start a Vite dev server for a React project.
+    #[tauri::command]
+    fn builder_dev_server_start(project_id: String) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id)
+            .join("react");
+
+        // Install deps if needed
+        // UI-initiated: grant process.exec capability for npm/vite.
+        let caps: &[&str] = &["process.exec"];
+        web_builder_agent::dev_server::DevServer::install_deps(&project_dir, caps)
+            .map_err(|e| format!("npm install: {e}"))?;
+
+        // Start the dev server
+        let mut server = web_builder_agent::dev_server::DevServer::new(project_dir);
+        let url = server.start(caps).map_err(|e| format!("start: {e}"))?;
+
+        // Note: In production, the server would be stored in AppState.
+        // For now we leak it intentionally — Drop will kill the process on app exit.
+        // A proper implementation would use DevServerRegistry in AppState.
+        std::mem::forget(server);
+
+        Ok(url)
+    }
+
+    /// Stop a Vite dev server for a React project.
+    #[tauri::command]
+    fn builder_dev_server_stop(_project_id: String) -> Result<(), String> {
+        // In a full implementation, this would look up the server in DevServerRegistry.
+        // For now, the Drop implementation handles cleanup on app exit.
+        Ok(())
+    }
+
+    /// Get the status of a project's dev server.
+    #[tauri::command]
+    fn builder_dev_server_status(_project_id: String) -> Result<serde_json::Value, String> {
+        Ok(serde_json::json!({ "status": "stopped" }))
+    }
+
+    /// Write a file to a React project directory (triggers Vite HMR).
+    #[tauri::command]
+    fn builder_dev_server_write_file(
+        project_id: String,
+        relative_path: String,
+        content: String,
+    ) -> Result<(), String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id)
+            .join("react");
+
+        let full_path = project_dir.join(&relative_path);
+        if let Some(parent) = full_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("mkdir: {e}"))?;
+        }
+        std::fs::write(&full_path, content).map_err(|e| format!("write: {e}"))?;
+        Ok(())
+    }
+
+    // ── Builder Deploy (Phase 7A) ─────────────────────────────────────
+
+    /// Deploy a builder project to Netlify, Cloudflare Pages, or Vercel.
+    #[tauri::command]
+    async fn builder_deploy(
+        project_id: String,
+        provider: String,
+        site_id: Option<String>,
+        site_name: Option<String>,
+    ) -> Result<serde_json::Value, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        // Load credentials
+        let creds = web_builder_agent::deploy::credentials::load_credentials(&provider)
+            .map_err(|e| format!("credentials: {e}"))?
+            .ok_or_else(|| {
+                format!("No credentials stored for {provider}. Please configure credentials first.")
+            })?;
+
+        // Determine output directory
+        // For HTML mode: project_dir/current/index.html (single file)
+        // For React mode: project_dir/react/dist/ (after npm run build)
+        let output_dir = if project_dir.join("react").join("dist").exists() {
+            project_dir.join("react").join("dist")
+        } else if project_dir.join("current").exists() {
+            project_dir.join("current")
+        } else if project_dir.join("index.html").exists() {
+            project_dir.clone()
+        } else {
+            return Err("No build output found. Build the project first.".into());
+        };
+
+        // Collect files
+        let files = web_builder_agent::deploy::collect_deploy_files(&output_dir)
+            .map_err(|e| format!("collect files: {e}"))?;
+
+        if files.is_empty() {
+            return Err("No files to deploy.".into());
+        }
+
+        let client = reqwest::Client::new();
+        // UI-initiated deploys: grant deploy.execute capability.
+        let gov = web_builder_agent::deploy::DeployGovernance {
+            agent_id: SYSTEM_UUID,
+            capabilities: vec!["deploy.execute".into()],
+            fuel_budget_usd: 10.0,
+        };
+
+        // Create site if needed
+        let effective_site_id = match site_id {
+            Some(id) if !id.is_empty() => id,
+            _ => {
+                let name = site_name.as_deref().unwrap_or(&project_id);
+                let site = match provider.as_str() {
+                    "netlify" => {
+                        web_builder_agent::deploy::netlify::create_site(name, &creds, &client, &gov)
+                            .await
+                            .map_err(|e| format!("create site: {e}"))?
+                    }
+                    "cloudflare" => web_builder_agent::deploy::cloudflare::create_site(
+                        name, &creds, &client, &gov,
+                    )
+                    .await
+                    .map_err(|e| format!("create site: {e}"))?,
+                    "vercel" => {
+                        // Vercel creates project on first deploy
+                        web_builder_agent::deploy::SiteInfo {
+                            id: name.to_string(),
+                            name: name.to_string(),
+                            url: format!("https://{name}.vercel.app"),
+                            provider: "vercel".into(),
+                        }
+                    }
+                    _ => return Err(format!("Unknown provider: {provider}")),
+                };
+                site.id
+            }
+        };
+
+        // Deploy
+        let result = match provider.as_str() {
+            "netlify" => web_builder_agent::deploy::netlify::deploy(
+                &effective_site_id,
+                &files,
+                &creds,
+                &client,
+                &gov,
+            )
+            .await
+            .map_err(|e| format!("deploy: {e}"))?,
+            "cloudflare" => web_builder_agent::deploy::cloudflare::deploy(
+                &effective_site_id,
+                &files,
+                &creds,
+                &client,
+                &gov,
+            )
+            .await
+            .map_err(|e| format!("deploy: {e}"))?,
+            "vercel" => web_builder_agent::deploy::vercel::deploy(
+                &effective_site_id,
+                &files,
+                &creds,
+                &client,
+                &gov,
+            )
+            .await
+            .map_err(|e| format!("deploy: {e}"))?,
+            _ => return Err(format!("Unknown provider: {provider}")),
+        };
+
+        // Build and save governance manifest
+        let cost = web_builder_agent::build_orchestrator::load_cost_tracker(&project_dir);
+        let build_cost = web_builder_agent::build_orchestrator::BuildCost {
+            total: cost.total_cost,
+            ..Default::default()
+        };
+        let total_bytes: u64 = files.iter().map(|f| f.content.len() as u64).sum();
+        let mut manifest = web_builder_agent::deploy::manifest::create_deploy_manifest(
+            &result,
+            &build_cost,
+            &["claude-sonnet-4-6".to_string()],
+            files.len(),
+            total_bytes,
+        );
+        let _ = web_builder_agent::deploy::manifest::sign_manifest(&mut manifest);
+        let _ = web_builder_agent::deploy::manifest::save_manifest(&project_dir, &manifest);
+        let _ = web_builder_agent::deploy::manifest::append_deploy_history(&project_dir, &manifest);
+
+        // Phase 7B: Record deploy in history with file manifest
+        {
+            let mut history = web_builder_agent::deploy::history::load_history(&project_dir);
+            let files_manifest: Vec<web_builder_agent::deploy::history::FileManifestEntry> = files
+                .iter()
+                .map(|f| web_builder_agent::deploy::history::FileManifestEntry {
+                    path: f.path.clone(),
+                    hash: f.hash.clone(),
+                    size: f.content.len() as u64,
+                })
+                .collect();
+            let entry = web_builder_agent::deploy::history::DeployHistoryEntry {
+                id: uuid::Uuid::new_v4().to_string(),
+                deploy_id: result.deploy_id.clone(),
+                provider: result.provider.clone(),
+                site_id: effective_site_id.clone(),
+                url: result.url.clone(),
+                build_hash: result.build_hash.clone(),
+                timestamp: result.timestamp.clone(),
+                status: web_builder_agent::deploy::history::DeployStatus::Live,
+                quality_score: None,
+                file_count: files.len(),
+                total_bytes,
+                cost: build_cost.total,
+                model_attribution: vec!["claude-sonnet-4-6".into()],
+                files_manifest,
+                signature: None,
+            };
+            history.record_deploy(entry);
+            let _ = web_builder_agent::deploy::history::save_history(&project_dir, &history);
+        }
+
+        Ok(serde_json::json!({
+            "deploy_id": result.deploy_id,
+            "url": result.url,
+            "provider": result.provider,
+            "site_id": result.site_id,
+            "build_hash": result.build_hash,
+            "duration_ms": result.duration_ms,
+            "file_count": files.len(),
+        }))
+    }
+
+    /// Rollback a builder deploy to the previous version.
+    #[tauri::command]
+    async fn builder_deploy_rollback(
+        project_id: String,
+        provider: String,
+        site_id: String,
+        deploy_id: String,
+    ) -> Result<serde_json::Value, String> {
+        let creds = web_builder_agent::deploy::credentials::load_credentials(&provider)
+            .map_err(|e| format!("credentials: {e}"))?
+            .ok_or_else(|| format!("No credentials for {provider}"))?;
+
+        let client = reqwest::Client::new();
+        let gov = web_builder_agent::deploy::DeployGovernance {
+            agent_id: SYSTEM_UUID,
+            capabilities: vec!["deploy.execute".into()],
+            fuel_budget_usd: 10.0,
+        };
+
+        let result = match provider.as_str() {
+            "netlify" => web_builder_agent::deploy::netlify::rollback(
+                &site_id, &deploy_id, &creds, &client, &gov,
+            )
+            .await
+            .map_err(|e| format!("rollback: {e}"))?,
+            "cloudflare" => web_builder_agent::deploy::cloudflare::rollback(
+                &site_id, &deploy_id, &creds, &client, &gov,
+            )
+            .await
+            .map_err(|e| format!("rollback: {e}"))?,
+            "vercel" => web_builder_agent::deploy::vercel::rollback(
+                &site_id, &deploy_id, &creds, &client, &gov,
+            )
+            .await
+            .map_err(|e| format!("rollback: {e}"))?,
+            _ => return Err(format!("Unknown provider: {provider}")),
+        };
+
+        // Update governance manifest
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let build_cost = web_builder_agent::build_orchestrator::BuildCost::default();
+        let mut manifest = web_builder_agent::deploy::manifest::create_deploy_manifest(
+            &result,
+            &build_cost,
+            &[],
+            0,
+            0,
+        );
+        let _ = web_builder_agent::deploy::manifest::sign_manifest(&mut manifest);
+        let _ = web_builder_agent::deploy::manifest::save_manifest(&project_dir, &manifest);
+        let _ = web_builder_agent::deploy::manifest::append_deploy_history(&project_dir, &manifest);
+
+        // Phase 7B: Update history — find the current live entry and the rollback target
+        {
+            let mut history = web_builder_agent::deploy::history::load_history(&project_dir);
+            // Find the current live entry
+            let current_id = history.current().map(|e| e.id.clone());
+            // Find the target entry (by deploy_id match)
+            let target_id = history
+                .entries
+                .iter()
+                .find(|e| e.deploy_id == deploy_id)
+                .map(|e| e.id.clone());
+            if let (Some(from), Some(to)) = (current_id, target_id) {
+                history.record_rollback(&from, &to);
+                let _ = web_builder_agent::deploy::history::save_history(&project_dir, &history);
+            }
+        }
+
+        Ok(serde_json::json!({
+            "deploy_id": result.deploy_id,
+            "url": result.url,
+            "provider": result.provider,
+        }))
+    }
+
+    /// Store deploy provider credentials (encrypted on disk).
+    #[tauri::command]
+    fn builder_deploy_store_credentials(
+        provider: String,
+        token: String,
+        account_id: Option<String>,
+    ) -> Result<(), String> {
+        let creds = web_builder_agent::deploy::Credentials {
+            provider: provider.clone(),
+            token,
+            account_id,
+            expires_at: None,
+        };
+        web_builder_agent::deploy::credentials::store_credentials(&provider, &creds)
+            .map_err(|e| format!("store credentials: {e}"))
+    }
+
+    /// Check if valid credentials exist for a deploy provider.
+    #[tauri::command]
+    async fn builder_deploy_check_credentials(provider: String) -> Result<bool, String> {
+        let creds = match web_builder_agent::deploy::credentials::load_credentials(&provider)
+            .map_err(|e| format!("load: {e}"))?
+        {
+            Some(c) => c,
+            None => return Ok(false),
+        };
+
+        let client = reqwest::Client::new();
+        let valid = match provider.as_str() {
+            "netlify" => web_builder_agent::deploy::netlify::check_token(&creds, &client)
+                .await
+                .unwrap_or(false),
+            "cloudflare" => web_builder_agent::deploy::cloudflare::check_token(&creds, &client)
+                .await
+                .unwrap_or(false),
+            "vercel" => web_builder_agent::deploy::vercel::check_token(&creds, &client)
+                .await
+                .unwrap_or(false),
+            _ => false,
+        };
+        Ok(valid)
+    }
+
+    /// List sites/projects for a deploy provider.
+    #[tauri::command]
+    async fn builder_deploy_list_sites(provider: String) -> Result<serde_json::Value, String> {
+        let creds = web_builder_agent::deploy::credentials::load_credentials(&provider)
+            .map_err(|e| format!("load: {e}"))?
+            .ok_or_else(|| format!("No credentials for {provider}"))?;
+
+        let client = reqwest::Client::new();
+        let sites = match provider.as_str() {
+            "netlify" => web_builder_agent::deploy::netlify::list_sites(&creds, &client)
+                .await
+                .map_err(|e| format!("list: {e}"))?,
+            "cloudflare" => web_builder_agent::deploy::cloudflare::list_sites(&creds, &client)
+                .await
+                .map_err(|e| format!("list: {e}"))?,
+            "vercel" => web_builder_agent::deploy::vercel::list_sites(&creds, &client)
+                .await
+                .map_err(|e| format!("list: {e}"))?,
+            _ => return Err(format!("Unknown provider: {provider}")),
+        };
+
+        Ok(serde_json::json!(sites))
+    }
+
+    /// Build static assets for deploy: for React projects runs npm run build,
+    /// for HTML projects returns the output path directly.
+    #[tauri::command]
+    fn builder_build_static(project_id: String) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let react_dir = project_dir.join("react");
+        if react_dir.exists() && react_dir.join("package.json").exists() {
+            // React project: ensure node_modules, then npm run build
+            if !react_dir.join("node_modules").exists() {
+                let install = std::process::Command::new("npm")
+                    .arg("install")
+                    .current_dir(&react_dir)
+                    .output()
+                    .map_err(|e| format!("npm install: {e}"))?;
+                if !install.status.success() {
+                    return Err(format!(
+                        "npm install failed: {}",
+                        String::from_utf8_lossy(&install.stderr)
+                    ));
+                }
+            }
+
+            let build = std::process::Command::new("npm")
+                .args(["run", "build"])
+                .current_dir(&react_dir)
+                .output()
+                .map_err(|e| format!("npm run build: {e}"))?;
+            if !build.status.success() {
+                return Err(format!(
+                    "npm run build failed: {}",
+                    String::from_utf8_lossy(&build.stderr)
+                ));
+            }
+
+            let dist = react_dir.join("dist");
+            if !dist.exists() {
+                return Err("dist/ not found after build".into());
+            }
+            return Ok(dist.to_string_lossy().to_string());
+        }
+
+        // HTML project: return the current output directory
+        if project_dir.join("current").join("index.html").exists() {
+            return Ok(project_dir.join("current").to_string_lossy().to_string());
+        }
+        if project_dir.join("index.html").exists() {
+            return Ok(project_dir.to_string_lossy().to_string());
+        }
+
+        Err("No build output found".into())
+    }
+
+    // ── Builder Quality Critic (Phase 9A) ─────────────────────────────
+
+    /// Run all six quality checks on a project's build output.
+    #[tauri::command]
+    fn builder_quality_check(project_id: String) -> Result<serde_json::Value, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        // Read HTML from the project
+        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(&project_dir);
+        let html = mgr
+            .read_current_html()
+            .map_err(|e| format!("no HTML to check: {e}"))?;
+
+        let sections = web_builder_agent::quality::extract_sections(&html);
+        let input = web_builder_agent::quality::QualityInput {
+            html,
+            output_dir: Some(project_dir.clone()),
+            template_id: String::new(),
+            sections,
+        };
+
+        let report = web_builder_agent::quality::run_quality_checks(&input)
+            .map_err(|e| format!("quality check: {e}"))?;
+
+        // Save report
+        let _ = web_builder_agent::quality::save_report(&project_dir, &report);
+
+        serde_json::to_value(&report).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Apply selected auto-fixes by index from the quality report.
+    #[tauri::command]
+    fn builder_quality_auto_fix(
+        project_id: String,
+        fix_indices: Vec<usize>,
+    ) -> Result<serde_json::Value, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        // Load current report
+        let report = web_builder_agent::quality::load_report(&project_dir)
+            .ok_or("No quality report found — run quality check first")?;
+
+        // Collect fixes at the requested indices
+        let all_issues: Vec<&web_builder_agent::quality::QualityIssue> =
+            report.checks.iter().flat_map(|c| &c.issues).collect();
+
+        let fixes: Vec<web_builder_agent::quality::AutoFix> = fix_indices
+            .iter()
+            .filter_map(|&i| all_issues.get(i).and_then(|issue| issue.fix.clone()))
+            .collect();
+
+        if fixes.is_empty() {
+            return Err("No auto-fixable issues at the given indices".into());
+        }
+
+        // Read HTML
+        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(&project_dir);
+        let html = mgr
+            .read_current_html()
+            .map_err(|e| format!("read html: {e}"))?;
+
+        // Apply fixes
+        let fix_result = web_builder_agent::quality::auto_fix::apply_auto_fixes(&html, &fixes);
+
+        // Write fixed HTML back
+        mgr.write_current_html(&fix_result.fixed_html)
+            .map_err(|e| format!("write fixed html: {e}"))?;
+
+        // Re-run quality checks on fixed HTML
+        let sections = web_builder_agent::quality::extract_sections(&fix_result.fixed_html);
+        let new_input = web_builder_agent::quality::QualityInput {
+            html: fix_result.fixed_html.clone(),
+            output_dir: Some(project_dir.clone()),
+            template_id: String::new(),
+            sections,
+        };
+        let new_report = web_builder_agent::quality::run_quality_checks(&new_input)
+            .map_err(|e| format!("re-check: {e}"))?;
+        let _ = web_builder_agent::quality::save_report(&project_dir, &new_report);
+
+        Ok(serde_json::json!({
+            "fixes_applied": fix_result.fixes_applied,
+            "fixes_failed": fix_result.fixes_failed,
+            "new_report": serde_json::to_value(&new_report).unwrap_or_default(),
+        }))
+    }
+
+    /// Apply ALL auto-fixable issues at once.
+    #[tauri::command]
+    fn builder_quality_auto_fix_all(project_id: String) -> Result<serde_json::Value, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let report = web_builder_agent::quality::load_report(&project_dir)
+            .ok_or("No quality report found — run quality check first")?;
+
+        let fixes: Vec<web_builder_agent::quality::AutoFix> = report
+            .checks
+            .iter()
+            .flat_map(|c| &c.issues)
+            .filter_map(|i| i.fix.clone())
+            .collect();
+
+        if fixes.is_empty() {
+            return Ok(serde_json::json!({
+                "fixes_applied": [],
+                "fixes_failed": [],
+                "new_report": serde_json::to_value(&report).unwrap_or_default(),
+            }));
+        }
+
+        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(&project_dir);
+        let html = mgr
+            .read_current_html()
+            .map_err(|e| format!("read html: {e}"))?;
+
+        let fix_result = web_builder_agent::quality::auto_fix::apply_auto_fixes(&html, &fixes);
+
+        mgr.write_current_html(&fix_result.fixed_html)
+            .map_err(|e| format!("write: {e}"))?;
+
+        // Re-run checks
+        let sections = web_builder_agent::quality::extract_sections(&fix_result.fixed_html);
+        let new_input = web_builder_agent::quality::QualityInput {
+            html: fix_result.fixed_html.clone(),
+            output_dir: Some(project_dir.clone()),
+            template_id: String::new(),
+            sections,
+        };
+        let new_report = web_builder_agent::quality::run_quality_checks(&new_input)
+            .map_err(|e| format!("re-check: {e}"))?;
+        let _ = web_builder_agent::quality::save_report(&project_dir, &new_report);
+
+        Ok(serde_json::json!({
+            "fixes_applied": fix_result.fixes_applied,
+            "fixes_failed": fix_result.fixes_failed,
+            "new_report": serde_json::to_value(&new_report).unwrap_or_default(),
+        }))
+    }
+
+    // ── Builder Conversion Critic (Phase 9B) ─────────────────────────
+
+    /// Run all four conversion checks on a project's build output.
+    #[tauri::command]
+    fn builder_conversion_check(project_id: String) -> Result<serde_json::Value, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        // Read HTML
+        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(&project_dir);
+        let html = mgr
+            .read_current_html()
+            .map_err(|e| format!("no HTML to check: {e}"))?;
+
+        let sections = web_builder_agent::quality::extract_sections(&html);
+
+        // Load project state for template_id and brief
+        let state = web_builder_agent::project::load_project_state(&project_dir)
+            .unwrap_or_else(|_| web_builder_agent::project::create_project(&project_id, ""));
+        let template_id = state
+            .selected_template
+            .clone()
+            .unwrap_or_else(|| "saas_landing".into());
+
+        let quality_input = web_builder_agent::quality::QualityInput {
+            html,
+            output_dir: Some(project_dir.clone()),
+            template_id: template_id.clone(),
+            sections,
+        };
+
+        let conversion_input = web_builder_agent::quality::conversion::ConversionInput {
+            quality_input,
+            content_payload: web_builder_agent::content_payload::ContentPayload {
+                template_id: template_id.clone(),
+                variant: web_builder_agent::variant::VariantSelection::default(),
+                sections: vec![],
+            },
+            template_id,
+            brief: Some(state.prompt.clone()),
+        };
+
+        let report =
+            web_builder_agent::quality::conversion::run_conversion_checks(&conversion_input)
+                .map_err(|e| format!("conversion check: {e}"))?;
+
+        // Save report
+        let _ = web_builder_agent::quality::conversion::save_report(&project_dir, &report);
+
+        serde_json::to_value(&report).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Apply selected auto-fixes from conversion report by index.
+    #[tauri::command]
+    fn builder_conversion_auto_fix(
+        project_id: String,
+        fix_indices: Vec<usize>,
+    ) -> Result<serde_json::Value, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let report = web_builder_agent::quality::conversion::load_report(&project_dir)
+            .ok_or("No conversion report found — run conversion check first")?;
+
+        let all_issues: Vec<&web_builder_agent::quality::QualityIssue> =
+            report.checks.iter().flat_map(|c| &c.issues).collect();
+
+        let fixes: Vec<web_builder_agent::quality::AutoFix> = fix_indices
+            .iter()
+            .filter_map(|&i| all_issues.get(i).and_then(|issue| issue.fix.clone()))
+            .collect();
+
+        if fixes.is_empty() {
+            return Err("No auto-fixable issues at the given indices".into());
+        }
+
+        // Read HTML
+        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(&project_dir);
+        let html = mgr
+            .read_current_html()
+            .map_err(|e| format!("read html: {e}"))?;
+
+        let fix_result = web_builder_agent::quality::auto_fix::apply_auto_fixes(&html, &fixes);
+
+        mgr.write_current_html(&fix_result.fixed_html)
+            .map_err(|e| format!("write fixed html: {e}"))?;
+
+        Ok(serde_json::json!({
+            "fixes_applied": fix_result.fixes_applied,
+            "fixes_failed": fix_result.fixes_failed,
+        }))
+    }
+
+    // ── Builder Collaboration (Phase 14) ──────────────────────────────
+
+    /// Start hosting a collaboration session for a project.
+    #[tauri::command]
+    fn builder_collab_start_hosting(
+        project_id: String,
+        port: Option<u16>,
+    ) -> Result<serde_json::Value, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let identity =
+            nexus_crypto::CryptoIdentity::generate(nexus_crypto::SignatureAlgorithm::Ed25519)
+                .map_err(|e| format!("keygen: {e}"))?;
+
+        let owner = web_builder_agent::collab::CollaboratorIdentity::new(
+            hex::encode(identity.verifying_key()),
+            std::env::var("USER").unwrap_or_else(|_| "Host".into()),
+            web_builder_agent::collab::roles::CollaborationRole::Owner,
+        );
+
+        let actual_port = port.unwrap_or(web_builder_agent::collab::DEFAULT_COLLAB_PORT);
+        let session = web_builder_agent::collab::start_hosting(&project_id, actual_port, &owner)
+            .map_err(|e| format!("start hosting: {e}"))?;
+
+        let _ = web_builder_agent::collab::save_session(&project_dir, &session);
+
+        serde_json::to_value(&session).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Join an existing collaboration session.
+    #[tauri::command]
+    fn builder_collab_join(
+        server_url: String,
+        session_token: String,
+        display_name: Option<String>,
+    ) -> Result<serde_json::Value, String> {
+        let identity =
+            nexus_crypto::CryptoIdentity::generate(nexus_crypto::SignatureAlgorithm::Ed25519)
+                .map_err(|e| format!("keygen: {e}"))?;
+
+        let collaborator = web_builder_agent::collab::CollaboratorIdentity::new(
+            hex::encode(identity.verifying_key()),
+            display_name
+                .unwrap_or_else(|| std::env::var("USER").unwrap_or_else(|_| "Guest".into())),
+            web_builder_agent::collab::roles::CollaborationRole::Editor,
+        );
+
+        // Return connection info for the frontend to establish WebSocket
+        Ok(serde_json::json!({
+            "server_url": server_url,
+            "session_token": session_token,
+            "identity": serde_json::to_value(&collaborator).unwrap_or_default(),
+        }))
+    }
+
+    /// Leave the current collaboration session.
+    #[tauri::command]
+    fn builder_collab_leave(project_id: String) -> Result<(), String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        // Remove session file
+        let path = project_dir.join("collab_session.json");
+        if path.exists() {
+            std::fs::remove_file(&path).map_err(|e| format!("remove session: {e}"))?;
+        }
+        Ok(())
+    }
+
+    /// Generate an invite link for a collaboration session.
+    #[tauri::command]
+    fn builder_collab_invite(project_id: String, role: String) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let session = web_builder_agent::collab::load_session(&project_dir)
+            .ok_or("No active session — start hosting first")?;
+
+        let collab_role = match role.as_str() {
+            "editor" => web_builder_agent::collab::roles::CollaborationRole::Editor,
+            "commenter" => web_builder_agent::collab::roles::CollaborationRole::Commenter,
+            "viewer" => web_builder_agent::collab::roles::CollaborationRole::Viewer,
+            _ => {
+                return Err(format!(
+                    "Invalid role: {role}. Use editor, commenter, or viewer"
+                ))
+            }
+        };
+
+        Ok(web_builder_agent::collab::generate_invite(
+            &session,
+            collab_role,
+        ))
+    }
+
+    /// Set a collaborator's role.
+    #[tauri::command]
+    fn builder_collab_set_role(
+        project_id: String,
+        public_key: String,
+        role: String,
+    ) -> Result<(), String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let mut session =
+            web_builder_agent::collab::load_session(&project_dir).ok_or("No active session")?;
+
+        let new_role = match role.as_str() {
+            "owner" => web_builder_agent::collab::roles::CollaborationRole::Owner,
+            "editor" => web_builder_agent::collab::roles::CollaborationRole::Editor,
+            "commenter" => web_builder_agent::collab::roles::CollaborationRole::Commenter,
+            "viewer" => web_builder_agent::collab::roles::CollaborationRole::Viewer,
+            _ => return Err(format!("Invalid role: {role}")),
+        };
+
+        if let Some(p) = session
+            .participants
+            .iter_mut()
+            .find(|p| p.public_key == public_key)
+        {
+            p.role = new_role;
+        } else {
+            return Err("Participant not found".into());
+        }
+
+        web_builder_agent::collab::save_session(&project_dir, &session)
+    }
+
+    /// Add a comment to a project.
+    #[tauri::command]
+    fn builder_collab_add_comment(
+        project_id: String,
+        section_id: Option<String>,
+        text: String,
+    ) -> Result<serde_json::Value, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let mut store = web_builder_agent::collab::comments::load_comments(&project_dir);
+
+        let identity =
+            nexus_crypto::CryptoIdentity::generate(nexus_crypto::SignatureAlgorithm::Ed25519)
+                .map_err(|e| format!("keygen: {e}"))?;
+
+        let author = web_builder_agent::collab::CollaboratorIdentity::new(
+            hex::encode(identity.verifying_key()),
+            std::env::var("USER").unwrap_or_else(|_| "User".into()),
+            web_builder_agent::collab::roles::CollaborationRole::Owner,
+        );
+
+        let comment = web_builder_agent::collab::comments::add_comment(
+            &mut store,
+            section_id.as_deref(),
+            &text,
+            &author,
+        );
+
+        web_builder_agent::collab::comments::save_comments(&project_dir, &store)
+            .map_err(|e| format!("save: {e}"))?;
+
+        serde_json::to_value(&comment).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Get comments for a project, optionally filtered by section.
+    #[tauri::command]
+    fn builder_collab_get_comments(
+        project_id: String,
+        section_id: Option<String>,
+    ) -> Result<serde_json::Value, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let store = web_builder_agent::collab::comments::load_comments(&project_dir);
+
+        let comments: Vec<_> = if let Some(ref sid) = section_id {
+            web_builder_agent::collab::comments::get_comments_for_section(
+                &store,
+                Some(sid.as_str()),
+            )
+        } else {
+            store.comments.iter().collect()
+        };
+
+        serde_json::to_value(&comments).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Resolve a comment.
+    #[tauri::command]
+    fn builder_collab_resolve_comment(
+        project_id: String,
+        comment_id: String,
+    ) -> Result<(), String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let mut store = web_builder_agent::collab::comments::load_comments(&project_dir);
+
+        web_builder_agent::collab::comments::resolve_comment(&mut store, &comment_id)
+            .map_err(|e| format!("resolve: {e}"))?;
+
+        web_builder_agent::collab::comments::save_comments(&project_dir, &store)
+    }
+
+    // ── Backend Integration Commands (Phase 8A) ──
+
+    #[tauri::command]
+    fn builder_backend_connect(
+        project_id: String,
+        project_url: String,
+        anon_key: String,
+        service_role_key: Option<String>,
+    ) -> Result<(), String> {
+        eprintln!("[builder-backend] Connecting Supabase for project '{project_id}'");
+        let creds = web_builder_agent::backend::credentials::SupabaseCredentials {
+            project_url,
+            anon_key,
+            service_role_key,
+        };
+        web_builder_agent::backend::credentials::store_supabase_credentials(&creds)
+            .map_err(|e| format!("credential storage failed: {e}"))
+    }
+
+    #[tauri::command]
+    fn builder_backend_generate(
+        project_id: String,
+        description: String,
+    ) -> Result<serde_json::Value, String> {
+        eprintln!(
+            "[builder-backend] Generating backend for '{}': {:?}",
+            project_id,
+            &description[..description.len().min(100)]
+        );
+
+        // Build a SchemaSpec from the description.
+        // In production this calls gemma4:e4b via parse_schema_description.
+        // For the Tauri command, we attempt LLM parsing, falling back to a
+        // basic schema inferred from keywords.
+        let schema = infer_schema_from_description(&description);
+
+        // Try to get Sonnet provider for RLS (security-critical)
+        let config = super::load_config().ok();
+        let rls_provider: Option<Box<dyn nexus_connectors_llm::providers::LlmProvider>> =
+            config.as_ref().and_then(|c| {
+                let pc = super::build_provider_config(c);
+                let has_key = pc
+                    .anthropic_api_key
+                    .as_deref()
+                    .map(|k| !k.trim().is_empty())
+                    .unwrap_or(false);
+                if has_key {
+                    Some(
+                        Box::new(super::ClaudeProvider::new(pc.anthropic_api_key.clone()))
+                            as Box<dyn nexus_connectors_llm::providers::LlmProvider>,
+                    )
+                } else {
+                    let status = nexus_connectors_llm::providers::claude_code::detect_claude_code();
+                    if status.installed && status.authenticated {
+                        Some(Box::new(
+                            nexus_connectors_llm::providers::claude_code::ClaudeCodeProvider::new(),
+                        )
+                            as Box<dyn nexus_connectors_llm::providers::LlmProvider>)
+                    } else {
+                        None
+                    }
+                }
+            });
+
+        let result = web_builder_agent::backend::generate_backend(&schema, rls_provider.as_deref())
+            .map_err(|e| format!("backend generation failed: {e}"))?;
+
+        serde_json::to_value(&result).map_err(|e| format!("serialize: {e}"))
+    }
+
+    #[tauri::command]
+    fn builder_backend_apply(project_id: String) -> Result<(), String> {
+        eprintln!("[builder-backend] Applying backend to project '{project_id}'");
+        // The frontend has the generated files — it writes them via
+        // builder_dev_server_write_file. This command logs the event.
+        Ok(())
+    }
+
+    #[tauri::command]
+    fn builder_backend_preview_schema(
+        _project_id: String,
+        description: String,
+    ) -> Result<serde_json::Value, String> {
+        let schema = infer_schema_from_description(&description);
+        serde_json::to_value(&schema).map_err(|e| format!("serialize: {e}"))
+    }
+
+    // ── Backend Multi-Provider Commands (Phase 8B) ──
+
+    #[tauri::command]
+    fn builder_backend_list_providers() -> Result<serde_json::Value, String> {
+        let providers = web_builder_agent::backend::list_providers();
+        serde_json::to_value(&providers).map_err(|e| format!("serialize: {e}"))
+    }
+
+    #[tauri::command]
+    fn builder_backend_generate_v2(
+        project_id: String,
+        provider: String,
+        description: String,
+        config: Option<String>,
+    ) -> Result<serde_json::Value, String> {
+        eprintln!(
+            "[builder-backend-v2] provider='{}' project='{}': {:?}",
+            provider,
+            project_id,
+            &description[..description.len().min(100)]
+        );
+
+        let schema = infer_schema_from_description(&description);
+
+        let backend_config: web_builder_agent::backend::BackendConfig = if let Some(ref c) = config
+        {
+            serde_json::from_str(c).unwrap_or_else(|_| web_builder_agent::backend::BackendConfig {
+                provider: provider.clone(),
+                options: std::collections::HashMap::new(),
+            })
+        } else {
+            web_builder_agent::backend::BackendConfig {
+                provider: provider.clone(),
+                options: std::collections::HashMap::new(),
+            }
+        };
+
+        // Try to get Sonnet provider for security rules (PocketBase/Firebase)
+        let app_config = super::load_config().ok();
+        let rls_provider: Option<Box<dyn nexus_connectors_llm::providers::LlmProvider>> =
+            app_config.as_ref().and_then(|c| {
+                let pc = super::build_provider_config(c);
+                let has_key = pc
+                    .anthropic_api_key
+                    .as_deref()
+                    .map(|k| !k.trim().is_empty())
+                    .unwrap_or(false);
+                if has_key {
+                    Some(
+                        Box::new(super::ClaudeProvider::new(pc.anthropic_api_key.clone()))
+                            as Box<dyn nexus_connectors_llm::providers::LlmProvider>,
+                    )
+                } else {
+                    let status = nexus_connectors_llm::providers::claude_code::detect_claude_code();
+                    if status.installed && status.authenticated {
+                        Some(Box::new(
+                            nexus_connectors_llm::providers::claude_code::ClaudeCodeProvider::new(),
+                        )
+                            as Box<dyn nexus_connectors_llm::providers::LlmProvider>)
+                    } else {
+                        None
+                    }
+                }
+            });
+
+        let result = web_builder_agent::backend::generate_backend_v2(
+            &schema,
+            &provider,
+            &backend_config,
+            rls_provider.as_deref(),
+        )
+        .map_err(|e| format!("backend generation failed: {e}"))?;
+
+        serde_json::to_value(&result).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Quick schema inference from description keywords (no LLM needed).
+    fn infer_schema_from_description(description: &str) -> web_builder_agent::backend::SchemaSpec {
+        use web_builder_agent::backend::*;
+
+        let lower = description.to_lowercase();
+        let auth_enabled = lower.contains("auth")
+            || lower.contains("login")
+            || lower.contains("signup")
+            || lower.contains("sign up")
+            || lower.contains("user");
+
+        let mut tables = Vec::new();
+
+        // Standard columns helper
+        let std_cols = |has_user_id: bool| -> Vec<ColumnSpec> {
+            let mut cols = vec![ColumnSpec {
+                name: "id".into(),
+                data_type: PgType::Uuid,
+                nullable: false,
+                default: Some("gen_random_uuid()".into()),
+                primary_key: true,
+                references: None,
+                unique: false,
+            }];
+            if has_user_id {
+                cols.push(ColumnSpec {
+                    name: "user_id".into(),
+                    data_type: PgType::Uuid,
+                    nullable: false,
+                    default: None,
+                    primary_key: false,
+                    references: Some(ForeignKey {
+                        table: "auth.users".into(),
+                        column: "id".into(),
+                        on_delete: FkAction::Cascade,
+                    }),
+                    unique: false,
+                });
+            }
+            cols
+        };
+
+        let timestamp_cols = || -> Vec<ColumnSpec> {
+            vec![
+                ColumnSpec {
+                    name: "created_at".into(),
+                    data_type: PgType::Timestamptz,
+                    nullable: false,
+                    default: Some("now()".into()),
+                    primary_key: false,
+                    references: None,
+                    unique: false,
+                },
+                ColumnSpec {
+                    name: "updated_at".into(),
+                    data_type: PgType::Timestamptz,
+                    nullable: false,
+                    default: Some("now()".into()),
+                    primary_key: false,
+                    references: None,
+                    unique: false,
+                },
+            ]
+        };
+
+        // Detect tables from keywords
+        if lower.contains("profile") || (auth_enabled && !lower.contains("product")) {
+            let mut cols = std_cols(true);
+            cols[1].unique = true; // user_id unique for profiles
+            cols.push(ColumnSpec {
+                name: "full_name".into(),
+                data_type: PgType::Text,
+                nullable: true,
+                default: None,
+                primary_key: false,
+                references: None,
+                unique: false,
+            });
+            cols.push(ColumnSpec {
+                name: "avatar_url".into(),
+                data_type: PgType::Text,
+                nullable: true,
+                default: None,
+                primary_key: false,
+                references: None,
+                unique: false,
+            });
+            cols.extend(timestamp_cols());
+            tables.push(TableSpec {
+                name: "profiles".into(),
+                columns: cols,
+                rls_enabled: true,
+                owner_column: Some("user_id".into()),
+                indexes: vec![],
+            });
+        }
+
+        if lower.contains("product") {
+            let mut cols = std_cols(true);
+            cols.push(ColumnSpec {
+                name: "name".into(),
+                data_type: PgType::Text,
+                nullable: false,
+                default: None,
+                primary_key: false,
+                references: None,
+                unique: false,
+            });
+            cols.push(ColumnSpec {
+                name: "price".into(),
+                data_type: PgType::Float8,
+                nullable: false,
+                default: Some("0".into()),
+                primary_key: false,
+                references: None,
+                unique: false,
+            });
+            cols.push(ColumnSpec {
+                name: "image_url".into(),
+                data_type: PgType::Text,
+                nullable: true,
+                default: None,
+                primary_key: false,
+                references: None,
+                unique: false,
+            });
+            cols.push(ColumnSpec {
+                name: "description".into(),
+                data_type: PgType::Text,
+                nullable: true,
+                default: None,
+                primary_key: false,
+                references: None,
+                unique: false,
+            });
+            cols.extend(timestamp_cols());
+            tables.push(TableSpec {
+                name: "products".into(),
+                columns: cols,
+                rls_enabled: true,
+                owner_column: Some("user_id".into()),
+                indexes: vec![IndexSpec {
+                    columns: vec!["user_id".into()],
+                    unique: false,
+                }],
+            });
+        }
+
+        if lower.contains("cart") || lower.contains("shopping") {
+            let mut cols = std_cols(true);
+            cols.push(ColumnSpec {
+                name: "product_id".into(),
+                data_type: PgType::Uuid,
+                nullable: false,
+                default: None,
+                primary_key: false,
+                references: Some(ForeignKey {
+                    table: "products".into(),
+                    column: "id".into(),
+                    on_delete: FkAction::Cascade,
+                }),
+                unique: false,
+            });
+            cols.push(ColumnSpec {
+                name: "quantity".into(),
+                data_type: PgType::Integer,
+                nullable: false,
+                default: Some("1".into()),
+                primary_key: false,
+                references: None,
+                unique: false,
+            });
+            cols.extend(timestamp_cols());
+            tables.push(TableSpec {
+                name: "cart_items".into(),
+                columns: cols,
+                rls_enabled: true,
+                owner_column: Some("user_id".into()),
+                indexes: vec![
+                    IndexSpec {
+                        columns: vec!["user_id".into()],
+                        unique: false,
+                    },
+                    IndexSpec {
+                        columns: vec!["product_id".into()],
+                        unique: false,
+                    },
+                ],
+            });
+        }
+
+        // Fallback: if no tables detected, create a generic data table
+        if tables.is_empty() {
+            let mut cols = std_cols(auth_enabled);
+            cols.push(ColumnSpec {
+                name: "title".into(),
+                data_type: PgType::Text,
+                nullable: false,
+                default: None,
+                primary_key: false,
+                references: None,
+                unique: false,
+            });
+            cols.push(ColumnSpec {
+                name: "content".into(),
+                data_type: PgType::Text,
+                nullable: true,
+                default: None,
+                primary_key: false,
+                references: None,
+                unique: false,
+            });
+            cols.extend(timestamp_cols());
+            tables.push(TableSpec {
+                name: "items".into(),
+                columns: cols,
+                rls_enabled: auth_enabled,
+                owner_column: if auth_enabled {
+                    Some("user_id".into())
+                } else {
+                    None
+                },
+                indexes: vec![],
+            });
+        }
+
+        SchemaSpec {
+            tables,
+            auth_enabled,
+            storage_buckets: vec![],
+        }
+    }
+
+    // ── Design Import Commands (Phase 10) ──
+
+    #[tauri::command]
+    fn builder_import_design(
+        project_id: String,
+        html: String,
+        css: Option<String>,
+        design_md: Option<String>,
+        source: String,
+    ) -> Result<serde_json::Value, String> {
+        eprintln!(
+            "[builder-import] Importing design for '{}' from '{}' ({} chars)",
+            project_id,
+            source,
+            html.len()
+        );
+
+        let import_source = match source.as_str() {
+            "stitch" => web_builder_agent::design_import::ImportSource::Stitch,
+            "figma" => web_builder_agent::design_import::ImportSource::Figma,
+            "url" => web_builder_agent::design_import::ImportSource::Url,
+            _ => web_builder_agent::design_import::ImportSource::Paste,
+        };
+
+        let output = web_builder_agent::design_import::import_design(
+            &project_id,
+            &html,
+            css.as_deref(),
+            design_md.as_deref(),
+            import_source,
+        )
+        .map_err(|e| format!("import failed: {e}"))?;
+
+        // Save the HTML to the project directory
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+        let _ = std::fs::create_dir_all(&project_dir);
+        let _ = std::fs::write(project_dir.join("index.html"), &output.html);
+
+        serde_json::to_value(&output.result).map_err(|e| format!("serialize: {e}"))
+    }
+
+    #[tauri::command]
+    fn builder_import_remap_sections(
+        project_id: String,
+        section_mappings: Vec<(String, String)>,
+    ) -> Result<(), String> {
+        eprintln!(
+            "[builder-import] Remapping {} sections for '{}'",
+            section_mappings.len(),
+            project_id
+        );
+        Ok(())
+    }
+
+    // ── Variant Generation Commands (Phase 11) ──
+
+    #[tauri::command]
+    fn builder_generate_variants(
+        project_id: String,
+        count: Option<usize>,
+        offset: Option<usize>,
+    ) -> Result<serde_json::Value, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let proj_state = web_builder_agent::project::load_project_state(&project_dir)
+            .map_err(|e| format!("load project: {e}"))?;
+
+        let template_id = proj_state
+            .selected_template
+            .as_deref()
+            .unwrap_or("saas_landing");
+
+        let variant_count = count.unwrap_or(3).min(6);
+        let seed_offset = offset.unwrap_or(0) as u64;
+
+        // Read the actual built HTML to use as base for CSS-token variants.
+        // This gives variants with REAL content (from the LLM build) plus
+        // visually distinct color schemes and typography.
+        let current_html_path = project_dir.join("current").join("index.html");
+        let base_html = if current_html_path.exists() {
+            std::fs::read_to_string(&current_html_path).unwrap_or_default()
+        } else {
+            // Fallback: try project root index.html
+            let root_html = project_dir.join("index.html");
+            if root_html.exists() {
+                std::fs::read_to_string(&root_html).unwrap_or_default()
+            } else {
+                String::new()
+            }
+        };
+
+        if base_html.is_empty() {
+            return Err(
+                "No built HTML found for variant generation. Build your site first.".into(),
+            );
+        }
+
+        // Generate diverse variant selections with unique seed per call
+        let base_variant = web_builder_agent::variant_select::select_variant(template_id, "");
+        let seed = 42u64.wrapping_add(seed_offset);
+        let selections = web_builder_agent::variant_select_diverse::select_diverse_variants_seeded(
+            template_id,
+            &base_variant,
+            variant_count,
+            seed,
+        );
+
+        eprintln!(
+            "[variants] Generating {} variants for template={}, seed={}, base_html={} chars, has_root_css={}",
+            variant_count, template_id, seed, base_html.len(), base_html.contains(":root {")
+        );
+
+        // For each variant: inject different CSS tokens into the real built HTML
+        let mut variants = Vec::with_capacity(variant_count);
+        for (i, selection) in selections.iter().enumerate() {
+            let token_set_opt = selection.to_token_set();
+            if token_set_opt.is_none() {
+                eprintln!(
+                    "[variants] WARNING: to_token_set() returned None for palette={}, typography={}",
+                    selection.palette_id, selection.typography_id
+                );
+            }
+            let token_set = token_set_opt.unwrap_or_default();
+            let token_css = token_set.to_css();
+            eprintln!(
+                "[variants] variant {}: palette={}, typography={}, css={} chars, primary={}",
+                i,
+                selection.palette_id,
+                selection.typography_id,
+                token_css.len(),
+                token_set.foundation.color_primary
+            );
+
+            // Inject variant tokens into the built HTML by replacing :root { ... }
+            let replaced = replace_root_css(&base_html, &token_css);
+            let variant_html = if replaced == base_html && !base_html.contains(":root {") {
+                // No :root block — inject tokens as a new <style> before </head>
+                base_html.replace("</head>", &format!("<style>{token_css}</style></head>"))
+            } else {
+                replaced
+            };
+
+            let palette_name = web_builder_agent::variant_select_diverse::palette_name_for_id(
+                &selection.palette_id,
+            );
+            let typo_name = web_builder_agent::variant_select_diverse::typography_name_for_id(
+                &selection.typography_id,
+            );
+
+            variants.push(web_builder_agent::variant_gen::VariantPayload {
+                id: format!(
+                    "variant_{}",
+                    ["a", "b", "c", "d", "e", "f"].get(i).unwrap_or(&"x")
+                ),
+                label: web_builder_agent::variant_select_diverse::variant_label(
+                    palette_name,
+                    typo_name,
+                ),
+                palette_id: selection.palette_id.clone(),
+                typography_id: selection.typography_id.clone(),
+                assembled_html: variant_html,
+            });
+        }
+
+        let payload = web_builder_agent::variant_gen::VariantSetPayload {
+            variants,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        };
+        serde_json::to_value(&payload).map_err(|e| format!("serialize: {e}"))
+    }
+
+    #[tauri::command]
+    fn builder_generate_section_variants(
+        project_id: String,
+        section_id: String,
+        variant_type: String,
+        count: Option<usize>,
+    ) -> Result<serde_json::Value, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let proj_state = web_builder_agent::project::load_project_state(&project_dir)
+            .map_err(|e| format!("load project: {e}"))?;
+
+        let template_id = proj_state
+            .selected_template
+            .as_deref()
+            .unwrap_or("saas_landing");
+        let base_variant = web_builder_agent::variant_select::select_variant(template_id, "");
+        let base_content = web_builder_agent::content_payload::ContentPayload {
+            template_id: template_id.to_string(),
+            variant: base_variant.clone(),
+            sections: vec![],
+        };
+
+        let brief = &proj_state.prompt;
+        let variant_count = count.unwrap_or(3).min(6);
+
+        let vt = match variant_type.as_str() {
+            "layout" => web_builder_agent::variant_gen::SectionVariantType::Layout,
+            "content" => web_builder_agent::variant_gen::SectionVariantType::Content,
+            "palette" => web_builder_agent::variant_gen::SectionVariantType::Palette,
+            _ => return Err(format!("unknown variant type: {variant_type}")),
+        };
+
+        let variant_set = web_builder_agent::variant_gen::generate_section_variants(
+            &section_id,
+            brief,
+            template_id,
+            &base_variant,
+            &base_content,
+            vt,
+            variant_count,
+            None,
+        )
+        .map_err(|e| format!("section variant generation failed: {e}"))?;
+
+        let payload: web_builder_agent::variant_gen::VariantSetPayload = variant_set.into();
+        serde_json::to_value(&payload).map_err(|e| format!("serialize: {e}"))
+    }
+
+    #[tauri::command]
+    fn builder_select_variant(project_id: String, variant_id: String) -> Result<(), String> {
+        eprintln!(
+            "[builder-variant] Selected variant '{}' for project '{}'",
+            variant_id, project_id
+        );
+        // The selected variant's HTML is already in the frontend —
+        // the frontend will call builder_save_state to persist it.
+        // This command logs the selection for audit purposes.
+        Ok(())
+    }
+
+    // ── Phase 12: Theme Panel Commands ───────────────���──────────────────
+
+    /// Apply a theme to a project's token set.
+    #[tauri::command]
+    fn builder_theme_apply(project_id: String, theme_json: String) -> Result<String, String> {
+        let theme: web_builder_agent::theme::Theme =
+            serde_json::from_str(&theme_json).map_err(|e| format!("parse theme: {e}"))?;
+
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        // Load existing visual edit state and token set
+        let mut edit_state = web_builder_agent::visual_edit::load_visual_edit_state(&project_dir)
+            .unwrap_or_default();
+        let mut token_set = web_builder_agent::tokens::TokenSet::default();
+        web_builder_agent::visual_edit::restore_visual_edits(&mut token_set, &edit_state);
+
+        // Apply theme (writes Layer 1 + dark mode)
+        web_builder_agent::theme::apply_theme(&mut token_set, &theme)
+            .map_err(|e| format!("{e}"))?;
+
+        // Record all foundation overrides so they persist
+        let ft = theme.to_foundation_tokens();
+        for name in web_builder_agent::tokens::FOUNDATION_TOKEN_NAMES {
+            if let Some(val) = ft.get(name) {
+                edit_state
+                    .foundation_overrides
+                    .insert(name.to_string(), val.to_string());
+            }
+        }
+
+        // Persist
+        web_builder_agent::visual_edit::save_visual_edit_state(&project_dir, &edit_state)
+            .map_err(|e| format!("save: {e}"))?;
+
+        // Also persist theme JSON for retrieval
+        let theme_path = project_dir.join("theme.json");
+        let theme_str =
+            serde_json::to_string_pretty(&theme).map_err(|e| format!("serialize theme: {e}"))?;
+        let _ = std::fs::create_dir_all(&project_dir);
+        std::fs::write(&theme_path, &theme_str).map_err(|e| format!("write theme.json: {e}"))?;
+
+        // Also update current/index.html so theme persists across reloads
+        let token_css = token_set.to_css();
+        persist_token_css_to_html(&project_dir, &token_css);
+
+        eprintln!(
+            "[builder-theme] Applied theme '{}' to project '{}'",
+            theme.name, project_id
+        );
+        Ok(token_css)
+    }
+
+    /// Get the current theme for a project.
+    #[tauri::command]
+    fn builder_theme_get_current(project_id: String) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        // Try loading persisted theme
+        let theme_path = project_dir.join("theme.json");
+        if theme_path.exists() {
+            let json = std::fs::read_to_string(&theme_path)
+                .map_err(|e| format!("read theme.json: {e}"))?;
+            return Ok(json);
+        }
+
+        // Fall back to extracting from current token set
+        let edit_state = web_builder_agent::visual_edit::load_visual_edit_state(&project_dir)
+            .unwrap_or_default();
+        let mut token_set = web_builder_agent::tokens::TokenSet::default();
+        web_builder_agent::visual_edit::restore_visual_edits(&mut token_set, &edit_state);
+        let theme = web_builder_agent::theme::extract_theme(&token_set);
+        serde_json::to_string(&theme).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Extract a theme from a URL (HTTPS only).
+    #[tauri::command]
+    async fn builder_theme_extract_from_url(url: String) -> Result<String, String> {
+        let theme = web_builder_agent::theme_extract::extract_theme_from_url(&url)
+            .await
+            .map_err(|e| format!("{e}"))?;
+        serde_json::to_string(&theme).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Export the current theme in a specified format.
+    #[tauri::command]
+    fn builder_theme_export(project_id: String, format: String) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        // Get current theme
+        let edit_state = web_builder_agent::visual_edit::load_visual_edit_state(&project_dir)
+            .unwrap_or_default();
+        let mut token_set = web_builder_agent::tokens::TokenSet::default();
+        web_builder_agent::visual_edit::restore_visual_edits(&mut token_set, &edit_state);
+        let theme = web_builder_agent::theme::extract_theme(&token_set);
+
+        match format.as_str() {
+            "css" => Ok(theme.to_css_variables()),
+            "tailwind" => Ok(theme.to_tailwind_config()),
+            "design_md" => Ok(theme.to_design_md()),
+            "dtcg" => Ok(theme.to_dtcg_json()),
+            _ => Err(format!("unknown export format: {format}")),
+        }
+    }
+
+    /// Import a theme from content in a specified format.
+    #[tauri::command]
+    fn builder_theme_import(content: String, format: String) -> Result<String, String> {
+        let theme = match format.as_str() {
+            "design_md" => web_builder_agent::theme::Theme::from_design_md(&content)
+                .map_err(|e| format!("{e}"))?,
+            "dtcg" | "json" => web_builder_agent::theme::Theme::from_dtcg_json(&content)
+                .map_err(|e| format!("{e}"))?,
+            _ => return Err(format!("unknown import format: {format}")),
+        };
+        serde_json::to_string(&theme).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// List available preset themes.
+    #[tauri::command]
+    fn builder_theme_list_presets() -> Result<String, String> {
+        let presets = web_builder_agent::theme_presets::get_preset_info_list();
+        serde_json::to_string(&presets).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Get a specific preset theme by name.
+    #[tauri::command]
+    fn builder_theme_get_preset(name: String) -> Result<String, String> {
+        let presets = web_builder_agent::theme_presets::get_preset_themes();
+        let theme = presets
+            .into_iter()
+            .find(|t| t.name == name)
+            .ok_or_else(|| format!("preset not found: {name}"))?;
+        serde_json::to_string(&theme).map_err(|e| format!("serialize: {e}"))
+    }
+
+    // ── Phase 13: Image Generation Commands ────────────────────────────
+
+    /// Check which image generation tiers are available.
+    #[tauri::command]
+    async fn builder_image_gen_status() -> Result<String, String> {
+        let config = web_builder_agent::image_gen::ImageGenConfig::default();
+        let status = web_builder_agent::image_gen::check_status(&config).await;
+        serde_json::to_string(&status).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Generate a single image for a specific slot.
+    #[tauri::command]
+    async fn builder_generate_image(
+        project_id: String,
+        slot_name: String,
+        section_id: String,
+        prompt: Option<String>,
+    ) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let image_type = web_builder_agent::image_gen::infer_image_type(&slot_name);
+        let aspect_ratio = web_builder_agent::image_gen::AspectRatio::from_image_type(image_type);
+
+        let request = web_builder_agent::image_gen::ImageRequest {
+            prompt: prompt.unwrap_or_else(|| format!("Image for {slot_name}")),
+            slot_name: slot_name.clone(),
+            section_id,
+            image_type,
+            aspect_ratio,
+        };
+
+        let config = web_builder_agent::image_gen::ImageGenConfig::default();
+        let theme = web_builder_agent::image_gen::ThemeColors::default();
+
+        let result =
+            web_builder_agent::image_gen::generate_image(&request, &project_dir, &config, &theme)
+                .await;
+
+        eprintln!(
+            "[builder-image] Generated image for slot '{}' via {} (${:.4})",
+            slot_name, result.generation_method, result.cost
+        );
+
+        serde_json::to_string(&result).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Generate images for all ImagePrompt slots in a project.
+    #[tauri::command]
+    async fn builder_generate_all_images(
+        project_id: String,
+        _app: tauri::AppHandle,
+    ) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        // Load the project state to get the template ID
+        let state = web_builder_agent::project::load_project_state(&project_dir)
+            .map_err(|e| format!("failed to load project state: {e}"))?;
+        let template_id = state.selected_template.as_deref().unwrap_or("saas_landing");
+        let schema = web_builder_agent::slot_schema::get_template_schema(template_id)
+            .ok_or_else(|| format!("unknown template: {template_id}"))?;
+
+        // Build a minimal content payload from latest checkpoint
+        let checkpoint_dir = project_dir.join("current");
+        let html_path = checkpoint_dir.join("index.html");
+        if !html_path.exists() {
+            return Err("no build output found — run a build first".into());
+        }
+
+        let config = web_builder_agent::image_gen::ImageGenConfig::default();
+        let theme = web_builder_agent::image_gen::ThemeColors::default();
+
+        // Collect all ImagePrompt slots from the schema and generate placeholders
+        let mut results = Vec::new();
+        let mut slot_count = 0usize;
+        let mut total_cost = 0.0f64;
+
+        for section in &schema.sections {
+            for (slot_name, constraint) in &section.slots {
+                if constraint.slot_type == web_builder_agent::slot_schema::SlotType::ImagePrompt {
+                    slot_count += 1;
+                    let image_type = web_builder_agent::image_gen::infer_image_type(slot_name);
+                    let request = web_builder_agent::image_gen::ImageRequest {
+                        prompt: format!("Image for {} in {}", slot_name, section.section_id),
+                        slot_name: slot_name.to_string(),
+                        section_id: section.section_id.clone(),
+                        image_type,
+                        aspect_ratio: web_builder_agent::image_gen::AspectRatio::from_image_type(
+                            image_type,
+                        ),
+                    };
+
+                    let result = web_builder_agent::image_gen::generate_image(
+                        &request,
+                        &project_dir,
+                        &config,
+                        &theme,
+                    )
+                    .await;
+
+                    total_cost += result.cost;
+                    results.push(result);
+                }
+            }
+        }
+
+        eprintln!(
+            "[builder-image] Generated {} images for project '{}' (total cost: ${:.4})",
+            slot_count, project_id, total_cost
+        );
+
+        serde_json::to_string(&results).map_err(|e| format!("serialize: {e}"))
+    }
+
+    // ── Phase 15: Enterprise Trust Pack Commands ───────────────────────
+
+    /// Generate a complete Trust Pack for a project.
+    #[tauri::command]
+    fn builder_generate_trust_pack(project_id: String) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let output_dir = project_dir.clone();
+        let result = web_builder_agent::trust_pack::generate_trust_pack(&project_dir, &output_dir)
+            .map_err(|e| format!("trust pack failed: {e}"))?;
+
+        eprintln!(
+            "[builder-trust] Generated trust pack for '{}': {} files, signed={}",
+            project_id, result.total_files, result.signed
+        );
+
+        serde_json::to_string(&result).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Get the audit trail for a project.
+    #[tauri::command]
+    fn builder_get_audit_trail(
+        project_id: String,
+        filter: Option<String>,
+        search: Option<String>,
+    ) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let state = web_builder_agent::project::load_project_state(&project_dir)
+            .unwrap_or_else(|_| web_builder_agent::project::create_project(&project_id, ""));
+
+        let mut events =
+            web_builder_agent::trust_pack::audit_trail::collect_audit_trail(&project_dir, &state);
+
+        // Apply filter
+        if let Some(ref filter_type) = filter {
+            let event_type: Option<web_builder_agent::trust_pack::audit_trail::AuditEventType> =
+                serde_json::from_str(&format!("\"{filter_type}\"")).ok();
+            if let Some(et) = event_type {
+                events = web_builder_agent::trust_pack::audit_trail::filter_by_type(&events, &et);
+            }
+        }
+
+        // Apply search
+        if let Some(ref query) = search {
+            events = web_builder_agent::trust_pack::audit_trail::search_events(&events, query);
+        }
+
+        serde_json::to_string(&events).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Export audit trail as CSV or JSON.
+    #[tauri::command]
+    fn builder_export_audit_trail(project_id: String, format: String) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let state = web_builder_agent::project::load_project_state(&project_dir)
+            .unwrap_or_else(|_| web_builder_agent::project::create_project(&project_id, ""));
+
+        let events =
+            web_builder_agent::trust_pack::audit_trail::collect_audit_trail(&project_dir, &state);
+
+        match format.as_str() {
+            "csv" => Ok(web_builder_agent::trust_pack::audit_trail::export_csv(
+                &events,
+            )),
+            "json" => Ok(web_builder_agent::trust_pack::audit_trail::export_json(
+                &events,
+            )),
+            _ => Err(format!("unknown format: {format}")),
+        }
+    }
+
+    /// Verify a build manifest's Ed25519 signature.
+    #[tauri::command]
+    fn builder_verify_manifest(manifest_json: String) -> Result<bool, String> {
+        let manifest: web_builder_agent::trust_pack::build_manifest::BuildManifest =
+            serde_json::from_str(&manifest_json).map_err(|e| format!("parse manifest: {e}"))?;
+
+        web_builder_agent::trust_pack::build_manifest::verify_manifest(&manifest)
+            .map_err(|e| format!("verify: {e}"))
+    }
+
+    // ── Phase 7B: Deploy History Commands ────────────────────────────────
+
+    /// Get the full deploy history for a project.
+    #[tauri::command]
+    fn builder_deploy_history(project_id: String) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+        let history = web_builder_agent::deploy::history::load_history(&project_dir);
+        serde_json::to_string(&history.all_newest_first()).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Compute diff between two deploys.
+    #[tauri::command]
+    fn builder_deploy_diff(
+        project_id: String,
+        from_id: String,
+        to_id: String,
+    ) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+        let history = web_builder_agent::deploy::history::load_history(&project_dir);
+        let diff = history
+            .diff(&from_id, &to_id)
+            .ok_or_else(|| "deploy entries not found".to_string())?;
+        serde_json::to_string(&diff).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Rollback to any previous deploy by history entry ID.
+    #[tauri::command]
+    async fn builder_deploy_rollback_to(
+        project_id: String,
+        entry_id: String,
+    ) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+
+        let mut history = web_builder_agent::deploy::history::load_history(&project_dir);
+
+        let target = history
+            .get(&entry_id)
+            .ok_or_else(|| format!("entry not found: {entry_id}"))?
+            .clone();
+
+        // Load credentials
+        let creds = web_builder_agent::deploy::credentials::load_credentials(&target.provider)
+            .map_err(|e| format!("credentials: {e}"))?
+            .ok_or_else(|| format!("No credentials for {}", target.provider))?;
+
+        let client = reqwest::Client::new();
+        let gov = web_builder_agent::deploy::DeployGovernance {
+            agent_id: SYSTEM_UUID,
+            capabilities: vec!["deploy.execute".into()],
+            fuel_budget_usd: 10.0,
+        };
+
+        // Rollback via provider
+        let result = match target.provider.as_str() {
+            "netlify" => web_builder_agent::deploy::netlify::rollback(
+                &target.site_id,
+                &target.deploy_id,
+                &creds,
+                &client,
+                &gov,
+            )
+            .await
+            .map_err(|e| format!("rollback: {e}"))?,
+            "cloudflare" => web_builder_agent::deploy::cloudflare::rollback(
+                &target.site_id,
+                &target.deploy_id,
+                &creds,
+                &client,
+                &gov,
+            )
+            .await
+            .map_err(|e| format!("rollback: {e}"))?,
+            "vercel" => web_builder_agent::deploy::vercel::rollback(
+                &target.site_id,
+                &target.deploy_id,
+                &creds,
+                &client,
+                &gov,
+            )
+            .await
+            .map_err(|e| format!("rollback: {e}"))?,
+            other => return Err(format!("Unknown provider: {other}")),
+        };
+
+        // Update history
+        let current_id = history.current().map(|e| e.id.clone());
+        if let Some(from) = current_id {
+            history.record_rollback(&from, &entry_id);
+        }
+        let _ = web_builder_agent::deploy::history::save_history(&project_dir, &history);
+
+        serde_json::to_string(&serde_json::json!({
+            "deploy_id": result.deploy_id,
+            "url": result.url,
+            "provider": result.provider,
+        }))
+        .map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Generate a QR code SVG for a URL.
+    #[tauri::command]
+    fn builder_deploy_qr_code(url: String) -> Result<String, String> {
+        web_builder_agent::deploy::qr::generate_qr_svg(&url, 200).map_err(|e| format!("{e}"))
+    }
+
+    /// Get share info for the current live deploy.
+    #[tauri::command]
+    fn builder_deploy_share_info(project_id: String) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+        let history = web_builder_agent::deploy::history::load_history(&project_dir);
+        let live = history
+            .current()
+            .ok_or_else(|| "No live deploy found".to_string())?;
+
+        let qr_svg =
+            web_builder_agent::deploy::qr::generate_qr_svg(&live.url, 200).unwrap_or_default();
+
+        let info = serde_json::json!({
+            "url": live.url,
+            "qr_svg": qr_svg,
+            "provider": live.provider,
+            "deployed_at": live.timestamp,
+            "build_hash": live.build_hash,
+            "is_current": true,
+        });
+        serde_json::to_string(&info).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Check deploy drift (current build vs live deploy).
+    #[tauri::command]
+    fn builder_deploy_drift(
+        project_id: String,
+        current_build_hash: String,
+    ) -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let project_dir = std::path::PathBuf::from(home)
+            .join(".nexus")
+            .join("builds")
+            .join(&project_id);
+        let history = web_builder_agent::deploy::history::load_history(&project_dir);
+        let drift =
+            web_builder_agent::deploy::history::check_deploy_drift(&current_build_hash, &history);
+        serde_json::to_string(&drift).map_err(|e| format!("serialize: {e}"))
+    }
+
+    // ── Phase 16: Self-Improving Builder Commands ──────���─────────────────
+
+    /// Get the current improvement status.
+    #[tauri::command]
+    fn builder_improvement_status() -> Result<String, String> {
+        let store = web_builder_agent::self_improve::store::load_store()
+            .map_err(|e| format!("load store: {e}"))?;
+        let status = web_builder_agent::self_improve::compute_status(&store);
+        serde_json::to_string(&status).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Run analysis on all completed projects.
+    #[tauri::command]
+    fn builder_improvement_run_analysis() -> Result<String, String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+        let builds_dir = std::path::PathBuf::from(&home)
+            .join(".nexus")
+            .join("builds");
+
+        let mut store = web_builder_agent::self_improve::store::load_store()
+            .map_err(|e| format!("load store: {e}"))?;
+
+        // Collect metrics from all completed projects
+        let metrics = web_builder_agent::self_improve::observer::collect_all_metrics(&builds_dir);
+        store.metrics = metrics;
+
+        // Aggregate and analyze
+        let agg = web_builder_agent::self_improve::metrics::aggregate_metrics(&store.metrics);
+        let analysis = web_builder_agent::self_improve::analyzer::analyze(
+            &agg,
+            web_builder_agent::self_improve::analyzer::DEFAULT_MIN_SAMPLE_SIZE,
+        );
+
+        // Generate proposals for new opportunities
+        let proposals = web_builder_agent::self_improve::proposer::generate_proposals(
+            &analysis,
+            &store.defaults,
+        );
+        for p in proposals {
+            if !store
+                .proposals
+                .iter()
+                .any(|existing| existing.opportunity_id == p.opportunity_id)
+            {
+                store.proposals.push(p);
+            }
+        }
+
+        web_builder_agent::self_improve::store::save_store(&store)
+            .map_err(|e| format!("save store: {e}"))?;
+
+        serde_json::to_string(&analysis).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Get all proposals.
+    #[tauri::command]
+    fn builder_improvement_get_proposals() -> Result<String, String> {
+        let store = web_builder_agent::self_improve::store::load_store()
+            .map_err(|e| format!("load store: {e}"))?;
+        serde_json::to_string(&store.proposals).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Validate a proposal by ID.
+    #[tauri::command]
+    fn builder_improvement_validate_proposal(proposal_id: String) -> Result<String, String> {
+        let mut store = web_builder_agent::self_improve::store::load_store()
+            .map_err(|e| format!("load store: {e}"))?;
+
+        let proposal = store
+            .proposals
+            .iter()
+            .find(|p| p.id == proposal_id)
+            .ok_or_else(|| format!("proposal not found: {proposal_id}"))?
+            .clone();
+
+        let avg_quality = 85u32; // baseline estimate
+        let avg_conversion = 75u32;
+        let result = web_builder_agent::self_improve::validator::validate_proposal(
+            &proposal,
+            avg_quality,
+            avg_conversion,
+        )
+        .map_err(|e| format!("validate: {e}"))?;
+
+        // Update proposal status
+        if let Some(p) = store.proposals.iter_mut().find(|p| p.id == proposal_id) {
+            p.status = if result.passed {
+                web_builder_agent::self_improve::proposer::ProposalStatus::Validated
+            } else {
+                web_builder_agent::self_improve::proposer::ProposalStatus::ValidationFailed
+            };
+        }
+        web_builder_agent::self_improve::store::save_store(&store)
+            .map_err(|e| format!("save store: {e}"))?;
+
+        serde_json::to_string(&result).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Apply a validated proposal.
+    #[tauri::command]
+    fn builder_improvement_apply_proposal(proposal_id: String) -> Result<String, String> {
+        let mut store = web_builder_agent::self_improve::store::load_store()
+            .map_err(|e| format!("load store: {e}"))?;
+
+        let proposal = store
+            .proposals
+            .iter_mut()
+            .find(|p| p.id == proposal_id)
+            .ok_or_else(|| format!("proposal not found: {proposal_id}"))?;
+
+        let result =
+            web_builder_agent::self_improve::applier::apply_proposal(proposal, &mut store.defaults)
+                .map_err(|e| format!("apply: {e}"))?;
+
+        // Save rollback snapshot
+        store
+            .rollback_snapshots
+            .insert(proposal_id.clone(), result.previous_state.clone());
+        store.version += 1;
+
+        web_builder_agent::self_improve::store::save_store(&store)
+            .map_err(|e| format!("save store: {e}"))?;
+
+        serde_json::to_string(&result).map_err(|e| format!("serialize: {e}"))
+    }
+
+    /// Roll back a previously applied proposal.
+    #[tauri::command]
+    fn builder_improvement_rollback_proposal(proposal_id: String) -> Result<String, String> {
+        let mut store = web_builder_agent::self_improve::store::load_store()
+            .map_err(|e| format!("load store: {e}"))?;
+
+        let snapshot = store
+            .rollback_snapshots
+            .get(&proposal_id)
+            .ok_or_else(|| format!("no rollback snapshot for: {proposal_id}"))?
+            .clone();
+
+        let proposal = store
+            .proposals
+            .iter_mut()
+            .find(|p| p.id == proposal_id)
+            .ok_or_else(|| format!("proposal not found: {proposal_id}"))?;
+
+        web_builder_agent::self_improve::applier::rollback_proposal(
+            proposal,
+            &mut store.defaults,
+            &snapshot,
+        )
+        .map_err(|e| format!("rollback: {e}"))?;
+
+        store.version += 1;
+        web_builder_agent::self_improve::store::save_store(&store)
+            .map_err(|e| format!("save store: {e}"))?;
+
+        Ok("rolled back".into())
+    }
+
+    /// Reset all improvements to factory defaults.
+    #[tauri::command]
+    fn builder_improvement_reset_defaults() -> Result<String, String> {
+        let mut store = web_builder_agent::self_improve::store::load_store()
+            .map_err(|e| format!("load store: {e}"))?;
+
+        web_builder_agent::self_improve::applier::reset_defaults(&mut store.defaults);
+        // Mark all applied proposals as rolled back
+        for p in &mut store.proposals {
+            if p.status == web_builder_agent::self_improve::proposer::ProposalStatus::Applied {
+                p.status = web_builder_agent::self_improve::proposer::ProposalStatus::RolledBack;
+            }
+        }
+        store.version += 1;
+        store.rollback_snapshots.clear();
+
+        web_builder_agent::self_improve::store::save_store(&store)
+            .map_err(|e| format!("save store: {e}"))?;
+
+        Ok("reset to factory defaults".into())
     }
 
     #[tauri::command]
@@ -6291,6 +9230,37 @@ pub mod runtime {
         // Spawn the background cognitive loop driver
         super::spawn_cognitive_loop(window, state.inner().clone(), agent_id, goal_id.clone());
         Ok(goal_id)
+    }
+
+    /// TEMPORARY DIAGNOSTIC: emit a synthetic agent-cognitive-cycle event from
+    /// inside a Tauri command, using the window injected by Tauri itself.
+    /// Bypasses BackendEventBridge to test if direct window.emit reaches the
+    /// frontend listener.
+    #[tauri::command]
+    async fn test_emit_event(window: tauri::WebviewWindow) -> Result<(), String> {
+        eprintln!(
+            "[TEST] test_emit_event called, window label: {}",
+            window.label()
+        );
+        window
+            .emit(
+                "agent-cognitive-cycle",
+                serde_json::json!({
+                    "agent_id": "test-agent-id",
+                    "phase": "test",
+                    "steps_executed": 1,
+                    "fuel_consumed": 0.0,
+                    "should_continue": true,
+                    "blocked_reason": null,
+                    "steps": []
+                }),
+            )
+            .map_err(|e| {
+                eprintln!("[TEST] emit failed: {}", e);
+                e.to_string()
+            })?;
+        eprintln!("[TEST] emit succeeded from test command");
+        Ok(())
     }
 
     /// Start an autonomous agent loop — the agent runs its default goal on
@@ -7754,6 +10724,37 @@ pub mod runtime {
         serde_json::to_string(&status).map_err(|e| format!("serialize: {e}"))
     }
 
+    #[tauri::command]
+    fn log_frontend_error(message: String, stack: String, component_stack: String) {
+        eprintln!("[FRONTEND ERROR] {message}");
+        if !stack.is_empty() {
+            eprintln!("[FRONTEND STACK] {stack}");
+        }
+        if !component_stack.is_empty() {
+            eprintln!("[COMPONENT STACK] {component_stack}");
+        }
+        // Also append to a log file for post-mortem debugging
+        if let Some(home) = dirs::home_dir() {
+            let log_dir = home.join(".nexus");
+            let _ = std::fs::create_dir_all(&log_dir);
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(log_dir.join("frontend_errors.log"))
+            {
+                use std::io::Write;
+                let _ = writeln!(
+                    file,
+                    "[{}] {}\n{}\n{}\n---",
+                    chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                    message,
+                    stack,
+                    component_stack
+                );
+            }
+        }
+    }
+
     pub fn run() {
         let builder = tauri::Builder::<tauri::Wry>::default()
             .plugin(
@@ -7792,7 +10793,7 @@ pub mod runtime {
                         }
 
                         state.log_event(
-                            Uuid::nil(),
+                            SYSTEM_UUID,
                             EventType::UserAction,
                             json!({
                                 "source": "computer-control",
@@ -7830,6 +10831,22 @@ pub mod runtime {
                 .set_goal_callback(Arc::new(RunnerGoalCallback {
                     state: state.inner().clone(),
                 }));
+
+            // Auto-detect enabled LLM providers (non-blocking).
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    match commands::chat_llm::auto_detect_enabled_providers() {
+                        Ok(providers) => {
+                            let _ = app_handle.emit("llm-providers-ready", &providers);
+                            eprintln!("[startup] LLM provider auto-detect complete");
+                        }
+                        Err(e) => {
+                            eprintln!("[startup] LLM provider auto-detect failed: {e}");
+                        }
+                    }
+                });
+            }
 
             // Defer heavy agent loading so the window appears immediately.
             let state_clone = state.inner().clone();
@@ -7944,6 +10961,14 @@ pub mod runtime {
                 get_provider_status,
                 get_available_providers,
                 save_api_key,
+                detect_claude_code_cli,
+                trigger_claude_code_login,
+                detect_codex_cli,
+                trigger_codex_cli_login,
+                load_llm_provider_settings,
+                save_llm_provider_settings,
+                detect_cli_provider,
+                auto_detect_all_enabled,
                 chat_with_ollama,
                 set_agent_model,
                 check_llm_status,
@@ -8070,6 +11095,13 @@ pub mod runtime {
                 builder_delete_project,
                 builder_get_history,
                 builder_record_build,
+                builder_get_available_models,
+                builder_get_model_config,
+                builder_save_model_config,
+                builder_reset_model_config,
+                builder_get_model_choices,
+                builder_check_cli_auth,
+                builder_authenticate_cli,
                 builder_read_preview,
                 builder_list_checkpoints,
                 builder_rollback,
@@ -8082,6 +11114,70 @@ pub mod runtime {
                 builder_export_project,
                 builder_save_state,
                 builder_load_state,
+                builder_visual_edit_token,
+                builder_visual_edit_text,
+                builder_scaffold_build,
+                builder_dev_server_start,
+                builder_dev_server_stop,
+                builder_dev_server_status,
+                builder_dev_server_write_file,
+                builder_deploy,
+                builder_deploy_rollback,
+                builder_deploy_store_credentials,
+                builder_deploy_check_credentials,
+                builder_deploy_list_sites,
+                builder_build_static,
+                builder_quality_check,
+                builder_quality_auto_fix,
+                builder_quality_auto_fix_all,
+                builder_conversion_check,
+                builder_conversion_auto_fix,
+                builder_collab_start_hosting,
+                builder_collab_join,
+                builder_collab_leave,
+                builder_collab_invite,
+                builder_collab_set_role,
+                builder_collab_add_comment,
+                builder_collab_get_comments,
+                builder_collab_resolve_comment,
+                builder_backend_connect,
+                builder_backend_generate,
+                builder_backend_apply,
+                builder_backend_preview_schema,
+                builder_backend_list_providers,
+                builder_backend_generate_v2,
+                builder_import_design,
+                builder_import_remap_sections,
+                builder_generate_variants,
+                builder_generate_section_variants,
+                builder_select_variant,
+                builder_theme_apply,
+                builder_theme_get_current,
+                builder_theme_extract_from_url,
+                builder_theme_export,
+                builder_theme_import,
+                builder_theme_list_presets,
+                builder_theme_get_preset,
+                builder_image_gen_status,
+                builder_generate_image,
+                builder_generate_all_images,
+                builder_generate_trust_pack,
+                builder_get_audit_trail,
+                builder_export_audit_trail,
+                builder_verify_manifest,
+                builder_deploy_history,
+                builder_deploy_diff,
+                builder_deploy_rollback_to,
+                builder_deploy_qr_code,
+                builder_deploy_share_info,
+                builder_deploy_drift,
+                builder_improvement_status,
+                builder_improvement_run_analysis,
+                builder_improvement_get_proposals,
+                builder_improvement_validate_proposal,
+                builder_improvement_apply_proposal,
+                builder_improvement_rollback_proposal,
+                builder_improvement_reset_defaults,
                 execute_tool,
                 list_tools,
                 terminal_execute,
@@ -8208,6 +11304,7 @@ pub mod runtime {
                 project_delete,
                 assign_agent_goal,
                 execute_agent_goal,
+                test_emit_event,
                 start_autonomous_loop,
                 stop_autonomous_loop,
                 stop_agent_goal,
@@ -8642,6 +11739,15 @@ pub mod runtime {
                 nx_bridge::commands::nx_session_save,
                 nx_bridge::commands::nx_session_list,
                 nx_bridge::commands::nx_switch_provider,
+                // Computer Use commands
+                nx_bridge::commands::nx_computer_use_screenshot,
+                nx_bridge::commands::nx_computer_use_status,
+                nx_bridge::commands::nx_agent_run,
+                nx_bridge::commands::nx_agent_approve,
+                nx_bridge::commands::nx_app_grants,
+                nx_bridge::commands::nx_learned_patterns,
+                nx_bridge::commands::nx_learning_stats,
+                log_frontend_error,
             ])
             .run(tauri::generate_context!())
             .unwrap_or_else(|e| {

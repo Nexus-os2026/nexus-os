@@ -12,9 +12,9 @@ import {
 } from "../api/backend";
 import { alpha, commandPageStyle } from "./commandCenterUi";
 
-const ACCENT = "#a855f7";
+const ACCENT = "#14b8a6";
 const GREEN = "#22c55e";
-const BLUE = "#3b82f6";
+const BLUE = "#0ea5e9";
 
 type TaskType =
   | "describe"

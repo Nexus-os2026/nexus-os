@@ -107,7 +107,7 @@ pub(crate) fn reputation_register(
 
     drop(reg);
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "reputation",
@@ -192,7 +192,7 @@ pub(crate) fn reputation_import(state: &AppState, json: String) -> Result<String
 
     drop(reg);
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "reputation",
@@ -547,7 +547,7 @@ pub(crate) fn computer_control_execute_action(
     let action: InputAction = serde_json::from_str(&action_json).map_err(|e| e.to_string())?;
     let result = engine.execute(action);
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({
             "source": "computer-control",
@@ -581,7 +581,7 @@ pub(crate) fn computer_control_toggle(state: &AppState, enabled: bool) -> Result
         engine.disable();
     }
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "computer-control",
@@ -613,7 +613,7 @@ pub(crate) fn capture_screen(
     let workspace = desktop_control_workspace();
     let path = capture_and_store_screen(&workspace, region.as_ref(), "tauri-capture-screen")?;
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::ToolCall,
         json!({
             "source": "computer-control",
@@ -635,7 +635,7 @@ pub(crate) fn analyze_screen(state: &AppState, query: String) -> Result<String, 
     let workspace = desktop_control_workspace();
     let analysis = capture_and_analyze_screen(&workspace, &query, None)?;
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::LlmCall,
         json!({
             "source": "computer-control",
@@ -655,7 +655,7 @@ pub(crate) fn analyze_media_file(
     let canonical = file_manager_validate_path(&path)?;
     let analysis = analyze_stored_screenshot(&canonical, &query, None)?;
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::LlmCall,
         json!({
             "source": "media-studio",
@@ -680,7 +680,7 @@ pub(crate) fn start_computer_action(
         .unwrap_or_else(|p| p.into_inner())
         .insert(session_id.clone(), cancelled.clone());
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "computer-control",
@@ -708,7 +708,7 @@ pub(crate) fn start_computer_action(
             .unwrap_or_else(|p| p.into_inner())
             .remove(&session_clone);
         state_clone.log_event(
-            Uuid::nil(),
+            SYSTEM_UUID,
             EventType::StateChange,
             json!({
                 "source": "computer-control",
@@ -741,7 +741,7 @@ pub(crate) fn stop_computer_action(state: &AppState, agent_id: String) -> Result
         engine.disable();
     }
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "computer-control",
@@ -785,7 +785,7 @@ pub(crate) fn neural_bridge_toggle(state: &AppState, enabled: bool) -> Result<St
         .unwrap_or_else(|p| p.into_inner());
     bridge.set_enabled(enabled);
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "neural-bridge",
@@ -885,7 +885,7 @@ pub(crate) fn neural_bridge_clear_old(
         .unwrap_or_else(|p| p.into_inner());
     let cleared_count = bridge.clear_before(before_timestamp);
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "neural-bridge",
@@ -908,7 +908,7 @@ pub(crate) fn economy_create_wallet(state: &AppState, agent_id: String) -> Resul
         .unwrap_or_else(|p| p.into_inner());
     let wallet = engine.create_wallet(&agent_id);
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({ "source": "economy", "action": "create_wallet", "agent_id": agent_id }),
     );
@@ -984,7 +984,7 @@ pub(crate) fn economy_freeze_wallet(state: &AppState, agent_id: String) -> Resul
         .unwrap_or_else(|p| p.into_inner());
     engine.freeze_wallet(&agent_id)?;
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({ "source": "economy", "action": "freeze", "agent_id": agent_id }),
     );

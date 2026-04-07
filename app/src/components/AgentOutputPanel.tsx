@@ -1,151 +1,454 @@
-import { useEffect, useState, useRef } from "react";
-import { hasDesktopRuntime, getAgentOutputs } from "../api/backend";
-import { Terminal, Clock, Loader } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import {
+  Terminal,
+  ChevronDown,
+  ChevronRight,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Search,
+  Brain,
+  FileText,
+  Code2,
+  Globe,
+  Zap,
+  Sparkles,
+} from "lucide-react";
 
-interface OutputEntry {
-  id: string;
-  time: string | number;
+/* ─── types ─── */
+
+export interface StepDetail {
   action: string;
-  type: string;
-  content: string;
+  status: string;
+  result: string;
+  fuel_cost: number;
 }
 
 interface Props {
-  agentId: string;
-  maxHeight?: string;
+  steps: StepDetail[];
+  phase: string | null;
+  running: boolean;
+  totalSteps: number;
+  fuelConsumed: number;
+  query: string;
 }
 
-export default function AgentOutputPanel({ agentId, maxHeight = "400px" }: Props) {
-  const [outputs, setOutputs] = useState<OutputEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const bottomRef = useRef<HTMLDivElement>(null);
+/* ─── helpers ─── */
 
-  useEffect(() => {
-    if (!agentId || !hasDesktopRuntime()) {
-      setLoading(false);
-      return;
-    }
+const ACTION_ICONS: Record<string, typeof Brain> = {
+  llm_query: Brain,
+  web_search: Search,
+  file_read: FileText,
+  file_write: Code2,
+  shell_command: Terminal,
+  web_fetch: Globe,
+  image_generate: Sparkles,
+};
 
-    let active = true;
+const ACTION_COLORS: Record<string, string> = {
+  llm_query: "#a78bfa",
+  web_search: "#22d3ee",
+  file_read: "#60a5fa",
+  file_write: "#f59e0b",
+  shell_command: "#10b981",
+  web_fetch: "#06b6d4",
+  image_generate: "#ec4899",
+};
 
-    const poll = async () => {
-      try {
-        const raw = await getAgentOutputs(agentId, 50);
-        if (!active) return;
-        const parsed: OutputEntry[] = JSON.parse(raw);
-        setOutputs(parsed);
-      } catch {
-        // silent
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
+function actionColor(action: string): string {
+  return ACTION_COLORS[action] ?? "#64748b";
+}
 
-    poll();
-    const interval = setInterval(poll, 3000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [agentId]);
+function ActionIcon({ action }: { action: string }) {
+  const Icon = ACTION_ICONS[action] ?? Zap;
+  return <Icon size={13} />;
+}
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [outputs.length]);
+function truncate(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return text.slice(0, max) + "…";
+}
 
-  const formatTime = (t: string | number) => {
-    if (typeof t === "number") {
-      return new Date(t * 1000).toLocaleTimeString();
-    }
-    return new Date(t).toLocaleTimeString();
-  };
+/* ─── step row ─── */
+
+function StepRow({
+  step,
+  index,
+  total,
+  isLast,
+}: {
+  step: StepDetail;
+  index: number;
+  total: number;
+  isLast: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const succeeded = step.status === "Succeeded" || step.status === "succeeded";
+  const failed = step.status === "Failed" || step.status === "failed";
+  const isFinalLlm = isLast && step.action === "llm_query" && succeeded;
+
+  const accentColor = actionColor(step.action);
 
   return (
     <div
       style={{
-        background: "var(--bg-secondary, #1e293b)",
-        border: "1px solid var(--border, #334155)",
-        borderRadius: 8,
-        overflow: "hidden",
-        fontFamily: "var(--font-mono, monospace)",
+        borderLeft: `2px solid ${succeeded ? accentColor : failed ? "#ef4444" : "#334155"}`,
+        marginLeft: 8,
+        paddingLeft: 12,
+        paddingBottom: isLast ? 0 : 12,
+        position: "relative",
       }}
     >
+      {/* timeline dot */}
       <div
         style={{
-          padding: "0.5rem 0.75rem",
-          borderBottom: "1px solid var(--border, #334155)",
+          position: "absolute",
+          left: -6,
+          top: 4,
+          width: 10,
+          height: 10,
+          borderRadius: "50%",
+          background: succeeded ? accentColor : failed ? "#ef4444" : "#334155",
+          border: "2px solid #0d1117",
+          boxShadow: succeeded ? `0 0 8px ${accentColor}55` : "none",
+        }}
+      />
+
+      {/* header */}
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        style={{
           display: "flex",
           alignItems: "center",
           gap: 8,
-          fontSize: "0.8rem",
-          fontWeight: 600,
-          color: "var(--text-primary, #e2e8f0)",
+          width: "100%",
+          background: "transparent",
+          border: "none",
+          color: "#e0e0e0",
+          cursor: "pointer",
+          padding: "2px 0",
+          fontSize: 13,
+          textAlign: "left",
         }}
       >
-        <Terminal size={14} />
-        Agent Output
-        {loading && <Loader size={12} style={{ animation: "spin 1s linear infinite" }} />}
-        <span style={{ marginLeft: "auto", opacity: 0.5, fontSize: "0.7rem" }}>
-          {outputs.length} events
-        </span>
-      </div>
+        {expanded ? (
+          <ChevronDown size={12} style={{ opacity: 0.5, flexShrink: 0 }} />
+        ) : (
+          <ChevronRight size={12} style={{ opacity: 0.5, flexShrink: 0 }} />
+        )}
 
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            fontSize: 11,
+            fontWeight: 600,
+            color: "#94a3b8",
+            fontFamily: "var(--font-mono, monospace)",
+            flexShrink: 0,
+          }}
+        >
+          {index + 1}/{total}
+        </span>
+
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            color: accentColor,
+            fontSize: 12,
+            fontWeight: 600,
+            fontFamily: "var(--font-mono, monospace)",
+          }}
+        >
+          <ActionIcon action={step.action} />
+          {step.action}
+        </span>
+
+        <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+          {succeeded ? (
+            <CheckCircle2 size={13} color="#22c55e" />
+          ) : failed ? (
+            <XCircle size={13} color="#ef4444" />
+          ) : (
+            <Loader2 size={13} color="#00e5ff" style={{ animation: "spin 1s linear infinite" }} />
+          )}
+          {step.fuel_cost > 0 && (
+            <span style={{ fontSize: 10, color: "#64748b", fontFamily: "var(--font-mono, monospace)" }}>
+              {step.fuel_cost.toFixed(1)} fuel
+            </span>
+          )}
+        </span>
+      </button>
+
+      {/* result preview — collapsed */}
+      {!expanded && step.result && !isFinalLlm && (
+        <div
+          style={{
+            fontSize: 12,
+            color: "#94a3b8",
+            marginTop: 4,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            maxWidth: "100%",
+            fontFamily: "var(--font-mono, monospace)",
+          }}
+        >
+          {truncate(step.result, 120)}
+        </div>
+      )}
+
+      {/* result — expanded */}
+      {expanded && step.result && (
+        <pre
+          style={{
+            margin: "6px 0 0",
+            padding: "8px 10px",
+            background: "#0a0f1a",
+            border: "1px solid #1e3a5f",
+            borderRadius: 6,
+            fontSize: 12,
+            color: "#cbd5e1",
+            lineHeight: 1.6,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            maxHeight: 300,
+            overflowY: "auto",
+            fontFamily: "var(--font-mono, monospace)",
+          }}
+        >
+          {step.result}
+        </pre>
+      )}
+
+      {/* Final LLM response — always shown prominently */}
+      {isFinalLlm && step.result && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: "12px 14px",
+            background: "linear-gradient(135deg, rgba(0, 229, 255, 0.06), rgba(167, 139, 250, 0.06))",
+            border: "1px solid rgba(0, 229, 255, 0.2)",
+            borderRadius: 8,
+            fontSize: 13,
+            color: "#e0e0e0",
+            lineHeight: 1.7,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              marginBottom: 8,
+              fontSize: 11,
+              fontWeight: 700,
+              color: "#00e5ff",
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              fontFamily: "var(--font-mono, monospace)",
+            }}
+          >
+            <Sparkles size={12} />
+            Agent Response
+          </div>
+          {step.result}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── main panel ─── */
+
+export default function AgentOutputPanel({
+  steps,
+  phase,
+  running,
+  totalSteps,
+  fuelConsumed,
+  query,
+}: Props) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // auto-scroll to latest
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [steps.length]);
+
+  // Find the last LLM result for prominent display
+  const hasOutput = steps.length > 0 || running;
+
+  return (
+    <div
+      style={{
+        background: "#0d1117",
+        border: "1px solid #1e3a5f",
+        borderRadius: 8,
+        overflow: "hidden",
+        marginBottom: 12,
+      }}
+    >
+      {/* header */}
       <div
         style={{
-          maxHeight,
-          overflowY: "auto",
-          padding: "0.5rem",
+          padding: "8px 14px",
+          borderBottom: "1px solid #1e3a5f",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          background: "linear-gradient(90deg, rgba(0, 229, 255, 0.04), transparent)",
         }}
       >
-        {outputs.length === 0 && !loading && (
-          <div
+        <Terminal size={14} color="#00e5ff" />
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: "#e0e0e0",
+            letterSpacing: "0.04em",
+          }}
+        >
+          Agent Output
+        </span>
+
+        {running && (
+          <Loader2
+            size={13}
+            color="#00e5ff"
+            style={{ animation: "spin 1s linear infinite" }}
+          />
+        )}
+
+        {phase && (
+          <span
             style={{
-              padding: "2rem",
-              textAlign: "center",
-              opacity: 0.5,
-              fontSize: "0.8rem",
+              marginLeft: "auto",
+              fontSize: 11,
+              fontWeight: 600,
+              color:
+                phase === "Complete"
+                  ? "#22c55e"
+                  : phase.startsWith("Error")
+                    ? "#ef4444"
+                    : "#00e5ff",
+              fontFamily: "var(--font-mono, monospace)",
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
             }}
           >
-            No output yet. Start the agent to see live activity.
+            {phase}
+            {totalSteps > 0 &&
+              ` · ${steps.length}/${totalSteps} steps · ${fuelConsumed.toFixed(0)} fuel`}
+          </span>
+        )}
+      </div>
+
+      {/* body */}
+      <div
+        ref={scrollRef}
+        style={{
+          maxHeight: 480,
+          overflowY: "auto",
+          padding: "12px 14px",
+        }}
+      >
+        {/* empty state */}
+        {!hasOutput && (
+          <div
+            style={{
+              padding: "32px 16px",
+              textAlign: "center",
+              color: "#475569",
+              fontSize: 13,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <Terminal size={24} style={{ opacity: 0.3 }} />
+            Run a goal to see agent output here
           </div>
         )}
-        {outputs.map((entry) => (
+
+        {/* query label */}
+        {query && hasOutput && (
           <div
-            key={entry.id}
             style={{
-              padding: "0.4rem 0.5rem",
-              borderBottom: "1px solid rgba(255,255,255,0.05)",
-              fontSize: "0.75rem",
-              lineHeight: 1.5,
+              fontSize: 12,
+              color: "#64748b",
+              marginBottom: 12,
+              padding: "6px 10px",
+              background: "#161b22",
+              borderRadius: 6,
+              border: "1px solid #21262d",
+              fontFamily: "var(--font-mono, monospace)",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-              <Clock size={10} style={{ opacity: 0.4 }} />
-              <span style={{ opacity: 0.5 }}>{formatTime(entry.time)}</span>
-              <span
-                style={{
-                  background: "rgba(129,140,248,0.15)",
-                  color: "#818cf8",
-                  padding: "1px 6px",
-                  borderRadius: 4,
-                  fontSize: "0.65rem",
-                  fontWeight: 600,
-                }}
-              >
-                {entry.action}
-              </span>
-            </div>
-            <div style={{ opacity: 0.8, wordBreak: "break-all" }}>
-              {entry.type === "code" ? (
-                <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
-                  <code>{entry.content}</code>
-                </pre>
-              ) : (
-                <span>{entry.content.slice(0, 500)}</span>
-              )}
-            </div>
+            <span style={{ color: "#00e5ff", fontWeight: 600 }}>Goal:</span>{" "}
+            {query}
           </div>
+        )}
+
+        {/* step timeline */}
+        {steps.map((step, i) => (
+          <StepRow
+            key={`${i}-${step.action}`}
+            step={step}
+            index={i}
+            total={totalSteps || steps.length}
+            isLast={i === steps.length - 1 && !running}
+          />
         ))}
+
+        {/* running indicator */}
+        {running && steps.length > 0 && (
+          <div
+            style={{
+              borderLeft: "2px solid #334155",
+              marginLeft: 8,
+              paddingLeft: 12,
+              paddingTop: 8,
+              position: "relative",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                left: -5,
+                top: 10,
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: "#00e5ff",
+                animation: "pulse 1.5s ease-in-out infinite",
+                boxShadow: "0 0 10px rgba(0, 229, 255, 0.5)",
+              }}
+            />
+            <span
+              style={{
+                fontSize: 12,
+                color: "#00e5ff",
+                fontFamily: "var(--font-mono, monospace)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />
+              Executing next step...
+            </span>
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
     </div>

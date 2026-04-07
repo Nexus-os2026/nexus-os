@@ -80,7 +80,25 @@ export default function ABValidation() {
 
       {loading && <div style={{ textAlign: "center", padding: 48, color: "#888" }}>Running validation (baseline + routed)...</div>}
 
-      {!loading && !result && !error && <EmptyState text="Run an A/B validation to compare fixed vs predictive model routing." />}
+      {!loading && !result && !error && (
+        <Panel title="Getting Started">
+          <EmptyState
+            icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v18M4 7l8-4 8 4M4 7v2a8 8 0 0 0 8 4 8 8 0 0 0 8-4V7"/></svg>}
+            text="Run an A/B validation to compare fixed vs predictive model routing."
+            cta="Run Validation"
+            onAction={runValidation}
+          />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginTop: 8 }}>
+            {Object.entries(VECTOR_COLORS).map(([name, color]) => (
+              <div key={name} style={{ textAlign: "center", padding: 16, background: alpha("#0f172a", 0.5), borderRadius: 10, border: "1px solid rgba(255,255,255,0.04)" }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, margin: "0 auto 10px" }} />
+                <div style={{ fontSize: 12, color: "#94a3b8", fontWeight: 500 }}>{name.replace(/([A-Z])/g, " $1").trim()}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "#334155", fontFamily: "monospace", marginTop: 4 }}>—</div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
 
       {/* Aggregate Summary */}
       {agg && (

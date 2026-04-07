@@ -213,7 +213,7 @@
   position: absolute; top: 4px; right: 4px; font-size: 0.55rem;
 }
 .fm-agent-badge {
-  font-size: 0.5rem; color: var(--nexus-accent); background: rgba(0, 255, 157, 0.1);
+  font-size: 0.65rem; color: var(--nexus-accent); background: rgba(0, 255, 157, 0.1);
   padding: 0.05rem 0.25rem; border-radius: 0.15rem; letter-spacing: 0.02em;
 }
 

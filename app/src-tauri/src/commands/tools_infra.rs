@@ -188,21 +188,12 @@ pub(crate) fn mcp_host_call_tool(
         serde_json::from_str(&arguments).map_err(|e| format!("Invalid arguments JSON: {e}"))?;
 
     let mut manager = state.mcp_host.lock().unwrap_or_else(|p| p.into_inner());
-    let result = manager.call_tool(&tool_name, args)?;
-
-    // Audit the tool call
-    drop(manager); // release mcp_host lock before acquiring audit lock
-    state.log_event(
-        Uuid::nil(),
-        EventType::ToolCall,
-        json!({
-            "source": "mcp-host",
-            "tool_name": result.tool_name,
-            "server_id": result.server_id,
-            "is_error": result.is_error,
-            "execution_ms": result.execution_ms,
-        }),
-    );
+    let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+    // Governed call — enforces mcp.call capability and audit logging.
+    // UI-initiated calls run as Uuid::nil with full capabilities.
+    let result = manager.call_tool(&tool_name, args, SYSTEM_UUID, &["mcp.call"], &mut audit)?;
+    drop(audit);
+    drop(manager);
 
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
@@ -242,7 +233,7 @@ pub(crate) fn ghost_protocol_toggle(state: &AppState, enabled: bool) -> Result<S
 
     drop(gp);
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "ghost-protocol",
@@ -281,7 +272,7 @@ pub(crate) fn ghost_protocol_add_peer(
 
     drop(gp);
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "ghost-protocol",
@@ -306,7 +297,7 @@ pub(crate) fn ghost_protocol_remove_peer(
 
     drop(gp);
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "ghost-protocol",
@@ -337,7 +328,7 @@ pub(crate) fn ghost_protocol_sync_now(state: &AppState) -> Result<String, String
 
     drop(gp);
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "ghost-protocol",
@@ -401,7 +392,7 @@ pub(crate) fn voice_start_listening(state: &AppState) -> Result<String, String> 
     drop(vp);
 
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "voice-assistant",
@@ -437,7 +428,7 @@ pub(crate) fn voice_stop_listening(state: &AppState) -> Result<String, String> {
     drop(vp);
 
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "voice-assistant",
@@ -544,7 +535,7 @@ pub(crate) fn voice_load_whisper_model(
     drop(whisper);
 
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "voice-assistant",
@@ -617,7 +608,7 @@ pub(crate) fn factory_create_project(
 
     drop(factory);
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "software-factory",
@@ -640,7 +631,7 @@ pub(crate) fn factory_build_project(
 
     drop(factory);
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "software-factory",
@@ -660,7 +651,7 @@ pub(crate) fn factory_test_project(state: &AppState, project_id: String) -> Resu
 
     drop(factory);
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "software-factory",
@@ -681,7 +672,7 @@ pub(crate) fn factory_run_pipeline(state: &AppState, project_id: String) -> Resu
 
     drop(factory);
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "software-factory",
@@ -776,7 +767,7 @@ pub(crate) fn conduct_build(
 
     // Log audit event
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "conductor",
@@ -826,7 +817,7 @@ pub(crate) fn execute_tool(state: &AppState, tool_json: String) -> Result<String
 
     // Audit log
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "typed-tools",
@@ -1143,7 +1134,7 @@ pub(crate) fn terminal_execute(
 
     // Audit log
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "terminal",
@@ -1208,7 +1199,7 @@ pub(crate) fn terminal_execute_approved(
     let fuel_cost = tool.fuel_cost();
 
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "terminal-hitl-approved",
@@ -1272,7 +1263,7 @@ pub(crate) fn replay_verify_bundle(state: &AppState, bundle_id: String) -> Resul
 
     drop(recorder);
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "replay-evidence",
@@ -1306,7 +1297,7 @@ pub(crate) fn replay_toggle_recording(state: &AppState, enabled: bool) -> Result
 
     drop(recorder);
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "replay-evidence",
@@ -1358,7 +1349,7 @@ pub(crate) fn airgap_install_bundle(
     let bundle = nexus_airgap::AirgapInstaller::install(&bundle_path, &install_dir)?;
 
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "airgap",

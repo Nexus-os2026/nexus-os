@@ -640,8 +640,9 @@ impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
             // we get an error instead of the whole app crashing.
             let prompt_owned = prompt.to_string();
             let handle = std::thread::spawn(move || {
-                // Cap max_tokens to 1024 for planner — a JSON plan is 200-500 tokens.
-                flash_provider.query(&prompt_owned, 1024, "flash")
+                // Allow up to 2048 tokens for planner — multi-step plans from small
+                // models can exceed 1024 tokens, causing truncated JSON parse failures.
+                flash_provider.query(&prompt_owned, 2048, "flash")
             });
 
             match handle.join() {
@@ -996,7 +997,7 @@ pub(crate) struct BackendEventBridge {
         feature = "tauri-runtime",
         any(target_os = "windows", target_os = "macos", target_os = "linux")
     ))]
-    app: Option<tauri::AppHandle<tauri::Wry>>,
+    window: Option<tauri::WebviewWindow<tauri::Wry>>,
 }
 
 impl BackendEventBridge {
@@ -1005,7 +1006,13 @@ impl BackendEventBridge {
         any(target_os = "windows", target_os = "macos", target_os = "linux")
     ))]
     fn from_app(app: tauri::AppHandle<tauri::Wry>) -> Self {
-        Self { app: Some(app) }
+        let window = app.get_webview_window("main");
+        if window.is_none() {
+            eprintln!(
+                "[agent-ipc] BUG: from_app could not resolve 'main' webview window — events will be dropped"
+            );
+        }
+        Self { window }
     }
 
     #[cfg(not(all(
@@ -1025,49 +1032,66 @@ impl BackendEventBridge {
             feature = "tauri-runtime",
             any(target_os = "windows", target_os = "macos", target_os = "linux")
         ))]
-        if let Some(app) = &self.app {
-            // Pre-serialize to check size and catch serialization errors safely
-            let payload_json = match serde_json::to_string(&_payload) {
-                Ok(json) => json,
-                Err(e) => {
+        {
+            eprintln!(
+                "[agent-ipc] entering emit for event={} window_is_some={}",
+                _event,
+                self.window.is_some()
+            );
+            if let Some(window) = &self.window {
+                // Pre-serialize to check size and catch serialization errors safely
+                let payload_json = match serde_json::to_string(&_payload) {
+                    Ok(json) => json,
+                    Err(e) => {
+                        eprintln!(
+                            "[agent-ipc] serialization FAILED for event '{}': {}",
+                            _event, e
+                        );
+                        // Emit a safe error payload instead of crashing
+                        let fallback = json!({"error": format!("serialization failed: {e}")});
+                        if let Err(emit_err) = window.emit(_event, fallback) {
+                            eprintln!("[agent-ipc] fallback emit also failed: {emit_err}");
+                        }
+                        return;
+                    }
+                };
+
+                // Truncate oversized payloads
+                if payload_json.len() > Self::MAX_EMIT_PAYLOAD {
                     eprintln!(
-                        "[agent-ipc] serialization FAILED for event '{}': {}",
-                        _event, e
+                        "[agent-ipc] TRUNCATING event '{}': {} bytes > {} max",
+                        _event,
+                        payload_json.len(),
+                        Self::MAX_EMIT_PAYLOAD,
                     );
-                    // Emit a safe error payload instead of crashing
-                    let fallback = json!({"error": format!("serialization failed: {e}")});
-                    if let Err(emit_err) = app.emit(_event, fallback) {
-                        eprintln!("[agent-ipc] fallback emit also failed: {emit_err}");
+                    let truncated = json!({
+                        "truncated": true,
+                        "original_size": payload_json.len(),
+                        "partial": &payload_json[..Self::MAX_EMIT_PAYLOAD.min(payload_json.len())],
+                    });
+                    if let Err(e) = window.emit(_event, truncated) {
+                        eprintln!("[agent-ipc] truncated emit failed: {e}");
                     }
                     return;
                 }
-            };
 
-            // Truncate oversized payloads
-            if payload_json.len() > Self::MAX_EMIT_PAYLOAD {
-                eprintln!(
-                    "[agent-ipc] TRUNCATING event '{}': {} bytes > {} max",
-                    _event,
-                    payload_json.len(),
-                    Self::MAX_EMIT_PAYLOAD,
-                );
-                let truncated = json!({
-                    "truncated": true,
-                    "original_size": payload_json.len(),
-                    "partial": &payload_json[..Self::MAX_EMIT_PAYLOAD.min(payload_json.len())],
-                });
-                if let Err(e) = app.emit(_event, truncated) {
-                    eprintln!("[agent-ipc] truncated emit failed: {e}");
+                match window.emit(_event, _payload) {
+                    Ok(()) => {
+                        eprintln!("[agent-ipc] emit returned Ok for event={}", _event);
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[agent-ipc] emit FAILED for '{}' ({} bytes): {}",
+                            _event,
+                            payload_json.len(),
+                            e,
+                        );
+                    }
                 }
-                return;
-            }
-
-            if let Err(e) = app.emit(_event, _payload) {
+            } else {
                 eprintln!(
-                    "[agent-ipc] emit FAILED for '{}' ({} bytes): {}",
-                    _event,
-                    payload_json.len(),
-                    e,
+                    "[agent-ipc] BUG: emit called but window is None for event={}",
+                    _event
                 );
             }
         }
@@ -2099,7 +2123,7 @@ pub(crate) fn start_hivemind(
     let _ = state.db.save_hivemind_session(&row);
 
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({"action": "start_hivemind", "session_id": session.id, "goal": goal}),
     );
@@ -2146,7 +2170,7 @@ pub(crate) fn cancel_hivemind(state: &AppState, session_id: String) -> Result<()
         });
 
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "cancel_hivemind", "session_id": session_id}),
     );
@@ -2175,7 +2199,7 @@ pub(crate) fn set_default_agent(
         .unwrap_or_else(|p| p.into_inner());
     gw.set_default_agent(&user_id, &agent_id);
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "set_messaging_default_agent", "user_id": user_id, "agent_id": agent_id}),
     );

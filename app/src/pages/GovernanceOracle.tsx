@@ -11,7 +11,7 @@ import {
   normalizeArray,
 } from "./commandCenterUi";
 
-const ACCENT = "#8b5cf6";
+const ACCENT = "#14b8a6";
 
 interface OracleStatus {
   queue_depth: number;

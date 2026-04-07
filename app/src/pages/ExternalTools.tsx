@@ -10,14 +10,14 @@ import {
 } from "../api/backend";
 import { alpha, commandPageStyle } from "./commandCenterUi";
 
-const ACCENT = "#f59e0b";
+const ACCENT = "#06b6d4";
 const GREEN = "#22c55e";
 const RED = "#ef4444";
-const BLUE = "#3b82f6";
+const BLUE = "#0ea5e9";
 
 const CATEGORY_COLORS: Record<string, string> = {
-  CodeRepository: "#8b5cf6",
-  ProjectManagement: "#3b82f6",
+  CodeRepository: "#14b8a6",
+  ProjectManagement: "#0ea5e9",
   Communication: "#22c55e",
   Search: "#f59e0b",
   Database: "#ef4444",

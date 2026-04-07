@@ -663,7 +663,7 @@ export default function ProjectManager() {
               {selectedTask.links.map((link, i) => (
                 <div key={i} className="pm-detail-link">
                   <span className={`pm-link-icon pm-link-${link.type}`}>
-                    {link.type === "commit" ? "⊙" : link.type === "branch" ? "⎇" : link.type === "pr" ? "⤴" : link.type === "note" ? "📝" : "⎇"}
+                    {link.type === "commit" ? "\u25CE" : link.type === "branch" ? "\u2387" : link.type === "pr" ? "\u2934" : link.type === "note" ? "\u25A1" : "\u2387"}
                   </span>
                   <span className="pm-link-text">{link.label}</span>
                 </div>

@@ -49,9 +49,11 @@ interface SidebarProps {
   activeId: string;
   onSelect: (id: string) => void;
   version: string;
+  fitnessScore?: number;
+  connected?: boolean;
 }
 
-export function Sidebar({ items, activeId, onSelect, version }: SidebarProps): JSX.Element {
+export function Sidebar({ items, activeId, onSelect, version, fitnessScore = 50, connected = false }: SidebarProps): JSX.Element {
   // All sections collapsed by default; persist expanded state to localStorage
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
     try {
@@ -110,8 +112,8 @@ export function Sidebar({ items, activeId, onSelect, version }: SidebarProps): J
           </div>
         </div>
         <div className="nexus-sidebar-status-pill">
-          <span className="nexus-sidebar-status-dot" />
-          Neural mesh online
+          <span className="nexus-sidebar-status-dot" style={connected ? undefined : { background: "#eab308", boxShadow: "0 0 8px rgba(234,179,8,0.5)" }} />
+          {connected ? "Neural mesh online" : "Simulation mode"}
         </div>
       </div>
 
@@ -183,20 +185,20 @@ export function Sidebar({ items, activeId, onSelect, version }: SidebarProps): J
               cy="16"
               r="13"
               fill="none"
-              stroke="var(--nexus-accent)"
+              stroke={fitnessScore >= 80 ? "var(--nexus-accent)" : fitnessScore >= 50 ? "#eab308" : "#ef4444"}
               strokeWidth="2"
-              strokeDasharray="65 81.7"
+              strokeDasharray={`${(fitnessScore / 100) * 81.7} 81.7`}
               strokeLinecap="round"
               transform="rotate(-90 16 16)"
-              style={{ filter: "drop-shadow(0 0 4px rgba(74,247,211,0.55))" }}
+              style={{ filter: `drop-shadow(0 0 4px ${fitnessScore >= 80 ? "rgba(74,247,211,0.55)" : fitnessScore >= 50 ? "rgba(234,179,8,0.55)" : "rgba(239,68,68,0.55)"})`, transition: "stroke-dasharray 0.6s ease, stroke 0.4s ease" }}
             />
-            <text x="16" y="17.5" textAnchor="middle" fill="var(--nexus-accent)" fontSize="8" fontFamily="var(--font-mono)" fontWeight="600">
-              80
+            <text x="16" y="17.5" textAnchor="middle" fill={fitnessScore >= 80 ? "var(--nexus-accent)" : fitnessScore >= 50 ? "#eab308" : "#ef4444"} fontSize="8" fontFamily="var(--font-mono)" fontWeight="600">
+              {fitnessScore}
             </text>
           </svg>
         </div>
         <div className="nexus-version-block">
-          <span className="nexus-version-label">Core Fitness 80%</span>
+          <span className="nexus-version-label">Core Fitness {fitnessScore}%</span>
           <span className="nexus-version-status">
             <span className="nexus-health-dot" />
             {version} operational

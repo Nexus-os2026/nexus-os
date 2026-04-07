@@ -645,7 +645,7 @@ pub(crate) fn time_machine_create_checkpoint(
     let id = commit_time_machine_checkpoint(state, cp)?;
 
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         nexus_kernel::audit::EventType::StateChange,
         json!({ "action": "time_machine.checkpoint_created", "checkpoint_id": id, "label": label }),
     );
@@ -689,7 +689,7 @@ pub(crate) fn time_machine_undo(state: &AppState) -> Result<String, String> {
     apply_non_file_undo_actions(state, &non_file_actions);
 
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         nexus_kernel::audit::EventType::StateChange,
         json!({
             "action": "time_machine.undo",
@@ -784,7 +784,7 @@ pub(crate) fn time_machine_undo_checkpoint(state: &AppState, id: String) -> Resu
     }
 
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         nexus_kernel::audit::EventType::StateChange,
         json!({
             "action": "time_machine.undo_checkpoint",
@@ -841,7 +841,7 @@ pub(crate) fn time_machine_redo(state: &AppState) -> Result<String, String> {
     apply_non_file_undo_actions(state, &non_file_actions);
 
     state.log_event(
-        uuid::Uuid::nil(),
+        SYSTEM_UUID,
         nexus_kernel::audit::EventType::StateChange,
         json!({
             "action": "time_machine.redo",
@@ -961,7 +961,7 @@ pub(crate) fn time_machine_what_if(
     }
 
     state.log_event(
-        Uuid::nil(),
+        SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "action": "time_machine.what_if",

@@ -16,7 +16,7 @@ import {
   toTitleCase,
 } from "./commandCenterUi";
 
-const ACCENT = "#a78bfa";
+const ACCENT = "#06b6d4";
 
 const VECTOR_COLORS: Record<string, string> = {
   ReasoningDepth: "#818cf8",
@@ -254,7 +254,7 @@ export default function MeasurementSession({ sessionId: initialSessionId }: { se
                   <div style={{ fontSize: 11, color: "#94a3b8" }}>{flag.evidence}</div>
                 </div>
                 <span style={{ fontSize: 10, color: SEVERITY_COLORS[flag.severity] || "#eab308", fontWeight: 600 }}>{flag.severity}</span>
-                {flag.requires_human_review && <span style={{ fontSize: 10, color: "#f97316" }}>⚠ Review</span>}
+                {flag.requires_human_review && <span style={{ fontSize: 10, color: "#f97316" }}>\u25B2 Review</span>}
               </div>
             ))}
           </div>

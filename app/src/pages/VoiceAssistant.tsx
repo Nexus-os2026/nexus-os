@@ -119,7 +119,7 @@ const S = {
     borderRadius: "50%",
     background:
       status === "listening"
-        ? "radial-gradient(circle, #3b82f6, #1d4ed8)"
+        ? "radial-gradient(circle, #14b8a6, #0d9488)"
         : status === "processing"
           ? "radial-gradient(circle, #f59e0b, #d97706)"
           : status === "error"
@@ -166,7 +166,7 @@ const S = {
     fontSize: "0.85rem",
     background: active
       ? "linear-gradient(135deg, #ef4444, #b91c1c)"
-      : "linear-gradient(135deg, #3b82f6, #1d4ed8)",
+      : "linear-gradient(135deg, #14b8a6, #0d9488)",
     color: "#fff",
     transition: "all 0.3s ease",
     boxShadow: active
@@ -201,7 +201,7 @@ const S = {
           ? "rgba(16,185,129,0.1)"
           : "rgba(100,116,139,0.1)",
     borderLeft: `3px solid ${
-      source === "user" ? "#3b82f6" : source === "agent" ? "#10b981" : "#64748b"
+      source === "user" ? "#0ea5e9" : source === "agent" ? "#10b981" : "#64748b"
     }`,
     fontSize: "0.85rem",
     color: "var(--text-primary, #e2e8f0)",
@@ -692,7 +692,7 @@ export default function VoiceAssistant() {
 
   const statusColor =
     status === "listening"
-      ? "#3b82f6"
+      ? "#14b8a6"
       : status === "processing"
         ? "#f59e0b"
         : status === "error"
@@ -988,7 +988,7 @@ export default function VoiceAssistant() {
                   style={{
                     background: modelLoading
                       ? "var(--bg-tertiary, #0f172a)"
-                      : "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+                      : "linear-gradient(135deg, #14b8a6, #0d9488)",
                     border: "1px solid var(--border, #334155)",
                     borderRadius: 6,
                     padding: "0.4rem 0.8rem",

@@ -9,7 +9,7 @@ import {
   normalizeArray,
 } from "./commandCenterUi";
 
-const ACCENT = "#a78bfa";
+const ACCENT = "#06b6d4";
 
 const VECTOR_COLORS: Record<string, string> = {
   ReasoningDepth: "#818cf8",
@@ -59,7 +59,27 @@ export default function MeasurementBatteries() {
       {loading && <div style={{ textAlign: "center", padding: 48, color: "#888" }}>Loading batteries...</div>}
 
       {!loading && batteries.length === 0 && (
-        <EmptyState text="No batteries loaded — check data/battery_v1.json." />
+        <>
+          <EmptyState icon={<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2v6m4-6v6M8 8h8l1 12H7L8 8z"/><path d="M10 12v4m4-4v4"/></svg>} text="No test batteries loaded yet" />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginTop: 8 }}>
+            {Object.entries(VECTOR_COLORS).map(([name, color]) => (
+              <div key={name} style={{
+                padding: 20, borderRadius: 12,
+                background: alpha("#0f172a", 0.6), border: `1px solid ${alpha(color, 0.2)}`,
+                textAlign: "center",
+              }}>
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, margin: "0 auto 12px" }} />
+                <div style={{ fontSize: 14, fontWeight: 600, color, marginBottom: 6 }}>{name.replace(/([A-Z])/g, " $1").trim()}</div>
+                <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>{VECTOR_DESCRIPTIONS[name]?.slice(0, 80) || ""}...</div>
+                <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 12 }}>
+                  {[1,2,3,4,5].map(l => (
+                    <div key={l} style={{ width: 28, height: 28, borderRadius: 6, background: alpha(color, 0.08), border: `1px solid ${alpha(color, 0.15)}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#475569", fontWeight: 600 }}>L{l}</div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {!loading && batteries.length > 0 && (
@@ -88,7 +108,7 @@ export default function MeasurementBatteries() {
                     border: `1px solid ${alpha(VECTOR_COLORS[b.vector] || "#818cf8", 0.2)}`,
                   }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: VECTOR_COLORS[b.vector] || "#e2e8f0" }}>L{i + 1}</div>
-                    <div style={{ fontSize: 10, color: "#94a3b8" }}>🔒</div>
+                    <div style={{ fontSize: 10, color: "#94a3b8" }}>\u25A0</div>
                   </div>
                 ))}
               </div>

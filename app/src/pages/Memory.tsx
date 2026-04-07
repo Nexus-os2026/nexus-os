@@ -152,13 +152,13 @@ export default function Memory(): JSX.Element {
       {error && (
         <div style={{ background: "#7f1d1d", padding: "8px 16px", borderRadius: 6, marginBottom: 12, color: "#fca5a5" }}>
           {error}
-          <button onClick={() => setError(null)} style={{ marginLeft: 12, color: "#fca5a5", background: "none", border: "none", cursor: "pointer" }}>✕</button>
+          <button onClick={() => setError(null)} style={{ marginLeft: 12, color: "#fca5a5", background: "none", border: "none", cursor: "pointer" }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
         </div>
       )}
       {message && (
         <div style={{ background: "#14532d", padding: "8px 16px", borderRadius: 6, marginBottom: 12, color: "#86efac" }}>
           {message}
-          <button onClick={() => setMessage(null)} style={{ marginLeft: 12, color: "#86efac", background: "none", border: "none", cursor: "pointer" }}>✕</button>
+          <button onClick={() => setMessage(null)} style={{ marginLeft: 12, color: "#86efac", background: "none", border: "none", cursor: "pointer" }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
         </div>
       )}
 
@@ -275,7 +275,7 @@ export default function Memory(): JSX.Element {
             <option value="execution">Execution</option>
             <option value="safety">Safety</option>
           </select>
-          <button onClick={doSearch} style={{ background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 13 }}>Search</button>
+          <button onClick={doSearch} style={{ background: "rgba(6,182,212,0.15)", color: "#06b6d4", border: "1px solid rgba(6,182,212,0.3)", borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Search</button>
         </div>
         {searchResults.length > 0 && (
           <div>

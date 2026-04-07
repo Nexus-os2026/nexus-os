@@ -21,6 +21,16 @@ export default class RootErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: unknown, info: ErrorInfo): void {
     console.error("[Nexus OS] Root crash caught:", error, info);
+    // Log to backend (fire-and-forget)
+    try {
+      const msg = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? (error.stack ?? "") : "";
+      const componentStack = info.componentStack ?? "";
+      const invoke = (window as any).__TAURI_INTERNALS__?.invoke;
+      if (invoke) {
+        invoke("log_frontend_error", { message: `[ROOT] ${msg}`, stack, componentStack }).catch(() => {});
+      }
+    } catch { /* */ }
   }
 
   private handleReload = () => {
