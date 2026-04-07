@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Builder / Teams — fixture</title>
+</head>
+<body>
+    <main id="teams-page">
+        <h1>Teams</h1>
+
+        <section class="team-row">
+            <button id="edit-team-btn">Edit team</button>
+            <button id="delete-team-btn">Delete team</button>
+        </section>
+
+        <section class="variant-picker">
+            <label for="variant-select">Variant</label>
+            <select id="variant-select">
+                <option value="a">Variant A</option>
+                <option value="b">Variant B</option>
+            </select>
+        </section>
+
+        <section class="invite">
+            <label for="email-input">Invite by email</label>
+            <input id="email-input" type="email" placeholder="name@example.com" />
+        </section>
+
+        <nav>
+            <a href="/settings" id="settings-link">Settings</a>
+        </nav>
+
+        <section class="danger-zone">
+            <button id="reset-all-btn">Reset all settings</button>
+        </section>
+
+        <section class="save-row">
+            <button id="save-btn">Save</button>
+        </section>
+    </main>
+</body>
+</html>

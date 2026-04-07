@@ -77,6 +77,10 @@ edition = "2021"
 version = "10.6.0"
 license = "MIT"
 
+[workspace.dependencies]
+regex = "1.10"
+scraper = "0.20"
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
