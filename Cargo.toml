@@ -68,6 +68,7 @@ members = [
   "crates/nexus-outcome-eval",
   "crates/nexus-self-improve",
   "crates/nexus-computer-use",
+  "crates/nexus-ui-repair",
   "nexus-code",
 ]
 

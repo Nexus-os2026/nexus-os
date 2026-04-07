@@ -1,0 +1,18 @@
+[package]
+name = "nexus-ui-repair"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Autonomous QA scout for the Nexus OS UI (Phase 1.1 skeleton). See docs/roadmaps/NEXUS_UI_REPAIR_v1.1_scout_repair_split.md."
+
+[dependencies]
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+sha2 = "0.10"
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3"
