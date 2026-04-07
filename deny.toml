@@ -56,6 +56,11 @@ ignore = [
 
     # number_prefix: unmaintained. Transitive dep for human-readable byte formatting.
     { id = "RUSTSEC-2025-0119", reason = "Transitive dep; stable, no security impact" },
+
+    # rustls-pemfile 1.0.4: unmaintained as of August 2025; repo archived.
+    # Transitive dep via reqwest 0.11 → readability → nexus-kernel.
+    # TODO: upgrade readability or replace with reqwest 0.12 (drops rustls-pemfile).
+    { id = "RUSTSEC-2025-0134", reason = "Transitive via reqwest 0.11; upgrade pending readability dep refresh" },
 ]
 
 [licenses]
@@ -69,6 +74,7 @@ allow = [
     "ISC",
     "MIT",
     "MPL-2.0",
+    "NCSA",
     "OpenSSL",
     "Unicode-DFS-2016",
     "Unicode-3.0",

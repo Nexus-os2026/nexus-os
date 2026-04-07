@@ -3,6 +3,7 @@ name = "nexus-computer-use"
 version = "0.1.0"
 edition = "2021"
 description = "Governed computer use capabilities for Nexus Code"
+license = "MIT OR Apache-2.0"
 
 [[bin]]
 name = "nx-screen"
