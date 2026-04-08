@@ -103,7 +103,8 @@ fn writes_report_to_correct_path() {
     let report = sample_report(None);
     let written = writer.write(&report, &acl).expect("write report");
 
-    let expected = reports_root.join("2026-04-07").join("builder_teams.md");
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let expected = reports_root.join(&today).join("builder_teams.md");
     assert_eq!(written, expected);
     assert!(written.exists(), "report file must exist on disk");
 

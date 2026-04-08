@@ -5,6 +5,10 @@
 //! `claude_cli` and `claude_ai_credits` are explicitly forbidden in
 //! autonomous mode (Max plan ToS, account-ban risk).
 
+pub const OLLAMA_MODEL_E2B: &str = "gemma4:e2b";
+pub const OLLAMA_MODEL_E4B: &str = "gemma4:e4b";
+pub const ANTHROPIC_MODEL_HAIKU_4_5: &str = "haiku-4.5";
+
 /// A provider that the scout may call autonomously.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Provider {
@@ -41,13 +45,13 @@ impl RoutingTable {
             allowed: vec![
                 Provider::CodexCli,
                 Provider::Ollama {
-                    model: "gemma4:e2b".to_string(),
+                    model: OLLAMA_MODEL_E2B.to_string(),
                 },
                 Provider::Ollama {
-                    model: "gemma4:e4b".to_string(),
+                    model: OLLAMA_MODEL_E4B.to_string(),
                 },
                 Provider::AnthropicApi {
-                    model: "haiku-4.5".to_string(),
+                    model: ANTHROPIC_MODEL_HAIKU_4_5.to_string(),
                 },
             ],
             forbidden: vec![
@@ -82,6 +86,17 @@ impl RoutingTable {
     /// Anthropic API spend cap, in USD.
     pub fn anthropic_api_cap_usd(&self) -> f64 {
         self.anthropic_api_cap_usd
+    }
+
+    /// Construct an empty routing table — used by tests that want to
+    /// trigger the defense-in-depth panic in `vision_judge`. Not for
+    /// production use.
+    pub fn empty_for_test() -> Self {
+        Self {
+            allowed: vec![],
+            forbidden: vec![],
+            anthropic_api_cap_usd: 0.0,
+        }
     }
 }
 

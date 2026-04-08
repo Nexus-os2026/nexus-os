@@ -18,12 +18,13 @@
 //!
 //! The writer computes the target path under `self.root`, runs it
 //! through the ACL (I-2 Layer 1 enforcement), and then writes the
-//! rendered markdown. Phase 1.2 uses a hard-coded date string; Phase
-//! 1.4 introduces `chrono` and replaces it.
+//! rendered markdown. As of Phase 1.4 the date segment is produced
+//! by `chrono::Utc::now()`.
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use crate::governance::acl::Acl;
@@ -117,14 +118,12 @@ impl ReportWriter {
     /// Render `report` to markdown and write it to
     /// `<root>/<YYYY-MM-DD>/<page-slug>.md`.
     ///
-    /// Phase 1.2 uses the hard-coded date `2026-04-07`; Phase 1.4
-    /// introduces `chrono` and replaces that. I-2 enforcement runs
-    /// **first** via `acl.ensure_parent_dirs` — no directory is ever
-    /// created outside the sandbox.
+    /// I-2 enforcement runs **first** via `acl.ensure_parent_dirs` —
+    /// no directory is ever created outside the sandbox.
     pub fn write(&self, report: &BugReport, acl: &Acl) -> crate::Result<PathBuf> {
-        let date = "2026-04-07";
+        let date = Utc::now().format("%Y-%m-%d").to_string();
         let slug = report.page.replace('/', "_");
-        let path = self.root.join(date).join(format!("{}.md", slug));
+        let path = self.root.join(&date).join(format!("{}.md", slug));
 
         acl.ensure_parent_dirs(&path)?;
 

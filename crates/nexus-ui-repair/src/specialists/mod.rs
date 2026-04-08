@@ -8,6 +8,7 @@ pub mod modal_handler;
 pub mod report_writer;
 pub mod specialist_call;
 pub mod vision_judge;
+pub mod vision_schema;
 
 pub use destructive_policy::{is_destructive_label, ElementKind};
 pub use eyes_and_hands::{CaptureResult, EyesAndHands};

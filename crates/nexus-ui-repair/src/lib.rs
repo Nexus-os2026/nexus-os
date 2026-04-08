@@ -60,7 +60,12 @@ pub mod replay;
 pub mod specialists;
 
 /// Crate version, mirrored for convenience.
-pub const VERSION: &str = "0.1.0";
+///
+/// Phase 1.4 bumped the mirrored version constant to `0.4.0`. The
+/// Cargo.toml `version` field still inherits `workspace.package.version`
+/// because the scout ships inside the Nexus OS workspace and must track
+/// the workspace release cadence — see Phase 1.4 ship notes.
+pub const VERSION: &str = "0.4.0";
 
 /// Top-level error type for `nexus-ui-repair`.
 #[derive(Debug, thiserror::Error)]

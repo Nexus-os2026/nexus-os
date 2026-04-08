@@ -10,6 +10,7 @@ fn make_entry(call_id: &str, similarity: f64) -> CalibrationEntry {
         threshold: 0.85,
         verdict: "Changed".to_string(),
         ground_truth: None,
+        classifier_input: None,
     }
 }
 

@@ -16,7 +16,17 @@ tracing = "0.1"
 scraper = { workspace = true }
 regex = { workspace = true }
 nexus-computer-use = { path = "../nexus-computer-use" }
-tokio = { version = "1", features = ["rt"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "process", "io-util", "fs", "sync", "time"] }
+chrono = { version = "0.4.44", default-features = false, features = ["clock", "serde"] }
+async-trait = "0.1"
+base64 = "0.22"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tempfile = "3"
+clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
 tempfile = "3"
+
+[[bin]]
+name = "nexus-ui-repair"
+path = "src/bin/nexus_ui_repair.rs"

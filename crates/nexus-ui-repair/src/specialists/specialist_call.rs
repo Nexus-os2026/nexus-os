@@ -10,9 +10,10 @@
 //! Phase 1.3 ships the type and the audit-log integration
 //! (`AuditLog::record_specialist_call`). Phase 1.4 wires the driver
 //! loop to actually construct and record one of these for every
-//! specialist invocation. The timestamp field is a placeholder until
-//! chrono is wired in Phase 1.4.
+//! specialist invocation. As of Phase 1.4 the timestamp is a real
+//! `chrono::Utc::now()` RFC3339 string.
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 /// One specialist call: (specialist_name, inputs, output).
@@ -25,8 +26,8 @@ pub struct SpecialistCall {
 }
 
 impl SpecialistCall {
-    /// Construct a call with the Phase 1.3 placeholder timestamp.
-    /// Phase 1.4 will replace this with a real chrono-produced string.
+    /// Construct a call timestamped with `chrono::Utc::now()` in
+    /// RFC3339 form.
     pub fn new(
         name: impl Into<String>,
         inputs: serde_json::Value,
@@ -34,7 +35,7 @@ impl SpecialistCall {
     ) -> Self {
         Self {
             specialist_name: name.into(),
-            timestamp: "2026-04-07T12:00:00Z".to_string(),
+            timestamp: Utc::now().to_rfc3339(),
             inputs,
             output,
         }

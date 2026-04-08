@@ -42,28 +42,32 @@ fn records_two_specialist_calls_with_chained_hashes() {
 
 #[test]
 fn output_capture_makes_replay_byte_identical() {
-    // With identical inputs AND identical outputs (and the Phase 1.3
-    // placeholder timestamp), two separate audit logs produce
-    // byte-identical files. This is the core I-5 determinism claim.
+    // I-5 determinism claim: replay reads recorded data, it does not
+    // re-run specialists. So a single `SpecialistCall` value (one
+    // timestamp, one input, one output) must, when recorded into two
+    // separate audit logs, produce byte-identical lines. Phase 1.4
+    // swapped the placeholder timestamp for `chrono::Utc::now()`, so
+    // the test must clone the same call rather than construct twice.
     let dir = tempfile::TempDir::new().unwrap();
     let path1 = dir.path().join("audit1.jsonl");
     let path2 = dir.path().join("audit2.jsonl");
 
-    let inputs = serde_json::json!({ "input": "same" });
-    let output = serde_json::json!({ "output": "same" });
+    let call = SpecialistCall::new(
+        "test",
+        serde_json::json!({ "input": "same" }),
+        serde_json::json!({ "output": "same" }),
+    );
 
     let mut log1 = AuditLog::new(path1.clone());
     let mut log2 = AuditLog::new(path2.clone());
 
-    log1.record_specialist_call(SpecialistCall::new("test", inputs.clone(), output.clone()))
-        .expect("record 1");
-    log2.record_specialist_call(SpecialistCall::new("test", inputs, output))
-        .expect("record 2");
+    log1.record_specialist_call(call.clone()).expect("record 1");
+    log2.record_specialist_call(call).expect("record 2");
 
     let c1 = std::fs::read_to_string(&path1).expect("read 1");
     let c2 = std::fs::read_to_string(&path2).expect("read 2");
     assert_eq!(
         c1, c2,
-        "same (inputs, output, timestamp) must produce byte-identical audit lines"
+        "the same SpecialistCall recorded into two logs must produce byte-identical lines"
     );
 }
