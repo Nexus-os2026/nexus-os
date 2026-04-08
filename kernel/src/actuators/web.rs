@@ -717,7 +717,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn parse_searxng_json() {
         let json = r#"{
             "results": [
