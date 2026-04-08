@@ -16,9 +16,35 @@
 //! governance TYPES ONLY — no screen capture or input event code
 //! path is exercised in Phase 1.3.
 //!
-//! **Still gated to Phase 1.3.5:** Xvfb isolation, real input events,
-//! real screen capture, and a live DOM path for the enumerator. The
-//! driver loop remains a Phase 1.2 stub.
+//! **Phase 1.3.5 status (this commit):** the scout now exercises real
+//! capture and input code paths via `nexus-computer-use`:
+//!
+//! - [`governance::XvfbSession`] — Hole A Layer 3 structural Xvfb
+//!   isolation. Owns a child Xvfb process on a unique display number
+//!   in `99..150` and tears it down on Drop.
+//! - [`specialists::EyesAndHands`] — first specialist that calls real
+//!   `nexus_computer_use::capture::take_screenshot` and
+//!   `nexus_computer_use::input::MouseController::execute`. Sync façade
+//!   over the async crate API via a per-call current-thread tokio
+//!   runtime.
+//! - [`governance::InputSandbox::validate_and_click`] — Hole A Layer 2
+//!   ACTIVE. Validates the target window through the real
+//!   `AppGrantManager` denial path before issuing any input event.
+//! - `tests/xvfb_smoke.rs` — two `#[ignore]`'d **structural** tests
+//!   that verify the XvfbSession + EyesAndHands wiring spawns,
+//!   captures, and drives input without panicking. They do NOT
+//!   assert pixel-level correctness: bare Xvfb has no painted
+//!   software cursor, no window manager motion delivery, and we
+//!   observed an X server quirk where `xsetroot -solid` changes
+//!   read back as byte-identical PNGs via scrot. Real end-to-end
+//!   pixel verification is deferred to **Phase 1.5.5**, which will
+//!   run a real Nexus OS Tauri WebView inside the same XvfbSession
+//!   and assert against actual framebuffer damage events.
+//!
+//! **Phase 1.4 (next-next):** wire `EyesAndHands` into the driver loop
+//! and layer the `vision_judge` LLM on top of `CaptureResult`. The
+//! driver loop and the live DOM path for the enumerator remain Phase
+//! 1.2 stubs until then.
 //!
 //! This crate is **read-only by design.** It cannot modify Nexus OS
 //! source code. Repairs are performed interactively by a human +

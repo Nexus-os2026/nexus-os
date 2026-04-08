@@ -42,6 +42,7 @@ use nexus_computer_use::error::ComputerUseError;
 use nexus_computer_use::governance::app_grant::{AppGrant, AppGrantManager, GrantLevel};
 use nexus_computer_use::governance::app_registry::{AppCategory, AppInfo};
 
+use crate::specialists::eyes_and_hands::EyesAndHands;
 use crate::Error;
 
 /// Per-window input sandbox for the scout.
@@ -108,6 +109,28 @@ impl InputSandbox {
                 target.wm_class, other
             ))),
         }
+    }
+
+    /// Validate that the target window is whitelisted, then issue a
+    /// real click via [`EyesAndHands`]. This is the **first active use**
+    /// of the `InputSandbox` — Phase 1.3 had only `validate_target_window`
+    /// as a structural check.
+    ///
+    /// Hole A Layer 2 enforcement happens here: if the target window
+    /// is not whitelisted, `validate_target_window` returns
+    /// `Err(InvariantViolation)` and **no input event is issued**.
+    pub fn validate_and_click(
+        &mut self,
+        target: &AppInfo,
+        eyes_and_hands: &EyesAndHands,
+        x: u32,
+        y: u32,
+    ) -> crate::Result<()> {
+        // 1. Check the sandbox FIRST. If this fails, no click happens.
+        self.validate_target_window(target)?;
+        // 2. Sandbox passed — issue the real click.
+        eyes_and_hands.click(x, y)?;
+        Ok(())
     }
 
     /// The wm_class this sandbox was constructed for.

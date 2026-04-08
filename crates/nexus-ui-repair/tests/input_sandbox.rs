@@ -6,6 +6,7 @@
 
 use nexus_computer_use::governance::app_registry::{AppCategory, AppInfo};
 use nexus_ui_repair::governance::InputSandbox;
+use nexus_ui_repair::specialists::EyesAndHands;
 use nexus_ui_repair::Error;
 
 fn make_app(wm_class: &str, category: AppCategory) -> AppInfo {
@@ -54,6 +55,31 @@ fn refuses_non_whitelisted_window() {
             );
         }
         other => panic!("expected InvariantViolation, got {:?}", other),
+    }
+}
+
+#[test]
+fn validate_and_click_refuses_non_whitelisted_window_before_clicking() {
+    let mut sandbox = InputSandbox::for_nexus_os_window("nexus-os", Some(1234));
+    let eyes = EyesAndHands::new();
+
+    // A window the sandbox does NOT whitelist. The click must NEVER
+    // reach EyesAndHands::click — validation should fail first, so
+    // this test does not need any real X server / DISPLAY.
+    let target = make_app("firefox", AppCategory::Communication);
+
+    let result = sandbox.validate_and_click(&target, &eyes, 100, 100);
+
+    match result {
+        Err(Error::InvariantViolation(msg)) => {
+            assert!(
+                msg.contains("firefox") || msg.contains("not whitelisted"),
+                "expected denial message naming the rejected window, got: {}",
+                msg
+            );
+        }
+        Ok(_) => panic!("expected InvariantViolation, got Ok — sandbox failed open!"),
+        Err(other) => panic!("expected InvariantViolation, got {:?}", other),
     }
 }
 

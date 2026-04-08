@@ -30,6 +30,56 @@ behavior.
 input event code paths are exercised by the scout in Phase 1.3. Phase 1.3.5
 wires Xvfb and real input.
 
+## Phase 1.3.5 status
+
+**Phase 1.3.5 = first commit in which the scout exercises real input
+and capture code paths.** Landed:
+
+- `governance::XvfbSession` — Hole A Layer 3 structural Xvfb display
+  isolation. Spawns Xvfb on the first free display in `99..150` and
+  reaps it on Drop.
+- `specialists::EyesAndHands` — sync façade over
+  `nexus_computer_use::capture::take_screenshot` and
+  `MouseController::execute`. First specialist to call real input/
+  capture functions.
+- `governance::InputSandbox::validate_and_click` — Hole A Layer 2
+  ACTIVE. Validates the target window through the real
+  `AppGrantManager` denial path before issuing any input event.
+- `tests/xvfb_smoke.rs` — two `#[ignore]`'d **structural** tests that
+  spawn an `XvfbSession`, run `EyesAndHands::capture`, and drive
+  `move_cursor` / `cursor_position` / `click`. They assert the wiring
+  is alive (non-empty PNG, expected dimensions, cursor round-trips).
+  They do **not** assert pixel-level capture-then-input-then-recapture
+  behavior. Run manually with:
+
+  ```text
+  cargo test -p nexus-ui-repair --test xvfb_smoke -- --ignored
+  ```
+
+### Known limitation
+
+The original Phase 1.3.5 design called for a capture → move_cursor →
+recapture test that asserted the two captures differed. Bare Xvfb does
+not produce reliable pixel ground truth for this style of test:
+
+- Xvfb does not paint a software cursor into the framebuffer, so cursor
+  moves are invisible to scrot even though `xdotool getmouselocation`
+  confirms them at the X protocol level.
+- With no window manager, MotionNotify delivery to clients like `xeyes`
+  is unreliable, so target apps don't redraw on cursor moves.
+- We observed an X server quirk where `xsetroot -solid` color changes
+  succeed at the X protocol level but scrot reads back byte-identical
+  PNGs from this Xvfb instance.
+
+The `XvfbSession` + `EyesAndHands` + `validate_and_click` wiring is
+correct and unit-tested. End-to-end pixel verification waits for
+**Phase 1.5.5**, which will run a real Nexus OS Tauri WebView inside
+the same Xvfb display — that target produces real framebuffer damage
+events that scrot can see.
+
+Phase 1.4 will wire `EyesAndHands` into the driver loop and layer the
+`vision_judge` LLM on top.
+
 Landed in 1.3:
 
 - **Hole A Layer 2 — InputSandbox** (`governance/input_sandbox.rs`). Wraps
