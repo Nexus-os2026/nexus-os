@@ -288,11 +288,9 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.subsec_nanos())
             .unwrap_or(0);
-        let dir = std::env::temp_dir()
-            .join(format!("nexus_budget_test_{pid}_{counter}_{nanos}"));
+        let dir = std::env::temp_dir().join(format!("nexus_budget_test_{pid}_{counter}_{nanos}"));
 
-        fs::create_dir_all(&dir)
-            .expect("temp_tracker: failed to create per-test tempdir");
+        fs::create_dir_all(&dir).expect("temp_tracker: failed to create per-test tempdir");
 
         BudgetTracker::with_path(dir.join("budget.json"))
     }
