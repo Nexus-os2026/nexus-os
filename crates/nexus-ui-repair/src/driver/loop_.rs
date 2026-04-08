@@ -31,8 +31,10 @@
 //! - running the driver in a fixture-only context where no real UI is
 //!   attached.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+
+use async_trait::async_trait;
 
 use crate::driver::heartbeat::Heartbeat;
 use crate::driver::state::DriverState;
@@ -45,7 +47,97 @@ use crate::governance::routing::RoutingTable;
 use crate::specialists::classifier::{
     Classification, Classifier, ClassifierInput, DomMutation, IpcEvent,
 };
-use crate::specialists::vision_judge::{VisionJudge, VisionVerdict, VisionVerdictKind};
+use crate::specialists::vision_judge::{
+    VisionJudge, VisionJudgeError, VisionVerdict, VisionVerdictKind,
+};
+
+/// Trait wrapper around the vision judge's primary `judge` method so
+/// the driver loop can accept a test double without pulling in the
+/// Codex subprocess or the Anthropic HTTP client at test time.
+/// Production wires [`VisionJudge`] through the blanket impl below.
+#[async_trait]
+pub trait VisionJudger: Send + Sync {
+    async fn judge(
+        &self,
+        screenshot: &Path,
+        prompt: &str,
+    ) -> Result<VisionVerdict, VisionJudgeError>;
+}
+
+#[async_trait]
+impl VisionJudger for VisionJudge {
+    async fn judge(
+        &self,
+        screenshot: &Path,
+        prompt: &str,
+    ) -> Result<VisionVerdict, VisionJudgeError> {
+        VisionJudge::judge(self, screenshot, prompt).await
+    }
+}
+
+/// Halt vs continue policy for vision_judge errors.
+///
+/// Halt-worthy errors are those that will not get better by
+/// retrying against the next page: configuration errors, missing
+/// binaries, exhausted budget, broken audit log integrity. The
+/// canonical example is CostCeilingExceeded — once the budget is
+/// gone, every subsequent vision_judge call will fail at the
+/// pre-call ceiling check, so continuing the loop just spams the
+/// audit log with N warnings and produces zero useful telemetry.
+///
+/// Continue-worthy errors are those that might be transient:
+/// OutputParseFailed could be a one-off bad LLM response that
+/// doesn't repeat on the next page. AnthropicHttp is treated as
+/// transient (rate limit, flaky network) but Io/Crate default to
+/// halt since they usually indicate broken invariants.
+///
+/// New variants added to VisionJudgeError must be classified
+/// here. The wildcard arm defaults to halt to fail safe.
+fn should_halt(err: &VisionJudgeError) -> bool {
+    match err {
+        VisionJudgeError::CostCeilingExceeded { .. } => true,
+        VisionJudgeError::CodexSpawnFailed(_) => true,
+        VisionJudgeError::CodexExitedNonZero { .. } => true,
+        VisionJudgeError::OutputFileMissing => true,
+        VisionJudgeError::MissingAnthropicApiKey => true,
+        VisionJudgeError::AuditLogFailed(_) => true,
+        VisionJudgeError::OutputParseFailed(_) => false,
+        VisionJudgeError::AnthropicHttp(_) => false,
+        VisionJudgeError::Io(_) => true,
+        VisionJudgeError::Crate(_) => true,
+    }
+}
+
+/// Extract a stable variant-name string (e.g. "CostCeilingExceeded")
+/// from a `VisionJudgeError` for audit-log and CLI surfacing.
+fn error_kind_of(err: &VisionJudgeError) -> &'static str {
+    match err {
+        VisionJudgeError::CodexSpawnFailed(_) => "CodexSpawnFailed",
+        VisionJudgeError::CodexExitedNonZero { .. } => "CodexExitedNonZero",
+        VisionJudgeError::OutputFileMissing => "OutputFileMissing",
+        VisionJudgeError::OutputParseFailed(_) => "OutputParseFailed",
+        VisionJudgeError::AuditLogFailed(_) => "AuditLogFailed",
+        VisionJudgeError::AnthropicHttp(_) => "AnthropicHttp",
+        VisionJudgeError::MissingAnthropicApiKey => "MissingAnthropicApiKey",
+        VisionJudgeError::CostCeilingExceeded { .. } => "CostCeilingExceeded",
+        VisionJudgeError::Io(_) => "Io",
+        VisionJudgeError::Crate(_) => "Crate",
+    }
+}
+
+/// Why the driver halted before completing all work.
+#[derive(Debug, Clone)]
+pub struct HaltReason {
+    /// The page that triggered the halt.
+    pub page: String,
+    /// The element being processed when the halt fired.
+    pub element: String,
+    /// Human-readable reason naming the error variant.
+    pub reason: String,
+    /// The variant name as a stable string (e.g. "CostCeilingExceeded")
+    /// for downstream tooling.
+    pub error_kind: String,
+}
 
 /// Configuration for a driver run.
 #[derive(Debug, Clone)]
@@ -101,6 +193,11 @@ pub struct DriverOutcome {
     pub elements_visited: usize,
     pub classifications: Vec<Classification>,
     pub vision_calls: usize,
+    /// `Some(reason)` if the driver halted mid-run due to a fatal
+    /// error (e.g. cost ceiling exceeded). Callers treat this as a
+    /// controlled exit, not a panic: the outcome fields still reflect
+    /// the partial work completed before the halt.
+    pub halt: Option<HaltReason>,
 }
 
 /// The scout driver.
@@ -111,7 +208,7 @@ pub struct Driver {
     audit: Arc<Mutex<AuditLog>>,
     cost_ceiling: Arc<Mutex<CostCeiling>>,
     classifier: Classifier,
-    vision_judge: Option<Arc<VisionJudge>>,
+    vision_judge: Option<Arc<dyn VisionJudger>>,
     heartbeat: Option<Heartbeat>,
     state: DriverState,
     config: DriverConfig,
@@ -153,6 +250,16 @@ impl Driver {
     /// Inject the vision judge. Kept separate from `new` so tests can
     /// construct a driver without the real specialist wiring.
     pub fn with_vision_judge(mut self, judge: Arc<VisionJudge>) -> Self {
+        self.vision_judge = Some(judge as Arc<dyn VisionJudger>);
+        self
+    }
+
+    /// Test-only constructor that injects a `VisionJudger` trait object
+    /// directly, bypassing the Codex + Anthropic wiring of the real
+    /// `VisionJudge`. Used by `tests/driver_loop.rs` to validate the
+    /// halt-on-fatal-error policy.
+    #[doc(hidden)]
+    pub fn with_vision_judger(mut self, judge: Arc<dyn VisionJudger>) -> Self {
         self.vision_judge = Some(judge);
         self
     }
@@ -190,6 +297,7 @@ impl Driver {
             elements_visited: 0,
             classifications: Vec::new(),
             vision_calls: 0,
+            halt: None,
         };
 
         for page in &work {
@@ -247,8 +355,41 @@ impl Driver {
                                             outcome.vision_calls += 1;
                                             last_verdict = Some(v);
                                         }
+                                        Err(e) if should_halt(&e) => {
+                                            let kind = error_kind_of(&e).to_string();
+                                            let halt = HaltReason {
+                                                page: page.page.clone(),
+                                                element: element.clone(),
+                                                reason: format!("vision_judge fatal error: {}", e),
+                                                error_kind: kind,
+                                            };
+                                            self.append_audit(
+                                                &page.page,
+                                                "Observe",
+                                                "halt",
+                                                serde_json::json!({
+                                                    "page": halt.page,
+                                                    "element": halt.element,
+                                                    "reason": halt.reason,
+                                                    "error_kind": halt.error_kind,
+                                                }),
+                                            )?;
+                                            tracing::error!(
+                                                page = %page.page,
+                                                element = %element,
+                                                error = %e,
+                                                "driver halt: vision_judge fatal error"
+                                            );
+                                            outcome.halt = Some(halt);
+                                            return Ok(outcome);
+                                        }
                                         Err(e) => {
-                                            tracing::warn!(error = %e, "vision_judge failed");
+                                            tracing::warn!(
+                                                page = %page.page,
+                                                element = %element,
+                                                error = %e,
+                                                "vision_judge transient error, continuing"
+                                            );
                                         }
                                     }
                                 }

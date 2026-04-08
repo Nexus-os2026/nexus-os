@@ -11,11 +11,11 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use nexus_ui_repair::driver::{Driver, DriverConfig, Heartbeat, PageWorkItem};
+use nexus_ui_repair::driver::{Driver, DriverConfig, Heartbeat, PageWorkItem, VisionJudger};
 use nexus_ui_repair::governance::audit::AuditLog;
 use nexus_ui_repair::governance::cost_ceiling::CostCeiling;
 use nexus_ui_repair::specialists::vision_judge::{
-    AnthropicClient, AnthropicResponse, VisionJudge, VisionJudgeError,
+    AnthropicClient, AnthropicResponse, VisionJudge, VisionJudgeError, VisionVerdict,
 };
 
 /// Ensure $HOME is set so `Acl::default_scout` doesn't panic inside
@@ -251,4 +251,82 @@ async fn vision_judge_escalation_refuses_when_ceiling_exhausted() {
         !audit_body.contains("vision_judge.anthropic_haiku45"),
         "refused call leaked into audit log"
     );
+}
+
+// ---------- Phase 1.4 C4: halt-on-fatal-error policy ----------
+
+/// Mock `VisionJudger` that returns `CostCeilingExceeded` on every
+/// call. Chosen over constructing a real `VisionJudge` with a
+/// zero-ceiling because the real `judge()` path runs the Codex
+/// subprocess before touching the cost ceiling, so we can't force a
+/// `CostCeilingExceeded` without either a real Codex binary or a
+/// trait double. The trait double is cleaner.
+struct CostCeilingMockJudge;
+
+#[async_trait]
+impl VisionJudger for CostCeilingMockJudge {
+    async fn judge(
+        &self,
+        _screenshot: &std::path::Path,
+        _prompt: &str,
+    ) -> Result<VisionVerdict, VisionJudgeError> {
+        Err(VisionJudgeError::CostCeilingExceeded {
+            ceiling: 0.01,
+            attempted: 0.10,
+        })
+    }
+}
+
+#[tokio::test]
+async fn driver_halts_cleanly_when_vision_judge_returns_cost_ceiling_exceeded() {
+    let tmp = ensure_home();
+    let cfg = config_in(tmp.path(), false); // NOT dry-run: we want the judge to be called.
+    let mut driver = Driver::new(cfg.clone())
+        .expect("driver new")
+        .with_vision_judger(Arc::new(CostCeilingMockJudge));
+
+    let work = vec![
+        PageWorkItem {
+            page: "/page_one".into(),
+            elements: vec!["btn_a".into()],
+        },
+        PageWorkItem {
+            page: "/page_two".into(),
+            elements: vec!["btn_b".into()],
+        },
+        PageWorkItem {
+            page: "/page_three".into(),
+            elements: vec!["btn_c".into()],
+        },
+    ];
+
+    let outcome = driver.run(work).await.expect("run returns Ok on halt");
+
+    // Halt is a controlled exit, not a panic.
+    assert!(outcome.halt.is_some(), "expected halt to be set");
+    let halt = outcome.halt.as_ref().unwrap();
+    assert_eq!(halt.error_kind, "CostCeilingExceeded");
+    assert_eq!(halt.page, "/page_one");
+    assert_eq!(halt.element, "btn_a");
+
+    // Halted on first page, never touched pages 2 or 3.
+    assert_eq!(outcome.pages_visited, 1);
+    // The Err path does not count as a successful vision call.
+    assert_eq!(outcome.vision_calls, 0);
+
+    // Audit log must contain exactly one entry with action == "halt"
+    // and payload referencing page, element, and CostCeilingExceeded.
+    let audit_body = std::fs::read_to_string(&cfg.audit_path).expect("audit log");
+    let lines: Vec<&str> = audit_body.lines().collect();
+    let mut halt_entries = 0;
+    for line in &lines {
+        let v: serde_json::Value = serde_json::from_str(line).unwrap();
+        if v["action"] == "halt" {
+            halt_entries += 1;
+            assert_eq!(v["inputs"]["page"], "/page_one");
+            assert_eq!(v["inputs"]["element"], "btn_a");
+            assert_eq!(v["inputs"]["error_kind"], "CostCeilingExceeded");
+        }
+    }
+    assert_eq!(halt_entries, 1, "expected exactly one halt audit entry");
 }

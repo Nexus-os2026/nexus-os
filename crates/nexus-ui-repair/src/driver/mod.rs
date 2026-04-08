@@ -5,5 +5,5 @@ pub mod loop_;
 pub mod state;
 
 pub use heartbeat::{Heartbeat, HeartbeatState};
-pub use loop_::{Driver, DriverConfig, DriverOutcome, PageWorkItem};
+pub use loop_::{Driver, DriverConfig, DriverOutcome, HaltReason, PageWorkItem, VisionJudger};
 pub use state::DriverState;

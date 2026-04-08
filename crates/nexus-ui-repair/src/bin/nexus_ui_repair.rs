@@ -111,6 +111,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let outcome = driver.run(work).await?;
     driver.shutdown_heartbeat().await;
 
+    if let Some(halt) = &outcome.halt {
+        eprintln!(
+            "HALTED at page {} element {}: {} ({})",
+            halt.page, halt.element, halt.reason, halt.error_kind
+        );
+        eprintln!(
+            "partial outcome: pages={} elements={} vision_calls={} classifications={}",
+            outcome.pages_visited,
+            outcome.elements_visited,
+            outcome.vision_calls,
+            outcome.classifications.len()
+        );
+        std::process::exit(2);
+    }
+
     println!(
         "done: pages={} elements={} vision_calls={} classifications={}",
         outcome.pages_visited,
