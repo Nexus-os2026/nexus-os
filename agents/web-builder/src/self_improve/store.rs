@@ -82,8 +82,10 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("store.json");
 
-        let mut store = ImprovementStore::default();
-        store.version = 3;
+        let mut store = ImprovementStore {
+            version: 3,
+            ..Default::default()
+        };
         store
             .defaults
             .content_prompt_hints

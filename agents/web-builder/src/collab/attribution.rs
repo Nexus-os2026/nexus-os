@@ -165,7 +165,7 @@ mod tests {
         let identity = test_identity();
         let edit = sign_edit("content", "test", &identity).unwrap();
 
-        save_attribution_log(&dir, &[edit.clone()]).unwrap();
+        save_attribution_log(&dir, std::slice::from_ref(&edit)).unwrap();
         let loaded = load_attribution_log(&dir);
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].edit_type, "content");

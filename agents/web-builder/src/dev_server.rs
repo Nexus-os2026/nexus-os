@@ -483,7 +483,7 @@ mod tests {
             // The first port is taken, so we should get a different one
             assert!(port.is_ok());
             let p = port.unwrap();
-            assert!(p > PORT_RANGE_START || p == PORT_RANGE_START);
+            assert!(p >= PORT_RANGE_START);
             assert!(p <= PORT_RANGE_END);
         }
         // If bind failed (port already in use by something else), that's fine too

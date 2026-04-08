@@ -543,7 +543,7 @@ mod tests {
                         break;
                     }
                 }
-                if hex_len >= 3 && hex_len <= 8 {
+                if (3..=8).contains(&hex_len) {
                     // Check it's a standalone color, not part of a word like #features
                     // CSS selectors start with a letter after #, colors start with digits or a-f
                     let first_hex = bytes[hex_start];

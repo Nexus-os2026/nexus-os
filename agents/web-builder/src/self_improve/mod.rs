@@ -404,9 +404,11 @@ mod tests {
 
     #[test]
     fn test_compute_status() {
-        let mut s = store::ImprovementStore::default();
-        s.version = 2;
-        s.metrics = vec![]; // mock empty
+        let mut s = store::ImprovementStore {
+            version: 2,
+            metrics: vec![],
+            ..Default::default()
+        };
         s.proposals.push(Proposal {
             id: "p1".into(),
             opportunity_id: "o1".into(),

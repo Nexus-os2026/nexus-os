@@ -259,8 +259,10 @@ mod tests {
     use std::collections::HashMap;
 
     fn base_metrics(total: usize) -> AggregateMetrics {
-        let mut agg = AggregateMetrics::default();
-        agg.total_projects = total;
+        let mut agg = AggregateMetrics {
+            total_projects: total,
+            ..Default::default()
+        };
         agg.projects_per_template
             .insert("saas_landing".into(), total);
         agg
