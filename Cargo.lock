@@ -10636,6 +10636,7 @@ dependencies = [
  "nexus-crypto",
  "nexus-kernel",
  "nexus-sdk",
+ "nix 0.29.0",
  "qrcode",
  "regex",
  "reqwest 0.12.28",

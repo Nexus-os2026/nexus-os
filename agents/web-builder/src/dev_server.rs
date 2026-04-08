@@ -46,22 +46,23 @@ pub enum DevServerStatus {
 
 // ─── Port Management ────────────────────────────────────────────────────────
 
-const PORT_RANGE_START: u16 = 15173;
-const PORT_RANGE_END: u16 = 15183;
-
-/// Find an available port in the range.
-pub fn find_available_port() -> Result<u16, DevServerError> {
-    for port in PORT_RANGE_START..=PORT_RANGE_END {
-        if is_port_available(port) {
-            return Ok(port);
-        }
-    }
-    Err(DevServerError::PortUnavailable(PORT_RANGE_START))
-}
-
-/// Check if a TCP port is available by attempting to bind to it.
-fn is_port_available(port: u16) -> bool {
-    std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
+/// Pick an OS-assigned ephemeral port by binding to 127.0.0.1:0 and reading
+/// back the chosen port. The listener is dropped immediately so the spawned
+/// vite process can bind to it.
+///
+/// There is a tiny TOCTOU window between drop and vite's bind, but the
+/// ephemeral range (typically 32768+) is large enough that parallel-test
+/// collisions are statistically negligible — unlike the previous fixed
+/// 11-port range which collided reliably under parallel load.
+pub fn pick_ephemeral_port() -> Result<u16, DevServerError> {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| DevServerError::ViteStartFailed(format!("port probe bind failed: {e}")))?;
+    let port = listener
+        .local_addr()
+        .map_err(|e| DevServerError::ViteStartFailed(format!("port probe local_addr: {e}")))?
+        .port();
+    drop(listener);
+    Ok(port)
 }
 
 // ─── Dev Server ─────────────────────────────────────────────────────────────
@@ -161,7 +162,7 @@ impl DevServer {
         // Kill any existing process first
         self.stop_internal();
 
-        self.port = find_available_port()?;
+        self.port = pick_ephemeral_port()?;
         self.status = DevServerStatus::Starting;
 
         eprintln!(
@@ -169,18 +170,30 @@ impl DevServer {
             self.project_dir.display(),
             self.port
         );
-        let mut child = Command::new("npx")
-            .args([
-                "vite",
-                "--port",
-                &self.port.to_string(),
-                "--strictPort",
-                "--host",
-                &self.host,
-            ])
-            .current_dir(&self.project_dir)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+        let mut cmd = Command::new("npx");
+        cmd.args([
+            "vite",
+            "--port",
+            &self.port.to_string(),
+            "--strictPort",
+            "--host",
+            &self.host,
+        ])
+        .current_dir(&self.project_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+        // On Unix, put the child (npx) and all its descendants (vite) into a
+        // new process group so we can kill the whole tree on stop. Without
+        // this, `child.kill()` only signals `npx`, leaving an orphan vite
+        // holding the port.
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
+
+        let mut child = cmd
             .spawn()
             .map_err(|e| DevServerError::ViteStartFailed(e.to_string()))?;
 
@@ -246,9 +259,19 @@ impl DevServer {
         Ok(())
     }
 
-    /// Internal stop — kills the child process.
+    /// Internal stop — kills the child process (and on Unix, the whole
+    /// process group so grandchild vite processes don't orphan).
     fn stop_internal(&mut self) {
         if let Some(mut child) = self.process.take() {
+            #[cfg(unix)]
+            {
+                use nix::sys::signal::{killpg, Signal};
+                use nix::unistd::Pid;
+                let pgid = Pid::from_raw(child.id() as i32);
+                let _ = killpg(pgid, Signal::SIGTERM);
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                let _ = killpg(pgid, Signal::SIGKILL);
+            }
             let _ = child.kill();
             let _ = child.wait();
         }
@@ -474,19 +497,153 @@ mod tests {
     }
 
     #[test]
-    fn test_port_selection_avoids_conflict() {
-        // Bind to a port in our range to simulate conflict
-        let listener = std::net::TcpListener::bind(("127.0.0.1", PORT_RANGE_START)).ok();
-        let port = find_available_port();
+    fn test_pick_ephemeral_port_returns_nonzero() {
+        let p = pick_ephemeral_port().expect("pick_ephemeral_port");
+        assert!(p > 0);
+    }
 
-        if listener.is_some() {
-            // The first port is taken, so we should get a different one
-            assert!(port.is_ok());
-            let p = port.unwrap();
-            assert!(p >= PORT_RANGE_START);
-            assert!(p <= PORT_RANGE_END);
+    /// Regression (Part 1): verify the production code uses OS-assigned
+    /// ephemeral ports (>= 32768 on Linux) and does NOT touch the old
+    /// fixed 15173 port, even when 15173 is already held by another
+    /// process. The old code would have collided on 15173.
+    #[test]
+    fn test_picks_ephemeral_port_not_in_old_range() {
+        if !node_available() {
+            eprintln!("SKIP: node/npm not on PATH");
+            return;
         }
-        // If bind failed (port already in use by something else), that's fine too
+        // Pre-bind the old PORT_RANGE_START to simulate an orphan / collision.
+        // If 15173 is already held (e.g. by a real orphan vite on the runner),
+        // that's a superset of our simulation — proceed either way.
+        let _hold = std::net::TcpListener::bind(("127.0.0.1", 15173u16)).ok();
+
+        let dir = temp_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("package.json"),
+            r#"{"name":"test","private":true,"type":"module","devDependencies":{"vite":"^5.3.4"}}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.join("index.html"), "<html><body>test</body></html>").unwrap();
+
+        DevServer::install_deps(&dir, &["process.exec"]).unwrap();
+        let mut server = DevServer::new(dir.clone());
+        let url = server.start(&["process.exec"]).expect("start");
+        let port = server.port();
+        assert_ne!(port, 15173, "must not reuse old fixed port");
+        assert!(
+            port >= 32768,
+            "expected ephemeral port (>= 32768), got {port} (url={url})"
+        );
+
+        server.stop().unwrap();
+        drop(_hold);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Regression (Part 1, parallel): 5 concurrent DevServer::start calls
+    /// must all succeed with distinct ports. The old fixed 11-port range
+    /// collided reliably under this exact load.
+    #[test]
+    fn test_five_parallel_starts_do_not_collide() {
+        if !node_available() {
+            eprintln!("SKIP: node/npm not on PATH");
+            return;
+        }
+
+        let mut handles = Vec::new();
+        for i in 0..5 {
+            let handle = std::thread::spawn(move || {
+                let dir = std::env::temp_dir().join(format!(
+                    "nexus-parallel-{}-{}",
+                    i,
+                    uuid::Uuid::new_v4()
+                ));
+                std::fs::create_dir_all(&dir).unwrap();
+                std::fs::write(
+                    dir.join("package.json"),
+                    r#"{"name":"test","private":true,"type":"module","devDependencies":{"vite":"^5.3.4"}}"#,
+                )
+                .unwrap();
+                std::fs::write(dir.join("index.html"), "<html><body>test</body></html>").unwrap();
+                DevServer::install_deps(&dir, &["process.exec"]).unwrap();
+                let mut server = DevServer::new(dir.clone());
+                let result = server.start(&["process.exec"]);
+                let port = server.port();
+                // Hold server so the test can observe all 5 ports bound simultaneously.
+                (result, port, server, dir)
+            });
+            handles.push(handle);
+        }
+
+        let mut ports = Vec::new();
+        let mut servers = Vec::new();
+        let mut dirs = Vec::new();
+        for h in handles {
+            let (result, port, server, dir) = h.join().expect("thread join");
+            assert!(result.is_ok(), "parallel start failed: {result:?}");
+            ports.push(port);
+            servers.push(server);
+            dirs.push(dir);
+        }
+
+        let mut sorted = ports.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(
+            sorted.len(),
+            ports.len(),
+            "parallel starts collided: {ports:?}"
+        );
+
+        for mut s in servers {
+            s.stop().unwrap();
+        }
+        for d in dirs {
+            let _ = std::fs::remove_dir_all(&d);
+        }
+    }
+
+    /// Regression (Part 2): stop() must kill not just the npx wrapper but
+    /// also the grandchild vite process. The old code SIGKILLed only the
+    /// npx child, leaving orphan vite processes holding the port across
+    /// test runs.
+    #[cfg(unix)]
+    #[test]
+    fn test_stop_kills_grandchild_vite_process() {
+        if !node_available() {
+            eprintln!("SKIP: node/npm not on PATH");
+            return;
+        }
+
+        let dir = temp_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("package.json"),
+            r#"{"name":"test","private":true,"type":"module","devDependencies":{"vite":"^5.3.4"}}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.join("index.html"), "<html><body>test</body></html>").unwrap();
+
+        DevServer::install_deps(&dir, &["process.exec"]).unwrap();
+        let mut server = DevServer::new(dir.clone());
+        let _ = server.start(&["process.exec"]);
+        let port = server.port();
+
+        // Enumerate all descendant PIDs that currently hold this port before stop.
+        // Easiest cross-check: after stop, no process should be bound to `port`.
+        server.stop().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
+        // If the port rebinds cleanly, nothing is holding it (grandchild killed).
+        let rebind = std::net::TcpListener::bind(("127.0.0.1", port));
+        assert!(
+            rebind.is_ok(),
+            "port {port} still held after stop — orphan vite grandchild: {:?}",
+            rebind.err()
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
