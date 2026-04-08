@@ -268,22 +268,33 @@ impl BudgetTracker {
 mod tests {
     use super::*;
     use std::fs;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicU64, Ordering};
 
-    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
 
+    // Per-test tempdir helper. Each call creates a unique top-level
+    // directory under std::env::temp_dir(); no shared parent.
+    // Cleanup: relies on /tmp being cleared by the OS or CI runner
+    // between sessions. Long-running CI runners may accumulate
+    // /tmp/nexus_budget_test_* directories — acceptable trade-off
+    // vs the previous shared-parent design which caused
+    // cross-UID permission failures (April 7 2026 fix).
+    // TODO(nexus-builder): consider tempfile::TempDir for RAII cleanup
+    // if /tmp accumulation becomes a problem.
     fn temp_tracker() -> BudgetTracker {
-        let id = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join("nexus_budget_test").join(format!(
-            "{}_{}",
-            std::process::id(),
-            id
-        ));
-        let _ = fs::create_dir_all(&dir);
-        let path = dir.join("budget.json");
-        // Ensure clean slate
-        let _ = fs::remove_file(&path);
-        BudgetTracker::with_path(path)
+        let pid = std::process::id();
+        let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.subsec_nanos())
+            .unwrap_or(0);
+        let dir = std::env::temp_dir()
+            .join(format!("nexus_budget_test_{pid}_{counter}_{nanos}"));
+
+        fs::create_dir_all(&dir)
+            .expect("temp_tracker: failed to create per-test tempdir");
+
+        BudgetTracker::with_path(dir.join("budget.json"))
     }
 
     fn sample_record(name: &str, cost: f64) -> BuildRecord {
