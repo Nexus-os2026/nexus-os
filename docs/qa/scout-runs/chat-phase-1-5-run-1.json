@@ -1,0 +1,1640 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-04-09T02:27:42.229835358+00:00",
+  "scout_version": "0.4.0",
+  "page": "chat",
+  "tickets": [
+    {
+      "id": "SCOUT-000",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:REFRESH",
+        "surrounding_markup": "role=\"push button\" name=\"REFRESH\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-001",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:START JARVIS",
+        "surrounding_markup": "role=\"push button\" name=\"START JARVIS\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-002",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:+ New",
+        "surrounding_markup": "role=\"push button\" name=\"+ New\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-003",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:⌁ Chat",
+        "surrounding_markup": "role=\"push button\" name=\"⌁ Chat\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-004",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:⇔ Compare",
+        "surrounding_markup": "role=\"push button\" name=\"⇔ Compare\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-005",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:History",
+        "surrounding_markup": "role=\"push button\" name=\"History\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-006",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:◆ gemma4:e4b Ollama · 5",
+        "surrounding_markup": "role=\"push button\" name=\"◆ gemma4:e4b Ollama · 5\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-007",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Pin",
+        "surrounding_markup": "role=\"push button\" name=\"Pin\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-008",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Copy conversation",
+        "surrounding_markup": "role=\"push button\" name=\"Copy conversation\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-009",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Delete",
+        "surrounding_markup": "role=\"push button\" name=\"Delete\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-010",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Voice",
+        "surrounding_markup": "role=\"push button\" name=\"Voice\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-011",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Attach files or images",
+        "surrounding_markup": "role=\"push button\" name=\"Attach files or images\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-012",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "embedded:Message gemma4:e4b... (drop files here)",
+        "surrounding_markup": "role=\"embedded\" name=\"Message gemma4:e4b... (drop files here)\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-013",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Generate image",
+        "surrounding_markup": "role=\"push button\" name=\"Generate image\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-014",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:→",
+        "surrounding_markup": "role=\"push button\" name=\"→\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-015",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Dashboard Alt+1",
+        "surrounding_markup": "role=\"push button\" name=\"Dashboard Alt+1\" description=\"Dashboard (Alt+1)\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-016",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Chat Alt+2",
+        "surrounding_markup": "role=\"push button\" name=\"Chat Alt+2\" description=\"Chat (Alt+2)\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-017",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Agents Alt+3",
+        "surrounding_markup": "role=\"push button\" name=\"Agents Alt+3\" description=\"Agents (Alt+3)\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-018",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Files",
+        "surrounding_markup": "role=\"push button\" name=\"Files\" description=\"Files\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-019",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Models",
+        "surrounding_markup": "role=\"push button\" name=\"Models\" description=\"Models\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-020",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Flash Inference",
+        "surrounding_markup": "role=\"push button\" name=\"Flash Inference\" description=\"Flash Inference\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-021",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Documents",
+        "surrounding_markup": "role=\"push button\" name=\"Documents\" description=\"Documents\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-022",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Scheduler",
+        "surrounding_markup": "role=\"push button\" name=\"Scheduler\" description=\"Scheduler\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-023",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Approvals",
+        "surrounding_markup": "role=\"push button\" name=\"Approvals\" description=\"Approvals\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-024",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Terminal",
+        "surrounding_markup": "role=\"push button\" name=\"Terminal\" description=\"Terminal\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-025",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Settings",
+        "surrounding_markup": "role=\"push button\" name=\"Settings\" description=\"Settings\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-026",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:DEVELOPER",
+        "surrounding_markup": "role=\"push button\" name=\"DEVELOPER\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-027",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Nexus Builder",
+        "surrounding_markup": "role=\"push button\" name=\"Nexus Builder\" description=\"Nexus Builder\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-028",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Nexus Code",
+        "surrounding_markup": "role=\"push button\" name=\"Nexus Code\" description=\"Nexus Code\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-029",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Code Editor",
+        "surrounding_markup": "role=\"push button\" name=\"Code Editor\" description=\"Code Editor\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-030",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:API Client",
+        "surrounding_markup": "role=\"push button\" name=\"API Client\" description=\"API Client\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-031",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Database",
+        "surrounding_markup": "role=\"push button\" name=\"Database\" description=\"Database\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-032",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Developer Portal",
+        "surrounding_markup": "role=\"push button\" name=\"Developer Portal\" description=\"Developer Portal\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-033",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Deploy Pipeline",
+        "surrounding_markup": "role=\"push button\" name=\"Deploy Pipeline\" description=\"Deploy Pipeline\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-034",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Software Factory",
+        "surrounding_markup": "role=\"push button\" name=\"Software Factory\" description=\"Software Factory\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-035",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Protocols",
+        "surrounding_markup": "role=\"push button\" name=\"Protocols\" description=\"Protocols\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-036",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:COMMUNICATION",
+        "surrounding_markup": "role=\"push button\" name=\"COMMUNICATION\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-037",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Email",
+        "surrounding_markup": "role=\"push button\" name=\"Email\" description=\"Email\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-038",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Voice",
+        "surrounding_markup": "role=\"push button\" name=\"Voice\" description=\"Voice\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-039",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Messaging",
+        "surrounding_markup": "role=\"push button\" name=\"Messaging\" description=\"Messaging\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-040",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Integrations",
+        "surrounding_markup": "role=\"push button\" name=\"Integrations\" description=\"Integrations\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-041",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:MONITORING",
+        "surrounding_markup": "role=\"push button\" name=\"MONITORING\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-042",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:System Monitor",
+        "surrounding_markup": "role=\"push button\" name=\"System Monitor\" description=\"System Monitor\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-043",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Audit",
+        "surrounding_markup": "role=\"push button\" name=\"Audit\" description=\"Audit\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-044",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Audit Timeline",
+        "surrounding_markup": "role=\"push button\" name=\"Audit Timeline\" description=\"Audit Timeline\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-045",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Trust Dashboard",
+        "surrounding_markup": "role=\"push button\" name=\"Trust Dashboard\" description=\"Trust Dashboard\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-046",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Firewall",
+        "surrounding_markup": "role=\"push button\" name=\"Firewall\" description=\"Firewall\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-047",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Compliance",
+        "surrounding_markup": "role=\"push button\" name=\"Compliance\" description=\"Compliance\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-048",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Permissions",
+        "surrounding_markup": "role=\"push button\" name=\"Permissions\" description=\"Permissions\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-049",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:AGENT LAB",
+        "surrounding_markup": "role=\"push button\" name=\"AGENT LAB\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-050",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Agent Browser",
+        "surrounding_markup": "role=\"push button\" name=\"Agent Browser\" description=\"Agent Browser\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-051",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Agent Memory",
+        "surrounding_markup": "role=\"push button\" name=\"Agent Memory\" description=\"Agent Memory\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-052",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:DNA Lab",
+        "surrounding_markup": "role=\"push button\" name=\"DNA Lab\" description=\"DNA Lab\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-053",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Measurement",
+        "surrounding_markup": "role=\"push button\" name=\"Measurement\" description=\"Measurement\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-054",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Session Detail",
+        "surrounding_markup": "role=\"push button\" name=\"Session Detail\" description=\"Session Detail\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-055",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Compare Agents",
+        "surrounding_markup": "role=\"push button\" name=\"Compare Agents\" description=\"Compare Agents\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-056",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Test Batteries",
+        "surrounding_markup": "role=\"push button\" name=\"Test Batteries\" description=\"Test Batteries\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-057",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Boundary Map",
+        "surrounding_markup": "role=\"push button\" name=\"Boundary Map\" description=\"Boundary Map\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-058",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Model Routing",
+        "surrounding_markup": "role=\"push button\" name=\"Model Routing\" description=\"Model Routing\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-059",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:A/B Validation",
+        "surrounding_markup": "role=\"push button\" name=\"A/B Validation\" description=\"A/B Validation\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-060",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Browser Agent",
+        "surrounding_markup": "role=\"push button\" name=\"Browser Agent\" description=\"Browser Agent\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-061",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Governance Oracle",
+        "surrounding_markup": "role=\"push button\" name=\"Governance Oracle\" description=\"Governance Oracle\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-062",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Token Economy",
+        "surrounding_markup": "role=\"push button\" name=\"Token Economy\" description=\"Token Economy\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-063",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Governed Control",
+        "surrounding_markup": "role=\"push button\" name=\"Governed Control\" description=\"Governed Control\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-064",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:World Simulation",
+        "surrounding_markup": "role=\"push button\" name=\"World Simulation\" description=\"World Simulation\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-065",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Perception",
+        "surrounding_markup": "role=\"push button\" name=\"Perception\" description=\"Perception\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-066",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Memory Store",
+        "surrounding_markup": "role=\"push button\" name=\"Memory Store\" description=\"Memory Store\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-067",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:External Tools",
+        "surrounding_markup": "role=\"push button\" name=\"External Tools\" description=\"External Tools\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-068",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Collaboration",
+        "surrounding_markup": "role=\"push button\" name=\"Collaboration\" description=\"Collaboration\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-069",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Self-Rewrite Lab",
+        "surrounding_markup": "role=\"push button\" name=\"Self-Rewrite Lab\" description=\"Self-Rewrite Lab\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-070",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Self-Improvement",
+        "surrounding_markup": "role=\"push button\" name=\"Self-Improvement\" description=\"Self-Improvement\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-071",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Consciousness",
+        "surrounding_markup": "role=\"push button\" name=\"Consciousness\" description=\"Consciousness\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-072",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:CREATIVE",
+        "surrounding_markup": "role=\"push button\" name=\"CREATIVE\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-073",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Design Studio",
+        "surrounding_markup": "role=\"push button\" name=\"Design Studio\" description=\"Design Studio\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-074",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Media Studio",
+        "surrounding_markup": "role=\"push button\" name=\"Media Studio\" description=\"Media Studio\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-075",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:DreamForge",
+        "surrounding_markup": "role=\"push button\" name=\"DreamForge\" description=\"DreamForge\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-076",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Notes",
+        "surrounding_markup": "role=\"push button\" name=\"Notes\" description=\"Notes\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-077",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:AUTOMATION",
+        "surrounding_markup": "role=\"push button\" name=\"AUTOMATION\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-078",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Workflows",
+        "surrounding_markup": "role=\"push button\" name=\"Workflows\" description=\"Workflows\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-079",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Time Machine",
+        "surrounding_markup": "role=\"push button\" name=\"Time Machine\" description=\"Time Machine\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-080",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Timeline Viewer",
+        "surrounding_markup": "role=\"push button\" name=\"Timeline Viewer\" description=\"Timeline Viewer\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-081",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Temporal Engine",
+        "surrounding_markup": "role=\"push button\" name=\"Temporal Engine\" description=\"Temporal Engine\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-082",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:SIMULATION",
+        "surrounding_markup": "role=\"push button\" name=\"SIMULATION\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-083",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Scenario Sandbox",
+        "surrounding_markup": "role=\"push button\" name=\"Scenario Sandbox\" description=\"Scenario Sandbox\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-084",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Civilization",
+        "surrounding_markup": "role=\"push button\" name=\"Civilization\" description=\"Civilization\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-085",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Computer Control",
+        "surrounding_markup": "role=\"push button\" name=\"Computer Control\" description=\"Computer Control\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-086",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:ENTERPRISE",
+        "surrounding_markup": "role=\"push button\" name=\"ENTERPRISE\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-087",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Auth / Sessions",
+        "surrounding_markup": "role=\"push button\" name=\"Auth / Sessions\" description=\"Auth / Sessions\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-088",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Workspaces",
+        "surrounding_markup": "role=\"push button\" name=\"Workspaces\" description=\"Workspaces\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-089",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Admin Dashboard",
+        "surrounding_markup": "role=\"push button\" name=\"Admin Dashboard\" description=\"Admin Dashboard\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-090",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Admin Users",
+        "surrounding_markup": "role=\"push button\" name=\"Admin Users\" description=\"Admin Users\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-091",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Admin Fleet",
+        "surrounding_markup": "role=\"push button\" name=\"Admin Fleet\" description=\"Admin Fleet\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-092",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Admin Compliance",
+        "surrounding_markup": "role=\"push button\" name=\"Admin Compliance\" description=\"Admin Compliance\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-093",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Admin Policy",
+        "surrounding_markup": "role=\"push button\" name=\"Admin Policy\" description=\"Admin Policy\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-094",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Admin Health",
+        "surrounding_markup": "role=\"push button\" name=\"Admin Health\" description=\"Admin Health\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-095",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Usage & Billing",
+        "surrounding_markup": "role=\"push button\" name=\"Usage & Billing\" description=\"Usage & Billing\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-096",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Telemetry",
+        "surrounding_markup": "role=\"push button\" name=\"Telemetry\" description=\"Telemetry\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-097",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Cluster Status",
+        "surrounding_markup": "role=\"push button\" name=\"Cluster Status\" description=\"Cluster Status\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-098",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Distributed Audit",
+        "surrounding_markup": "role=\"push button\" name=\"Distributed Audit\" description=\"Distributed Audit\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-099",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Policy Management",
+        "surrounding_markup": "role=\"push button\" name=\"Policy Management\" description=\"Policy Management\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-100",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:LEARN & DISCOVER",
+        "surrounding_markup": "role=\"push button\" name=\"LEARN & DISCOVER\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-101",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Learning Center",
+        "surrounding_markup": "role=\"push button\" name=\"Learning Center\" description=\"Learning Center\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-102",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:App Store",
+        "surrounding_markup": "role=\"push button\" name=\"App Store\" description=\"App Store\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-103",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Knowledge Graph",
+        "surrounding_markup": "role=\"push button\" name=\"Knowledge Graph\" description=\"Knowledge Graph\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-104",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Project Manager",
+        "surrounding_markup": "role=\"push button\" name=\"Project Manager\" description=\"Project Manager\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-105",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:OTHER",
+        "surrounding_markup": "role=\"push button\" name=\"OTHER\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-106",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Chat (Legacy)",
+        "surrounding_markup": "role=\"push button\" name=\"Chat (Legacy)\" description=\"Chat (Legacy)\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-107",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Command Center",
+        "surrounding_markup": "role=\"push button\" name=\"Command Center\" description=\"Command Center\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-108",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Mission Control",
+        "surrounding_markup": "role=\"push button\" name=\"Mission Control\" description=\"Mission Control\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-109",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Publish Agent",
+        "surrounding_markup": "role=\"push button\" name=\"Publish Agent\" description=\"Publish Agent\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-110",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Browse Agents",
+        "surrounding_markup": "role=\"push button\" name=\"Browse Agents\" description=\"Browse Agents\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-111",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Immune System",
+        "surrounding_markup": "role=\"push button\" name=\"Immune System\" description=\"Immune System\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-112",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:Identity & Mesh",
+        "surrounding_markup": "role=\"push button\" name=\"Identity & Mesh\" description=\"Identity & Mesh\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-113",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "embedded:Search...",
+        "surrounding_markup": "role=\"embedded\" name=\"Search...\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-114",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:ALL AGENTS (54)",
+        "surrounding_markup": "role=\"push button\" name=\"ALL AGENTS (54)\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    },
+    {
+      "id": "SCOUT-115",
+      "page": "chat",
+      "sub_view": "",
+      "severity": "low",
+      "dom_context": {
+        "selector": "push button:All Agents",
+        "surrounding_markup": "role=\"push button\" name=\"All Agents\" description=\"\""
+      },
+      "error_strings": [],
+      "suggested_fix_category": "ux_polish",
+      "component_file_hint": "app/src/pages/Chat.tsx",
+      "reproduction_steps": []
+    }
+  ],
+  "comparison_summary": {
+    "confirmed_match_count": 0,
+    "unknown_new_count": 116,
+    "confirmed_miss_count": 8,
+    "f1_score": 0.0,
+    "human_triage_required": 124,
+    "is_partial": false
+  }
+}

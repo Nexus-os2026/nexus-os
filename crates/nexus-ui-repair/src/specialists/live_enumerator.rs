@@ -94,6 +94,7 @@ const INTERACTIVE_ROLES: &[&str] = &[
     "entry",
     "combo box",
     "menu item",
+    "embedded",
 ];
 
 /// Connects to the AT-SPI accessibility tree, locates the application
@@ -108,8 +109,18 @@ const INTERACTIVE_ROLES: &[&str] = &[
 pub async fn enumerate_live(
     config: &LiveTargetConfig,
 ) -> Result<LiveEnumerationResult, LiveEnumeratorError> {
+    enumerate_live_with_options(config, false).await
+}
+
+/// Same as [`enumerate_live`] but with an optional per-node diagnostic
+/// dump to stderr. Used by `scout --dump-walk` to trace where the BFS
+/// dies when the walker is yielding zero interactive elements.
+pub async fn enumerate_live_with_options(
+    config: &LiveTargetConfig,
+    dump_walk: bool,
+) -> Result<LiveEnumerationResult, LiveEnumeratorError> {
     let config = config.clone();
-    let fut = async move { walk(config).await };
+    let fut = async move { walk(config, dump_walk).await };
 
     match tokio::time::timeout(WALK_TIMEOUT, fut).await {
         Ok(res) => res,
@@ -119,10 +130,15 @@ pub async fn enumerate_live(
     }
 }
 
-async fn walk(config: LiveTargetConfig) -> Result<LiveEnumerationResult, LiveEnumeratorError> {
+async fn walk(
+    config: LiveTargetConfig,
+    dump_walk: bool,
+) -> Result<LiveEnumerationResult, LiveEnumeratorError> {
     use atspi::proxy::accessible::{AccessibleProxy, ObjectRefExt};
     use atspi::AccessibilityConnection;
-    use atspi::{ObjectRef, State};
+    use atspi::State;
+    use zbus::names::{BusName, OwnedBusName};
+    use zbus::zvariant::OwnedObjectPath;
 
     let conn = AccessibilityConnection::new()
         .await
@@ -140,15 +156,18 @@ async fn walk(config: LiveTargetConfig) -> Result<LiveEnumerationResult, LiveEnu
         .await
         .map_err(|e| LiveEnumeratorError::AtSpiConnectionFailed(e.to_string()))?;
 
-    let registry_children: Vec<ObjectRef> = registry_root
+    let registry_children = registry_root
         .get_children()
         .await
         .map_err(|e| LiveEnumeratorError::EnumerationFailed(e.to_string()))?;
 
     // Find the application whose accessible name contains `app_name`
-    // (case-insensitive).
+    // (case-insensitive). Harvest (dest, path) directly from the
+    // matched AccessibleProxy — this avoids keeping an ObjectRef whose
+    // OwnedUniqueName field will later trip atspi-rs's deserializer on
+    // AT-SPI's "empty sender = same connection" short form.
     let wanted = config.app_name.to_lowercase();
-    let mut app_root: Option<ObjectRef> = None;
+    let mut app_seed: Option<(OwnedBusName, OwnedObjectPath)> = None;
     for child in registry_children {
         let proxy: AccessibleProxy<'_> = match child.clone().into_accessible_proxy(&zconn).await {
             Ok(p) => p,
@@ -156,12 +175,14 @@ async fn walk(config: LiveTargetConfig) -> Result<LiveEnumerationResult, LiveEnu
         };
         let name = proxy.name().await.unwrap_or_default();
         if name.to_lowercase().contains(&wanted) {
-            app_root = Some(child);
+            let dest: OwnedBusName = proxy.inner().destination().to_owned().into();
+            let path: OwnedObjectPath = proxy.inner().path().to_owned().into();
+            app_seed = Some((dest, path));
             break;
         }
     }
 
-    let app_root = app_root.ok_or_else(|| LiveEnumeratorError::AppNotFound {
+    let (root_dest, root_path) = app_seed.ok_or_else(|| LiveEnumeratorError::AppNotFound {
         app_name: config.app_name.clone(),
     })?;
 
@@ -169,33 +190,171 @@ async fn walk(config: LiveTargetConfig) -> Result<LiveEnumerationResult, LiveEnu
     let mut nodes_visited: usize = 0;
     let mut fallback_counter: usize = 0;
 
-    // Iterative BFS. Async recursion without boxing is awkward; a queue
-    // keeps the logic flat and bounds stack usage.
-    let mut queue: VecDeque<ObjectRef> = VecDeque::new();
-    queue.push_back(app_root);
+    // Iterative BFS. The queue holds `(dest, path, depth)` tuples so
+    // we rebuild the AccessibleProxy on each pop and never pass
+    // through an ObjectRef whose serde impl rejects empty / non-unique
+    // sender names.
+    let mut queue: VecDeque<(OwnedBusName, OwnedObjectPath, usize)> = VecDeque::new();
 
-    while let Some(obj) = queue.pop_front() {
+    if dump_walk {
+        // WALK_START diagnostic.
+        let builder = AccessibleProxy::builder(&zconn)
+            .destination(root_dest.clone())
+            .and_then(|b| b.path(root_path.clone()));
+        match builder {
+            Ok(b) => match b
+                .cache_properties(zbus::proxy::CacheProperties::No)
+                .build()
+                .await
+            {
+                Ok(root_proxy) => {
+                    let cc = root_proxy.child_count().await.unwrap_or(-1);
+                    eprintln!(
+                        "WALK_START app_root dest={} path={} child_count={}",
+                        root_dest.as_str(),
+                        root_path.as_str(),
+                        cc
+                    );
+                }
+                Err(e) => eprintln!("WALK_START app_root <build failed: {e}>"),
+            },
+            Err(e) => eprintln!("WALK_START app_root <builder failed: {e}>"),
+        }
+    }
+
+    queue.push_back((root_dest, root_path, 0));
+
+    while let Some((dest, path, depth)) = queue.pop_front() {
         if nodes_visited >= MAX_NODES {
             break;
         }
         nodes_visited += 1;
 
-        let proxy: AccessibleProxy<'_> = match obj.clone().into_accessible_proxy(&zconn).await {
-            Ok(p) => p,
+        // Build the AccessibleProxy manually from (dest, path). This
+        // sidesteps ObjectRefExt::into_accessible_proxy, which does
+        // the same thing but only given an ObjectRef we no longer
+        // keep around.
+        let proxy: AccessibleProxy<'_> = match AccessibleProxy::builder(&zconn)
+            .destination(dest.clone())
+            .and_then(|b| b.path(path.clone()))
+        {
+            Ok(b) => match b
+                .cache_properties(zbus::proxy::CacheProperties::No)
+                .build()
+                .await
+            {
+                Ok(p) => p,
+                Err(_) => continue,
+            },
             Err(_) => continue,
         };
 
-        // Enqueue children before we bail out of this particular node.
-        if let Ok(children) = proxy.get_children().await {
-            for c in children {
-                queue.push_back(c);
-            }
+        let child_count = proxy.child_count().await.unwrap_or(0);
+
+        if dump_walk {
+            let role_dbg = proxy
+                .get_role_name()
+                .await
+                .unwrap_or_else(|e| format!("<role err: {e}>"));
+            let name_dbg = proxy.name().await.unwrap_or_default();
+            eprintln!(
+                "{depth} [{role_dbg}] {name_dbg:?} child_count={child_count} dest={} path={}",
+                dest.as_str(),
+                path.as_str()
+            );
         }
 
-        // Fetch role. If it fails, skip but keep walking.
-        let role_name = match proxy.get_role_name().await {
-            Ok(r) => r.to_lowercase(),
-            Err(_) => continue,
+        // Raw zbus call bypasses atspi-rs's ObjectRef deserializer,
+        // which rejects the AT-SPI "empty sender = same connection as
+        // parent" short form because its name field is typed
+        // OwnedUniqueName and requires a leading `:`.
+        let raw = match zbus::Proxy::new(
+            &zconn,
+            dest.clone(),
+            path.clone(),
+            "org.a11y.atspi.Accessible",
+        )
+        .await
+        {
+            Ok(p) => p,
+            Err(e) => {
+                if dump_walk {
+                    eprintln!("{depth} FAILED raw proxy build: {e}");
+                }
+                continue;
+            }
+        };
+
+        for i in 0..child_count {
+            let reply: Result<(String, OwnedObjectPath), zbus::Error> =
+                raw.call("GetChildAtIndex", &(i,)).await;
+            let (child_name, child_path) = match reply {
+                Ok(r) => r,
+                Err(e) => {
+                    if dump_walk {
+                        eprintln!("{depth} FAILED GetChildAtIndex({i}): {e}");
+                    }
+                    continue;
+                }
+            };
+
+            // The AT-SPI GetChildAtIndex reply sender name may be:
+            //   a) empty string  → same connection as parent
+            //   b) ":1.NNNN"     → another unique name on the a11y bus
+            //   c) "org.x.y.z"   → a well-known name (WebKitGTK sandboxed
+            //                      web process, AT-SPI Plug/Socket, etc.)
+            // Only (a) should reuse parent dest. (b) and (c) are both
+            // valid D-Bus destinations and must be used directly.
+            let child_dest: OwnedBusName = if child_name.is_empty() {
+                dest.clone()
+            } else {
+                match BusName::try_from(child_name.as_str()) {
+                    Ok(name) => name.to_owned().into(),
+                    Err(e) => {
+                        if dump_walk {
+                            eprintln!("{depth} FAILED to parse child bus name {child_name:?}: {e}");
+                        }
+                        continue;
+                    }
+                }
+            };
+
+            if dump_walk {
+                eprintln!(
+                    "{} ENQUEUED child[{}] dest={} path={}",
+                    depth + 1,
+                    i,
+                    child_dest.as_str(),
+                    child_path.as_str()
+                );
+            }
+
+            queue.push_back((child_dest, child_path, depth + 1));
+        }
+
+        // Fetch role. WebKitGTK sandboxed web processes return an
+        // empty string from GetRoleName for many webview nodes, so
+        // fall back to the numeric Role enum and map it to canonical
+        // lowercase form. Matches pyatspi behaviour.
+        let role_name = {
+            let name = proxy.get_role_name().await.unwrap_or_default();
+            let trimmed = name.trim().to_lowercase();
+            if !trimmed.is_empty() {
+                trimmed
+            } else {
+                match proxy.get_role().await {
+                    Ok(role) => {
+                        let canonical = role_to_canonical_string(role);
+                        if dump_walk {
+                            eprintln!(
+                                "{depth} ROLE fallback: name_empty, enum={role:?}, canonical={canonical:?}"
+                            );
+                        }
+                        canonical
+                    }
+                    Err(_) => continue,
+                }
+            }
         };
         if !INTERACTIVE_ROLES.contains(&role_name.as_str()) {
             continue;
@@ -254,6 +413,33 @@ async fn walk(config: LiveTargetConfig) -> Result<LiveEnumerationResult, LiveEnu
         tab: config.tab,
         nodes_visited,
     })
+}
+
+/// Convert an [`atspi::Role`] enum variant to its canonical AT-SPI
+/// role name string (lowercase, spaces between words), matching the
+/// format that `GetRoleName` normally returns (and that
+/// [`INTERACTIVE_ROLES`] is populated against).
+///
+/// Used as a fallback when WebKitGTK sandboxed web processes return
+/// an empty string from `GetRoleName` for webview accessibles.
+fn role_to_canonical_string(role: atspi::Role) -> String {
+    // Debug format yields the CamelCase variant name (e.g.
+    // "PushButton"). We insert a space before any uppercase letter
+    // that follows a lowercase letter, then lowercase the whole
+    // thing. This produces "push button", "check box", "radio
+    // button", etc. — the same strings pyatspi reports via
+    // getRoleName().
+    let debug = format!("{role:?}");
+    let mut out = String::with_capacity(debug.len() + 4);
+    let mut prev_lower = false;
+    for ch in debug.chars() {
+        if ch.is_ascii_uppercase() && prev_lower {
+            out.push(' ');
+        }
+        out.push(ch.to_ascii_lowercase());
+        prev_lower = ch.is_ascii_lowercase();
+    }
+    out
 }
 
 async fn build_bbox(
@@ -338,6 +524,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_role_to_canonical_string_matches_interactive_roles() {
+        use atspi::Role;
+        assert_eq!(role_to_canonical_string(Role::PushButton), "push button");
+        assert_eq!(role_to_canonical_string(Role::CheckBox), "check box");
+        assert_eq!(role_to_canonical_string(Role::RadioButton), "radio button");
+        assert_eq!(role_to_canonical_string(Role::Embedded), "embedded");
+        assert_eq!(role_to_canonical_string(Role::Entry), "entry");
+        assert_eq!(role_to_canonical_string(Role::Link), "link");
+        // Sanity: every one of these must be recognised by the filter
+        // (either directly, or via a matching entry). "push button",
+        // "radio button", "check box", "embedded", "entry", "link"
+        // are all present in INTERACTIVE_ROLES.
+        for r in [
+            "push button",
+            "check box",
+            "radio button",
+            "embedded",
+            "entry",
+            "link",
+        ] {
+            assert!(
+                INTERACTIVE_ROLES.contains(&r),
+                "INTERACTIVE_ROLES missing {r:?}"
+            );
+        }
+    }
+
+    #[test]
     fn test_live_target_config_fields() {
         let cfg = LiveTargetConfig {
             app_name: "nexus-os".to_string(),
@@ -377,7 +591,7 @@ mod tests {
             tab: None,
         };
         let result = enumerate_live(&cfg).await;
-        assert!(matches!(result, Err(_)));
+        assert!(result.is_err());
     }
 
     #[test]

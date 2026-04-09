@@ -31,6 +31,23 @@ impl EnumerationSource {
     }
 }
 
+impl LiveTargetConfig {
+    /// Phase 1.5 Group C — canonical live target for the Nexus OS
+    /// Chat page. Points the AT-SPI enumerator at the running
+    /// `nexus-desktop-backend` application (the Tauri backend's
+    /// accessible name) with `/chat` as the page route. The
+    /// 10-second walk timeout is enforced as a module constant in
+    /// [`crate::specialists::live_enumerator`]; no per-config
+    /// override is required.
+    pub fn for_nexus_chat() -> Self {
+        LiveTargetConfig {
+            app_name: "nexus-desktop-backend".to_string(),
+            page_route: "/chat".to_string(),
+            tab: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
