@@ -1079,9 +1079,9 @@ export default function AiChatHub() {
     setFuelUsed(f => f + (m0?.fuelCost ?? 5) + (m1?.fuelCost ?? 5));
     logAudit(`Comparing ${compareModels[0]} vs ${compareModels[1]}`);
 
-    const fetchResponse = async (_modelId: string): Promise<string> => {
+    const fetchResponse = async (modelId: string): Promise<string> => {
       try {
-        const response = await sendChat(comparePrompt);
+        const response = await sendChat(comparePrompt, modelId);
         return response.text;
       } catch (err) {
         return classifyError(String(err));
