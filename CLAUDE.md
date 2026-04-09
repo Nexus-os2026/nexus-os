@@ -62,3 +62,13 @@ Nexus OS is OpenClaw done RIGHT:
 The pitch: "Would you give your bank password to software with
 512 known vulnerabilities? Or to the only agent OS with tamper-proof
 audit trails and cryptographic identity?"
+
+## Workflow Rules
+- Before writing any code, output a numbered implementation plan and wait for approval
+- Never use --all-features
+- Never resume an interrupted session
+- Run: cargo fmt && cargo clippy && cargo test -p <modified_crate> after every prompt
+- Plain text prompts only — no markdown in prompts
+- cargo gates run on MODIFIED CRATES ONLY; never `cargo test --workspace` inside Claude Code (full workspace runs happen in local terminal)
+- Long Claude Code prompts go in downloadable files, not inline
+- No assumptions about time of day from session length; Suresh works long sessions starting in the morning
