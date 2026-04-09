@@ -23,6 +23,8 @@ base64 = "0.22"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tempfile = "3"
 clap = { version = "4", features = ["derive"] }
+atspi = { version = "0.24", default-features = false, features = ["tokio"] }
+zbus = { version = "4", default-features = false, features = ["tokio"] }
 
 [dev-dependencies]
 tempfile = "3"

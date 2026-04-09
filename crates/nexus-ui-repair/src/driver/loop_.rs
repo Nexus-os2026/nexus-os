@@ -156,6 +156,11 @@ pub struct DriverConfig {
     pub calibration_path: PathBuf,
     /// Dry run — skip all LLM calls but still walk the state machine.
     pub dry_run: bool,
+    /// Selects fixture mode or a live AT-SPI walk. See
+    /// [`crate::driver::config::EnumerationSource`]. Phase 1.4 and
+    /// Group A tests all use `Fixture(PathBuf::new())` as a safe
+    /// default.
+    pub target: crate::driver::config::EnumerationSource,
 }
 
 impl DriverConfig {
@@ -171,6 +176,7 @@ impl DriverConfig {
             heartbeat_interval_ms: 1000,
             calibration_path: base.join("calibration.jsonl"),
             dry_run: true,
+            target: crate::driver::config::EnumerationSource::default_fixture(),
         }
     }
 }

@@ -40,6 +40,7 @@ fn config_in(dir: &std::path::Path, dry_run: bool) -> DriverConfig {
         heartbeat_interval_ms: 50,
         calibration_path: base.join("calibration.jsonl"),
         dry_run,
+        target: nexus_ui_repair::driver::EnumerationSource::default_fixture(),
     }
 }
 

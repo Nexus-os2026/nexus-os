@@ -2,8 +2,10 @@
 
 pub mod classifier;
 pub mod destructive_policy;
+pub mod element;
 pub mod enumerator;
 pub mod eyes_and_hands;
+pub mod live_enumerator;
 pub mod modal_handler;
 pub mod report_writer;
 pub mod specialist_call;
