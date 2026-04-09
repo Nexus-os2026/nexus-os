@@ -235,123 +235,108 @@ export function Agents({
     let cycleEventCount = 0;
     let cycleResetTimer: ReturnType<typeof setTimeout> | null = null;
 
-    let cancelled = false;
-    const unlistenFns: Array<() => void> = [];
-
-    (async () => {
+    const p1 = listen<{
+      agent_id: string; phase: string; steps_executed: number;
+      fuel_consumed: number; should_continue: boolean;
+      blocked_reason?: string;
+      steps?: Array<{action: string; status: string; result: string; fuel_cost: number}>;
+    }>("agent-cognitive-cycle", (event) => {
       try {
-        const u1 = await listen<{
-          agent_id: string; phase: string; steps_executed: number;
-          fuel_consumed: number; should_continue: boolean;
-          blocked_reason?: string;
-          steps?: Array<{action: string; status: string; result: string; fuel_cost: number}>;
-        }>("agent-cognitive-cycle", (event) => {
-          try {
-            if (!mountedRef.current) return;
-            console.log("[AgentOutput] cycle event", event.payload?.agent_id, "filter:", dispatchedAgentIdRef.current, "match:", event.payload?.agent_id === dispatchedAgentIdRef.current);
-            if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
+        if (!mountedRef.current) return;
+        console.log("[AgentOutput] cycle event", event.payload?.agent_id, "filter:", dispatchedAgentIdRef.current, "match:", event.payload?.agent_id === dispatchedAgentIdRef.current);
+        if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
 
-            // Throttle rapid events to prevent React re-render storm
-            cycleEventCount++;
-            if (!cycleResetTimer) {
-              cycleResetTimer = setTimeout(() => { cycleEventCount = 0; cycleResetTimer = null; }, 1000);
-            }
-            if (cycleEventCount > 10) return; // skip — too many in 1s
+        // Throttle rapid events to prevent React re-render storm
+        cycleEventCount++;
+        if (!cycleResetTimer) {
+          cycleResetTimer = setTimeout(() => { cycleEventCount = 0; cycleResetTimer = null; }, 1000);
+        }
+        if (cycleEventCount > 10) return; // skip — too many in 1s
 
-            setGoalPhase(String(event.payload.phase ?? ""));
-            if (!event.payload.should_continue) {
-              setGoalSteps(Number(event.payload.steps_executed) || 0);
-              setGoalFuel(Number(event.payload.fuel_consumed) || 0);
-              setGoalRunning(false);
-              setGoalPhase("Complete");
-            } else {
-              setGoalSteps(prev => prev + (Number(event.payload.steps_executed) || 0));
-              setGoalFuel(prev => prev + (Number(event.payload.fuel_consumed) || 0));
-            }
-            if (Array.isArray(event.payload.steps) && event.payload.steps.length > 0) {
-              const safeSteps = event.payload.steps.map(s => ({
-                action: String(s?.action ?? "unknown"),
-                status: String(s?.status ?? "unknown"),
-                result: String(s?.result ?? ""),
-                fuel_cost: Number(s?.fuel_cost) || 0,
-              }));
-              setGoalStepDetails(prev => {
-                const updated = [...prev, ...safeSteps];
-                return updated.length > 200 ? updated.slice(-200) : updated;
-              });
-            }
-            if (event.payload.blocked_reason) {
-              setGoalPhase(`Blocked: ${String(event.payload.blocked_reason)}`);
-            }
-          } catch (err) {
-            console.error("[agent-ui] error processing cycle event:", err);
-          }
-        });
-        if (cancelled) { u1(); return; }
-        unlistenFns.push(u1);
-
-        const u2 = await listen("agent-goal-completed", (event: any) => {
-          try {
-            if (!mountedRef.current) return;
-            console.log("[AgentOutput] completed event", event.payload?.agent_id);
-            if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
-            setGoalRunning(false);
-            if (event.payload?.success === false) {
-              const reason = String(event.payload?.reason ?? event.payload?.result_summary ?? "Unknown error");
-              setGoalPhase(`Error: ${reason}`);
-            } else {
-              setGoalPhase("Complete");
-            }
-          } catch (err) {
-            console.error("[agent-ui] error processing completion event:", err);
-            setGoalRunning(false);
-            setGoalPhase("Complete");
-          }
-        });
-        if (cancelled) { u2(); return; }
-        unlistenFns.push(u2);
-
-        const u3 = await listen("agent-blocked", (event: any) => {
-          if (!mountedRef.current) return;
-          console.log("[AgentOutput] blocked event", event.payload?.agent_id);
-          if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
-          listPendingConsents().then(consents => {
-            if (!mountedRef.current) return;
-            const agentConsents = consents.filter(c => c.agent_id === dispatchedAgentIdRef.current);
-            setPendingConsents(agentConsents);
-          }).catch((err) => {
-            console.error("[agent-ui] Failed to fetch consent requests:", err);
+        setGoalPhase(String(event.payload.phase ?? ""));
+        if (!event.payload.should_continue) {
+          setGoalSteps(Number(event.payload.steps_executed) || 0);
+          setGoalFuel(Number(event.payload.fuel_consumed) || 0);
+          setGoalRunning(false);
+          setGoalPhase("Complete");
+        } else {
+          setGoalSteps(prev => prev + (Number(event.payload.steps_executed) || 0));
+          setGoalFuel(prev => prev + (Number(event.payload.fuel_consumed) || 0));
+        }
+        if (Array.isArray(event.payload.steps) && event.payload.steps.length > 0) {
+          const safeSteps = event.payload.steps.map(s => ({
+            action: String(s?.action ?? "unknown"),
+            status: String(s?.status ?? "unknown"),
+            result: String(s?.result ?? ""),
+            fuel_cost: Number(s?.fuel_cost) || 0,
+          }));
+          setGoalStepDetails(prev => {
+            const updated = [...prev, ...safeSteps];
+            return updated.length > 200 ? updated.slice(-200) : updated;
           });
-        });
-        if (cancelled) { u3(); return; }
-        unlistenFns.push(u3);
-
-        const u4 = await listen("consent-request-pending", (event: any) => {
-          if (!mountedRef.current) return;
-          if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
-          listPendingConsents().then(consents => {
-            if (!mountedRef.current) return;
-            const agentConsents = consents.filter(c => c.agent_id === dispatchedAgentIdRef.current);
-            setPendingConsents(agentConsents);
-          }).catch((err) => {
-            console.error("[agent-ui] Failed to fetch consent requests on pending event:", err);
-          });
-        });
-        if (cancelled) { u4(); return; }
-        unlistenFns.push(u4);
-
-        console.log("[AgentOutput] all listeners attached:", unlistenFns.length);
+        }
+        if (event.payload.blocked_reason) {
+          setGoalPhase(`Blocked: ${String(event.payload.blocked_reason)}`);
+        }
       } catch (err) {
-        console.error("[AgentOutput] listen() failed:", err);
+        console.error("[agent-ui] error processing cycle event:", err);
       }
-    })();
+    });
+    p1.then(() => console.log("[AgentOutput] cycle listener attached")).catch(err => console.error("[AgentOutput] cycle listen failed:", err));
+
+    const p2 = listen("agent-goal-completed", (event: any) => {
+      try {
+        if (!mountedRef.current) return;
+        console.log("[AgentOutput] completed event", event.payload?.agent_id);
+        if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
+        setGoalRunning(false);
+        if (event.payload?.success === false) {
+          const reason = String(event.payload?.reason ?? event.payload?.result_summary ?? "Unknown error");
+          setGoalPhase(`Error: ${reason}`);
+        } else {
+          setGoalPhase("Complete");
+        }
+      } catch (err) {
+        console.error("[agent-ui] error processing completion event:", err);
+        setGoalRunning(false);
+        setGoalPhase("Complete");
+      }
+    });
+    p2.then(() => console.log("[AgentOutput] completed listener attached")).catch(err => console.error("[AgentOutput] completed listen failed:", err));
+
+    const p3 = listen("agent-blocked", (event: any) => {
+      if (!mountedRef.current) return;
+      console.log("[AgentOutput] blocked event", event.payload?.agent_id);
+      if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
+      listPendingConsents().then(consents => {
+        if (!mountedRef.current) return;
+        const agentConsents = consents.filter(c => c.agent_id === dispatchedAgentIdRef.current);
+        setPendingConsents(agentConsents);
+      }).catch((err) => {
+        console.error("[agent-ui] Failed to fetch consent requests:", err);
+      });
+    });
+    p3.then(() => console.log("[AgentOutput] blocked listener attached")).catch(err => console.error("[AgentOutput] blocked listen failed:", err));
+
+    const p4 = listen("consent-request-pending", (event: any) => {
+      if (!mountedRef.current) return;
+      if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
+      listPendingConsents().then(consents => {
+        if (!mountedRef.current) return;
+        const agentConsents = consents.filter(c => c.agent_id === dispatchedAgentIdRef.current);
+        setPendingConsents(agentConsents);
+      }).catch((err) => {
+        console.error("[agent-ui] Failed to fetch consent requests on pending event:", err);
+      });
+    });
+    p4.then(() => console.log("[AgentOutput] consent-pending listener attached")).catch(err => console.error("[AgentOutput] consent-pending listen failed:", err));
 
     return () => {
-      cancelled = true;
       if (cycleResetTimer) clearTimeout(cycleResetTimer);
-      unlistenFns.forEach(fn => {
-        try { fn(); } catch (e) { console.error("[AgentOutput] unlisten failed:", e); }
-      });
+      p1.then(fn => fn()).catch(() => {});
+      p2.then(fn => fn()).catch(() => {});
+      p3.then(fn => fn()).catch(() => {});
+      p4.then(fn => fn()).catch(() => {});
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- filters via dispatchedAgentIdRef (stable ref), not state
 

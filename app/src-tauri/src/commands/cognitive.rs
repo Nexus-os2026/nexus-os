@@ -997,7 +997,7 @@ pub(crate) struct BackendEventBridge {
         feature = "tauri-runtime",
         any(target_os = "windows", target_os = "macos", target_os = "linux")
     ))]
-    window: Option<tauri::WebviewWindow<tauri::Wry>>,
+    app: Option<tauri::AppHandle<tauri::Wry>>,
 }
 
 impl BackendEventBridge {
@@ -1006,13 +1006,7 @@ impl BackendEventBridge {
         any(target_os = "windows", target_os = "macos", target_os = "linux")
     ))]
     fn from_app(app: tauri::AppHandle<tauri::Wry>) -> Self {
-        let window = app.get_webview_window("main");
-        if window.is_none() {
-            eprintln!(
-                "[agent-ipc] BUG: from_app could not resolve 'main' webview window — events will be dropped"
-            );
-        }
-        Self { window }
+        Self { app: Some(app) }
     }
 
     #[cfg(not(all(
@@ -1034,65 +1028,77 @@ impl BackendEventBridge {
         ))]
         {
             eprintln!(
-                "[agent-ipc] entering emit for event={} window_is_some={}",
+                "[agent-ipc] entering emit for event={} app_is_some={}",
                 _event,
-                self.window.is_some()
+                self.app.is_some()
             );
-            if let Some(window) = &self.window {
-                // Pre-serialize to check size and catch serialization errors safely
-                let payload_json = match serde_json::to_string(&_payload) {
-                    Ok(json) => json,
-                    Err(e) => {
-                        eprintln!(
-                            "[agent-ipc] serialization FAILED for event '{}': {}",
-                            _event, e
-                        );
-                        // Emit a safe error payload instead of crashing
-                        let fallback = json!({"error": format!("serialization failed: {e}")});
-                        if let Err(emit_err) = window.emit(_event, fallback) {
-                            eprintln!("[agent-ipc] fallback emit also failed: {emit_err}");
-                        }
-                        return;
-                    }
-                };
+            let Some(app) = &self.app else {
+                eprintln!(
+                    "[agent-ipc] BUG: emit called but app is None for event={}",
+                    _event
+                );
+                return;
+            };
+            let Some(window) = app.get_webview_window("main") else {
+                eprintln!(
+                    "[agent-ipc] BUG: get_webview_window('main') returned None at emit time for event={}",
+                    _event
+                );
+                return;
+            };
+            eprintln!(
+                "[agent-ipc] resolved window fresh, label={}",
+                window.label()
+            );
 
-                // Truncate oversized payloads
-                if payload_json.len() > Self::MAX_EMIT_PAYLOAD {
+            // Pre-serialize to check size and catch serialization errors safely
+            let payload_json = match serde_json::to_string(&_payload) {
+                Ok(json) => json,
+                Err(e) => {
                     eprintln!(
-                        "[agent-ipc] TRUNCATING event '{}': {} bytes > {} max",
-                        _event,
-                        payload_json.len(),
-                        Self::MAX_EMIT_PAYLOAD,
+                        "[agent-ipc] serialization FAILED for event '{}': {}",
+                        _event, e
                     );
-                    let truncated = json!({
-                        "truncated": true,
-                        "original_size": payload_json.len(),
-                        "partial": &payload_json[..Self::MAX_EMIT_PAYLOAD.min(payload_json.len())],
-                    });
-                    if let Err(e) = window.emit(_event, truncated) {
-                        eprintln!("[agent-ipc] truncated emit failed: {e}");
+                    // Emit a safe error payload instead of crashing
+                    let fallback = json!({"error": format!("serialization failed: {e}")});
+                    if let Err(emit_err) = window.emit(_event, fallback) {
+                        eprintln!("[agent-ipc] fallback emit also failed: {emit_err}");
                     }
                     return;
                 }
+            };
 
-                match window.emit(_event, _payload) {
-                    Ok(()) => {
-                        eprintln!("[agent-ipc] emit returned Ok for event={}", _event);
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "[agent-ipc] emit FAILED for '{}' ({} bytes): {}",
-                            _event,
-                            payload_json.len(),
-                            e,
-                        );
-                    }
-                }
-            } else {
+            // Truncate oversized payloads
+            if payload_json.len() > Self::MAX_EMIT_PAYLOAD {
                 eprintln!(
-                    "[agent-ipc] BUG: emit called but window is None for event={}",
-                    _event
+                    "[agent-ipc] TRUNCATING event '{}': {} bytes > {} max",
+                    _event,
+                    payload_json.len(),
+                    Self::MAX_EMIT_PAYLOAD,
                 );
+                let truncated = json!({
+                    "truncated": true,
+                    "original_size": payload_json.len(),
+                    "partial": &payload_json[..Self::MAX_EMIT_PAYLOAD.min(payload_json.len())],
+                });
+                if let Err(e) = window.emit(_event, truncated) {
+                    eprintln!("[agent-ipc] truncated emit failed: {e}");
+                }
+                return;
+            }
+
+            match window.emit(_event, &_payload) {
+                Ok(()) => {
+                    eprintln!("[agent-ipc] emit returned Ok for event={}", _event);
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[agent-ipc] emit FAILED for '{}' ({} bytes): {}",
+                        _event,
+                        payload_json.len(),
+                        e,
+                    );
+                }
             }
         }
     }
