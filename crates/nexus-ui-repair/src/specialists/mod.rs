@@ -7,6 +7,7 @@ pub mod eyes_and_hands;
 pub mod modal_handler;
 pub mod report_writer;
 pub mod specialist_call;
+pub mod ticket_writer;
 pub mod vision_judge;
 pub mod vision_schema;
 

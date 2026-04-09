@@ -52,10 +52,13 @@
 
 use std::path::PathBuf;
 
+pub mod comparison;
 pub mod descriptors;
 pub mod driver;
 pub mod governance;
+pub mod ground_truth;
 pub mod ledger;
+pub mod repair_ticket;
 pub mod replay;
 pub mod specialists;
 

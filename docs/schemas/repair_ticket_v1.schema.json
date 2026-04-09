@@ -1,0 +1,25 @@
+{
+  "description": "Nexus OS UI repair ticket file produced by nexus-ui-repair scout v1.0.0. Consumed by Claude Code during the human + Claude Code repair phase.",
+  "fields": {
+    "comparison_summary": "ComparisonSummary produced by the comparison harness. Reports confirmed_match / unknown_new / confirmed_miss counts, F1 score, and whether the run was partial.",
+    "generated_at": "RFC3339 timestamp recording when the ticket file was written to disk.",
+    "halt": "Optional HaltReason. Present only when the scout halted before finishing a full run.",
+    "page": "The Nexus OS page or sub-system this ticket batch targets (e.g. 'chat', 'cli_provider').",
+    "schema_version": "Semver string identifying this schema revision.",
+    "scout_version": "Version string of the nexus-ui-repair scout that produced this file.",
+    "tickets": "Array of RepairTicket objects. One per confirmed or suspected bug."
+  },
+  "repair_ticket_fields": {
+    "component_file_hint": "Best-guess relative path to the React or Rust file most likely to contain the fix.",
+    "dom_context": "DomContext with a CSS selector and a small slice of surrounding markup.",
+    "error_strings": "Array of error strings captured from the DOM or console at scout time.",
+    "id": "GT-NNN when the ticket matches a ground-truth entry, otherwise SCOUT-NNN for unknown_new findings.",
+    "page": "Page identifier — matches TicketFile.page.",
+    "reproduction_steps": "Ordered array of reproduction step strings.",
+    "screenshot_path": "Optional filesystem path to a screenshot captured at scout time.",
+    "severity": "One of critical, high, medium, low.",
+    "sub_view": "Sub-view within the page (e.g. 'sidebar', 'composer').",
+    "suggested_fix_category": "One of wiring, missing_endpoint, missing_component, labeling, ux_polish."
+  },
+  "schema_version": "1.0.0"
+}
