@@ -90,9 +90,12 @@ export function Settings({
   const [micLevel, setMicLevel] = useState(0.08);
   const [updateCheck, setUpdateCheck] = useState<"idle" | "checking" | "up-to-date">("idle");
   const updateCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       if (updateCheckTimerRef.current) clearTimeout(updateCheckTimerRef.current);
     };
   }, []);
@@ -314,23 +317,29 @@ export function Settings({
         // Auto re-detect to update status
         setCodexCliDetecting(true);
         detectCliProvider("codex_cli").then((s) => {
+          if (!isMountedRef.current) return;
           setCodexCliStatus({ installed: s.installed, version: s.version, authenticated: s.authenticated, binary_path: s.binary_path, auth_mode: s.auth_mode ?? null });
           setCodexCliVerifiedAt(Date.now());
           setProviderSettings((prev) => {
             if (!prev) return prev;
             return { ...prev, cli_providers: prev.cli_providers.map((p) => p.id === "codex_cli" ? { ...p, ...s } : p) };
           });
-        }).catch(() => {}).finally(() => setCodexCliDetecting(false));
+        }).catch((err) => {
+          console.error("[Settings] Codex CLI auto-detect failed:", err);
+        }).finally(() => { if (isMountedRef.current) setCodexCliDetecting(false); });
       } else if (cli === "claude") {
         setClaudeCodeDetecting(true);
         detectCliProvider("claude_code").then((s) => {
+          if (!isMountedRef.current) return;
           setClaudeCodeStatus({ installed: s.installed, version: s.version, authenticated: s.authenticated, binary_path: s.binary_path });
           setClaudeCodeVerifiedAt(Date.now());
           setProviderSettings((prev) => {
             if (!prev) return prev;
             return { ...prev, cli_providers: prev.cli_providers.map((p) => p.id === "claude_code" ? { ...p, ...s } : p) };
           });
-        }).catch(() => {}).finally(() => setClaudeCodeDetecting(false));
+        }).catch((err) => {
+          console.error("[Settings] Claude Code auto-detect failed:", err);
+        }).finally(() => { if (isMountedRef.current) setClaudeCodeDetecting(false); });
       }
     }).then((fn) => { unlistenAuth = fn; });
 
@@ -762,12 +771,15 @@ export function Settings({
                           // Auto-detect on enable
                           setClaudeCodeDetecting(true);
                           detectCliProvider("claude_code").then((s) => {
+                            if (!isMountedRef.current) return;
                             setClaudeCodeStatus({ installed: s.installed, version: s.version, authenticated: s.authenticated, binary_path: s.binary_path });
                             setProviderSettings((prev) => {
                               if (!prev) return prev;
                               return { ...prev, cli_providers: prev.cli_providers.map((p) => p.id === "claude_code" ? { ...p, ...s, enabled: true } : p) };
                             });
-                          }).catch(() => {}).finally(() => setClaudeCodeDetecting(false));
+                          }).catch((err) => {
+                            console.error("[Settings] Claude Code enable-detect failed:", err);
+                          }).finally(() => { if (isMountedRef.current) setClaudeCodeDetecting(false); });
                         }
                       }}
                     />
@@ -827,17 +839,27 @@ export function Settings({
                       style={{ marginLeft: "auto", fontSize: "0.75rem", padding: "3px 10px" }}
                       disabled={claudeCodeDetecting}
                       onClick={async () => {
+                        if (!isMountedRef.current) return;
                         setClaudeCodeDetecting(true);
+                        setClaudeCodeLoginMsg(null);
                         try {
                           const s = await detectCliProvider("claude_code");
+                          if (!isMountedRef.current) return;
                           setClaudeCodeStatus({ installed: s.installed, version: s.version, authenticated: s.authenticated, binary_path: s.binary_path });
                           setClaudeCodeVerifiedAt(Date.now());
                           setProviderSettings((prev) => {
                             if (!prev) return prev;
                             return { ...prev, cli_providers: prev.cli_providers.map((p) => p.id === "claude_code" ? { ...p, ...s } : p) };
                           });
-                        } catch { /* ignore */ }
-                        setClaudeCodeDetecting(false);
+                        } catch (err) {
+                          console.error("[Settings] Claude Code detect failed:", err);
+                          if (!isMountedRef.current) return;
+                          setClaudeCodeLoginMsg(`Detection failed: ${String(err)}`);
+                        } finally {
+                          if (isMountedRef.current) {
+                            setClaudeCodeDetecting(false);
+                          }
+                        }
                       }}
                     >
                       <RefreshCw size={12} className="inline-icon" /> {claudeCodeDetecting ? "Detecting..." : "Re-detect"}
@@ -872,12 +894,15 @@ export function Settings({
                         if (next && !status) {
                           setCodexCliDetecting(true);
                           detectCliProvider("codex_cli").then((s) => {
+                            if (!isMountedRef.current) return;
                             setCodexCliStatus({ installed: s.installed, version: s.version, authenticated: s.authenticated, binary_path: s.binary_path, auth_mode: s.auth_mode ?? null });
                             setProviderSettings((prev) => {
                               if (!prev) return prev;
                               return { ...prev, cli_providers: prev.cli_providers.map((p) => p.id === "codex_cli" ? { ...p, ...s, enabled: true } : p) };
                             });
-                          }).catch(() => {}).finally(() => setCodexCliDetecting(false));
+                          }).catch((err) => {
+                            console.error("[Settings] Codex CLI enable-detect failed:", err);
+                          }).finally(() => { if (isMountedRef.current) setCodexCliDetecting(false); });
                         }
                       }}
                     />
@@ -947,17 +972,27 @@ export function Settings({
                       style={{ marginLeft: "auto", fontSize: "0.75rem", padding: "3px 10px" }}
                       disabled={codexCliDetecting}
                       onClick={async () => {
+                        if (!isMountedRef.current) return;
                         setCodexCliDetecting(true);
+                        setCodexCliLoginMsg(null);
                         try {
                           const s = await detectCliProvider("codex_cli");
+                          if (!isMountedRef.current) return;
                           setCodexCliStatus({ installed: s.installed, version: s.version, authenticated: s.authenticated, binary_path: s.binary_path, auth_mode: s.auth_mode ?? null });
                           setCodexCliVerifiedAt(Date.now());
                           setProviderSettings((prev) => {
                             if (!prev) return prev;
                             return { ...prev, cli_providers: prev.cli_providers.map((p) => p.id === "codex_cli" ? { ...p, ...s } : p) };
                           });
-                        } catch { /* ignore */ }
-                        setCodexCliDetecting(false);
+                        } catch (err) {
+                          console.error("[Settings] Codex CLI detect failed:", err);
+                          if (!isMountedRef.current) return;
+                          setCodexCliLoginMsg(`Detection failed: ${String(err)}`);
+                        } finally {
+                          if (isMountedRef.current) {
+                            setCodexCliDetecting(false);
+                          }
+                        }
                       }}
                     >
                       <RefreshCw size={12} className="inline-icon" /> {codexCliDetecting ? "Detecting..." : "Re-detect"}

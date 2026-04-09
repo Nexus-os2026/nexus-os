@@ -2780,7 +2780,30 @@ pub(crate) fn provider_from_prefixed_model(
                     }
                 }
             }
-            "openai" => Box::new(OpenAiProvider::new(prov_config.openai_api_key.clone())),
+            "openai" => {
+                // GPT-5.x models are accessible only via the Codex CLI
+                // (ChatGPT Plus subscription). Route them there if available,
+                // otherwise return a helpful error.
+                if model_name.starts_with("gpt-5") {
+                    let status = nexus_connectors_llm::providers::codex_cli::detect_codex_cli();
+                    if status.installed && status.authenticated {
+                        eprintln!(
+                            "[provider] Routing openai/{model_name} to Codex CLI \
+                             (ChatGPT Plus subscription)"
+                        );
+                        Box::new(CodexCliProvider::new())
+                    } else {
+                        return Err(format!(
+                            "Model 'openai/{model_name}' requires the Codex CLI \
+                             (ChatGPT Plus subscription). The OpenAI HTTP API does \
+                             not serve GPT-5. Install and authenticate the Codex \
+                             CLI: npm install -g @openai/codex && codex login"
+                        ));
+                    }
+                } else {
+                    Box::new(OpenAiProvider::new(prov_config.openai_api_key.clone()))
+                }
+            }
             "deepseek" => Box::new(DeepSeekProvider::new(prov_config.deepseek_api_key.clone())),
             "google" | "gemini" => {
                 Box::new(GeminiProvider::new(prov_config.gemini_api_key.clone()))
