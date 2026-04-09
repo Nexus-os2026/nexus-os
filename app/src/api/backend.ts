@@ -149,12 +149,13 @@ export function resumeAgent(agentId: string): Promise<void> {
   return invokeDesktop<void>("resume_agent", agentArgs(agentId));
 }
 
-export function sendChat(message: string, modelId?: string, agentName?: string): Promise<ChatResponse> {
+export function sendChat(message: string, modelId?: string, agentName?: string, autoRoute: boolean = false): Promise<ChatResponse> {
   return invokeDesktop<ChatResponse>("send_chat", {
     message,
     modelId,
     model_id: modelId,
     agent_name: agentName,
+    auto_route: autoRoute,
   });
 }
 

@@ -82,7 +82,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 #[cfg(all(
     feature = "tauri-runtime",
@@ -282,7 +282,9 @@ pub(crate) fn send_chat(
     message: String,
     model_id: Option<String>,
     agent_name: Option<String>,
+    auto_route: Option<bool>,
 ) -> Result<ChatResponse, String> {
+    let auto_route = auto_route.unwrap_or(false);
     state.check_rate(nexus_kernel::rate_limit::RateCategory::LlmRequest)?;
     state.validate_input(&message)?;
     // ── Pipeline Step 0: Check if user is approving a pending project ──
@@ -333,7 +335,7 @@ pub(crate) fn send_chat(
     let (effective_agent_name, routing_prefix) = if agent_name.is_some() {
         // User explicitly selected an agent — use it directly
         (agent_name.clone(), String::new())
-    } else {
+    } else if auto_route {
         match complexity {
             ComplexityLevel::ComplexProject => {
                 // For complex projects, we generate a plan instead of routing to an agent
@@ -351,10 +353,13 @@ pub(crate) fn send_chat(
                 (Some(routed_agent), prefix)
             }
         }
+    } else {
+        // auto_route is off — direct LLM dispatch, no routing prefix
+        (None, String::new())
     };
 
     // ── Pipeline Step 3: ComplexProject → generate plan, set awaiting_approval ──
-    if complexity == ComplexityLevel::ComplexProject && agent_name.is_none() {
+    if auto_route && complexity == ComplexityLevel::ComplexProject && agent_name.is_none() {
         // Build a project-planning prompt and send it through the normal LLM path.
         // The response becomes the plan; we set awaiting_approval so the next "yes"
         // triggers autopilot.
@@ -1088,7 +1093,15 @@ pub(crate) fn list_prebuilt_manifest_paths() -> Vec<PathBuf> {
     paths
 }
 
+static PREBUILT_MANIFEST_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
+
 pub(crate) fn resolve_prebuilt_manifest_dir() -> Option<PathBuf> {
+    PREBUILT_MANIFEST_DIR
+        .get_or_init(resolve_prebuilt_manifest_dir_uncached)
+        .clone()
+}
+
+fn resolve_prebuilt_manifest_dir_uncached() -> Option<PathBuf> {
     let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut candidate_dirs = vec![workspace_root.join("agents/prebuilt")];
 

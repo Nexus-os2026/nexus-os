@@ -2021,11 +2021,12 @@ pub mod runtime {
         message: String,
         model_id: Option<String>,
         agent_name: Option<String>,
+        auto_route: Option<bool>,
     ) -> Result<ChatResponse, String> {
         let state = state.inner().clone();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let result = super::send_chat(&state, message, model_id, agent_name);
+            let result = super::send_chat(&state, message, model_id, agent_name, auto_route);
             let _ = tx.send(result);
         });
         rx.recv()
