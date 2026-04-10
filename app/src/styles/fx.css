@@ -29,7 +29,6 @@
 }
 
 .living-background__grid {
-  inset: -8%;
   background-image:
     linear-gradient(rgba(108, 185, 255, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(74, 247, 211, 0.035) 1px, transparent 1px);
