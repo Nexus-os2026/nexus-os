@@ -5,38 +5,23 @@
 //! accounting, speculative execution, audit trail integrity, and sender auth
 //! all enforced — no governance bypass possible through external protocols.
 
+use nexus_kernel::actuators::web::GovernedWeb;
+use nexus_kernel::actuators::ActuatorRegistry;
 use nexus_kernel::manifest::AgentManifest;
 use nexus_kernel::protocols::a2a::{
     AgentCard, MessagePart, MessageRole, TaskMessage, TaskPayload, TaskStatus, A2A_PROTOCOL_VERSION,
 };
 use nexus_kernel::protocols::bridge::{A2ATaskRequest, GovernanceBridge, McpInvokeRequest};
 use nexus_kernel::protocols::mcp::McpServer;
-use nexus_kernel::actuators::web::{GovernedWeb, WebSearchBackend, WebSearchResult};
-use nexus_kernel::actuators::ActuatorRegistry;
+use nexus_kernel::test_support::HermeticSearchBackend;
 use serde_json::json;
 use std::sync::Arc;
 
-// ── Hermetic search backend (no network dependency) ─────────────────────────
-
-struct HermeticSearchBackend;
-
-impl WebSearchBackend for HermeticSearchBackend {
-    fn search(&self, query: &str) -> Result<Vec<WebSearchResult>, String> {
-        Ok(vec![WebSearchResult {
-            title: format!("Result for: {query}"),
-            url: "https://hermetic.test/result".to_string(),
-            snippet: "Hermetic test result".to_string(),
-            relevance_score: 1.0,
-        }])
-    }
-    fn fetch_content(&self, _url: &str) -> Result<String, String> {
-        Ok("Hermetic test content".to_string())
-    }
-}
-
 fn hermetic_bridge(allowed_senders: Vec<String>) -> GovernanceBridge {
     let mut registry = ActuatorRegistry::with_defaults();
-    registry.register(Box::new(GovernedWeb::with_backend(Arc::new(HermeticSearchBackend))));
+    registry.register(Box::new(GovernedWeb::with_backend(Arc::new(
+        HermeticSearchBackend,
+    ))));
     let mcp = McpServer::with_actuator_registry(registry);
     GovernanceBridge::with_mcp_server(mcp, allowed_senders)
 }

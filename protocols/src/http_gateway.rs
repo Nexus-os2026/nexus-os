@@ -447,6 +447,14 @@ impl GatewayState {
         self
     }
 
+    /// Replace the default MCP server with a custom one (e.g. with hermetic actuators for tests).
+    pub fn with_mcp_server(self, mcp_server: McpServer) -> Self {
+        let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        inner.mcp_server = mcp_server;
+        drop(inner);
+        self
+    }
+
     /// Register an agent with the gateway.
     pub fn register_agent(&self, manifest: AgentManifest, base_url: &str) {
         let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
@@ -2835,7 +2843,11 @@ mod tests {
     use super::*;
     use axum::body::Body;
     use axum::http::{Method, Request};
+    use nexus_kernel::actuators::web::GovernedWeb;
+    use nexus_kernel::actuators::ActuatorRegistry;
     use nexus_kernel::protocols::a2a::TaskStatus;
+    use nexus_kernel::test_support::HermeticSearchBackend;
+    use std::sync::Arc;
     use tower::ServiceExt;
 
     fn test_manifest(name: &str, caps: Vec<&str>, fuel: u64) -> AgentManifest {
@@ -2859,8 +2871,14 @@ mod tests {
     }
 
     fn setup_gateway() -> (Router, GatewayState) {
+        let mut registry = ActuatorRegistry::with_defaults();
+        registry.register(Box::new(GovernedWeb::with_backend(Arc::new(
+            HermeticSearchBackend,
+        ))));
+        let mcp = McpServer::with_actuator_registry(registry);
         let state = GatewayState::new("ignored")
             .unwrap()
+            .with_mcp_server(mcp)
             .with_llm_provider(Box::new(
                 nexus_connectors_llm::providers::mock::MockProvider::new(),
             ));
