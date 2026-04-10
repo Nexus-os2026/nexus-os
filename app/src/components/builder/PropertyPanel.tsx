@@ -264,7 +264,7 @@ export default function PropertyPanel({ selected, onTokenChange, onTextChange, o
               Undo
             </button>
           )}
-          <button onClick={onDeselect} style={{ background: "transparent", color: C.dim, border: "none", padding: "2px 6px", fontSize: 14, cursor: "pointer" }} title="Deselect">
+          <button onClick={onDeselect} style={{ background: "transparent", color: C.dim, border: "none", padding: "2px 6px", fontSize: 14, cursor: "pointer" }} aria-label="Deselect">
             {"\u00D7"}
           </button>
         </div>

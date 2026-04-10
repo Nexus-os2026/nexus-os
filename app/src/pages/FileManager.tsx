@@ -333,7 +333,7 @@ export default function FileManager(): JSX.Element {
             <button type="button" className={`fm-tool-btn cursor-pointer ${viewMode === "grid" ? "fm-tool-active" : ""}`} onClick={() => setViewMode("grid")} title="Grid view"><LayoutGrid size={14} /></button>
             <button type="button" className={`fm-tool-btn cursor-pointer ${viewMode === "list" ? "fm-tool-active" : ""}`} onClick={() => setViewMode("list")} title="List view"><List size={14} /></button>
             <button type="button" className={`fm-tool-btn cursor-pointer ${showSearch ? "fm-tool-active" : ""}`} onClick={() => setShowSearch((p) => !p)} title="Search (Ctrl+F)"><Search size={14} /></button>
-            <button type="button" className="fm-tool-btn cursor-pointer" onClick={refresh} title="Refresh (F5)"><RefreshCw size={14} /></button>
+            <button type="button" className="fm-tool-btn cursor-pointer" onClick={refresh} title="Refresh (F5)" aria-label="Refresh (F5)"><RefreshCw size={14} /></button>
             <button type="button" className={`fm-tool-btn cursor-pointer ${showSidebar ? "fm-tool-active" : ""}`} onClick={() => setShowSidebar((p) => !p)} title="Sidebar (Ctrl+B)"><PanelRight size={14} /></button>
           </div>
         </div>
@@ -350,7 +350,7 @@ export default function FileManager(): JSX.Element {
       {/* ---- Action bar ---- */}
       <div className="fm-action-bar">
         <div className="fm-breadcrumbs">
-          <button type="button" className="fm-nav-btn cursor-pointer" onClick={goUp} disabled={!currentPath || currentPath === "/"} title="Go up"><ArrowUp size={14} /></button>
+          <button type="button" className="fm-nav-btn cursor-pointer" onClick={goUp} disabled={!currentPath || currentPath === "/"} title="Go up" aria-label="Go up"><ArrowUp size={14} /></button>
           {breadcrumbs.map((bc, i) => (
             <span key={bc.path} className="fm-crumb-wrap">
               {i > 0 && <span className="fm-crumb-sep">/</span>}

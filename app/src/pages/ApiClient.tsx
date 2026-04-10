@@ -300,7 +300,7 @@ export default function ApiClient() {
         <div className="ac-sidebar-header">
           <h2 className="ac-sidebar-title">API Client</h2>
           <div className="ac-sidebar-actions">
-            <button className="ac-btn-icon cursor-pointer" onClick={addCollection} title="New collection"><Plus size={14} /></button>
+            <button className="ac-btn-icon cursor-pointer" onClick={addCollection} title="New collection" aria-label="New collection"><Plus size={14} /></button>
             <button className={`ac-btn-icon cursor-pointer ${showAudit ? "active" : ""}`} onClick={() => setShowAudit(!showAudit)} title="Audit"><LayoutGrid size={14} /></button>
           </div>
         </div>

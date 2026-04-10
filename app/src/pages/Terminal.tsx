@@ -565,7 +565,7 @@ export default function Terminal(): JSX.Element {
             <span className="tm-fuel-value">{fuelRemaining.toLocaleString()}</span>
           </div>
           <div className="tm-toolbar">
-            <button type="button" className="tm-tool-btn cursor-pointer" onClick={addPane} title="New Tab (Ctrl+T)"><Plus size={14} /></button>
+            <button type="button" className="tm-tool-btn cursor-pointer" onClick={addPane} title="New Tab (Ctrl+T)" aria-label="New Tab (Ctrl+T)"><Plus size={14} /></button>
             <button type="button" className={`tm-tool-btn cursor-pointer ${showSidebar ? "tm-tool-active" : ""}`} onClick={() => setShowSidebar((p) => !p)} title="Toggle Sidebar (Ctrl+B)"><Menu size={14} /></button>
           </div>
         </div>

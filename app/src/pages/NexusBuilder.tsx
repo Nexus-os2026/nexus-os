@@ -1429,7 +1429,7 @@ export default function NexusBuilder() {
               building={isBuilding}
             />
             <button onClick={() => { if (outDir) rPreview(outDir); }} disabled={!outDir} style={{ background: "transparent", color: outDir ? C.muted : C.dim, border: "none", padding: "3px 6px", fontSize: 13, cursor: outDir ? "pointer" : "default" }} title="Refresh">{"\u21BB"}</button>
-            <button onClick={doDownload} disabled={!html} style={{ background: "transparent", color: html ? C.muted : C.dim, border: "none", padding: "3px 6px", fontSize: 13, cursor: html ? "pointer" : "default" }} title="Download HTML">{"\u2193"}</button>
+            <button onClick={doDownload} disabled={!html} style={{ background: "transparent", color: html ? C.muted : C.dim, border: "none", padding: "3px 6px", fontSize: 13, cursor: html ? "pointer" : "default" }} title="Download HTML" aria-label="Download HTML">{"\u2193"}</button>
             {outDir && <button onClick={() => { if (projectId) exportProject(projectId); }} style={{ background: "transparent", color: C.muted, border: "none", padding: "3px 6px", fontSize: 10, cursor: "pointer", fontFamily: C.sans }} title="Export as ZIP">ZIP</button>}
           </div>
 

@@ -1374,7 +1374,7 @@ export default function AiChatHub() {
               </div>
               <div className="ch-chat-actions">
                 <button className="ch-hdr-btn cursor-pointer" onClick={() => togglePin(activeConv.id)} title={activeConv.pinned ? "Unpin" : "Pin"}>{activeConv.pinned ? <Pin size={16} aria-hidden="true" /> : <MapPin size={16} aria-hidden="true" />}</button>
-                <button className="ch-hdr-btn cursor-pointer" onClick={copyConversation} title="Copy conversation"><ClipboardList size={16} aria-hidden="true" /></button>
+                <button className="ch-hdr-btn cursor-pointer" onClick={copyConversation} title="Copy conversation" aria-label="Copy conversation"><ClipboardList size={16} aria-hidden="true" /></button>
                 <button className="ch-hdr-btn cursor-pointer" onClick={() => { if (window.confirm("Delete this conversation?")) deleteConversation(activeConv.id); }} title="Delete"><Trash2 size={16} aria-hidden="true" /></button>
                 <button className={`ch-hdr-btn ch-voice-btn cursor-pointer ${voiceActive ? "active" : ""}`} onClick={() => { setVoiceActive(!voiceActive); logAudit(voiceActive ? "Voice off" : "Voice on \u2014 Jarvis mode"); }} title="Voice">
                   {voiceActive ? <Mic size={16} aria-hidden="true" /> : <MicOff size={16} aria-hidden="true" />}
@@ -1673,7 +1673,7 @@ export default function AiChatHub() {
                 </button>
                 <textarea ref={inputRef} className="ch-input" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} onPaste={handleFilePaste} placeholder={`Message ${activeModel?.name ?? "AI"}... (drop files here)`} rows={1} />
                 <div className="ch-input-actions">
-                  <button className="ch-input-btn cursor-pointer" onClick={generateImage} title="Generate image" disabled={!input.trim()}><Image size={16} aria-hidden="true" /></button>
+                  <button className="ch-input-btn cursor-pointer" onClick={generateImage} title="Generate image" aria-label="Generate image" disabled={!input.trim()}><Image size={16} aria-hidden="true" /></button>
                   <button className="ch-send-btn" onClick={sendMessage} disabled={(!input.trim() && pendingFiles.length === 0) || sending}>
                     {sending ? "..." : "→"}
                   </button>

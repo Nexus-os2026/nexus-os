@@ -82,3 +82,37 @@ Deleted both `TEMPORARY DIAGNOSTIC` blocks entirely (Type 1 classification — p
 
 - Before: `[TEST] attaching standalone test listener` + `[TEST] standalone listen failed: TypeError: Cannot read properties of undefined (reading 'transformCallback')` firing twice per page load (React StrictMode)
 - After: clean console on /agents — no `[TEST]` messages, no `transformCallback` errors, no new errors introduced
+
+## Cluster F: Icon buttons use `title` instead of `aria-label`
+
+**Status:** DONE
+**Fixed:** 2026-04-10
+**Commit:** (see git log)
+**Buttons affected:** 8 (across 6 files)
+
+### Buttons and classifications
+
+| File | Line | Button purpose | Classification | Action |
+|------|------|----------------|----------------|--------|
+| src/pages/FileManager.tsx | 336 | Refresh (F5) | Type 1 | Added aria-label, kept title |
+| src/pages/FileManager.tsx | 353 | Go up | Type 1 | Added aria-label, kept title |
+| src/pages/Terminal.tsx | 568 | New Tab (Ctrl+T) | Type 1 | Added aria-label, kept title |
+| src/pages/ApiClient.tsx | 303 | New collection | Type 1 | Added aria-label, kept title |
+| src/pages/AiChatHub.tsx | 1377 | Copy conversation | Type 1 | Added aria-label, kept title |
+| src/pages/AiChatHub.tsx | 1676 | Generate image | Type 1 | Added aria-label, kept title |
+| src/pages/NexusBuilder.tsx | 1432 | Download HTML (↓) | Type 1 | Added aria-label, kept title |
+| src/components/builder/PropertyPanel.tsx | 267 | Deselect (×) | Type 2 | Replaced title with aria-label |
+
+### Root cause
+
+Developers used the HTML `title` attribute as the only accessible name for icon-only buttons. Screen readers handle `title` inconsistently — some announce it after a delay, some only on focus, some not at all. The correct attribute for accessible names is `aria-label`.
+
+### Fix
+
+7 buttons classified as Type 1 (toolbar/action icons where hover tooltips are useful): kept existing `title` attribute and added matching `aria-label`. 1 button classified as Type 2 (× close/deselect button where meaning is obvious): replaced `title` with `aria-label` since a tooltip is redundant for a standard close affordance.
+
+### Verification
+
+- Hover tooltips still appear on Type 1 buttons (verified on /api-client "New collection")
+- Accessibility tree now shows accessible names for all fixed buttons
+- Build passes
