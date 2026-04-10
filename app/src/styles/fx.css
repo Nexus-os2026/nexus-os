@@ -76,7 +76,7 @@
     linear-gradient(160deg, rgba(4, 10, 24, 0.84), rgba(12, 24, 40, 0.62)),
     linear-gradient(135deg, rgba(74, 247, 211, 0.04), rgba(140, 123, 255, 0.04));
   border-radius: var(--radius-panel-lg);
-  overflow: hidden;
+  overflow: clip;
   transform: translate3d(var(--holo-shift-x), var(--holo-shift-y), 0) rotateX(calc(var(--holo-tilt) * -0.18)) rotateY(var(--holo-tilt));
   transition: transform 260ms ease, border-color 220ms ease;
   box-shadow:
@@ -90,6 +90,15 @@
 
 .holo-panel__refraction {
   position: absolute;
+  inset: 0;
+  overflow: clip;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.holo-panel__refraction::before {
+  content: '';
+  position: absolute;
   inset: -50% -20%;
   background: conic-gradient(
     from 220deg,
@@ -100,9 +109,7 @@
     rgba(56, 189, 248, 0.18) 255deg,
     rgba(255, 255, 255, 0) 360deg
   );
-  mix-blend-mode: screen;
   animation: holo-drift 12s linear infinite;
-  pointer-events: none;
 }
 
 .holo-panel__grain {
