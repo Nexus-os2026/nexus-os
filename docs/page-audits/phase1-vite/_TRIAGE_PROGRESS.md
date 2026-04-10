@@ -168,3 +168,43 @@ Mechanical sweep: added `type="button"` to all `<button>` elements outside `<for
 | /agents | 101 | 0 |
 
 Build passes. No new console errors on any spot-checked page.
+
+## Cluster E: Shell header demo-mode feedback (Refresh + Start Jarvis)
+
+**Status:** ALREADY FIXED (no code change needed)
+**Verified:** 2026-04-10
+**Files affected:** 0 (no changes required)
+
+### Root cause (of the audit finding, not a bug)
+
+The audit reported "dead buttons — zero feedback on click" for Refresh and Start Jarvis. Investigation found that demo-mode feedback **already exists**: `showDemoToast()` in App.tsx (line 890) sets a `runtimeError` state rendering an error badge: "Action unavailable in demo mode — requires desktop backend". Both `handleRefresh()` (line 1425) and `enableJarvisMode()` (line 1443) call `showDemoToast()` when `runtimeMode !== "desktop"`.
+
+The automated Puppeteer audit script's change-detection heuristic did not capture the error badge DOM insertion, so it reported "no visible change." Manual browser verification confirms the feedback works correctly on all tested pages.
+
+### Verification
+
+| Page | Refresh click | Start Jarvis click |
+|------|--------------|-------------------|
+| /dashboard | Error badge shown | Error badge shown |
+| /files | Error badge shown | — |
+| /agents | Error badge shown | — |
+
+No code changes required. Cluster E is resolved by the existing implementation.
+
+---
+
+## Phase 2A Complete
+
+All 7 clusters triaged and resolved:
+
+| Cluster | Finding | Fix type | Commit |
+|---------|---------|----------|--------|
+| A | living-background overflow | CSS: removed grid inset | 898ad4e9 |
+| B | holo-panel clips children | CSS: refraction → pseudo-element | 65880913 |
+| C | sidebar text clipping | CSS: removed shortcut translateX | abe7f84c |
+| D | type="submit" outside form | JSX: added type="button" | 0961ed4c |
+| E | dead buttons (no feedback) | Already fixed (showDemoToast) | n/a |
+| F | icon buttons use title not aria-label | JSX: added aria-label | c2733a7b |
+| H | leaked [TEST] debug code | JSX: deleted test blocks | 9903dd91 |
+
+Ready for single CI push to remote.
