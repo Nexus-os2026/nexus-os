@@ -11,7 +11,35 @@ use nexus_kernel::protocols::a2a::{
 };
 use nexus_kernel::protocols::bridge::{A2ATaskRequest, GovernanceBridge, McpInvokeRequest};
 use nexus_kernel::protocols::mcp::McpServer;
+use nexus_kernel::actuators::web::{GovernedWeb, WebSearchBackend, WebSearchResult};
+use nexus_kernel::actuators::ActuatorRegistry;
 use serde_json::json;
+use std::sync::Arc;
+
+// ── Hermetic search backend (no network dependency) ─────────────────────────
+
+struct HermeticSearchBackend;
+
+impl WebSearchBackend for HermeticSearchBackend {
+    fn search(&self, query: &str) -> Result<Vec<WebSearchResult>, String> {
+        Ok(vec![WebSearchResult {
+            title: format!("Result for: {query}"),
+            url: "https://hermetic.test/result".to_string(),
+            snippet: "Hermetic test result".to_string(),
+            relevance_score: 1.0,
+        }])
+    }
+    fn fetch_content(&self, _url: &str) -> Result<String, String> {
+        Ok("Hermetic test content".to_string())
+    }
+}
+
+fn hermetic_bridge(allowed_senders: Vec<String>) -> GovernanceBridge {
+    let mut registry = ActuatorRegistry::with_defaults();
+    registry.register(Box::new(GovernedWeb::with_backend(Arc::new(HermeticSearchBackend))));
+    let mcp = McpServer::with_actuator_registry(registry);
+    GovernanceBridge::with_mcp_server(mcp, allowed_senders)
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -247,7 +275,7 @@ fn mcp_tool_discovery_returns_governed_tools_only() {
 
 #[test]
 fn mcp_invocation_enforces_capability_and_fuel_checks() {
-    let mut bridge = GovernanceBridge::new();
+    let mut bridge = hermetic_bridge(vec![]);
     let manifest = limited_manifest("mcp-agent", vec!["web.search", "fs.read"], 10_000);
     bridge.register_agent(manifest);
 
@@ -279,7 +307,7 @@ fn mcp_invocation_enforces_capability_and_fuel_checks() {
     );
 
     // Fuel exhaustion check: create a fuel-starved agent
-    let mut bridge2 = GovernanceBridge::new();
+    let mut bridge2 = hermetic_bridge(vec![]);
     bridge2.register_agent(limited_manifest("starved-agent", vec!["web.search"], 10));
 
     let request = McpInvokeRequest {
@@ -577,7 +605,7 @@ fn all_protocol_actions_appear_in_audit_trail() {
 fn no_governance_bypass_through_external_protocols() {
     // This test systematically verifies that every bypass vector is blocked.
 
-    let mut bridge = GovernanceBridge::with_allowed_senders(vec!["legit".to_string()]);
+    let mut bridge = hermetic_bridge(vec!["legit".to_string()]);
     bridge.register_agent(limited_manifest(
         "locked-agent",
         vec!["web.search", "fs.read"],

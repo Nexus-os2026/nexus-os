@@ -115,6 +115,18 @@ impl GovernanceBridge {
         bridge
     }
 
+    /// Create a bridge with a custom MCP server and optional sender restrictions.
+    pub fn with_mcp_server(mcp_server: McpServer, allowed_senders: Vec<String>) -> Self {
+        Self {
+            agents_by_name: HashMap::new(),
+            agents: HashMap::new(),
+            mcp_server,
+            speculative_engine: SpeculativeEngine::new(),
+            audit_trail: AuditTrail::new(),
+            allowed_senders,
+        }
+    }
+
     /// Register an agent, making it available for A2A tasks and MCP tool calls.
     pub fn register_agent(&mut self, manifest: AgentManifest) -> AgentId {
         let agent_id = Uuid::new_v4();

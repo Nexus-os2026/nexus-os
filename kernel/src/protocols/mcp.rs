@@ -365,6 +365,15 @@ impl McpServer {
         }
     }
 
+    /// Create a server with a custom actuator registry. Used for hermetic
+    /// tests that must not depend on network reachability.
+    pub fn with_actuator_registry(registry: ActuatorRegistry) -> Self {
+        Self {
+            actuator_registry: registry,
+            ..Self::new()
+        }
+    }
+
     /// Register an agent, generating MCP tools from its manifest capabilities.
     pub fn register_agent(&mut self, agent_id: Uuid, manifest: AgentManifest) {
         let tools: Vec<GovernedTool> = manifest
