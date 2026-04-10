@@ -190,17 +190,19 @@ export default function LivingBackground({ status = "healthy", agentCount = 4 }:
 
   return (
     <div ref={shellRef} className="living-background" aria-hidden="true">
-      <div
-        ref={auraRef}
-        className="living-background__aura"
-        style={{
-          background: `
-            radial-gradient(circle at 18% 22%, rgba(${r}, ${g}, ${b}, 0.2), transparent 24%),
-            radial-gradient(circle at 84% 16%, rgba(140, 123, 255, 0.18), transparent 22%),
-            radial-gradient(circle at 50% 78%, rgba(108, 185, 255, 0.12), transparent 32%)
-          `,
-        }}
-      />
+      <div className="living-background__aura-clip">
+        <div
+          ref={auraRef}
+          className="living-background__aura"
+          style={{
+            background: `
+              radial-gradient(circle at 18% 22%, rgba(${r}, ${g}, ${b}, 0.2), transparent 24%),
+              radial-gradient(circle at 84% 16%, rgba(140, 123, 255, 0.18), transparent 22%),
+              radial-gradient(circle at 50% 78%, rgba(108, 185, 255, 0.12), transparent 32%)
+            `,
+          }}
+        />
+      </div>
       <div ref={gridRef} className="living-background__grid" />
       <canvas ref={canvasRef} className="living-background__canvas" />
       <div className="living-background__vignette" />
