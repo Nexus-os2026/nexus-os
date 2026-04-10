@@ -116,3 +116,26 @@ Developers used the HTML `title` attribute as the only accessible name for icon-
 - Hover tooltips still appear on Type 1 buttons (verified on /api-client "New collection")
 - Accessibility tree now shows accessible names for all fixed buttons
 - Build passes
+
+## Cluster C: `span.nexus-sidebar-item-text` 4px text clipping
+
+**Status:** DONE
+**Fixed:** 2026-04-10
+**Commit:** (see git log)
+**Pages affected:** 88 (sidebar appears on every page)
+
+### Root cause
+
+`.nexus-sidebar-shortcut` (keyboard shortcut badges like "Alt+1") had `transform: translateX(4px)` as default state, sliding to `translateX(0)` on hover. Even though the shortcut was `opacity: 0` (invisible), Chrome included the 4px transform offset in the parent `.nexus-sidebar-item-text`'s scrollWidth. Only the 3 sidebar items with shortcuts (Dashboard, Chat, Agents) actually overflowed — the other 85 items had no shortcut text and no overflow.
+
+### Fix
+
+Removed `transform: translateX(4px)` from `.nexus-sidebar-shortcut` default state and `transform: translateX(0)` from the hover state in `app/src/components/layout/sidebar.css`. The shortcut now fades in with opacity only (160ms ease transition), without the subtle slide-in effect. The slide was barely perceptible alongside the opacity transition.
+
+### Before / After
+
+| Page | Before overflowing | After overflowing |
+|------|-------------------|------------------|
+| /dashboard | 3 of 88 spans | 0 of 88 spans |
+| /files | 3 of 88 spans | 0 of 88 spans |
+| /api-client | 3 of 88 spans | 0 of 88 spans |
