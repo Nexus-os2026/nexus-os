@@ -617,7 +617,7 @@ export default function ModelHub() {
       {/* Quick filters */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
         {QUICK_FILTERS.map((f) => (
-          <button
+          <button type="button"
             key={f}
             onClick={() => handleFilterClick(f)}
             style={{
@@ -1056,7 +1056,7 @@ export default function ModelHub() {
                                 </div>
                               </div>
                             ) : (
-                              <button
+                              <button type="button"
                                 onClick={() =>
                                   handleDownload(
                                     selectedModelDetails.model_id,
@@ -1262,7 +1262,7 @@ export default function ModelHub() {
                 </span>
                 {model.removable && deleteConfirm === model.deleteId ? (
                   <div style={{ display: "flex", gap: 4 }}>
-                    <button
+                    <button type="button"
                       onClick={() => handleDelete(model.deleteId!)}
                       style={{
                         padding: "2px 8px",
@@ -1277,7 +1277,7 @@ export default function ModelHub() {
                     >
                       Confirm
                     </button>
-                    <button
+                    <button type="button"
                       onClick={() => setDeleteConfirm(null)}
                       style={{
                         padding: "2px 8px",
@@ -1294,7 +1294,7 @@ export default function ModelHub() {
                     </button>
                   </div>
                 ) : model.removable ? (
-                  <button
+                  <button type="button"
                     onClick={() => setDeleteConfirm(model.deleteId!)}
                     style={{
                       background: "none",
@@ -1399,7 +1399,7 @@ export default function ModelHub() {
 
       {/* Toggle sharing */}
       <div style={{ display: "flex", gap: 8 }}>
-        <button
+        <button type="button"
           onClick={() => handleToggleSharing(true)}
           disabled={linkLoading || linkStatus?.sharing_enabled === true}
           style={{
@@ -1417,7 +1417,7 @@ export default function ModelHub() {
         >
           Enable Sharing
         </button>
-        <button
+        <button type="button"
           onClick={() => handleToggleSharing(false)}
           disabled={linkLoading || linkStatus?.sharing_enabled === false}
           style={{
@@ -1481,7 +1481,7 @@ export default function ModelHub() {
                     <div style={{ fontSize: 10, color: accent, marginTop: 1 }}>{peer.status}</div>
                   )}
                 </div>
-                <button
+                <button type="button"
                   onClick={() => handleRemovePeer(peer.device_id)}
                   disabled={linkLoading}
                   style={{
@@ -1553,7 +1553,7 @@ export default function ModelHub() {
               boxSizing: "border-box",
             }}
           />
-          <button
+          <button type="button"
             onClick={handleAddPeer}
             disabled={linkLoading || !addPeerAddress.trim() || !addPeerName.trim()}
             style={{
@@ -1639,7 +1639,7 @@ export default function ModelHub() {
               boxSizing: "border-box",
             }}
           />
-          <button
+          <button type="button"
             onClick={handleSendModel}
             disabled={
               sendingModel ||

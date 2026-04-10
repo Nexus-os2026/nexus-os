@@ -168,7 +168,7 @@ export default function SoftwareFactory() {
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
               <input placeholder="Project title" value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} />
               <textarea placeholder="Describe what to build..." value={userRequest} onChange={(e) => setUserRequest(e.target.value)} rows={3} style={{ ...inputStyle, resize: "vertical" }} />
-              <button onClick={handleCreate} style={{ ...btnStyle, background: ACCENT, color: "#fff" }}>Create Project</button>
+              <button type="button" onClick={handleCreate} style={{ ...btnStyle, background: ACCENT, color: "#fff" }}>Create Project</button>
             </div>
           </div>
 
@@ -255,7 +255,7 @@ export default function SoftwareFactory() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={labelStyle}>Team ({selectedProject.team?.length || 0})</div>
                   {selectedProject.status === "Initializing" && (
-                    <button onClick={handleStart} style={{ ...btnStyle, background: GREEN, color: "#000" }}>Start Pipeline</button>
+                    <button type="button" onClick={handleStart} style={{ ...btnStyle, background: GREEN, color: "#000" }}>Start Pipeline</button>
                   )}
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
@@ -275,7 +275,7 @@ export default function SoftwareFactory() {
                       {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                     <input type="number" min={1} max={5} value={autonomy} onChange={(e) => setAutonomy(Number(e.target.value))} style={{ ...inputStyle, width: 50 }} />
-                    <button onClick={handleAssign} style={{ ...btnStyle, background: ACCENT, color: "#fff" }}>Assign</button>
+                    <button type="button" onClick={handleAssign} style={{ ...btnStyle, background: ACCENT, color: "#fff" }}>Assign</button>
                   </div>
                 )}
               </div>

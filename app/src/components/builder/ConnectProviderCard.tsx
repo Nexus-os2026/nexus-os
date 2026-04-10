@@ -150,7 +150,7 @@ export default function ConnectProviderCard({ cli, displayName, authenticated, o
         </span>
       )}
       {status === "idle" && (
-        <button
+        <button type="button"
           onClick={handleConnect}
           style={{
             background: C.accent,
@@ -183,7 +183,7 @@ export default function ConnectProviderCard({ cli, displayName, authenticated, o
         />
       )}
       {status === "failed" && (
-        <button
+        <button type="button"
           onClick={handleConnect}
           style={{
             background: "transparent",

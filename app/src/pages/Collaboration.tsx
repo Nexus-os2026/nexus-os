@@ -204,7 +204,7 @@ export default function Collaboration() {
                 {patterns.map((p) => <option key={p.id} value={p.id}>{p.id} — {p.description}</option>)}
               </select>
               <input placeholder="Lead Agent ID" value={leadAgent} onChange={(e) => setLeadAgent(e.target.value)} style={inputStyle} />
-              <button onClick={handleCreate} style={{ ...btnStyle, background: ACCENT, color: "#000" }}>Create</button>
+              <button type="button" onClick={handleCreate} style={{ ...btnStyle, background: ACCENT, color: "#000" }}>Create</button>
             </div>
           </div>
 
@@ -262,9 +262,9 @@ export default function Collaboration() {
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     {selectedSession.status === "Forming" && (
-                      <button onClick={handleStart} style={{ ...btnStyle, background: GREEN, color: "#000" }}>Start</button>
+                      <button type="button" onClick={handleStart} style={{ ...btnStyle, background: GREEN, color: "#000" }}>Start</button>
                     )}
-                    <button onClick={refresh} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Refresh</button>
+                    <button type="button" onClick={refresh} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Refresh</button>
                   </div>
                 </div>
                 {(selectedSession.status === "Forming" || selectedSession.status === "Active") && (
@@ -276,7 +276,7 @@ export default function Collaboration() {
                       <option value="Observer">Observer</option>
                       <option value="lead">Lead</option>
                     </select>
-                    <button onClick={handleAddParticipant} style={{ ...btnStyle, background: ACCENT, color: "#000" }}>Add</button>
+                    <button type="button" onClick={handleAddParticipant} style={{ ...btnStyle, background: ACCENT, color: "#000" }}>Add</button>
                   </div>
                 )}
               </div>
@@ -323,18 +323,18 @@ export default function Collaboration() {
                   </div>
                   {selectedSession.status === "Voting" ? (
                     <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                      <button onClick={() => handleVote("approve")} style={{ ...btnStyle, background: GREEN, color: "#000", flex: 1 }}>Approve</button>
-                      <button onClick={() => handleVote("reject")} style={{ ...btnStyle, background: RED, color: "#fff", flex: 1 }}>Reject</button>
-                      <button onClick={() => handleVote("abstain")} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0", flex: 1 }}>Abstain</button>
+                      <button type="button" onClick={() => handleVote("approve")} style={{ ...btnStyle, background: GREEN, color: "#000", flex: 1 }}>Approve</button>
+                      <button type="button" onClick={() => handleVote("reject")} style={{ ...btnStyle, background: RED, color: "#fff", flex: 1 }}>Reject</button>
+                      <button type="button" onClick={() => handleVote("abstain")} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0", flex: 1 }}>Abstain</button>
                     </div>
                   ) : (
                     <>
                       <textarea placeholder="Message..." value={msgText} onChange={(e) => setMsgText(e.target.value)} rows={2} style={{ ...inputStyle, marginTop: 6, resize: "vertical" }} />
                       <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                        <button onClick={handleSendMessage} style={{ ...btnStyle, background: ACCENT, color: "#000", flex: 1 }}>Send</button>
-                        <button onClick={handleDeclareConsensus} style={{ ...btnStyle, background: GREEN, color: "#000" }}>Declare Consensus</button>
+                        <button type="button" onClick={handleSendMessage} style={{ ...btnStyle, background: ACCENT, color: "#000", flex: 1 }}>Send</button>
+                        <button type="button" onClick={handleDeclareConsensus} style={{ ...btnStyle, background: GREEN, color: "#000" }}>Declare Consensus</button>
                         {(selectedSession.messages || []).some((m: any) => m.message_type === "Propose") && (
-                          <button onClick={async () => {
+                          <button type="button" onClick={async () => {
                             setVoteError(null);
                             try {
                               const proposalMsg = (selectedSession.messages || []).find((m: any) => m.message_type === "Propose");

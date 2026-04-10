@@ -188,8 +188,7 @@ export default function MediaStudio(): JSX.Element {
                 ))}
               </select>
             </label>
-            <button
-              type="button"
+            <button type="button"
               onClick={() => void refreshFiles()}
               className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100"
             >
@@ -202,9 +201,8 @@ export default function MediaStudio(): JSX.Element {
                 </p>
               ) : (
                 entries.map((entry) => (
-                  <button
+                  <button type="button"
                     key={entry.path}
-                    type="button"
                     onClick={() => setSelectedPath(entry.path)}
                     className={`w-full rounded-2xl border p-4 text-left ${
                       selectedPath === entry.path
@@ -254,8 +252,7 @@ export default function MediaStudio(): JSX.Element {
                 rows={4}
                 className="mt-3 w-full rounded-2xl border border-cyan-500/20 bg-slate-950/70 px-3 py-3 text-sm text-cyan-50"
               />
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => void runAnalysis()}
                 disabled={busy || selectedType !== "image"}
                 className="mt-3 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100"
@@ -289,8 +286,7 @@ export default function MediaStudio(): JSX.Element {
                   className="rounded-2xl border border-cyan-500/20 bg-slate-950/70 px-3 py-3 text-sm text-cyan-50"
                 />
               </label>
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => void runFfmpegGoal()}
                 disabled={busy || !selectedEntry || !selectedAgentId}
                 className="mt-3 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100"

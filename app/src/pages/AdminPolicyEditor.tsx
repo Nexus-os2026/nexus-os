@@ -115,7 +115,7 @@ export default function AdminPolicyEditor() {
 
       <div className="admin-tabs">
         {(["editor", "templates", "history"] as const).map((t) => (
-          <button key={t} className={`admin-tab ${tab === t ? "admin-tab--active" : ""}`} onClick={() => setTab(t)}>
+          <button type="button" key={t} className={`admin-tab ${tab === t ? "admin-tab--active" : ""}`} onClick={() => setTab(t)}>
             {t === "editor" ? "Edit Policy" : t === "templates" ? "Templates" : "History"}
           </button>
         ))}
@@ -198,7 +198,7 @@ export default function AdminPolicyEditor() {
           </div>
 
           <div style={{ marginTop: "1rem", display: "flex", justifyContent: "flex-end" }}>
-            <button className="admin-btn admin-btn--accent" onClick={() => void handleSave()} disabled={saving || loading}>
+            <button type="button" className="admin-btn admin-btn--accent" onClick={() => void handleSave()} disabled={saving || loading}>
               {saving ? "Saving..." : "Save Policy"}
             </button>
           </div>

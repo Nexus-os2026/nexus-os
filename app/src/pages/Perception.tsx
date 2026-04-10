@@ -213,7 +213,7 @@ export default function Perception() {
               onChange={(e) => setModelId(e.target.value)}
               style={{ padding: 8, borderRadius: 6, background: "#2a2a3e", color: "#e0e0e0", border: "1px solid #444" }}
             />
-            <button onClick={handleInit} style={{ ...btnStyle, background: ACCENT, color: "#fff" }}>
+            <button type="button" onClick={handleInit} style={{ ...btnStyle, background: ACCENT, color: "#fff" }}>
               Initialize
             </button>
             {initError && <div style={{ color: "#ef4444", fontSize: 12 }}>{initError}</div>}
@@ -280,7 +280,7 @@ export default function Perception() {
                 />
               )}
 
-              <button
+              <button type="button"
                 onClick={handlePerceive}
                 disabled={!imageBase64 || loading}
                 style={{

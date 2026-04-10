@@ -95,7 +95,7 @@ export default function QualityReportCard({ projectId, onHtmlChanged }: QualityR
 
   if (!report && !loading) {
     return (
-      <button onClick={runCheck} style={{
+      <button type="button" onClick={runCheck} style={{
         background: C.accentDim, border: `1px solid rgba(0,212,170,0.2)`,
         borderRadius: 4, padding: "4px 10px", color: C.accent, fontSize: 10,
         cursor: "pointer", fontWeight: 500, fontFamily: C.sans,
@@ -189,7 +189,7 @@ export default function QualityReportCard({ projectId, onHtmlChanged }: QualityR
         </span>
         <div style={{ display: "flex", gap: 6 }}>
           {report.auto_fixable_count > 0 && (
-            <button onClick={fixAll} disabled={fixing} style={{
+            <button type="button" onClick={fixAll} disabled={fixing} style={{
               background: C.accent, border: "none", borderRadius: 3,
               padding: "2px 8px", color: C.bg, fontSize: 9,
               fontWeight: 600, cursor: fixing ? "default" : "pointer",
@@ -198,7 +198,7 @@ export default function QualityReportCard({ projectId, onHtmlChanged }: QualityR
               {fixing ? "Fixing..." : `Auto-fix ${report.auto_fixable_count}`}
             </button>
           )}
-          <button onClick={runCheck} style={{
+          <button type="button" onClick={runCheck} style={{
             background: "transparent", border: `1px solid ${C.border}`,
             borderRadius: 3, padding: "2px 8px", color: C.muted, fontSize: 9,
             cursor: "pointer",

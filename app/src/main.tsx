@@ -30,8 +30,8 @@ window.addEventListener("error", (e) => {
         <p style="color:#94a3b8;font-size:14px;margin:0 0 16px">The app crashed but your data is safe.</p>
         <pre style="background:rgba(0,0,0,0.3);border:1px solid rgba(248,113,113,0.2);border-radius:8px;padding:12px;font-size:11px;color:rgba(248,113,113,0.85);overflow:auto;max-height:100px;margin:0 0 16px">${e.message || "Unknown error"}</pre>
         <div style="display:flex;gap:10px">
-          <button onclick="location.reload()" style="padding:10px 20px;background:rgba(74,247,211,0.15);border:1px solid rgba(74,247,211,0.3);border-radius:8px;color:#4af7d3;cursor:pointer;font-weight:600">Reload</button>
-          <button onclick="try{localStorage.removeItem('nexus-chat-conversations')}catch(e){};location.reload()" style="padding:10px 20px;background:rgba(100,116,139,0.15);border:1px solid rgba(100,116,139,0.3);border-radius:8px;color:#94a3b8;cursor:pointer;font-weight:600">Clear Cache & Reload</button>
+          <button type="button" onclick="location.reload()" style="padding:10px 20px;background:rgba(74,247,211,0.15);border:1px solid rgba(74,247,211,0.3);border-radius:8px;color:#4af7d3;cursor:pointer;font-weight:600">Reload</button>
+          <button type="button" onclick="try{localStorage.removeItem('nexus-chat-conversations')}catch(e){};location.reload()" style="padding:10px 20px;background:rgba(100,116,139,0.15);border:1px solid rgba(100,116,139,0.3);border-radius:8px;color:#94a3b8;cursor:pointer;font-weight:600">Clear Cache & Reload</button>
         </div>
       </div>
     </div>`;

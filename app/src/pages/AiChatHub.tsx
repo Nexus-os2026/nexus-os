@@ -302,11 +302,11 @@ function BuildResultCard({ data }: { data: BuildResultData }) {
       {/* Actions */}
       <div className="ch-build-actions">
         {hasIndex && (
-          <button className="ch-build-btn ch-build-btn-primary cursor-pointer" onClick={openPreview}>
+          <button type="button" className="ch-build-btn ch-build-btn-primary cursor-pointer" onClick={openPreview}>
             <Play size={12} aria-hidden="true" /> Preview
           </button>
         )}
-        <button className="ch-build-btn cursor-pointer" onClick={openFileManager}>
+        <button type="button" className="ch-build-btn cursor-pointer" onClick={openFileManager}>
           <FolderOpen size={12} aria-hidden="true" /> View Files
         </button>
       </div>
@@ -804,7 +804,7 @@ export default function AiChatHub() {
     if (!content) return "";
     return content.replace(/```(\w+)?\n([\s\S]*?)```/g, (_match, lang: string, code: string) => {
       const l = lang || "text";
-      return `<div class="ch-code-block"><div class="ch-code-header"><span>${l}</span><button class="ch-code-run" data-code="${encodeURIComponent(code.trim())}">▶ Run</button></div><pre class="ch-code-pre"><code>${code.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></pre></div>`;
+      return `<div class="ch-code-block"><div class="ch-code-header"><span>${l}</span><button type="button" class="ch-code-run" data-code="${encodeURIComponent(code.trim())}">▶ Run</button></div><pre class="ch-code-pre"><code>${code.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></pre></div>`;
     });
   };
 
@@ -1145,13 +1145,13 @@ export default function AiChatHub() {
       <aside className="ch-sidebar">
         <div className="ch-sidebar-header">
           <h2 className="ch-sidebar-title">AI Chat Hub</h2>
-          <button className="ch-new-btn" onClick={newConversation}>+ New</button>
+          <button type="button" className="ch-new-btn" onClick={newConversation}>+ New</button>
         </div>
 
         {/* views */}
         <div className="ch-views">
           {([["chat", "chat", "Chat"], ["compare", "compare", "Compare"], ["history", "history", "History"]] as const).map(([id, icon, label]) => (
-            <button key={id} className={`ch-view-btn cursor-pointer ${view === id ? "active" : ""}`} onClick={() => setView(id)}>
+            <button type="button" key={id} className={`ch-view-btn cursor-pointer ${view === id ? "active" : ""}`} onClick={() => setView(id)}>
               <span>{icon === "chat" ? "\u2301" : icon === "compare" ? "\u21D4" : <Clock size={14} aria-hidden="true" />}</span> {label}
             </button>
           ))}
@@ -1160,7 +1160,7 @@ export default function AiChatHub() {
         {/* model picker (grouped by provider) */}
         <div className="ch-model-section">
           <div className="ch-section-header">Active Model</div>
-          <button className="ch-model-active" onClick={() => setShowModelPicker(!showModelPicker)}>
+          <button type="button" className="ch-model-active" onClick={() => setShowModelPicker(!showModelPicker)}>
             <span className="ch-model-icon" style={{ color: activeModel?.color }}>{activeModel?.icon}</span>
             <div className="ch-model-info">
               <span className="ch-model-name">{activeModel?.name ?? "Select a model"}</span>
@@ -1183,7 +1183,7 @@ export default function AiChatHub() {
                 <>
                   <div className="ch-model-group-header">LOCAL MODELS (Ollama)</div>
                   {localFiltered.map(m => (
-                    <button key={m.id} className={`ch-model-option ${selectedModel === m.id ? "active" : ""}`} onClick={() => {
+                    <button type="button" key={m.id} className={`ch-model-option ${selectedModel === m.id ? "active" : ""}`} onClick={() => {
                       setSelectedModel(m.id);
                       localStorage.setItem("nexus-selected-model", m.id);
                       setShowModelPicker(false);
@@ -1207,7 +1207,7 @@ export default function AiChatHub() {
                 <div key={prov}>
                   <div className="ch-model-group-header" style={{ color: meta?.color }}>{(meta?.label ?? prov).toUpperCase()}</div>
                   {provModels.map(m => (
-                    <button key={m.id} className={`ch-model-option ${selectedModel === m.id ? "active" : ""} ${m.locked ? "locked" : ""}`} onClick={() => {
+                    <button type="button" key={m.id} className={`ch-model-option ${selectedModel === m.id ? "active" : ""} ${m.locked ? "locked" : ""}`} onClick={() => {
                       if (m.locked) {
                         setShowApiKeyModal(m.id.split("/")[0]);
                         setShowModelPicker(false);
@@ -1231,7 +1231,7 @@ export default function AiChatHub() {
               })}
               {filtered.length === 0 && <div style={{ padding: "12px 16px", color: "#64748b", fontSize: 13 }}>No models match "{modelSearch}"</div>}
               {/* Add API Key button */}
-              <button className="ch-model-option ch-add-key-btn" onClick={() => { setShowApiKeyModal(""); setShowModelPicker(false); }}>
+              <button type="button" className="ch-model-option ch-add-key-btn" onClick={() => { setShowApiKeyModal(""); setShowModelPicker(false); }}>
                 <span className="ch-model-icon" style={{ color: "var(--nexus-accent)" }}>+</span>
                 <div className="ch-model-info">
                   <span className="ch-model-name">Add API Key</span>
@@ -1264,7 +1264,7 @@ export default function AiChatHub() {
 
         {/* agent panel — all prebuilt agents */}
         <div className="ch-agent-section">
-          <button className="ch-section-header ch-agent-toggle" onClick={() => setShowAgentPanel(!showAgentPanel)}>
+          <button type="button" className="ch-section-header ch-agent-toggle" onClick={() => setShowAgentPanel(!showAgentPanel)}>
             All Agents ({preinstalledAgents.length}) {showAgentPanel ? <ChevronUp size={12} aria-hidden="true" /> : <ChevronDown size={12} aria-hidden="true" />}
           </button>
           {showAgentPanel && (
@@ -1276,7 +1276,7 @@ export default function AiChatHub() {
                     {autonomyShort(group.level)} — {AUTONOMY_LABELS[group.level] ?? `Level ${group.level}`} ({group.agents.length})
                   </div>
                   {group.agents.map(a => (
-                    <button
+                    <button type="button"
                       key={a.agent_id}
                       className={`ch-agent-btn ${selectedAgent?.agent_id === a.agent_id ? "active" : ""}`}
                       onClick={() => selectAgent(a)}
@@ -1317,15 +1317,15 @@ export default function AiChatHub() {
                     <span className="ch-agent-header-level" style={{ color: autonomyColor(selectedAgent.autonomy_level) }}>
                       {autonomyShort(selectedAgent.autonomy_level)}
                     </span>
-                    <button className="ch-agent-info-btn" onClick={() => setShowAgentInfo(!showAgentInfo)} title="Agent info">ⓘ</button>
-                    <button className="ch-agent-deselect-btn cursor-pointer" onClick={() => { setSelectedAgent(null); setAgentStatus("Idle"); setShowAgentLogs(false); }} title="Deselect agent"><X size={12} aria-hidden="true" /></button>
+                    <button type="button" className="ch-agent-info-btn" onClick={() => setShowAgentInfo(!showAgentInfo)} title="Agent info">ⓘ</button>
+                    <button type="button" className="ch-agent-deselect-btn cursor-pointer" onClick={() => { setSelectedAgent(null); setAgentStatus("Idle"); setShowAgentLogs(false); }} title="Deselect agent"><X size={12} aria-hidden="true" /></button>
                   </div>
                 ) : (
                   <div className="ch-chat-title">{activeConv.title}</div>
                 )}
                 {/* Agent dropdown */}
                 <div className="ch-agent-dropdown-wrap">
-                  <button className="ch-agent-dropdown-btn cursor-pointer" onClick={() => setShowAgentDropdown(!showAgentDropdown)}>
+                  <button type="button" className="ch-agent-dropdown-btn cursor-pointer" onClick={() => setShowAgentDropdown(!showAgentDropdown)}>
                     <Hexagon size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />
                     {selectedAgent
                       ? `${selectedAgent.name} (${autonomyShort(selectedAgent.autonomy_level)})`
@@ -1341,7 +1341,7 @@ export default function AiChatHub() {
                     <div className="ch-agent-dropdown">
                       <input className="ch-search" placeholder="Search agents..." value={agentSearch} onChange={e => setAgentSearch(e.target.value)} autoFocus style={{ margin: "6px 8px", width: "calc(100% - 16px)" }} />
                       <div className="ch-agent-dropdown-header">Select Agent ({preinstalledAgents.length})</div>
-                      <button className="ch-agent-dropdown-item" onClick={() => { setSelectedAgent(null); setAgentStatus("Idle"); setShowAgentDropdown(false); setAgentSearch(""); }}>
+                      <button type="button" className="ch-agent-dropdown-item" onClick={() => { setSelectedAgent(null); setAgentStatus("Idle"); setShowAgentDropdown(false); setAgentSearch(""); }}>
                         <span>\u2014</span> No agent (direct LLM)
                       </button>
                       {filteredGroups.map(group => (
@@ -1350,7 +1350,7 @@ export default function AiChatHub() {
                             {AUTONOMY_LABELS[group.level] ?? `Level ${group.level}`}
                           </div>
                           {group.agents.map(a => (
-                            <button
+                            <button type="button"
                               key={a.agent_id}
                               className={`ch-agent-dropdown-item ${selectedAgent?.agent_id === a.agent_id ? "active" : ""}`}
                               onClick={() => { selectAgent(a); setAgentSearch(""); }}
@@ -1373,10 +1373,10 @@ export default function AiChatHub() {
                 </div>
               </div>
               <div className="ch-chat-actions">
-                <button className="ch-hdr-btn cursor-pointer" onClick={() => togglePin(activeConv.id)} title={activeConv.pinned ? "Unpin" : "Pin"}>{activeConv.pinned ? <Pin size={16} aria-hidden="true" /> : <MapPin size={16} aria-hidden="true" />}</button>
-                <button className="ch-hdr-btn cursor-pointer" onClick={copyConversation} title="Copy conversation" aria-label="Copy conversation"><ClipboardList size={16} aria-hidden="true" /></button>
-                <button className="ch-hdr-btn cursor-pointer" onClick={() => { if (window.confirm("Delete this conversation?")) deleteConversation(activeConv.id); }} title="Delete"><Trash2 size={16} aria-hidden="true" /></button>
-                <button className={`ch-hdr-btn ch-voice-btn cursor-pointer ${voiceActive ? "active" : ""}`} onClick={() => { setVoiceActive(!voiceActive); logAudit(voiceActive ? "Voice off" : "Voice on \u2014 Jarvis mode"); }} title="Voice">
+                <button type="button" className="ch-hdr-btn cursor-pointer" onClick={() => togglePin(activeConv.id)} title={activeConv.pinned ? "Unpin" : "Pin"}>{activeConv.pinned ? <Pin size={16} aria-hidden="true" /> : <MapPin size={16} aria-hidden="true" />}</button>
+                <button type="button" className="ch-hdr-btn cursor-pointer" onClick={copyConversation} title="Copy conversation" aria-label="Copy conversation"><ClipboardList size={16} aria-hidden="true" /></button>
+                <button type="button" className="ch-hdr-btn cursor-pointer" onClick={() => { if (window.confirm("Delete this conversation?")) deleteConversation(activeConv.id); }} title="Delete"><Trash2 size={16} aria-hidden="true" /></button>
+                <button type="button" className={`ch-hdr-btn ch-voice-btn cursor-pointer ${voiceActive ? "active" : ""}`} onClick={() => { setVoiceActive(!voiceActive); logAudit(voiceActive ? "Voice off" : "Voice on \u2014 Jarvis mode"); }} title="Voice">
                   {voiceActive ? <Mic size={16} aria-hidden="true" /> : <MicOff size={16} aria-hidden="true" />}
                 </button>
               </div>
@@ -1415,26 +1415,26 @@ export default function AiChatHub() {
                 </div>
                 <div className="ch-agent-btns">
                   {(agentStatus === "Idle" || agentStatus === "Stopped" || agentStatus === "Error") && (
-                    <button className="ch-ctrl-btn ch-ctrl-start cursor-pointer" onClick={() => handleAgentAction("start")} disabled={agentActionLoading}>
+                    <button type="button" className="ch-ctrl-btn ch-ctrl-start cursor-pointer" onClick={() => handleAgentAction("start")} disabled={agentActionLoading}>
                       <Play size={12} aria-hidden="true" /> Start
                     </button>
                   )}
                   {agentStatus === "Running" && (
-                    <button className="ch-ctrl-btn ch-ctrl-pause cursor-pointer" onClick={() => handleAgentAction("pause")} disabled={agentActionLoading}>
+                    <button type="button" className="ch-ctrl-btn ch-ctrl-pause cursor-pointer" onClick={() => handleAgentAction("pause")} disabled={agentActionLoading}>
                       <Pause size={12} aria-hidden="true" /> Pause
                     </button>
                   )}
                   {agentStatus === "Paused" && (
-                    <button className="ch-ctrl-btn ch-ctrl-resume cursor-pointer" onClick={() => handleAgentAction("resume")} disabled={agentActionLoading}>
+                    <button type="button" className="ch-ctrl-btn ch-ctrl-resume cursor-pointer" onClick={() => handleAgentAction("resume")} disabled={agentActionLoading}>
                       <Play size={12} aria-hidden="true" /> Resume
                     </button>
                   )}
                   {(agentStatus === "Running" || agentStatus === "Paused") && (
                     <>
-                      <button className="ch-ctrl-btn ch-ctrl-stop cursor-pointer" onClick={() => handleAgentAction("stop")} disabled={agentActionLoading}>
+                      <button type="button" className="ch-ctrl-btn ch-ctrl-stop cursor-pointer" onClick={() => handleAgentAction("stop")} disabled={agentActionLoading}>
                         <Square size={12} aria-hidden="true" /> Stop
                       </button>
-                      <button
+                      <button type="button"
                         className="ch-ctrl-btn ch-ctrl-kill cursor-pointer"
                         onClick={() => { if (window.confirm(`Force kill ${selectedAgent.name}?`)) handleAgentAction("kill"); }}
                         disabled={agentActionLoading}
@@ -1443,7 +1443,7 @@ export default function AiChatHub() {
                       </button>
                     </>
                   )}
-                  <button className={`ch-ctrl-btn ch-ctrl-logs cursor-pointer ${showAgentLogs ? "active" : ""}`} onClick={toggleAgentLogs}>
+                  <button type="button" className={`ch-ctrl-btn ch-ctrl-logs cursor-pointer ${showAgentLogs ? "active" : ""}`} onClick={toggleAgentLogs}>
                     <ClipboardList size={12} aria-hidden="true" /> Logs
                   </button>
                 </div>
@@ -1466,7 +1466,7 @@ export default function AiChatHub() {
                   ))}
                 </div>
                 <span>Jarvis mode active — speak to chat</span>
-                <button className="ch-voice-stop" onClick={() => setVoiceActive(false)}>Stop</button>
+                <button type="button" className="ch-voice-stop" onClick={() => setVoiceActive(false)}>Stop</button>
               </div>
             )}
 
@@ -1485,7 +1485,7 @@ export default function AiChatHub() {
               <div className="ch-agent-logs">
                 <div className="ch-agent-logs-header">
                   <span>Agent Logs — {selectedAgent.name}</span>
-                  <button className="ch-agent-logs-refresh cursor-pointer" onClick={handleLoadAgentLogs}><RefreshCw size={12} aria-hidden="true" /> Refresh</button>
+                  <button type="button" className="ch-agent-logs-refresh cursor-pointer" onClick={handleLoadAgentLogs}><RefreshCw size={12} aria-hidden="true" /> Refresh</button>
                 </div>
                 <div className="ch-agent-logs-body">
                   {agentLogs.length === 0 && <div className="ch-agent-logs-empty">No log entries</div>}
@@ -1518,7 +1518,7 @@ export default function AiChatHub() {
                   <div className="ch-empty-hint">Start a conversation. Type a message or use voice.</div>
                   <div className="ch-quick-prompts">
                     {["Explain Nexus OS governance", "Write a Rust function", "Compare WASM runtimes", "Build a portfolio site with dark mode"].map(p => (
-                      <button key={p} className="ch-quick-btn" onClick={() => setInput(p)}>{p}</button>
+                      <button type="button" key={p} className="ch-quick-btn" onClick={() => setInput(p)}>{p}</button>
                     ))}
                   </div>
                 </div>
@@ -1601,10 +1601,10 @@ export default function AiChatHub() {
                         </div>
                         {msg.approvalStatus === "pending" ? (
                           <div className="ch-approval-actions">
-                            <button className="ch-approval-btn ch-approval-approve cursor-pointer" onClick={() => handleApproval(msg.approval!.consent_id, "approve")}>
+                            <button type="button" className="ch-approval-btn ch-approval-approve cursor-pointer" onClick={() => handleApproval(msg.approval!.consent_id, "approve")}>
                               <Check size={12} aria-hidden="true" /> Approve
                             </button>
-                            <button className="ch-approval-btn ch-approval-deny cursor-pointer" onClick={() => handleApproval(msg.approval!.consent_id, "deny")}>
+                            <button type="button" className="ch-approval-btn ch-approval-deny cursor-pointer" onClick={() => handleApproval(msg.approval!.consent_id, "deny")}>
                               <X size={12} aria-hidden="true" /> Reject
                             </button>
                           </div>
@@ -1658,13 +1658,13 @@ export default function AiChatHub() {
                         <span className="ch-attach-file-icon">\u25A1</span>
                       )}
                       <span className="ch-attach-name">{f.name}</span>
-                      <button className="ch-attach-remove" onClick={() => removeFile(f.name)} title="Remove">×</button>
+                      <button type="button" className="ch-attach-remove" onClick={() => removeFile(f.name)} title="Remove">×</button>
                     </div>
                   ))}
                 </div>
               )}
               <div className="ch-input-row">
-                <button
+                <button type="button"
                   className="ch-input-btn cursor-pointer"
                   onClick={() => fileInputRef.current?.click()}
                   title="Attach files or images"
@@ -1673,8 +1673,8 @@ export default function AiChatHub() {
                 </button>
                 <textarea ref={inputRef} className="ch-input" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} onPaste={handleFilePaste} placeholder={`Message ${activeModel?.name ?? "AI"}... (drop files here)`} rows={1} />
                 <div className="ch-input-actions">
-                  <button className="ch-input-btn cursor-pointer" onClick={generateImage} title="Generate image" aria-label="Generate image" disabled={!input.trim()}><Image size={16} aria-hidden="true" /></button>
-                  <button className="ch-send-btn" onClick={sendMessage} disabled={(!input.trim() && pendingFiles.length === 0) || sending}>
+                  <button type="button" className="ch-input-btn cursor-pointer" onClick={generateImage} title="Generate image" aria-label="Generate image" disabled={!input.trim()}><Image size={16} aria-hidden="true" /></button>
+                  <button type="button" className="ch-send-btn" onClick={sendMessage} disabled={(!input.trim() && pendingFiles.length === 0) || sending}>
                     {sending ? "..." : "→"}
                   </button>
                 </div>
@@ -1713,7 +1713,7 @@ export default function AiChatHub() {
             </div>
             <div className="ch-cmp-prompt">
               <textarea value={comparePrompt} onChange={e => setComparePrompt(e.target.value)} placeholder="Enter a prompt to compare responses..." rows={3} />
-              <button className="ch-cmp-btn" onClick={handleCompare} disabled={!comparePrompt.trim() || comparing}>
+              <button type="button" className="ch-cmp-btn" onClick={handleCompare} disabled={!comparePrompt.trim() || comparing}>
                 {comparing ? "Comparing..." : "Compare Responses"}
               </button>
             </div>
@@ -1762,8 +1762,8 @@ export default function AiChatHub() {
                       )}
                     </div>
                     <div className="ch-hist-actions">
-                      <button className="ch-hist-act-btn cursor-pointer" onClick={e => { e.stopPropagation(); togglePin(conv.id); }}>{conv.pinned ? <Pin size={14} aria-hidden="true" /> : <MapPin size={14} aria-hidden="true" />}</button>
-                      <button className="ch-hist-act-btn cursor-pointer" onClick={e => { e.stopPropagation(); deleteConversation(conv.id); }}><Trash2 size={14} aria-hidden="true" /></button>
+                      <button type="button" className="ch-hist-act-btn cursor-pointer" onClick={e => { e.stopPropagation(); togglePin(conv.id); }}>{conv.pinned ? <Pin size={14} aria-hidden="true" /> : <MapPin size={14} aria-hidden="true" />}</button>
+                      <button type="button" className="ch-hist-act-btn cursor-pointer" onClick={e => { e.stopPropagation(); deleteConversation(conv.id); }}><Trash2 size={14} aria-hidden="true" /></button>
                     </div>
                   </div>
                 );
@@ -1776,7 +1776,7 @@ export default function AiChatHub() {
           <div className="ch-no-conv">
             <div className="ch-empty-icon">{"\u25CE"}</div>
             <div>Select a conversation or start a new one</div>
-            <button className="ch-new-btn" onClick={newConversation}>+ New Conversation</button>
+            <button type="button" className="ch-new-btn" onClick={newConversation}>+ New Conversation</button>
           </div>
         )}
       </div>
@@ -1801,7 +1801,7 @@ export default function AiChatHub() {
           <div className="ch-modal" onClick={e => e.stopPropagation()}>
             <div className="ch-modal-header">
               <h3>Configure API Key</h3>
-              <button className="ch-modal-close" onClick={() => { setShowApiKeyModal(null); setApiKeyInput(""); }}>×</button>
+              <button type="button" className="ch-modal-close" onClick={() => { setShowApiKeyModal(null); setApiKeyInput(""); }}>×</button>
             </div>
             <div className="ch-modal-body">
               {(showApiKeyModal === "" ? ["anthropic", "openai", "deepseek", "google"] : [showApiKeyModal]).map(provider => {
@@ -1827,7 +1827,7 @@ export default function AiChatHub() {
                           onChange={e => { setApiKeyInput(e.target.value); setShowApiKeyModal(provider); }}
                           onFocus={() => setShowApiKeyModal(provider)}
                         />
-                        <button
+                        <button type="button"
                           className="ch-api-key-save"
                           disabled={apiKeySaving || !apiKeyInput.trim() || showApiKeyModal !== provider}
                           onClick={handleSaveApiKey}

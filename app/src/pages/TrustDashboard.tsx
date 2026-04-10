@@ -232,7 +232,7 @@ function ReputationSection({ isDesktop }: { isDesktop: boolean }): JSX.Element {
                   <td>{entry.total_tasks}</td>
                   <td>{entry.average_rating.toFixed(1)}</td>
                   <td>
-                    <button
+                    <button type="button"
                       className="td-rep-btn td-rep-btn-sm"
                       onClick={() => handleExport(entry.did)}
                       disabled={exportLoading && exportDid === entry.did}
@@ -252,7 +252,7 @@ function ReputationSection({ isDesktop }: { isDesktop: boolean }): JSX.Element {
         <div className="td-rep-panel">
           <h3 className="td-rep-heading">Export Result ({exportDid.slice(0, 20)}...)</h3>
           <textarea className="td-rep-textarea" readOnly value={exportResult} rows={6} />
-          <button className="td-rep-btn" onClick={() => setExportResult(null)}>Dismiss</button>
+          <button type="button" className="td-rep-btn" onClick={() => setExportResult(null)}>Dismiss</button>
         </div>
       )}
       {exportError && (
@@ -272,7 +272,7 @@ function ReputationSection({ isDesktop }: { isDesktop: boolean }): JSX.Element {
               value={lookupDid}
               onChange={(e) => setLookupDid(e.target.value)}
             />
-            <button className="td-rep-btn" onClick={handleLookup} disabled={detailLoading || !lookupDid.trim()}>
+            <button type="button" className="td-rep-btn" onClick={handleLookup} disabled={detailLoading || !lookupDid.trim()}>
               {detailLoading ? "Loading..." : "Lookup"}
             </button>
           </div>
@@ -294,7 +294,7 @@ function ReputationSection({ isDesktop }: { isDesktop: boolean }): JSX.Element {
           <div className="td-rep-form-row">
             <input className="td-rep-input" placeholder="DID" value={regDid} onChange={(e) => setRegDid(e.target.value)} />
             <input className="td-rep-input" placeholder="Name" value={regName} onChange={(e) => setRegName(e.target.value)} />
-            <button className="td-rep-btn" onClick={handleRegister} disabled={regLoading || !regDid.trim() || !regName.trim()}>
+            <button type="button" className="td-rep-btn" onClick={handleRegister} disabled={regLoading || !regDid.trim() || !regName.trim()}>
               {regLoading ? "..." : "Register"}
             </button>
           </div>
@@ -327,7 +327,7 @@ function ReputationSection({ isDesktop }: { isDesktop: boolean }): JSX.Element {
               value={rateComment}
               onChange={(e) => setRateComment(e.target.value)}
             />
-            <button className="td-rep-btn" onClick={handleRate} disabled={rateLoading || !rateDid.trim() || !raterDid.trim()}>
+            <button type="button" className="td-rep-btn" onClick={handleRate} disabled={rateLoading || !rateDid.trim() || !raterDid.trim()}>
               {rateLoading ? "..." : "Rate"}
             </button>
           </div>
@@ -347,7 +347,7 @@ function ReputationSection({ isDesktop }: { isDesktop: boolean }): JSX.Element {
               />
               Success
             </label>
-            <button className="td-rep-btn" onClick={handleRecordTask} disabled={taskLoading || !taskDid.trim()}>
+            <button type="button" className="td-rep-btn" onClick={handleRecordTask} disabled={taskLoading || !taskDid.trim()}>
               {taskLoading ? "..." : "Record"}
             </button>
           </div>
@@ -364,7 +364,7 @@ function ReputationSection({ isDesktop }: { isDesktop: boolean }): JSX.Element {
             value={importJson}
             onChange={(e) => setImportJson(e.target.value)}
           />
-          <button className="td-rep-btn" onClick={handleImport} disabled={importLoading || !importJson.trim()}>
+          <button type="button" className="td-rep-btn" onClick={handleImport} disabled={importLoading || !importJson.trim()}>
             {importLoading ? "Importing..." : "Import"}
           </button>
           {importMsg && <p className="td-rep-status">{importMsg}</p>}
@@ -433,8 +433,8 @@ export default function TrustDashboard(): JSX.Element {
           <p className="td-subtitle">Desktop runtime required</p>
         </header>
         <nav className="td-tabs">
-          <button className="td-tab td-tab-active">Trust Overview</button>
-          <button className="td-tab">Reputation</button>
+          <button type="button" className="td-tab td-tab-active">Trust Overview</button>
+          <button type="button" className="td-tab">Reputation</button>
         </nav>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 24 }}>
           {demoAgents.map(a => (
@@ -469,13 +469,13 @@ export default function TrustDashboard(): JSX.Element {
 
       {/* Tab bar */}
       <nav className="td-tabs">
-        <button
+        <button type="button"
           className={`td-tab ${activeTab === "trust" ? "td-tab-active" : ""}`}
           onClick={() => setActiveTab("trust")}
         >
           Trust Overview
         </button>
-        <button
+        <button type="button"
           className={`td-tab ${activeTab === "reputation" ? "td-tab-active" : ""}`}
           onClick={() => setActiveTab("reputation")}
         >

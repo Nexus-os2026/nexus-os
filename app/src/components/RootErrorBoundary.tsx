@@ -101,7 +101,7 @@ export default class RootErrorBoundary extends Component<Props, State> {
             </pre>
           )}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button
+            <button type="button"
               onClick={this.handleReload}
               style={{
                 padding: "10px 20px",
@@ -116,7 +116,7 @@ export default class RootErrorBoundary extends Component<Props, State> {
             >
               Reload App
             </button>
-            <button
+            <button type="button"
               onClick={this.handleClearAndReload}
               style={{
                 padding: "10px 20px",

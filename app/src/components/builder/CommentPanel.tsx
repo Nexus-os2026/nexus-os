@@ -135,7 +135,7 @@ export default function CommentPanel({ projectId, sectionId }: CommentPanelProps
           {/* Actions */}
           {!comment.resolved && (
             <div style={{ marginTop: 3 }}>
-              <button
+              <button type="button"
                 onClick={() => resolveComment(comment.id)}
                 style={{
                   background: "transparent", border: "none", color: C.green,
@@ -162,7 +162,7 @@ export default function CommentPanel({ projectId, sectionId }: CommentPanelProps
             outline: "none", fontFamily: C.sans,
           }}
         />
-        <button
+        <button type="button"
           onClick={addComment}
           disabled={loading || !newText.trim()}
           style={{

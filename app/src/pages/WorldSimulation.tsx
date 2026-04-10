@@ -605,9 +605,8 @@ export default function WorldSimulation(): JSX.Element {
             (tab.id === "results" && !report) ||
             (tab.id === "chat" && !(report && simulation?.personas.length));
           return (
-            <button
+            <button type="button"
               key={tab.id}
-              type="button"
               className={tab.id === activeTab ? "is-active" : ""}
               disabled={disabled}
               onClick={() => setActiveTab(tab.id)}
@@ -735,9 +734,8 @@ export default function WorldSimulation(): JSX.Element {
             ) : (
               <div className="world-sim-history-grid">
                 {summaries.map((summary) => (
-                  <button
+                  <button type="button"
                     key={summary.id}
-                    type="button"
                     className={`world-sim-history-card ${summary.id === worldId ? "is-selected" : ""}`}
                     onClick={() => selectExistingSimulation(summary)}
                   >
@@ -795,15 +793,13 @@ export default function WorldSimulation(): JSX.Element {
                   </div>
                 </div>
                 <div className="world-sim-actions">
-                  <button
-                    type="button"
+                  <button type="button"
                     onClick={() => void handleStart()}
                     disabled={!worldId || busy !== null}
                   >
                     {busy === "start" ? "Starting..." : "Start"}
                   </button>
-                  <button
-                    type="button"
+                  <button type="button"
                     className="secondary"
                     onClick={() => void handlePause()}
                     disabled={!worldId || busy !== null}
@@ -878,8 +874,7 @@ export default function WorldSimulation(): JSX.Element {
                     onChange={(event) => setInjectValue(event.target.value)}
                     placeholder="Value"
                   />
-                  <button
-                    type="button"
+                  <button type="button"
                     onClick={() => void handleInject()}
                     disabled={!worldId || busy !== null}
                   >

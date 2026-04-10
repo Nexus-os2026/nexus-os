@@ -162,8 +162,7 @@ export default function Dashboard(): JSX.Element {
     <section className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6" style={{ paddingBottom: 80 }}>
       <div className="flex items-center justify-between">
         <h2 className="nexus-display text-2xl text-cyan-50">Runtime Overview</h2>
-        <button
-          type="button"
+        <button type="button"
           onClick={() => void refresh()}
           className="rounded-full border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100 transition hover:bg-cyan-500/20"
         >

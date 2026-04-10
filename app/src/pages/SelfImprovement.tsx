@@ -411,7 +411,7 @@ export default function SelfImprovement() {
                 const enabled = config.enabled_domains.includes(domain);
                 const isCodePatch = domain === "CodePatch";
                 return (
-                  <button
+                  <button type="button"
                     key={domain}
                     onClick={() => {
                       if (isCodePatch) return;

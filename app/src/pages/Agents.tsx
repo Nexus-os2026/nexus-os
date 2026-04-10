@@ -509,7 +509,7 @@ export function Agents({
           <span style={{ color: "#fca5a5", fontSize: 13 }}>
             Agent error: {asyncError}
           </span>
-          <button
+          <button type="button"
             onClick={() => setAsyncError(null)}
             style={{
               background: "transparent",
@@ -541,8 +541,7 @@ export function Agents({
             <Plus size={16} /> CREATE AGENT
           </button>
           {onClearAll && (
-            <button
-              type="button"
+            <button type="button"
               className="create-btn cursor-pointer"
               style={{ background: "#dc2626", borderColor: "#991b1b" }}
               onClick={() => {
@@ -625,8 +624,7 @@ export function Agents({
               onBlur={e => { if (!searchQuery) e.target.style.borderColor = "#30363d"; }}
             />
             {searchQuery && (
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => setSearchQuery("")}
                 style={{
                   position: "absolute",
@@ -657,7 +655,7 @@ export function Agents({
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12, textAlign: "left" }}>
                   {filteredAgents.slice(0, 20).map(({ preinstalled: pa }) => (
-                    <button
+                    <button type="button"
                       key={pa.agent_id}
                       onClick={() => {
                         setAutonomyFilter(pa.autonomy_level as AutonomyFilter);
@@ -702,7 +700,7 @@ export function Agents({
             {([1, 2, 3, 4, 5, 6] as number[]).map(level => {
               const count = (hasPreinstalled ? enrichedAgents : []).filter(a => a.preinstalled.autonomy_level === level).length;
               return (
-                <button
+                <button type="button"
                   key={level}
                   onClick={() => setAutonomyFilter(level as AutonomyFilter)}
                   style={{
@@ -734,7 +732,7 @@ export function Agents({
         </div>
       ) : (
         <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 0" }}>
-          <button
+          <button type="button"
             onClick={() => { setAutonomyFilter(null); setSelectedAgentId(null); }}
             style={{
               color: "#94a3b8",
@@ -794,7 +792,7 @@ export function Agents({
               const levelColor = AUTONOMY_COLORS[pa.autonomy_level] ?? "#64748b";
 
               return (
-                <button
+                <button type="button"
                   key={agentId}
                   onClick={() => setSelectedAgentId(isSelected ? null : agentId)}
                   style={{
@@ -917,7 +915,7 @@ export function Agents({
                 <span style={{ fontSize: 12, fontWeight: 600, color: "#94a3b8", letterSpacing: "0.04em", textTransform: "uppercase" }}>Provider</span>
               </div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <button
+                <button type="button"
                   onClick={() => {
                     setSelectedProvider("auto");
                     if (selectedAgentId) {
@@ -944,7 +942,7 @@ export function Agents({
                     : p.status === "stopped" ? "#ef4444"
                     : "#64748b";
                   return (
-                    <button
+                    <button type="button"
                       key={p.id}
                       onClick={() => {
                         if (!p.available) return;
@@ -1026,7 +1024,7 @@ export function Agents({
                       <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 600 }}>Busy</span>
                     )}
                     {needsLoad && !flashLoading && (
-                      <button
+                      <button type="button"
                         onClick={async () => {
                           if (!currentModelPath) { setFlashLoadError("No model path found"); return; }
                           setFlashLoading(true);
@@ -1163,7 +1161,7 @@ export function Agents({
                 outline: "none",
               }}
             />
-            <button
+            <button type="button"
               onClick={handleRunGoal}
               disabled={goalRunning || !goalInput.trim()}
               style={{
@@ -1236,7 +1234,7 @@ export function Agents({
                 </div>
               )}
               <div style={{ display: "flex", gap: 8 }}>
-                <button
+                <button type="button"
                   onClick={async () => {
                     try {
                       await approveConsentRequest(consent.consent_id, "user");
@@ -1259,7 +1257,7 @@ export function Agents({
                 >
                   Approve
                 </button>
-                <button
+                <button type="button"
                   onClick={async () => {
                     try {
                       for (const c of pendingConsents) {
@@ -1284,7 +1282,7 @@ export function Agents({
                 >
                   Approve All
                 </button>
-                <button
+                <button type="button"
                   onClick={async () => {
                     try {
                       await denyConsentRequest(consent.consent_id, "user", "User denied");
@@ -1390,7 +1388,7 @@ export function Agents({
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button
+            <button type="button"
               onClick={() => {
                 setShowPermissionGate(false);
                 startGoalExecution();
@@ -1414,7 +1412,7 @@ export function Agents({
               <span style={{ fontSize: 11, color: "#64748b" }}>Agent runs freely. Actions are logged.</span>
             </button>
 
-            <button
+            <button type="button"
               onClick={() => {
                 setShowPermissionGate(false);
                 // Enable review-each mode via the cognitive runtime
@@ -1443,7 +1441,7 @@ export function Agents({
               <span style={{ fontSize: 11, color: "#64748b" }}>I approve each action one by one.</span>
             </button>
 
-            <button
+            <button type="button"
               onClick={() => {
                 setShowPermissionGate(false);
               }}

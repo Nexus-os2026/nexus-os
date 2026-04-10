@@ -193,7 +193,7 @@ export default function TokenEconomy() {
       {/* Tab bar */}
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
         {tabs.map((t) => (
-          <button
+          <button type="button"
             key={t.id}
             onClick={() => setTab(t.id)}
             style={{
@@ -339,7 +339,7 @@ function WalletsTab({ wallets }: { wallets: WalletSummary[] }) {
     <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         {(["balance", "burn_rate", "earned"] as const).map((s) => (
-          <button
+          <button type="button"
             key={s}
             onClick={() => setSortBy(s)}
             style={{
@@ -449,7 +449,7 @@ function LedgerTab({ ledger }: { ledger: LedgerEntry[] }) {
           }}
         />
         {(["all", "burn", "credit"] as const).map((t) => (
-          <button
+          <button type="button"
             key={t}
             onClick={() => setFilterType(t)}
             style={{

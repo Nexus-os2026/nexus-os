@@ -238,7 +238,7 @@ function ActionButton({
   disabled?: boolean;
 }) {
   return (
-    <button
+    <button type="button"
       onClick={onClick}
       disabled={disabled}
       style={{

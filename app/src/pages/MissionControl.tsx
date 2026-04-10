@@ -382,9 +382,8 @@ export default function MissionControl({ onNavigate }: { onNavigate?: (page: str
             </svg>
 
             {constellationNodes.map((node) => (
-              <button
+              <button type="button"
                 key={node.agent.id}
-                type="button"
                 className={`mc-node mc-node--${node.tone}`}
                 style={{
                   left: `${node.x}%`,

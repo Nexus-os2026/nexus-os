@@ -138,7 +138,7 @@ export default function DeployHistory({ projectId, onClose }: DeployHistoryProps
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ color: C.text, fontSize: 14, fontWeight: 600 }}>Deploy History</span>
-          <button onClick={onClose} style={{
+          <button type="button" onClick={onClose} style={{
             background: "transparent", border: "none", color: C.dim, fontSize: 16,
             cursor: "pointer", padding: "2px 6px",
           }}>x</button>
@@ -249,12 +249,12 @@ export default function DeployHistory({ projectId, onClose }: DeployHistoryProps
                 This will replace the current live version.
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => setRollbackConfirm(null)} style={{
+                <button type="button" onClick={() => setRollbackConfirm(null)} style={{
                   background: "transparent", border: `1px solid ${C.border}`,
                   borderRadius: 4, padding: "6px 14px", color: C.muted, fontSize: 10,
                   cursor: "pointer", flex: 1,
                 }}>Cancel</button>
-                <button onClick={() => handleRollback(rollbackConfirm)} style={{
+                <button type="button" onClick={() => handleRollback(rollbackConfirm)} style={{
                   background: C.accent, border: "none", borderRadius: 4,
                   padding: "6px 14px", color: C.bg, fontSize: 10,
                   fontWeight: 600, cursor: "pointer", flex: 1,
@@ -270,7 +270,7 @@ export default function DeployHistory({ projectId, onClose }: DeployHistoryProps
 
 function SmallBtn({ label, onClick, accent }: { label: string; onClick: () => void; accent?: boolean }) {
   return (
-    <button onClick={onClick} style={{
+    <button type="button" onClick={onClick} style={{
       background: accent ? C.accentDim : "transparent",
       border: `1px solid ${accent ? "rgba(0,212,170,0.25)" : C.border}`,
       borderRadius: 3,

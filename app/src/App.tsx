@@ -1546,7 +1546,7 @@ export default function App(): JSX.Element {
             </p>
             <div style={{ display: "grid", gap: "0.6rem" }}>
               {agents.filter((a, i, arr) => arr.findIndex((x) => x.id === a.id) === i).map((a) => (
-                <button
+                <button type="button"
                   key={a.id}
                   onClick={() => setPermissionAgentId(a.id)}
                   style={{
@@ -1931,14 +1931,14 @@ export default function App(): JSX.Element {
                     <span className="nexus-topbar-chip__signal" style={{ background: "var(--nexus-purple)" }} />
                     RAM {sysInfo ? `${sysInfo.ram_used_gb}/${sysInfo.ram_total_gb}G` : "--"}
                   </span>
-                  <button
+                  <button type="button"
                     onClick={() => { void handleRefresh(); }}
                     className="nx-btn nx-btn-ghost"
                     style={{ padding: "0.45rem 0.9rem", fontSize: "0.7rem" }}
                   >
                     Refresh
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       if (overlay.visible) { void disableJarvisMode(); return; }
                       void enableJarvisMode();

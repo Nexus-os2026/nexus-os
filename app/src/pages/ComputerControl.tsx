@@ -252,15 +252,13 @@ export default function ComputerControl(): JSX.Element {
             </p>
           </div>
           <div className="flex gap-3">
-            <button
-              type="button"
+            <button type="button"
               onClick={() => void toggleControl()}
               className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100"
             >
               {enabled ? "Disable" : "Enable"}
             </button>
-            <button
-              type="button"
+            <button type="button"
               onClick={() => void killSwitch()}
               className="rounded-full border border-rose-400/30 bg-rose-500/10 px-4 py-2 text-sm text-rose-100"
             >
@@ -278,8 +276,8 @@ export default function ComputerControl(): JSX.Element {
 
       {/* ── Mode Selector ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <button className="cursor-pointer" onClick={() => setMode('demo')} style={{ padding: "6px 16px", background: mode === 'demo' ? "rgba(129,140,248,0.2)" : "transparent", border: `1px solid ${mode === 'demo' ? "rgba(129,140,248,0.4)" : "#334155"}`, borderRadius: 6, color: "#e2e8f0", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer", fontWeight: mode === 'demo' ? 600 : 400 }}>Preview Mode</button>
-        <button className="cursor-pointer" onClick={() => setMode('live')} style={{ padding: "6px 16px", background: mode === 'live' ? "rgba(239,68,68,0.2)" : "transparent", border: `1px solid ${mode === 'live' ? "rgba(239,68,68,0.4)" : "#334155"}`, borderRadius: 6, color: "#e2e8f0", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer", fontWeight: mode === 'live' ? 600 : 400 }}>Live Mode</button>
+        <button type="button" className="cursor-pointer" onClick={() => setMode('demo')} style={{ padding: "6px 16px", background: mode === 'demo' ? "rgba(129,140,248,0.2)" : "transparent", border: `1px solid ${mode === 'demo' ? "rgba(129,140,248,0.4)" : "#334155"}`, borderRadius: 6, color: "#e2e8f0", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer", fontWeight: mode === 'demo' ? 600 : 400 }}>Preview Mode</button>
+        <button type="button" className="cursor-pointer" onClick={() => setMode('live')} style={{ padding: "6px 16px", background: mode === 'live' ? "rgba(239,68,68,0.2)" : "transparent", border: `1px solid ${mode === 'live' ? "rgba(239,68,68,0.4)" : "#334155"}`, borderRadius: 6, color: "#e2e8f0", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer", fontWeight: mode === 'live' ? 600 : 400 }}>Live Mode</button>
         <span style={{ fontSize: "0.7rem", opacity: 0.5 }}>{mode === 'demo' ? "Safe preview — shows governed action sequence without executing" : "Agent controls your computer"}</span>
       </div>
 
@@ -288,7 +286,7 @@ export default function ComputerControl(): JSX.Element {
         <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: 16, marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
             <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Preview: Watch What the Agent Would Do</h3>
-            <button className="cursor-pointer" onClick={runDemo} disabled={demoRunning} style={{ padding: "6px 14px", background: "rgba(129,140,248,0.2)", border: "1px solid rgba(129,140,248,0.3)", borderRadius: 6, color: "#818cf8", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>{demoRunning ? "Running..." : "Run Preview"}</button>
+            <button type="button" className="cursor-pointer" onClick={runDemo} disabled={demoRunning} style={{ padding: "6px 14px", background: "rgba(129,140,248,0.2)", border: "1px solid rgba(129,140,248,0.3)", borderRadius: 6, color: "#818cf8", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>{demoRunning ? "Running..." : "Run Preview"}</button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {DEMO_ACTIONS.slice(0, demoStep + 1).map((action, i) => (
@@ -314,7 +312,7 @@ export default function ComputerControl(): JSX.Element {
             Live mode lets agents control your mouse and keyboard. Everything is governed — fuel limits, HITL approval on dangerous actions, full audit trail.
             Press ESC 3 times to force-stop.
           </p>
-          <button className="cursor-pointer" onClick={() => computerControlToggle(true).then(() => setEnabled(true))} style={{ padding: "8px 20px", background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.4)", borderRadius: 6, color: "#ef4444", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer", fontWeight: 600 }}>I Understand — Enable Live Control</button>
+          <button type="button" className="cursor-pointer" onClick={() => computerControlToggle(true).then(() => setEnabled(true))} style={{ padding: "8px 20px", background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.4)", borderRadius: 6, color: "#ef4444", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer", fontWeight: 600 }}>I Understand — Enable Live Control</button>
         </div>
       )}
 
@@ -390,16 +388,14 @@ export default function ComputerControl(): JSX.Element {
               className="mt-3 w-full rounded-2xl border border-cyan-500/20 bg-slate-950/70 px-3 py-3 text-sm text-cyan-50"
             />
             <div className="mt-3 flex flex-wrap gap-3">
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => void startAction()}
                 className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100"
               >
                 Start Action
               </button>
               {sessionId ? (
-                <button
-                  type="button"
+                <button type="button"
                   onClick={() => void stopComputerAction(sessionId)}
                   className="rounded-full border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-100"
                 >
@@ -423,8 +419,7 @@ export default function ComputerControl(): JSX.Element {
               Screen-aware context engine. Captures screen context, predicts user intent, and executes actions.
             </p>
           </div>
-          <button
-            type="button"
+          <button type="button"
             disabled={omniLoading}
             onClick={() => void toggleOmniscience()}
             className={`rounded-full border px-4 py-2 text-sm ${
@@ -442,8 +437,7 @@ export default function ComputerControl(): JSX.Element {
           <div className="rounded-2xl border border-violet-500/15 bg-slate-950/50 p-4">
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs uppercase tracking-[0.18em] text-violet-300/50">Screen Context</p>
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => void fetchOmniScreenCtx()}
                 className="rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1 text-xs text-violet-200"
               >
@@ -459,8 +453,7 @@ export default function ComputerControl(): JSX.Element {
           <div className="rounded-2xl border border-violet-500/15 bg-slate-950/50 p-4">
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs uppercase tracking-[0.18em] text-violet-300/50">Intent Predictions</p>
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => void fetchOmniPredictions()}
                 className="rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1 text-xs text-violet-200"
               >
@@ -483,8 +476,7 @@ export default function ComputerControl(): JSX.Element {
                 placeholder="App name (e.g. Firefox)"
                 className="flex-1 rounded-xl border border-violet-500/20 bg-slate-950/70 px-3 py-2 text-sm text-cyan-50 placeholder:text-cyan-100/30"
               />
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => void fetchOmniAppCtx()}
                 className="rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-xs text-violet-200"
               >
@@ -507,8 +499,7 @@ export default function ComputerControl(): JSX.Element {
               placeholder='{"type":"click","x":100,"y":200}'
             />
             <div className="mt-2 flex items-center gap-3">
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => void executeOmniAction()}
                 className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100"
               >

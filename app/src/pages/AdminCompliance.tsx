@@ -111,13 +111,13 @@ export default function AdminCompliance() {
       </p>
 
       <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
-        <button className="admin-btn" onClick={() => void handleExport("json")} disabled={exporting}>Export JSON</button>
-        <button className="admin-btn" onClick={() => void handleExport("csv")} disabled={exporting}>Export CSV</button>
+        <button type="button" className="admin-btn" onClick={() => void handleExport("json")} disabled={exporting}>Export JSON</button>
+        <button type="button" className="admin-btn" onClick={() => void handleExport("csv")} disabled={exporting}>Export CSV</button>
       </div>
 
       <div className="admin-tabs">
         {(["overview", "eu-ai-act", "soc2", "audit"] as const).map((t) => (
-          <button key={t} className={`admin-tab ${tab === t ? "admin-tab--active" : ""}`} onClick={() => setTab(t)}>
+          <button type="button" key={t} className={`admin-tab ${tab === t ? "admin-tab--active" : ""}`} onClick={() => setTab(t)}>
             {t === "eu-ai-act" ? "EU AI Act" : t === "soc2" ? "SOC 2" : t === "audit" ? "Audit & Privacy" : "Overview"}
           </button>
         ))}

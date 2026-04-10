@@ -104,7 +104,7 @@ export function WebPreview({ projectDir, reloadKey }: WebPreviewProps) {
       >
         <div style={{ display: "flex", gap: 4 }}>
           {(Object.keys(VIEWPORTS) as Viewport[]).map((vk) => (
-            <button
+            <button type="button"
               key={vk}
               onClick={() => setViewport(vk)}
               title={VIEWPORTS[vk].label + " (" + VIEWPORTS[vk].width + "\u00D7" + VIEWPORTS[vk].height + ")"}
@@ -144,7 +144,7 @@ export function WebPreview({ projectDir, reloadKey }: WebPreviewProps) {
               </span>
             )}
           </span>
-          <button
+          <button type="button"
             onClick={() => {
               // Force reload by incrementing a local counter
               setHtmlContent(null);

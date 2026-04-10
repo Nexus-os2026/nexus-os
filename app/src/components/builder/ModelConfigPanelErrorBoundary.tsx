@@ -78,7 +78,7 @@ export default class ModelConfigPanelErrorBoundary extends Component<Props, Stat
           </div>
         )}
         <div style={{ display: "flex", gap: 8 }}>
-          <button
+          <button type="button"
             onClick={() => this.setState({ hasError: false, error: null })}
             style={{
               background: C.accentDim,
@@ -94,7 +94,7 @@ export default class ModelConfigPanelErrorBoundary extends Component<Props, Stat
           >
             Retry
           </button>
-          <button
+          <button type="button"
             onClick={this.props.onClose}
             style={{
               background: "transparent",

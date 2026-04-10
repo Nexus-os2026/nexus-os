@@ -259,7 +259,7 @@ export default function BuildPlanCard({
                   onChange={(e) => updateSection(i, e.target.value)}
                   style={{ ...inputStyle, width: 100 }}
                 />
-                <button
+                <button type="button"
                   onClick={() => removeSection(i)}
                   style={{ background: "transparent", border: "none", color: C.dim, cursor: "pointer", fontSize: 10, padding: "2px 4px" }}
                 >
@@ -283,7 +283,7 @@ export default function BuildPlanCard({
             )
           )}
           {editing && (
-            <button
+            <button type="button"
               onClick={addSection}
               style={{
                 background: "transparent",
@@ -314,7 +314,7 @@ export default function BuildPlanCard({
                   onChange={(e) => updateListItem("must_have", i, e.target.value)}
                   style={{ ...inputStyle, flex: 1 }}
                 />
-                <button
+                <button type="button"
                   onClick={() => removeListItem("must_have", i)}
                   style={{ background: "transparent", border: "none", color: C.dim, cursor: "pointer", fontSize: 10, padding: "2px 4px" }}
                 >
@@ -329,7 +329,7 @@ export default function BuildPlanCard({
             )
           )}
           {editing && (
-            <button
+            <button type="button"
               onClick={() => addListItem("must_have")}
               style={{ background: "transparent", border: "none", color: C.dim, cursor: "pointer", fontSize: 10, textAlign: "left" as const, padding: "2px 0" }}
             >
@@ -352,7 +352,7 @@ export default function BuildPlanCard({
                     onChange={(e) => updateListItem("must_not_have", i, e.target.value)}
                     style={{ ...inputStyle, flex: 1 }}
                   />
-                  <button
+                  <button type="button"
                     onClick={() => removeListItem("must_not_have", i)}
                     style={{ background: "transparent", border: "none", color: C.dim, cursor: "pointer", fontSize: 10, padding: "2px 4px" }}
                   >
@@ -367,7 +367,7 @@ export default function BuildPlanCard({
               )
             )}
             {editing && (
-              <button
+              <button type="button"
                 onClick={() => addListItem("must_not_have")}
                 style={{ background: "transparent", border: "none", color: C.dim, cursor: "pointer", fontSize: 10, textAlign: "left" as const, padding: "2px 0" }}
               >
@@ -386,7 +386,7 @@ export default function BuildPlanCard({
 
       {/* Actions */}
       <div style={{ display: "flex", gap: 6 }}>
-        <button
+        <button type="button"
           onClick={handleApprove}
           disabled={disabled}
           style={{
@@ -412,7 +412,7 @@ export default function BuildPlanCard({
         </button>
 
         {!editing ? (
-          <button
+          <button type="button"
             onClick={startEdit}
             disabled={disabled}
             style={{
@@ -429,7 +429,7 @@ export default function BuildPlanCard({
             Edit Plan
           </button>
         ) : (
-          <button
+          <button type="button"
             onClick={cancelEdit}
             style={{
               padding: "10px 16px",
@@ -445,7 +445,7 @@ export default function BuildPlanCard({
           </button>
         )}
 
-        <button
+        <button type="button"
           onClick={onCancel}
           disabled={disabled}
           style={{

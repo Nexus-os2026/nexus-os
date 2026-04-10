@@ -144,7 +144,7 @@ export default function ImprovementDashboard({ open, onClose }: Props) {
               Governed, auditable, reversible improvements
             </p>
           </div>
-          <button onClick={onClose} style={{
+          <button type="button" onClick={onClose} style={{
             background: "none", border: "none", color: C.muted,
             fontSize: 20, cursor: "pointer", padding: 4,
           }}>&times;</button>
@@ -233,14 +233,14 @@ export default function ImprovementDashboard({ open, onClose }: Props) {
 
         {/* Actions */}
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
-          <button onClick={resetAll} style={{
+          <button type="button" onClick={resetAll} style={{
             background: "rgba(239,68,68,0.1)", border: `1px solid ${C.error}`,
             borderRadius: 6, padding: "6px 14px", color: C.error,
             fontSize: 12, cursor: "pointer", fontWeight: 500,
           }}>
             Reset All to Factory
           </button>
-          <button onClick={runAnalysis} disabled={loading} style={{
+          <button type="button" onClick={runAnalysis} disabled={loading} style={{
             background: C.accentDim, border: `1px solid ${C.accent}`,
             borderRadius: 6, padding: "6px 14px", color: C.accent,
             fontSize: 12, cursor: loading ? "wait" : "pointer", fontWeight: 500,
@@ -256,7 +256,7 @@ export default function ImprovementDashboard({ open, onClose }: Props) {
 
 function SmallButton({ label, color, onClick }: { label: string; color: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} style={{
+    <button type="button" onClick={onClick} style={{
       background: `${color}15`, border: `1px solid ${color}`,
       borderRadius: 4, padding: "3px 10px", color,
       fontSize: 11, cursor: "pointer", fontWeight: 500,

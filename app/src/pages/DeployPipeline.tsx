@@ -389,12 +389,12 @@ export default function DeployPipeline() {
       <aside className="dp-sidebar">
         <div className="dp-sidebar-header">
           <h2 className="dp-sidebar-title">Deploy Pipeline</h2>
-          <button className="dp-new-btn" onClick={() => setShowNewProject(true)}>+ Project</button>
+          <button type="button" className="dp-new-btn" onClick={() => setShowNewProject(true)}>+ Project</button>
         </div>
 
         <div className="dp-views">
           {([["projects", "zap", "Projects"], ["pipeline", "play", "Pipeline"], ["history", "clock", "History"], ["logs", "list", "Logs"], ["airgap", "shield", "Airgap"]] as const).map(([id, icon, label]) => (
-            <button key={id} className={`dp-view-btn cursor-pointer ${view === id ? "active" : ""}`} onClick={() => setView(id)}>
+            <button type="button" key={id} className={`dp-view-btn cursor-pointer ${view === id ? "active" : ""}`} onClick={() => setView(id)}>
               <span>{icon === "zap" ? <Zap size={14} aria-hidden="true" /> : icon === "play" ? <Play size={14} aria-hidden="true" /> : icon === "clock" ? <Clock size={14} aria-hidden="true" /> : icon === "list" ? <List size={14} aria-hidden="true" /> : <Shield size={14} aria-hidden="true" />}</span> {label}
             </button>
           ))}
@@ -462,12 +462,12 @@ export default function DeployPipeline() {
                 <span>Governance: Tier 2 — HITL mandatory for deploy</span>
               </div>
               <div className="dp-hitl-actions">
-                <button className="dp-hitl-approve" onClick={() => {
+                <button type="button" className="dp-hitl-approve" onClick={() => {
                   const pid = hitlPending;
                   setHitlPending(null);
                   runFullPipeline(pid);
                 }}>Approve & Execute</button>
-                <button className="dp-hitl-deny" onClick={() => { setHitlPending(null); addLog("warn", "Pipeline denied by user"); }}>Deny</button>
+                <button type="button" className="dp-hitl-deny" onClick={() => { setHitlPending(null); addLog("warn", "Pipeline denied by user"); }}>Deny</button>
               </div>
             </div>
           </div>
@@ -495,10 +495,10 @@ export default function DeployPipeline() {
                 </div>
               </div>
               <div className="dp-form-actions">
-                <button className="dp-form-deploy" onClick={createProject} disabled={loading || !newName.trim()}>
+                <button type="button" className="dp-form-deploy" onClick={createProject} disabled={loading || !newName.trim()}>
                   {loading ? "Creating..." : "Create Project"}
                 </button>
-                <button className="dp-form-cancel" onClick={() => setShowNewProject(false)}>Cancel</button>
+                <button type="button" className="dp-form-cancel" onClick={() => setShowNewProject(false)}>Cancel</button>
               </div>
             </div>
           </div>
@@ -510,7 +510,7 @@ export default function DeployPipeline() {
             <div className="dp-deploys-header">
               <h3 className="dp-view-title">Factory Projects</h3>
               <div className="dp-filters">
-                <button className="dp-new-btn" onClick={() => setShowNewProject(true)}>+ New Project</button>
+                <button type="button" className="dp-new-btn" onClick={() => setShowNewProject(true)}>+ New Project</button>
               </div>
             </div>
 
@@ -530,7 +530,7 @@ export default function DeployPipeline() {
                   <p style={{ color: "#94a3b8", marginTop: "0.5rem" }}>
                     No deployment pipelines configured. Create a pipeline to deploy your agent-built projects.
                   </p>
-                  <button className="dp-new-btn" style={{ marginTop: "1rem" }} onClick={() => setShowNewProject(true)}>+ Create First Project</button>
+                  <button type="button" className="dp-new-btn" style={{ marginTop: "1rem" }} onClick={() => setShowNewProject(true)}>+ Create First Project</button>
                 </div>
               </div>
             ) : (
@@ -640,21 +640,21 @@ export default function DeployPipeline() {
                   )}
 
                   <div className="dp-detail-actions">
-                    <button
+                    <button type="button"
                       className="dp-btn-retry"
                       onClick={() => buildProject(activeProject.id)}
                       disabled={pipelineStage === "building" || pipelineStage === "testing" || pipelineStage === "deploying"}
                     >
                       Build Only
                     </button>
-                    <button
+                    <button type="button"
                       className="dp-btn-retry"
                       onClick={() => testProject(activeProject.id)}
                       disabled={pipelineStage === "building" || pipelineStage === "testing" || pipelineStage === "deploying"}
                     >
                       Test Only
                     </button>
-                    <button
+                    <button type="button"
                       className="dp-btn-rollback"
                       onClick={() => handleRunPipeline(activeProject.id)}
                       disabled={pipelineStage === "building" || pipelineStage === "testing" || pipelineStage === "deploying"}
@@ -672,7 +672,7 @@ export default function DeployPipeline() {
                   <p style={{ color: "#94a3b8", marginTop: "0.5rem" }}>
                     No deployment pipelines configured. Create a pipeline to deploy your agent-built projects.
                   </p>
-                  <button className="dp-new-btn" style={{ marginTop: "1rem" }} onClick={() => setShowNewProject(true)}>+ Create First Project</button>
+                  <button type="button" className="dp-new-btn" style={{ marginTop: "1rem" }} onClick={() => setShowNewProject(true)}>+ Create First Project</button>
                 </div>
               </div>
             )}
@@ -767,7 +767,7 @@ export default function DeployPipeline() {
                     style={{ padding: "6px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.8rem" }} />
                   <input value={bundleComponents} onChange={e => setBundleComponents(e.target.value)} placeholder="Components (optional, comma sep)"
                     style={{ padding: "6px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.8rem" }} />
-                  <button onClick={() => void handleCreateBundle()} disabled={airgapLoading}
+                  <button type="button" onClick={() => void handleCreateBundle()} disabled={airgapLoading}
                     style={{ padding: "8px 16px", background: "rgba(34,211,238,0.15)", border: "1px solid #22d3ee", borderRadius: 6, color: "#22d3ee", cursor: "pointer", fontFamily: "monospace", fontSize: "0.8rem", fontWeight: 600 }}>
                     {airgapLoading ? "Creating..." : "Create Bundle"}
                   </button>
@@ -789,7 +789,7 @@ export default function DeployPipeline() {
                   <div style={{ display: "flex", gap: 8 }}>
                     <input value={validatePath} onChange={e => setValidatePath(e.target.value)} placeholder="Bundle path"
                       style={{ flex: 1, padding: "6px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.8rem" }} />
-                    <button onClick={() => void handleValidateBundle()} disabled={airgapLoading || !validatePath.trim()}
+                    <button type="button" onClick={() => void handleValidateBundle()} disabled={airgapLoading || !validatePath.trim()}
                       style={{ padding: "6px 14px", background: "rgba(34,211,238,0.15)", border: "1px solid #22d3ee", borderRadius: 6, color: "#22d3ee", cursor: "pointer", fontFamily: "monospace", fontSize: "0.8rem" }}>
                       Validate
                     </button>
@@ -814,7 +814,7 @@ export default function DeployPipeline() {
                       style={{ padding: "6px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.8rem" }} />
                     <input value={installDir} onChange={e => setInstallDir(e.target.value)} placeholder="Install directory"
                       style={{ padding: "6px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.8rem" }} />
-                    <button onClick={() => void handleInstallBundle()} disabled={airgapLoading || !installBundlePath.trim()}
+                    <button type="button" onClick={() => void handleInstallBundle()} disabled={airgapLoading || !installBundlePath.trim()}
                       style={{ padding: "8px 16px", background: "rgba(245,158,11,0.15)", border: "1px solid #f59e0b", borderRadius: 6, color: "#f59e0b", cursor: "pointer", fontFamily: "monospace", fontSize: "0.8rem", fontWeight: 600 }}>
                       {airgapLoading ? "Installing..." : "Install Bundle"}
                     </button>
@@ -835,7 +835,7 @@ export default function DeployPipeline() {
           <div className="dp-logs-view">
             <div className="dp-deploys-header">
               <h3 className="dp-view-title">Pipeline Logs</h3>
-              <button className="dp-new-btn" onClick={() => setLogs([])}>Clear</button>
+              <button type="button" className="dp-new-btn" onClick={() => setLogs([])}>Clear</button>
             </div>
             <div className="dp-logs-list">
               {logs.length === 0 ? (

@@ -288,8 +288,7 @@ export function BuildMode({ onActivity }: BuildModeProps): JSX.Element {
             placeholder="Describe what to build... (e.g. landing page with hero section and feature cards)"
             disabled={running}
           />
-          <button
-            type="button"
+          <button type="button"
             className="build-start-btn"
             onClick={() => void handleStart()}
             disabled={running || !description.trim()}

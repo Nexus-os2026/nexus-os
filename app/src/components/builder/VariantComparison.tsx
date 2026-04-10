@@ -73,7 +73,7 @@ export default function VariantComparison({
           minHeight: 40,
         }}
       >
-        <button
+        <button type="button"
           onClick={onBack}
           style={{
             background: "transparent",
@@ -99,7 +99,7 @@ export default function VariantComparison({
           {loading ? "Generating variants..." : `${variants.length} Variants — $0.00`}
         </span>
 
-        <button
+        <button type="button"
           onClick={onRegenerate}
           disabled={loading}
           style={{
@@ -128,7 +128,7 @@ export default function VariantComparison({
         }}
       >
         {variants.map((v, i) => (
-          <button
+          <button type="button"
             key={v.id}
             onClick={() => setMobileTab(i)}
             style={{
@@ -268,7 +268,7 @@ export default function VariantComparison({
               </div>
 
               {/* Select button */}
-              <button
+              <button type="button"
                 onClick={() => handleSelect(v)}
                 style={{
                   background: C.accentDim,

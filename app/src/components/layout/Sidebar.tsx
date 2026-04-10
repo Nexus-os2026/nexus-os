@@ -123,8 +123,7 @@ export function Sidebar({ items, activeId, onSelect, version, fitnessScore = 50,
           return (
             <div key={group.section || "_default"} className="nexus-sidebar-group">
               {group.section ? (
-                <button
-                  type="button"
+                <button type="button"
                   className="nexus-sidebar-section"
                   onClick={() => toggleSection(group.section)}
                 >
@@ -146,9 +145,8 @@ export function Sidebar({ items, activeId, onSelect, version, fitnessScore = 50,
                 {group.items.map((item) => {
                   const IconComponent = ICON_MAP[item.icon];
                   return (
-                    <button
+                    <button type="button"
                       key={item.id}
-                      type="button"
                       className={`nexus-sidebar-item ${activeId === item.id ? "active" : ""}`}
                       onClick={() => onSelect(item.id)}
                       title={item.shortcut ? `${item.label} (${item.shortcut})` : item.label}

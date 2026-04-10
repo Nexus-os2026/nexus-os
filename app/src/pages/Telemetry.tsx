@@ -193,7 +193,7 @@ export default function Telemetry() {
         }}
       >
         <h1>Telemetry</h1>
-        <button
+        <button type="button"
           className="admin-btn admin-btn--accent"
           onClick={() => void refresh()}
           disabled={loading}
@@ -365,7 +365,7 @@ export default function Telemetry() {
             Telemetry Configuration
           </div>
           {!editing && config && (
-            <button className="admin-btn admin-btn--sm" onClick={startEdit}>
+            <button type="button" className="admin-btn admin-btn--sm" onClick={startEdit}>
               Edit
             </button>
           )}
@@ -419,7 +419,7 @@ export default function Telemetry() {
               }}
             >
               <label style={{ color: "var(--text-secondary)" }}>Enabled</label>
-              <button
+              <button type="button"
                 className={`admin-btn admin-btn--sm ${editConfig.enabled ? "admin-btn--accent" : ""}`}
                 onClick={() => patchEdit("enabled", !editConfig.enabled)}
               >
@@ -546,14 +546,14 @@ export default function Telemetry() {
 
             {/* Actions */}
             <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
-              <button
+              <button type="button"
                 className="admin-btn admin-btn--accent"
                 onClick={() => void saveConfig()}
                 disabled={saving}
               >
                 {saving ? "Saving..." : "Save"}
               </button>
-              <button
+              <button type="button"
                 className="admin-btn"
                 onClick={cancelEdit}
                 disabled={saving}

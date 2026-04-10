@@ -309,8 +309,7 @@ export function Chat({
               </option>
             ))}
           </select>
-          <button
-            type="button"
+          <button type="button"
             className="jarvis-clear-btn"
             onClick={() => {
               onClearMessages();
@@ -320,8 +319,7 @@ export function Chat({
             <Trash2 size={12} aria-hidden="true" />
             Clear
           </button>
-          <button
-            type="button"
+          <button type="button"
             className="jarvis-history-button"
             onClick={() => setHistoryOpen((open) => !open)}
           >
@@ -415,8 +413,7 @@ export function Chat({
                       {message.content || (message.streaming ? "..." : "")}
                     </p>
                     {message.variant === "approval" && onNavigate && (
-                      <button
-                        type="button"
+                      <button type="button"
                         className="jarvis-approval-link"
                         onClick={() => onNavigate("approvals")}
                       >
@@ -463,8 +460,7 @@ export function Chat({
           }}
         >
           <div className="jarvis-input-row">
-            <button
-              type="button"
+            <button type="button"
               onClick={onToggleMic}
               className={`jarvis-mic-button ${isRecording ? "recording" : ""}`}
               aria-label="Toggle microphone"

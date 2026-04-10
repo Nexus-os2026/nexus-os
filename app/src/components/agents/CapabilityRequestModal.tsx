@@ -64,10 +64,10 @@ export function CapabilityRequestModal({
           </p>
         </details>
         <div className="perm-modal-actions">
-          <button className="perm-modal-cancel" onClick={onDeny}>
+          <button type="button" className="perm-modal-cancel" onClick={onDeny}>
             Deny
           </button>
-          <button
+          <button type="button"
             className="perm-modal-confirm"
             onClick={() => onApprove(request.requested_capability)}
           >

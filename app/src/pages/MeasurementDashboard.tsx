@@ -166,7 +166,7 @@ export default function MeasurementDashboard() {
       {error && (
         <div style={{ background: alpha("#ef4444", 0.15), border: "1px solid #ef4444", borderRadius: 8, padding: 12, marginBottom: 16, color: "#fca5a5", fontSize: 13 }}>
           {error}
-          <button onClick={load} style={{ marginLeft: 12, color: ACCENT, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Retry</button>
+          <button type="button" onClick={load} style={{ marginLeft: 12, color: ACCENT, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Retry</button>
         </div>
       )}
 

@@ -115,8 +115,7 @@ function StepRow({
       />
 
       {/* header */}
-      <button
-        type="button"
+      <button type="button"
         onClick={() => setExpanded(!expanded)}
         style={{
           display: "flex",

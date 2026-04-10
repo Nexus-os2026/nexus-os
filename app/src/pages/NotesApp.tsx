@@ -406,8 +406,8 @@ export default function NotesApp() {
           <div className="na-sidebar-header">
             <h2 className="na-sidebar-title">Notes</h2>
             <div className="na-sidebar-actions">
-              <button className="na-btn-icon" onClick={() => setShowTemplateMenu(!showTemplateMenu)} title="New note">+</button>
-              <button className="na-btn-icon cursor-pointer" onClick={() => setShowSidebar(false)} title="Hide sidebar"><ChevronLeft size={14} aria-hidden="true" /></button>
+              <button type="button" className="na-btn-icon" onClick={() => setShowTemplateMenu(!showTemplateMenu)} title="New note">+</button>
+              <button type="button" className="na-btn-icon cursor-pointer" onClick={() => setShowSidebar(false)} title="Hide sidebar"><ChevronLeft size={14} aria-hidden="true" /></button>
             </div>
           </div>
 
@@ -416,7 +416,7 @@ export default function NotesApp() {
             <div className="na-template-menu">
               <div className="na-template-header">New from template</div>
               {Object.entries(TEMPLATES).map(([key, _tmpl]) => (
-                <button key={key} className="na-template-item cursor-pointer" onClick={() => createNote(key)}>
+                <button type="button" key={key} className="na-template-item cursor-pointer" onClick={() => createNote(key)}>
                   <span className="na-template-icon">{key === "meeting" ? <Calendar size={14} aria-hidden="true" /> : key === "research" ? <Microscope size={14} aria-hidden="true" /> : key === "project" ? <FolderOpen size={14} aria-hidden="true" /> : key === "bug-report" ? <Bug size={14} aria-hidden="true" /> : <StickyNote size={14} aria-hidden="true" />}</span>
                   <span>{key.replace("-", " ").replace(/\b\w/g, c => c.toUpperCase())}</span>
                 </button>
@@ -428,20 +428,20 @@ export default function NotesApp() {
           <div className="na-search-box">
             <span className="na-search-icon"><Search size={14} aria-hidden="true" /></span>
             <input id="na-search" className="na-search-input" placeholder="Search notes..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
-            {searchQuery && <button className="na-search-clear" onClick={() => setSearchQuery("")}>×</button>}
+            {searchQuery && <button type="button" className="na-search-clear" onClick={() => setSearchQuery("")}>×</button>}
           </div>
 
           {/* folders */}
           <div className="na-folders">
             {folders.map(folder => (
               <div key={folder.id} className={`na-folder-item ${selectedFolderId === folder.id ? "active" : ""}`}>
-                <button className="na-folder-btn cursor-pointer" onClick={() => { setSelectedFolderId(folder.id); setSelectedTagFilter(null); }}>
+                <button type="button" className="na-folder-btn cursor-pointer" onClick={() => { setSelectedFolderId(folder.id); setSelectedTagFilter(null); }}>
                   <span className="na-folder-icon">{FOLDER_ICON_MAP[folder.icon] ?? folder.icon}</span>
                   <span className="na-folder-name">{folder.name}</span>
                   <span className="na-folder-count">{getNoteCount(folder.id)}</span>
                 </button>
                 {folder.parentId === null && folder.id !== "f-all" && (
-                  <button className="na-folder-toggle cursor-pointer" onClick={() => toggleFolder(folder.id)}>
+                  <button type="button" className="na-folder-toggle cursor-pointer" onClick={() => toggleFolder(folder.id)}>
                     {folder.collapsed ? <ChevronRight size={12} aria-hidden="true" /> : <ChevronDown size={12} aria-hidden="true" />}
                   </button>
                 )}
@@ -454,7 +454,7 @@ export default function NotesApp() {
             <div className="na-tags-header">Tags</div>
             <div className="na-tags-list">
               {tags.map(tag => (
-                <button key={tag.id} className={`na-tag-filter ${selectedTagFilter === tag.id ? "active" : ""}`} onClick={() => setSelectedTagFilter(selectedTagFilter === tag.id ? null : tag.id)} style={{ borderColor: tag.color }}>
+                <button type="button" key={tag.id} className={`na-tag-filter ${selectedTagFilter === tag.id ? "active" : ""}`} onClick={() => setSelectedTagFilter(selectedTagFilter === tag.id ? null : tag.id)} style={{ borderColor: tag.color }}>
                   <span className="na-tag-dot" style={{ background: tag.color }} />
                   {tag.name}
                 </button>
@@ -478,7 +478,7 @@ export default function NotesApp() {
       <div className="na-note-list">
         <div className="na-list-header">
           <div className="na-list-title">
-            {!showSidebar && <button className="na-btn-icon cursor-pointer" onClick={() => setShowSidebar(true)} title="Show sidebar"><Play size={12} aria-hidden="true" /></button>}
+            {!showSidebar && <button type="button" className="na-btn-icon cursor-pointer" onClick={() => setShowSidebar(true)} title="Show sidebar"><Play size={12} aria-hidden="true" /></button>}
             <span>{folders.find(f => f.id === selectedFolderId)?.name ?? "All Notes"}</span>
             {selectedTagFilter && <span className="na-filter-badge" style={{ borderColor: getTagById(selectedTagFilter)?.color }}>#{getTagById(selectedTagFilter)?.name}</span>}
           </div>
@@ -496,7 +496,7 @@ export default function NotesApp() {
             <div className="na-empty">
               <div className="na-empty-icon"><StickyNote size={24} aria-hidden="true" /></div>
               <div>No notes found</div>
-              <button className="na-btn-create" onClick={() => createNote()}>Create Note</button>
+              <button type="button" className="na-btn-create" onClick={() => createNote()}>Create Note</button>
             </div>
           )}
           {filteredNotes.map(note => (
@@ -504,8 +504,8 @@ export default function NotesApp() {
               <div className="na-note-card-header">
                 <span className="na-note-card-title">{note.pinned && <span className="na-pin"><Pin size={12} aria-hidden="true" /></span>}{note.title}</span>
                 <div className="na-note-card-actions">
-                  <button className="na-btn-tiny cursor-pointer" onClick={e => { e.stopPropagation(); togglePin(note.id); }}>{note.pinned ? <PinOff size={12} aria-hidden="true" /> : <Pin size={12} aria-hidden="true" />}</button>
-                  <button className="na-btn-tiny" onClick={e => { e.stopPropagation(); deleteNote(note.id); }}>×</button>
+                  <button type="button" className="na-btn-tiny cursor-pointer" onClick={e => { e.stopPropagation(); togglePin(note.id); }}>{note.pinned ? <PinOff size={12} aria-hidden="true" /> : <Pin size={12} aria-hidden="true" />}</button>
+                  <button type="button" className="na-btn-tiny" onClick={e => { e.stopPropagation(); deleteNote(note.id); }}>×</button>
                 </div>
               </div>
               <div className="na-note-card-preview">{note.content.replace(/[#*`>\[\]|_~-]/g, "").slice(0, 100)}...</div>
@@ -535,16 +535,16 @@ export default function NotesApp() {
               </div>
               <div className="na-toolbar-right">
                 <div className="na-view-toggle">
-                  <button className={`na-view-btn ${viewMode === "edit" ? "active" : ""}`} onClick={() => setViewMode("edit")}>Edit</button>
-                  <button className={`na-view-btn ${viewMode === "split" ? "active" : ""}`} onClick={() => setViewMode("split")}>Split</button>
-                  <button className={`na-view-btn ${viewMode === "preview" ? "active" : ""}`} onClick={() => setViewMode("preview")}>Preview</button>
+                  <button type="button" className={`na-view-btn ${viewMode === "edit" ? "active" : ""}`} onClick={() => setViewMode("edit")}>Edit</button>
+                  <button type="button" className={`na-view-btn ${viewMode === "split" ? "active" : ""}`} onClick={() => setViewMode("split")}>Split</button>
+                  <button type="button" className={`na-view-btn ${viewMode === "preview" ? "active" : ""}`} onClick={() => setViewMode("preview")}>Preview</button>
                 </div>
-                <button className={`na-btn-icon cursor-pointer ${showTagPicker ? "active" : ""}`} onClick={() => setShowTagPicker(!showTagPicker)} title="Tags"><Tag size={14} aria-hidden="true" /></button>
+                <button type="button" className={`na-btn-icon cursor-pointer ${showTagPicker ? "active" : ""}`} onClick={() => setShowTagPicker(!showTagPicker)} title="Tags"><Tag size={14} aria-hidden="true" /></button>
                 <div className="na-export-wrapper">
-                  <button className="na-btn-icon cursor-pointer" onClick={() => setShowExportMenu(!showExportMenu)} title="Export"><Download size={14} aria-hidden="true" /></button>
+                  <button type="button" className="na-btn-icon cursor-pointer" onClick={() => setShowExportMenu(!showExportMenu)} title="Export"><Download size={14} aria-hidden="true" /></button>
                   {showExportMenu && (
                     <div className="na-export-menu">
-                      <button className="na-export-item cursor-pointer" onClick={() => { setShowExportMenu(false); setFuelUsed(f => f + 5); }}><FileText size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} /> Markdown (.md)</button>
+                      <button type="button" className="na-export-item cursor-pointer" onClick={() => { setShowExportMenu(false); setFuelUsed(f => f + 5); }}><FileText size={12} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} /> Markdown (.md)</button>
                     </div>
                   )}
                 </div>
@@ -555,7 +555,7 @@ export default function NotesApp() {
                     ))}
                   </select>
                 </div>
-                <button className="na-btn-icon cursor-pointer" onClick={() => duplicateNote(selectedNote.id)} title="Duplicate"><Copy size={14} aria-hidden="true" /></button>
+                <button type="button" className="na-btn-icon cursor-pointer" onClick={() => duplicateNote(selectedNote.id)} title="Duplicate"><Copy size={14} aria-hidden="true" /></button>
               </div>
             </div>
 
@@ -563,7 +563,7 @@ export default function NotesApp() {
             {showTagPicker && (
               <div className="na-tag-picker">
                 {tags.map(tag => (
-                  <button key={tag.id} className={`na-tag-pick ${selectedNote.tags.includes(tag.id) ? "selected" : ""}`} style={{ borderColor: tag.color, background: selectedNote.tags.includes(tag.id) ? tag.color + "22" : "transparent" }} onClick={() => toggleNoteTag(selectedNote.id, tag.id)}>
+                  <button type="button" key={tag.id} className={`na-tag-pick ${selectedNote.tags.includes(tag.id) ? "selected" : ""}`} style={{ borderColor: tag.color, background: selectedNote.tags.includes(tag.id) ? tag.color + "22" : "transparent" }} onClick={() => toggleNoteTag(selectedNote.id, tag.id)}>
                     <span className="na-tag-dot" style={{ background: tag.color }} />
                     {tag.name}
                   </button>
@@ -610,7 +610,7 @@ export default function NotesApp() {
           <div className="na-no-note">
             <div className="na-no-note-icon"><StickyNote size={32} aria-hidden="true" /></div>
             <div className="na-no-note-text">Select a note or create a new one</div>
-            <button className="na-btn-create" onClick={() => createNote()}>New Note</button>
+            <button type="button" className="na-btn-create" onClick={() => createNote()}>New Note</button>
           </div>
         )}
       </div>

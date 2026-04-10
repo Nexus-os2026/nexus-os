@@ -118,7 +118,7 @@ function ProviderRow(props: {
                 }
               }}
             />
-            <button
+            <button type="button"
               style={btnStyle}
               onClick={() => {
                 const v = parseFloat(inputVal);

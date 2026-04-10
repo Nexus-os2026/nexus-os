@@ -731,7 +731,7 @@ export default function VoiceAssistant() {
             <span style={S.indicator(serverRunning)} />
             {serverRunning ? "Capture Active" : "Capture Idle"}
           </span>
-          <button
+          <button type="button"
             onClick={handleClear}
             style={{
               background: "var(--bg-tertiary, #0f172a)",
@@ -829,7 +829,7 @@ export default function VoiceAssistant() {
                 }}
               >
                 <code style={{ color: "var(--text-primary, #e2e8f0)" }}>{pythonCommand}</code>
-                <button
+                <button type="button"
                   onClick={handleCopyPythonCommand}
                   style={{
                     padding: "0.28rem 0.6rem",
@@ -851,7 +851,7 @@ export default function VoiceAssistant() {
           {/* Web Speech API — browser-native, ZERO setup required */}
           {webSpeechAvailable && useWebSpeech && (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, marginBottom: 16 }}>
-              <button
+              <button type="button"
                 className="cursor-pointer"
                 onClick={status === 'listening' ? stopWebSpeechListening : startWebSpeechListening}
                 style={{
@@ -884,7 +884,7 @@ export default function VoiceAssistant() {
           )}
 
           {!useWebSpeech && (
-            <button onClick={handleToggle} style={S.toggleBtn(status === "listening")}>
+            <button type="button" onClick={handleToggle} style={S.toggleBtn(status === "listening")}>
               {status === "listening" ? "Stop Listening" : "Start Listening (Whisper)"}
             </button>
           )}
@@ -982,7 +982,7 @@ export default function VoiceAssistant() {
             </div>
             <div style={{ marginLeft: "auto" }}>
               {!engineStatus.whisperLoaded && (
-                <button
+                <button type="button"
                   onClick={handleLoadWhisper}
                   disabled={modelLoading}
                   style={{

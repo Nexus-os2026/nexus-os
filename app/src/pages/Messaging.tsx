@@ -311,22 +311,19 @@ export default function Messaging(): JSX.Element {
                 className="mt-4 w-full rounded-xl border border-cyan-500/20 bg-slate-950/60 px-3 py-2 text-sm text-cyan-50"
               />
               <div className="mt-4 flex flex-wrap gap-3">
-                <button
-                  type="button"
+                <button type="button"
                   onClick={() => void connectPlatform(platform)}
                   className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100"
                 >
                   Connect
                 </button>
-                <button
-                  type="button"
+                <button type="button"
                   onClick={() => void load()}
                   className="rounded-full border border-cyan-400/20 bg-slate-950/60 px-4 py-2 text-sm text-cyan-100/75"
                 >
                   Test
                 </button>
-                <button
-                  type="button"
+                <button type="button"
                   className="cursor-pointer rounded-full px-4 py-2 text-xs"
                   onClick={() => void handleConnect(platform.key, tokens[platform.key] ?? "")}
                   disabled={connectingPlatform === platform.key}
@@ -375,7 +372,7 @@ export default function Messaging(): JSX.Element {
             </select>
             <input value={replyChannel} onChange={e => setReplyChannel(e.target.value)} placeholder="Channel / Chat ID" style={{ flex: "0 0 140px", background: "var(--bg-primary, #0f172a)", border: "1px solid var(--border, #334155)", borderRadius: 4, color: "inherit", padding: "4px 8px", fontSize: "0.8rem", fontFamily: "inherit" }} />
             <input value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Type a message..." style={{ flex: 1, background: "var(--bg-primary, #0f172a)", border: "1px solid var(--border, #334155)", borderRadius: 4, color: "inherit", padding: "4px 8px", fontSize: "0.8rem", fontFamily: "inherit" }} onKeyDown={e => e.key === 'Enter' && handleSendReply()} />
-            <button className="cursor-pointer" onClick={handleSendReply} disabled={sendingReply || !replyText.trim() || !replyPlatform || !replyChannel} style={{ padding: "4px 12px", background: "rgba(129,140,248,0.2)", border: "1px solid rgba(129,140,248,0.3)", borderRadius: 4, color: "#818cf8", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>{sendingReply ? "..." : "Send"}</button>
+            <button type="button" className="cursor-pointer" onClick={handleSendReply} disabled={sendingReply || !replyText.trim() || !replyPlatform || !replyChannel} style={{ padding: "4px 12px", background: "rgba(129,140,248,0.2)", border: "1px solid rgba(129,140,248,0.3)", borderRadius: 4, color: "#818cf8", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>{sendingReply ? "..." : "Send"}</button>
           </div>
         </div>
       )}

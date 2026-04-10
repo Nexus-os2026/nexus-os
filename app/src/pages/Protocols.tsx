@@ -598,7 +598,7 @@ export default function Protocols(): JSX.Element {
           value={a2aDiscoverUrl}
           onChange={(e) => setA2aDiscoverUrl(e.target.value)}
         />
-        <button
+        <button type="button"
           className="proto-mcp-btn proto-mcp-btn--add"
           disabled={!!a2aBusy || !a2aDiscoverUrl.trim()}
           onClick={() => void handleA2aDiscover()}
@@ -651,7 +651,7 @@ export default function Protocols(): JSX.Element {
           onChange={(e) => setA2aSendMessage(e.target.value)}
           rows={2}
         />
-        <button
+        <button type="button"
           className="proto-mcp-btn proto-mcp-btn--add"
           disabled={!!a2aBusy || !a2aSendUrl.trim() || !a2aSendMessage.trim()}
           onClick={() => void handleA2aSendTask()}
@@ -678,14 +678,14 @@ export default function Protocols(): JSX.Element {
           value={a2aStatusTaskId}
           onChange={(e) => setA2aStatusTaskId(e.target.value)}
         />
-        <button
+        <button type="button"
           className="proto-mcp-btn proto-mcp-btn--connect"
           disabled={!!a2aBusy || !a2aStatusUrl.trim() || !a2aStatusTaskId.trim()}
           onClick={() => void handleA2aGetStatus()}
         >
           Get Status
         </button>
-        <button
+        <button type="button"
           className="proto-mcp-btn proto-mcp-btn--remove"
           disabled={!!a2aBusy || !a2aStatusUrl.trim() || !a2aStatusTaskId.trim()}
           onClick={() => void handleA2aCancelTask()}
@@ -698,19 +698,19 @@ export default function Protocols(): JSX.Element {
       {/* ====== A2A Crate (Agent Card, Skills, Status) ====== */}
       <h3 className="proto-section-title">A2A Protocol (nexus-a2a)</h3>
       <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-        <button className="proto-mcp-btn" onClick={async () => {
+        <button type="button" className="proto-mcp-btn" onClick={async () => {
           try {
             const card = await a2aCrateGetAgentCard();
             setA2aCrateCard(card);
           } catch (e: any) { setA2aError(e?.toString() ?? "Failed to get agent card"); }
         }}>Get Agent Card</button>
-        <button className="proto-mcp-btn" onClick={async () => {
+        <button type="button" className="proto-mcp-btn" onClick={async () => {
           try {
             const skills = await a2aCrateListSkills();
             setA2aCrateSkills(Array.isArray(skills) ? skills : []);
           } catch (e: any) { setA2aError(e?.toString() ?? "Failed to list skills"); }
         }}>List Skills</button>
-        <button className="proto-mcp-btn" onClick={async () => {
+        <button type="button" className="proto-mcp-btn" onClick={async () => {
           try {
             const st = await a2aCrateGetStatus();
             setA2aCrateStatus(st);
@@ -778,7 +778,7 @@ export default function Protocols(): JSX.Element {
           value={addAuthToken}
           onChange={(e) => setAddAuthToken(e.target.value)}
         />
-        <button
+        <button type="button"
           className="proto-mcp-btn proto-mcp-btn--add"
           disabled={!!mcpBusy || !addName.trim() || !addUrl.trim()}
           onClick={() => void handleAddServer()}
@@ -816,7 +816,7 @@ export default function Protocols(): JSX.Element {
                 </td>
                 <td className="proto-mcp-actions">
                   {srv.connected ? (
-                    <button
+                    <button type="button"
                       className="proto-mcp-btn proto-mcp-btn--disconnect"
                       disabled={!!mcpBusy}
                       onClick={() => void handleDisconnect(srv.id)}
@@ -824,7 +824,7 @@ export default function Protocols(): JSX.Element {
                       Disconnect
                     </button>
                   ) : (
-                    <button
+                    <button type="button"
                       className="proto-mcp-btn proto-mcp-btn--connect"
                       disabled={!!mcpBusy}
                       onClick={() => void handleConnect(srv.id)}
@@ -832,7 +832,7 @@ export default function Protocols(): JSX.Element {
                       Connect
                     </button>
                   )}
-                  <button
+                  <button type="button"
                     className="proto-mcp-btn proto-mcp-btn--remove"
                     disabled={!!mcpBusy}
                     onClick={() => void handleRemoveServer(srv.id)}
@@ -888,7 +888,7 @@ export default function Protocols(): JSX.Element {
           onChange={(e) => setCallToolArgs(e.target.value)}
           rows={3}
         />
-        <button
+        <button type="button"
           className="proto-mcp-btn proto-mcp-btn--add"
           disabled={!!mcpBusy || !callToolName.trim()}
           onClick={() => void handleCallTool()}
@@ -939,7 +939,7 @@ export default function Protocols(): JSX.Element {
           <input className="proto-input" placeholder="Display name" value={mcp2AddName} onChange={(e) => setMcp2AddName(e.target.value)} />
           <input className="proto-input" placeholder="Command (e.g. npx)" value={mcp2AddCommand} onChange={(e) => setMcp2AddCommand(e.target.value)} />
           <input className="proto-input" placeholder="Args (space-separated)" value={mcp2AddArgs} onChange={(e) => setMcp2AddArgs(e.target.value)} />
-          <button className="proto-btn" onClick={handleMcp2AddClient} disabled={!!mcp2Busy}>Register</button>
+          <button type="button" className="proto-btn" onClick={handleMcp2AddClient} disabled={!!mcp2Busy}>Register</button>
         </div>
       </div>
 
@@ -947,9 +947,9 @@ export default function Protocols(): JSX.Element {
         <h4>Discover Remote Tools</h4>
         <div className="proto-form-row">
           <input className="proto-input" placeholder="Server ID" value={mcp2DiscoverServerId} onChange={(e) => setMcp2DiscoverServerId(e.target.value)} />
-          <button className="proto-btn" onClick={handleMcp2Discover} disabled={!!mcp2Busy}>Discover</button>
+          <button type="button" className="proto-btn" onClick={handleMcp2Discover} disabled={!!mcp2Busy}>Discover</button>
           {mcp2DiscoverResult && (
-            <button className="proto-btn-secondary" onClick={() => handleMcp2RemoveClient(mcp2DiscoverServerId.trim())} disabled={!!mcp2Busy}>Remove</button>
+            <button type="button" className="proto-btn-secondary" onClick={() => handleMcp2RemoveClient(mcp2DiscoverServerId.trim())} disabled={!!mcp2Busy}>Remove</button>
           )}
         </div>
         {mcp2DiscoverResult && (
@@ -964,7 +964,7 @@ export default function Protocols(): JSX.Element {
           <input className="proto-input" placeholder="Tool name" value={mcp2CallToolName} onChange={(e) => setMcp2CallToolName(e.target.value)} />
         </div>
         <textarea className="proto-textarea" rows={3} placeholder='{"key": "value"}' value={mcp2CallToolArgs} onChange={(e) => setMcp2CallToolArgs(e.target.value)} />
-        <button className="proto-btn" onClick={handleMcp2CallTool} disabled={!!mcp2Busy}>Execute</button>
+        <button type="button" className="proto-btn" onClick={handleMcp2CallTool} disabled={!!mcp2Busy}>Execute</button>
         {mcp2CallResult && (
           <div className="proto-json-preview">{mcp2CallResult}</div>
         )}

@@ -113,7 +113,7 @@ export default function AdminDashboard() {
               <div style={{ width: 48, height: 48, borderRadius: 12, background: "rgba(6, 182, 212, 0.06)", border: "1px solid rgba(6, 182, 212, 0.12)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
               <p style={{ fontSize: 14, color: "#e2e8f0", marginBottom: 6 }}>Desktop runtime required</p>
               <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16, lineHeight: 1.5 }}>Connect to the Nexus OS kernel for live fleet monitoring, health checks, and system metrics.</p>
-              <button className="admin-btn" onClick={refresh}>Retry Connection</button>
+              <button type="button" className="admin-btn" onClick={refresh}>Retry Connection</button>
             </div>
           </div>
         </div>

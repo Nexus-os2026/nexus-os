@@ -139,3 +139,32 @@ Removed `transform: translateX(4px)` from `.nexus-sidebar-shortcut` default stat
 | /dashboard | 3 of 88 spans | 0 of 88 spans |
 | /files | 3 of 88 spans | 0 of 88 spans |
 | /api-client | 3 of 88 spans | 0 of 88 spans |
+
+## Cluster D: `<button type="submit">` outside `<form>` elements
+
+**Status:** DONE
+**Fixed:** 2026-04-10
+**Commit:** (see git log)
+**Files affected:** 117 (across 88 pages + shared components)
+
+### Root cause
+
+Buttons declared without an explicit `type` attribute default to `type="submit"` in HTML. Across the codebase, ~500 buttons outside `<form>` elements had no `type` attribute, making them implicitly `type="submit"` — semantically incorrect and a latent form-submission risk if a parent form is ever added.
+
+### Experiment result
+
+Ran a controlled experiment on Dashboard before rolling out. Changed Refresh and Start Jarvis buttons from implicit `type="submit"` to `type="button"`. Result: **INDEPENDENT** from Cluster E. Dead-button behavior was unchanged — buttons are dead because their handlers call Tauri IPC commands unavailable in demo mode, not because of the button type. D and E require separate fixes.
+
+### Fix
+
+Mechanical sweep: added `type="button"` to all `<button>` elements outside `<form>` elements across 117 files. Three buttons inside forms (Chat.tsx, BackendPanel.tsx x2) were correctly left as `type="submit"`. No behavioral changes — purely semantic correctness.
+
+### Verification
+
+| Page | Total buttons | Missing type attr |
+|------|--------------|-------------------|
+| /files | 111 | 0 |
+| /api-client | 103 | 0 |
+| /agents | 101 | 0 |
+
+Build passes. No new console errors on any spot-checked page.

@@ -202,7 +202,7 @@ function TabBar({ active, onChange }: { active: CivTab; onChange: (t: CivTab) =>
       {TAB_ITEMS.map((tab) => {
         const isActive = active === tab.key;
         return (
-          <button
+          <button type="button"
             key={tab.key}
             onClick={() => onChange(tab.key)}
             style={{
@@ -1336,7 +1336,7 @@ export default function CivilizationPage(): JSX.Element {
               { type: "meritocracy", label: "Meritocracy", desc: "Highest-performing agents lead and set policy.", accent: "#f59e0b" },
               { type: "council", label: "Council", desc: "A governing council of elected agents makes decisions.", accent: "#a78bfa" },
             ] as const).map((opt) => (
-              <button
+              <button type="button"
                 key={opt.type}
                 onClick={() => foundCiv(opt.type)}
                 style={{

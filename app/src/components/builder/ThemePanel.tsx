@@ -307,7 +307,7 @@ export default function ThemePanel({ projectId, onClose, previewRef, onCssChange
         borderBottom: `1px solid ${C.border}`,
       }}>
         <span style={{ fontWeight: 600, fontSize: 12 }}>Theme Panel</span>
-        <button onClick={onClose} style={{
+        <button type="button" onClick={onClose} style={{
           background: "transparent",
           border: "none",
           color: C.muted,
@@ -324,7 +324,7 @@ export default function ThemePanel({ projectId, onClose, previewRef, onCssChange
         padding: "0 4px",
       }}>
         {(["presets", "colors", "typography", "spacing", "io"] as Tab[]).map((t) => (
-          <button
+          <button type="button"
             key={t}
             onClick={() => setTab(t)}
             style={{
@@ -403,7 +403,7 @@ function PresetGrid({ presets, onSelect }: { presets: ThemePresetInfo[]; onSelec
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
       {presets.map((p) => (
-        <button
+        <button type="button"
           key={p.name}
           onClick={() => onSelect(p.name)}
           style={{
@@ -577,7 +577,7 @@ function SpacingEditor({ spacing, radii, onSpacingChange, onRadiiChange }: {
       <div style={{ fontSize: 10, fontWeight: 600, color: C.muted, marginBottom: 6 }}>Spacing Scale</div>
       <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
         {Object.keys(SPACING_SCALES).map((key) => (
-          <button
+          <button type="button"
             key={key}
             onClick={() => onSpacingChange(SPACING_SCALES[key])}
             style={{
@@ -600,7 +600,7 @@ function SpacingEditor({ spacing, radii, onSpacingChange, onRadiiChange }: {
       <div style={{ fontSize: 10, fontWeight: 600, color: C.muted, marginBottom: 6 }}>Border Radius</div>
       <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
         {Object.entries(RADII_PRESETS).map(([key, val]) => (
-          <button
+          <button type="button"
             key={key}
             onClick={() => onRadiiChange(val)}
             style={{
@@ -659,7 +659,7 @@ function ImportExportPanel({
           onChange={(e) => onExtractUrlChange(e.target.value)}
           style={{ ...inputStyle, flex: 1 }}
         />
-        <button onClick={onExtract} disabled={extracting || !extractUrl} style={btnStyle}>
+        <button type="button" onClick={onExtract} disabled={extracting || !extractUrl} style={btnStyle}>
           {extracting ? "..." : "Extract"}
         </button>
       </div>
@@ -671,7 +671,7 @@ function ImportExportPanel({
           <option value="design_md">DESIGN.md</option>
           <option value="dtcg">DTCG JSON</option>
         </select>
-        <button onClick={onImport} disabled={!importText.trim()} style={btnStyle}>Import</button>
+        <button type="button" onClick={onImport} disabled={!importText.trim()} style={btnStyle}>Import</button>
       </div>
       <textarea
         value={importText}
@@ -701,7 +701,7 @@ function ImportExportPanel({
           <option value="design_md">DESIGN.md</option>
           <option value="dtcg">DTCG JSON</option>
         </select>
-        <button onClick={onExport} style={btnStyle}>Export</button>
+        <button type="button" onClick={onExport} style={btnStyle}>Export</button>
       </div>
       {exportOutput && (
         <textarea

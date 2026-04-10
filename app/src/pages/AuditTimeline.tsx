@@ -125,8 +125,7 @@ export default function AuditTimeline({ events }: AuditTimelineProps): JSX.Eleme
             )}
           </p>
         </div>
-        <button
-          type="button"
+        <button type="button"
           className="at-select"
           style={{ cursor: "pointer", minWidth: "auto", padding: "0.4rem 1rem" }}
           onClick={() => void handleRefresh()}

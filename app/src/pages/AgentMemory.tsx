@@ -180,10 +180,10 @@ export default function AgentMemory() {
             <option key={a.id} value={a.id}>{a.name}</option>
           ))}
         </select>
-        <button onClick={handleSave} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Save</button>
-        <button onClick={handleLoad} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Load</button>
-        <button onClick={handleConsolidate} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Consolidate</button>
-        <button onClick={refresh} style={{ ...btnStyle, background: ACCENT, color: "#fff" }}>Refresh</button>
+        <button type="button" onClick={handleSave} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Save</button>
+        <button type="button" onClick={handleLoad} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Load</button>
+        <button type="button" onClick={handleConsolidate} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Consolidate</button>
+        <button type="button" onClick={refresh} style={{ ...btnStyle, background: ACCENT, color: "#fff" }}>Refresh</button>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -219,7 +219,7 @@ export default function AgentMemory() {
                   <span style={{ color: YELLOW }}>{newImportance.toFixed(1)}</span>
                 </div>
               </div>
-              <button onClick={handleStore} disabled={!selectedAgent || !newSummary.trim()} style={{ ...btnStyle, background: ACCENT, color: "#fff" }}>
+              <button type="button" onClick={handleStore} disabled={!selectedAgent || !newSummary.trim()} style={{ ...btnStyle, background: ACCENT, color: "#fff" }}>
                 Store Memory
               </button>
             </div>
@@ -234,7 +234,7 @@ export default function AgentMemory() {
                 <option value="">All Types</option>
                 {MEMORY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
-              <button onClick={refresh} style={{ ...btnStyle, background: BLUE, color: "#fff" }}>Search</button>
+              <button type="button" onClick={refresh} style={{ ...btnStyle, background: BLUE, color: "#fff" }}>Search</button>
             </div>
           </div>
 
@@ -243,7 +243,7 @@ export default function AgentMemory() {
             <div style={labelStyle}>Context Preview</div>
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
               <input placeholder="Task description..." value={contextTask} onChange={(e) => setContextTask(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
-              <button onClick={handleBuildContext} disabled={!selectedAgent} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Preview</button>
+              <button type="button" onClick={handleBuildContext} disabled={!selectedAgent} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Preview</button>
             </div>
             {contextPreview && (
               <pre style={{ fontSize: 11, color: GREEN, background: alpha("#000", 0.3), padding: 10, borderRadius: 6, marginTop: 8, whiteSpace: "pre-wrap", maxHeight: 200, overflow: "auto" }}>
@@ -311,7 +311,7 @@ export default function AgentMemory() {
                     {m.access_count}x accessed
                   </span>
                 </div>
-                <button
+                <button type="button"
                   onClick={() => handleDelete(m.id)}
                   style={{ ...btnStyle, padding: "2px 8px", background: "transparent", color: "#666", fontSize: 10 }}
                 >

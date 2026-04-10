@@ -213,9 +213,8 @@ export default function AppStore(): JSX.Element {
         />
         <div className="as-filter-row">
           {LEVEL_FILTERS.map((level) => (
-            <button
+            <button type="button"
               key={level}
-              type="button"
               className={`as-filter-btn ${levelFilter === level ? "active" : ""}`}
               onClick={() => setLevelFilter(level)}
             >
@@ -283,8 +282,7 @@ export default function AppStore(): JSX.Element {
                         <span>Fuel budget: {agent.fuel_budget.toLocaleString()}</span>
                         <span>Schedule: {agent.schedule ?? "On demand"}</span>
                       </div>
-                      <button
-                        type="button"
+                      <button type="button"
                         className="as-action-btn"
                         onClick={() => void handleStart(agent.agent_id)}
                         disabled={!agent.agent_id || isRunning || isStarting}
@@ -349,8 +347,7 @@ export default function AppStore(): JSX.Element {
                     {agent.fuel_budget ? <span>Fuel budget: {agent.fuel_budget.toLocaleString()}</span> : null}
                     <span>Schedule: {agent.schedule ?? "On demand"}</span>
                   </div>
-                  <button
-                    type="button"
+                  <button type="button"
                     className="as-action-btn as-action-btn-secondary"
                     onClick={() => void handleInstall(agent.package_id)}
                     disabled={isInstalling}
@@ -366,8 +363,8 @@ export default function AppStore(): JSX.Element {
         {/* ── Community Agents from GitLab ── */}
         <div style={{ marginTop: 24 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-            <button className="cursor-pointer" onClick={() => setActiveTab('installed')} style={{ padding: "6px 16px", background: activeTab === 'installed' ? "rgba(129,140,248,0.2)" : "transparent", border: `1px solid ${activeTab === 'installed' ? "rgba(129,140,248,0.4)" : "var(--border, #334155)"}`, borderRadius: 6, color: "var(--text-primary, #e2e8f0)", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>Pre-installed</button>
-            <button className="cursor-pointer" onClick={() => setActiveTab('community')} style={{ padding: "6px 16px", background: activeTab === 'community' ? "rgba(129,140,248,0.2)" : "transparent", border: `1px solid ${activeTab === 'community' ? "rgba(129,140,248,0.4)" : "var(--border, #334155)"}`, borderRadius: 6, color: "var(--text-primary, #e2e8f0)", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>Community (GitLab)</button>
+            <button type="button" className="cursor-pointer" onClick={() => setActiveTab('installed')} style={{ padding: "6px 16px", background: activeTab === 'installed' ? "rgba(129,140,248,0.2)" : "transparent", border: `1px solid ${activeTab === 'installed' ? "rgba(129,140,248,0.4)" : "var(--border, #334155)"}`, borderRadius: 6, color: "var(--text-primary, #e2e8f0)", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>Pre-installed</button>
+            <button type="button" className="cursor-pointer" onClick={() => setActiveTab('community')} style={{ padding: "6px 16px", background: activeTab === 'community' ? "rgba(129,140,248,0.2)" : "transparent", border: `1px solid ${activeTab === 'community' ? "rgba(129,140,248,0.4)" : "var(--border, #334155)"}`, borderRadius: 6, color: "var(--text-primary, #e2e8f0)", fontSize: "0.8rem", fontFamily: "inherit", cursor: "pointer" }}>Community (GitLab)</button>
           </div>
 
           {activeTab === 'community' && (
@@ -378,7 +375,7 @@ export default function AppStore(): JSX.Element {
                   style={{ flex: 1, background: "var(--bg-primary, #0f172a)", border: "1px solid var(--border, #334155)", borderRadius: 6, color: "var(--text-primary)", padding: "8px 12px", fontSize: "0.85rem", fontFamily: "inherit" }}
                   onKeyDown={e => e.key === 'Enter' && handleGitlabSearch((e.target as HTMLInputElement).value)}
                 />
-                <button className="cursor-pointer" onClick={() => handleGitlabSearch("nexus agent")} disabled={gitlabSearching} style={{ padding: "8px 16px", background: "rgba(129,140,248,0.2)", border: "1px solid rgba(129,140,248,0.3)", borderRadius: 6, color: "#818cf8", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer" }}>{gitlabSearching ? "Searching..." : "Search GitLab"}</button>
+                <button type="button" className="cursor-pointer" onClick={() => handleGitlabSearch("nexus agent")} disabled={gitlabSearching} style={{ padding: "8px 16px", background: "rgba(129,140,248,0.2)", border: "1px solid rgba(129,140,248,0.3)", borderRadius: 6, color: "#818cf8", fontSize: "0.85rem", fontFamily: "inherit", cursor: "pointer" }}>{gitlabSearching ? "Searching..." : "Search GitLab"}</button>
               </div>
               {gitlabAgents.length === 0 && !gitlabSearching && (
                 <div style={{ padding: 24, textAlign: "center", opacity: 0.5, fontSize: "0.85rem" }}>Search GitLab for community agents tagged "nexus-agent". Or publish your own with `nexus publish`.</div>
@@ -391,7 +388,7 @@ export default function AppStore(): JSX.Element {
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.7rem" }}>
                       <span style={{ opacity: 0.5 }}>by {agent.author} · {agent.stars} stars</span>
                       <div style={{ display: "flex", gap: 8 }}>
-                        <button className="cursor-pointer" onClick={() => void handleInstall(agent.name)} style={{ padding: "4px 12px", background: "rgba(34,211,238,0.15)", border: "1px solid rgba(34,211,238,0.3)", borderRadius: 4, color: "#22d3ee", fontSize: "0.7rem", cursor: "pointer", fontFamily: "inherit" }}>Install</button>
+                        <button type="button" className="cursor-pointer" onClick={() => void handleInstall(agent.name)} style={{ padding: "4px 12px", background: "rgba(34,211,238,0.15)", border: "1px solid rgba(34,211,238,0.3)", borderRadius: 4, color: "#22d3ee", fontSize: "0.7rem", cursor: "pointer", fontFamily: "inherit" }}>Install</button>
                         <a href={agent.url} target="_blank" rel="noopener noreferrer" style={{ color: "#818cf8", textDecoration: "none", padding: "4px 0" }}>View</a>
                       </div>
                     </div>

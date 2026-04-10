@@ -340,8 +340,7 @@ export function ResearchMode({
                       </option>
                     ))}
                   </select>
-                  <button
-                    type="button"
+                  <button type="button"
                     className="research-start-btn"
                     onClick={() => void handleStart()}
                     disabled={running || !topic.trim()}
@@ -356,8 +355,7 @@ export function ResearchMode({
                   {session.supervisor_message}
                 </span>
                 {session.status === "complete" && (
-                  <button
-                    type="button"
+                  <button type="button"
                     className="research-new-btn"
                     onClick={() => {
                       setSession(null);

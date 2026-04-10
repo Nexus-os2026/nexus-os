@@ -130,9 +130,9 @@ export default function ExternalTools() {
       </p>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <button onClick={handleRefreshAvail} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Refresh Availability</button>
-        <button onClick={handleVerify} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Verify Audit</button>
-        <button onClick={() => getRateLimitStatus().then(setRateLimits).catch((e) => { if (import.meta.env.DEV) console.warn("[ExternalTools]", e); })} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Rate Limits</button>
+        <button type="button" onClick={handleRefreshAvail} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Refresh Availability</button>
+        <button type="button" onClick={handleVerify} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Verify Audit</button>
+        <button type="button" onClick={() => getRateLimitStatus().then(setRateLimits).catch((e) => { if (import.meta.env.DEV) console.warn("[ExternalTools]", e); })} style={{ ...btnStyle, background: "#374151", color: "#e0e0e0" }}>Rate Limits</button>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -194,7 +194,7 @@ export default function ExternalTools() {
                 rows={4}
                 style={{ ...inputStyle, fontFamily: "monospace", fontSize: 12, resize: "vertical", marginBottom: 8 }}
               />
-              <button
+              <button type="button"
                 onClick={handleExecute}
                 disabled={loading}
                 style={{ ...btnStyle, width: "100%", background: ACCENT, color: "#000" }}

@@ -546,9 +546,8 @@ export default function AgentDnaLab(): JSX.Element {
 
       <div className="dna-tabs">
         {allTabs.map((t) => (
-          <button
+          <button type="button"
             key={t.key}
-            type="button"
             onClick={() => setTab(t.key)}
             className={`dna-tab ${tab === t.key ? "is-active" : ""}`}
           >

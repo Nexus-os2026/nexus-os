@@ -169,11 +169,11 @@ export default function AdminFleet() {
         {selected.size > 0 && (
           <>
             <span style={{ fontSize: "0.78rem", color: "var(--text-secondary)" }}>{selected.size} selected</span>
-            <button className="admin-btn admin-btn--accent admin-btn--sm" onClick={() => void handleBulkUpdate("restart")}>Restart</button>
-            <button className="admin-btn admin-btn--danger admin-btn--sm" onClick={() => void handleBulkUpdate("stop")}>Stop</button>
+            <button type="button" className="admin-btn admin-btn--accent admin-btn--sm" onClick={() => void handleBulkUpdate("restart")}>Restart</button>
+            <button type="button" className="admin-btn admin-btn--danger admin-btn--sm" onClick={() => void handleBulkUpdate("stop")}>Stop</button>
           </>
         )}
-        <button className="admin-btn admin-btn--danger" onClick={() => void handleStopAll(wsFilter || "all")}>
+        <button type="button" className="admin-btn admin-btn--danger" onClick={() => void handleStopAll(wsFilter || "all")}>
           Stop All
         </button>
       </div>

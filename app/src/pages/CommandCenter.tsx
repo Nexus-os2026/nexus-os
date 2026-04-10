@@ -145,24 +145,21 @@ export default function CommandCenter(): JSX.Element {
               </div>
 
               <div className="cc-card-actions">
-                <button
-                  type="button"
+                <button type="button"
                   className="cc-btn cc-btn-start"
                   disabled={status === "Running"}
                   onClick={() => void handleAction(agent.id, status === "Paused" ? "resume" : "start")}
                 >
                   {status === "Paused" ? "Resume" : "Start"}
                 </button>
-                <button
-                  type="button"
+                <button type="button"
                   className="cc-btn cc-btn-stop"
                   disabled={status === "Paused" || status === "Stopped"}
                   onClick={() => void handleAction(agent.id, "pause")}
                 >
                   Pause
                 </button>
-                <button
-                  type="button"
+                <button type="button"
                   className="cc-btn cc-btn-stop"
                   disabled={status === "Stopped"}
                   onClick={() => void handleAction(agent.id, "stop")}

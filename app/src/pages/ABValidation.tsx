@@ -74,7 +74,7 @@ export default function ABValidation() {
 
       {error && (
         <div style={{ color: "#ef4444", background: "rgba(239,68,68,0.1)", padding: "8px 12px", borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
-          {error} <button onClick={() => setError(null)} style={{ marginLeft: 8, background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}>Dismiss</button>
+          {error} <button type="button" onClick={() => setError(null)} style={{ marginLeft: 8, background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}>Dismiss</button>
         </div>
       )}
 

@@ -340,13 +340,13 @@ export default function Workspaces() {
 
         {/* Controls */}
         <div style={{ display: "flex", gap: "0.6rem", marginBottom: "1rem", alignItems: "center" }}>
-          <button
+          <button type="button"
             className="admin-btn admin-btn--accent"
             onClick={() => setShowCreate(!showCreate)}
           >
             + Create Workspace
           </button>
-          <button className="admin-btn" onClick={() => void fetchWorkspaces()}>
+          <button type="button" className="admin-btn" onClick={() => void fetchWorkspaces()}>
             Refresh
           </button>
         </div>
@@ -369,14 +369,14 @@ export default function Workspaces() {
                   disabled={creating}
                 />
               </div>
-              <button
+              <button type="button"
                 className="admin-btn admin-btn--accent"
                 onClick={() => void handleCreate()}
                 disabled={creating || !createName.trim()}
               >
                 {creating ? "Creating..." : "Create"}
               </button>
-              <button
+              <button type="button"
                 className="admin-btn"
                 onClick={() => { setShowCreate(false); setCreateName(""); setCreateError(null); }}
               >
@@ -421,7 +421,7 @@ export default function Workspaces() {
             }}
           >
             {workspaces.map((ws) => (
-              <button
+              <button type="button"
                 key={ws.id}
                 className="admin-card"
                 style={{
@@ -523,7 +523,7 @@ export default function Workspaces() {
       <div className="admin-shell">
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.25rem" }}>
-          <button
+          <button type="button"
             className="admin-btn admin-btn--sm"
             onClick={() => setSelectedId(null)}
             style={{ flexShrink: 0 }}
@@ -586,7 +586,7 @@ export default function Workspaces() {
                 <div className="admin-card">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
                     <div className="admin-card__title" style={{ margin: 0 }}>Members</div>
-                    <button
+                    <button type="button"
                       className="admin-btn admin-btn--accent admin-btn--sm"
                       onClick={() => { setShowAddMember(!showAddMember); setAddMemberError(null); }}
                     >
@@ -633,14 +633,14 @@ export default function Workspaces() {
                           </select>
                         </div>
                         <div style={{ display: "flex", gap: "0.5rem" }}>
-                          <button
+                          <button type="button"
                             className="admin-btn admin-btn--accent admin-btn--sm"
                             onClick={() => void handleAddMember()}
                             disabled={addingMember || !addMemberForm.userId.trim()}
                           >
                             {addingMember ? "Adding..." : "Add"}
                           </button>
-                          <button
+                          <button type="button"
                             className="admin-btn admin-btn--sm"
                             onClick={() => { setShowAddMember(false); setAddMemberError(null); }}
                           >
@@ -674,7 +674,7 @@ export default function Workspaces() {
                               <span className={roleBadgeClass(m.role)}>{m.role}</span>
                             </td>
                             <td>
-                              <button
+                              <button type="button"
                                 className="admin-btn admin-btn--danger admin-btn--sm"
                                 onClick={() => void handleRemoveMember(m.user_id)}
                               >
@@ -694,7 +694,7 @@ export default function Workspaces() {
                 <div className="admin-card">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
                     <div className="admin-card__title" style={{ margin: 0 }}>Policy</div>
-                    <button
+                    <button type="button"
                       className="admin-btn admin-btn--sm"
                       onClick={() => {
                         setShowPolicyEditor(!showPolicyEditor);
@@ -756,14 +756,14 @@ export default function Workspaces() {
                         disabled={savingPolicy}
                       />
                       <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-                        <button
+                        <button type="button"
                           className="admin-btn admin-btn--accent admin-btn--sm"
                           onClick={() => void handleSavePolicy()}
                           disabled={savingPolicy}
                         >
                           {savingPolicy ? "Saving..." : "Save Policy"}
                         </button>
-                        <button
+                        <button type="button"
                           className="admin-btn admin-btn--sm"
                           onClick={() => { setShowPolicyEditor(false); setPolicyError(null); }}
                         >

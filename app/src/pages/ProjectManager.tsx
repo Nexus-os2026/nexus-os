@@ -313,12 +313,12 @@ export default function ProjectManager() {
         <div className="pm-header-right">
           <div className="pm-view-toggle">
             {(["board", "list", "timeline", "metrics"] as ViewMode[]).map(v => (
-              <button key={v} className={`pm-view-btn cursor-pointer ${viewMode === v ? "active" : ""}`} onClick={() => setViewMode(v)}>
+              <button type="button" key={v} className={`pm-view-btn cursor-pointer ${viewMode === v ? "active" : ""}`} onClick={() => setViewMode(v)}>
                 {v === "board" ? <LayoutGrid size={14} /> : v === "list" ? <List size={14} /> : v === "timeline" ? <Clock size={14} /> : <PieChart size={14} />} {v.charAt(0).toUpperCase() + v.slice(1)}
               </button>
             ))}
           </div>
-          <button className="pm-btn-new cursor-pointer" onClick={() => setShowNewTask(true)}><Plus size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />New Task</button>
+          <button type="button" className="pm-btn-new cursor-pointer" onClick={() => setShowNewTask(true)}><Plus size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />New Task</button>
         </div>
       </div>
 
@@ -353,14 +353,14 @@ export default function ProjectManager() {
           <div className="pm-modal" onClick={e => e.stopPropagation()}>
             <div className="pm-modal-header">
               <span>New Task</span>
-              <button className="pm-modal-close" onClick={() => setShowNewTask(false)}>×</button>
+              <button type="button" className="pm-modal-close" onClick={() => setShowNewTask(false)}>×</button>
             </div>
             <div className="pm-modal-body">
               <input className="pm-modal-input" placeholder="Task title..." value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} autoFocus onKeyDown={e => e.key === "Enter" && createTask()} />
               <select className="pm-modal-select" value={newTaskColumn} onChange={e => setNewTaskColumn(e.target.value as ColumnId)}>
                 {COLUMNS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
               </select>
-              <button className="pm-btn-create" onClick={createTask} disabled={!newTaskTitle.trim()}>Create Task</button>
+              <button type="button" className="pm-btn-create" onClick={createTask} disabled={!newTaskTitle.trim()}>Create Task</button>
             </div>
           </div>
         </div>
@@ -518,7 +518,7 @@ export default function ProjectManager() {
                 <div key={auto.id} className={`pm-automation-card ${auto.enabled ? "enabled" : "disabled"}`}>
                   <div className="pm-automation-header">
                     <span className="pm-automation-trigger">{auto.trigger}</span>
-                    <button className={`pm-automation-toggle ${auto.enabled ? "on" : "off"}`} onClick={() => toggleAutomation(auto.id)}>
+                    <button type="button" className={`pm-automation-toggle ${auto.enabled ? "on" : "off"}`} onClick={() => toggleAutomation(auto.id)}>
                       {auto.enabled ? "ON" : "OFF"}
                     </button>
                   </div>
@@ -613,7 +613,7 @@ export default function ProjectManager() {
         <aside className="pm-detail-panel">
           <div className="pm-detail-header">
             <span className="pm-detail-id">{selectedTask.id.replace("task-", "#")}</span>
-            <button className="pm-detail-close" onClick={() => setSelectedTask(null)}>×</button>
+            <button type="button" className="pm-detail-close" onClick={() => setSelectedTask(null)}>×</button>
           </div>
           <input className="pm-detail-title" value={selectedTask.title} onChange={e => { updateTask(selectedTask.id, { title: e.target.value }); setSelectedTask({ ...selectedTask, title: e.target.value }); }} />
           <textarea className="pm-detail-desc" value={selectedTask.description} onChange={e => { updateTask(selectedTask.id, { description: e.target.value }); setSelectedTask({ ...selectedTask, description: e.target.value }); }} placeholder="Add description..." />
@@ -680,7 +680,7 @@ export default function ProjectManager() {
             <div className="pm-detail-meta-row"><span>Updated</span><span>{new Date(selectedTask.updatedAt).toLocaleString()}</span></div>
           </div>
 
-          <button className="pm-btn-delete" onClick={() => deleteTask(selectedTask.id)}>Delete Task</button>
+          <button type="button" className="pm-btn-delete" onClick={() => deleteTask(selectedTask.id)}>Delete Task</button>
         </aside>
       )}
 

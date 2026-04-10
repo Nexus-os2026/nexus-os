@@ -615,7 +615,7 @@ export default function TimeMachine() {
 
                 {/* Selective undo button */}
                 {!cp.undone && (
-                  <button
+                  <button type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleUndoCheckpoint(cp.id);
@@ -638,7 +638,7 @@ export default function TimeMachine() {
                   </button>
                 )}
                 {!cp.undone && (
-                  <button
+                  <button type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       void handleWhatIf(cp);
@@ -870,7 +870,7 @@ export default function TimeMachine() {
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Controls */}
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <button
+        <button type="button"
           onClick={handleToggleRecording}
           style={{
             padding: "6px 14px",
@@ -910,7 +910,7 @@ export default function TimeMachine() {
             width: 180,
           }}
         />
-        <button
+        <button type="button"
           onClick={loadReplayBundles}
           disabled={replayLoading}
           style={{
@@ -994,7 +994,7 @@ export default function TimeMachine() {
                   </div>
                   {/* Action buttons */}
                   <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
-                    <button
+                    <button type="button"
                       onClick={(e) => { e.stopPropagation(); handleVerifyBundle(b.bundle_id); }}
                       style={{
                         padding: "2px 8px",
@@ -1008,7 +1008,7 @@ export default function TimeMachine() {
                     >
                       Verify
                     </button>
-                    <button
+                    <button type="button"
                       onClick={(e) => { e.stopPropagation(); handleExportBundle(b.bundle_id); }}
                       style={{
                         padding: "2px 8px",
@@ -1224,7 +1224,7 @@ export default function TimeMachine() {
           />
         </label>
 
-        <button
+        <button type="button"
           onClick={handleSaveTemporalConfig}
           disabled={temporalSaving}
           style={{
@@ -1275,7 +1275,7 @@ export default function TimeMachine() {
           >
             History ({temporalHistory.length})
           </span>
-          <button
+          <button type="button"
             onClick={loadTemporalHistory}
             disabled={temporalLoading}
             style={{
@@ -1435,7 +1435,7 @@ export default function TimeMachine() {
               flexWrap: "wrap",
             }}
           >
-            <button
+            <button type="button"
               onClick={handleUndo}
               disabled={isUndoing || checkpoints.filter((c) => !c.undone).length === 0}
               style={{
@@ -1452,7 +1452,7 @@ export default function TimeMachine() {
             >
               {isUndoing ? "Undoing..." : "Undo"}
             </button>
-            <button
+            <button type="button"
               onClick={handleRedo}
               disabled={isRedoing}
               style={{
@@ -1495,7 +1495,7 @@ export default function TimeMachine() {
                     outline: "none",
                   }}
                 />
-                <button
+                <button type="button"
                   onClick={handleCreate}
                   disabled={isLoading || !createLabel.trim()}
                   style={{
@@ -1513,7 +1513,7 @@ export default function TimeMachine() {
                 </button>
               </div>
             ) : (
-              <button
+              <button type="button"
                 onClick={() => setShowCreateInput(true)}
                 style={{
                   padding: "6px 14px",
@@ -1575,7 +1575,7 @@ export default function TimeMachine() {
         {/* Tab bar */}
         <div style={{ display: "flex", borderBottom: `1px solid ${borderColor}` }}>
           {(["replay", "temporal"] as const).map((tab) => (
-            <button
+            <button type="button"
               key={tab}
               onClick={() => setBottomTab(tab)}
               style={{

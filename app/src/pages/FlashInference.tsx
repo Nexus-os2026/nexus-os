@@ -450,13 +450,13 @@ export default function FlashInference() {
           <span key={slot.tier} style={{ display:"inline-flex", alignItems:"center", gap:"6px", background:"#0d1117", border:`1px solid ${TIER_COLORS[slot.tier]}`, borderRadius:"12px", padding:"3px 10px", fontSize:"11px", color: TIER_COLORS[slot.tier] }}>
             <span style={{ fontWeight:600, textTransform:"uppercase", fontSize:"9px", opacity:0.7 }}>{TIER_LABELS[slot.tier]}</span>
             <span style={{ color:"#e5e7eb", maxWidth:"140px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{slot.name}</span>
-            <button onClick={() => handleUnloadSlot(slot.tier)} style={{ background:"none", border:"none", color:"#f87171", cursor:"pointer", fontSize:"12px", padding:0, lineHeight:1 }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+            <button type="button" onClick={() => handleUnloadSlot(slot.tier)} style={{ background:"none", border:"none", color:"#f87171", cursor:"pointer", fontSize:"12px", padding:0, lineHeight:1 }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
           </span>
         ))}
 
         {/* Load more button */}
         {slots.length < 3 && (
-          <button onClick={() => setShowLoader(!showLoader)} style={{ background:"transparent", border:"1px solid #5eead4", color:"#5eead4", padding:"4px 12px", borderRadius:"6px", fontSize:"11px", cursor:"pointer", whiteSpace:"nowrap" }}>
+          <button type="button" onClick={() => setShowLoader(!showLoader)} style={{ background:"transparent", border:"1px solid #5eead4", color:"#5eead4", padding:"4px 12px", borderRadius:"6px", fontSize:"11px", cursor:"pointer", whiteSpace:"nowrap" }}>
             {showLoader ? "Cancel" : "+ Load Model"}
           </button>
         )}
@@ -468,7 +468,7 @@ export default function FlashInference() {
               const isAvailable = m === "auto" || slots.some(s => s.tier === m);
               const isActive = mode === m;
               return (
-                <button key={m} onClick={() => isAvailable && setMode(m)} disabled={!isAvailable} style={{
+                <button type="button" key={m} onClick={() => isAvailable && setMode(m)} disabled={!isAvailable} style={{
                   background: isActive ? "#1e3a5f" : "transparent",
                   border: "none",
                   color: !isAvailable ? "#374151" : isActive ? "#5eead4" : "#9ca3af",
@@ -498,7 +498,7 @@ export default function FlashInference() {
                 <option value="">Select model...</option>
                 {models.map(m => <option key={m.file_path} value={m.file_path}>{m.name} ({m.file_size_display})</option>)}
               </select>
-              <button onClick={() => handleLoadSlot(tier)} disabled={!selectedPaths[tier] || loadingTier !== null} style={{
+              <button type="button" onClick={() => handleLoadSlot(tier)} disabled={!selectedPaths[tier] || loadingTier !== null} style={{
                 background: "transparent",
                 border: `1px solid ${TIER_COLORS[tier]}`,
                 color: TIER_COLORS[tier],
@@ -545,7 +545,7 @@ export default function FlashInference() {
           <span style={{ color:"#6b7280" }}><span style={{ color:"#5eead4", fontWeight:500 }}>{Number(tokPerSec).toFixed(1)}</span> tok/s</span>
           <span style={{ color:"#6b7280" }}><span style={{ color:"#5eead4", fontWeight:500 }}>{Math.round(tokenCount)}</span> tokens</span>
           {slots.some(s => s.tier === "power") && (
-            <button
+            <button type="button"
               onClick={handleSpecToggle}
               disabled={specLoading || generating}
               title={specEnabled ? `Speculative decoding ON — ${Math.round(specRate * 100)}% accept rate, draft len ${specDraftLen}` : "Enable speculative decoding (uses Fast model as draft)"}
@@ -561,7 +561,7 @@ export default function FlashInference() {
             </span>
           )}
           {messages.length > 0 && !generating && (
-            <button onClick={clearHistory} title="Clear chat history" style={{ marginLeft:"auto", background:"#dc2626", border:"none", color:"#ffffff", padding:"3px 12px", borderRadius:"4px", cursor:"pointer", fontSize:"11px", fontWeight:600, display:"flex", alignItems:"center", gap:"5px", whiteSpace:"nowrap" }}>
+            <button type="button" onClick={clearHistory} title="Clear chat history" style={{ marginLeft:"auto", background:"#dc2626", border:"none", color:"#ffffff", padding:"3px 12px", borderRadius:"4px", cursor:"pointer", fontSize:"11px", fontWeight:600, display:"flex", alignItems:"center", gap:"5px", whiteSpace:"nowrap" }}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               Clear Chat
             </button>
@@ -602,7 +602,7 @@ export default function FlashInference() {
         )}
         {lastMsgIncomplete && (
           <div style={{ alignSelf:"flex-start" }}>
-            <button onClick={handleContinue} style={{ background:"transparent", border:"1px solid #5eead4", color:"#5eead4", padding:"6px 16px", borderRadius:"8px", fontSize:"12px", cursor:"pointer" }}>Continue ▶</button>
+            <button type="button" onClick={handleContinue} style={{ background:"transparent", border:"1px solid #5eead4", color:"#5eead4", padding:"6px 16px", borderRadius:"8px", fontSize:"12px", cursor:"pointer" }}>Continue ▶</button>
           </div>
         )}
         {generating && !streamText && (
@@ -624,22 +624,22 @@ export default function FlashInference() {
       {error && (
         <div style={{ flexShrink:0, padding:"8px 16px", background:"#2d1b1b", borderTop:"1px solid #5f2020", color:"#f87171", fontSize:"12px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <span>{error}</span>
-          <button onClick={() => setError("")} style={{ background:"none", border:"none", color:"#f87171", cursor:"pointer", fontSize:"14px" }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+          <button type="button" onClick={() => setError("")} style={{ background:"none", border:"none", color:"#f87171", cursor:"pointer", fontSize:"14px" }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
         </div>
       )}
 
       {/* Benchmark bar */}
       <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:"8px", padding:"6px 16px", background:"#0d1117", borderTop:"1px solid #1e3a5f", fontSize:12 }}>
         <span style={{ color:"#64748b" }}>Benchmark:</span>
-        <button onClick={async () => { try { const r = await flashRunBenchmark(models[0]?.file_path || "", "balanced"); setBenchmarkResults(r); } catch(e) { console.error(e); } }} disabled={models.length === 0} style={{ background:"#1e3a5f", color: models.length === 0 ? "#475569" : "#5eead4", border:"none", padding:"4px 12px", borderRadius:4, cursor: models.length === 0 ? "not-allowed" : "pointer", fontSize:12 }}>Run Benchmark</button>
-        <button onClick={async () => { try { if(benchmarkResults) { const p = await flashExportBenchmarkReport(Array.isArray(benchmarkResults) ? benchmarkResults : [benchmarkResults]); setBenchmarkReport(p); } } catch(e) { console.error(e); } }} disabled={!benchmarkResults} style={{ background:"#1e3a5f", color:!benchmarkResults ? "#475569" : "#5eead4", border:"none", padding:"4px 12px", borderRadius:4, cursor:!benchmarkResults ? "not-allowed" : "pointer", fontSize:12 }}>Export Report</button>
+        <button type="button" onClick={async () => { try { const r = await flashRunBenchmark(models[0]?.file_path || "", "balanced"); setBenchmarkResults(r); } catch(e) { console.error(e); } }} disabled={models.length === 0} style={{ background:"#1e3a5f", color: models.length === 0 ? "#475569" : "#5eead4", border:"none", padding:"4px 12px", borderRadius:4, cursor: models.length === 0 ? "not-allowed" : "pointer", fontSize:12 }}>Run Benchmark</button>
+        <button type="button" onClick={async () => { try { if(benchmarkResults) { const p = await flashExportBenchmarkReport(Array.isArray(benchmarkResults) ? benchmarkResults : [benchmarkResults]); setBenchmarkReport(p); } } catch(e) { console.error(e); } }} disabled={!benchmarkResults} style={{ background:"#1e3a5f", color:!benchmarkResults ? "#475569" : "#5eead4", border:"none", padding:"4px 12px", borderRadius:4, cursor:!benchmarkResults ? "not-allowed" : "pointer", fontSize:12 }}>Export Report</button>
         {benchmarkReport && <span style={{ color:"#22c55e" }}>Saved: {benchmarkReport}</span>}
       </div>
 
       {/* Input bar */}
       <div style={{ flexShrink:0, height:"56px", display:"flex", alignItems:"center", gap:"8px", padding:"0 16px", background:"#0a1628", borderTop:"1px solid #1e3a5f" }}>
         <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} disabled={!hasAnyModel || generating} placeholder={!hasAnyModel ? "Load a model first..." : generating ? "Generating..." : mode === "auto" ? "Type a message (auto-routed)..." : `Type a message (${MODE_LABELS[mode]})...`} style={{ flex:1, background:"#0d1117", border:"1px solid #1e3a5f", borderRadius:"8px", color:"#e5e7eb", padding:"10px 14px", fontSize:"13px", outline:"none", opacity:!hasAnyModel?0.5:1 }}/>
-        <button onClick={handleSend} disabled={!hasAnyModel || generating || !input.trim()} style={{ background:(!hasAnyModel||generating||!input.trim())?"#1e3a5f":"#5eead4", color:(!hasAnyModel||generating||!input.trim())?"#6b7280":"#0d1117", border:"none", padding:"10px 20px", borderRadius:"8px", fontSize:"13px", fontWeight:500, cursor:(!hasAnyModel||generating||!input.trim())?"not-allowed":"pointer", whiteSpace:"nowrap" }}>{generating ? "Stop" : "Send"}</button>
+        <button type="button" onClick={handleSend} disabled={!hasAnyModel || generating || !input.trim()} style={{ background:(!hasAnyModel||generating||!input.trim())?"#1e3a5f":"#5eead4", color:(!hasAnyModel||generating||!input.trim())?"#6b7280":"#0d1117", border:"none", padding:"10px 20px", borderRadius:"8px", fontSize:"13px", fontWeight:500, cursor:(!hasAnyModel||generating||!input.trim())?"not-allowed":"pointer", whiteSpace:"nowrap" }}>{generating ? "Stop" : "Send"}</button>
       </div>
       <style>{`@keyframes blink { 50% { opacity: 0; } }`}</style>
     </div>

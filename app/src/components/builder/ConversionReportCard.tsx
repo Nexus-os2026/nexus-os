@@ -108,7 +108,7 @@ export default function ConversionReportCard({ projectId, onHtmlChanged }: Conve
 
   if (!report && !loading) {
     return (
-      <button onClick={runCheck} style={{
+      <button type="button" onClick={runCheck} style={{
         background: C.purpleDim, border: "1px solid rgba(168,85,247,0.2)",
         borderRadius: 4, padding: "4px 10px", color: C.purple, fontSize: 10,
         cursor: "pointer", fontWeight: 500, fontFamily: C.sans,
@@ -213,7 +213,7 @@ export default function ConversionReportCard({ projectId, onHtmlChanged }: Conve
         </span>
         <div style={{ display: "flex", gap: 6 }}>
           {report.auto_fixable_count > 0 && (
-            <button onClick={fixAll} disabled={fixing} style={{
+            <button type="button" onClick={fixAll} disabled={fixing} style={{
               background: C.purple, border: "none", borderRadius: 3,
               padding: "2px 8px", color: "#fff", fontSize: 9,
               fontWeight: 600, cursor: fixing ? "default" : "pointer",
@@ -222,7 +222,7 @@ export default function ConversionReportCard({ projectId, onHtmlChanged }: Conve
               {fixing ? "Fixing..." : `Auto-fix ${report.auto_fixable_count}`}
             </button>
           )}
-          <button onClick={runCheck} style={{
+          <button type="button" onClick={runCheck} style={{
             background: "transparent", border: `1px solid ${C.border}`,
             borderRadius: 3, padding: "2px 8px", color: C.muted, fontSize: 9,
             cursor: "pointer",

@@ -205,8 +205,7 @@ export function ActionButton({
   onClick?: () => void;
 }): JSX.Element {
   return (
-    <button
-      type="button"
+    <button type="button"
       onClick={onClick}
       disabled={disabled}
       style={{
@@ -373,7 +372,7 @@ export function EmptyState({
         {text}
       </div>
       {cta && (
-        <button
+        <button type="button"
           onClick={onAction}
           style={{
             marginTop: 16,

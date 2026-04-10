@@ -1032,8 +1032,7 @@ export default function CodeEditor(): JSX.Element {
                     />
                     {pendingApproval && (
                       <>
-                        <button
-                          type="button"
+                        <button type="button"
                           className="ce-tool-btn"
                           onClick={() => void runTerminalCommand(pendingApproval.cmd, true, pendingApproval.cwd)}
                         >

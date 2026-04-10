@@ -60,15 +60,13 @@ export default class PageErrorBoundary extends Component<
             </pre>
           ) : null}
           <div style={{ marginTop: 20, display: "flex", flexWrap: "wrap", gap: 12 }}>
-            <button
-              type="button"
+            <button type="button"
               onClick={this.props.onOpenSafePage}
               style={{ borderRadius: 9999, border: "1px solid rgba(34,211,238,0.3)", background: "rgba(6,182,212,0.10)", padding: "8px 16px", fontSize: 14, color: "#cffafe", cursor: "pointer" }}
             >
               Open Chat
             </button>
-            <button
-              type="button"
+            <button type="button"
               onClick={() => this.setState({ hasError: false, message: null })}
               style={{ borderRadius: 9999, border: "1px solid rgba(148,163,184,0.3)", background: "rgba(100,116,139,0.10)", padding: "8px 16px", fontSize: 14, color: "#e2e8f0", cursor: "pointer" }}
             >

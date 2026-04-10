@@ -101,7 +101,7 @@ export function VoiceOverlay({ state, onDismiss, onTranscript }: VoiceOverlayPro
     <aside className="fixed bottom-5 right-5 z-50 w-full max-w-sm rounded-2xl border border-cyan-300/35 bg-slate-950/88 p-4 shadow-xl backdrop-blur-md holo-tooltip">
       <div className="mb-2 flex items-center justify-between">
         <h3 className="nexus-display text-lg text-cyan-100">Jarvis Mode</h3>
-        <button onClick={onDismiss} className="nexus-btn nexus-btn-secondary">Close</button>
+        <button type="button" onClick={onDismiss} className="nexus-btn nexus-btn-secondary">Close</button>
       </div>
 
       <div className="mb-3 flex items-center gap-4 text-xs text-cyan-100/75">

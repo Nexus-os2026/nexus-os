@@ -261,7 +261,7 @@ export default function AdminSystemHealth() {
       <div className="admin-card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div className="admin-card__title">Backups</div>
-          <button
+          <button type="button"
             className="admin-btn admin-btn--primary"
             disabled={backupBusy !== null}
             onClick={handleCreateBackup}
@@ -296,14 +296,14 @@ export default function AdminSystemHealth() {
                   </span>
                 </td>
                 <td style={{ display: "flex", gap: "0.4rem" }}>
-                  <button
+                  <button type="button"
                     className="admin-btn admin-btn--secondary"
                     disabled={backupBusy !== null}
                     onClick={() => handleVerify(b.id)}
                   >
                     {backupBusy === `verify-${b.id}` ? "Verifying..." : "Verify"}
                   </button>
-                  <button
+                  <button type="button"
                     className="admin-btn admin-btn--secondary"
                     disabled={backupBusy !== null}
                     onClick={() => handleRestore(b.id)}

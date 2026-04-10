@@ -171,7 +171,7 @@ export default function UsageBilling() {
         </span>
         <div className="admin-tabs" style={{ marginBottom: 0, borderBottom: "none", padding: 0 }}>
           {PERIODS.map((p) => (
-            <button
+            <button type="button"
               key={p.value}
               className={`admin-tab${period === p.value ? " admin-tab--active" : ""}`}
               onClick={() => setPeriod(p.value)}
@@ -181,7 +181,7 @@ export default function UsageBilling() {
           ))}
         </div>
         <div style={{ flex: 1 }} />
-        <button
+        <button type="button"
           className="admin-btn admin-btn--accent"
           onClick={handleExport}
           disabled={exporting}
@@ -322,7 +322,7 @@ export default function UsageBilling() {
             value={newThreshold}
             onChange={(e) => setNewThreshold(e.target.value)}
           />
-          <button
+          <button type="button"
             className="admin-btn admin-btn--accent"
             onClick={handleSetAlert}
             disabled={settingAlert}

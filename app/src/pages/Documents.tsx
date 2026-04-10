@@ -375,7 +375,7 @@ export default function Documents() {
                 </span>
               </div>
             </div>
-            <button
+            <button type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 handleRemove(doc.path);
@@ -866,7 +866,7 @@ export default function Documents() {
 
           {/* View toggle */}
           <div style={{ display: "flex", gap: 4 }}>
-            <button
+            <button type="button"
               onClick={() => setViewMode("list")}
               style={{
                 flex: 1,
@@ -882,7 +882,7 @@ export default function Documents() {
             >
               List View
             </button>
-            <button
+            <button type="button"
               onClick={() => setViewMode("cluster")}
               style={{
                 flex: 1,
@@ -1089,7 +1089,7 @@ export default function Documents() {
                 outline: "none",
               }}
             />
-            <button
+            <button type="button"
               onClick={() => {
                 handleChat();
               }}

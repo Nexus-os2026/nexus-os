@@ -344,7 +344,7 @@ export default function EmailClient() {
       <aside className="ec-sidebar">
         <div className="ec-sidebar-header">
           <h2 className="ec-sidebar-title">Mail</h2>
-          <button className="ec-btn-compose cursor-pointer" onClick={() => { setShowCompose(true); setShowTemplates(false); }}><Pen size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Compose</button>
+          <button type="button" className="ec-btn-compose cursor-pointer" onClick={() => { setShowCompose(true); setShowTemplates(false); }}><Pen size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Compose</button>
         </div>
 
         {/* OAuth connect / status */}
@@ -352,14 +352,14 @@ export default function EmailClient() {
           <div className="ec-pii-notice" style={{ margin: "0 8px 8px", fontSize: 11, background: "rgba(34,197,94,0.1)", borderColor: "rgba(34,197,94,0.3)" }}>
             <span className="ec-pii-icon" style={{ color: "#22c55e" }}>✓</span>
             Connected: {connectedProvider}
-            <button onClick={handleOauthDisconnect} style={{ marginLeft: 8, fontSize: 10, background: "none", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 4, color: "inherit", cursor: "pointer", padding: "1px 6px" }}>Disconnect</button>
+            <button type="button" onClick={handleOauthDisconnect} style={{ marginLeft: 8, fontSize: 10, background: "none", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 4, color: "inherit", cursor: "pointer", padding: "1px 6px" }}>Disconnect</button>
           </div>
         ) : (
           <div style={{ margin: "0 8px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-            <button className="cursor-pointer" disabled={connecting} onClick={() => handleOauthConnect("gmail")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", background: "rgba(66,133,244,0.15)", border: "1px solid rgba(66,133,244,0.3)", borderRadius: 6, color: "#93c5fd", fontSize: 11, fontFamily: "inherit", cursor: "pointer" }}>
+            <button type="button" className="cursor-pointer" disabled={connecting} onClick={() => handleOauthConnect("gmail")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", background: "rgba(66,133,244,0.15)", border: "1px solid rgba(66,133,244,0.3)", borderRadius: 6, color: "#93c5fd", fontSize: 11, fontFamily: "inherit", cursor: "pointer" }}>
               <Mail size={12} />{connecting ? "Connecting..." : "Sign in with Google"}
             </button>
-            <button className="cursor-pointer" disabled={connecting} onClick={() => handleOauthConnect("outlook")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", background: "rgba(0,120,212,0.15)", border: "1px solid rgba(0,120,212,0.3)", borderRadius: 6, color: "#60a5fa", fontSize: 11, fontFamily: "inherit", cursor: "pointer" }}>
+            <button type="button" className="cursor-pointer" disabled={connecting} onClick={() => handleOauthConnect("outlook")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", background: "rgba(0,120,212,0.15)", border: "1px solid rgba(0,120,212,0.3)", borderRadius: 6, color: "#60a5fa", fontSize: 11, fontFamily: "inherit", cursor: "pointer" }}>
               <Mail size={12} />{connecting ? "Connecting..." : "Sign in with Microsoft"}
             </button>
             <div style={{ fontSize: 9, opacity: 0.4, padding: "2px 4px" }}>Your emails stay on your device. We use OAuth2.</div>
@@ -369,7 +369,7 @@ export default function EmailClient() {
         {/* folders */}
         <div className="ec-folders">
           {FOLDERS.map(folder => (
-            <button key={folder.id} className={`ec-folder ${selectedFolder === folder.id ? "active" : ""}`} onClick={() => { setSelectedFolder(folder.id); setSelectedEmailId(null); setFilterCategory("all"); }}>
+            <button type="button" key={folder.id} className={`ec-folder ${selectedFolder === folder.id ? "active" : ""}`} onClick={() => { setSelectedFolder(folder.id); setSelectedEmailId(null); setFilterCategory("all"); }}>
               <span className="ec-folder-icon">{folder.icon}</span>
               <span className="ec-folder-label">{folder.label}</span>
               {folderCounts[folder.id] > 0 && <span className="ec-folder-badge">{folderCounts[folder.id]}</span>}
@@ -381,7 +381,7 @@ export default function EmailClient() {
         <div className="ec-categories">
           <div className="ec-cat-header">Categories</div>
           {(["all", "primary", "updates", "social", "promotions", "agent"] as const).map(cat => (
-            <button key={cat} className={`ec-cat-btn ${filterCategory === cat ? "active" : ""}`} onClick={() => setFilterCategory(cat)}>
+            <button type="button" key={cat} className={`ec-cat-btn ${filterCategory === cat ? "active" : ""}`} onClick={() => setFilterCategory(cat)}>
               {cat !== "all" && <span className="ec-cat-dot" style={{ background: CATEGORY_COLORS[cat as Category] }} />}
               {cat === "all" ? "All" : cat.charAt(0).toUpperCase() + cat.slice(1)}
             </button>
@@ -423,7 +423,7 @@ export default function EmailClient() {
           {filteredEmails.map(email => (
             <div key={email.id} className={`ec-email-item ${!email.read ? "unread" : ""} ${selectedEmailId === email.id ? "active" : ""}`} onClick={() => { setSelectedEmailId(email.id); markRead(email.id); }}>
               <div className="ec-email-item-left">
-                <button className="ec-star-btn cursor-pointer" onClick={e => { e.stopPropagation(); toggleStar(email.id); }}>{email.starred ? <Star size={14} fill="currentColor" /> : <StarOff size={14} />}</button>
+                <button type="button" className="ec-star-btn cursor-pointer" onClick={e => { e.stopPropagation(); toggleStar(email.id); }}>{email.starred ? <Star size={14} fill="currentColor" /> : <StarOff size={14} />}</button>
               </div>
               <div className="ec-email-item-main">
                 <div className="ec-email-from">{email.from.name}</div>
@@ -450,8 +450,8 @@ export default function EmailClient() {
             <div className="ec-compose-header">
               <span>New Email</span>
               <div className="ec-compose-actions">
-                <button className="ec-btn-template cursor-pointer" onClick={() => setShowTemplates(!showTemplates)}><FileText size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Templates</button>
-                <button className="ec-compose-close" onClick={() => setShowCompose(false)}>×</button>
+                <button type="button" className="ec-btn-template cursor-pointer" onClick={() => setShowTemplates(!showTemplates)}><FileText size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Templates</button>
+                <button type="button" className="ec-compose-close" onClick={() => setShowCompose(false)}>×</button>
               </div>
             </div>
 
@@ -480,11 +480,11 @@ export default function EmailClient() {
             <textarea className="ec-compose-body" value={composeBody} onChange={e => setComposeBody(e.target.value)} placeholder="Write your email..." />
             <div className="ec-compose-footer">
               {connectedProvider ? (
-                <button className="ec-btn-send" onClick={handleRealSend} disabled={!composeTo.trim() || !composeSubject.trim()}>Send via {connectedProvider}</button>
+                <button type="button" className="ec-btn-send" onClick={handleRealSend} disabled={!composeTo.trim() || !composeSubject.trim()}>Send via {connectedProvider}</button>
               ) : (
-                <button className="ec-btn-send" onClick={sendEmail} disabled={!composeTo.trim() || !composeSubject.trim()} title="Send email via connected provider or save locally">Send</button>
+                <button type="button" className="ec-btn-send" onClick={sendEmail} disabled={!composeTo.trim() || !composeSubject.trim()} title="Send email via connected provider or save locally">Send</button>
               )}
-              <button className="ec-btn-draft" onClick={saveDraft}>Save Draft</button>
+              <button type="button" className="ec-btn-draft" onClick={saveDraft}>Save Draft</button>
               <span className="ec-compose-fuel" style={{ opacity: 0.7 }}><SendHorizonal size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Connect Gmail or Outlook in Settings to send emails</span>
             </div>
           </div>
@@ -499,10 +499,10 @@ export default function EmailClient() {
                 {selectedEmail.priority === "high" && <span className="ec-detail-priority">High Priority</span>}
               </div>
               <div className="ec-detail-actions">
-                <button className="ec-action-btn cursor-pointer" onClick={() => moveToFolder(selectedEmail.id, "archive")} title="Archive"><Archive size={14} /></button>
-                <button className="ec-action-btn cursor-pointer" onClick={() => deleteEmailHandler(selectedEmail.id)} title="Delete"><Trash2 size={14} /></button>
-                <button className="ec-action-btn cursor-pointer" onClick={() => toggleStar(selectedEmail.id)} title="Star">{selectedEmail.starred ? <Star size={14} fill="currentColor" /> : <StarOff size={14} />}</button>
-                <button className="ec-action-btn cursor-pointer" onClick={() => { setShowCompose(true); setComposeTo(selectedEmail.from.email); setComposeSubject(`Re: ${selectedEmail.subject}`); }} title="Reply"><CornerDownLeft size={14} /></button>
+                <button type="button" className="ec-action-btn cursor-pointer" onClick={() => moveToFolder(selectedEmail.id, "archive")} title="Archive"><Archive size={14} /></button>
+                <button type="button" className="ec-action-btn cursor-pointer" onClick={() => deleteEmailHandler(selectedEmail.id)} title="Delete"><Trash2 size={14} /></button>
+                <button type="button" className="ec-action-btn cursor-pointer" onClick={() => toggleStar(selectedEmail.id)} title="Star">{selectedEmail.starred ? <Star size={14} fill="currentColor" /> : <StarOff size={14} />}</button>
+                <button type="button" className="ec-action-btn cursor-pointer" onClick={() => { setShowCompose(true); setComposeTo(selectedEmail.from.email); setComposeSubject(`Re: ${selectedEmail.subject}`); }} title="Reply"><CornerDownLeft size={14} /></button>
               </div>
             </div>
 

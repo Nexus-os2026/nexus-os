@@ -18,9 +18,8 @@ export function Suggestions({ visible, onSelect }: SuggestionsProps): JSX.Elemen
   return (
     <div className="jarvis-suggestions">
       {SUGGESTIONS.map((item) => (
-        <button
+        <button type="button"
           key={item}
-          type="button"
           className="jarvis-suggestion-chip"
           onClick={() => onSelect(item)}
         >

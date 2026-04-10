@@ -92,7 +92,7 @@ export default function CollabToolbar({
   // Solo mode
   if (mode === "solo") {
     return (
-      <button
+      <button type="button"
         onClick={startHosting}
         disabled={loading}
         style={{
@@ -131,14 +131,14 @@ export default function CollabToolbar({
             </span>
           )}
         </div>
-        <button onClick={copyInvite} style={{
+        <button type="button" onClick={copyInvite} style={{
           background: "transparent", border: `1px solid ${C.border}`,
           borderRadius: 3, padding: "2px 8px", color: C.muted, fontSize: 9,
           cursor: "pointer", fontFamily: C.sans,
         }}>
           {inviteLink ? "Copied!" : "Invite Link"}
         </button>
-        <button onClick={stopHosting} style={{
+        <button type="button" onClick={stopHosting} style={{
           background: "transparent", border: `1px solid ${C.border}`,
           borderRadius: 3, padding: "2px 8px", color: C.dim, fontSize: 9,
           cursor: "pointer", fontFamily: C.sans,
@@ -161,7 +161,7 @@ export default function CollabToolbar({
           Connected{hostName ? ` to ${hostName}` : ""}
         </span>
       </div>
-      <button onClick={leaveSession} style={{
+      <button type="button" onClick={leaveSession} style={{
         background: "transparent", border: `1px solid ${C.border}`,
         borderRadius: 3, padding: "2px 8px", color: C.dim, fontSize: 9,
         cursor: "pointer", fontFamily: C.sans,

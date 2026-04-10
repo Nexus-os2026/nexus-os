@@ -271,8 +271,7 @@ function DistributedTracingTab(): JSX.Element {
               onChange={(e) => setNewTraceAgent(e.target.value)}
               placeholder="Agent ID (optional)"
             />
-            <button
-              type="button"
+            <button type="button"
               className="audit-verify-btn"
               disabled={startingTrace || !newTraceOp.trim()}
               onClick={() => void handleStartTrace()}
@@ -313,8 +312,7 @@ function DistributedTracingTab(): JSX.Element {
               onChange={(e) => setSpanAgentId(e.target.value)}
               placeholder="Agent ID (optional)"
             />
-            <button
-              type="button"
+            <button type="button"
               className="audit-verify-btn"
               disabled={startingSpan || !spanTraceId.trim() || !spanOpName.trim()}
               onClick={() => void handleStartSpan()}
@@ -352,8 +350,7 @@ function DistributedTracingTab(): JSX.Element {
               onChange={(e) => setEndSpanError(e.target.value)}
               placeholder="Error message (optional)"
             />
-            <button
-              type="button"
+            <button type="button"
               className="audit-verify-btn"
               disabled={endingSpan || !endSpanId.trim()}
               onClick={() => void handleEndSpan()}
@@ -371,8 +368,7 @@ function DistributedTracingTab(): JSX.Element {
       <div className="audit-panel">
         <div className="audit-panel-header">
           <h3 className="audit-panel-title">Traces</h3>
-          <button
-            type="button"
+          <button type="button"
             className="audit-verify-btn"
             disabled={tracesLoading}
             onClick={() => void fetchTraces()}
@@ -414,16 +410,14 @@ function DistributedTracingTab(): JSX.Element {
                     <td className="audit-td audit-td-mono">{t.span_count ?? "-"}</td>
                     <td className="audit-td">
                       <div className="audit-action-btns">
-                        <button
-                          type="button"
+                        <button type="button"
                           className="audit-copy-btn"
                           onClick={() => void handleViewTrace(t.trace_id)}
                           title="View trace details"
                         >
                           View
                         </button>
-                        <button
-                          type="button"
+                        <button type="button"
                           className="audit-copy-btn"
                           onClick={() => void handleEndTrace(t.trace_id)}
                           disabled={endingTraceId === t.trace_id}
@@ -621,8 +615,7 @@ function GovernanceVerificationTab(): JSX.Element {
       <div className="audit-panel">
         <div className="audit-panel-header">
           <h3 className="audit-panel-title">Verify All Governance Invariants</h3>
-          <button
-            type="button"
+          <button type="button"
             className="audit-verify-btn"
             disabled={allLoading}
             onClick={() => void handleVerifyAll()}
@@ -647,8 +640,7 @@ function GovernanceVerificationTab(): JSX.Element {
             onChange={(e) => setInvariantName(e.target.value)}
             placeholder="Invariant name (e.g., capability_checks, fuel_budget, audit_integrity, pii_redaction, hitl_approval, no_unsafe_code)"
           />
-          <button
-            type="button"
+          <button type="button"
             className="audit-verify-btn"
             disabled={specificLoading || !invariantName.trim()}
             onClick={() => void handleVerifySpecific()}
@@ -664,8 +656,7 @@ function GovernanceVerificationTab(): JSX.Element {
       <div className="audit-panel">
         <div className="audit-panel-header">
           <h3 className="audit-panel-title">Export Compliance Report</h3>
-          <button
-            type="button"
+          <button type="button"
             className="audit-verify-btn"
             disabled={reportLoading}
             onClick={() => void handleExportReport()}
@@ -935,29 +926,25 @@ export function Audit({ events, onRefresh }: AuditProps): JSX.Element {
 
       {/* Tab Navigation */}
       <div className="audit-tabs">
-        <button
-          type="button"
+        <button type="button"
           className={`audit-tab ${activeTab === "log" ? "active" : ""}`}
           onClick={() => setActiveTab("log")}
         >
           Audit Log
         </button>
-        <button
-          type="button"
+        <button type="button"
           className={`audit-tab ${activeTab === "statistics" ? "active" : ""}`}
           onClick={() => { setActiveTab("statistics"); void loadStats(); }}
         >
           Statistics
         </button>
-        <button
-          type="button"
+        <button type="button"
           className={`audit-tab ${activeTab === "tracing" ? "active" : ""}`}
           onClick={() => setActiveTab("tracing")}
         >
           Distributed Tracing
         </button>
-        <button
-          type="button"
+        <button type="button"
           className={`audit-tab ${activeTab === "governance" ? "active" : ""}`}
           onClick={() => setActiveTab("governance")}
         >
@@ -1059,8 +1046,7 @@ export function Audit({ events, onRefresh }: AuditProps): JSX.Element {
                       <td className="audit-td audit-td-mono">{fuel !== null ? fuel : "-"}</td>
                       <td className="audit-td audit-td-hash">
                         <span className="audit-hash-text">{event.hash.slice(0, 8)}...</span>
-                        <button
-                          type="button"
+                        <button type="button"
                           className="audit-copy-btn"
                           onClick={(e) => {
                             e.stopPropagation();

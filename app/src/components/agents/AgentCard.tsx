@@ -183,8 +183,7 @@ export function AgentCard({
       <p className="agent-card-last">Last action: {eventLine}</p>
 
       <div className="agent-card-actions">
-        <button
-          type="button"
+        <button type="button"
           className="agent-action-btn"
           disabled={isRunning || pendingAction === "starting"}
           onClick={(event) => {
@@ -196,8 +195,7 @@ export function AgentCard({
         >
           {pendingAction === "starting" ? "Starting..." : "Start"}
         </button>
-        <button
-          type="button"
+        <button type="button"
           className="agent-action-btn"
           disabled={!isRunning || pendingAction === "pausing"}
           onClick={(event) => {
@@ -209,8 +207,7 @@ export function AgentCard({
         >
           {pendingAction === "pausing" ? "Pausing..." : "Pause"}
         </button>
-        <button
-          type="button"
+        <button type="button"
           className="agent-action-btn danger"
           disabled={isStopped || pendingAction === "stopping"}
           onClick={(event) => {
@@ -222,8 +219,7 @@ export function AgentCard({
         >
           {pendingAction === "stopping" ? "Stopping..." : "Stop"}
         </button>
-        <button
-          type="button"
+        <button type="button"
           className="agent-action-btn logs"
           onClick={(event) => {
             event.stopPropagation();
@@ -233,8 +229,7 @@ export function AgentCard({
           Logs
         </button>
         {onPermissions && (
-          <button
-            type="button"
+          <button type="button"
             className="agent-action-btn permissions"
             onClick={(event) => {
               event.stopPropagation();
@@ -245,8 +240,7 @@ export function AgentCard({
           </button>
         )}
         {!agent.isSystem && (
-          <button
-            type="button"
+          <button type="button"
             className="agent-action-btn delete"
             onClick={(event) => {
               event.stopPropagation();

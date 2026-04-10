@@ -173,7 +173,7 @@ export default function AuditTrailViewer({
               {events.length} governance events
             </div>
           </div>
-          <button
+          <button type="button"
             onClick={onClose}
             style={{
               background: "none",
@@ -347,7 +347,7 @@ export default function AuditTrailViewer({
             justifyContent: "flex-end",
           }}
         >
-          <button
+          <button type="button"
             onClick={() => handleExport("csv")}
             style={{
               background: C.surface,
@@ -361,7 +361,7 @@ export default function AuditTrailViewer({
           >
             Export CSV
           </button>
-          <button
+          <button type="button"
             onClick={() => handleExport("json")}
             style={{
               background: C.surface,
@@ -375,7 +375,7 @@ export default function AuditTrailViewer({
           >
             Export JSON
           </button>
-          <button
+          <button type="button"
             onClick={handleGenerateTrustPack}
             disabled={generating}
             style={{

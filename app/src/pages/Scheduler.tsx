@@ -208,8 +208,8 @@ export default function Scheduler(): JSX.Element {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>Background Scheduler</h1>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => void refresh()} style={btnStyle}>Refresh</button>
-          <button onClick={() => setShowCreate(!showCreate)} style={{ ...btnStyle, background: "rgba(37,99,235,0.3)", border: "1px solid rgba(37,99,235,0.5)", color: "#60a5fa" }}>
+          <button type="button" onClick={() => void refresh()} style={btnStyle}>Refresh</button>
+          <button type="button" onClick={() => setShowCreate(!showCreate)} style={{ ...btnStyle, background: "rgba(37,99,235,0.3)", border: "1px solid rgba(37,99,235,0.5)", color: "#60a5fa" }}>
             {showCreate ? "Cancel" : "+ New Schedule"}
           </button>
         </div>
@@ -218,14 +218,14 @@ export default function Scheduler(): JSX.Element {
       {error && (
         <div style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, padding: 12, marginBottom: 12, color: "#f87171" }}>
           {error}
-          <button onClick={() => setError(null)} style={{ marginLeft: 8, cursor: "pointer", background: "none", border: "none", color: "#f87171", fontWeight: 700 }}>×</button>
+          <button type="button" onClick={() => setError(null)} style={{ marginLeft: 8, cursor: "pointer", background: "none", border: "none", color: "#f87171", fontWeight: 700 }}>×</button>
         </div>
       )}
 
       {runResult && (
         <div style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 6, padding: 12, marginBottom: 12, fontFamily: "monospace", fontSize: 13, whiteSpace: "pre-wrap", maxHeight: 200, overflow: "auto", color: "#86efac" }}>
           {runResult}
-          <button onClick={() => setRunResult(null)} style={{ float: "right", cursor: "pointer", background: "none", border: "none", fontWeight: 700, color: "#86efac" }}>×</button>
+          <button type="button" onClick={() => setRunResult(null)} style={{ float: "right", cursor: "pointer", background: "none", border: "none", fontWeight: 700, color: "#86efac" }}>×</button>
         </div>
       )}
 
@@ -310,7 +310,7 @@ export default function Scheduler(): JSX.Element {
               Require HITL Approval
             </label>
           </div>
-          <button onClick={() => void handleCreate()} style={{ ...btnStyle, background: "rgba(22,163,74,0.3)", border: "1px solid rgba(22,163,74,0.5)", color: "#4ade80", marginTop: 12 }}>
+          <button type="button" onClick={() => void handleCreate()} style={{ ...btnStyle, background: "rgba(22,163,74,0.3)", border: "1px solid rgba(22,163,74,0.5)", color: "#4ade80", marginTop: 12 }}>
             Create Schedule
           </button>
         </div>
@@ -359,13 +359,13 @@ export default function Scheduler(): JSX.Element {
                   </td>
                   <td style={tdStyle}>
                     <div style={{ display: "flex", gap: 4 }}>
-                      <button onClick={() => void handleToggle(e)} style={smallBtnStyle}>
+                      <button type="button" onClick={() => void handleToggle(e)} style={smallBtnStyle}>
                         {e.enabled ? "Disable" : "Enable"}
                       </button>
-                      <button onClick={() => void handleRunNow(e.id)} style={{ ...smallBtnStyle, background: "rgba(59,130,246,0.15)", color: "#60a5fa" }}>
+                      <button type="button" onClick={() => void handleRunNow(e.id)} style={{ ...smallBtnStyle, background: "rgba(59,130,246,0.15)", color: "#60a5fa" }}>
                         Run Now
                       </button>
-                      <button onClick={() => void handleDelete(e.id)} style={{ ...smallBtnStyle, background: "rgba(239,68,68,0.15)", color: "#f87171" }}>
+                      <button type="button" onClick={() => void handleDelete(e.id)} style={{ ...smallBtnStyle, background: "rgba(239,68,68,0.15)", color: "#f87171" }}>
                         Delete
                       </button>
                     </div>

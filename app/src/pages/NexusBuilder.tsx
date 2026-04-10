@@ -908,10 +908,10 @@ export default function NexusBuilder() {
       {/* ==== TOOLBAR ==== */}
       <div style={{ height: 42, minHeight: 42, display: "flex", alignItems: "center", gap: 10, padding: "0 16px", borderBottom: `1px solid ${C.border}`, background: C.surface }}>
         {!showProjectList && (
-          <button onClick={() => { setModelsOpen(false); refreshProjects(true); }} style={{ background: C.accentDim, color: C.accent, border: `1px solid ${C.border}`, borderRadius: 4, padding: "2px 10px", fontSize: 11, cursor: "pointer", fontWeight: 600 }} title="Back to projects">{"\u2190"} Projects</button>
+          <button type="button" onClick={() => { setModelsOpen(false); refreshProjects(true); }} style={{ background: C.accentDim, color: C.accent, border: `1px solid ${C.border}`, borderRadius: 4, padding: "2px 10px", fontSize: 11, cursor: "pointer", fontWeight: 600 }} title="Back to projects">{"\u2190"} Projects</button>
         )}
         <div style={{ position: "relative" }}>
-          <button
+          <button type="button"
             ref={modelBtnRef}
             onClick={() => {
               setModelsOpen(o => {
@@ -968,7 +968,7 @@ export default function NexusBuilder() {
           </span>
         )}
         {!showProjectList && (phase !== "idle" || planPhase !== "idle") && (
-          <button onClick={doNew} style={{ background: C.accentDim, color: C.accent, border: `1px solid ${C.border}`, borderRadius: 4, padding: "2px 10px", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>+ New</button>
+          <button type="button" onClick={doNew} style={{ background: C.accentDim, color: C.accent, border: `1px solid ${C.border}`, borderRadius: 4, padding: "2px 10px", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>+ New</button>
         )}
         {ver > 0 && <span style={{ background: C.accentDim, color: C.accent, padding: "1px 7px", borderRadius: 3, fontSize: 10, fontWeight: 700 }}>v{ver + 1}</span>}
         <div style={{ flex: 1 }} />
@@ -1028,7 +1028,7 @@ export default function NexusBuilder() {
                               </div>
                               <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
                                 {!isArchived && (st === "Generated" || st === "Exported") && (
-                                  <button
+                                  <button type="button"
                                     onClick={e => { e.stopPropagation(); exportProject(proj.project_id || proj.id); }}
                                     style={{ background: "transparent", border: "none", color: C.dim, fontSize: 11, cursor: "pointer", padding: "2px 4px" }}
                                     onMouseEnter={e => { e.currentTarget.style.color = C.accent; }}
@@ -1037,7 +1037,7 @@ export default function NexusBuilder() {
                                   >{"\u2913"}</button>
                                 )}
                                 {!isArchived && (st === "Generated" || st === "Exported") && (
-                                  <button
+                                  <button type="button"
                                     onClick={e => { e.stopPropagation(); archiveProject(proj.project_id || proj.id); }}
                                     style={{ background: "transparent", border: "none", color: C.dim, fontSize: 11, cursor: "pointer", padding: "2px 4px" }}
                                     onMouseEnter={e => { e.currentTarget.style.color = C.warn; }}
@@ -1046,7 +1046,7 @@ export default function NexusBuilder() {
                                   >{"\u2610"}</button>
                                 )}
                                 {isArchived && (
-                                  <button
+                                  <button type="button"
                                     onClick={e => { e.stopPropagation(); unarchiveProject(proj.project_id || proj.id); }}
                                     style={{ background: "transparent", border: "none", color: C.dim, fontSize: 11, cursor: "pointer", padding: "2px 4px" }}
                                     onMouseEnter={e => { e.currentTarget.style.color = C.ok; }}
@@ -1054,7 +1054,7 @@ export default function NexusBuilder() {
                                     title="Unarchive project"
                                   >{"\u21A9"}</button>
                                 )}
-                                <button
+                                <button type="button"
                                   onClick={e => { e.stopPropagation(); deleteProject(proj.project_id || proj.id); }}
                                   style={{ background: "transparent", border: "none", color: C.dim, fontSize: 11, cursor: "pointer", padding: "2px 4px" }}
                                   onMouseEnter={e => { e.currentTarget.style.color = C.err; }}
@@ -1079,7 +1079,7 @@ export default function NexusBuilder() {
                     <div style={{ fontSize: 10, fontWeight: 600, color: C.dim, textTransform: "uppercase" as const, letterSpacing: 1.2, marginBottom: 8 }}>Quick start</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 14 }}>
                       {SUGGESTIONS.map((s, i) => (
-                        <button key={i} onClick={() => { setPrompt(SUGGESTION_PROMPTS[i]); setShowProjectList(false); taRef.current?.focus(); }}
+                        <button type="button" key={i} onClick={() => { setPrompt(SUGGESTION_PROMPTS[i]); setShowProjectList(false); taRef.current?.focus(); }}
                           style={{ display: "flex", alignItems: "flex-start", gap: 8, background: C.surfaceAlt, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 9px", fontSize: 11, cursor: "pointer", fontFamily: C.sans, textAlign: "left" as const, lineHeight: 1.3, transition: "border-color 0.15s, background 0.15s" }}
                           onMouseEnter={e => { e.currentTarget.style.borderColor = C.accent; e.currentTarget.style.background = "rgba(0,212,170,0.04)"; }}
                           onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = C.surfaceAlt; }}
@@ -1095,7 +1095,7 @@ export default function NexusBuilder() {
                   </>
                 )}
                 {/* + New Project button — always visible */}
-                <button
+                <button type="button"
                   onClick={() => setShowProjectList(false)}
                   style={{
                     marginTop: 8, width: "100%", padding: projects.length > 0 ? "7px 0" : "12px 0",
@@ -1123,7 +1123,7 @@ export default function NexusBuilder() {
                 <div style={{ fontSize: 10, fontWeight: 600, color: C.dim, textTransform: "uppercase" as const, letterSpacing: 1.2, marginBottom: 8 }}>Quick start</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, flexShrink: 0 }}>
                   {SUGGESTIONS.map((s, i) => (
-                    <button key={i} onClick={() => { setPrompt(SUGGESTION_PROMPTS[i]); taRef.current?.focus(); setShowProjectList(false); }}
+                    <button type="button" key={i} onClick={() => { setPrompt(SUGGESTION_PROMPTS[i]); taRef.current?.focus(); setShowProjectList(false); }}
                       style={{ display: "flex", alignItems: "flex-start", gap: 8, background: C.surfaceAlt, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 9px", fontSize: 11, cursor: "pointer", fontFamily: C.sans, textAlign: "left" as const, lineHeight: 1.3, transition: "border-color 0.15s, background 0.15s" }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = C.accent; e.currentTarget.style.background = "rgba(0,212,170,0.04)"; }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = C.surfaceAlt; }}
@@ -1196,7 +1196,7 @@ export default function NexusBuilder() {
                 <div style={{ fontSize: 10, fontWeight: 600, color: C.dim, textTransform: "uppercase" as const, letterSpacing: 1.2, marginBottom: 6 }}>What's next?</div>
                 <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 4 }}>
                   {QUICK_ITER.map(q => (
-                    <button key={q} onClick={() => { setIterTxt(q); taRef.current?.focus(); }}
+                    <button type="button" key={q} onClick={() => { setIterTxt(q); taRef.current?.focus(); }}
                       style={{ background: "transparent", color: C.dim, border: `1px solid ${C.border}`, borderRadius: 10, padding: "3px 10px", fontSize: 10, cursor: "pointer", transition: "color 0.15s, border-color 0.15s" }}
                       onMouseEnter={e => { e.currentTarget.style.color = C.accent; e.currentTarget.style.borderColor = C.accent; }}
                       onMouseLeave={e => { e.currentTarget.style.color = C.dim; e.currentTarget.style.borderColor = C.border; }}>
@@ -1234,7 +1234,7 @@ export default function NexusBuilder() {
                 {noBudget && !showBudgetEdit ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 10, color: C.muted, flex: 1 }}>Set API budgets to track costs</span>
-                    <button onClick={openBudgetEdit}
+                    <button type="button" onClick={openBudgetEdit}
                       style={{ background: C.accentDim, color: C.accent, border: `1px solid rgba(0,212,170,0.2)`, borderRadius: 5, padding: "4px 10px", fontSize: 10, fontWeight: 600, cursor: "pointer" }}>
                       Configure
                     </button>
@@ -1261,8 +1261,8 @@ export default function NexusBuilder() {
                         style={{ flex: 1, background: C.bg, color: C.text, border: `1px solid ${C.border}`, borderRadius: 5, padding: "3px 6px", fontSize: 11, fontFamily: C.mono, outline: "none", boxSizing: "border-box" as const }} />
                     </div>
                     <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={saveBudgetEdit} style={{ flex: 1, background: C.accent, color: "#0a0e14", border: "none", borderRadius: 5, padding: "5px 0", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Save</button>
-                      <button onClick={() => setShowBudgetEdit(false)} style={{ background: "transparent", color: C.dim, border: `1px solid ${C.border}`, borderRadius: 5, padding: "5px 10px", fontSize: 10, cursor: "pointer" }}>{"\u2715"}</button>
+                      <button type="button" onClick={saveBudgetEdit} style={{ flex: 1, background: C.accent, color: "#0a0e14", border: "none", borderRadius: 5, padding: "5px 0", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Save</button>
+                      <button type="button" onClick={() => setShowBudgetEdit(false)} style={{ background: "transparent", color: C.dim, border: `1px solid ${C.border}`, borderRadius: 5, padding: "5px 10px", fontSize: 10, cursor: "pointer" }}>{"\u2715"}</button>
                     </div>
                   </div>
                 )}
@@ -1298,7 +1298,7 @@ export default function NexusBuilder() {
                     <span style={{ fontSize: 10, color: C.dim }}>{costEstimateLabel(modelConfig)}</span>
                     <span style={{ fontSize: 10, color: C.dim, opacity: 0.6 }}>Ctrl+Enter</span>
                   </div>
-                  <button
+                  <button type="button"
                     onClick={doBuild}
                     disabled={busy || !prompt.trim()}
                     style={{
@@ -1341,7 +1341,7 @@ export default function NexusBuilder() {
                     </span>
                     <span style={{ fontSize: 10, color: C.dim, opacity: 0.6 }}>Ctrl+Enter</span>
                   </div>
-                  <button
+                  <button type="button"
                     onClick={doIter}
                     disabled={itering || !iterTxt.trim()}
                     style={{
@@ -1377,14 +1377,14 @@ export default function NexusBuilder() {
           {/* Toolbar */}
           <div style={{ display: "flex", alignItems: "center", gap: 3, padding: "5px 12px", borderBottom: `1px solid ${C.border}`, background: C.surface, flexShrink: 0 }}>
             {(["mobile", "tablet", "desktop"] as const).map(v => (
-              <button key={v} onClick={() => setVp(v)}
+              <button type="button" key={v} onClick={() => setVp(v)}
                 style={{ background: vp === v ? C.accentDim : "transparent", color: vp === v ? C.accent : C.dim, border: vp === v ? `1px solid rgba(0,212,170,0.25)` : "1px solid transparent", borderRadius: 4, padding: "3px 9px", fontSize: 10, cursor: "pointer", fontWeight: vp === v ? 600 : 400, textTransform: "capitalize" as const }}>
                 {v}
               </button>
             ))}
             <div style={{ width: 1, height: 14, background: C.border, margin: "0 4px" }} />
             {(["preview", "code"] as const).map(m => (
-              <button key={m} onClick={() => { setViewMode(m); setModelsOpen(false); }}
+              <button type="button" key={m} onClick={() => { setViewMode(m); setModelsOpen(false); }}
                 style={{ background: viewMode === m ? C.accentDim : "transparent", color: viewMode === m ? C.accent : C.dim, border: viewMode === m ? `1px solid rgba(0,212,170,0.25)` : "1px solid transparent", borderRadius: 4, padding: "3px 9px", fontSize: 10, cursor: "pointer", fontWeight: viewMode === m ? 600 : 400, textTransform: "capitalize" as const }}>
                 {m}
               </button>
@@ -1407,7 +1407,7 @@ export default function NexusBuilder() {
               />
             )}
             {!isPostBuild && html && (
-              <button
+              <button type="button"
                 onClick={() => { setEditMode(!editMode); if (viewMode !== "preview") setViewMode("preview"); }}
                 style={{
                   background: editMode ? C.accentDim : "transparent",
@@ -1428,9 +1428,9 @@ export default function NexusBuilder() {
               editCount={editCount}
               building={isBuilding}
             />
-            <button onClick={() => { if (outDir) rPreview(outDir); }} disabled={!outDir} style={{ background: "transparent", color: outDir ? C.muted : C.dim, border: "none", padding: "3px 6px", fontSize: 13, cursor: outDir ? "pointer" : "default" }} title="Refresh">{"\u21BB"}</button>
-            <button onClick={doDownload} disabled={!html} style={{ background: "transparent", color: html ? C.muted : C.dim, border: "none", padding: "3px 6px", fontSize: 13, cursor: html ? "pointer" : "default" }} title="Download HTML" aria-label="Download HTML">{"\u2193"}</button>
-            {outDir && <button onClick={() => { if (projectId) exportProject(projectId); }} style={{ background: "transparent", color: C.muted, border: "none", padding: "3px 6px", fontSize: 10, cursor: "pointer", fontFamily: C.sans }} title="Export as ZIP">ZIP</button>}
+            <button type="button" onClick={() => { if (outDir) rPreview(outDir); }} disabled={!outDir} style={{ background: "transparent", color: outDir ? C.muted : C.dim, border: "none", padding: "3px 6px", fontSize: 13, cursor: outDir ? "pointer" : "default" }} title="Refresh">{"\u21BB"}</button>
+            <button type="button" onClick={doDownload} disabled={!html} style={{ background: "transparent", color: html ? C.muted : C.dim, border: "none", padding: "3px 6px", fontSize: 13, cursor: html ? "pointer" : "default" }} title="Download HTML" aria-label="Download HTML">{"\u2193"}</button>
+            {outDir && <button type="button" onClick={() => { if (projectId) exportProject(projectId); }} style={{ background: "transparent", color: C.muted, border: "none", padding: "3px 6px", fontSize: 10, cursor: "pointer", fontFamily: C.sans }} title="Export as ZIP">ZIP</button>}
           </div>
 
           {/* Variant Comparison Overlay */}

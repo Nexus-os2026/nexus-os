@@ -73,9 +73,8 @@ export function BrowserToolbar({
       {/* Mode tabs */}
       <div className="browser-mode-tabs">
         {(Object.keys(MODE_LABELS) as BrowserMode[]).map((m) => (
-          <button
+          <button type="button"
             key={m}
-            type="button"
             className={`browser-mode-tab ${mode === m ? "active" : ""}`}
             onClick={() => onModeChange(m)}
             title={`Ctrl+${MODE_LABELS[m].shortcut}`}
@@ -88,8 +87,7 @@ export function BrowserToolbar({
 
         {/* History toggle */}
         {onToggleHistory && (
-          <button
-            type="button"
+          <button type="button"
             className="browser-toolbar-icon-btn"
             onClick={onToggleHistory}
             title="History (Ctrl+H)"
@@ -100,8 +98,7 @@ export function BrowserToolbar({
 
         {/* Governance toggle */}
         {onToggleGovernance && (
-          <button
-            type="button"
+          <button type="button"
             className={`browser-toolbar-icon-btn ${showGovernance ? "browser-toolbar-icon-btn--active" : ""}`}
             onClick={onToggleGovernance}
             title="Governance (Ctrl+G)"
@@ -113,8 +110,7 @@ export function BrowserToolbar({
 
       {/* Navigation controls */}
       <div className="browser-nav-row">
-        <button
-          type="button"
+        <button type="button"
           className="browser-nav-btn"
           disabled={!canGoBack}
           onClick={onBack}
@@ -122,8 +118,7 @@ export function BrowserToolbar({
         >
           {"\u25C1"}
         </button>
-        <button
-          type="button"
+        <button type="button"
           className="browser-nav-btn"
           disabled={!canGoForward}
           onClick={onForward}
@@ -131,8 +126,7 @@ export function BrowserToolbar({
         >
           {"\u25B7"}
         </button>
-        <button
-          type="button"
+        <button type="button"
           className="browser-nav-btn"
           onClick={onRefresh}
           title="Refresh (Ctrl+R)"
@@ -152,8 +146,7 @@ export function BrowserToolbar({
             placeholder="Enter URL... (Ctrl+L to focus)"
             spellCheck={false}
           />
-          <button
-            type="button"
+          <button type="button"
             className="browser-go-btn"
             onClick={handleSubmit}
             title="Navigate"

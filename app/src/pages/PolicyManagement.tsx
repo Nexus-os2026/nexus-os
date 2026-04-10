@@ -106,7 +106,7 @@ export default function PolicyManagement() {
       {/* Tab bar */}
       <div style={{ display: "flex", gap: 4, marginBottom: 24 }}>
         {(["list", "editor", "test", "conflicts"] as const).map((t) => (
-          <button
+          <button type="button"
             key={t}
             onClick={() => setTab(t)}
             style={{
@@ -130,7 +130,7 @@ export default function PolicyManagement() {
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
             <h2 style={{ margin: 0 }}>Loaded Policies ({policies.length})</h2>
-            <button
+            <button type="button"
               onClick={refresh}
               style={{
                 padding: "6px 16px",
@@ -212,7 +212,7 @@ export default function PolicyManagement() {
             }}
           />
           <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-            <button
+            <button type="button"
               onClick={handleValidate}
               style={{
                 padding: "8px 20px",
@@ -302,7 +302,7 @@ export default function PolicyManagement() {
               />
             </div>
           </div>
-          <button
+          <button type="button"
             onClick={handleTest}
             style={{
               padding: "8px 20px",

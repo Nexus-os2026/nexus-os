@@ -699,11 +699,11 @@ export default function NexusCode(): JSX.Element {
           disabled={isRunning}
         />
         {isRunning ? (
-          <button style={S.btnDanger} onClick={() => nxChatCancel()}>
+          <button type="button" style={S.btnDanger} onClick={() => nxChatCancel()}>
             Cancel
           </button>
         ) : (
-          <button style={S.btn} onClick={handleSend} disabled={!input.trim()}>
+          <button type="button" style={S.btn} onClick={handleSend} disabled={!input.trim()}>
             Send
           </button>
         )}
@@ -731,7 +731,7 @@ export default function NexusCode(): JSX.Element {
               Switch provider:
             </span>
             {diagnostic.configured_providers.map((p) => (
-              <button
+              <button type="button"
                 key={p}
                 style={{
                   ...S.btn,
@@ -755,7 +755,7 @@ export default function NexusCode(): JSX.Element {
                 {p}
               </button>
             ))}
-            <button
+            <button type="button"
               style={{
                 ...S.btn,
                 padding: "0.25rem 0.5rem",
@@ -804,10 +804,10 @@ export default function NexusCode(): JSX.Element {
               {consent.details}
             </div>
             <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-              <button style={S.btnDanger} onClick={() => handleConsent(false)}>
+              <button type="button" style={S.btnDanger} onClick={() => handleConsent(false)}>
                 Deny
               </button>
-              <button style={S.btn} onClick={() => handleConsent(true)}>
+              <button type="button" style={S.btn} onClick={() => handleConsent(true)}>
                 Approve
               </button>
             </div>

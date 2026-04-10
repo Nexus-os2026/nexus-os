@@ -131,7 +131,7 @@ export default function RoleManager({
 
       {/* Invite button */}
       {isOwner && (
-        <button onClick={copyInvite} style={{
+        <button type="button" onClick={copyInvite} style={{
           width: "100%", marginTop: 8,
           background: C.accentDim, border: `1px solid rgba(0,212,170,0.2)`,
           borderRadius: 4, padding: "6px 0", color: C.accent, fontSize: 10,

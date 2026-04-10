@@ -248,36 +248,31 @@ export function AgentDetail({
         </header>
 
         <nav className="agent-detail-tabs">
-          <button
-            type="button"
+          <button type="button"
             className={`agent-detail-tab ${activeTab === "overview" ? "active" : ""}`}
             onClick={() => onTabChange("overview")}
           >
             Overview
           </button>
-          <button
-            type="button"
+          <button type="button"
             className={`agent-detail-tab ${activeTab === "logs" ? "active" : ""}`}
             onClick={() => onTabChange("logs")}
           >
             Logs
           </button>
-          <button
-            type="button"
+          <button type="button"
             className={`agent-detail-tab ${activeTab === "audit" ? "active" : ""}`}
             onClick={() => onTabChange("audit")}
           >
             Audit
           </button>
-          <button
-            type="button"
+          <button type="button"
             className={`agent-detail-tab ${activeTab === "config" ? "active" : ""}`}
             onClick={() => onTabChange("config")}
           >
             Config
           </button>
-          <button
-            type="button"
+          <button type="button"
             className={`agent-detail-tab ${activeTab === "evolution" ? "active" : ""}`}
             onClick={() => onTabChange("evolution")}
           >
@@ -518,8 +513,7 @@ export function AgentDetail({
                     <p className="agent-card-last">No trend data yet.</p>
                   )}
 
-                  <button
-                    type="button"
+                  <button type="button"
                     className="agent-detail-tab"
                     style={{ marginTop: "1rem", width: "100%" }}
                     onClick={async () => {

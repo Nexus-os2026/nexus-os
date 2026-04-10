@@ -239,7 +239,7 @@ export function AgentBrowser(): JSX.Element {
       {blocked && (
         <div className="browser-blocked-banner">
           <span>{blocked}</span>
-          <button
+          <button type="button"
             className="browser-retry-button"
             onClick={() => {
               setBlocked(null);
@@ -258,7 +258,7 @@ export function AgentBrowser(): JSX.Element {
         <div className="browser-history-dropdown">
           <div className="browser-history-header">
             <span className="browser-history-title">Browsing History</span>
-            <button
+            <button type="button"
               className="browser-history-close"
               onClick={() => setShowHistory(false)}
             >
@@ -270,7 +270,7 @@ export function AgentBrowser(): JSX.Element {
           ) : (
             <div className="browser-history-list">
               {historyLog.map((entry, i) => (
-                <button
+                <button type="button"
                   key={i}
                   className="browser-history-item"
                   onClick={() => {

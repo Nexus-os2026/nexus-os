@@ -207,7 +207,7 @@ export default function Login() {
                   />
 
                   <div style={{ marginTop: "0.5rem" }}>
-                    <button
+                    <button type="button"
                       className="admin-btn admin-btn--danger"
                       onClick={() => void handleLogout()}
                       disabled={loggingOut}

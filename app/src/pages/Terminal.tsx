@@ -627,9 +627,8 @@ export default function Terminal(): JSX.Element {
           {showSuggestions && (
             <div className="tm-suggestions">
               {suggestions.map((s, i) => (
-                <button
+                <button type="button"
                   key={s.cmd}
-                  type="button"
                   className={`tm-suggestion ${i === selectedSuggestion ? "tm-suggestion-active" : ""}`}
                   onClick={() => { setInput(s.cmd); setShowSuggestions(false); inputRef.current?.focus(); }}
                   onMouseEnter={() => setSelectedSuggestion(i)}
@@ -682,9 +681,8 @@ export default function Terminal(): JSX.Element {
                 </div>
                 <div className="tm-sidebar-list">
                   {[...commandHistory].reverse().map((h, i) => (
-                    <button
+                    <button type="button"
                       key={`${h.ts}-${i}`}
-                      type="button"
                       className={`tm-history-item ${h.blocked ? "tm-history-blocked" : ""}`}
                       onClick={() => { setInput(h.cmd); inputRef.current?.focus(); }}
                     >

@@ -165,7 +165,7 @@ export default function DeployPanel({ projectId, onClose, lastDeploy, onHistory 
           <span style={{ color: C.text, fontSize: 14, fontWeight: 600 }}>
             {lastDeploy ? "Redeploy" : "Deploy"}
           </span>
-          <button onClick={onClose} style={{
+          <button type="button" onClick={onClose} style={{
             background: "transparent", border: "none", color: C.dim, fontSize: 16,
             cursor: "pointer", padding: "2px 6px",
           }}>x</button>
@@ -176,7 +176,7 @@ export default function DeployPanel({ projectId, onClose, lastDeploy, onHistory 
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <span style={{ color: C.muted, fontSize: 11 }}>Choose your hosting:</span>
             {PROVIDERS.map(p => (
-              <button key={p.id} onClick={() => handleProviderSelect(p.id)} style={{
+              <button type="button" key={p.id} onClick={() => handleProviderSelect(p.id)} style={{
                 background: C.surfaceAlt, border: `1px solid ${C.border}`,
                 borderRadius: 6, padding: "12px 14px", cursor: "pointer",
                 textAlign: "left", transition: "border-color 0.15s",
@@ -247,12 +247,12 @@ export default function DeployPanel({ projectId, onClose, lastDeploy, onHistory 
             </div>
 
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setStep("provider")} style={{
+              <button type="button" onClick={() => setStep("provider")} style={{
                 background: "transparent", border: `1px solid ${C.border}`,
                 borderRadius: 4, padding: "6px 14px", color: C.muted, fontSize: 10,
                 cursor: "pointer",
               }}>Back</button>
-              <button onClick={handleSaveCredentials} disabled={!token.trim()} style={{
+              <button type="button" onClick={handleSaveCredentials} disabled={!token.trim()} style={{
                 background: token.trim() ? C.accent : C.dim,
                 border: "none", borderRadius: 4, padding: "6px 14px",
                 color: token.trim() ? C.bg : C.muted, fontSize: 10,
@@ -301,20 +301,20 @@ export default function DeployPanel({ projectId, onClose, lastDeploy, onHistory 
 
             <div style={{ display: "flex", gap: 8 }}>
               {!lastDeploy && (
-                <button onClick={() => setStep("provider")} style={{
+                <button type="button" onClick={() => setStep("provider")} style={{
                   background: "transparent", border: `1px solid ${C.border}`,
                   borderRadius: 4, padding: "6px 14px", color: C.muted, fontSize: 10,
                   cursor: "pointer",
                 }}>Back</button>
               )}
-              <button onClick={handleDeploy} style={{
+              <button type="button" onClick={handleDeploy} style={{
                 background: C.accent, border: "none", borderRadius: 4,
                 padding: "6px 18px", color: C.bg, fontSize: 10,
                 fontWeight: 600, cursor: "pointer", flex: 1,
               }}>
                 {lastDeploy ? "Redeploy Now" : "Deploy Now"}
               </button>
-              <button onClick={onClose} style={{
+              <button type="button" onClick={onClose} style={{
                 background: "transparent", border: `1px solid ${C.border}`,
                 borderRadius: 4, padding: "6px 14px", color: C.muted, fontSize: 10,
                 cursor: "pointer",
@@ -358,12 +358,12 @@ export default function DeployPanel({ projectId, onClose, lastDeploy, onHistory 
             </div>
 
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={copyUrl} style={{
+              <button type="button" onClick={copyUrl} style={{
                 background: C.surfaceAlt, border: `1px solid ${C.border}`,
                 borderRadius: 4, padding: "6px 14px", color: C.muted, fontSize: 10,
                 cursor: "pointer", flex: 1,
               }}>Copy URL</button>
-              <button onClick={openUrl} style={{
+              <button type="button" onClick={openUrl} style={{
                 background: C.accent, border: "none", borderRadius: 4,
                 padding: "6px 14px", color: C.bg, fontSize: 10,
                 fontWeight: 600, cursor: "pointer", flex: 1,
@@ -377,7 +377,7 @@ export default function DeployPanel({ projectId, onClose, lastDeploy, onHistory 
 
             {/* Rollback link */}
             {lastDeploy && (
-              <button onClick={handleRollback} style={{
+              <button type="button" onClick={handleRollback} style={{
                 background: "transparent", border: "none", color: C.dim,
                 fontSize: 9, cursor: "pointer", textDecoration: "underline",
                 padding: 0, textAlign: "left",
@@ -387,14 +387,14 @@ export default function DeployPanel({ projectId, onClose, lastDeploy, onHistory 
             )}
 
             {onHistory && (
-              <button onClick={onHistory} style={{
+              <button type="button" onClick={onHistory} style={{
                 background: C.surfaceAlt, border: `1px solid ${C.border}`,
                 borderRadius: 4, padding: "6px 14px", color: C.muted, fontSize: 10,
                 cursor: "pointer",
               }}>View Deploy History</button>
             )}
 
-            <button onClick={onClose} style={{
+            <button type="button" onClick={onClose} style={{
               background: "transparent", border: `1px solid ${C.border}`,
               borderRadius: 4, padding: "6px 14px", color: C.muted, fontSize: 10,
               cursor: "pointer",
@@ -415,12 +415,12 @@ export default function DeployPanel({ projectId, onClose, lastDeploy, onHistory 
               <div style={{ color: C.muted, fontSize: 10, wordBreak: "break-word" }}>{error}</div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setStep("confirm")} style={{
+              <button type="button" onClick={() => setStep("confirm")} style={{
                 background: C.surfaceAlt, border: `1px solid ${C.border}`,
                 borderRadius: 4, padding: "6px 14px", color: C.muted, fontSize: 10,
                 cursor: "pointer",
               }}>Try Again</button>
-              <button onClick={onClose} style={{
+              <button type="button" onClick={onClose} style={{
                 background: "transparent", border: `1px solid ${C.border}`,
                 borderRadius: 4, padding: "6px 14px", color: C.muted, fontSize: 10,
                 cursor: "pointer",

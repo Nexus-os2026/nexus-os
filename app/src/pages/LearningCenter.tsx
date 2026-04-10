@@ -702,7 +702,7 @@ export default function LearningCenter() {
 
         <div className="lc-views">
           {([["courses", "courses", "Courses"], ["challenges", "challenges", "Challenges"], ["build", "build", "Build"], ["knowledge", "knowledge", "Knowledge"], ["progress", "progress", "Progress"]] as [View, string, string][]).map(([id, icon, label]) => (
-            <button key={id} className={`lc-view-btn cursor-pointer ${view === id ? "active" : ""}`} onClick={() => { setView(id); setSelectedCourse(null); setSelectedChallenge(null); setSelectedBuild(null); }}>
+            <button type="button" key={id} className={`lc-view-btn cursor-pointer ${view === id ? "active" : ""}`} onClick={() => { setView(id); setSelectedCourse(null); setSelectedChallenge(null); setSelectedBuild(null); }}>
               <span>{icon === "courses" ? <BookOpen size={14} aria-hidden="true" /> : icon === "challenges" ? <Code size={14} aria-hidden="true" /> : icon === "build" ? <Braces size={14} aria-hidden="true" /> : icon === "knowledge" ? <Library size={14} aria-hidden="true" /> : <BarChart size={14} aria-hidden="true" />}</span> {label}
             </button>
           ))}
@@ -809,7 +809,7 @@ export default function LearningCenter() {
         {/* ═══ COURSE DETAIL ═══ */}
         {view === "courses" && activeCourse && (
           <div className="lc-course-detail">
-            <button className="lc-back-btn" onClick={() => setSelectedCourse(null)}>← Back to Courses</button>
+            <button type="button" className="lc-back-btn" onClick={() => setSelectedCourse(null)}>← Back to Courses</button>
             <div className="lc-cd-header">
               <div className="lc-cd-thumb" style={{ background: activeCourse.thumbnail }} />
               <div className="lc-cd-info">
@@ -871,7 +871,7 @@ export default function LearningCenter() {
                           </div>
                         )}
                         {!isDone && (
-                          <button
+                          <button type="button"
                             className="lc-start-course-btn"
                             style={{ marginTop: "1rem" }}
                             onClick={() => completeStep(activeCourse.id, i)}
@@ -957,9 +957,9 @@ export default function LearningCenter() {
                     </div>
                   </div>
                   <div className="lc-ce-actions">
-                    <button className="lc-ce-run" onClick={runChallenge}>Run & Check</button>
+                    <button type="button" className="lc-ce-run" onClick={runChallenge}>Run & Check</button>
                     {activeChallenge.hints.map((_, i) => (
-                      <button key={i} className="lc-ce-hint" onClick={() => setShowHint(showHint === i ? -1 : i)}>
+                      <button type="button" key={i} className="lc-ce-hint" onClick={() => setShowHint(showHint === i ? -1 : i)}>
                         Hint {i + 1}
                       </button>
                     ))}
@@ -1063,7 +1063,7 @@ export default function LearningCenter() {
           if (!proj) return null;
           return (
             <div className="lc-course-detail">
-              <button className="lc-back-btn" onClick={() => setSelectedBuild(null)}>← Back to Projects</button>
+              <button type="button" className="lc-back-btn" onClick={() => setSelectedBuild(null)}>← Back to Projects</button>
               <div className="lc-cd-header">
                 <div className="lc-cd-thumb" style={{ background: "linear-gradient(135deg, #0f172a 0%, #6366f1 100%)" }} />
                 <div className="lc-cd-info">
@@ -1133,7 +1133,7 @@ export default function LearningCenter() {
                   onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTeachResponse(teachInput); } }}
                   disabled={teachLoading}
                 />
-                <button className="lc-start-course-btn" onClick={() => sendTeachResponse(teachInput)} disabled={teachLoading || !teachInput.trim()}>
+                <button type="button" className="lc-start-course-btn" onClick={() => sendTeachResponse(teachInput)} disabled={teachLoading || !teachInput.trim()}>
                   Send
                 </button>
               </div>

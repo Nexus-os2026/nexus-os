@@ -93,7 +93,7 @@ export default function AdminUsers() {
       {error && (
         <div className="admin-error" style={{ marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <span>{error}</span>
-          <button className="admin-btn admin-btn--sm" onClick={() => void refresh()}>Retry</button>
+          <button type="button" className="admin-btn admin-btn--sm" onClick={() => void refresh()}>Retry</button>
         </div>
       )}
 
@@ -105,7 +105,7 @@ export default function AdminUsers() {
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
-        <button className="admin-btn admin-btn--accent" onClick={() => setShowCreate(!showCreate)}>
+        <button type="button" className="admin-btn admin-btn--accent" onClick={() => setShowCreate(!showCreate)}>
           + Add User
         </button>
       </div>
@@ -128,7 +128,7 @@ export default function AdminUsers() {
                 {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
-            <button className="admin-btn admin-btn--accent" onClick={() => void handleCreate()}>Create</button>
+            <button type="button" className="admin-btn admin-btn--accent" onClick={() => void handleCreate()}>Create</button>
           </div>
           {createError && (
             <div className="admin-error" style={{ marginTop: "0.5rem" }}>{createError}</div>
@@ -179,7 +179,7 @@ export default function AdminUsers() {
                 </td>
                 <td>
                   {u.status === "active" && (
-                    <button className="admin-btn admin-btn--danger admin-btn--sm" onClick={() => void handleDeactivate(u.id)}>
+                    <button type="button" className="admin-btn admin-btn--danger admin-btn--sm" onClick={() => void handleDeactivate(u.id)}>
                       Deactivate
                     </button>
                   )}

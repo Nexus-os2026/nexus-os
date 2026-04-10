@@ -219,7 +219,7 @@ export function InlineApprovalBanner(): JSX.Element | null {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                <button
+                <button type="button"
                   onClick={() => handleApprove(c)}
                   disabled={acting === c.consent_id}
                   style={{
@@ -235,7 +235,7 @@ export function InlineApprovalBanner(): JSX.Element | null {
                 >
                   Approve
                 </button>
-                <button
+                <button type="button"
                   onClick={() => handleDeny(c)}
                   disabled={acting === c.consent_id}
                   style={{
@@ -369,7 +369,7 @@ export function InlineApprovalBanner(): JSX.Element | null {
               alignItems: "center",
             }}
           >
-            <button
+            <button type="button"
               onClick={() => handleApprove(top)}
               disabled={acting === top.consent_id}
               style={{
@@ -390,7 +390,7 @@ export function InlineApprovalBanner(): JSX.Element | null {
               <Check size={14} /> Approve
             </button>
             {top.goal_id && (
-              <button
+              <button type="button"
                 onClick={() => handleApproveAll(top)}
                 disabled={acting === top.consent_id}
                 style={{
@@ -408,7 +408,7 @@ export function InlineApprovalBanner(): JSX.Element | null {
                 Approve All
               </button>
             )}
-            <button
+            <button type="button"
               onClick={() => handleDeny(top)}
               disabled={acting === top.consent_id}
               style={{
@@ -433,7 +433,7 @@ export function InlineApprovalBanner(): JSX.Element | null {
 
         {/* Queue indicator */}
         {rest.length > 0 && (
-          <button
+          <button type="button"
             onClick={() => setExpanded(!expanded)}
             style={{
               display: "flex",

@@ -262,7 +262,7 @@ export function PermissionDashboard({
           <span className={`perm-risk-badge ${risk.className}`}>{risk.label}</span>
           {!perm.can_user_toggle && <span className="perm-locked-badge" title="Locked by admin">{"\u{1F512}"}</span>}
           {tooltip && (
-            <button
+            <button type="button"
               className="perm-help-btn"
               onClick={() => setOpenTooltip(isTooltipOpen ? null : perm.capability_key)}
               title="What does this mean?"
@@ -355,7 +355,7 @@ export function PermissionDashboard({
     <div className="perm-dashboard">
       {/* Header */}
       <div className="perm-header">
-        <button className="perm-back-btn" onClick={onBack}>&larr; Back</button>
+        <button type="button" className="perm-back-btn" onClick={onBack}>&larr; Back</button>
         <h2 className="perm-title">{agentName}</h2>
         <span className="perm-subtitle">Permission Dashboard</span>
       </div>
@@ -363,7 +363,7 @@ export function PermissionDashboard({
       {error && (
         <div className="perm-error">
           {error}
-          <button onClick={() => setError(null)}>&times;</button>
+          <button type="button" onClick={() => setError(null)}>&times;</button>
         </div>
       )}
 
@@ -372,7 +372,7 @@ export function PermissionDashboard({
         <div className="perm-request-banner">
           <span>This agent is requesting new capabilities</span>
           {requests.map((req) => (
-            <button key={req.requested_capability} className="perm-request-btn" onClick={() => setRequestModalCap(req)}>
+            <button type="button" key={req.requested_capability} className="perm-request-btn" onClick={() => setRequestModalCap(req)}>
               Review: {req.requested_capability}
             </button>
           ))}
@@ -381,7 +381,7 @@ export function PermissionDashboard({
 
       {/* Bulk Controls */}
       <div className="perm-bulk-bar">
-        <button
+        <button type="button"
           className="perm-bulk-btn perm-bulk-network"
           onClick={() => setConfirmAction({
             label: "Revoke All Network",
@@ -391,7 +391,7 @@ export function PermissionDashboard({
         >
           Revoke All Network
         </button>
-        <button
+        <button type="button"
           className="perm-bulk-btn perm-bulk-readonly"
           onClick={() => setConfirmAction({
             label: "Read-Only Mode",
@@ -407,7 +407,7 @@ export function PermissionDashboard({
         >
           Read-Only Mode
         </button>
-        <button
+        <button type="button"
           className="perm-bulk-btn perm-bulk-minimal"
           onClick={() => setConfirmAction({
             label: "Minimal Mode",
@@ -437,8 +437,8 @@ export function PermissionDashboard({
             <h3>Confirm: {confirmAction.label}</h3>
             <p>This will update {confirmAction.updates.length} permissions. Continue?</p>
             <div className="perm-modal-actions">
-              <button className="perm-modal-cancel" onClick={() => setConfirmAction(null)}>Cancel</button>
-              <button className="perm-modal-confirm" onClick={() => executeBulkAction(confirmAction.updates, confirmAction.reason)}>Apply</button>
+              <button type="button" className="perm-modal-cancel" onClick={() => setConfirmAction(null)}>Cancel</button>
+              <button type="button" className="perm-modal-confirm" onClick={() => executeBulkAction(confirmAction.updates, confirmAction.reason)}>Apply</button>
             </div>
           </div>
         </div>
@@ -527,7 +527,7 @@ export function PermissionDashboard({
 
       {/* Permission History */}
       <div className="perm-history-section">
-        <button
+        <button type="button"
           className="perm-history-toggle"
           onClick={() => setHistoryOpen(!historyOpen)}
         >

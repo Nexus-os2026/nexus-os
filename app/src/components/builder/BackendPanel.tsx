@@ -200,7 +200,7 @@ export default function BackendPanel({ projectId, onClose }: BackendPanelProps) 
             </span>
           )}
         </div>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 16 }}>x</button>
+        <button type="button" onClick={onClose} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 16 }}>x</button>
       </div>
 
       {/* Content */}
@@ -282,7 +282,7 @@ export default function BackendPanel({ projectId, onClose }: BackendPanelProps) 
         {/* Step 3: Describe Data Model */}
         {step === "describe" && (
           <div>
-            <button onClick={() => setStep("provider")} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 10, marginBottom: 10, padding: 0 }}>&larr; Change provider</button>
+            <button type="button" onClick={() => setStep("provider")} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 10, marginBottom: 10, padding: 0 }}>&larr; Change provider</button>
             <p style={{ color: C.muted, marginBottom: 12, lineHeight: 1.5 }}>
               Describe your data model in plain English.
             </p>
@@ -298,7 +298,7 @@ export default function BackendPanel({ projectId, onClose }: BackendPanelProps) 
                 {currentProvider?.cost_hint ?? ""}
               </span>
             </div>
-            <button
+            <button type="button"
               onClick={handleGenerate}
               disabled={loading || !description.trim()}
               style={{ width: "100%", padding: "7px 0", background: C.accentDim, border: `1px solid ${C.accentGlow}`, borderRadius: 4, color: C.accent, cursor: loading ? "default" : "pointer", fontWeight: 600, fontSize: 11 }}
@@ -357,13 +357,13 @@ export default function BackendPanel({ projectId, onClose }: BackendPanelProps) 
 
             {/* Actions */}
             <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
-              <button
+              <button type="button"
                 onClick={() => setShowSql(!showSql)}
                 style={{ flex: 1, padding: "6px 0", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, cursor: "pointer", fontSize: 10 }}
               >
                 {showSql ? "Hide Preview" : "View Files"}
               </button>
-              <button
+              <button type="button"
                 onClick={handleApply}
                 disabled={loading}
                 style={{ flex: 1, padding: "6px 0", background: C.accentDim, border: `1px solid ${C.accentGlow}`, borderRadius: 4, color: C.accent, cursor: loading ? "default" : "pointer", fontWeight: 600, fontSize: 10 }}
@@ -402,14 +402,14 @@ export default function BackendPanel({ projectId, onClose }: BackendPanelProps) 
               {selectedProvider === "firebase" && "Next: Deploy rules with 'firebase deploy --only firestore:rules'."}
             </p>
             {selectedProvider === "supabase" && (
-              <button
+              <button type="button"
                 onClick={() => { navigator.clipboard.writeText(allMigrationSql); }}
                 style={{ width: "100%", padding: "7px 0", marginTop: 10, background: C.accentDim, border: `1px solid ${C.accentGlow}`, borderRadius: 4, color: C.accent, cursor: "pointer", fontWeight: 600, fontSize: 11 }}
               >
                 Copy Migration SQL
               </button>
             )}
-            <button
+            <button type="button"
               onClick={onClose}
               style={{ width: "100%", padding: "7px 0", marginTop: 6, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, cursor: "pointer", fontSize: 11 }}
             >

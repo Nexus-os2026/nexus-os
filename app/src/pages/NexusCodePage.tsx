@@ -1046,7 +1046,7 @@ export default function NexusCodePage(): JSX.Element {
           </div>
           <div style={{ flex: 1 }} />
           {activeTab === "agent" && (
-            <button
+            <button type="button"
               style={{
                 ...S.btnPurple,
                 padding: "0.2rem 0.5rem",
@@ -1190,7 +1190,7 @@ export default function NexusCodePage(): JSX.Element {
                 Switch provider:
               </span>
               {diagnostic.configured_providers.map((p) => (
-                <button
+                <button type="button"
                   key={p}
                   style={{
                     ...S.btn,
@@ -1213,7 +1213,7 @@ export default function NexusCodePage(): JSX.Element {
                   {p}
                 </button>
               ))}
-              <button
+              <button type="button"
                 style={{
                   ...S.btn,
                   padding: "0.25rem 0.5rem",
@@ -1253,11 +1253,11 @@ export default function NexusCodePage(): JSX.Element {
             disabled={isRunning}
           />
           {isRunning ? (
-            <button style={S.btnDanger} onClick={() => nxChatCancel()}>
+            <button type="button" style={S.btnDanger} onClick={() => nxChatCancel()}>
               Cancel
             </button>
           ) : (
-            <button
+            <button type="button"
               style={activeTab === "agent" ? S.btnPurple : S.btn}
               onClick={handleSend}
               disabled={!input.trim()}
@@ -1278,7 +1278,7 @@ export default function NexusCodePage(): JSX.Element {
               {sidePanel === "patterns" && "Learned Patterns"}
               {sidePanel === "stats" && "Learning Stats"}
             </span>
-            <button
+            <button type="button"
               style={{
                 background: "none",
                 border: "none",
@@ -1558,13 +1558,13 @@ export default function NexusCodePage(): JSX.Element {
                 justifyContent: "flex-end",
               }}
             >
-              <button
+              <button type="button"
                 style={S.btnDanger}
                 onClick={() => handleConsent(false)}
               >
                 Deny
               </button>
-              <button style={S.btn} onClick={() => handleConsent(true)}>
+              <button type="button" style={S.btn} onClick={() => handleConsent(true)}>
                 Approve
               </button>
             </div>
@@ -1651,13 +1651,13 @@ export default function NexusCodePage(): JSX.Element {
                 justifyContent: "flex-end",
               }}
             >
-              <button
+              <button type="button"
                 style={S.btnDanger}
                 onClick={() => handleAgentApproval(false)}
               >
                 Deny
               </button>
-              <button
+              <button type="button"
                 style={S.btnPurple}
                 onClick={() => handleAgentApproval(true)}
               >

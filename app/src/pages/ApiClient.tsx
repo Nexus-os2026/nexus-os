@@ -300,8 +300,8 @@ export default function ApiClient() {
         <div className="ac-sidebar-header">
           <h2 className="ac-sidebar-title">API Client</h2>
           <div className="ac-sidebar-actions">
-            <button className="ac-btn-icon cursor-pointer" onClick={addCollection} title="New collection" aria-label="New collection"><Plus size={14} /></button>
-            <button className={`ac-btn-icon cursor-pointer ${showAudit ? "active" : ""}`} onClick={() => setShowAudit(!showAudit)} title="Audit"><LayoutGrid size={14} /></button>
+            <button type="button" className="ac-btn-icon cursor-pointer" onClick={addCollection} title="New collection" aria-label="New collection"><Plus size={14} /></button>
+            <button type="button" className={`ac-btn-icon cursor-pointer ${showAudit ? "active" : ""}`} onClick={() => setShowAudit(!showAudit)} title="Audit"><LayoutGrid size={14} /></button>
           </div>
         </div>
 
@@ -330,7 +330,7 @@ export default function ApiClient() {
             {collections.length === 0 && (
               <div style={{ padding: "24px 16px", textAlign: "center", color: "#64748b", fontSize: 13 }}>
                 <p style={{ marginBottom: 12 }}>No collections yet.</p>
-                <button className="ac-btn-send cursor-pointer" style={{ fontSize: 12, padding: "6px 16px" }} onClick={addCollection}>
+                <button type="button" className="ac-btn-send cursor-pointer" style={{ fontSize: 12, padding: "6px 16px" }} onClick={addCollection}>
                   <Plus size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Create your first collection
                 </button>
               </div>
@@ -342,7 +342,7 @@ export default function ApiClient() {
                   <span className="ac-collection-icon">{col.icon}</span>
                   <span className="ac-collection-name">{col.name}</span>
                   <span className="ac-collection-count">{col.requests.length}</span>
-                  <button className="ac-btn-tiny cursor-pointer" onClick={e => { e.stopPropagation(); addRequest(col.id); }} title="Add request"><Plus size={10} /></button>
+                  <button type="button" className="ac-btn-tiny cursor-pointer" onClick={e => { e.stopPropagation(); addRequest(col.id); }} title="Add request"><Plus size={10} /></button>
                 </div>
                 {!col.collapsed && (
                   <div className="ac-collection-requests">
@@ -350,7 +350,7 @@ export default function ApiClient() {
                       <div key={req.id} className={`ac-req-item ${activeReqId === req.id ? "active" : ""}`} onClick={() => { setActiveReqId(req.id); setResponse(null); setRequestError(null); }}>
                         <span className="ac-req-method" style={{ color: METHOD_COLORS[req.method] }}>{req.method.slice(0, 3)}</span>
                         <span className="ac-req-name">{req.name}</span>
-                        <button className="ac-btn-del cursor-pointer" onClick={e => { e.stopPropagation(); deleteRequest(col.id, req.id); }}><Trash2 size={10} /></button>
+                        <button type="button" className="ac-btn-del cursor-pointer" onClick={e => { e.stopPropagation(); deleteRequest(col.id, req.id); }}><Trash2 size={10} /></button>
                       </div>
                     ))}
                   </div>
@@ -376,7 +376,7 @@ export default function ApiClient() {
             ))}
           </select>
           <input className="ac-url-input" value={activeReq.url} onChange={e => updateReq({ url: e.target.value })} placeholder="Enter request URL..." onKeyDown={e => e.key === "Enter" && sendRequest()} />
-          <button className="ac-btn-send cursor-pointer" onClick={sendRequest} disabled={loading}>
+          <button type="button" className="ac-btn-send cursor-pointer" onClick={sendRequest} disabled={loading}>
             {loading ? "Sending..." : <><Send size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Send</>}
           </button>
         </div>
@@ -389,7 +389,7 @@ export default function ApiClient() {
         {/* request tabs */}
         <div className="ac-req-tabs">
           {(["params", "headers", "body", "auth"] as ReqTab[]).map(tab => (
-            <button key={tab} className={`ac-req-tab ${reqTab === tab ? "active" : ""}`} onClick={() => setReqTab(tab)}>
+            <button type="button" key={tab} className={`ac-req-tab ${reqTab === tab ? "active" : ""}`} onClick={() => setReqTab(tab)}>
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
               {tab === "params" && activeReq.params.length > 0 && <span className="ac-tab-count">{activeReq.params.length}</span>}
               {tab === "headers" && <span className="ac-tab-count">{activeReq.headers.length}</span>}
@@ -403,7 +403,7 @@ export default function ApiClient() {
             <div className="ac-kv-section">
               <div className="ac-kv-header">
                 <span>Query Parameters</span>
-                <button className="ac-btn-add" onClick={() => addKV("params")}>+ Add</button>
+                <button type="button" className="ac-btn-add" onClick={() => addKV("params")}>+ Add</button>
               </div>
               {activeReq.params.length === 0 && <div className="ac-kv-empty">No parameters. Click + Add to create one.</div>}
               {activeReq.params.map((kv, i) => (
@@ -411,7 +411,7 @@ export default function ApiClient() {
                   <input type="checkbox" checked={kv.enabled} onChange={e => updateKV("params", i, { enabled: e.target.checked })} className="ac-kv-check" />
                   <input className="ac-kv-key" value={kv.key} onChange={e => updateKV("params", i, { key: e.target.value })} placeholder="Key" />
                   <input className="ac-kv-value" value={kv.value} onChange={e => updateKV("params", i, { value: e.target.value })} placeholder="Value" />
-                  <button className="ac-btn-remove" onClick={() => removeKV("params", i)}>×</button>
+                  <button type="button" className="ac-btn-remove" onClick={() => removeKV("params", i)}>×</button>
                 </div>
               ))}
             </div>
@@ -422,14 +422,14 @@ export default function ApiClient() {
             <div className="ac-kv-section">
               <div className="ac-kv-header">
                 <span>Headers</span>
-                <button className="ac-btn-add" onClick={() => addKV("headers")}>+ Add</button>
+                <button type="button" className="ac-btn-add" onClick={() => addKV("headers")}>+ Add</button>
               </div>
               {activeReq.headers.map((kv, i) => (
                 <div key={i} className="ac-kv-row">
                   <input type="checkbox" checked={kv.enabled} onChange={e => updateKV("headers", i, { enabled: e.target.checked })} className="ac-kv-check" />
                   <input className="ac-kv-key" value={kv.key} onChange={e => updateKV("headers", i, { key: e.target.value })} placeholder="Header name" />
                   <input className="ac-kv-value" value={kv.value} onChange={e => updateKV("headers", i, { value: e.target.value })} placeholder="Value" />
-                  <button className="ac-btn-remove" onClick={() => removeKV("headers", i)}>×</button>
+                  <button type="button" className="ac-btn-remove" onClick={() => removeKV("headers", i)}>×</button>
                 </div>
               ))}
             </div>
@@ -440,7 +440,7 @@ export default function ApiClient() {
             <div className="ac-body-section">
               <div className="ac-body-type-bar">
                 {(["none", "json", "form", "text"] as BodyType[]).map(bt => (
-                  <button key={bt} className={`ac-body-type-btn ${activeReq.bodyType === bt ? "active" : ""}`} onClick={() => updateReq({ bodyType: bt })}>
+                  <button type="button" key={bt} className={`ac-body-type-btn ${activeReq.bodyType === bt ? "active" : ""}`} onClick={() => updateReq({ bodyType: bt })}>
                     {bt.charAt(0).toUpperCase() + bt.slice(1)}
                   </button>
                 ))}
@@ -456,14 +456,14 @@ export default function ApiClient() {
                 <div className="ac-kv-section">
                   <div className="ac-kv-header">
                     <span>Form Data</span>
-                    <button className="ac-btn-add" onClick={() => addKV("bodyForm")}>+ Add</button>
+                    <button type="button" className="ac-btn-add" onClick={() => addKV("bodyForm")}>+ Add</button>
                   </div>
                   {activeReq.bodyForm.map((kv, i) => (
                     <div key={i} className="ac-kv-row">
                       <input type="checkbox" checked={kv.enabled} onChange={e => updateKV("bodyForm", i, { enabled: e.target.checked })} className="ac-kv-check" />
                       <input className="ac-kv-key" value={kv.key} onChange={e => updateKV("bodyForm", i, { key: e.target.value })} placeholder="Key" />
                       <input className="ac-kv-value" value={kv.value} onChange={e => updateKV("bodyForm", i, { value: e.target.value })} placeholder="Value" />
-                      <button className="ac-btn-remove" onClick={() => removeKV("bodyForm", i)}>×</button>
+                      <button type="button" className="ac-btn-remove" onClick={() => removeKV("bodyForm", i)}>×</button>
                     </div>
                   ))}
                 </div>
@@ -476,7 +476,7 @@ export default function ApiClient() {
             <div className="ac-auth-section">
               <div className="ac-auth-type-bar">
                 {(["none", "bearer", "basic", "api-key"] as AuthType[]).map(at => (
-                  <button key={at} className={`ac-auth-type-btn ${activeReq.authType === at ? "active" : ""}`} onClick={() => updateReq({ authType: at })}>
+                  <button type="button" key={at} className={`ac-auth-type-btn ${activeReq.authType === at ? "active" : ""}`} onClick={() => updateReq({ authType: at })}>
                     {at === "api-key" ? "API Key" : at.charAt(0).toUpperCase() + at.slice(1)}
                   </button>
                 ))}
@@ -505,8 +505,8 @@ export default function ApiClient() {
                   <input className="ac-auth-input" value={activeReq.authKeyValue} onChange={e => updateReq({ authKeyValue: e.target.value })} placeholder="API key value" type="password" />
                   <label>Add to</label>
                   <div className="ac-auth-location">
-                    <button className={`ac-auth-loc-btn ${activeReq.authKeyIn === "header" ? "active" : ""}`} onClick={() => updateReq({ authKeyIn: "header" })}>Header</button>
-                    <button className={`ac-auth-loc-btn ${activeReq.authKeyIn === "query" ? "active" : ""}`} onClick={() => updateReq({ authKeyIn: "query" })}>Query Param</button>
+                    <button type="button" className={`ac-auth-loc-btn ${activeReq.authKeyIn === "header" ? "active" : ""}`} onClick={() => updateReq({ authKeyIn: "header" })}>Header</button>
+                    <button type="button" className={`ac-auth-loc-btn ${activeReq.authKeyIn === "query" ? "active" : ""}`} onClick={() => updateReq({ authKeyIn: "query" })}>Query Param</button>
                   </div>
                 </div>
               )}
@@ -530,7 +530,7 @@ export default function ApiClient() {
             {response && (
               <div className="ac-res-tabs">
                 {(["body", "headers", "cookies"] as ResTab[]).map(tab => (
-                  <button key={tab} className={`ac-res-tab ${resTab === tab ? "active" : ""}`} onClick={() => setResTab(tab)}>
+                  <button type="button" key={tab} className={`ac-res-tab ${resTab === tab ? "active" : ""}`} onClick={() => setResTab(tab)}>
                     {tab.charAt(0).toUpperCase() + tab.slice(1)}
                   </button>
                 ))}

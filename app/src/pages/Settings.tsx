@@ -505,9 +505,8 @@ export function Settings({
 
       <nav className="st-nav">
         {(["general", "llm", "api", "privacy", "voice", "models", "tools", "about"] as SettingsSection[]).map((s) => (
-          <button
+          <button type="button"
             key={s}
-            type="button"
             className={`st-nav-btn cursor-pointer ${section === s ? "active" : ""}`}
             onClick={() => setSection(s)}
           >
@@ -655,8 +654,7 @@ export function Settings({
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     {p.is_paid && <span className="st-badge" style={{ fontSize: "0.7rem", padding: "2px 6px" }}>Paid</span>}
                     {!p.is_paid && p.name !== "mock" && <span className="st-badge st-badge-green" style={{ fontSize: "0.7rem", padding: "2px 6px" }}>Free</span>}
-                    <button
-                      type="button"
+                    <button type="button"
                       className="st-btn st-btn-ghost cursor-pointer"
                       style={{ fontSize: "0.75rem", padding: "3px 10px" }}
                       disabled={testingProvider === p.name}
@@ -808,8 +806,7 @@ export function Settings({
                         <p style={{ color: "#ffa500", fontSize: "0.82rem", marginTop: 2 }}>
                           Installed (v{status.version ?? "?"}) — not logged in
                         </p>
-                        <button
-                          type="button"
+                        <button type="button"
                           className="st-btn st-btn-blue cursor-pointer"
                           style={{ marginTop: 4, fontSize: "0.78rem", padding: "3px 10px" }}
                           onClick={async () => {
@@ -833,8 +830,7 @@ export function Settings({
                     )}
                   </div>
                   {isEnabled && (
-                    <button
-                      type="button"
+                    <button type="button"
                       className="st-btn st-btn-ghost cursor-pointer"
                       style={{ marginLeft: "auto", fontSize: "0.75rem", padding: "3px 10px" }}
                       disabled={claudeCodeDetecting}
@@ -938,8 +934,7 @@ export function Settings({
                         <p style={{ color: "#ffa500", fontSize: "0.82rem", marginTop: 2 }}>
                           Installed (v{status.version ?? "?"}) — not logged in
                         </p>
-                        <button
-                          type="button"
+                        <button type="button"
                           className="st-btn st-btn-blue cursor-pointer"
                           style={{ marginTop: 4, fontSize: "0.78rem", padding: "3px 10px" }}
                           disabled={codexCliLoggingIn}
@@ -966,8 +961,7 @@ export function Settings({
                     )}
                   </div>
                   {isEnabled && (
-                    <button
-                      type="button"
+                    <button type="button"
                       className="st-btn st-btn-ghost cursor-pointer"
                       style={{ marginLeft: "auto", fontSize: "0.75rem", padding: "3px 10px" }}
                       disabled={codexCliDetecting}
@@ -1004,8 +998,7 @@ export function Settings({
 
             {/* Save Provider Settings */}
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-              <button
-                type="button"
+              <button type="button"
                 className="st-btn st-btn-blue cursor-pointer"
                 disabled={providerSettingsSaving || !providerSettings}
                 onClick={async () => {
@@ -1308,8 +1301,7 @@ export function Settings({
                           : `${(m.size / 1_000_000).toFixed(0)} MB`}
                       </span>
                       {onDeleteModel && (
-                        <button
-                          type="button"
+                        <button type="button"
                           className="st-btn st-btn-red st-btn-sm cursor-pointer"
                           onClick={() => { void onDeleteModel(m.name); }}
                         >
@@ -1370,8 +1362,7 @@ export function Settings({
                       <p className="st-row-label" style={{ fontFamily: "monospace" }}>{t.name}</p>
                       <p className="st-row-hint">{t.description}</p>
                     </div>
-                    <button
-                      type="button"
+                    <button type="button"
                       className="st-btn st-btn-ghost cursor-pointer"
                       style={{ fontSize: "0.75rem", padding: "3px 10px" }}
                       onClick={() => setToolJson(JSON.stringify({ tool: t.name, args: {} }, null, 2))}
@@ -1396,16 +1387,14 @@ export function Settings({
                 placeholder={'{\n  "tool": "tool_name",\n  "args": {}\n}'}
               />
               <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  type="button"
+                <button type="button"
                   className="st-btn st-btn-blue cursor-pointer"
                   onClick={handleExecuteTool}
                   disabled={toolExecuting || !toolJson.trim()}
                 >
                   {toolExecuting ? "Executing..." : "Execute Tool"}
                 </button>
-                <button
-                  type="button"
+                <button type="button"
                   className="st-btn st-btn-ghost cursor-pointer"
                   onClick={() => { setToolJson(""); setToolResult(null); }}
                 >

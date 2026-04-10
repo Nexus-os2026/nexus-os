@@ -99,7 +99,7 @@ export default function WorldSimulation2() {
 
       {error && (
         <div style={{ color: "#ef4444", background: alpha("#ef4444", 0.1), padding: "8px 12px", borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
-          {error} <button onClick={() => setError(null)} style={{ marginLeft: 8, background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}>Dismiss</button>
+          {error} <button type="button" onClick={() => setError(null)} style={{ marginLeft: 8, background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}>Dismiss</button>
         </div>
       )}
 
@@ -111,7 +111,7 @@ export default function WorldSimulation2() {
         </div>
         <textarea placeholder='Actions JSON array' value={actionsJson} onChange={(e) => setActionsJson(e.target.value)} rows={3} style={{ width: "100%", padding: 8, borderRadius: 6, background: "#2a2a3e", color: "#e0e0e0", border: "1px solid #444", fontFamily: "monospace", fontSize: 12, boxSizing: "border-box", resize: "vertical", marginBottom: 8 }} />
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={async () => {
+          <button type="button" onClick={async () => {
             if (!selectedAgent || !scenarioDesc.trim()) return;
             setError(null);
             try {

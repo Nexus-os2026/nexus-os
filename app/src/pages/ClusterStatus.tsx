@@ -180,8 +180,7 @@ export default function ClusterStatus(): JSX.Element {
           <div style={cardStyle}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
               <span style={{ fontFamily: "monospace", fontSize: "0.9rem", color: "#22d3ee", fontWeight: 600 }}>MESH NETWORK</span>
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => void handleDiscover()}
                 disabled={discovering}
                 style={{
@@ -247,8 +246,8 @@ export default function ClusterStatus(): JSX.Element {
                   placeholder="Agent IDs (comma sep)"
                   style={{ flex: 1, padding: "6px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.8rem" }}
                 />
-                <button
-                  type="button" onClick={() => void handleDistributeTask()}
+                <button type="button"
+                  onClick={() => void handleDistributeTask()}
                   disabled={!taskInput.trim()}
                   style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #22d3ee", background: "rgba(34,211,238,0.1)", color: "#22d3ee", cursor: "pointer", fontFamily: "monospace", fontSize: "0.78rem" }}
                 >
@@ -271,8 +270,8 @@ export default function ClusterStatus(): JSX.Element {
                   placeholder="Target peer ID"
                   style={{ flex: 1, padding: "6px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 6, color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.8rem" }}
                 />
-                <button
-                  type="button" onClick={() => void handleMigrateAgent()}
+                <button type="button"
+                  onClick={() => void handleMigrateAgent()}
                   disabled={!migrateAgentId.trim() || !migrateTarget.trim()}
                   style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #f59e0b", background: "rgba(245,158,11,0.1)", color: "#f59e0b", cursor: "pointer", fontFamily: "monospace", fontSize: "0.78rem" }}
                 >

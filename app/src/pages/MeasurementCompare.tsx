@@ -99,7 +99,7 @@ export default function MeasurementCompare() {
       <Panel title={`Select Agents (${selected.size}/4)`} action={<ActionButton accent={ACCENT} onClick={doCompare}>Compare</ActionButton>}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {availableAgents.map((id) => (
-            <button key={id} onClick={() => toggleAgent(id)} style={{
+            <button type="button" key={id} onClick={() => toggleAgent(id)} style={{
               padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: "pointer", border: "1px solid",
               borderColor: selected.has(id) ? ACCENT : "#334155",
               background: selected.has(id) ? alpha(ACCENT, 0.15) : "transparent",

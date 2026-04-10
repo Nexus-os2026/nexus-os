@@ -541,9 +541,8 @@ export default function KnowledgeGraphPage(): JSX.Element {
             {results.map((result) => {
               const active = result.path === selectedPath;
               return (
-                <button
+                <button type="button"
                   key={result.path}
-                  type="button"
                   onClick={() => void loadFileDetails(result.path, result)}
                   style={{
                     ...commandInsetStyle,

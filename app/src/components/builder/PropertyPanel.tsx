@@ -260,11 +260,11 @@ export default function PropertyPanel({ selected, onTokenChange, onTextChange, o
         </div>
         <div style={{ display: "flex", gap: 4 }}>
           {undoStack.length > 0 && (
-            <button onClick={handleUndo} style={{ background: "transparent", color: C.muted, border: `1px solid ${C.border}`, borderRadius: 4, padding: "2px 8px", fontSize: 10, cursor: "pointer" }} title="Undo last change">
+            <button type="button" onClick={handleUndo} style={{ background: "transparent", color: C.muted, border: `1px solid ${C.border}`, borderRadius: 4, padding: "2px 8px", fontSize: 10, cursor: "pointer" }} title="Undo last change">
               Undo
             </button>
           )}
-          <button onClick={onDeselect} style={{ background: "transparent", color: C.dim, border: "none", padding: "2px 6px", fontSize: 14, cursor: "pointer" }} aria-label="Deselect">
+          <button type="button" onClick={onDeselect} style={{ background: "transparent", color: C.dim, border: "none", padding: "2px 6px", fontSize: 14, cursor: "pointer" }} aria-label="Deselect">
             {"\u00D7"}
           </button>
         </div>
@@ -325,7 +325,7 @@ export default function PropertyPanel({ selected, onTokenChange, onTextChange, o
           <Section title="Typography">
             <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
               {TYPE_SCALE.map(ts => (
-                <button
+                <button type="button"
                   key={ts.token}
                   onClick={() => handleTokenChange(sectionId ? 3 : 1, sectionId, ts.token, `var(--${ts.token})`, styles.fontSize || "")}
                   style={{
@@ -341,7 +341,7 @@ export default function PropertyPanel({ selected, onTokenChange, onTextChange, o
               <Label text="Font Weight" />
               <div style={{ display: "flex", gap: 3 }}>
                 {["400", "500", "600", "700", "800"].map(w => (
-                  <button
+                  <button type="button"
                     key={w}
                     onClick={() => {
                       // Font weight is not a token operation but a direct style — skip for now
@@ -367,7 +367,7 @@ export default function PropertyPanel({ selected, onTokenChange, onTextChange, o
           <Section title="Border Radius">
             <div style={{ display: "flex", gap: 3 }}>
               {RADIUS_TOKENS.map(rt => (
-                <button
+                <button type="button"
                   key={rt.token}
                   onClick={() => handleTokenChange(sectionId ? 3 : 1, sectionId, rt.token, rt.value, styles.borderRadius || "")}
                   style={{

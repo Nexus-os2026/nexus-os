@@ -330,7 +330,7 @@ export default function DatabaseManager() {
             placeholder="SQLite path (e.g. ~/.nexus/data.db)"
             onKeyDown={e => e.key === "Enter" && connectToDb()}
           />
-          <button className="db-btn-run" style={{ width: "100%", fontSize: 11 }} onClick={connectToDb} disabled={connecting}>
+          <button type="button" className="db-btn-run" style={{ width: "100%", fontSize: 11 }} onClick={connectToDb} disabled={connecting}>
             {connecting ? "Connecting..." : "Connect"}
           </button>
         </div>
@@ -348,7 +348,7 @@ export default function DatabaseManager() {
                 <span className="db-conn-engine" style={{ color: "#38bdf8" }}><Diamond size={12} /></span>
                 <span className="db-conn-name">{conn.name}</span>
                 <span className={`db-conn-status db-status-${conn.status}`}><Circle size={8} fill="currentColor" /></span>
-                <button className="db-conn-toggle cursor-pointer" onClick={e => { e.stopPropagation(); disconnectDb(idx); }}><Power size={12} /></button>
+                <button type="button" className="db-conn-toggle cursor-pointer" onClick={e => { e.stopPropagation(); disconnectDb(idx); }}><Power size={12} /></button>
               </div>
               {selectedConnIdx === idx && (
                 <div className="db-tables-list">
@@ -393,7 +393,7 @@ export default function DatabaseManager() {
         <div className="db-tabs">
           <div className="db-tabs-left">
             {(["query", "builder", "schema", "visualize", "history"] as TabId[]).map(tab => (
-              <button key={tab} className={`db-tab cursor-pointer ${activeTab === tab ? "active" : ""}`} onClick={() => setActiveTab(tab)}>
+              <button type="button" key={tab} className={`db-tab cursor-pointer ${activeTab === tab ? "active" : ""}`} onClick={() => setActiveTab(tab)}>
                 {tab === "query" ? <Keyboard size={14} /> : tab === "builder" ? <LayoutGrid size={14} /> : tab === "schema" ? <Hexagon size={14} /> : tab === "visualize" ? <PieChartIcon size={14} /> : <Clock size={14} />} {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
@@ -409,12 +409,12 @@ export default function DatabaseManager() {
           <div className="db-query-tab">
             <div className="db-query-editor">
               <div className="db-query-toolbar">
-                <button className="db-btn-run cursor-pointer" onClick={() => executeQuery(sqlQuery)} disabled={executing}>
+                <button type="button" className="db-btn-run cursor-pointer" onClick={() => executeQuery(sqlQuery)} disabled={executing}>
                   {executing ? "Running..." : <><Play size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Run Query</>}
                 </button>
-                <button className="db-btn-secondary" onClick={() => handleExport("csv")}>CSV</button>
-                <button className="db-btn-secondary" onClick={() => handleExport("json")}>JSON</button>
-                <button className="db-btn-secondary" onClick={() => setSqlQuery("")}>Clear</button>
+                <button type="button" className="db-btn-secondary" onClick={() => handleExport("csv")}>CSV</button>
+                <button type="button" className="db-btn-secondary" onClick={() => handleExport("json")}>JSON</button>
+                <button type="button" className="db-btn-secondary" onClick={() => setSqlQuery("")}>Clear</button>
               </div>
               <textarea
                 className="db-sql-editor"
@@ -480,9 +480,9 @@ export default function DatabaseManager() {
                   <div className="db-builder-section">
                     <label className="db-builder-label">Columns</label>
                     <div className="db-builder-chips">
-                      <button className={`db-builder-chip ${builderColumns.includes("*") ? "active" : ""}`} onClick={() => setBuilderColumns(["*"])}>All (*)</button>
+                      <button type="button" className={`db-builder-chip ${builderColumns.includes("*") ? "active" : ""}`} onClick={() => setBuilderColumns(["*"])}>All (*)</button>
                       {selectedConn.tables.find(t => t.name === builderTable)?.columns.map(col => (
-                        <button key={col.name} className={`db-builder-chip ${builderColumns.includes(col.name) ? "active" : ""}`} onClick={() => toggleBuilderColumn(col.name)}>
+                        <button type="button" key={col.name} className={`db-builder-chip ${builderColumns.includes(col.name) ? "active" : ""}`} onClick={() => toggleBuilderColumn(col.name)}>
                           {col.primaryKey && "PK "}{col.name}
                         </button>
                       ))}
@@ -492,7 +492,7 @@ export default function DatabaseManager() {
                   <div className="db-builder-section">
                     <div className="db-builder-label-row">
                       <label className="db-builder-label">Filters</label>
-                      <button className="db-btn-add-filter" onClick={addBuilderFilter}>+ Add</button>
+                      <button type="button" className="db-btn-add-filter" onClick={addBuilderFilter}>+ Add</button>
                     </div>
                     {builderFilters.map((filter, idx) => (
                       <div key={idx} className="db-builder-filter-row">
@@ -510,7 +510,7 @@ export default function DatabaseManager() {
                           <option value="IN">IN</option>
                         </select>
                         <input className="db-builder-filter-val" value={filter.value} onChange={e => updateBuilderFilter(idx, { value: e.target.value })} placeholder="value" />
-                        <button className="db-btn-remove" onClick={() => removeBuilderFilter(idx)}>×</button>
+                        <button type="button" className="db-btn-remove" onClick={() => removeBuilderFilter(idx)}>×</button>
                       </div>
                     ))}
                   </div>
@@ -535,7 +535,7 @@ export default function DatabaseManager() {
                 <div className="db-builder-preview">
                   <div className="db-builder-preview-header">
                     <span>Generated SQL</span>
-                    <button className="db-btn-run cursor-pointer" onClick={() => { setSqlQuery(builderSql); executeQuery(builderSql); setActiveTab("query"); }}><Play size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Run</button>
+                    <button type="button" className="db-btn-run cursor-pointer" onClick={() => { setSqlQuery(builderSql); executeQuery(builderSql); setActiveTab("query"); }}><Play size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Run</button>
                   </div>
                   <pre className="db-builder-sql">{builderSql}</pre>
                 </div>
@@ -593,7 +593,7 @@ export default function DatabaseManager() {
                     <label>Chart Type</label>
                     <div className="db-viz-type-btns">
                       {(["bar", "pie", "line"] as const).map(t => (
-                        <button key={t} className={`db-viz-type-btn cursor-pointer ${vizType === t ? "active" : ""}`} onClick={() => setVizType(t)}>
+                        <button type="button" key={t} className={`db-viz-type-btn cursor-pointer ${vizType === t ? "active" : ""}`} onClick={() => setVizType(t)}>
                           {t === "bar" ? <BarChart3 size={14} /> : t === "pie" ? <PieChartIcon size={14} /> : <TrendingUp size={14} />} {t.charAt(0).toUpperCase() + t.slice(1)}
                         </button>
                       ))}
@@ -683,7 +683,7 @@ export default function DatabaseManager() {
                     <span className="db-history-time">{formatTimestamp(entry.timestamp)}</span>
                     <span className="db-history-db" style={{ color: "#38bdf8" }}><Diamond size={10} style={{ display: "inline", verticalAlign: "middle", marginRight: 2 }} /> {entry.database}</span>
                     <span className="db-history-meta">{entry.rowCount} rows · {entry.duration}ms</span>
-                    <button className="db-history-rerun cursor-pointer" onClick={() => { setSqlQuery(entry.query); setActiveTab("query"); }} title="Load query"><RotateCcw size={12} /></button>
+                    <button type="button" className="db-history-rerun cursor-pointer" onClick={() => { setSqlQuery(entry.query); setActiveTab("query"); }} title="Load query"><RotateCcw size={12} /></button>
                   </div>
                   <pre className="db-history-query">{entry.query}</pre>
                   {entry.error && <div className="db-history-error">{entry.error}</div>}

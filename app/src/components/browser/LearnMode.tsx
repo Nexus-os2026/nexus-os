@@ -260,7 +260,7 @@ export function LearnMode({ onActivity }: LearnModeProps): JSX.Element {
       {/* Top controls */}
       <div className="learn-controls">
         <div className="learn-controls-left">
-          <button
+          <button type="button"
             className={`learn-btn ${running ? "learn-btn--stop" : "learn-btn--start"}`}
             onClick={running ? handleStop : handleStart}
           >
@@ -280,7 +280,7 @@ export function LearnMode({ onActivity }: LearnModeProps): JSX.Element {
       {/* Panel tabs */}
       <div className="learn-panel-tabs">
         {(["browser", "feed", "knowledge"] as LearnPanel[]).map((p) => (
-          <button
+          <button type="button"
             key={p}
             className={`learn-panel-tab${activePanel === p ? " learn-panel-tab--active" : ""}`}
             onClick={() => setActivePanel(p)}
@@ -303,7 +303,7 @@ export function LearnMode({ onActivity }: LearnModeProps): JSX.Element {
             <div className="learn-sources-list">
               <div className="learn-sources-header">
                 <span className="learn-sources-title">Learning Sources</span>
-                <button className="learn-sources-add" onClick={handleAddSource}>
+                <button type="button" className="learn-sources-add" onClick={handleAddSource}>
                   + Add
                 </button>
               </div>
@@ -323,7 +323,7 @@ export function LearnMode({ onActivity }: LearnModeProps): JSX.Element {
                     <span className="learn-source-reading">Reading...</span>
                   )}
                   {!running && (
-                    <button
+                    <button type="button"
                       className="learn-source-remove"
                       onClick={() => handleRemoveSource(i)}
                       title="Remove source"

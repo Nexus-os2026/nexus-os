@@ -262,8 +262,7 @@ export default function ComplianceDashboard(): JSX.Element {
       {/* Tab bar */}
       <nav className="cd-tabs">
         {tabs.map((t) => (
-          <button
-            type="button"
+          <button type="button"
             key={t.id}
             className={`cd-tab ${tab === t.id ? "cd-tab--active" : ""}`}
             onClick={() => setTab(t.id)}
@@ -476,8 +475,7 @@ export default function ComplianceDashboard(): JSX.Element {
           <p className="cd-desc">Verify the integrity of the append-only audit trail by checking every hash link in the chain.</p>
 
           <div className="cd-chain-actions">
-            <button
-              type="button"
+            <button type="button"
               className="cd-generate-btn"
               onClick={handleVerifyChain}
               disabled={chainVerifying}
@@ -700,8 +698,7 @@ export default function ComplianceDashboard(): JSX.Element {
           ) : (
             <div className="cd-report-select">
               {agents.map((agent) => (
-                <button
-                  type="button"
+                <button type="button"
                   key={agent.id}
                   className={`cd-report-agent ${reportAgent === agent.id ? "cd-report-agent--selected" : ""}`}
                   onClick={() => setReportAgent(agent.id)}
@@ -731,8 +728,7 @@ export default function ComplianceDashboard(): JSX.Element {
                   <div className="cd-report-field"><span className="cd-field-label">Capabilities:</span> {agent.capabilities.join(", ")}</div>
                   <div className="cd-report-field"><span className="cd-field-label">Agent ID:</span> <code>{agent.id}</code></div>
                 </div>
-                <button
-                  type="button"
+                <button type="button"
                   className="cd-generate-btn"
                   onClick={() => handleGenerateReport(agent.id)}
                 >
@@ -775,8 +771,7 @@ export default function ComplianceDashboard(): JSX.Element {
                         </button>
                       </div>
                     ) : (
-                      <button
-                        type="button"
+                      <button type="button"
                         className="cd-btn-erase"
                         onClick={() => setEraseConfirm(agent.id)}
                       >

@@ -104,7 +104,7 @@ export default function ImportPanel({ projectId, onClose, onImportComplete }: Im
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: `1px solid ${C.border}` }}>
         <span style={{ fontWeight: 600, fontSize: 13 }}>Import Design</span>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 16 }}>x</button>
+        <button type="button" onClick={onClose} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 16 }}>x</button>
       </div>
 
       {/* Content */}
@@ -119,8 +119,8 @@ export default function ImportPanel({ projectId, onClose, onImportComplete }: Im
           <>
             {/* Tabs */}
             <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
-              <button onClick={() => setTab("paste")} style={tabStyle(tab === "paste")}>Paste HTML</button>
-              <button onClick={() => setTab("stitch")} style={tabStyle(tab === "stitch")}>Stitch / DESIGN.md</button>
+              <button type="button" onClick={() => setTab("paste")} style={tabStyle(tab === "paste")}>Paste HTML</button>
+              <button type="button" onClick={() => setTab("stitch")} style={tabStyle(tab === "stitch")}>Stitch / DESIGN.md</button>
             </div>
 
             {tab === "paste" && (
@@ -169,7 +169,7 @@ export default function ImportPanel({ projectId, onClose, onImportComplete }: Im
               All scripts and event handlers are removed during import. Cost: $0.00
             </div>
 
-            <button
+            <button type="button"
               onClick={handleImport}
               disabled={loading || !htmlInput.trim()}
               style={{ width: "100%", padding: "7px 0", background: C.accentDim, border: `1px solid ${C.accentGlow}`, borderRadius: 4, color: C.accent, cursor: loading ? "default" : "pointer", fontWeight: 600, fontSize: 11 }}
@@ -203,13 +203,13 @@ export default function ImportPanel({ projectId, onClose, onImportComplete }: Im
             )}
 
             <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
-              <button
+              <button type="button"
                 onClick={handleOpenInEditor}
                 style={{ flex: 1, padding: "7px 0", background: C.accentDim, border: `1px solid ${C.accentGlow}`, borderRadius: 4, color: C.accent, cursor: "pointer", fontWeight: 600, fontSize: 11 }}
               >
                 Open in Editor
               </button>
-              <button
+              <button type="button"
                 onClick={onClose}
                 style={{ flex: 1, padding: "7px 0", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, cursor: "pointer", fontSize: 11 }}
               >

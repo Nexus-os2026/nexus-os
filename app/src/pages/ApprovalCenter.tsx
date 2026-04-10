@@ -230,7 +230,7 @@ function PendingCard({
 
       {/* Action buttons */}
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-        <button
+        <button type="button"
           disabled={reviewRemaining > 0}
           onClick={() => {
             if (isBatch && item.goal_id) {
@@ -256,7 +256,7 @@ function PendingCard({
           <CheckCircle size={14} /> {isBatch ? "Approve All" : "Approve"}
         </button>
         {isBatch && item.review_each_available && (
-          <button
+          <button type="button"
             onClick={() => onReviewEach(item.consent_id)}
             style={{
               background: "rgba(96, 165, 250, 0.15)",
@@ -273,7 +273,7 @@ function PendingCard({
           </button>
         )}
         {!showDenyReason ? (
-          <button
+          <button type="button"
             onClick={() => setShowDenyReason(true)}
             style={{
               background: "rgba(248, 113, 113, 0.15)",
@@ -309,7 +309,7 @@ function PendingCard({
                 fontFamily: "var(--font-mono, monospace)",
               }}
             />
-            <button
+            <button type="button"
               onClick={() => {
                 if (isBatch && item.goal_id) {
                   onBatchDeny(item.goal_id, denyReason || undefined);

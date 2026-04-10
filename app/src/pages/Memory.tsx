@@ -152,13 +152,13 @@ export default function Memory(): JSX.Element {
       {error && (
         <div style={{ background: "#7f1d1d", padding: "8px 16px", borderRadius: 6, marginBottom: 12, color: "#fca5a5" }}>
           {error}
-          <button onClick={() => setError(null)} style={{ marginLeft: 12, color: "#fca5a5", background: "none", border: "none", cursor: "pointer" }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+          <button type="button" onClick={() => setError(null)} style={{ marginLeft: 12, color: "#fca5a5", background: "none", border: "none", cursor: "pointer" }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
         </div>
       )}
       {message && (
         <div style={{ background: "#14532d", padding: "8px 16px", borderRadius: 6, marginBottom: 12, color: "#86efac" }}>
           {message}
-          <button onClick={() => setMessage(null)} style={{ marginLeft: 12, color: "#86efac", background: "none", border: "none", cursor: "pointer" }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+          <button type="button" onClick={() => setMessage(null)} style={{ marginLeft: 12, color: "#86efac", background: "none", border: "none", cursor: "pointer" }}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
         </div>
       )}
 
@@ -192,7 +192,7 @@ export default function Memory(): JSX.Element {
           </div>
         )}
 
-        <button onClick={refresh} style={{ marginLeft: "auto", background: "#374151", color: "#e5e7eb", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>
+        <button type="button" onClick={refresh} style={{ marginLeft: "auto", background: "#374151", color: "#e5e7eb", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>
           Refresh
         </button>
       </div>
@@ -200,7 +200,7 @@ export default function Memory(): JSX.Element {
       {/* Tab bar */}
       <div style={{ display: "flex", gap: 2, marginBottom: 16, borderBottom: "1px solid #374151" }}>
         {TAB_LABELS.map((t) => (
-          <button
+          <button type="button"
             key={t.key}
             onClick={() => setTab(t.key)}
             style={{
@@ -275,7 +275,7 @@ export default function Memory(): JSX.Element {
             <option value="execution">Execution</option>
             <option value="safety">Safety</option>
           </select>
-          <button onClick={doSearch} style={{ background: "rgba(6,182,212,0.15)", color: "#06b6d4", border: "1px solid rgba(6,182,212,0.3)", borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Search</button>
+          <button type="button" onClick={doSearch} style={{ background: "rgba(6,182,212,0.15)", color: "#06b6d4", border: "1px solid rgba(6,182,212,0.3)", borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Search</button>
         </div>
         {searchResults.length > 0 && (
           <div>
@@ -334,7 +334,7 @@ export default function Memory(): JSX.Element {
               placeholder="Checkpoint label..."
               style={{ flex: 1, background: "#1f2937", color: "#e5e7eb", border: "1px solid #374151", borderRadius: 6, padding: "6px 12px", fontSize: 13 }}
             />
-            <button onClick={doCreateCheckpoint} style={{ background: "#374151", color: "#e5e7eb", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>Create</button>
+            <button type="button" onClick={doCreateCheckpoint} style={{ background: "#374151", color: "#e5e7eb", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>Create</button>
           </div>
           {checkpoints.map((cp: any, i: number) => (
             <div key={i} style={{ padding: "4px 10px", background: "#1f2937", borderRadius: 4, marginBottom: 4, fontSize: 12 }}>
@@ -347,10 +347,10 @@ export default function Memory(): JSX.Element {
         <div style={{ background: "#111827", borderRadius: 8, padding: 16, border: "1px solid #1f2937" }}>
           <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: "#f9fafb" }}>Maintenance</h2>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button onClick={doGc} style={{ background: "#374151", color: "#e5e7eb", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>
+            <button type="button" onClick={doGc} style={{ background: "#374151", color: "#e5e7eb", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>
               Run GC
             </button>
-            <button onClick={doClearWorking} style={{ background: "#7f1d1d", color: "#fca5a5", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>
+            <button type="button" onClick={doClearWorking} style={{ background: "#7f1d1d", color: "#fca5a5", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>
               Clear Working Memory
             </button>
           </div>

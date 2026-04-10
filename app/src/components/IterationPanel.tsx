@@ -169,7 +169,7 @@ export function IterationPanel({
         <div
           style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}
         >
-          <button
+          <button type="button"
             onClick={handleIterate}
             disabled={iterating || !changeRequest.trim()}
             style={{

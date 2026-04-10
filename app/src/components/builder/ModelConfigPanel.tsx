@@ -228,7 +228,7 @@ export default function ModelConfigPanel({ onClose, cachedConfig, cachedChoices,
         {/* Header */}
         <div style={headerStyle}>
           <div style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: C.text, letterSpacing: 0.5 }}>MODEL CONFIGURATION</div>
-          <button onClick={onClose} style={closeBtnStyle}>X</button>
+          <button type="button" onClick={onClose} style={closeBtnStyle}>X</button>
         </div>
         {/* Skeleton: Connected Providers */}
         <div style={{ padding: "10px 16px 6px" }}>
@@ -261,12 +261,12 @@ export default function ModelConfigPanel({ onClose, cachedConfig, cachedChoices,
       <div style={panelStyle}>
         <div style={headerStyle}>
           <div style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: C.text, letterSpacing: 0.5 }}>MODEL CONFIGURATION</div>
-          <button onClick={onClose} style={closeBtnStyle}>X</button>
+          <button type="button" onClick={onClose} style={closeBtnStyle}>X</button>
         </div>
         <div style={{ padding: 16, color: C.err, fontSize: 12, fontFamily: C.mono }}>
           <p style={{ margin: "0 0 8px" }}>{"\u26A0\uFE0F"} Failed to load model configuration.</p>
           <p style={{ margin: "0 0 12px", fontSize: 11, color: C.muted, wordBreak: "break-word" as const }}>{loadError}</p>
-          <button
+          <button type="button"
             onClick={() => { setLoadError(""); }}
             style={{ ...actionBtnStyle, background: C.accentDim, color: C.accent }}
           >
@@ -308,7 +308,7 @@ export default function ModelConfigPanel({ onClose, cachedConfig, cachedChoices,
         <div style={{ fontFamily: C.mono, fontSize: 13, fontWeight: 700, color: C.text, letterSpacing: 0.5 }}>
           MODEL CONFIGURATION
         </div>
-        <button onClick={onClose} style={closeBtnStyle}>
+        <button type="button" onClick={onClose} style={closeBtnStyle}>
           X
         </button>
       </div>
@@ -498,7 +498,7 @@ export default function ModelConfigPanel({ onClose, cachedConfig, cachedChoices,
 
           {/* Buttons */}
           <div style={{ display: "flex", gap: 8 }}>
-            <button
+            <button type="button"
               onClick={handleSave}
               disabled={!dirty || saving}
               style={{
@@ -511,7 +511,7 @@ export default function ModelConfigPanel({ onClose, cachedConfig, cachedChoices,
             >
               {saving ? "Saving..." : "Save as Default"}
             </button>
-            <button onClick={handleReset} style={{ ...actionBtnStyle, background: C.surfaceAlt, color: C.muted, flex: 1 }}>
+            <button type="button" onClick={handleReset} style={{ ...actionBtnStyle, background: C.surfaceAlt, color: C.muted, flex: 1 }}>
               Reset to Recommended
             </button>
           </div>

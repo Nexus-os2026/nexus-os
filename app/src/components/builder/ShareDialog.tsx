@@ -90,14 +90,14 @@ export default function ShareDialog({ projectId: _projectId, entry, onClose }: S
 
         {/* Action buttons */}
         <div style={{ display: "flex", gap: 8, width: "100%" }}>
-          <button onClick={copyUrl} style={{
+          <button type="button" onClick={copyUrl} style={{
             flex: 1, background: C.surfaceAlt, border: `1px solid ${C.border}`,
             borderRadius: 4, padding: "7px 12px", color: copied ? C.accent : C.muted,
             fontSize: 10, cursor: "pointer", fontFamily: C.sans,
           }}>
             {copied ? "Copied!" : "Copy URL"}
           </button>
-          <button onClick={openUrl} style={{
+          <button type="button" onClick={openUrl} style={{
             flex: 1, background: C.accent, border: "none",
             borderRadius: 4, padding: "7px 12px", color: C.bg,
             fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: C.sans,
@@ -132,7 +132,7 @@ export default function ShareDialog({ projectId: _projectId, entry, onClose }: S
         </div>
 
         {/* Close */}
-        <button onClick={onClose} style={{
+        <button type="button" onClick={onClose} style={{
           background: "transparent", border: `1px solid ${C.border}`,
           borderRadius: 4, padding: "6px 14px", color: C.muted, fontSize: 10,
           cursor: "pointer",

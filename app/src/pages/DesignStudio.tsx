@@ -229,24 +229,21 @@ export default function DesignStudio(): JSX.Element {
               </select>
             </label>
             <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => void saveCurrentMarkup()}
                 disabled={saving}
                 className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100"
               >
                 {saving ? "Saving..." : "Save Markup"}
               </button>
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => void generateComponent()}
                 disabled={generating || !selectedAgentId}
                 className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100"
               >
                 {generating ? "Dispatching..." : "Generate With Agent"}
               </button>
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => void refreshWorkspace()}
                 className="rounded-full border border-cyan-400/20 bg-slate-950/60 px-4 py-2 text-sm text-cyan-100/75"
               >
@@ -307,9 +304,8 @@ export default function DesignStudio(): JSX.Element {
         ) : (
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {files.map((file) => (
-              <button
+              <button type="button"
                 key={file.path}
-                type="button"
                 onClick={() => void loadFile(file.path)}
                 className="rounded-2xl border border-cyan-500/15 bg-slate-950/55 p-4 text-left"
               >

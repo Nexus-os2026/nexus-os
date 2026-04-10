@@ -111,7 +111,7 @@ export default function GovernanceOracle() {
       <Panel title="Agent Budget Viewer" style={{ marginTop: 16 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
           {agents.slice(0, 20).map((a) => (
-            <button key={a.id} onClick={() => loadBudget(a.id)} style={{
+            <button type="button" key={a.id} onClick={() => loadBudget(a.id)} style={{
               padding: "4px 12px", borderRadius: 6, fontSize: 11, cursor: "pointer",
               border: `1px solid ${selectedAgent === a.id ? ACCENT : "#334155"}`,
               background: selectedAgent === a.id ? alpha(ACCENT, 0.15) : "transparent",

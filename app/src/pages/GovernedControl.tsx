@@ -205,7 +205,7 @@ export default function GovernedControl() {
       {/* Error display */}
       {error && (
         <div style={{ color: "#ef4444", background: alpha("#ef4444", 0.1), padding: "8px 12px", borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
-          {error} <button onClick={() => setError(null)} style={{ marginLeft: 8, background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}>Dismiss</button>
+          {error} <button type="button" onClick={() => setError(null)} style={{ marginLeft: 8, background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}>Dismiss</button>
         </div>
       )}
 
@@ -214,7 +214,7 @@ export default function GovernedControl() {
         <div style={{ ...cardStyle, marginBottom: 16 }}>
           <div style={labelStyle}>Execute Action</div>
           <textarea value={actionJson} onChange={(e) => setActionJson(e.target.value)} rows={3} style={{ width: "100%", padding: 8, borderRadius: 6, background: "#2a2a3e", color: "#e0e0e0", border: "1px solid #444", fontFamily: "monospace", fontSize: 12, boxSizing: "border-box", marginTop: 8, marginBottom: 8, resize: "vertical" }} />
-          <button onClick={() => {
+          <button type="button" onClick={() => {
             setError(null);
             ccExecuteAction(selectedAgent, 4, ["computer_control"], actionJson)
               .then((r) => { setExecuteResult(r); /* refresh history */ ccGetActionHistory(selectedAgent).then((h) => setHistory(Array.isArray(h) ? h : [])).catch((e) => { if (import.meta.env.DEV) console.warn("[GovernedControl]", e); }); })

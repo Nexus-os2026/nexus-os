@@ -59,9 +59,8 @@ export function History({ open, entries, onClose, onSelect }: HistoryProps): JSX
           <p className="jarvis-history-empty">No matching transmissions.</p>
         ) : (
           filtered.map((entry) => (
-            <button
+            <button type="button"
               key={entry.id}
-              type="button"
               className="jarvis-history-entry"
               onClick={() => onSelect(entry)}
             >

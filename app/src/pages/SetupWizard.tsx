@@ -378,8 +378,7 @@ export function SetupWizard({
                     </div>
                   </div>
                   <div className="setup-actions">
-                    <button
-                      type="button"
+                    <button type="button"
                       className="setup-btn setup-btn-primary"
                       onClick={() => { void goToOllamaStep(); }}
                     >
@@ -417,8 +416,7 @@ export function SetupWizard({
                   <div className="setup-ollama-badge disconnected">
                     Ollama is installed but not running
                   </div>
-                  <button
-                    type="button"
+                  <button type="button"
                     className="setup-btn setup-btn-download"
                     onClick={() => { void handleEnsureOllama(); }}
                     disabled={ollamaStarting}
@@ -445,8 +443,7 @@ export function SetupWizard({
                     >
                       Download Ollama
                     </a>
-                    <button
-                      type="button"
+                    <button type="button"
                       className="setup-btn setup-btn-ghost"
                       onClick={() => { void handleRetryOllama(); }}
                     >
@@ -458,15 +455,13 @@ export function SetupWizard({
 
               {!ollamaChecking && (
                 <div className="setup-actions">
-                  <button
-                    type="button"
+                  <button type="button"
                     className="setup-btn setup-btn-ghost"
                     onClick={() => setStep("welcome")}
                   >
                     Back
                   </button>
-                  <button
-                    type="button"
+                  <button type="button"
                     className="setup-btn setup-btn-primary"
                     onClick={() => { void goToModelsStep(); }}
                   >
@@ -497,8 +492,7 @@ export function SetupWizard({
                     {recommended.map(m => renderModelCard(m, true))}
                   </div>
                   {recommended.some(m => !m.installed && !installedModels.has(m.id)) && (
-                    <button
-                      type="button"
+                    <button type="button"
                       className="setup-btn setup-btn-download"
                       style={{ width: "100%", marginBottom: "1rem" }}
                       disabled={anyDownloading}
@@ -545,15 +539,13 @@ export function SetupWizard({
               )}
 
               <div className="setup-actions">
-                <button
-                  type="button"
+                <button type="button"
                   className="setup-btn setup-btn-ghost"
                   onClick={() => setStep("ollama")}
                 >
                   Back
                 </button>
-                <button
-                  type="button"
+                <button type="button"
                   className="setup-btn setup-btn-primary"
                   disabled={anyDownloading}
                   onClick={goToAgentsStep}
@@ -598,15 +590,13 @@ export function SetupWizard({
               )}
 
               <div className="setup-actions">
-                <button
-                  type="button"
+                <button type="button"
                   className="setup-btn setup-btn-ghost"
                   onClick={() => { void goToModelsStep(); }}
                 >
                   Back
                 </button>
-                <button
-                  type="button"
+                <button type="button"
                   className="setup-btn setup-btn-primary"
                   disabled={installedModelList.length === 0}
                   onClick={() => { void finishSetup(); }}
@@ -634,8 +624,7 @@ export function SetupWizard({
           {error && (
             <div className="setup-error">
               {error}
-              <button
-                type="button"
+              <button type="button"
                 className="setup-error-dismiss"
                 onClick={() => setError(null)}
               >
@@ -696,8 +685,7 @@ export function SetupWizard({
         ) : dlState === "error" ? (
           <div className="setup-model-error">
             <span className="setup-model-error-text">{downloadErrors[m.id] || "Download failed"}</span>
-            <button
-              type="button"
+            <button type="button"
               className="setup-btn setup-btn-download"
               onClick={() => { void handleDownload(m.id); }}
             >
@@ -705,8 +693,7 @@ export function SetupWizard({
             </button>
           </div>
         ) : ollama?.connected ? (
-          <button
-            type="button"
+          <button type="button"
             className="setup-btn setup-btn-download"
             disabled={anyDownloading}
             onClick={() => { void handleDownload(m.id); }}
@@ -742,8 +729,7 @@ export function SetupWizard({
     }
     if (dlState === "error") {
       return (
-        <button
-          type="button"
+        <button type="button"
           className="setup-btn-sm setup-btn-download"
           onClick={() => { void handleDownload(m.id); }}
         >
@@ -753,8 +739,7 @@ export function SetupWizard({
     }
     if (ollama?.connected) {
       return (
-        <button
-          type="button"
+        <button type="button"
           className="setup-btn-sm setup-btn-download"
           disabled={anyDownloading}
           onClick={() => { void handleDownload(m.id); }}

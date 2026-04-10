@@ -171,7 +171,7 @@ export default function Integrations() {
         </div>
         <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
           {["github", "gitlab", "slack", "jira"].includes(p.id) && !oauthConnected[p.id] && (
-            <button
+            <button type="button"
               className="cursor-pointer"
               onClick={() => handleOauthConnect(p.id)}
               disabled={oauthLoading === p.id}
@@ -195,7 +195,7 @@ export default function Integrations() {
               \u2713 OAuth Connected
             </span>
           )}
-          <button
+          <button type="button"
             className="intg-btn intg-btn--sm"
             onClick={() => handleTest(p.id)}
             disabled={testing === p.id}
@@ -203,7 +203,7 @@ export default function Integrations() {
             {testing === p.id ? <RefreshCw size={12} className="spin" /> : <Zap size={12} />}
             {" "}Test
           </button>
-          <button
+          <button type="button"
             className="intg-btn intg-btn--sm intg-btn--primary"
             onClick={() => setConfiguring(configuring === p.id ? null : p.id)}
           >
@@ -235,10 +235,10 @@ export default function Integrations() {
             </div>
           ))}
           <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem" }}>
-            <button className="intg-btn intg-btn--primary" onClick={() => handleConfigure(p.id)}>
+            <button type="button" className="intg-btn intg-btn--primary" onClick={() => handleConfigure(p.id)}>
               Save Configuration
             </button>
-            <button className="intg-btn" onClick={() => setConfiguring(null)}>
+            <button type="button" className="intg-btn" onClick={() => setConfiguring(null)}>
               Cancel
             </button>
           </div>
@@ -251,7 +251,7 @@ export default function Integrations() {
     <>
       <div className="intg-filters">
         {CATEGORIES.map((c) => (
-          <button
+          <button type="button"
             key={c.id}
             className={`intg-filter-btn ${category === c.id ? "intg-filter-btn--active" : ""}`}
             onClick={() => setCategory(c.id)}
@@ -264,7 +264,7 @@ export default function Integrations() {
         <div className="intg-config-panel" style={{ textAlign: "center", padding: "2rem" }}>
           <XCircle size={24} style={{ color: "var(--nexus-red, #ef4444)", marginBottom: "0.5rem" }} />
           <p style={{ color: "var(--text-secondary)", marginBottom: "1rem" }}>{loadError}</p>
-          <button className="intg-btn intg-btn--primary" onClick={load}>
+          <button type="button" className="intg-btn intg-btn--primary" onClick={load}>
             <RefreshCw size={14} /> Retry
           </button>
         </div>
@@ -315,7 +315,7 @@ export default function Integrations() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
         <h3 style={{ fontFamily: "var(--font-display)", fontSize: "1rem", margin: 0 }}>Provider Health Status</h3>
-        <button className="intg-btn intg-btn--sm" onClick={load}>
+        <button type="button" className="intg-btn intg-btn--sm" onClick={load}>
           <RefreshCw size={12} /> Refresh
         </button>
       </div>
@@ -328,7 +328,7 @@ export default function Integrations() {
               <span className={`intg-dot ${p.healthy ? "intg-dot--green" : "intg-dot--red"}`} />
               {p.healthy ? "Healthy" : "Unreachable"}
             </div>
-            <button
+            <button type="button"
               className="intg-btn intg-btn--sm"
               onClick={() => handleTest(p.id)}
               disabled={testing === p.id}
@@ -358,7 +358,7 @@ export default function Integrations() {
             { id: "health" as Tab, label: "Health Status", icon: Activity },
           ] as const
         ).map((t) => (
-          <button
+          <button type="button"
             key={t.id}
             className={`intg-tab ${tab === t.id ? "intg-tab--active" : ""}`}
             onClick={() => setTab(t.id)}

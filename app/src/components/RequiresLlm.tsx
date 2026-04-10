@@ -61,7 +61,7 @@ export default function RequiresLlm({ feature, children }: Props) {
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          <button
+          <button type="button"
             onClick={() => {
               if (hasDesktopRuntime()) {
                 import("../api/backend").then((b) =>

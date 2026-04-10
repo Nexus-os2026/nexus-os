@@ -59,7 +59,7 @@ export default function DeployDiff({ projectId, fromId, toId, onClose }: DeployD
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ color: C.text, fontSize: 14, fontWeight: 600 }}>Deploy Diff</span>
-          <button onClick={onClose} style={{
+          <button type="button" onClick={onClose} style={{
             background: "transparent", border: "none", color: C.dim, fontSize: 16,
             cursor: "pointer", padding: "2px 6px",
           }}>x</button>

@@ -96,7 +96,7 @@ export default function BrowserAgent() {
           <p style={{ ...commandMutedStyle, fontSize: 12, marginBottom: 12 }}>Select an L3+ agent to start a browser session.</p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {agents.slice(0, 20).map((a) => (
-              <button key={a.id} onClick={() => handleCreateSession(a.id, 3)} style={{
+              <button type="button" key={a.id} onClick={() => handleCreateSession(a.id, 3)} style={{
                 padding: "4px 12px", borderRadius: 6, fontSize: 11, cursor: "pointer",
                 border: "1px solid #334155", background: "transparent", color: "#94a3b8",
               }}>
