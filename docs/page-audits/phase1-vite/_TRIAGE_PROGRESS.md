@@ -55,3 +55,30 @@ The refraction's visual effect is identical — the oversized rotating gradient 
 | /api-client | 2087 | 1577 | 1577 | 1577 | true |
 
 Stable across animation frames (verified 6 consecutive frames, all match).
+
+## Cluster H: Leaked `[TEST]` debug code in component files
+
+**Status:** DONE
+**Fixed:** 2026-04-10
+**Commit:** (see git log)
+**Files affected:** 1 (Agents.tsx — all 4 audit findings traced back to this single file)
+
+### Files and classifications
+
+| File | Classification | Action |
+|------|----------------|--------|
+| src/pages/Agents.tsx (useEffect, lines 219-228) | Type 1 — Leaked test code | Deleted entire `TEMPORARY DIAGNOSTIC` useEffect block |
+| src/pages/Agents.tsx (button, lines 551-576) | Type 1 — Leaked test code | Deleted entire `TEST EMIT` button element |
+
+### Root cause
+
+Two blocks of debug code labeled `TEMPORARY DIAGNOSTIC` were left in `Agents.tsx` from development. The first was a standalone `listen("agent-cognitive-cycle")` useEffect that only logged events to console. The second was a hot-pink `TEST EMIT` button that invoked a test Tauri command (`test_emit_event`). Both fired `[TEST]` console.log messages on every page load, and the listener threw `transformCallback` TypeError in Vite/demo mode because `window.__TAURI_IPC__` doesn't exist outside Tauri runtime.
+
+### Fix
+
+Deleted both `TEMPORARY DIAGNOSTIC` blocks entirely (Type 1 classification — pure debug code with no production purpose). Also removed the now-unused `import { invoke } from "@tauri-apps/api/core"` that was only consumed by the test button. The `listen` import remains as it's used by 4 real production listeners in the same file.
+
+### Console verification
+
+- Before: `[TEST] attaching standalone test listener` + `[TEST] standalone listen failed: TypeError: Cannot read properties of undefined (reading 'transformCallback')` firing twice per page load (React StrictMode)
+- After: clean console on /agents — no `[TEST]` messages, no `transformCallback` errors, no new errors introduced

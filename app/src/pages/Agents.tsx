@@ -14,7 +14,6 @@ import type { AgentSummary, AuditEventRow, PreinstalledAgent, SlmStatus } from "
 import { Play, Pause, Square, Trash2, Plus, Search, Shield, Settings, Users, Zap, Fuel, MemoryStick, ChevronDown, ChevronUp, Eye, Send, Loader2 } from "lucide-react";
 import AgentOutputPanel from "../components/AgentOutputPanel";
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
 import "./agents.css";
 
 /* ─── constants ─── */
@@ -216,16 +215,6 @@ export function Agents({
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
-  /* ─── TEMPORARY DIAGNOSTIC: standalone test listener ─── */
-  useEffect(() => {
-    console.log("[TEST] attaching standalone test listener");
-    const p = listen("agent-cognitive-cycle", (e) => {
-      console.log("[TEST] STANDALONE listener received event:", e);
-    });
-    p.then(() => console.log("[TEST] standalone listener attached ok"))
-     .catch(err => console.error("[TEST] standalone listen failed:", err));
-    return () => { p.then(fn => fn()).catch(() => {}); };
-  }, []);
 
   useEffect(() => {
     if (!hasDesktopRuntime()) return;
@@ -548,32 +537,6 @@ export function Agents({
             <span className="mission-active-hex">{activeCount}</span>
             <span className="mission-active-value">ACTIVE</span>
           </div>
-          {/* TEMPORARY DIAGNOSTIC: test button for IPC event delivery */}
-          <button
-            type="button"
-            style={{
-              background: "#ff00aa",
-              color: "#fff",
-              border: "1px solid #ff00aa",
-              borderRadius: 6,
-              padding: "6px 14px",
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: "pointer",
-              marginRight: 8,
-            }}
-            onClick={async () => {
-              console.log("[TEST] calling test_emit_event");
-              try {
-                await invoke("test_emit_event");
-                console.log("[TEST] invoke returned ok");
-              } catch (e) {
-                console.error("[TEST] invoke failed:", e);
-              }
-            }}
-          >
-            TEST EMIT
-          </button>
           <button type="button" className="create-btn cursor-pointer" onClick={() => setShowCreate(true)}>
             <Plus size={16} /> CREATE AGENT
           </button>
