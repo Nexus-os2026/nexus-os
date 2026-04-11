@@ -43,17 +43,22 @@ Fixed and committed during Group D (not in this backlog):
   journalctl showed hundreds of "EOF when reading a line" + "piper
   CLI not found" per minute. Python process burning CPU.
 
-- Bug J — o3 Mini returns 400 from OpenAI HTTP provider in Chat page.
-  Reproduced April 2026 on All Agents mode, direct send via Chat page.
-  Error surface: "supervisor error: openai request failed with status 400".
+- Bug J — **FIXED** (748d99e8) — o4-mini corrected to o3-mini in nexus-code.
+  Root cause: model ID typo `o4-mini` in nexus-code/src/llm/providers/mod.rs;
+  OpenAI API returned 400 because o4-mini does not exist.
+  Originally reproduced April 2026 on All Agents mode, direct send via Chat page.
   Same class as Bug C (GPT-5 400) which was fixed by rerouting to
   Codex CLI. o3 likely needs either (a) Codex CLI rerouting in
   chat_llm.rs provider selection, or (b) the OpenAI HTTP provider
   needs reasoning-model param shape: max_completion_tokens instead of
   max_tokens, no temperature field, no top_p. Not a GT ticket.
 
-- Bug K — nexus-herald L3 agent with gemma4:e4b produces no tool calls.
-  Reproduced April 2026. Agent shows "Running" with capabilities
+- Bug K — **ROOT CAUSE IDENTIFIED** (e57c5e06) — OllamaProvider uses /api/generate
+  not /api/chat; extraction forward-compatible; endpoint switch is separate ticket.
+  tool_calls extraction added across all providers but Ollama's /api/generate
+  endpoint does not support tool calls. Fix requires switching to /api/chat with
+  messages[] array format and tools[] parameter in the request body.
+  Originally reproduced April 2026. Agent shows "Running" with capabilities
   web.search, web.read, fs.read, fs.write. User prompt: "what is the
   latest ai news today?". LLM responds with generic "I'm an LLM, I
   don't have real-time access" hallucination. Zero tool calls attempted.
