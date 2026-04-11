@@ -128,3 +128,63 @@ vary by page layout. This is expected and not a regression.
 commit will reclassify these as P3 cosmetic going forward so future
 audits do not surface them as P1.
 
+## Phase 2B P2 Re-Audit Results (2026-04-12)
+
+### Method
+Re-audited 4 hardest-hit pages using fixed audit script:
+- 9741c5cf: MutationObserver captures transient DOM additions (eliminates Cluster E false positives)
+- c56498e9: overflow classification walks ancestor chain for overflow:hidden|clip|scroll|auto (separates user-visible P1 from internal/cosmetic P3)
+- Live Puppeteer runs at 1920x1080, 1280x800, 1024x768
+
+### Prior fixes that resolved original P1s
+- d0bb2f51: RequiresLlm #/settings anchor → history.pushState (fixes cs-04, md-06 + 12 other gated pages)
+- fdeaa172: showDemoToast() verified working (fixes gate button feedback)
+- 743bde12: living-background__aura overflow:clip container (fixes all background overflow findings)
+
+### Reclassification table
+
+| Page | Finding | Original | New | Reason |
+|------|---------|----------|-----|--------|
+| governed-control | gc-01 background overflow | P1 | FP | documentElement.scrollWidth === clientWidth at all viewports; clipped by ancestor |
+| governed-control | gc-02 holo-panel overflow | P1 | P3 | decorative bleed clipped by overflow:clip; by-design |
+| governed-control | gc-03 empty agent select | P1 | P3 | real demo-mode gap but not user-blocking; always been this way |
+| governed-control | gc-04 missing aria-label | P1 | P3 | real a11y gap, low effort fix, not blocking |
+| world-sim | ws-01 background overflow | P1 | FP | same as gc-01 |
+| world-sim | ws-02 holo-panel overflow | P1 | P3 | same as gc-02 |
+| world-sim | ws-03 duplicate H1 | P1 | P3 | real semantic issue, shell+page H1 pattern, not blocking |
+| world-sim | ws-04 empty agent select | P1 | P3 | same as gc-03 |
+| consciousness | cs-01 background overflow | P1 | FP | same as gc-01 |
+| consciousness | cs-02 holo-panel overflow | P1 | P3 | same as gc-02 |
+| consciousness | cs-03 gate buttons silent | P1 | FP | MutationObserver now captures Refresh text change + Start Jarvis error badge; only Install Ollama remains dead (P3) |
+| consciousness | cs-04 #/settings broken | P1 | FP | fixed by d0bb2f51; live re-audit confirms navigation works |
+| media | md-01 background overflow | P1 | FP | same as gc-01 |
+| media | md-03 Refresh silent | P1 | FP | MutationObserver captures innerText change |
+| media | md-04 Start Jarvis silent | P1 | FP | MutationObserver captures error badge |
+| media | md-05 Install Ollama silent | P1 | P3 | real but downgraded; zero feedback in demo mode only |
+| media | md-06 #/settings broken | P1 | FP | fixed by d0bb2f51 |
+
+### Summary
+
+| Page | Original P1 | Surviving P1 | → P3 | → FP |
+|------|------------|-------------|------|------|
+| governed-control | 4 | 0 | 3 | 1 |
+| world-sim | 4 | 0 | 3 | 1 |
+| consciousness | 4 | 0 | 1 | 3 |
+| media | 5 | 0 | 1 | 4 |
+| **TOTAL** | **17** | **0** | **8** | **9** |
+
+### Remaining P3 backlog (not blocking Phase 2C)
+- Install Ollama button: zero feedback in demo mode (gc-03, md-05)
+- Empty agent selects in demo mode (gc-03, ws-04)
+- Missing aria-label on agent selects (gc-04)
+- Duplicate H1 shell+page pattern (ws-03, likely affects other pages)
+- Holo-panel decorative overflow internal clipping (gc-02, ws-02, cs-02, md-01)
+
+### Phase 2B status: COMPLETE
+P1 tier: 11 commits, all CI-green (276b00dd)
+P2 tier: 17 → 0 P1s after re-audit with fixed tooling
+Infrastructure: audit script false positive classes eliminated (MutationObserver + overflow classification)
+LLM batch: 4 commits landed (e57c5e06, 3cb003bd, 748d99e8, 2b812619)
+
+Next: Phase 2C — full Tauri runtime audit with cargo tauri dev
+

@@ -70,3 +70,12 @@ Fixed and committed during Group D (not in this backlog):
   Together Bug E + Bug K mean agent runtime has no viable default model
   on 62GB RAM + RTX 3070. Flag as Phase 1 blocker candidate once Group
   D closes. Not a GT ticket.
+
+### Phase 2B close-out notes (2026-04-12)
+- Bug J (o3-mini): CLOSED — fixed in 748d99e8
+- Bug K (nexus-herald gemma4 no tool calls): ROOT CAUSE UPDATED
+  - Was: missing tool_call extraction in ollama.rs
+  - Is: OllamaProvider::query() uses /api/generate not /api/chat
+  - Extraction is forward-compatible (e57c5e06)
+  - Fix requires switching to /api/chat with messages[] + tools[] — separate ticket
+- LLM batch landed: smart default model detection, tool_calls across 7/8 providers, Ollama fallback preserved
