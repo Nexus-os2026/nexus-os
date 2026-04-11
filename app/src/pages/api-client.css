@@ -68,6 +68,15 @@
 .ac-collections {
   flex: 1;
   padding: 6px;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.ac-sidebar .ac-btn-send {
+  max-width: 100%;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .ac-collection {
