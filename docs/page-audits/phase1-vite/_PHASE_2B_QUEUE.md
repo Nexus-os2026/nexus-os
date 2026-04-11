@@ -58,6 +58,8 @@ These pages had the highest P1 finding density in the Phase 1 audit. Group remai
 
 ## Audit infrastructure improvements
 
+**Status:** Done — 2026-04-11 (commit lands with this change)
+
 ### 6. Audit script change-detection misses DOM-inserted badges
 **Source:** Cluster E false positive.
 **Symptom:** Puppeteer audit driver flagged Refresh + Start Jarvis as "dead buttons" on 67 pages because its change-detection heuristic compares screenshots/DOM states and missed the `nx-badge-error` div that `showDemoToast()` inserts into the header. The error badge auto-clears after 3s, which may also have contributed.

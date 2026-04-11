@@ -1,0 +1,148 @@
+You are running a single-page discovery audit of the Nexus OS frontend. The app is running at http://localhost:1420 in DEMO MODE — the Tauri backend is not active and all backend calls return mocked data. The orange "DEMO MODE — RUNNING WITHOUT BACKEND" banner at the top of every page is intentional. Do NOT report it as a bug.
+
+TARGET
+URL: {{URL}}
+Page name: {{NAME}}
+Page slug: {{SLUG}}
+
+YOUR JOB
+Audit this single page. Discovery pass — find anything that looks wrong, with evidence. Report findings only. Do NOT modify any code. Do NOT propose fixes. Audit only.
+
+NOTE ON SCREENSHOTS
+Screenshots for this page will be captured by a separate Puppeteer script after your audit completes. You do NOT need to take screenshots. Focus only on the textual audit (console, overflow, click sequence, accessibility, findings).
+
+GATE DETECTION
+Some pages render a "RequiresLlm" gate screen in demo mode (a card titled "<feature> needs an AI engine" with "Install Ollama" and "I have an API key" buttons). When you detect this gate, set Gate detected: true, audit the gate screen as a real surface (it has its own bugs), and note in the summary that the unlocked content is deferred to a Tauri-runtime audit pass.
+
+PROCEDURE
+
+1. Open {{URL}} in Chrome. If localhost permission is required, request it once and proceed. Wait for the page to fully load (network idle, no spinners).
+
+2. For each viewport in [1920x1080, 1280x800, 1024x768], in order:
+   a. Resize viewport using setDeviceMetricsOverride or equivalent.
+   b. Wait 300ms for layout to settle.
+   c. Measure horizontal overflow:
+      - document.documentElement: scrollWidth, clientWidth
+      - document.body: scrollWidth, clientWidth
+      - main content container (identify selector): scrollWidth, clientWidth
+      - any other element where scrollWidth > clientWidth
+   You do NOT need to take screenshots in this step. Just measure and record numbers.
+
+3. After viewport sweep, return to 1920x1080 for remaining steps.
+
+4. Capture ALL browser console messages from page load. Report every error, warning, log, info, and debug message verbatim with file:line. Do NOT filter by perceived importance — severity grading happens in Findings, not in Console.
+
+5. List every interactive element in the MAIN CONTENT AREA only (exclude sidebar nav `aside.nexus-sidebar-shell`). Element types: button, input, select, textarea, anchor with href. For each: visible label, type, href if any, enabled state.
+
+6. Click each element from step 5, in tab order (top-to-bottom, left-to-right). RULES:
+   - Maximum 10 clicks. If more than 10 elements exist, click the first 10 in tab order and report the total count.
+   - SKIP any element whose visible label or aria-label contains: "delete", "remove", "destroy", "reset", "wipe", "clear all", "logout", "sign out", "uninstall", "drop". Report skipped elements separately with reason "skipped: destructive".
+   - BEFORE each click, record window.location.pathname AND install a MutationObserver that captures every added node and characterData change on document.body for the next 1500ms. Also snapshot document.body.innerText hashed (length + first 200 chars) as a fallback.
+   - CLICK the element.
+   - WAIT 1500ms (do not poll faster — transient toast badges, error banners, and feedback elements may mount+unmount within this window; the observer must capture them even if they have already cleared by the time you read the result).
+   - After the wait, disconnect the observer and read its recorded mutations. For each added node, capture: tagName, className, id, textContent (first 120 chars), and whether the node is still present in the DOM or has already been removed (transient).
+   - For each click, capture ALL of these fields (no merging, no skipping):
+     * Pathname before
+     * New console messages since the last click
+     * Failed network requests (4xx/5xx)
+     * Visible change: persistent DOM diff (what is different NOW vs before the click)
+     * Feedback: transient DOM additions captured by the observer (nodes added then removed within the 1500ms window, OR nodes still present that were not there before). Report every added element even if visually small — toast badges, error banners, inline messages, status indicators.
+     * innerText change: yes|no based on the hashed snapshot comparison
+     * Pathname after
+   - A button is "dead" ONLY if ALL of the following are true: pathname unchanged, zero new console messages, zero failed network requests, zero persistent DOM diff, zero transient DOM additions from the observer, AND no innerText change. If ANY of those show activity, the button produced feedback and must NOT be classified as dead. When in doubt, report the captured feedback under the click result and let the findings pass judge severity — do not pre-classify as dead in the click section.
+   - If pathname changed, the click caused navigation. Navigate back via history.back() or by re-opening {{URL}}. Verify pathname returned before the next click.
+
+7. Basic accessibility check (DOM-based):
+   - Images without alt: count + up to 5 example selectors
+   - Inputs without label or aria-label: count + up to 5 selectors
+   - Buttons without accessible name: count + up to 5 selectors
+
+OUTPUT
+
+Write findings as markdown to:
+/home/nexus/NEXUS/nexus-os/docs/page-audits/phase1-vite/findings/{{SLUG}}.md
+
+Use this exact structure:
+
+# Audit: {{NAME}}
+URL: {{URL}}
+Audited at: <ISO timestamp>
+Gate detected: <true|false>
+Gate type: <RequiresLlm|none|other>
+
+## Console (captured at 1920x1080, ALL messages)
+### Errors
+<verbatim list with file:line, or "none">
+### Warnings
+<verbatim list, or "none">
+### Logs
+<verbatim list, or "none">
+### Info
+<verbatim list, or "none">
+### Debug
+<verbatim list, or "none">
+
+## Overflow
+
+### 1920x1080
+- documentElement: scrollWidth=N clientWidth=N [OK|OVERFLOW]
+- body: scrollWidth=N clientWidth=N [OK|OVERFLOW]
+- main `<selector>`: scrollWidth=N clientWidth=N [OK|OVERFLOW]
+- other overflowing: <list or none>
+
+### 1280x800
+(same)
+
+### 1024x768
+(same)
+
+## Interactive elements (main content only)
+| # | Label | Type | Href | Enabled |
+
+## Click sequence
+### Click 1: "<label>"
+- Pathname before: <path>
+- New console: <list or clean>
+- Network failures: <list or none>
+- Visible change: <persistent DOM diff, or "none">
+- Feedback: <transient DOM additions from MutationObserver, or "none captured in 1500ms window">
+- innerText change: <yes|no>
+- Pathname after: <path>
+- Reverted: <yes|no|n/a>
+
+(... up to Click 10)
+
+### Skipped (destructive)
+- "<label>" — reason: destructive keyword "<word>"
+
+### Total interactive elements found: N
+### Elements clicked: N (capped at 10)
+
+## Accessibility
+- Images without alt: N (selectors: ...)
+- Inputs without label: N (selectors: ...)
+- Buttons without accessible name: N (selectors: ...)
+
+## Findings
+
+For EACH bug found:
+
+### {{SLUG}}-01
+- SEVERITY: P0|P1|P2
+- DIMENSION: console|overflow|interactive|a11y|action|gate|copy
+- VIEWPORT: 1920|1280|1024|all
+- EVIDENCE: <observation with selectors, numbers, file:line>
+- IMPACT: <one sentence>
+
+(... {{SLUG}}-02, {{SLUG}}-03, etc. Sequential per page.)
+
+## Summary
+- Gate detected: <yes|no>
+- Total interactive elements: N
+- Elements clicked: N
+- P0: N
+- P1: N
+- P2: N
+
+After saving the markdown file, reply with this single line:
+"Audit complete. {{SLUG}}.md saved. Gate=<yes|no> Clicked=N P0=N P1=N P2=N"
