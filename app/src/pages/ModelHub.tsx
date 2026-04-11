@@ -150,6 +150,7 @@ export default function ModelHub() {
   const [selectedModelDetails, setSelectedModelDetails] = useState<HfModelInfo | null>(null);
   const [localModels, setLocalModels] = useState<LocalModelConfig[]>([]);
   const [ollamaModels, setOllamaModels] = useState<ProviderModel[]>([]);
+  const [cloudModels, setCloudModels] = useState<ProviderModel[]>([]);
   const [systemSpecs, setSystemSpecs] = useState<SystemSpecs | null>(null);
   const [compatibilityMap, setCompatibilityMap] = useState<Record<string, SystemCompatibility>>({});
   const [activeDownloads, setActiveDownloads] = useState<Record<string, DownloadProgress>>({});
@@ -208,10 +209,14 @@ export default function ModelHub() {
           (model) => model.local && model.provider === "ollama" && model.installed,
         ),
       );
+      setCloudModels(
+        providerModels.filter((model) => !model.local),
+      );
     } catch (err) {
       if (import.meta.env.DEV) console.error("[ModelHub] failed to load installed models", err);
       setLocalModels([]);
       setOllamaModels([]);
+      setCloudModels([]);
     }
   }, []);
 
@@ -1319,6 +1324,93 @@ export default function ModelHub() {
             </div>
           ))
         )}
+
+        {/* ── Cloud / API Models ── */}
+        {cloudModels.length > 0 && (
+          <>
+            <div
+              style={{
+                padding: "10px 14px",
+                borderTop: `1px solid ${borderColor}`,
+                borderBottom: `1px solid ${borderColor}`,
+                fontWeight: 600,
+                fontSize: 13,
+                color: textSecondary,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              Cloud Models
+              <span
+                style={{
+                  fontSize: 10,
+                  padding: "1px 8px",
+                  borderRadius: 10,
+                  background: `${accent}22`,
+                  color: accent,
+                  fontWeight: 600,
+                }}
+              >
+                {cloudModels.filter((m) => m.installed).length}/{cloudModels.length}
+              </span>
+            </div>
+            {(() => {
+              const grouped = new Map<string, ProviderModel[]>();
+              for (const m of cloudModels) {
+                const list = grouped.get(m.provider) ?? [];
+                list.push(m);
+                grouped.set(m.provider, list);
+              }
+              return Array.from(grouped.entries()).map(([provider, models]) => (
+                <div key={provider} style={{ padding: "6px 14px" }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: models[0].installed ? accent : "#fbbf24",
+                      textTransform: "uppercase",
+                      letterSpacing: 0.5,
+                      marginBottom: 4,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: models[0].installed ? accent : "#555",
+                        display: "inline-block",
+                      }}
+                    />
+                    {provider}
+                    {!models[0].installed && (
+                      <span style={{ fontSize: 10, color: "#f87171", fontWeight: 500, textTransform: "none" }}>
+                        — Add API key in Settings
+                      </span>
+                    )}
+                  </div>
+                  {models.map((m) => (
+                    <div
+                      key={m.id}
+                      style={{
+                        fontSize: 12,
+                        color: m.installed ? textPrimary : textSecondary,
+                        padding: "2px 0 2px 12px",
+                        opacity: m.installed ? 1 : 0.5,
+                      }}
+                    >
+                      {m.name}
+                    </div>
+                  ))}
+                </div>
+              ));
+            })()}
+          </>
+        )}
       </div>
     </div>
   );
@@ -1777,7 +1869,7 @@ export default function ModelHub() {
             fontWeight: 600,
           }}
         >
-          {installedModels.length} installed
+          {installedModels.length + cloudModels.filter((m) => m.installed).length} models
         </span>
       </div>
 

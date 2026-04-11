@@ -19,7 +19,7 @@ pub fn create_openai_provider() -> OpenAiCompatibleProvider {
             "gpt-4o".to_string(),
             "gpt-4o-mini".to_string(),
             "o3".to_string(),
-            "o4-mini".to_string(),
+            "o3-mini".to_string(),
         ],
         true,
     )
