@@ -208,3 +208,17 @@ All 7 clusters triaged and resolved:
 | H | leaked [TEST] debug code | JSX: deleted test blocks | 9903dd91 |
 
 Ready for single CI push to remote.
+
+## Phase 2B — False Positives
+
+### agents-start-jarvis-banner
+**Status:** FALSE POSITIVE (no code change needed)
+**Verified:** 2026-04-11
+**Same class as:** Cluster E (dashboard-03)
+
+Audit reported "clicking Start Jarvis silently dismisses Desktop runtime banner with no feedback." Direct testing on HEAD confirmed:
+1. RequiresLlm gate persists after click (not dismissed)
+2. Shell-level showDemoToast() fires the "Action unavailable in demo mode — requires desktop backend" error badge correctly
+3. No page-level Start Jarvis handler exists in Agents.tsx — the only button is in the shell header, already covered by Cluster E's existing implementation
+
+Root cause of the audit finding: the Puppeteer change-detection heuristic does not capture the transient error badge DOM insertion, identical to the issue behind Cluster E. This reinforces that the audit script change-detection (Phase 2B queue item 6) must be fixed before further audit-finding triage to stop burning investigation time on non-bugs.
