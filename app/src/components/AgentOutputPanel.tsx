@@ -31,6 +31,7 @@ interface Props {
   totalSteps: number;
   fuelConsumed: number;
   query: string;
+  resultSummary?: string | null;
 }
 
 /* ─── helpers ─── */
@@ -264,6 +265,84 @@ function StepRow({
   );
 }
 
+/* ─── result summary block ─── */
+
+function ResultSummaryBlock({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  }, [text]);
+
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        padding: "14px 16px",
+        background: "linear-gradient(135deg, rgba(0, 229, 255, 0.06), rgba(34, 197, 94, 0.06))",
+        border: "1px solid rgba(34, 197, 94, 0.25)",
+        borderRadius: 8,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 10,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 11,
+            fontWeight: 700,
+            color: "#22c55e",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            fontFamily: "var(--font-mono, monospace)",
+          }}
+        >
+          <CheckCircle2 size={12} />
+          Result
+        </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          style={{
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 4,
+            padding: "3px 10px",
+            fontSize: 11,
+            color: copied ? "#22c55e" : "#94a3b8",
+            cursor: "pointer",
+            fontFamily: "var(--font-mono, monospace)",
+          }}
+        >
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      </div>
+      <div
+        style={{
+          fontSize: 13,
+          color: "#e0e0e0",
+          lineHeight: 1.7,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+        }}
+      >
+        {text}
+      </div>
+    </div>
+  );
+}
+
 /* ─── main panel ─── */
 
 export default function AgentOutputPanel({
@@ -273,6 +352,7 @@ export default function AgentOutputPanel({
   totalSteps,
   fuelConsumed,
   query,
+  resultSummary,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -283,7 +363,10 @@ export default function AgentOutputPanel({
   }, [steps.length]);
 
   // Find the last LLM result for prominent display
-  const hasOutput = steps.length > 0 || running;
+  const hasError = phase != null && phase.startsWith("Error");
+  const hasResult = resultSummary != null && resultSummary.length > 0;
+  const isComplete = phase === "Complete";
+  const hasOutput = steps.length > 0 || running || hasError || hasResult || isComplete;
 
   return (
     <div
@@ -397,6 +480,25 @@ export default function AgentOutputPanel({
           </div>
         )}
 
+        {/* error banner */}
+        {phase && phase.startsWith("Error") && (
+          <div
+            style={{
+              padding: "10px 14px",
+              background: "#2d0a0a",
+              border: "1px solid #ef444466",
+              borderRadius: 6,
+              marginBottom: 12,
+              fontSize: 13,
+              color: "#fca5a5",
+              lineHeight: 1.5,
+              wordBreak: "break-word",
+            }}
+          >
+            {phase.replace(/^Error:\s*/, "")}
+          </div>
+        )}
+
         {/* step timeline */}
         {steps.map((step, i) => (
           <StepRow
@@ -409,7 +511,7 @@ export default function AgentOutputPanel({
         ))}
 
         {/* running indicator */}
-        {running && steps.length > 0 && (
+        {running && (
           <div
             style={{
               borderLeft: "2px solid #334155",
@@ -443,10 +545,40 @@ export default function AgentOutputPanel({
               }}
             >
               <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} />
-              Executing next step...
+              {phase && phase !== "Starting..." ? `Phase: ${phase}` : "Executing next step..."}
             </span>
           </div>
         )}
+
+        {/* result summary from goal completion */}
+        {!running && (() => {
+          // Prefer the last LLM result from steps (actual agent output)
+          const lastLlmResult = [...steps]
+            .reverse()
+            .find(s => s.action === "llm_query" && (s.status === "Succeeded" || s.status === "succeeded") && s.result);
+          const displayText = lastLlmResult?.result || resultSummary;
+          if (displayText) {
+            return <ResultSummaryBlock text={displayText} />;
+          }
+          // If complete but no text, show the phase as confirmation
+          if (isComplete) {
+            return (
+              <div style={{
+                marginTop: 12,
+                padding: "10px 14px",
+                background: "rgba(34, 197, 94, 0.08)",
+                border: "1px solid rgba(34, 197, 94, 0.2)",
+                borderRadius: 6,
+                fontSize: 13,
+                color: "#22c55e",
+              }}>
+                Goal completed successfully.
+                {fuelConsumed > 0 && ` (${fuelConsumed.toFixed(0)} fuel used)`}
+              </div>
+            );
+          }
+          return null;
+        })()}
 
         <div ref={bottomRef} />
       </div>

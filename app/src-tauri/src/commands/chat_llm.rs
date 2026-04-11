@@ -265,16 +265,68 @@ pub(crate) fn load_agent_system_prompt(agent_name: &str) -> Option<String> {
 
 /// Return the default chat/completion model from config (or `"mock-1"`).
 pub(crate) fn get_default_model() -> String {
-    load_config()
-        .map(|c| {
-            let m = c.llm.default_model.trim().to_string();
-            if m.is_empty() {
-                "mock-1".to_string()
-            } else {
-                m
+    let config = match load_config() {
+        Ok(c) => c,
+        Err(_) => return "mock-1".to_string(),
+    };
+    let m = config.llm.default_model.trim().to_string();
+    if !m.is_empty() {
+        return m;
+    }
+    // Auto-detect: pick the best available provider's flagship model
+    let prov = build_provider_config(&config);
+    if has_provider_key(&prov.anthropic_api_key) {
+        return "anthropic/claude-sonnet-4-6".to_string();
+    }
+    if has_provider_key(&prov.openai_api_key) {
+        return "openai/gpt-4o".to_string();
+    }
+    if has_provider_key(&prov.deepseek_api_key) {
+        return "deepseek/deepseek-chat".to_string();
+    }
+    if has_provider_key(&prov.gemini_api_key) {
+        return "google/gemini-2.5-flash".to_string();
+    }
+    if has_provider_key(&prov.nvidia_api_key) {
+        return "nvidia/meta/llama-3.3-70b-instruct".to_string();
+    }
+    if has_provider_key(&prov.groq_api_key) {
+        return "groq/llama-3.3-70b-versatile".to_string();
+    }
+    if has_provider_key(&prov.openrouter_api_key) {
+        return "openrouter/meta-llama/llama-3.3-70b-instruct:free".to_string();
+    }
+    // Local-first fallback: probe Ollama for an installed model.
+    // Budget: 200ms TCP health_check + 500ms curl for /api/tags = 700ms worst case.
+    let ollama_url = prov
+        .ollama_url
+        .clone()
+        .unwrap_or_else(|| "http://localhost:11434".to_string());
+    let ollama = OllamaProvider::new(&ollama_url);
+    if ollama.health_check().unwrap_or(false) {
+        // Fast model list with 500ms hard ceiling (curl_get_json uses 10s — too slow here)
+        if let Ok(output) = std::process::Command::new("curl")
+            .args(["-sS", "-m", "0.5"])
+            .arg(format!("{}/api/tags", ollama_url))
+            .output()
+        {
+            if output.status.success() {
+                if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                    // TODO: prefer larger models for planner default
+                    if let Some(name) = json
+                        .get("models")
+                        .and_then(|v| v.as_array())
+                        .and_then(|arr| arr.first())
+                        .and_then(|m| m.get("name"))
+                        .and_then(|n| n.as_str())
+                    {
+                        return format!("ollama/{name}");
+                    }
+                }
             }
-        })
-        .unwrap_or_else(|_| "mock-1".to_string())
+        }
+    }
+    "mock-1".to_string()
 }
 
 pub(crate) fn send_chat(
@@ -1978,7 +2030,8 @@ pub(crate) fn list_provider_models() -> Result<Vec<ProviderModel>, String> {
     }
 
     // ── Anthropic (Claude) ──
-    if has_provider_key(&prov_config.anthropic_api_key) {
+    {
+        let has_key = has_provider_key(&prov_config.anthropic_api_key);
         for (id, name) in [
             ("claude-sonnet-4-6", "Claude Sonnet 4.6"),
             ("claude-sonnet-4-20250514", "Claude Sonnet 4"),
@@ -1992,13 +2045,14 @@ pub(crate) fn list_provider_models() -> Result<Vec<ProviderModel>, String> {
                 local: false,
                 requires_key: true,
                 size_gb: None,
-                installed: true,
+                installed: has_key,
             });
         }
     }
 
     // ── OpenAI ──
-    if has_provider_key(&prov_config.openai_api_key) {
+    {
+        let has_key = has_provider_key(&prov_config.openai_api_key);
         for (id, name) in [
             ("gpt-4.1-nano", "GPT-4.1 Nano"),
             ("gpt-4.1-mini", "GPT-4.1 Mini"),
@@ -2016,13 +2070,14 @@ pub(crate) fn list_provider_models() -> Result<Vec<ProviderModel>, String> {
                 local: false,
                 requires_key: true,
                 size_gb: None,
-                installed: true,
+                installed: has_key,
             });
         }
     }
 
     // ── DeepSeek ──
-    if has_provider_key(&prov_config.deepseek_api_key) {
+    {
+        let has_key = has_provider_key(&prov_config.deepseek_api_key);
         for (id, name) in [
             ("deepseek-chat", "DeepSeek Chat"),
             ("deepseek-coder", "DeepSeek Coder"),
@@ -2035,13 +2090,14 @@ pub(crate) fn list_provider_models() -> Result<Vec<ProviderModel>, String> {
                 local: false,
                 requires_key: true,
                 size_gb: None,
-                installed: true,
+                installed: has_key,
             });
         }
     }
 
     // ── Gemini ──
-    if has_provider_key(&prov_config.gemini_api_key) {
+    {
+        let has_key = has_provider_key(&prov_config.gemini_api_key);
         for (id, name) in [
             ("gemini-2.5-pro", "Gemini 2.5 Pro"),
             ("gemini-2.5-flash", "Gemini 2.5 Flash"),
@@ -2053,13 +2109,14 @@ pub(crate) fn list_provider_models() -> Result<Vec<ProviderModel>, String> {
                 local: false,
                 requires_key: true,
                 size_gb: None,
-                installed: true,
+                installed: has_key,
             });
         }
     }
 
     // ── NVIDIA NIM ──
-    if has_provider_key(&prov_config.nvidia_api_key) {
+    {
+        let has_key = has_provider_key(&prov_config.nvidia_api_key);
         for (id, name) in NVIDIA_MODELS.iter().copied() {
             models.push(ProviderModel {
                 id: format!("nvidia/{id}"),
@@ -2068,13 +2125,14 @@ pub(crate) fn list_provider_models() -> Result<Vec<ProviderModel>, String> {
                 local: false,
                 requires_key: true,
                 size_gb: None,
-                installed: true,
+                installed: has_key,
             });
         }
     }
 
     // ── Groq ──
-    if has_provider_key(&prov_config.groq_api_key) {
+    {
+        let has_key = has_provider_key(&prov_config.groq_api_key);
         for (id, name) in GROQ_MODELS.iter().copied() {
             models.push(ProviderModel {
                 id: format!("groq/{id}"),
@@ -2083,13 +2141,14 @@ pub(crate) fn list_provider_models() -> Result<Vec<ProviderModel>, String> {
                 local: false,
                 requires_key: true,
                 size_gb: None,
-                installed: true,
+                installed: has_key,
             });
         }
     }
 
     // ── OpenRouter (free models available!) ──
-    if has_provider_key(&prov_config.openrouter_api_key) {
+    {
+        let has_key = has_provider_key(&prov_config.openrouter_api_key);
         for (id, name) in OPENROUTER_MODELS.iter().copied() {
             models.push(ProviderModel {
                 id: format!("openrouter/{id}"),
@@ -2098,7 +2157,7 @@ pub(crate) fn list_provider_models() -> Result<Vec<ProviderModel>, String> {
                 local: false,
                 requires_key: true,
                 size_gb: None,
-                installed: true,
+                installed: has_key,
             });
         }
     }

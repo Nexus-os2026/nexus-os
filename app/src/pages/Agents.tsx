@@ -177,9 +177,13 @@ export function Agents({
   const [goalFuel, setGoalFuel] = useState(0);
   const goalInputRef = useRef<HTMLInputElement>(null);
   const dispatchedAgentIdRef = useRef<string | null>(null);
+  const goalQueryRef = useRef("");
   const [pendingConsents, setPendingConsents] = useState<ConsentNotification[]>([]);
   const [goalStepDetails, setGoalStepDetails] = useState<Array<{action: string; status: string; result: string; fuel_cost: number}>>([]);
   const [goalQuery, setGoalQuery] = useState("");
+  const [goalResult, setGoalResult] = useState<string | null>(null);
+  const [goalHistory, setGoalHistory] = useState<Array<{query: string; result: string; success: boolean; fuel: number; timestamp: number}>>([]);
+  const goalTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [availableProviders, setAvailableProviders] = useState<AvailableProvider[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<string>("auto");
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
@@ -199,9 +203,19 @@ export function Agents({
     setGoalStepDetails([]);
     setPendingConsents([]);
     setGoalQuery(goalInput.trim());
+    goalQueryRef.current = goalInput.trim();
+    setGoalResult(null);
+    // Timeout fallback: if no completion after 120s, stop waiting
+    if (goalTimeoutRef.current) clearTimeout(goalTimeoutRef.current);
+    goalTimeoutRef.current = setTimeout(() => {
+      setGoalRunning(false);
+      setGoalPhase("Error: Task timed out after 120 seconds. The agent may still be running in the background.");
+    }, 120_000);
     try {
       await executeAgentGoal(selectedAgentId, goalInput.trim(), 5);
     } catch (err) {
+      if (goalTimeoutRef.current) { clearTimeout(goalTimeoutRef.current); goalTimeoutRef.current = null; }
+      setGoalRunning(false);
       setGoalPhase(`Error: ${err}`);
     }
   }, [selectedAgentId, goalInput, goalRunning]);
@@ -278,15 +292,34 @@ export function Agents({
         if (!mountedRef.current) return;
         console.log("[AgentOutput] completed event", event.payload?.agent_id);
         if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
+        // Clear timeout
+        if (goalTimeoutRef.current) { clearTimeout(goalTimeoutRef.current); goalTimeoutRef.current = null; }
         setGoalRunning(false);
+        const summary = String(event.payload?.result_summary ?? "");
         if (event.payload?.success === false) {
-          const reason = String(event.payload?.reason ?? event.payload?.result_summary ?? "Unknown error");
+          const reason = String(event.payload?.reason ?? summary ?? "Unknown error");
           setGoalPhase(`Error: ${reason}`);
+          setGoalResult(null);
         } else {
           setGoalPhase("Complete");
+          if (summary) setGoalResult(summary);
         }
+        // Add to history
+        setGoalHistory(prev => {
+          const entry = {
+            query: goalQueryRef.current,
+            result: summary || (event.payload?.success === false
+              ? String(event.payload?.reason ?? "Failed")
+              : "Completed"),
+            success: event.payload?.success !== false,
+            fuel: Number(event.payload?.fuel_consumed) || 0,
+            timestamp: Date.now(),
+          };
+          return [entry, ...prev].slice(0, 10);
+        });
       } catch (err) {
         console.error("[agent-ui] error processing completion event:", err);
+        if (goalTimeoutRef.current) { clearTimeout(goalTimeoutRef.current); goalTimeoutRef.current = null; }
         setGoalRunning(false);
         setGoalPhase("Complete");
       }
@@ -1194,7 +1227,54 @@ export function Agents({
           totalSteps={goalSteps}
           fuelConsumed={goalFuel}
           query={goalQuery}
+          resultSummary={goalResult}
         />
+      )}
+
+      {/* ─── Goal History ─── */}
+      {goalHistory.length > 0 && !goalRunning && (
+        <div style={{
+          background: "#0d1117",
+          border: "1px solid #1e293b",
+          borderRadius: 8,
+          padding: "10px 14px",
+          marginBottom: 12,
+          maxHeight: 200,
+          overflowY: "auto",
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Recent Runs
+          </div>
+          {goalHistory.slice(0, 5).map((entry, i) => (
+            <div key={entry.timestamp} style={{
+              padding: "6px 0",
+              borderTop: i > 0 ? "1px solid #1e293b" : "none",
+              display: "flex",
+              gap: 8,
+              alignItems: "flex-start",
+              fontSize: 12,
+            }}>
+              <span style={{
+                color: entry.success ? "#22c55e" : "#ef4444",
+                flexShrink: 0,
+                marginTop: 1,
+              }}>
+                {entry.success ? "\u2713" : "\u2717"}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {entry.query}
+                </div>
+                <div style={{ color: "#64748b", fontSize: 11, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {entry.result.slice(0, 100)}{entry.result.length > 100 ? "..." : ""}
+                </div>
+              </div>
+              <span style={{ color: "#475569", fontSize: 10, flexShrink: 0, whiteSpace: "nowrap" }}>
+                {new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* ─── Inline Approval Panel ─── */}

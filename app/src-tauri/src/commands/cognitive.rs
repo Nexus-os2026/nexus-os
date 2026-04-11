@@ -17,7 +17,7 @@ use nexus_connectors_llm::model_registry::ModelRegistry;
 use nexus_connectors_llm::nexus_link::NexusLink;
 use nexus_connectors_llm::providers::{
     groq::GROQ_MODELS, nvidia::NVIDIA_MODELS, ClaudeProvider, DeepSeekProvider, GeminiProvider,
-    GroqProvider, LlmProvider, NvidiaProvider, OllamaProvider, OpenAiProvider,
+    GroqProvider, LlmProvider, NvidiaProvider, OpenAiProvider,
 };
 use nexus_connectors_llm::rag::{RagConfig, RagPipeline};
 use nexus_connectors_llm::whisper::WhisperTranscriber;
@@ -697,22 +697,27 @@ impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
                 })?
             }
         } else {
-            let provider = select_provider(&prov_config)?;
-            let model = if config.llm.default_model.trim().is_empty() {
-                if provider.name() == "ollama" {
-                    let ollama = OllamaProvider::from_env();
-                    ollama
-                        .list_models()
-                        .ok()
-                        .and_then(|models| models.into_iter().next().map(|m| m.name))
-                        .unwrap_or_else(|| "llama3.2".to_string())
-                } else {
-                    "mock-1".to_string()
-                }
+            // Use smart default model detection (checks API keys in priority order)
+            let default_model = crate::commands::chat_llm::get_default_model();
+            if default_model.contains('/') {
+                // Prefixed model (e.g. "anthropic/claude-sonnet-4-6") — resolve provider from it
+                provider_from_prefixed_model(&default_model, &prov_config).map_err(|e| {
+                    nexus_kernel::errors::AgentError::SupervisorError(format!(
+                        "Cannot resolve default model '{}': {}. Add an API key in Settings.",
+                        default_model, e
+                    ))
+                })?
+            } else if default_model == "mock-1" {
+                // No provider configured at all — fail with clear message
+                return Err(nexus_kernel::errors::AgentError::SupervisorError(
+                    "No LLM provider configured. Add an API key in Settings (Anthropic, OpenAI, etc.) \
+                     or install Ollama for local models."
+                        .to_string(),
+                ));
             } else {
-                config.llm.default_model.clone()
-            };
-            (provider, model)
+                let provider = select_provider(&prov_config)?;
+                (provider, default_model)
+            }
         };
         // Wrap the LLM query in catch_unwind as a last resort — if the provider
         // crashes (e.g., llama.cpp segfault caught by signal handler, or Ollama timeout),
@@ -1015,11 +1020,6 @@ impl BackendEventBridge {
             any(target_os = "windows", target_os = "macos", target_os = "linux")
         ))]
         {
-            eprintln!(
-                "[agent-ipc] entering emit for event={} app_is_some={}",
-                _event,
-                self.app.is_some()
-            );
             let Some(app) = &self.app else {
                 eprintln!(
                     "[agent-ipc] BUG: emit called but app is None for event={}",
@@ -1027,17 +1027,6 @@ impl BackendEventBridge {
                 );
                 return;
             };
-            let Some(window) = app.get_webview_window("main") else {
-                eprintln!(
-                    "[agent-ipc] BUG: get_webview_window('main') returned None at emit time for event={}",
-                    _event
-                );
-                return;
-            };
-            eprintln!(
-                "[agent-ipc] resolved window fresh, label={}",
-                window.label()
-            );
 
             // Pre-serialize to check size and catch serialization errors safely
             let payload_json = match serde_json::to_string(&_payload) {
@@ -1049,7 +1038,7 @@ impl BackendEventBridge {
                     );
                     // Emit a safe error payload instead of crashing
                     let fallback = json!({"error": format!("serialization failed: {e}")});
-                    if let Err(emit_err) = window.emit(_event, fallback) {
+                    if let Err(emit_err) = app.emit(_event, fallback) {
                         eprintln!("[agent-ipc] fallback emit also failed: {emit_err}");
                     }
                     return;
@@ -1069,16 +1058,17 @@ impl BackendEventBridge {
                     "original_size": payload_json.len(),
                     "partial": &payload_json[..Self::MAX_EMIT_PAYLOAD.min(payload_json.len())],
                 });
-                if let Err(e) = window.emit(_event, truncated) {
+                if let Err(e) = app.emit(_event, truncated) {
                     eprintln!("[agent-ipc] truncated emit failed: {e}");
                 }
                 return;
             }
 
-            match window.emit(_event, &_payload) {
-                Ok(()) => {
-                    eprintln!("[agent-ipc] emit returned Ok for event={}", _event);
-                }
+            // Use app.emit() (not window.emit()) so the global listen() in
+            // the frontend receives the event. window.emit() only targets the
+            // webview-level emitter which global listen() does not subscribe to.
+            match app.emit(_event, &_payload) {
+                Ok(()) => {}
                 Err(e) => {
                     eprintln!(
                         "[agent-ipc] emit FAILED for '{}' ({} bytes): {}",
