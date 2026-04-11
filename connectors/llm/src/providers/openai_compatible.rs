@@ -125,9 +125,27 @@ pub(crate) fn execute_openai_compatible_query(
         output_text: extract_openai_text(&payload),
         token_count: extract_total_tokens(&payload).unwrap_or(query.max_tokens.min(256)),
         model_name: query.model.to_string(),
-        tool_calls: Vec::new(),
+        tool_calls: extract_tool_calls(&payload),
         input_tokens: None,
     })
+}
+
+/// Extract tool_calls from an OpenAI-compatible API response.
+pub(crate) fn extract_tool_calls(payload: &serde_json::Value) -> Vec<String> {
+    payload
+        .get("choices")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|choices| choices.first())
+        .and_then(|choice| choice.get("message"))
+        .and_then(|message| message.get("tool_calls"))
+        .and_then(serde_json::Value::as_array)
+        .map(|calls| {
+            calls
+                .iter()
+                .filter_map(|c| serde_json::to_string(c).ok())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 pub(crate) fn extract_openai_text(payload: &Value) -> String {

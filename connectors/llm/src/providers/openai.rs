@@ -99,11 +99,26 @@ impl LlmProvider for OpenAiProvider {
             .and_then(|value| u32::try_from(value).ok())
             .unwrap_or(max_tokens.min(256));
 
+        let tool_calls = payload
+            .get("choices")
+            .and_then(Value::as_array)
+            .and_then(|choices| choices.first())
+            .and_then(|choice| choice.get("message"))
+            .and_then(|message| message.get("tool_calls"))
+            .and_then(Value::as_array)
+            .map(|calls| {
+                calls
+                    .iter()
+                    .filter_map(|c| serde_json::to_string(c).ok())
+                    .collect()
+            })
+            .unwrap_or_default();
+
         Ok(LlmResponse {
             output_text,
             token_count,
             model_name: model.to_string(),
-            tool_calls: Vec::new(),
+            tool_calls,
             input_tokens: None,
         })
     }

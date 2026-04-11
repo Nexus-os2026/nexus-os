@@ -400,7 +400,12 @@ impl OllamaProvider {
 
 /// GET request using curl (returns status + json body).
 fn curl_get_json(endpoint: &str) -> Result<(u16, Value), AgentError> {
-    eprintln!("[nexus-llm][governance] ollama::curl_get_json endpoint={endpoint}");
+    // Rate-limit logging: only print the first call, then stay silent.
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static LOGGED_ONCE: AtomicBool = AtomicBool::new(false);
+    if !LOGGED_ONCE.swap(true, Ordering::Relaxed) {
+        eprintln!("[nexus-llm][governance] ollama::curl_get_json endpoint={endpoint}");
+    }
     let marker = "__NEXUS_STATUS__:";
     let output = Command::new("curl")
         .args(["-sS", "-L", "-m", "10"])
@@ -472,11 +477,24 @@ impl LlmProvider for OllamaProvider {
             .and_then(|value| u32::try_from(value).ok())
             .unwrap_or(max_tokens.min(128));
 
+        // Extract tool_calls from /api/chat shape (message.tool_calls).
+        // For /api/generate responses this field is absent — yields empty Vec.
+        let tool_calls = payload
+            .get("message")
+            .and_then(|m| m.get("tool_calls"))
+            .and_then(Value::as_array)
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| serde_json::to_string(item).ok())
+                    .collect()
+            })
+            .unwrap_or_default();
+
         Ok(LlmResponse {
             output_text,
             token_count,
             model_name: model.to_string(),
-            tool_calls: Vec::new(),
+            tool_calls,
             input_tokens: None,
         })
     }

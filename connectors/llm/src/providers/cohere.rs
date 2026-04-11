@@ -1,4 +1,4 @@
-use super::openai_compatible::{bearer_headers, extract_content_text};
+use super::openai_compatible::{bearer_headers, extract_content_text, extract_tool_calls};
 use super::{LlmProvider, LlmResponse, ProviderRequest};
 use nexus_kernel::errors::AgentError;
 use reqwest::blocking::Client;
@@ -123,7 +123,7 @@ impl LlmProvider for CohereProvider {
             output_text,
             token_count,
             model_name: model.to_string(),
-            tool_calls: Vec::new(),
+            tool_calls: extract_tool_calls(&payload),
             input_tokens: None,
         })
     }

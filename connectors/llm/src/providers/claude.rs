@@ -144,11 +144,23 @@ impl LlmProvider for ClaudeProvider {
             .and_then(Value::as_u64)
             .and_then(|value| u32::try_from(value).ok());
 
+        let tool_calls = payload
+            .get("content")
+            .and_then(Value::as_array)
+            .map(|content| {
+                content
+                    .iter()
+                    .filter(|item| item.get("type").and_then(Value::as_str) == Some("tool_use"))
+                    .filter_map(|item| serde_json::to_string(item).ok())
+                    .collect()
+            })
+            .unwrap_or_default();
+
         Ok(LlmResponse {
             output_text,
             token_count: output_tokens,
             model_name: model.to_string(),
-            tool_calls: Vec::new(),
+            tool_calls,
             input_tokens,
         })
     }

@@ -1,3 +1,4 @@
+use super::openai_compatible::extract_tool_calls;
 use super::{curl_post_json, LlmProvider, LlmResponse, ProviderRequest};
 use nexus_kernel::errors::AgentError;
 use serde_json::{json, Value};
@@ -99,7 +100,7 @@ impl LlmProvider for DeepSeekProvider {
             output_text,
             token_count,
             model_name: model.to_string(),
-            tool_calls: Vec::new(),
+            tool_calls: extract_tool_calls(&payload),
             input_tokens: None,
         })
     }
