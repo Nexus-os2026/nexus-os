@@ -1,0 +1,44 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06070f"/>
+      <stop offset="55%" stop-color="#0b1322"/>
+      <stop offset="100%" stop-color="#11192e"/>
+    </linearGradient>
+    <linearGradient id="neon" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7cf6ff"/>
+      <stop offset="55%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#2f7bff"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="0" y="0" width="512" height="512" rx="96" fill="url(#bg)"/>
+
+  <g stroke="url(#neon)" stroke-width="12" fill="none" stroke-linecap="round" filter="url(#glow)">
+    <polygon points="256,92 397,174 397,338 256,420 115,338 115,174"/>
+    <path d="M194 344V168h48l76 101V168h50v176h-48l-76-100v100z"/>
+
+    <line x1="397" y1="174" x2="474" y2="140"/>
+    <line x1="397" y1="338" x2="474" y2="372"/>
+    <line x1="115" y1="174" x2="38" y2="140"/>
+    <line x1="115" y1="338" x2="38" y2="372"/>
+    <line x1="256" y1="92" x2="256" y2="24"/>
+    <line x1="256" y1="420" x2="256" y2="488"/>
+  </g>
+
+  <g fill="url(#neon)">
+    <circle cx="474" cy="140" r="10"/>
+    <circle cx="474" cy="372" r="10"/>
+    <circle cx="38" cy="140" r="10"/>
+    <circle cx="38" cy="372" r="10"/>
+    <circle cx="256" cy="24" r="10"/>
+    <circle cx="256" cy="488" r="10"/>
+  </g>
+</svg>
