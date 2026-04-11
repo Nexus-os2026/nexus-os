@@ -45,3 +45,9 @@ _old/
 audit_artifacts/
 nexus-output/
 llamabridge/
+
+# Page audit: track markdown findings, ignore regenerable screenshots + re-run experiments
+docs/page-audits/*/findings/*.png
+docs/page-audits/*/findings/*.run[0-9]*.md
+docs/page-audits/*/findings/*.run[0-9]*.png
+docs/page-audits/*/findings/*-[0-9]*.run[0-9]*.png
