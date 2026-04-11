@@ -90,8 +90,12 @@ export default function RequiresLlm({ feature, children }: Props) {
             Install Ollama (Free, Local, Private)
           </button>
 
-          <a
-            href="#/settings"
+          <button
+            type="button"
+            onClick={() => {
+              window.history.pushState({ page: "settings" }, "", "/settings");
+              window.dispatchEvent(new PopStateEvent("popstate"));
+            }}
             style={{
               display: "flex",
               alignItems: "center",
@@ -106,11 +110,12 @@ export default function RequiresLlm({ feature, children }: Props) {
               fontWeight: 500,
               fontFamily: "inherit",
               textDecoration: "none",
+              cursor: "pointer",
             }}
           >
             <Key size={16} />
             I have an API key (OpenAI, Anthropic, etc.)
-          </a>
+          </button>
         </div>
 
         <p
