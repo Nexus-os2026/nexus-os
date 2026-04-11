@@ -89,3 +89,42 @@ Phase 2C is the full Tauri runtime audit — `cargo tauri dev` build, audit each
 - Phase 2B is complete (or at least P1 items resolved)
 - Audit script change-detection is improved (item 6 above)
 - A clean baseline is established on `cargo tauri dev`
+
+---
+
+## Reclassified as cosmetic (not user-visible bugs)
+
+### living-background__aura-clip + holo-panel__refraction internal overflow
+**Status:** RECLASSIFIED P1 → P3 (cosmetic)
+**Verified:** 2026-04-11
+**Replaces:** former Batch 2 of api-client P1 work
+
+DOM measurements on /api-client, /dashboard, and /files at viewport
+1377x722 confirmed `documentElement.scrollWidth - clientWidth === 0`
+and `body.scrollWidth - clientWidth === 0` on all three pages. The
+page itself does not scroll horizontally.
+
+The `living-background__aura-clip` (+30 to +44px) and
+`holo-panel__refraction` (+180 to +363px) overflows reported by the
+audit are real `scrollWidth > clientWidth` measurements, but they
+exist *inside clipping containers* — `.living-background` has
+`overflow: clip` (per dashboard-01 fix) and `.holo-panel` has
+`overflow: clip` (per Phase 2A Cluster B fix). Neither overflow
+propagates to a user-visible scroll position. They are by-design
+decorative bleed:
+
+- `aura-clip` wraps an aura element scaled to `1.04` for blur edge
+  compensation during parallax — load-bearing visual safety margin,
+  preserved by dashboard-01 fix
+- `holo-panel__refraction` is a rotating conic-gradient pseudo-
+  element used as a visual effect; its bounding box exceeds its
+  parent by design, clipped by the parent's `overflow: clip`
+
+Magnitudes vary across pages (aura-clip: 30 vs 44, refraction: 363
+vs 180) because the inner content widths of the containing elements
+vary by page layout. This is expected and not a regression.
+
+**Action:** No code change. The audit script change in the next
+commit will reclassify these as P3 cosmetic going forward so future
+audits do not surface them as P1.
+

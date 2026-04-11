@@ -51,3 +51,7 @@ docs/page-audits/*/findings/*.png
 docs/page-audits/*/findings/*.run[0-9]*.md
 docs/page-audits/*/findings/*.run[0-9]*.png
 docs/page-audits/*/findings/*-[0-9]*.run[0-9]*.png
+
+# Working artifacts (investigation prompts, Codex CLI state)
+prompts/triage/
+.codex

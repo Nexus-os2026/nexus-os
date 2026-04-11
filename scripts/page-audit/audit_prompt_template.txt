@@ -21,12 +21,18 @@ PROCEDURE
 2. For each viewport in [1920x1080, 1280x800, 1024x768], in order:
    a. Resize viewport using setDeviceMetricsOverride or equivalent.
    b. Wait 300ms for layout to settle.
-   c. Measure horizontal overflow:
-      - document.documentElement: scrollWidth, clientWidth
-      - document.body: scrollWidth, clientWidth
-      - main content container (identify selector): scrollWidth, clientWidth
-      - any other element where scrollWidth > clientWidth
-   You do NOT need to take screenshots in this step. Just measure and record numbers.
+   c. Measure horizontal overflow at TWO levels:
+      - **User-visible level (P1 candidates):** document.documentElement and document.body. Any overflow here means the page itself scrolls horizontally and the user sees it. ALWAYS report.
+      - **Internal element level (classify before reporting):** any element where scrollWidth > clientWidth. For each such element, walk the ancestor chain and check whether any ancestor has computed `overflow`, `overflow-x`, or `overflow-y` set to `hidden`, `clip`, `scroll`, or `auto`. Classify as:
+        * **user-visible:** no clipping ancestor found OR documentElement/body itself overflows. The user can scroll to see the bleed.
+        * **internal (cosmetic):** at least one clipping ancestor exists and documentElement/body do NOT overflow. The bleed is contained inside a clip box and is invisible to the user.
+   d. Identify the main content container by selector and report its scrollWidth/clientWidth alongside documentElement and body.
+   You do NOT need to take screenshots in this step. Just measure, classify, and record numbers.
+
+   **Severity rule for overflow findings:**
+   - documentElement or body overflow → P1 (user sees horizontal scroll)
+   - Internal element overflow classified user-visible → P1
+   - Internal element overflow classified internal (cosmetic) → P3 (informational only — by-design decorative bleed inside clip containers, do not surface as P1 unless the visual is genuinely broken)
 
 3. After viewport sweep, return to 1920x1080 for remaining steps.
 
@@ -88,13 +94,14 @@ Gate type: <RequiresLlm|none|other>
 - documentElement: scrollWidth=N clientWidth=N [OK|OVERFLOW]
 - body: scrollWidth=N clientWidth=N [OK|OVERFLOW]
 - main `<selector>`: scrollWidth=N clientWidth=N [OK|OVERFLOW]
-- other overflowing: <list or none>
+- other overflowing (user-visible): <list with selector + sw + cw + diff, or none>
+- other overflowing (internal/cosmetic): <list with selector + sw + cw + diff + clipping ancestor, or none>
 
 ### 1280x800
-(same)
+(same structure as 1920x1080, including both user-visible and internal/cosmetic buckets)
 
 ### 1024x768
-(same)
+(same structure as 1920x1080, including both user-visible and internal/cosmetic buckets)
 
 ## Interactive elements (main content only)
 | # | Label | Type | Href | Enabled |
