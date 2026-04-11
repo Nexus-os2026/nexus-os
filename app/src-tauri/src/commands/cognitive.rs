@@ -670,17 +670,10 @@ impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
             }
         }
 
-        eprintln!(
-            "[CRASH-TRACE-30] Flash not available/busy, loading config for standard provider"
-        );
         let config = nexus_kernel::config::load_config().unwrap_or_default();
         let prov_config = build_provider_config(&config);
         let route_model = ACTIVE_AGENT_LLM_ROUTE
             .with(|slot| slot.borrow().as_ref().map(|route| route.model.clone()));
-        eprintln!(
-            "[CRASH-TRACE-31] route_model={:?}",
-            route_model.as_deref().unwrap_or("none")
-        );
         let (provider, model) = if let Some(route_model) = route_model {
             // Skip flash routes — already handled by ACTIVE_FLASH_PROVIDER above.
             // If we reach here, Flash was requested but couldn't be resolved.
@@ -721,17 +714,12 @@ impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
             };
             (provider, model)
         };
-        eprintln!(
-            "[CRASH-TRACE-32] about to call provider.query() on provider={}",
-            provider.name()
-        );
         // Wrap the LLM query in catch_unwind as a last resort — if the provider
         // crashes (e.g., llama.cpp segfault caught by signal handler, or Ollama timeout),
         // we return an error instead of killing the app.
         let query_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             provider.query(prompt, 4096, &model)
         }));
-        eprintln!("[CRASH-TRACE-33] provider.query() returned (survived)");
         match query_result {
             Ok(Ok(response)) => Ok(strip_think_tags(&response.output_text)),
             Ok(Err(e)) => Err(e),
@@ -1447,13 +1435,6 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
         // inside a hook can cause a double-panic (which aborts the entire process).
         // The catch_unwind below is sufficient for recovery.
 
-        eprintln!(
-            "[CRASH-TRACE-10] cognitive loop spawned for agent={} goal={}",
-            &agent_id[..agent_id.len().min(8)],
-            &goal_id[..goal_id.len().min(8)]
-        );
-
-        eprintln!("[CRASH-TRACE-11] creating planner and memory manager");
         let planner = nexus_kernel::cognitive::CognitivePlanner::new(Box::new(GatewayPlannerLlm));
         let mem_store = DbMemoryStore {
             db: state.db.clone(),
@@ -1476,23 +1457,15 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
         .with_llm_handler(Arc::new(BridgeLlmQueryHandler))
         .with_memory_manager(memory_mgr.clone());
 
-        eprintln!("[CRASH-TRACE-12] entering cycle loop");
         let max_cycles = 500u32;
         'cycle_loop: for _cycle in 0..max_cycles {
-            eprintln!("[CRASH-TRACE-20] cycle {} starting", _cycle);
             let before_snapshot = capture_agent_snapshot(&state, &agent_id);
 
-            eprintln!("[CRASH-TRACE-21] about to run cognitive cycle (catch_unwind)");
             // Run the cognitive cycle inside catch_unwind
             let cycle_result_or_panic =
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    eprintln!("[CRASH-TRACE-22] inside catch_unwind, acquiring audit lock");
                     let mut audit_guard = state.audit.lock().unwrap_or_else(|p| p.into_inner());
-                    eprintln!("[CRASH-TRACE-23] audit lock acquired, calling with_agent_llm_route");
                     with_agent_llm_route(&state, &agent_id, || {
-                        eprintln!(
-                            "[CRASH-TRACE-24] inside llm_route, calling run_cycle_with_evolution"
-                        );
                         state.cognitive_runtime.run_cycle_with_evolution(
                             &agent_id,
                             &planner,
@@ -1504,7 +1477,6 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
                     })
                 }));
 
-            eprintln!("[CRASH-TRACE-25] catch_unwind returned, processing result");
             let result = match cycle_result_or_panic {
                 Ok(r) => r,
                 Err(panic_info) => {
@@ -1530,13 +1502,8 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
                 }
             };
 
-            eprintln!("[CRASH-TRACE-26] processing cycle result");
             match result {
                 Ok(cycle_result) => {
-                    eprintln!(
-                        "[CRASH-TRACE-27] cycle OK, phase={}, steps={}",
-                        cycle_result.phase, cycle_result.steps_executed
-                    );
                     let after_snapshot = capture_agent_snapshot(&state, &agent_id);
                     if cycle_result.steps_executed > 0 {
                         persist_agent_fuel_ledger(&state, &agent_id);
@@ -1576,7 +1543,6 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
                     };
 
                     // Emit phase/step events to the frontend
-                    eprintln!("[CRASH-TRACE-28] about to emit agent-cognitive-cycle");
                     bridge.emit(
                         "agent-cognitive-cycle",
                         json!({

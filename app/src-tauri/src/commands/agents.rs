@@ -452,10 +452,6 @@ pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, S
 }
 
 pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
-    eprintln!(
-        "[CRASH-TRACE-01] start_agent called for {}",
-        &agent_id[..agent_id.len().min(12)]
-    );
     let parsed = parse_agent_id(agent_id.as_str())?;
     let agent_id = parsed.to_string();
     if let Some(manifest) = find_manifest(state, &agent_id) {
