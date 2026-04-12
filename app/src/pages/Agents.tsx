@@ -287,6 +287,19 @@ export function Agents({
         console.log("[AgentOutput] completed event", event.payload?.agent_id);
         if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
         setGoalRunning(false);
+        // Bug S fix: finalize step spinners on goal completion
+        if (event.payload?.success !== false) {
+          setGoalStepDetails(prev => prev.map(s => ({
+            ...s,
+            status: s.status === "failed" ? "failed" : "succeeded",
+          })));
+        } else {
+          // On failure, mark any non-terminal steps as failed
+          setGoalStepDetails(prev => prev.map(s => ({
+            ...s,
+            status: (s.status === "succeeded" || s.status === "failed") ? s.status : "failed",
+          })));
+        }
         const summary = String(event.payload?.result_summary ?? "");
         const finalOutput = event.payload?.final_output ?? null;
         const userGoal = event.payload?.user_goal ?? null;
