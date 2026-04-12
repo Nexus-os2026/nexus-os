@@ -1600,6 +1600,7 @@ impl CognitiveRuntime {
             steps_total: state.steps.len() as u32,
             fuel_remaining,
             cycle_count: state.cycle_count,
+            started_at_secs: state.started_at_secs,
             last_step_result: state
                 .steps
                 .iter()
@@ -3911,5 +3912,24 @@ mod tests {
             file_write_step(Some("wrote 42 bytes to /tmp/out.txt")),
         ]);
         assert_eq!(result.as_deref(), Some("answer2"));
+    }
+
+    #[test]
+    fn test_started_at_secs_exposed_in_status() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup);
+        let goal = AgentGoal::new("timing test".into(), 5);
+        runtime.assign_goal(&agent_id, goal).unwrap();
+        let status = runtime.get_agent_status(&agent_id).unwrap();
+        assert!(
+            status.started_at_secs >= now && status.started_at_secs <= now + 5,
+            "started_at_secs {} should be within 5s of now {}",
+            status.started_at_secs,
+            now,
+        );
     }
 }

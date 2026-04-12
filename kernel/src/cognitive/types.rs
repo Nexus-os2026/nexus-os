@@ -535,6 +535,8 @@ pub struct CognitiveStatusResponse {
     pub steps_total: u32,
     pub fuel_remaining: f64,
     pub cycle_count: u32,
+    /// UNIX epoch seconds when the goal was assigned (for elapsed-time display).
+    pub started_at_secs: u64,
     /// Raw output of the most recently succeeded step (for UI display).
     pub last_step_result: Option<String>,
 }
@@ -763,6 +765,7 @@ mod tests {
             steps_total: 0,
             fuel_remaining: 1000.0,
             cycle_count: 0,
+            started_at_secs: 0,
             last_step_result: None,
         };
         let json = serde_json::to_string(&status).unwrap();
