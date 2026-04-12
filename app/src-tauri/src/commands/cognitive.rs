@@ -1941,7 +1941,8 @@ pub(crate) fn get_agent_cognitive_status(
             "steps_completed": 0,
             "steps_total": 0,
             "fuel_remaining": 0.0,
-            "cycle_count": 0
+            "cycle_count": 0,
+            "started_at_secs": 0
         })),
     }
 }
