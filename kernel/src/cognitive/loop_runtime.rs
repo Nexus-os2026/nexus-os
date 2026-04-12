@@ -1604,7 +1604,18 @@ impl CognitiveRuntime {
                 .steps
                 .iter()
                 .rev()
-                .find(|s| s.status == StepStatus::Succeeded && s.result.is_some())
+                .find(|s| {
+                    s.status == StepStatus::Succeeded
+                        && s.result.is_some()
+                        && matches!(s.action, PlannedAction::LlmQuery { .. })
+                })
+                .or_else(|| {
+                    state
+                        .steps
+                        .iter()
+                        .rev()
+                        .find(|s| s.status == StepStatus::Succeeded && s.result.is_some())
+                })
                 .and_then(|s| s.result.clone()),
         })
     }
@@ -3811,5 +3822,94 @@ mod tests {
             .unwrap();
         assert_eq!(r3.steps_executed, 3);
         assert!(!r3.should_continue);
+    }
+
+    // ── Bug P: last_step_result prefers LlmQuery over file-write ──
+
+    /// Helper: build an AgentStep with the given action, status, and result.
+    fn make_step(action: PlannedAction, result: Option<&str>) -> AgentStep {
+        AgentStep {
+            id: uuid::Uuid::new_v4().to_string(),
+            goal_id: "goal-1".into(),
+            action,
+            status: StepStatus::Succeeded,
+            result: result.map(|s| s.to_string()),
+            fuel_cost: 1.0,
+            attempts: 1,
+            max_retries: 3,
+        }
+    }
+
+    fn llm_step(result: Option<&str>) -> AgentStep {
+        make_step(
+            PlannedAction::LlmQuery {
+                prompt: "test".into(),
+                context: vec![],
+            },
+            result,
+        )
+    }
+
+    fn file_write_step(result: Option<&str>) -> AgentStep {
+        make_step(
+            PlannedAction::FileWrite {
+                path: "/tmp/out.txt".into(),
+                content: "hello".into(),
+            },
+            result,
+        )
+    }
+
+    /// Inject custom steps into a runtime's loop state and read back last_step_result.
+    fn last_step_result_for(steps: Vec<AgentStep>) -> Option<String> {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup);
+        let goal = AgentGoal::new("bug-p test".into(), 5);
+        runtime.assign_goal(&agent_id, goal).unwrap();
+        {
+            let mut loops = runtime.loops.lock().unwrap();
+            let state = loops.get_mut(&agent_id).unwrap();
+            state.steps = steps;
+        }
+        runtime
+            .get_agent_status(&agent_id)
+            .unwrap()
+            .last_step_result
+    }
+
+    #[test]
+    fn bug_p_a_prefers_llm_over_file_write() {
+        let result = last_step_result_for(vec![
+            llm_step(Some("answer")),
+            file_write_step(Some("wrote 42 bytes to /tmp/out.txt")),
+        ]);
+        assert_eq!(result.as_deref(), Some("answer"));
+    }
+
+    #[test]
+    fn bug_p_b_falls_back_to_file_write_when_no_llm() {
+        let result = last_step_result_for(vec![file_write_step(Some(
+            "wrote 42 bytes to /tmp/out.txt",
+        ))]);
+        assert_eq!(result.as_deref(), Some("wrote 42 bytes to /tmp/out.txt"));
+    }
+
+    #[test]
+    fn bug_p_c_falls_back_when_llm_has_no_result() {
+        let result = last_step_result_for(vec![
+            llm_step(None),
+            file_write_step(Some("wrote 42 bytes to /tmp/out.txt")),
+        ]);
+        assert_eq!(result.as_deref(), Some("wrote 42 bytes to /tmp/out.txt"));
+    }
+
+    #[test]
+    fn bug_p_d_returns_most_recent_llm_result() {
+        let result = last_step_result_for(vec![
+            llm_step(Some("answer1")),
+            llm_step(Some("answer2")),
+            file_write_step(Some("wrote 42 bytes to /tmp/out.txt")),
+        ]);
+        assert_eq!(result.as_deref(), Some("answer2"));
     }
 }
