@@ -83,7 +83,7 @@ Fixed and committed during Group D (not in this backlog):
 ### Phase 2C Live Runtime Audit (2026-04-12) — COMPLETE
 
 **Verified live:** Backend cognitive loop, LLM batch integration, Ollama fallback,
-IPC event delivery, two-pane Agents layout. Tested at 3 viewport sizes.
+IPC event delivery, two-pane Agents layout. Tested at 3 viewport sizes. Further polish issues (Bugs P, S) surfaced during post-commit testing; logged for Phase 2D.
 
 **Bugs fixed this phase:**
 - Bug L: agent-goal-completed event was being dropped by mountedRef guard — fixed
@@ -94,9 +94,10 @@ IPC event delivery, two-pane Agents layout. Tested at 3 viewport sizes.
 
 **Bugs remaining (Phase 2D follow-up):**
 - Bug O: gemma4:e2b too small for planner JSON output (model selection / grammar constraints needed)
-- Bug P: AgentOutputPanel shows "wrote N bytes" when last step is file_create — should prefer last llm_query step's result
+- Bug P: AgentOutputPanel result prefers last step regardless of action type. When the last step is `file_create`, users see "wrote N bytes to /path/strategy_draft.txt" instead of the actual LLM-generated content. Fix: in `get_agent_status()` (crates/nexus-kernel/src/cognitive/loop_runtime.rs), change `last_step_result` to walk `state.steps.iter().rev()` and return the first step matching `action.type == "LlmQuery" && result.is_some()`. Fall back to current behaviour (any completed step with result) only if no LlmQuery step exists.
 - Bug Q: "AGENT CONTROL // 4 ACTIVE" header block too tall (~140px chrome) — compress
 - Bug R: Recent Runs section layout cleanup
+- Bug S: Step list in AgentOutputPanel shows spinning loader icons on each step row even after the goal completes. The goal-completed handler sets `goalRunning: false` but doesn't flip individual `StepDetail.status` values from "running" to "succeeded". Either (a) update all step statuses to "succeeded" on goal-completed, (b) hide the step list below the RESULT block once the goal is complete, or (c) have the agent-cycle event stream the final step status before goal-completed fires. Option (a) is the cheapest fix — a single setGoalStepDetails() call in the agent-goal-completed listener in Agents.tsx.
 
 **Bug K status unchanged:** OllamaProvider uses /api/generate not /api/chat.
 Extraction logic is forward-compatible. Endpoint switch still separate ticket.
