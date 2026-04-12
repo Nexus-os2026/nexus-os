@@ -185,7 +185,6 @@ export function Agents({
   const [goalFinalOutput, setGoalFinalOutput] = useState<string | null>(null);
   const [goalUserGoal, setGoalUserGoal] = useState<string | null>(null);
   const [goalHistory, setGoalHistory] = useState<Array<{query: string; result: string; success: boolean; fuel: number; timestamp: number}>>([]);
-  const goalTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [availableProviders, setAvailableProviders] = useState<AvailableProvider[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<string>("auto");
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
@@ -209,16 +208,9 @@ export function Agents({
     setGoalResult(null);
     setGoalFinalOutput(null);
     setGoalUserGoal(null);
-    // Timeout fallback: if no completion after 120s, stop waiting
-    if (goalTimeoutRef.current) clearTimeout(goalTimeoutRef.current);
-    goalTimeoutRef.current = setTimeout(() => {
-      setGoalRunning(false);
-      setGoalPhase("Error: Task timed out after 120 seconds. The agent may still be running in the background.");
-    }, 120_000);
     try {
       await executeAgentGoal(selectedAgentId, goalInput.trim(), 5);
     } catch (err) {
-      if (goalTimeoutRef.current) { clearTimeout(goalTimeoutRef.current); goalTimeoutRef.current = null; }
       setGoalRunning(false);
       setGoalPhase(`Error: ${err}`);
     }
@@ -294,8 +286,6 @@ export function Agents({
       try {
         console.log("[AgentOutput] completed event", event.payload?.agent_id);
         if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
-        // Clear timeout
-        if (goalTimeoutRef.current) { clearTimeout(goalTimeoutRef.current); goalTimeoutRef.current = null; }
         setGoalRunning(false);
         const summary = String(event.payload?.result_summary ?? "");
         const finalOutput = event.payload?.final_output ?? null;
@@ -325,7 +315,6 @@ export function Agents({
         });
       } catch (err) {
         console.error("[agent-ui] error processing completion event:", err);
-        if (goalTimeoutRef.current) { clearTimeout(goalTimeoutRef.current); goalTimeoutRef.current = null; }
         setGoalRunning(false);
         setGoalPhase("Complete");
       }
