@@ -79,3 +79,24 @@ Fixed and committed during Group D (not in this backlog):
   - Extraction is forward-compatible (e57c5e06)
   - Fix requires switching to /api/chat with messages[] + tools[] — separate ticket
 - LLM batch landed: smart default model detection, tool_calls across 7/8 providers, Ollama fallback preserved
+
+### Phase 2C Live Runtime Audit (2026-04-12) — COMPLETE
+
+**Verified live:** Backend cognitive loop, LLM batch integration, Ollama fallback,
+IPC event delivery, two-pane Agents layout. Tested at 3 viewport sizes.
+
+**Bugs fixed this phase:**
+- Bug L: agent-goal-completed event was being dropped by mountedRef guard — fixed
+- Bug M-1: AgentGoal.description contained manifest text — added user_goal field
+- Bug M-2: result_summary echoed description instead of LLM output — added last_step_result
+- Bug N: AgentOutputPanel result text had no overflow — added max-height + scroll
+- Bug N-2: Agents page buried output panel below fold — refactored to two-pane layout
+
+**Bugs remaining (Phase 2D follow-up):**
+- Bug O: gemma4:e2b too small for planner JSON output (model selection / grammar constraints needed)
+- Bug P: AgentOutputPanel shows "wrote N bytes" when last step is file_create — should prefer last llm_query step's result
+- Bug Q: "AGENT CONTROL // 4 ACTIVE" header block too tall (~140px chrome) — compress
+- Bug R: Recent Runs section layout cleanup
+
+**Bug K status unchanged:** OllamaProvider uses /api/generate not /api/chat.
+Extraction logic is forward-compatible. Endpoint switch still separate ticket.
