@@ -1600,6 +1600,12 @@ impl CognitiveRuntime {
             steps_total: state.steps.len() as u32,
             fuel_remaining,
             cycle_count: state.cycle_count,
+            last_step_result: state
+                .steps
+                .iter()
+                .rev()
+                .find(|s| s.status == StepStatus::Succeeded && s.result.is_some())
+                .and_then(|s| s.result.clone()),
         })
     }
 

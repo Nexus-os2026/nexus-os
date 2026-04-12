@@ -32,6 +32,8 @@ interface Props {
   fuelConsumed: number;
   query: string;
   resultSummary?: string | null;
+  finalOutput?: string | null;
+  userGoal?: string | null;
 }
 
 /* ─── helpers ─── */
@@ -335,6 +337,8 @@ function ResultSummaryBlock({ text }: { text: string }) {
           lineHeight: 1.7,
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
+          maxHeight: 384,
+          overflowY: "auto" as const,
         }}
       >
         {text}
@@ -353,6 +357,8 @@ export default function AgentOutputPanel({
   fuelConsumed,
   query,
   resultSummary,
+  finalOutput,
+  userGoal,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -476,7 +482,7 @@ export default function AgentOutputPanel({
             }}
           >
             <span style={{ color: "#00e5ff", fontWeight: 600 }}>Goal:</span>{" "}
-            {query}
+            {userGoal || query}
           </div>
         )}
 
@@ -552,11 +558,8 @@ export default function AgentOutputPanel({
 
         {/* result summary from goal completion */}
         {!running && (() => {
-          // Prefer the last LLM result from steps (actual agent output)
-          const lastLlmResult = [...steps]
-            .reverse()
-            .find(s => s.action === "llm_query" && (s.status === "Succeeded" || s.status === "succeeded") && s.result);
-          const displayText = lastLlmResult?.result || resultSummary;
+          // Prefer finalOutput (actual LLM answer from backend) over resultSummary
+          const displayText = finalOutput || resultSummary;
           if (displayText) {
             return <ResultSummaryBlock text={displayText} />;
           }

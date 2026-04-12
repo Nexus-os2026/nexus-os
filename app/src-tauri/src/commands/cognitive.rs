@@ -107,7 +107,8 @@ pub(crate) fn assign_agent_goal(
         &goal_description,
         find_manifest_description(state, &agent_id).as_deref(),
     );
-    let goal = nexus_kernel::cognitive::AgentGoal::new(effective_goal_description, priority);
+    let mut goal = nexus_kernel::cognitive::AgentGoal::new(effective_goal_description, priority);
+    goal.user_goal = goal_description.clone();
     let goal_id = goal.id.clone();
     state
         .cognitive_runtime
@@ -1740,21 +1741,30 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
                         let success =
                             cycle_result.phase == nexus_kernel::cognitive::CognitivePhase::Learn;
 
+                        // Hoist status — single call, used by both result_summary and emit
+                        let status = state.cognitive_runtime.get_agent_status(&agent_id);
+
                         // Build a result summary from the cognitive status
                         let result_summary = if success {
-                            let status = state.cognitive_runtime.get_agent_status(&agent_id);
-                            status
+                            // Prefer actual LLM output over formatted status string
+                            let last_output = status
                                 .as_ref()
-                                .and_then(|s| s.active_goal.as_ref())
-                                .map(|g| {
-                                    format!(
-                                        "Completed: {} ({} steps, {:.1} fuel used)",
-                                        g.description,
-                                        cycle_result.steps_executed,
-                                        cycle_result.fuel_consumed
-                                    )
-                                })
-                                .unwrap_or_else(|| "Goal completed successfully.".to_string())
+                                .and_then(|s| s.last_step_result.clone())
+                                .filter(|t| !t.is_empty());
+                            last_output.unwrap_or_else(|| {
+                                status
+                                    .as_ref()
+                                    .and_then(|s| s.active_goal.as_ref())
+                                    .map(|g| {
+                                        format!(
+                                            "Completed: {} ({} steps, {:.1} fuel used)",
+                                            g.user_goal,
+                                            cycle_result.steps_executed,
+                                            cycle_result.fuel_consumed
+                                        )
+                                    })
+                                    .unwrap_or_else(|| "Goal completed successfully.".to_string())
+                            })
                         } else {
                             cycle_result
                                 .blocked_reason
@@ -1773,6 +1783,10 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
                                 "success": success,
                                 "phase": format!("{}", cycle_result.phase),
                                 "result_summary": result_summary,
+                                "final_output": status.as_ref().and_then(|s| s.last_step_result.clone()),
+                                "user_goal": status.as_ref()
+                                    .and_then(|s| s.active_goal.as_ref())
+                                    .map(|g| g.user_goal.clone()),
                             }),
                         );
                         persist_task_completion(

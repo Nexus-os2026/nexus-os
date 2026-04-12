@@ -77,6 +77,8 @@ pub enum GoalStatus {
 pub struct AgentGoal {
     pub id: String,
     pub description: String,
+    /// Pristine user-provided goal text (before manifest concatenation).
+    pub user_goal: String,
     pub priority: u8,
     pub deadline: Option<String>,
     pub parent_goal: Option<String>,
@@ -85,9 +87,11 @@ pub struct AgentGoal {
 
 impl AgentGoal {
     pub fn new(description: String, priority: u8) -> Self {
+        let user_goal = description.clone();
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             description,
+            user_goal,
             priority: priority.clamp(1, 10),
             deadline: None,
             parent_goal: None,
@@ -531,6 +535,8 @@ pub struct CognitiveStatusResponse {
     pub steps_total: u32,
     pub fuel_remaining: f64,
     pub cycle_count: u32,
+    /// Raw output of the most recently succeeded step (for UI display).
+    pub last_step_result: Option<String>,
 }
 
 /// Events emitted during cognitive loop execution.
@@ -757,6 +763,7 @@ mod tests {
             steps_total: 0,
             fuel_remaining: 1000.0,
             cycle_count: 0,
+            last_step_result: None,
         };
         let json = serde_json::to_string(&status).unwrap();
         assert!(json.contains("\"phase\":\"Idle\""));

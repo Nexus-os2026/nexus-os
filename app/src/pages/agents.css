@@ -82,6 +82,8 @@
   position: relative;
   z-index: 2;
   overflow-y: auto;
+  scrollbar-gutter: stable;
+  max-height: 40vh;
   padding: 0.7rem 1rem;
   display: grid;
   grid-template-columns: repeat(1, minmax(0, 1fr));
@@ -1248,6 +1250,7 @@
 @media (max-width: 800px) {
   .mission-control {
     height: calc(100vh - 8rem);
+    overflow-y: auto;
   }
 
   .mission-stats-ribbon {
@@ -1830,9 +1833,12 @@
 
 /* AI OS entity grid overrides */
 .mission-control {
-  gap: 1rem;
-  height: auto;
-  min-height: calc(100vh - 12rem);
+  display: flex !important;
+  flex-direction: column;
+  gap: 0.85rem;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   padding: 0.35rem;
   border: none;
   background: transparent;
@@ -1921,7 +1927,6 @@
 .mission-agent-grid {
   gap: 1rem;
   padding: 0;
-  overflow: visible;
 }
 
 .mission-agent-card {
@@ -2016,4 +2021,54 @@
   .mission-agent-card__action:hover {
     transform: none;
   }
+}
+
+/* ─── Two-Pane Layout (Phase 2C refactor) ─── */
+
+.mission-pane-header {
+  flex-shrink: 0;
+}
+
+.mission-pane-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+  .mission-pane-body {
+    grid-template-columns: minmax(320px, 40fr) minmax(0, 60fr);
+  }
+}
+
+.mission-pane-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.mission-pane-right {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.mission-pane-right > .mission-output-wrapper {
+  flex: 1 1 auto;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+}
+
+.mission-pane-right > .mission-output-wrapper > * {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }

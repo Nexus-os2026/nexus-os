@@ -182,6 +182,8 @@ export function Agents({
   const [goalStepDetails, setGoalStepDetails] = useState<Array<{action: string; status: string; result: string; fuel_cost: number}>>([]);
   const [goalQuery, setGoalQuery] = useState("");
   const [goalResult, setGoalResult] = useState<string | null>(null);
+  const [goalFinalOutput, setGoalFinalOutput] = useState<string | null>(null);
+  const [goalUserGoal, setGoalUserGoal] = useState<string | null>(null);
   const [goalHistory, setGoalHistory] = useState<Array<{query: string; result: string; success: boolean; fuel: number; timestamp: number}>>([]);
   const goalTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [availableProviders, setAvailableProviders] = useState<AvailableProvider[]>([]);
@@ -205,6 +207,8 @@ export function Agents({
     setGoalQuery(goalInput.trim());
     goalQueryRef.current = goalInput.trim();
     setGoalResult(null);
+    setGoalFinalOutput(null);
+    setGoalUserGoal(null);
     // Timeout fallback: if no completion after 120s, stop waiting
     if (goalTimeoutRef.current) clearTimeout(goalTimeoutRef.current);
     goalTimeoutRef.current = setTimeout(() => {
@@ -245,7 +249,6 @@ export function Agents({
       steps?: Array<{action: string; status: string; result: string; fuel_cost: number}>;
     }>("agent-cognitive-cycle", (event) => {
       try {
-        if (!mountedRef.current) return;
         console.log("[AgentOutput] cycle event", event.payload?.agent_id, "filter:", dispatchedAgentIdRef.current, "match:", event.payload?.agent_id === dispatchedAgentIdRef.current);
         if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
 
@@ -289,13 +292,16 @@ export function Agents({
 
     const p2 = listen("agent-goal-completed", (event: any) => {
       try {
-        if (!mountedRef.current) return;
         console.log("[AgentOutput] completed event", event.payload?.agent_id);
         if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
         // Clear timeout
         if (goalTimeoutRef.current) { clearTimeout(goalTimeoutRef.current); goalTimeoutRef.current = null; }
         setGoalRunning(false);
         const summary = String(event.payload?.result_summary ?? "");
+        const finalOutput = event.payload?.final_output ?? null;
+        const userGoal = event.payload?.user_goal ?? null;
+        setGoalFinalOutput(typeof finalOutput === "string" ? finalOutput : null);
+        setGoalUserGoal(typeof userGoal === "string" ? userGoal : null);
         if (event.payload?.success === false) {
           const reason = String(event.payload?.reason ?? summary ?? "Unknown error");
           setGoalPhase(`Error: ${reason}`);
@@ -327,7 +333,6 @@ export function Agents({
     p2.then(() => console.log("[AgentOutput] completed listener attached")).catch(err => console.error("[AgentOutput] completed listen failed:", err));
 
     const p3 = listen("agent-blocked", (event: any) => {
-      if (!mountedRef.current) return;
       console.log("[AgentOutput] blocked event", event.payload?.agent_id);
       if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
       listPendingConsents().then(consents => {
@@ -341,7 +346,6 @@ export function Agents({
     p3.then(() => console.log("[AgentOutput] blocked listener attached")).catch(err => console.error("[AgentOutput] blocked listen failed:", err));
 
     const p4 = listen("consent-request-pending", (event: any) => {
-      if (!mountedRef.current) return;
       if (event.payload?.agent_id !== dispatchedAgentIdRef.current) return;
       listPendingConsents().then(consents => {
         if (!mountedRef.current) return;
@@ -525,6 +529,7 @@ export function Agents({
   return (
     <RequiresLlm feature="Agents">
     <section className="mission-control">
+      <div className="mission-pane-header">
       <div className="mission-grid-overlay" />
 
       {/* ─── Async Error Banner ─── */}
@@ -619,9 +624,10 @@ export function Agents({
         </div>
         {/* SlmStatusBadge removed — moved to Settings for debugging */}
       </div>}
+      </div>{/* end mission-pane-header */}
 
       {/* ─── Level Selector ─── */}
-      {autonomyFilter === null ? (
+      {autonomyFilter === null && (
         <div style={{ padding: "40px 20px", textAlign: "center" }}>
           {/* ── Agent Search Bar ── */}
           <div style={{ maxWidth: 480, margin: "0 auto 28px auto", position: "relative" }}>
@@ -763,7 +769,10 @@ export function Agents({
           </>
           )}
         </div>
-      ) : (
+      )}
+
+      {/* ─── Two-Pane Layout (when level selected) ─── */}
+      {autonomyFilter !== null && (<>
         <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 0" }}>
           <button type="button"
             onClick={() => { setAutonomyFilter(null); setSelectedAgentId(null); }}
@@ -802,17 +811,16 @@ export function Agents({
             </span>
           )}
         </div>
-      )}
 
+      <div className="mission-pane-body">
+      <div className="mission-pane-left">
       {/* ─── Agent Selector (compact list) ─── */}
-      {autonomyFilter !== null && (
-      <div style={{ marginBottom: 12 }}>
         {filteredAgents.length === 0 ? (
           <div style={{ padding: "20px", textAlign: "center", color: "#64748b" }}>
             No agents at this level.
           </div>
         ) : (
-          <div style={{
+          <div className="mission-agent-grid" style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
             gap: 10,
@@ -875,7 +883,9 @@ export function Agents({
             })}
           </div>
         )}
+      </div>{/* end mission-pane-left */}
 
+      <div className="mission-pane-right">
         {/* Selected agent detail strip */}
         {selectedPreinstalled && (
           <div style={{
@@ -903,17 +913,11 @@ export function Agents({
                 Fuel {selectedPreinstalled.fuel_budget.toLocaleString()}
               </span>
             </div>
-            <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.5 }}>
+            <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.5, maxHeight: 80, overflowY: "auto", paddingRight: 4 }}>
               {selectedPreinstalled.description}
             </div>
           </div>
         )}
-      </div>
-      )}
-
-      {/* ─── Goal Execution Panel (immediately after agent selector) ─── */}
-      {autonomyFilter !== null && (<>
-
       {/* ─── Detail Panel ─── */}
       <AgentDetail
         open={detailOpen}
@@ -1220,6 +1224,7 @@ export function Agents({
 
       {/* ─── Agent Output Panel ─── */}
       {selectedAgentId && (
+        <div className="mission-output-wrapper">
         <AgentOutputPanel
           steps={goalStepDetails}
           phase={goalPhase}
@@ -1228,7 +1233,10 @@ export function Agents({
           fuelConsumed={goalFuel}
           query={goalQuery}
           resultSummary={goalResult}
+          finalOutput={goalFinalOutput}
+          userGoal={goalUserGoal}
         />
+        </div>
       )}
 
       {/* ─── Goal History ─── */}
@@ -1395,6 +1403,8 @@ export function Agents({
           ))}
         </div>
       )}
+      </div>{/* end mission-pane-right */}
+      </div>{/* end mission-pane-body */}
 
       {/* ─── Permission Gate (pre-run approval — centered overlay) ─── */}
       {showPermissionGate && selectedPreinstalled && (
