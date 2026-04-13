@@ -1933,7 +1933,7 @@ pub(crate) fn get_agent_cognitive_status(
     state: &AppState,
     agent_id: String,
 ) -> Result<serde_json::Value, String> {
-    match state.cognitive_runtime.get_agent_status(&agent_id) {
+    match state.cognitive_runtime.get_agent_status_fast(&agent_id) {
         Some(status) => serde_json::to_value(&status).map_err(|e| format!("serialize error: {e}")),
         None => Ok(json!({
             "phase": "Idle",
