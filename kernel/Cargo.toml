@@ -17,6 +17,7 @@ test-utils = []
 
 [dependencies]
 aes-gcm = "0.10"
+arc-swap = "1"
 argon2 = "0.5"
 zeroize = { version = "1", features = ["derive"] }
 flate2 = "1"

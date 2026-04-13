@@ -17,6 +17,7 @@ use crate::capabilities::has_capability;
 use crate::errors::AgentError;
 use crate::protocols::a2a_client::A2aClient;
 use crate::supervisor::Supervisor;
+use arc_swap::ArcSwap;
 use nexus_persistence::{NexusDatabase, StateStore};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -490,6 +491,10 @@ pub struct CognitiveRuntime {
     darwin: Mutex<PlanEvolutionEngine>,
     /// A2A client for delegating tasks to external agents.
     a2a_client: Mutex<A2aClient>,
+    /// Lock-free status snapshots published at each phase transition.
+    /// Readers use `get_agent_status_fast()` which briefly locks this map
+    /// (never held during a cycle) then does an atomic ArcSwap load.
+    status_snapshots: Mutex<HashMap<String, Arc<ArcSwap<CognitiveStatusResponse>>>>,
 }
 
 impl CognitiveRuntime {
@@ -519,6 +524,7 @@ impl CognitiveRuntime {
             evolution: Mutex::new(EvolutionEngine::new(0.3)),
             darwin: Mutex::new(PlanEvolutionEngine::default()),
             a2a_client: Mutex::new(A2aClient::new()),
+            status_snapshots: Mutex::new(HashMap::new()),
         }
     }
 
@@ -539,6 +545,7 @@ impl CognitiveRuntime {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
+        let goal_clone = goal.clone();
         let state = AgentLoopState {
             goal,
             phase: CognitivePhase::Perceive,
@@ -563,6 +570,25 @@ impl CognitiveRuntime {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .insert(agent_id.to_string(), state);
+
+        // Publish initial lock-free snapshot for status readers (Bug AB fix).
+        let initial_snapshot = CognitiveStatusResponse {
+            phase: CognitivePhase::Perceive,
+            active_goal: Some(goal_clone),
+            steps_completed: 0,
+            steps_total: 0,
+            fuel_remaining: 0.0,
+            cycle_count: 0,
+            started_at_secs: now,
+            last_step_result: None,
+        };
+        self.status_snapshots
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(
+                agent_id.to_string(),
+                Arc::new(ArcSwap::new(Arc::new(initial_snapshot))),
+            );
 
         Ok(())
     }
@@ -1561,6 +1587,10 @@ impl CognitiveRuntime {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .remove(agent_id);
+        self.status_snapshots
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(agent_id);
         self.shutdown_flags
             .lock()
             .unwrap_or_else(|p| p.into_inner())
@@ -1601,24 +1631,22 @@ impl CognitiveRuntime {
             fuel_remaining,
             cycle_count: state.cycle_count,
             started_at_secs: state.started_at_secs,
-            last_step_result: state
-                .steps
-                .iter()
-                .rev()
-                .find(|s| {
-                    s.status == StepStatus::Succeeded
-                        && s.result.is_some()
-                        && matches!(s.action, PlannedAction::LlmQuery { .. })
-                })
-                .or_else(|| {
-                    state
-                        .steps
-                        .iter()
-                        .rev()
-                        .find(|s| s.status == StepStatus::Succeeded && s.result.is_some())
-                })
-                .and_then(|s| s.result.clone()),
+            last_step_result: compute_last_step_result(&state.steps),
         })
+    }
+
+    /// Lock-free read of the latest published status snapshot for an agent.
+    /// Returns None if the agent has no active loop.
+    /// Staleness: bounded by the most recent phase transition (typically seconds).
+    /// This method NEVER blocks on the cycle lock and is safe to call during
+    /// long-running cycles.
+    pub fn get_agent_status_fast(&self, agent_id: &str) -> Option<CognitiveStatusResponse> {
+        let map = self
+            .status_snapshots
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        map.get(agent_id)
+            .map(|arc_swap| (**arc_swap.load()).clone())
     }
 
     /// Check if an agent has an active cognitive loop.
@@ -1784,6 +1812,25 @@ impl CognitiveRuntime {
             goal_id: state.goal.id.clone(),
             timestamp,
         });
+
+        // Publish lock-free snapshot for status readers (Bug AB fix).
+        if let Some(snap) = self
+            .status_snapshots
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(agent_id)
+        {
+            snap.store(Arc::new(CognitiveStatusResponse {
+                phase: state.phase,
+                active_goal: Some(state.goal.clone()),
+                steps_completed: state.steps_completed,
+                steps_total: state.steps.len() as u32,
+                fuel_remaining: state.total_fuel_consumed,
+                cycle_count: state.cycle_count,
+                started_at_secs: state.started_at_secs,
+                last_step_result: compute_last_step_result(&state.steps),
+            }));
+        }
     }
 
     fn emit_step_executed(&self, agent_id: &str, step: &AgentStep) {
@@ -1803,6 +1850,26 @@ impl CognitiveRuntime {
             fuel_cost: step.fuel_cost,
         });
     }
+}
+
+/// Extract the last step result using the Bug P logic: prefer the most recent
+/// succeeded LlmQuery, fall back to any succeeded step with a result.
+fn compute_last_step_result(steps: &[AgentStep]) -> Option<String> {
+    steps
+        .iter()
+        .rev()
+        .find(|s| {
+            s.status == StepStatus::Succeeded
+                && s.result.is_some()
+                && matches!(s.action, PlannedAction::LlmQuery { .. })
+        })
+        .or_else(|| {
+            steps
+                .iter()
+                .rev()
+                .find(|s| s.status == StepStatus::Succeeded && s.result.is_some())
+        })
+        .and_then(|s| s.result.clone())
 }
 
 /// Determine if an action requires HITL approval based on autonomy level.
@@ -3930,6 +3997,82 @@ mod tests {
             "started_at_secs {} should be within 5s of now {}",
             status.started_at_secs,
             now,
+        );
+    }
+
+    // ── Bug AB: ArcSwap snapshot tests ──
+
+    #[test]
+    fn bug_ab_snapshot_published_on_assign_goal() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup);
+        let goal = AgentGoal::new("snapshot test".into(), 5);
+        runtime.assign_goal(&agent_id, goal).unwrap();
+
+        let snap = runtime
+            .get_agent_status_fast(&agent_id)
+            .expect("snapshot should exist after assign_goal");
+        assert_eq!(snap.phase, CognitivePhase::Perceive);
+        assert!(snap.started_at_secs >= now);
+        assert_eq!(snap.cycle_count, 0);
+        assert_eq!(snap.steps_completed, 0);
+        let goal_desc = snap
+            .active_goal
+            .as_ref()
+            .expect("active_goal should be set");
+        assert_eq!(goal_desc.description, "snapshot test");
+    }
+
+    #[test]
+    fn bug_ab_snapshot_updates_after_cycle_phase() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup);
+        let goal = AgentGoal::new("cycle snapshot test".into(), 5);
+        runtime.assign_goal(&agent_id, goal).unwrap();
+
+        let planner = make_planner(
+            r#"[{"action": {"type": "LlmQuery", "prompt": "test", "context": []}, "description": "ask"}]"#,
+        );
+        let memory_mgr = make_memory_mgr();
+        let executor = MockExecutor::always_ok("done");
+        let mut audit = AuditTrail::new();
+
+        runtime
+            .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+            .unwrap();
+
+        let snap = runtime
+            .get_agent_status_fast(&agent_id)
+            .expect("snapshot should exist after cycle");
+        // After a cycle, at least one of these should have advanced from the initial state.
+        let advanced = snap.cycle_count > 0
+            || snap.steps_completed > 0
+            || snap.phase != CognitivePhase::Perceive;
+        assert!(
+            advanced,
+            "snapshot should reflect post-cycle state: cycle_count={}, steps_completed={}, phase={:?}",
+            snap.cycle_count, snap.steps_completed, snap.phase
+        );
+    }
+
+    #[test]
+    fn bug_ab_snapshot_removed_on_stop_agent_loop() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup);
+        let goal = AgentGoal::new("stop test".into(), 5);
+        runtime.assign_goal(&agent_id, goal).unwrap();
+
+        assert!(runtime.get_agent_status_fast(&agent_id).is_some());
+
+        runtime.stop_agent_loop(&agent_id).unwrap();
+
+        assert!(
+            runtime.get_agent_status_fast(&agent_id).is_none(),
+            "snapshot should be removed after stop_agent_loop"
         );
     }
 }
