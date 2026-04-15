@@ -929,22 +929,37 @@ pub(crate) fn time_machine_what_if(
     let rewind_result: serde_json::Value =
         serde_json::from_str(&rewind_raw).map_err(|e| e.to_string())?;
 
+    let mut status_emit_target: Option<String> = None;
     if let Some(path) = variable_key.strip_prefix("agent://") {
         if let Some((agent_id, field)) = path.split_once('/') {
             if let Ok(agent_uuid) = Uuid::parse_str(agent_id) {
                 let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-                if let Some(handle) = supervisor.get_agent_mut(agent_uuid) {
-                    match field {
-                        "fuel_remaining" => {
+                match field {
+                    "fuel_remaining" => {
+                        if let Some(handle) = supervisor.get_agent_mut(agent_uuid) {
                             let fuel = variable_value.parse::<u64>().map_err(|e| e.to_string())?;
                             handle.remaining_fuel = fuel;
                         }
-                        "status" => {
-                            handle.state = parse_agent_state(&variable_value)
-                                .ok_or_else(|| format!("invalid agent status: {variable_value}"))?;
-                        }
-                        _ => {}
                     }
+                    "status" => {
+                        let status = parse_agent_state(&variable_value)
+                            .ok_or_else(|| format!("invalid agent status: {variable_value}"))?;
+                        // Route through the chokepoint; fall back to force
+                        // because what-if must set the user-requested state
+                        // even across illegal FSM edges.
+                        if supervisor
+                            .transition_agent_state(agent_uuid, status, "time-machine-what-if")
+                            .is_err()
+                        {
+                            let _ = supervisor.force_transition_agent_state(
+                                agent_uuid,
+                                status,
+                                "time-machine-what-if-forced",
+                            );
+                        }
+                        status_emit_target = Some(agent_id.to_string());
+                    }
+                    _ => {}
                 }
             }
         }
@@ -953,6 +968,10 @@ pub(crate) fn time_machine_what_if(
         config.governance.enable_warden_review =
             matches!(variable_value.as_str(), "true" | "1" | "yes" | "on");
         save_nexus_config(&config).map_err(agent_error)?;
+    }
+
+    if let Some(agent_id) = status_emit_target.as_deref() {
+        crate::emit_agent_status_via_app(state, agent_id);
     }
 
     let mut replayed = 0usize;

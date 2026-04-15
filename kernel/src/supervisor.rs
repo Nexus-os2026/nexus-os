@@ -35,6 +35,78 @@ pub fn max_fuel_cost(action_type: &str) -> u64 {
     }
 }
 
+/// Runtime-configurable supervisor settings.
+///
+/// Caps on how many L5 (Sovereign) and L6 (Transcendent) agents may be
+/// simultaneously active. Defaults are conservative-but-usable on a
+/// high-end workstation (62GB RAM, single GPU); raise via env vars for
+/// larger hardware.
+#[derive(Debug, Clone)]
+pub struct SupervisorConfig {
+    pub max_l5_agents: usize,
+    pub max_l6_agents: usize,
+}
+
+impl Default for SupervisorConfig {
+    fn default() -> Self {
+        Self {
+            max_l5_agents: 1,
+            max_l6_agents: 6,
+        }
+    }
+}
+
+impl SupervisorConfig {
+    /// Load from environment variables, falling back to defaults.
+    /// `NEXUS_MAX_L5_AGENTS` and `NEXUS_MAX_L6_AGENTS`.
+    pub fn from_env() -> Self {
+        let mut config = Self::default();
+        if let Ok(val) = std::env::var("NEXUS_MAX_L5_AGENTS") {
+            match val.parse::<usize>() {
+                Ok(n) => {
+                    config.max_l5_agents = n;
+                    eprintln!(
+                        "[supervisor] config: max_l5_agents = {n} (from NEXUS_MAX_L5_AGENTS)"
+                    );
+                    if n == 0 {
+                        eprintln!("[supervisor] WARNING: max_l5_agents = 0 — no L5 agents can run");
+                    } else if n > 100 {
+                        eprintln!("[supervisor] WARNING: max_l5_agents = {n} is unusually high");
+                    }
+                }
+                Err(_) => {
+                    eprintln!(
+                        "[supervisor] WARNING: NEXUS_MAX_L5_AGENTS='{val}' is not a valid number, using default {}",
+                        config.max_l5_agents
+                    );
+                }
+            }
+        }
+        if let Ok(val) = std::env::var("NEXUS_MAX_L6_AGENTS") {
+            match val.parse::<usize>() {
+                Ok(n) => {
+                    config.max_l6_agents = n;
+                    eprintln!(
+                        "[supervisor] config: max_l6_agents = {n} (from NEXUS_MAX_L6_AGENTS)"
+                    );
+                    if n == 0 {
+                        eprintln!("[supervisor] WARNING: max_l6_agents = 0 — no L6 agents can run");
+                    } else if n > 100 {
+                        eprintln!("[supervisor] WARNING: max_l6_agents = {n} is unusually high");
+                    }
+                }
+                Err(_) => {
+                    eprintln!(
+                        "[supervisor] WARNING: NEXUS_MAX_L6_AGENTS='{val}' is not a valid number, using default {}",
+                        config.max_l6_agents
+                    );
+                }
+            }
+        }
+        config
+    }
+}
+
 /// A fuel reservation held against an agent's balance in the Supervisor.
 ///
 /// The reserved amount is immediately subtracted from the agent's
@@ -102,6 +174,7 @@ pub struct Supervisor {
     permission_manager: PermissionManager,
     policy_engine: PolicyEngine,
     time_machine: TimeMachine,
+    config: SupervisorConfig,
 }
 
 impl Default for Supervisor {
@@ -112,6 +185,14 @@ impl Default for Supervisor {
 
 impl Supervisor {
     pub fn new() -> Self {
+        Self::with_config(SupervisorConfig::from_env())
+    }
+
+    /// Create a supervisor with an explicit [`SupervisorConfig`].
+    ///
+    /// Use this in tests when you need deterministic L5/L6 caps. Production
+    /// code should use [`Supervisor::new`], which loads caps from env vars.
+    pub fn with_config(config: SupervisorConfig) -> Self {
         Self {
             agents: HashMap::new(),
             fuel_ledgers: HashMap::new(),
@@ -121,6 +202,7 @@ impl Supervisor {
             permission_manager: PermissionManager::new(),
             policy_engine: PolicyEngine::default(),
             time_machine: TimeMachine::default(),
+            config,
         }
     }
 
@@ -138,6 +220,7 @@ impl Supervisor {
             permission_manager: PermissionManager::new(),
             policy_engine: engine,
             time_machine: TimeMachine::default(),
+            config: SupervisorConfig::from_env(),
         }
     }
 
@@ -166,15 +249,17 @@ impl Supervisor {
         &mut self.time_machine
     }
 
-    /// Find the currently active L5 (Sovereign) agent, if any.
-    fn active_sovereign(&self) -> Option<(&AgentId, &AgentHandle)> {
-        self.agents.iter().find(|(_, handle)| {
-            handle.autonomy_level == 5
-                && matches!(
-                    handle.state,
-                    AgentState::Running | AgentState::Starting | AgentState::Paused
-                )
-        })
+    fn active_sovereign_agents(&self) -> Vec<(&AgentId, &AgentHandle)> {
+        self.agents
+            .iter()
+            .filter(|(_, handle)| {
+                handle.autonomy_level == 5
+                    && matches!(
+                        handle.state,
+                        AgentState::Running | AgentState::Starting | AgentState::Paused
+                    )
+            })
+            .collect()
     }
 
     fn active_transcendent_agents(&self) -> Vec<(&AgentId, &AgentHandle)> {
@@ -195,37 +280,27 @@ impl Supervisor {
         self.start_agent_with_id(id, manifest)
     }
 
-    pub fn start_agent_with_id(
+    /// Register an agent in the supervisor without starting it.
+    ///
+    /// Inserts a new entry into the agent registry with the given initial state.
+    /// Does NOT enforce L5/L6 caps — caps are enforced only when transitioning
+    /// to Running via `transition_to_running`.
+    ///
+    /// Returns `Err` if the UUID is already registered (duplicate registration is a bug).
+    pub fn register_agent(
         &mut self,
         id: AgentId,
         manifest: AgentManifest,
+        initial_state: AgentState,
     ) -> Result<AgentId, AgentError> {
+        if self.agents.contains_key(&id) {
+            return Err(AgentError::SupervisorError(format!(
+                "agent '{id}' is already registered"
+            )));
+        }
+
         let autonomy_level = AutonomyLevel::from_manifest(manifest.autonomy_level);
 
-        // L5 singleton enforcement: only one Sovereign agent may be active at a time.
-        if autonomy_level == AutonomyLevel::L5 {
-            if let Some((_, existing_handle)) = self.active_sovereign() {
-                return Err(AgentError::SupervisorError(format!(
-                    "Only one Sovereign agent allowed. Currently active: {}. Stop it first.",
-                    existing_handle.manifest.name
-                )));
-            }
-        }
-
-        if autonomy_level == AutonomyLevel::L6 {
-            let active_l6 = self.active_transcendent_agents();
-            if active_l6.len() >= 2 {
-                let mut names = active_l6
-                    .iter()
-                    .map(|(_, handle)| handle.manifest.name.clone())
-                    .collect::<Vec<_>>();
-                names.sort();
-                return Err(AgentError::SupervisorError(format!(
-                    "Maximum two Transcendent agents allowed. Currently active: {}. Stop one first.",
-                    names.join(", ")
-                )));
-            }
-        }
         let mut consent_runtime = ConsentRuntime::from_manifest(
             manifest.consent_policy_path.as_deref(),
             manifest.requester_id.as_deref(),
@@ -265,7 +340,7 @@ impl Supervisor {
             autonomy_guard: AutonomyGuard::new(autonomy_level),
             consent_runtime,
             autonomy_level: autonomy_level_numeric(autonomy_level),
-            state: AgentState::Created,
+            state: initial_state,
             remaining_fuel: monthly_cap,
             execution_mode: execution_mode.clone(),
         };
@@ -301,6 +376,65 @@ impl Supervisor {
             }),
         )?;
 
+        Ok(id)
+    }
+
+    /// Transition a registered agent to Running state.
+    ///
+    /// Enforces L5 singleton and L6 cap (max 2) before allowing the transition.
+    /// If the agent is already Running, returns Ok (idempotent).
+    pub fn transition_to_running(&mut self, id: AgentId) -> Result<(), AgentError> {
+        let (autonomy_level, current_state) = {
+            let handle = self
+                .agents
+                .get(&id)
+                .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+            (
+                AutonomyLevel::from_manifest(Some(handle.autonomy_level)),
+                handle.state,
+            )
+        };
+
+        // Idempotent: already running
+        if current_state == AgentState::Running {
+            return Ok(());
+        }
+
+        // L5 cap enforcement (default singleton, configurable via NEXUS_MAX_L5_AGENTS).
+        if autonomy_level == AutonomyLevel::L5 {
+            let active_l5 = self.active_sovereign_agents();
+            let others: Vec<_> = active_l5.iter().filter(|(aid, _)| **aid != id).collect();
+            if others.len() >= self.config.max_l5_agents {
+                let mut names = others
+                    .iter()
+                    .map(|(_, handle)| handle.manifest.name.clone())
+                    .collect::<Vec<_>>();
+                names.sort();
+                return Err(AgentError::SupervisorError(format!(
+                    "Maximum {} L5 agents allowed. Currently active: {}. Stop one first.",
+                    self.config.max_l5_agents,
+                    names.join(", ")
+                )));
+            }
+        }
+
+        if autonomy_level == AutonomyLevel::L6 {
+            let active_l6 = self.active_transcendent_agents();
+            let others: Vec<_> = active_l6.iter().filter(|(aid, _)| **aid != id).collect();
+            if others.len() >= self.config.max_l6_agents {
+                let mut names = others
+                    .iter()
+                    .map(|(_, handle)| handle.manifest.name.clone())
+                    .collect::<Vec<_>>();
+                names.sort();
+                return Err(AgentError::SupervisorError(format!(
+                    "Maximum {} Transcendent agents allowed. Currently active: {}. Stop one first.",
+                    self.config.max_l6_agents,
+                    names.join(", ")
+                )));
+            }
+        }
+
         {
             let entry = self
                 .agents
@@ -330,7 +464,107 @@ impl Supervisor {
         // Best-effort: failure to record checkpoint does not block agent start
         let _ = self.time_machine.commit_checkpoint(checkpoint);
 
+        Ok(())
+    }
+
+    pub fn start_agent_with_id(
+        &mut self,
+        id: AgentId,
+        manifest: AgentManifest,
+    ) -> Result<AgentId, AgentError> {
+        self.register_agent(id, manifest, AgentState::Created)?;
+        self.transition_to_running(id)?;
         Ok(id)
+    }
+
+    /// Sole legal entry point for mutating `AgentHandle.state`.
+    ///
+    /// Wraps the FSM helper in [`crate::lifecycle::transition_state`] and, on
+    /// success, commits the new state plus a tamper-evident audit record
+    /// (`event_kind = "agent.state_transition"`). Any call-site that touches
+    /// `handle.state` directly bypasses audit and causes the UI to drift —
+    /// do not add new direct mutations.
+    ///
+    /// Returns `Err` on illegal FSM transitions or unknown agent ids.
+    pub fn transition_agent_state(
+        &mut self,
+        id: AgentId,
+        new_state: AgentState,
+        reason: &str,
+    ) -> Result<AgentState, AgentError> {
+        let old_state = {
+            let handle = self
+                .agents
+                .get(&id)
+                .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+            handle.state
+        };
+        let next = transition_state(old_state, new_state)?;
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        handle.state = next;
+        // Best-effort audit: a hash-chain failure must not roll back the
+        // committed state transition.
+        let _ = self.audit_trail.append_event(
+            id,
+            EventType::UserAction,
+            json!({
+                "event_kind": "agent.state_transition",
+                "agent_id": id.to_string(),
+                "old_state": old_state.to_string(),
+                "new_state": next.to_string(),
+                "reason": reason,
+                "forced": false,
+            }),
+        );
+        eprintln!("[supervisor] agent {id} transition {old_state} -> {next} ({reason})");
+        Ok(next)
+    }
+
+    /// Bypasses the FSM legality check and force-sets the agent state.
+    ///
+    /// WARNING: this exists **solely** for the safety-halt fallback where a
+    /// corrupt or mid-transition state must be crushed to `Stopped` to
+    /// contain a runaway agent. It should never be used by lifecycle
+    /// commands, Tauri handlers, or time-machine undo/redo — those must go
+    /// through [`Supervisor::transition_agent_state`] so FSM guarantees and
+    /// the audit trail remain intact.
+    pub fn force_transition_agent_state(
+        &mut self,
+        id: AgentId,
+        new_state: AgentState,
+        reason: &str,
+    ) -> Result<AgentState, AgentError> {
+        let old_state = {
+            let handle = self
+                .agents
+                .get(&id)
+                .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+            handle.state
+        };
+        let handle = self
+            .agents
+            .get_mut(&id)
+            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+        handle.state = new_state;
+        let _ = self.audit_trail.append_event(
+            id,
+            EventType::UserAction,
+            json!({
+                "event_kind": "agent.state_transition",
+                "agent_id": id.to_string(),
+                "old_state": old_state.to_string(),
+                "new_state": new_state.to_string(),
+                "reason": reason,
+                "forced": true,
+            }),
+        );
+        eprintln!(
+            "[supervisor] agent {id} FORCED transition {old_state} -> {new_state} ({reason})"
+        );
+        Ok(new_state)
     }
 
     pub fn stop_agent(&mut self, id: AgentId) -> Result<(), AgentError> {
@@ -345,11 +579,8 @@ impl Supervisor {
             AgentState::Running | AgentState::Paused => {
                 // Consume fuel for stop operation (symmetric with start)
                 self.consume_fuel_units(id, "supervisor.stop", 2)?;
-                let handle = self.agents.get_mut(&id).ok_or_else(|| {
-                    AgentError::SupervisorError(format!("agent '{id}' not found"))
-                })?;
-                handle.state = transition_state(handle.state, AgentState::Stopping)?;
-                handle.state = transition_state(handle.state, AgentState::Stopped)?;
+                self.transition_agent_state(id, AgentState::Stopping, "stop")?;
+                self.transition_agent_state(id, AgentState::Stopped, "stop")?;
 
                 // Create a time machine checkpoint for agent stop
                 let mut builder = self
@@ -376,36 +607,42 @@ impl Supervisor {
     }
 
     pub fn pause_agent(&mut self, id: AgentId) -> Result<(), AgentError> {
-        let handle = self
-            .agents
-            .get_mut(&id)
-            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
-        match handle.state {
+        let current_state = {
+            let handle = self
+                .agents
+                .get(&id)
+                .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+            handle.state
+        };
+        match current_state {
             AgentState::Running => {
-                handle.state = transition_state(handle.state, AgentState::Paused)?;
+                self.transition_agent_state(id, AgentState::Paused, "pause")?;
                 Ok(())
             }
             AgentState::Paused => Ok(()),
             _ => Err(AgentError::InvalidTransition {
-                from: handle.state,
+                from: current_state,
                 to: AgentState::Paused,
             }),
         }
     }
 
     pub fn resume_agent(&mut self, id: AgentId) -> Result<(), AgentError> {
-        let handle = self
-            .agents
-            .get_mut(&id)
-            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
-        match handle.state {
+        let current_state = {
+            let handle = self
+                .agents
+                .get(&id)
+                .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
+            handle.state
+        };
+        match current_state {
             AgentState::Paused => {
-                handle.state = transition_state(handle.state, AgentState::Running)?;
+                self.transition_agent_state(id, AgentState::Running, "resume")?;
                 Ok(())
             }
             AgentState::Running => Ok(()),
             _ => Err(AgentError::InvalidTransition {
-                from: handle.state,
+                from: current_state,
                 to: AgentState::Running,
             }),
         }
@@ -424,31 +661,40 @@ impl Supervisor {
             .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
 
         if autonomy_level == AutonomyLevel::L5 {
-            if let Some((_, existing_handle)) = self
-                .active_sovereign()
-                .filter(|(existing_id, _)| **existing_id != id)
-            {
-                return Err(AgentError::SupervisorError(format!(
-                    "Only one Sovereign agent allowed. Currently active: {}. Stop it first.",
-                    existing_handle.manifest.name
-                )));
-            }
-        }
-
-        if autonomy_level == AutonomyLevel::L6 {
-            let active_l6 = self
-                .active_transcendent_agents()
+            let others: Vec<_> = self
+                .active_sovereign_agents()
                 .into_iter()
                 .filter(|(existing_id, _)| **existing_id != id)
-                .collect::<Vec<_>>();
-            if active_l6.len() >= 2 {
-                let mut names = active_l6
+                .collect();
+            if others.len() >= self.config.max_l5_agents {
+                let mut names = others
                     .iter()
                     .map(|(_, handle)| handle.manifest.name.clone())
                     .collect::<Vec<_>>();
                 names.sort();
                 return Err(AgentError::SupervisorError(format!(
-                    "Maximum two Transcendent agents allowed. Currently active: {}. Stop one first.",
+                    "Maximum {} L5 agents allowed. Currently active: {}. Stop one first.",
+                    self.config.max_l5_agents,
+                    names.join(", ")
+                )));
+            }
+        }
+
+        if autonomy_level == AutonomyLevel::L6 {
+            let others: Vec<_> = self
+                .active_transcendent_agents()
+                .into_iter()
+                .filter(|(existing_id, _)| **existing_id != id)
+                .collect();
+            if others.len() >= self.config.max_l6_agents {
+                let mut names = others
+                    .iter()
+                    .map(|(_, handle)| handle.manifest.name.clone())
+                    .collect::<Vec<_>>();
+                names.sort();
+                return Err(AgentError::SupervisorError(format!(
+                    "Maximum {} Transcendent agents allowed. Currently active: {}. Stop one first.",
+                    self.config.max_l6_agents,
                     names.join(", ")
                 )));
             }
@@ -458,12 +704,8 @@ impl Supervisor {
             self.stop_agent(id)?;
         }
         self.consume_fuel(id, "supervisor.restart")?;
-        let handle = self
-            .agents
-            .get_mut(&id)
-            .ok_or_else(|| AgentError::SupervisorError(format!("agent '{id}' not found")))?;
-        handle.state = transition_state(handle.state, AgentState::Starting)?;
-        handle.state = transition_state(handle.state, AgentState::Running)?;
+        self.transition_agent_state(id, AgentState::Starting, "restart")?;
+        self.transition_agent_state(id, AgentState::Running, "restart")?;
         Ok(())
     }
 
@@ -1261,19 +1503,29 @@ impl Supervisor {
                 Ok(())
             }
             SafetyAction::Halted { reason, report_id } => {
-                if let Some(agent) = self.agents.get_mut(&id) {
-                    match agent.state {
-                        AgentState::Running | AgentState::Paused | AgentState::Starting => {
-                            if let Ok(next) = transition_state(agent.state, AgentState::Stopping) {
-                                agent.state = next;
-                            }
-                            if let Ok(next) = transition_state(agent.state, AgentState::Stopped) {
-                                agent.state = next;
-                            } else {
-                                agent.state = AgentState::Stopped;
-                            }
-                        }
-                        _ => {}
+                let old_state = self.agents.get(&id).map(|agent| agent.state);
+                if let Some(AgentState::Running | AgentState::Paused | AgentState::Starting) =
+                    old_state
+                {
+                    if self
+                        .transition_agent_state(id, AgentState::Stopping, "safety-halt")
+                        .is_err()
+                    {
+                        let _ = self.force_transition_agent_state(
+                            id,
+                            AgentState::Stopping,
+                            "safety-halt-forced",
+                        );
+                    }
+                    if self
+                        .transition_agent_state(id, AgentState::Stopped, "safety-halt")
+                        .is_err()
+                    {
+                        let _ = self.force_transition_agent_state(
+                            id,
+                            AgentState::Stopped,
+                            "safety-halt-forced",
+                        );
                     }
                 }
 
@@ -1678,9 +1930,19 @@ priority = 50
         assert_eq!(sup.policy_engine().policies()[0].policy_id, "runtime-added");
     }
 
+    /// Test helper: supervisor with the historical cap of max_l6_agents=2.
+    /// Use this in tests that predate configurable caps so their semantics
+    /// (cap enforcement with N=2) are preserved explicitly.
+    fn sup_with_l6_cap_2() -> Supervisor {
+        Supervisor::with_config(SupervisorConfig {
+            max_l5_agents: 1,
+            max_l6_agents: 2,
+        })
+    }
+
     #[test]
     fn only_one_l5_agent_can_be_active() {
-        let mut sup = Supervisor::new();
+        let mut sup = sup_with_l6_cap_2();
         let first = sup.start_agent(l5_manifest("nexus-sovereign"));
         assert!(first.is_ok());
 
@@ -1688,13 +1950,13 @@ priority = 50
         let err = second.unwrap_err();
         assert_eq!(
             err.to_string(),
-            "supervisor error: Only one Sovereign agent allowed. Currently active: nexus-sovereign. Stop it first."
+            "supervisor error: Maximum 1 L5 agents allowed. Currently active: nexus-sovereign. Stop one first."
         );
     }
 
     #[test]
     fn l5_slot_reopens_after_stop() {
-        let mut sup = Supervisor::new();
+        let mut sup = sup_with_l6_cap_2();
         let first = sup.start_agent(l5_manifest("nexus-sovereign")).unwrap();
         sup.stop_agent(first).unwrap();
 
@@ -1704,20 +1966,20 @@ priority = 50
 
     #[test]
     fn maximum_two_l6_agents_can_be_active() {
-        let mut sup = Supervisor::new();
+        let mut sup = sup_with_l6_cap_2();
         assert!(sup.start_agent(l6_manifest("ascendant")).is_ok());
         assert!(sup.start_agent(l6_manifest("architect-prime")).is_ok());
 
         let err = sup.start_agent(l6_manifest("oracle-supreme")).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "supervisor error: Maximum two Transcendent agents allowed. Currently active: architect-prime, ascendant. Stop one first."
+            "supervisor error: Maximum 2 Transcendent agents allowed. Currently active: architect-prime, ascendant. Stop one first."
         );
     }
 
     #[test]
     fn l5_and_l6_limits_do_not_interfere() {
-        let mut sup = Supervisor::new();
+        let mut sup = sup_with_l6_cap_2();
         assert!(sup.start_agent(l5_manifest("nexus-sovereign")).is_ok());
         assert!(sup.start_agent(l6_manifest("ascendant")).is_ok());
         assert!(sup.start_agent(l6_manifest("architect-prime")).is_ok());
@@ -1725,7 +1987,7 @@ priority = 50
 
     #[test]
     fn restart_agent_enforces_l5_singleton() {
-        let mut sup = Supervisor::new();
+        let mut sup = sup_with_l6_cap_2();
         let first = sup.start_agent(l5_manifest("nexus-sovereign")).unwrap();
         let second = sup.start_agent(test_manifest()).unwrap();
         {
@@ -1742,14 +2004,14 @@ priority = 50
         let err = sup.restart_agent(second).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "supervisor error: Only one Sovereign agent allowed. Currently active: nexus-sovereign. Stop it first."
+            "supervisor error: Maximum 1 L5 agents allowed. Currently active: nexus-sovereign. Stop one first."
         );
         sup.stop_agent(first).unwrap();
     }
 
     #[test]
     fn restart_agent_enforces_l6_limit() {
-        let mut sup = Supervisor::new();
+        let mut sup = sup_with_l6_cap_2();
         assert!(sup.start_agent(l6_manifest("ascendant")).is_ok());
         assert!(sup.start_agent(l6_manifest("architect-prime")).is_ok());
         let third = sup.start_agent(test_manifest()).unwrap();
@@ -1767,7 +2029,7 @@ priority = 50
         let err = sup.restart_agent(third).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "supervisor error: Maximum two Transcendent agents allowed. Currently active: architect-prime, ascendant. Stop one first."
+            "supervisor error: Maximum 2 Transcendent agents allowed. Currently active: architect-prime, ascendant. Stop one first."
         );
     }
 
@@ -1841,5 +2103,371 @@ priority = 50
         assert_eq!(max_fuel_cost("llm_inference_cloud"), 10_000);
         assert_eq!(max_fuel_cost("filesystem_read"), 200);
         assert_eq!(max_fuel_cost("unknown_action"), 1_000);
+    }
+
+    // ── register_agent / transition_to_running tests ──
+
+    #[test]
+    fn test_register_agent_does_not_enforce_l6_cap() {
+        let mut sup = sup_with_l6_cap_2();
+        // Start 2 L6 agents in Running state via start_agent (cap is full).
+        assert!(sup.start_agent(l6_manifest("ascendant")).is_ok());
+        assert!(sup.start_agent(l6_manifest("architect-prime")).is_ok());
+
+        // Register 10 more L6 agents in Stopped state — cap must NOT fire.
+        let names = [
+            "nexus-arbiter",
+            "nexus-continuum",
+            "nexus-genesis-prime",
+            "nexus-mirror",
+            "nexus-weaver",
+            "nexus-prime",
+            "nexus-oracle-omega",
+            "nexus-oracle-supreme",
+            "nexus-warden",
+            "nexus-legion",
+        ];
+        for name in &names {
+            let id = Uuid::new_v4();
+            assert!(
+                sup.register_agent(id, l6_manifest(name), AgentState::Stopped)
+                    .is_ok(),
+                "register_agent should not enforce L6 cap for Stopped agents: {name}"
+            );
+        }
+
+        assert_eq!(sup.agents.len(), 12, "all 12 agents should be registered");
+    }
+
+    #[test]
+    fn test_transition_to_running_enforces_l6_cap() {
+        let mut sup = sup_with_l6_cap_2();
+        // 2 running L6 agents.
+        assert!(sup.start_agent(l6_manifest("ascendant")).is_ok());
+        assert!(sup.start_agent(l6_manifest("architect-prime")).is_ok());
+
+        // Register a stopped L6 agent.
+        let stopped_id = Uuid::new_v4();
+        assert!(sup
+            .register_agent(
+                stopped_id,
+                l6_manifest("oracle-supreme"),
+                AgentState::Stopped
+            )
+            .is_ok());
+
+        // Transition to running must fail — cap is full.
+        let err = sup.transition_to_running(stopped_id).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "supervisor error: Maximum 2 Transcendent agents allowed. Currently active: architect-prime, ascendant. Stop one first."
+        );
+
+        // Agent should still be in Stopped state.
+        assert_eq!(
+            sup.agents.get(&stopped_id).unwrap().state,
+            AgentState::Stopped
+        );
+    }
+
+    #[test]
+    fn test_transition_to_running_succeeds_for_l5_when_l6_cap_full() {
+        let mut sup = sup_with_l6_cap_2();
+        // Fill L6 cap.
+        assert!(sup.start_agent(l6_manifest("ascendant")).is_ok());
+        assert!(sup.start_agent(l6_manifest("architect-prime")).is_ok());
+
+        // Register a stopped L5 agent.
+        let l5_id = Uuid::new_v4();
+        assert!(sup
+            .register_agent(l5_id, l5_manifest("sentinel"), AgentState::Stopped)
+            .is_ok());
+
+        // L5 transition should succeed — L6 cap does not affect L5.
+        assert!(sup.transition_to_running(l5_id).is_ok());
+        assert_eq!(sup.agents.get(&l5_id).unwrap().state, AgentState::Running);
+    }
+
+    #[test]
+    fn test_stop_l6_then_start_another_l6_succeeds() {
+        let mut sup = sup_with_l6_cap_2();
+        let first = sup.start_agent(l6_manifest("ascendant")).unwrap();
+        let _second = sup.start_agent(l6_manifest("architect-prime")).unwrap();
+
+        // Register 10 stopped L6 agents.
+        let mut stopped_ids = Vec::new();
+        for i in 0..10 {
+            let id = Uuid::new_v4();
+            assert!(sup
+                .register_agent(id, l6_manifest(&format!("agent-{i}")), AgentState::Stopped)
+                .is_ok());
+            stopped_ids.push(id);
+        }
+
+        // Stop one of the running L6 agents.
+        assert!(sup.stop_agent(first).is_ok());
+
+        // Now transition one of the stopped L6 agents to Running.
+        assert!(sup.transition_to_running(stopped_ids[0]).is_ok());
+        assert_eq!(
+            sup.agents.get(&stopped_ids[0]).unwrap().state,
+            AgentState::Running
+        );
+
+        // Count running L6: should be exactly 2 (architect-prime + agent-0).
+        let active = sup.active_transcendent_agents();
+        assert_eq!(active.len(), 2);
+
+        // A third L6 start should still fail.
+        let err = sup.transition_to_running(stopped_ids[1]).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("Maximum 2 Transcendent agents allowed"));
+    }
+
+    #[test]
+    fn test_register_duplicate_uuid_returns_error() {
+        let mut sup = Supervisor::new();
+        let id = Uuid::new_v4();
+        assert!(sup
+            .register_agent(id, test_manifest(), AgentState::Stopped)
+            .is_ok());
+
+        let err = sup
+            .register_agent(id, test_manifest(), AgentState::Stopped)
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("already registered"),
+            "expected duplicate registration error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_transition_to_running_idempotent_for_already_running() {
+        let mut sup = Supervisor::new();
+        let id = sup.start_agent(test_manifest()).unwrap();
+        assert_eq!(sup.agents.get(&id).unwrap().state, AgentState::Running);
+
+        // Calling transition_to_running on an already-running agent should be a no-op.
+        assert!(sup.transition_to_running(id).is_ok());
+        assert_eq!(sup.agents.get(&id).unwrap().state, AgentState::Running);
+    }
+
+    // ── SupervisorConfig tests ──
+
+    #[test]
+    fn test_supervisor_config_default_values() {
+        let config = SupervisorConfig::default();
+        assert_eq!(config.max_l5_agents, 1);
+        assert_eq!(config.max_l6_agents, 6);
+    }
+
+    // NOTE: Env-var-driven tests (below) mutate process-global state. Rust runs
+    // tests in parallel by default, so these are marked `#[ignore]` to avoid
+    // flakiness with other tests that read the same env vars. Run explicitly:
+    //   cargo test -p nexus-kernel -- --ignored supervisor_config_from_env
+    #[test]
+    #[ignore]
+    fn test_supervisor_config_from_env_with_valid_values() {
+        std::env::set_var("NEXUS_MAX_L6_AGENTS", "10");
+        let config = SupervisorConfig::from_env();
+        assert_eq!(config.max_l6_agents, 10);
+        std::env::remove_var("NEXUS_MAX_L6_AGENTS");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_supervisor_config_from_env_with_invalid_value_uses_default() {
+        std::env::set_var("NEXUS_MAX_L6_AGENTS", "not_a_number");
+        let config = SupervisorConfig::from_env();
+        assert_eq!(config.max_l6_agents, 6);
+        std::env::remove_var("NEXUS_MAX_L6_AGENTS");
+    }
+
+    #[test]
+    fn test_supervisor_with_config_l6_cap_six() {
+        let mut sup = Supervisor::with_config(SupervisorConfig {
+            max_l5_agents: 1,
+            max_l6_agents: 6,
+        });
+        for i in 0..6 {
+            assert!(
+                sup.start_agent(l6_manifest(&format!("l6-{i}"))).is_ok(),
+                "agent {i} should start"
+            );
+        }
+        let err = sup.start_agent(l6_manifest("l6-7")).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Maximum 6 Transcendent agents allowed"),
+            "expected cap error for 7th L6, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_supervisor_with_config_l6_cap_zero_blocks_all() {
+        let mut sup = Supervisor::with_config(SupervisorConfig {
+            max_l5_agents: 1,
+            max_l6_agents: 0,
+        });
+        let id = Uuid::new_v4();
+        sup.register_agent(id, l6_manifest("blocked"), AgentState::Stopped)
+            .unwrap();
+        let err = sup.transition_to_running(id).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Maximum 0 Transcendent agents allowed"),
+            "expected cap=0 error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_supervisor_with_config_custom_l5_cap() {
+        let mut sup = Supervisor::with_config(SupervisorConfig {
+            max_l5_agents: 3,
+            max_l6_agents: 6,
+        });
+        assert!(sup.start_agent(l5_manifest("a")).is_ok());
+        assert!(sup.start_agent(l5_manifest("b")).is_ok());
+        assert!(sup.start_agent(l5_manifest("c")).is_ok());
+        let err = sup.start_agent(l5_manifest("d")).unwrap_err();
+        assert!(
+            err.to_string().contains("Maximum 3 L5 agents allowed"),
+            "expected cap=3 error, got: {err}"
+        );
+    }
+
+    // ── Bug D2: state-transition chokepoint tests ──
+
+    fn last_transition_event(sup: &Supervisor) -> Option<&serde_json::Value> {
+        sup.audit_trail.events().iter().rev().find_map(|event| {
+            let payload = &event.payload;
+            if payload.get("event_kind").and_then(|v| v.as_str()) == Some("agent.state_transition")
+            {
+                Some(payload)
+            } else {
+                None
+            }
+        })
+    }
+
+    #[test]
+    fn test_transition_agent_state_legal() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+        // start_agent leaves the agent in Running; we can move Running -> Paused.
+        assert_eq!(sup.agents.get(&id).unwrap().state, AgentState::Running);
+
+        let events_before = sup.audit_trail.events().len();
+        let next = sup
+            .transition_agent_state(id, AgentState::Paused, "test")
+            .expect("legal transition should succeed");
+
+        assert_eq!(next, AgentState::Paused);
+        assert_eq!(sup.agents.get(&id).unwrap().state, AgentState::Paused);
+        assert!(
+            sup.audit_trail.events().len() > events_before,
+            "audit trail should have grown after transition_agent_state"
+        );
+        let payload = last_transition_event(&sup).expect("transition audit event must exist");
+        assert_eq!(
+            payload.get("forced").and_then(|v| v.as_bool()),
+            Some(false),
+            "forced flag should be false for legal transition"
+        );
+        assert_eq!(payload.get("reason").and_then(|v| v.as_str()), Some("test"));
+        assert_eq!(
+            payload.get("new_state").and_then(|v| v.as_str()),
+            Some("Paused")
+        );
+    }
+
+    #[test]
+    fn test_transition_agent_state_unknown_agent_errors() {
+        let mut sup = Supervisor::new();
+        let ghost = Uuid::new_v4();
+        let err = sup
+            .transition_agent_state(ghost, AgentState::Stopped, "test")
+            .unwrap_err();
+        match err {
+            AgentError::SupervisorError(msg) => {
+                assert!(msg.contains("not found"), "unexpected error message: {msg}");
+            }
+            other => panic!("expected SupervisorError, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_transition_agent_state_illegal_transition_rejects() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+        // Drive the agent to Stopped through the normal path so the FSM agrees.
+        sup.stop_agent(id).expect("stop should succeed");
+        assert_eq!(sup.agents.get(&id).unwrap().state, AgentState::Stopped);
+
+        let events_before = sup.audit_trail.events().len();
+        let err = sup
+            .transition_agent_state(id, AgentState::Running, "test")
+            .unwrap_err();
+        assert!(matches!(err, AgentError::InvalidTransition { .. }));
+        assert_eq!(
+            sup.agents.get(&id).unwrap().state,
+            AgentState::Stopped,
+            "state must remain Stopped after rejected transition"
+        );
+        assert_eq!(
+            sup.audit_trail.events().len(),
+            events_before,
+            "no audit event should be written when the FSM rejects the transition"
+        );
+    }
+
+    #[test]
+    fn test_force_transition_agent_state_accepts_illegal() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+        sup.stop_agent(id).expect("stop should succeed");
+        assert_eq!(sup.agents.get(&id).unwrap().state, AgentState::Stopped);
+
+        let next = sup
+            .force_transition_agent_state(id, AgentState::Running, "test-force")
+            .expect("force path should accept illegal transition");
+        assert_eq!(next, AgentState::Running);
+        assert_eq!(sup.agents.get(&id).unwrap().state, AgentState::Running);
+
+        let payload = last_transition_event(&sup).expect("forced audit event must exist");
+        assert_eq!(payload.get("forced").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            payload.get("reason").and_then(|v| v.as_str()),
+            Some("test-force")
+        );
+    }
+
+    #[test]
+    fn test_safety_halt_path_transitions_through_chokepoint() {
+        let (mut sup, id) = setup_supervisor_with_agent();
+        assert_eq!(sup.agents.get(&id).unwrap().state, AgentState::Running);
+
+        // manual_halt_agent drives SafetyAction::Halted and returns Err(SupervisorError).
+        let err = sup
+            .manual_halt_agent(id, "admin", "integration test")
+            .unwrap_err();
+        assert!(matches!(err, AgentError::SupervisorError(_)));
+        assert_eq!(
+            sup.agents.get(&id).unwrap().state,
+            AgentState::Stopped,
+            "safety-halt must crush agent to Stopped"
+        );
+
+        let has_halt_event = sup.audit_trail.events().iter().any(|event| {
+            let payload = &event.payload;
+            payload.get("event_kind").and_then(|v| v.as_str()) == Some("agent.state_transition")
+                && payload
+                    .get("reason")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.contains("safety-halt"))
+                    .unwrap_or(false)
+        });
+        assert!(
+            has_halt_event,
+            "audit trail should contain at least one safety-halt state transition"
+        );
     }
 }
