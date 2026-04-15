@@ -535,6 +535,12 @@ pub struct PlanningContext {
     pub relevant_memories: Vec<String>,
     pub previous_outcomes: Vec<String>,
     pub working_directory: Option<String>,
+    /// Top-level contents of `working_directory` at planning time.
+    /// Helps the planner LLM disambiguate user phrases like "src/" or
+    /// "config/" against the actual repo layout. `None` when the cwd
+    /// cannot be read or is empty.
+    #[serde(default)]
+    pub directory_listing: Option<String>,
     pub autonomy_level: u8,
 }
 
@@ -763,6 +769,7 @@ mod tests {
             relevant_memories: vec![],
             previous_outcomes: vec![],
             working_directory: Some("/tmp".into()),
+            directory_listing: None,
             autonomy_level: 2,
         };
         let json = serde_json::to_string(&ctx).unwrap();

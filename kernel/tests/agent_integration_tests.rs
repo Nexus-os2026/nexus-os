@@ -67,6 +67,7 @@ impl ActionExecutor for MockExecutor {
         _agent_id: &str,
         _action: &PlannedAction,
         _audit: &mut AuditTrail,
+        _hitl_approved: bool,
     ) -> Result<String, String> {
         let mut results = self.results.lock().unwrap();
         if results.is_empty() {
@@ -165,6 +166,7 @@ fn make_context(caps: Vec<&str>) -> PlanningContext {
         relevant_memories: vec![],
         previous_outcomes: vec![],
         working_directory: Some("/tmp/nexus-test".into()),
+        directory_listing: None,
         autonomy_level: 3,
     }
 }
@@ -525,6 +527,7 @@ fn test_actuator_registry_has_all_standard_actuators() {
         fuel_remaining: 1000.0,
         egress_allowlist: vec![],
         action_review_engine: None,
+        hitl_approved: false,
     };
 
     // ShellCommand should be routed to the GovernedShell actuator
@@ -557,6 +560,7 @@ fn test_actuator_rejects_missing_capability() {
         fuel_remaining: 1000.0,
         egress_allowlist: vec![],
         action_review_engine: None,
+        hitl_approved: false,
     };
 
     let action = PlannedAction::ShellCommand {
@@ -583,6 +587,7 @@ fn test_actuator_rejects_zero_fuel() {
         fuel_remaining: 0.0, // No fuel
         egress_allowlist: vec![],
         action_review_engine: None,
+        hitl_approved: false,
     };
 
     let action = PlannedAction::FileRead {

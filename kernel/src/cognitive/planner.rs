@@ -77,9 +77,20 @@ impl CognitivePlanner {
 
         let allowed_actions = self.allowed_actions_description(&context.agent_capabilities);
         let workspace = context.working_directory.as_deref().unwrap_or("/home/user");
+        // G8: splice in the real top-level cwd contents so the planner can
+        // resolve phrases like "src/" against the actual layout rather than
+        // hallucinating paths. Empty string when no listing is available.
+        let cwd_block = match &context.directory_listing {
+            Some(listing) => format!(
+                "\n\nCurrent working directory contents (top-level, max 60 entries):\n{listing}\n"
+            ),
+            None => String::new(),
+        };
 
         format!(
-            r#"You are the planning subsystem for Nexus OS. Create a step-by-step plan to achieve the goal below.
+            r#"CRITICAL: Output ONLY a JSON array. Do NOT think out loud. Do NOT use <think> tags. Do NOT explain. Start your response with `[` and end with `]`.
+
+You are the planning subsystem for Nexus OS. Create a step-by-step plan to achieve the goal below.
 
 AGENT NAME: {agent_name}
 AGENT DESCRIPTION:
@@ -89,7 +100,7 @@ GOAL: {goal_desc}
 PRIORITY: {priority}
 
 WORKSPACE DIRECTORY: {workspace}
-(Use ABSOLUTE paths starting from this directory when reading/writing files. Example: "{workspace}/README.md")
+(Use ABSOLUTE paths starting from this directory when reading/writing files. Example: "{workspace}/README.md"){cwd_block}
 
 AGENT CAPABILITIES: [{capabilities}]
 AVAILABLE FUEL: {fuel}
@@ -458,11 +469,12 @@ Each item must be:
             response.len()
         );
 
-        let repaired = repair_common_json_issues(&json_str);
-        let raw_steps = parse_raw_steps(&json_str)
+        let sanitized = escape_control_chars_in_strings(&json_str);
+        let repaired = repair_common_json_issues(&sanitized);
+        let raw_steps = parse_raw_steps(&sanitized)
             .or_else(|e| {
                 eprintln!("[planner:{}] parse attempt 1 failed: {e}", goal_id);
-                parse_raw_steps(&remove_trailing_commas(&json_str))
+                parse_raw_steps(&remove_trailing_commas(&sanitized))
             })
             .or_else(|e| {
                 eprintln!("[planner:{}] parse attempt 2 failed: {e}", goal_id);
@@ -493,21 +505,15 @@ Each item must be:
         &self,
         goal_id: &str,
         goal_description: &str,
-        message: String,
+        _message: String,
     ) -> AgentStep {
         AgentStep::new(
             goal_id.to_string(),
             PlannedAction::LlmQuery {
                 prompt: format!(
-                    "IMPORTANT: The structured planner failed to produce a valid action plan. \
-                     You MUST NOT hallucinate or fabricate data. If the goal requires running a command, \
-                     reading a file, or fetching data, say exactly: \
-                     'I was unable to create an execution plan. The goal was: {goal_description}. \
-                     Error: {message}'. \
-                     Only answer if you can do so from your training data alone, and clearly state \
-                     that this is from general knowledge, not from executing any command."
+                    "Answer this as best you can from general knowledge:\n\n{goal_description}"
                 ),
-                context: vec![message],
+                context: vec![],
             },
         )
     }
@@ -650,6 +656,55 @@ fn strip_markdown_fences(input: &str) -> String {
 fn repair_common_json_issues(input: &str) -> String {
     let no_trailing_commas = remove_trailing_commas(input);
     remove_duplicate_json_fields(&no_trailing_commas)
+}
+
+/// Escape literal control characters (newline, tab, etc.) that appear inside
+/// JSON string values.  Small LLMs like Gemma4 emit literal `\n`/`\t` bytes
+/// inside strings which are illegal per the JSON spec and cause serde_json to
+/// reject the payload.  This function walks the input tracking whether we are
+/// inside a quoted string and replaces only the offending bytes, leaving
+/// everything outside strings untouched.
+fn escape_control_chars_in_strings(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut in_string = false;
+    let mut escape_next = false;
+
+    for ch in input.chars() {
+        if escape_next {
+            out.push(ch);
+            escape_next = false;
+            continue;
+        }
+
+        if ch == '"' {
+            in_string = !in_string;
+            out.push(ch);
+            continue;
+        }
+
+        if in_string && ch == '\\' {
+            escape_next = true;
+            out.push(ch);
+            continue;
+        }
+
+        if in_string && ch.is_control() {
+            match ch {
+                '\n' => out.push_str("\\n"),
+                '\r' => out.push_str("\\r"),
+                '\t' => out.push_str("\\t"),
+                other => {
+                    // \u00XX for other control chars
+                    let code = other as u32;
+                    out.push_str(&format!("\\u{code:04x}"));
+                }
+            }
+            continue;
+        }
+
+        out.push(ch);
+    }
+    out
 }
 
 fn remove_duplicate_json_fields(input: &str) -> String {
@@ -795,6 +850,7 @@ mod tests {
             relevant_memories: vec![],
             previous_outcomes: vec![],
             working_directory: None,
+            directory_listing: None,
             autonomy_level: 2,
         }
     }
@@ -1031,10 +1087,13 @@ Your previous response had invalid JSON."#;
         assert_eq!(steps.len(), 1);
         assert_eq!(steps[0].action.action_type(), "llm_query");
         // Fallback step should NOT pre-populate result (that caused hallucination).
-        // Instead, the prompt itself warns the LLM not to fabricate data.
+        // The prompt sends the original goal so the LLM can still give a useful answer.
         assert!(steps[0].result.is_none());
         if let PlannedAction::LlmQuery { ref prompt, .. } = steps[0].action {
-            assert!(prompt.contains("structured planner failed"));
+            assert!(
+                prompt.contains("gracefully degrade"),
+                "fallback prompt must contain the original goal, got: {prompt}"
+            );
         } else {
             panic!("expected LlmQuery fallback action");
         }
@@ -1084,5 +1143,154 @@ Your previous response had invalid JSON."#;
         let sanitized = sanitize_llm_response(input);
         assert!(!sanitized.contains("<think>"));
         assert!(sanitized.contains("Noop"));
+    }
+
+    // ── escape_control_chars_in_strings tests ──
+
+    #[test]
+    fn test_sanitizer_passes_valid_json_unchanged() {
+        let input = r#"[{"action": {"type": "ShellCommand", "command": "ls -la"}}]"#;
+        assert_eq!(escape_control_chars_in_strings(input), input);
+    }
+
+    #[test]
+    fn test_sanitizer_escapes_literal_newline_in_string() {
+        // Build JSON with a literal 0x0A byte inside a string value
+        let input = format!(r#"{{"a":"x{}y"}}"#, '\n');
+        let result = escape_control_chars_in_strings(&input);
+        assert!(
+            result.contains(r#""x\ny""#),
+            "expected escaped newline, got: {result}"
+        );
+        // The result must now be valid JSON
+        let parsed: Result<serde_json::Value, _> = serde_json::from_str(&result);
+        assert!(parsed.is_ok(), "sanitized output should be valid JSON");
+    }
+
+    #[test]
+    fn test_sanitizer_does_not_touch_literal_newline_outside_string() {
+        let input = "[\n  {\"a\": \"b\"}\n]";
+        assert_eq!(escape_control_chars_in_strings(input), input);
+    }
+
+    #[test]
+    fn test_sanitizer_handles_escaped_quote() {
+        // {"msg": "he said \"hi\""} with a literal newline after the last escaped quote
+        let input = format!(r#"{{"msg": "he said \"hi\"{}end"}}"#, '\n');
+        let result = escape_control_chars_in_strings(&input);
+        // The escaped quotes must be preserved
+        assert!(
+            result.contains(r#"\"hi\""#),
+            "escaped quotes lost: {result}"
+        );
+        // The literal newline must be escaped
+        assert!(
+            result.contains(r#"\n"#),
+            "literal newline not escaped: {result}"
+        );
+        let parsed: Result<serde_json::Value, _> = serde_json::from_str(&result);
+        assert!(parsed.is_ok(), "sanitized output should be valid JSON");
+    }
+
+    #[test]
+    fn test_parse_plan_response_recovers_gemma_style_response() {
+        // Simulate Gemma4 output: correct JSON shape but with a literal newline
+        // inside the "command" string value (the real bug).
+        let response = format!(
+            r#"[
+  {{"action": {{"type": "ShellCommand", "command": "cd /home/nexus{}&& ls -la", "args": []}}, "description": "List files"}},
+  {{"action": {{"type": "LlmQuery", "prompt": "Summarize the file list", "context": ["output"]}}, "description": "Summarize"}}
+]"#,
+            '\n'
+        );
+
+        let llm = MockLlm {
+            response: response.clone(),
+        };
+        let planner = CognitivePlanner::new(Box::new(llm));
+        let goal = AgentGoal::new("list files".into(), 5);
+        let ctx = make_context(vec!["process.exec", "llm.query"]);
+        let steps = planner.plan_goal(&goal, &ctx).unwrap();
+        assert_eq!(steps.len(), 2);
+        assert_eq!(steps[0].action.action_type(), "shell_command");
+        assert_eq!(steps[1].action.action_type(), "llm_query");
+    }
+
+    // ── llm_query_fallback_step tests ──
+
+    #[test]
+    fn test_fallback_step_uses_original_goal() {
+        let llm = MockLlm {
+            response: "[]".to_string(),
+        };
+        let planner = CognitivePlanner::new(Box::new(llm));
+        let step = planner.llm_query_fallback_step(
+            "goal-1",
+            "list the files in the current directory",
+            "some error".to_string(),
+        );
+        if let PlannedAction::LlmQuery { prompt, .. } = &step.action {
+            assert!(
+                prompt.contains("list the files in the current directory"),
+                "fallback prompt must contain the original goal, got: {prompt}"
+            );
+            assert!(
+                !prompt.contains("IMPORTANT"),
+                "fallback prompt must not contain meta-instructions, got: {prompt}"
+            );
+            assert!(
+                !prompt.contains("hallucinate"),
+                "fallback prompt must not contain anti-hallucination lecture, got: {prompt}"
+            );
+            assert!(
+                !prompt.contains("unable to create"),
+                "fallback prompt must not mention planning failure, got: {prompt}"
+            );
+        } else {
+            panic!("expected LlmQuery action");
+        }
+    }
+
+    #[test]
+    fn test_strip_think_tags_unclosed_at_start_returns_empty() {
+        // Regression: if <think> starts at position 0 and never closes,
+        // the entire response is truncated to "". This is the exact scenario
+        // that causes the planner to see 0-char responses from reasoning models.
+        let input = "<think>I am thinking but never close";
+        let result = strip_think_tags(input);
+        assert_eq!(
+            result, "",
+            "unclosed <think> at position 0 must return empty string"
+        );
+    }
+
+    #[test]
+    fn test_strip_think_tags_closed_returns_after_think() {
+        let input = "<think>reasoning</think>[{\"action\":\"x\"}]";
+        let result = strip_think_tags(input);
+        assert_eq!(result, "[{\"action\":\"x\"}]");
+    }
+
+    #[test]
+    fn test_strip_think_tags_no_think_passes_through() {
+        let input = "[{\"action\":\"x\"}]";
+        let result = strip_think_tags(input);
+        assert_eq!(result, input);
+    }
+
+    #[test]
+    fn test_planning_prompt_starts_with_critical_no_think() {
+        let llm = MockLlm {
+            response: "[]".to_string(),
+        };
+        let planner = CognitivePlanner::new(Box::new(llm));
+        let goal = AgentGoal::new("test goal".into(), 5);
+        let ctx = make_context(vec!["llm.query"]);
+        let prompt = planner.build_planning_prompt(&goal, &ctx);
+        assert!(
+            prompt.starts_with("CRITICAL: Output ONLY a JSON array. Do NOT think out loud."),
+            "planning prompt must start with CRITICAL no-think prefix, got: {}",
+            &prompt[..80.min(prompt.len())]
+        );
     }
 }

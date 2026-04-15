@@ -98,6 +98,43 @@ impl EventEmitter for CollectingEmitter {
     }
 }
 
+/// G8: Snapshot the top-level contents of a directory for the planner LLM.
+///
+/// Returns a newline-joined listing (directories first with trailing `/`,
+/// then files, alphabetical within each group, hidden entries filtered,
+/// capped at 60 entries). `None` when the directory cannot be read or is
+/// empty after filtering. Intended as planner-prompt context so the LLM can
+/// disambiguate user phrases like `src/` or `config/` against the real
+/// repo layout.
+fn read_cwd_listing(cwd: &std::path::Path) -> Option<String> {
+    use std::fs;
+    let entries = fs::read_dir(cwd).ok()?;
+    let mut items: Vec<(bool, String)> = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') {
+            continue;
+        }
+        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        items.push((is_dir, name));
+    }
+    items.sort_by(|a, b| match (a.0, b.0) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.1.to_lowercase().cmp(&b.1.to_lowercase()),
+    });
+    let formatted: Vec<String> = items
+        .into_iter()
+        .take(60)
+        .map(|(is_dir, name)| if is_dir { format!("{name}/") } else { name })
+        .collect();
+    if formatted.is_empty() {
+        None
+    } else {
+        Some(formatted.join("\n"))
+    }
+}
+
 /// Trait for executing planned actions. Separates execution from the loop logic.
 pub trait ActionExecutor: Send + Sync {
     fn execute(
@@ -990,6 +1027,16 @@ impl CognitiveRuntime {
                 }
             }
 
+            // G8: capture cwd once and derive both the string form and the
+            // top-level directory listing from the same PathBuf so planner
+            // sees a self-consistent view.
+            let cwd_path = std::env::current_dir().ok();
+            let working_directory_str = cwd_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| "/home".to_string());
+            let directory_listing = cwd_path.as_deref().and_then(read_cwd_listing);
+
             let context = PlanningContext {
                 agent_name: Some(agent_name.clone()),
                 agent_description: Some(format!(
@@ -1000,11 +1047,8 @@ impl CognitiveRuntime {
                 available_fuel: fuel_remaining,
                 relevant_memories: memory_strs,
                 previous_outcomes,
-                working_directory: Some(
-                    std::env::current_dir()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_else(|_| "/home".to_string()),
-                ),
+                working_directory: Some(working_directory_str),
+                directory_listing,
                 autonomy_level,
             };
 
@@ -4588,5 +4632,74 @@ mod tests {
             start.elapsed() < Duration::from_millis(100),
             "loop should exit within 100ms of flag being set"
         );
+    }
+
+    // ── G8 read_cwd_listing tests ──
+
+    fn unique_tempdir(tag: &str) -> PathBuf {
+        let pid = std::process::id();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let dir = std::env::temp_dir().join(format!("nexus_g8_{tag}_{pid}_{nanos}"));
+        std::fs::create_dir_all(&dir).expect("tempdir create");
+        dir
+    }
+
+    #[test]
+    fn test_read_cwd_listing_returns_dirs_first() {
+        let dir = unique_tempdir("dirs_first");
+        std::fs::write(dir.join("file_z.txt"), "").unwrap();
+        std::fs::create_dir(dir.join("dir_a")).unwrap();
+        std::fs::write(dir.join("file_a.txt"), "").unwrap();
+        std::fs::create_dir(dir.join("dir_z")).unwrap();
+
+        let listing = read_cwd_listing(&dir).expect("non-empty listing");
+        let lines: Vec<&str> = listing.lines().collect();
+        assert_eq!(
+            lines,
+            vec!["dir_a/", "dir_z/", "file_a.txt", "file_z.txt"],
+            "dirs (with trailing /) must come before files, each alphabetical"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_read_cwd_listing_skips_hidden() {
+        let dir = unique_tempdir("hidden");
+        std::fs::write(dir.join("visible.txt"), "").unwrap();
+        std::fs::write(dir.join(".hidden"), "").unwrap();
+        std::fs::create_dir(dir.join(".git")).unwrap();
+        std::fs::write(dir.join(".gitignore"), "").unwrap();
+
+        let listing = read_cwd_listing(&dir).expect("at least one visible entry");
+        assert_eq!(listing, "visible.txt");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_read_cwd_listing_caps_at_60() {
+        let dir = unique_tempdir("cap60");
+        for i in 1..=100 {
+            std::fs::write(dir.join(format!("file_{i:03}.txt")), "").unwrap();
+        }
+
+        let listing = read_cwd_listing(&dir).expect("100 files => non-empty listing");
+        let line_count = listing.lines().count();
+        assert_eq!(line_count, 60, "must cap at 60 entries");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_read_cwd_listing_empty_dir_returns_none() {
+        let dir = unique_tempdir("empty");
+        let result = read_cwd_listing(&dir);
+        assert!(result.is_none(), "empty dir must return None");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
