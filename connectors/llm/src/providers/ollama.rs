@@ -168,7 +168,11 @@ impl OllamaProvider {
                 "prompt": prompt,
                 "stream": false,
                 "options": {
-                    "num_predict": max_tokens
+                    "num_predict": max_tokens,
+                    "num_ctx": 8192,
+                    "temperature": 0.2,
+                    "top_p": 0.9,
+                    "repeat_penalty": 1.1
                 }
             }),
         }
@@ -443,6 +447,22 @@ fn curl_get_json(endpoint: &str) -> Result<(u16, Value), AgentError> {
     Ok((status, response_json))
 }
 
+/// G3: Format a friendly error for the "Ollama returned 404 because the model
+/// tag isn't installed" case. Extracted so the formatting can be unit-tested
+/// without HTTP mocking.
+fn format_model_not_installed_error(model: &str, available: &[String]) -> String {
+    if available.is_empty() {
+        format!(
+            "ollama: model '{model}' not installed; available models: (none — Ollama responded but reports no models installed). Run `ollama pull {model}` to install it, or update the agent's llm_model assignment."
+        )
+    } else {
+        format!(
+            "ollama: model '{model}' not installed; available models: {}. Run `ollama pull {model}` to install it, or update the agent's llm_model assignment.",
+            available.join(", ")
+        )
+    }
+}
+
 impl LlmProvider for OllamaProvider {
     fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
         // Fast check: is Ollama even running? (200ms TCP probe instead of 5s curl)
@@ -454,6 +474,14 @@ impl LlmProvider for OllamaProvider {
         }
 
         let request = self.build_request(prompt, max_tokens, model);
+        // G3: observability — log the model+endpoint on every non-streaming
+        // call, matching the existing chat_stream log at L277. Without this,
+        // a 404 looked like an opaque HTTP error with no indication of which
+        // model was actually requested.
+        eprintln!(
+            "[nexus-llm][governance] ollama::query endpoint={} model={model}",
+            request.endpoint
+        );
         let (status, payload) = curl_post_json_with_timeout(
             request.endpoint.as_str(),
             &request.headers,
@@ -461,6 +489,23 @@ impl LlmProvider for OllamaProvider {
             self.request_timeout_secs,
         )?;
         if !(200..300).contains(&status) {
+            // G3: a 404 from /api/generate means Ollama itself is reachable
+            // but the requested model tag isn't installed. Enumerate what's
+            // available so the surface error names the problem instead of
+            // saying "status 404". Non-404 errors fall through unchanged.
+            if status == 404 {
+                let enriched = match self.list_models() {
+                    Ok(models) => {
+                        let names: Vec<String> =
+                            models.iter().map(|m| m.name.clone()).collect();
+                        format_model_not_installed_error(model, &names)
+                    }
+                    Err(list_err) => format!(
+                        "ollama request failed with status 404 for model '{model}'; could not enumerate available models: {list_err}"
+                    ),
+                };
+                return Err(AgentError::SupervisorError(enriched));
+            }
             return Err(AgentError::SupervisorError(format!(
                 "ollama request failed with status {status}"
             )));
@@ -584,5 +629,44 @@ mod tests {
         assert!(err
             .to_string()
             .contains("No vision model available. Install one with: ollama pull llava"));
+    }
+
+    // ── G3 404-enrichment tests ──
+    //
+    // NOTE: the live 404 path in `query()` cannot be unit-tested without
+    // adding an HTTP mock crate (wiremock / mockito / httpmock) — the
+    // transport uses a curl subprocess. Adding such a dep for a single
+    // enrichment path is not worth it; instead we extracted the error
+    // formatting into `format_model_not_installed_error` and exercise that
+    // here. The branch that wires it into `query()` remains verified by
+    // inspection + manual smoke (re-run A3/A5 after restarting the dev
+    // server and confirm the new message shape).
+
+    #[test]
+    fn test_format_not_installed_error_with_models() {
+        let available = vec!["qwen2.5-coder:14b".to_string(), "gemma4:e2b".to_string()];
+        let msg = format_model_not_installed_error("nonexistent:99b", &available);
+        assert!(
+            msg.contains("model 'nonexistent:99b' not installed"),
+            "error must name the failing model; got: {msg}"
+        );
+        assert!(
+            msg.contains("qwen2.5-coder:14b") && msg.contains("gemma4:e2b"),
+            "error must list available models; got: {msg}"
+        );
+        assert!(
+            msg.contains("ollama pull nonexistent:99b"),
+            "error must include a remediation hint; got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_format_not_installed_error_when_list_empty() {
+        let msg = format_model_not_installed_error("any:model", &[]);
+        assert!(msg.contains("model 'any:model' not installed"));
+        assert!(
+            msg.contains("(none"),
+            "empty-list case must say 'none' rather than an empty string; got: {msg}"
+        );
     }
 }

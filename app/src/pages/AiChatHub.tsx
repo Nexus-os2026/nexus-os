@@ -1510,6 +1510,12 @@ export default function AiChatHub() {
             </div>
             <span className="ch-model-arrow">{showModelPicker ? <ChevronUp size={12} aria-hidden="true" /> : <ChevronDown size={12} aria-hidden="true" />}</span>
           </button>
+          {/* G3: clarify that this dropdown scopes to chat only — autonomous
+              agents run against their own per-agent assignment set on the
+              Agents page, so changing this here has no effect on running agents. */}
+          <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", paddingLeft: "2px" }}>
+            Chat-only · agents use their assigned model
+          </div>
           {showModelPicker && (() => {
             const q = modelSearch.toLowerCase();
             const filtered = q ? models.filter(m => m.name.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : models;
