@@ -374,7 +374,11 @@ mod tests {
                 "prompt": "hello local model",
                 "stream": false,
                 "options": {
-                    "num_predict": 64
+                    "num_predict": 64,
+                    "num_ctx": 8192,
+                    "temperature": 0.2,
+                    "top_p": 0.9,
+                    "repeat_penalty": 1.1
                 }
             })
         );
