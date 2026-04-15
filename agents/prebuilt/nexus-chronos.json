@@ -10,6 +10,15 @@
     "web.read",
     "self.modify"
   ],
+  "allowed_endpoints": [
+    "https://github.com",
+    "https://www.kaggle.com",
+    "https://data.gov",
+    "https://www.worldbank.org",
+    "https://ourworldindata.org",
+    "https://www.opendatasoft.com",
+    "https://datahub.io"
+  ],
   "autonomy_level": 4,
   "fuel_budget": 25000,
   "llm_model": "auto",

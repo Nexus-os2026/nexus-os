@@ -6,6 +6,7 @@
     "fs.read",
     "process.exec"
   ],
+  "allowed_endpoints": [],
   "autonomy_level": 1,
   "fuel_budget": 2000,
   "default_goal": "Scan the workspace, run safe lint checks, and produce a severity-ranked Code Health Report without modifying files.",

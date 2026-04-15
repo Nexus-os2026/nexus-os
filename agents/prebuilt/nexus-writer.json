@@ -7,6 +7,7 @@
     "fs.read",
     "fs.write"
   ],
+  "allowed_endpoints": [],
   "autonomy_level": 3,
   "fuel_budget": 10000,
   "llm_model": "auto",

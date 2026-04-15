@@ -9,6 +9,7 @@
     "mcp.call",
     "self.modify"
   ],
+  "allowed_endpoints": [],
   "autonomy_level": 4,
   "fuel_budget": 50000,
   "schedule": "0 3 * * 0",

@@ -9,6 +9,18 @@
     "mcp.call",
     "web.read"
   ],
+  "allowed_endpoints": [
+    "https://github.com",
+    "https://gitlab.com",
+    "https://docker.io",
+    "https://hub.docker.com",
+    "https://www.npmjs.com",
+    "https://pypi.org",
+    "https://crates.io",
+    "https://kubernetes.io",
+    "https://www.terraform.io",
+    "https://www.hashicorp.com"
+  ],
   "autonomy_level": 2,
   "fuel_budget": 10000,
   "schedule": "0 */2 * * *",

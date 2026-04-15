@@ -8,6 +8,15 @@
     "process.exec",
     "web.search"
   ],
+  "allowed_endpoints": [
+    "https://github.com",
+    "https://www.kaggle.com",
+    "https://data.gov",
+    "https://www.worldbank.org",
+    "https://ourworldindata.org",
+    "https://www.opendatasoft.com",
+    "https://datahub.io"
+  ],
   "autonomy_level": 2,
   "fuel_budget": 10000,
   "llm_model": "auto",

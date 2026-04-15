@@ -8,6 +8,13 @@
     "fs.read",
     "fs.write"
   ],
+  "allowed_endpoints": [
+    "https://translate.google.com",
+    "https://www.deepl.com",
+    "https://libretranslate.com",
+    "https://github.com",
+    "https://en.wikipedia.org"
+  ],
   "autonomy_level": 3,
   "fuel_budget": 10000,
   "default_goal": "Translate and localize the target content with terminology consistency, placeholder safety, and a report explaining important linguistic or cultural choices.",

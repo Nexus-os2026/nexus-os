@@ -14,6 +14,7 @@
     "input.autonomous",
     "self.modify"
   ],
+  "allowed_endpoints": [],
   "autonomy_level": 4,
   "fuel_budget": 30000,
   "llm_model": "auto",

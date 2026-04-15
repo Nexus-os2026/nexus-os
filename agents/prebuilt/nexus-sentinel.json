@@ -8,6 +8,18 @@
     "web.read",
     "mcp.call"
   ],
+  "allowed_endpoints": [
+    "https://github.com",
+    "https://cve.mitre.org",
+    "https://nvd.nist.gov",
+    "https://www.exploit-db.com",
+    "https://www.shodan.io",
+    "https://www.virustotal.com",
+    "https://abuse.ch",
+    "https://urlhaus.abuse.ch",
+    "https://otx.alienvault.com",
+    "https://censys.io"
+  ],
   "autonomy_level": 2,
   "fuel_budget": 8000,
   "schedule": "0 */4 * * *",

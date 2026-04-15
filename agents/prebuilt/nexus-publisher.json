@@ -8,6 +8,7 @@
     "fs.write",
     "process.exec"
   ],
+  "allowed_endpoints": [],
   "autonomy_level": 3,
   "fuel_budget": 5000,
   "llm_model": "auto",

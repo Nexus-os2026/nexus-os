@@ -7,6 +7,7 @@
     "fs.write",
     "process.exec"
   ],
+  "allowed_endpoints": [],
   "autonomy_level": 2,
   "fuel_budget": 3000,
   "default_goal": "Organize the workspace into a clear, durable file structure and report every file or folder that was created, moved, or renamed.",

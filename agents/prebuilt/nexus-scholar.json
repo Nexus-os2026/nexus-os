@@ -8,6 +8,21 @@
     "fs.read",
     "fs.write"
   ],
+  "allowed_endpoints": [
+    "https://news.ycombinator.com",
+    "https://hacker-news.firebaseio.com",
+    "https://www.reddit.com",
+    "https://en.wikipedia.org",
+    "https://arxiv.org",
+    "https://github.com",
+    "https://gitlab.com",
+    "https://stackoverflow.com",
+    "https://semanticscholar.org",
+    "https://scholar.google.com",
+    "https://duckduckgo.com",
+    "https://ddg.gg",
+    "https://archive.org"
+  ],
   "autonomy_level": 3,
   "fuel_budget": 12000,
   "llm_model": "auto",
