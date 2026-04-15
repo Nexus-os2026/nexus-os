@@ -28,7 +28,13 @@ function timeLeft(autoDenyAt: string): string {
   return `${Math.floor(secs / 60)}m ${secs % 60}s`;
 }
 
-export function InlineApprovalBanner(): JSX.Element | null {
+interface InlineApprovalBannerProps {
+  currentPage?: string;
+}
+
+export function InlineApprovalBanner({
+  currentPage,
+}: InlineApprovalBannerProps = {}): JSX.Element | null {
   const [pending, setPending] = useState<ConsentNotification[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
@@ -151,10 +157,17 @@ export function InlineApprovalBanner(): JSX.Element | null {
     return () => clearInterval(t);
   }, [pending.length]);
 
-  if (pending.length === 0) return null;
+  // Fix G9: when the user is on the Chat page, AiChatHub's consent-pending
+  // listener already surfaces every pending consent inline in the active
+  // conversation, so suppress the floating banner to avoid duplicate UX.
+  // Banner remains the canonical surface on every non-chat page.
+  const onChatPage = currentPage === "ai-chat-hub" || currentPage === "chat";
+  const visiblePending = onChatPage ? [] : pending;
 
-  const top = pending[0];
-  const rest = pending.slice(1);
+  if (visiblePending.length === 0) return null;
+
+  const top = visiblePending[0];
+  const rest = visiblePending.slice(1);
   const color = riskColor(top.risk_level);
 
   return (

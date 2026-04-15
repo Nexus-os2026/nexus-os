@@ -1997,8 +1997,9 @@ export default function App(): JSX.Element {
         }}
       />
 
-      {/* Global inline HITL approval banner — appears on ANY page */}
-      <InlineApprovalBanner />
+      {/* Global inline HITL approval banner — appears on every page EXCEPT
+          Chat, where AiChatHub surfaces consents inline in the chat stream. */}
+      <InlineApprovalBanner currentPage={page} />
 
       {showSetupWizard && (
         <SetupWizard
