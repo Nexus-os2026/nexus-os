@@ -24,6 +24,7 @@ fn make_exec_context() -> ActuatorContext {
         fuel_remaining: 1000.0,
         egress_allowlist: vec![],
         action_review_engine: None,
+        hitl_approved: false,
     }
 }
 
@@ -240,6 +241,7 @@ fn test_no_capability_rejected() {
         fuel_remaining: 1000.0,
         egress_allowlist: vec![],
         action_review_engine: None,
+        hitl_approved: false,
     };
     let mut audit = AuditTrail::new();
 

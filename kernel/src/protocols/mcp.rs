@@ -627,6 +627,7 @@ impl McpServer {
                     fuel_remaining: agent_fuel as f64,
                     egress_allowlist: agent_endpoints.clone(),
                     action_review_engine: None,
+                    hitl_approved: false,
                 };
 
                 match self.actuator_registry.execute_action(

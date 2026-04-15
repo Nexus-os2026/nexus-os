@@ -186,6 +186,7 @@ mod tests {
             fuel_remaining: 1000.0,
             egress_allowlist: vec!["https://api.example.com".into()],
             action_review_engine: None,
+            hitl_approved: false,
         }
     }
 

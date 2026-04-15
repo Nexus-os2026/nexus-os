@@ -257,6 +257,7 @@ pub async fn run_content_pipeline(
         fuel_remaining,
         egress_allowlist,
         action_review_engine: None,
+        hitl_approved: false,
     };
 
     let llm_handler: Arc<dyn nexus_kernel::cognitive::loop_runtime::LlmQueryHandler> =

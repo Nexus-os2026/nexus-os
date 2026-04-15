@@ -909,6 +909,7 @@ mod tests {
                 "https://www.reddit.com".into(),
             ],
             action_review_engine: None,
+            hitl_approved: false,
         }
     }
 

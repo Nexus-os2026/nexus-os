@@ -804,6 +804,7 @@ mod tests {
             fuel_remaining: 200_000.0,
             egress_allowlist: vec![],
             action_review_engine: None,
+            hitl_approved: false,
         }
     }
 
