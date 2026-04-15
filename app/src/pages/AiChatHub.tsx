@@ -5,7 +5,7 @@ import {
   sendChat, chatWithOllama, conductBuild, hasDesktopRuntime,
   listProviderModels, getProviderStatus, saveApiKey, getPreinstalledAgents,
   startAgent, stopAgent, pauseAgent, resumeAgent, getAuditLog,
-  approveConsentRequest, denyConsentRequest,
+  approveConsentRequest, denyConsentRequest, executeAgentGoal,
 } from "../api/backend";
 import type {
   ChatTokenEvent, ConductorPlanEvent, ConductorAgentCompletedEvent,
@@ -43,6 +43,18 @@ interface ChatAttachment {
   isImage: boolean;
 }
 
+type AgentActivityKind = "phase" | "tool" | "hitl_request" | "hitl_approved" | "hitl_denied" | "goal" | "cycle_failed" | "error";
+
+interface AgentActivityEntry {
+  id: string;
+  timestamp: number;
+  kind: AgentActivityKind;
+  label: string;
+  detail?: string;
+  fuelCost?: number;
+  durationMs?: number;
+}
+
 interface ChatMsg {
   id: string;
   role: "user" | "assistant" | "system" | "agent" | "approval";
@@ -57,6 +69,8 @@ interface ChatMsg {
   buildResult?: BuildResultData;
   approval?: ConsentNotification;
   approvalStatus?: "pending" | "approved" | "denied";
+  agentActivity?: AgentActivityEntry[];
+  agentStatus?: "running" | "blocked" | "completed" | "failed";
 }
 
 type AgentRunStatus = "Idle" | "Running" | "Paused" | "Stopped" | "Error";
@@ -80,6 +94,37 @@ interface Conversation {
   updatedAt: number;
   pinned: boolean;
   tags: string[];
+}
+
+/* ─── HITL approval helpers ─── */
+
+/** Remove ALL standalone HITL approval messages matching a consent_id across ALL conversations.
+ *  The agent activity timeline entry (kind: "hitl_request") stays inside the agent bubble as
+ *  the in-chat record; the Approvals page is the full audit trail. */
+function removeResolvedApproval(
+  conversations: Conversation[],
+  consentId: string,
+): Conversation[] {
+  let changed = false;
+  const next = conversations.map(c => {
+    const msgs = c.messages.filter(m => m.approval?.consent_id !== consentId);
+    if (msgs.length !== c.messages.length) {
+      changed = true;
+      return { ...c, messages: msgs };
+    }
+    return c;
+  });
+  return changed ? next : conversations;
+}
+
+/** True if ANY conversation already has a standalone approval card for this consent_id. */
+function alreadyHasApprovalCard(conversations: Conversation[], consentId: string): boolean {
+  for (const c of conversations) {
+    for (const m of c.messages) {
+      if (m.approval?.consent_id === consentId) return true;
+    }
+  }
+  return false;
 }
 
 /* ─── constants ─── */
@@ -314,6 +359,142 @@ function BuildResultCard({ data }: { data: BuildResultData }) {
   );
 }
 
+/* ─── agent activity helpers ─── */
+
+const ACTIVITY_ICONS: Record<AgentActivityKind, string> = {
+  phase: "\u25b8",       // ▸
+  tool: "\u25b8",        // ▸
+  hitl_request: "\u23f8", // ⏸
+  hitl_approved: "\u2713", // ✓
+  hitl_denied: "\u2717",  // ✗
+  goal: "\u25cf",        // ●
+  cycle_failed: "\u2717", // ✗
+  error: "\u26a0",       // ⚠
+};
+
+const ACTIVITY_COLORS: Record<AgentActivityKind, string> = {
+  phase: "#94a3b8",
+  tool: "#38bdf8",
+  hitl_request: "#f59e0b",
+  hitl_approved: "#22c55e",
+  hitl_denied: "#ef4444",
+  goal: "#a78bfa",
+  cycle_failed: "#ef4444",
+  error: "#ef4444",
+};
+
+function shouldRenderAsPre(content: string, activity: AgentActivityEntry[]): boolean {
+  if (content.startsWith("total ")) return true;
+  const lines = content.split("\n");
+  if (lines.length >= 3) {
+    const firstChars = lines.filter(l => l.length > 0).map(l => l[0]);
+    const nonAlpha = firstChars.filter(ch => !/[a-zA-Z]/.test(ch));
+    if (nonAlpha.length >= 3) return true;
+  }
+  if (activity.some(e => e.kind === "tool" && /shell_command|process_exec/i.test(e.label))) return true;
+  return false;
+}
+
+function AgentActivityTimeline({ entries, collapsed }: { entries: AgentActivityEntry[]; collapsed?: boolean }) {
+  const totalFuel = entries.reduce((sum, e) => sum + (e.fuelCost ?? 0), 0);
+  const elapsedMs = entries.length >= 2 ? entries[entries.length - 1].timestamp - entries[0].timestamp : 0;
+
+  const timeline = (
+    <div style={{ display: "flex", flexDirection: "column", gap: "3px", padding: "6px 0" }}>
+      {entries.map(entry => (
+        <div key={entry.id} style={{ display: "flex", flexDirection: "column", gap: "2px", fontSize: "12px", lineHeight: "1.4" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+            <span style={{ color: ACTIVITY_COLORS[entry.kind], flexShrink: 0, width: "14px", textAlign: "center", fontFamily: "monospace" }}>
+              {ACTIVITY_ICONS[entry.kind]}
+            </span>
+            <span style={{
+              color: entry.kind === "cycle_failed" ? "#ef4444" : "#e2e8f0",
+              fontWeight: entry.kind === "cycle_failed" ? 600 : 400,
+              flexShrink: 0,
+            }}>{entry.label}</span>
+            {entry.fuelCost != null && entry.fuelCost > 0 && (
+              <span style={{ color: "#64748b", fontSize: "11px" }}>{entry.fuelCost.toFixed(1)} fuel</span>
+            )}
+            {entry.detail && entry.kind !== "cycle_failed" && (
+              <span style={{
+                color: "#64748b", fontSize: "11px", overflow: "hidden", textOverflow: "ellipsis",
+                whiteSpace: "nowrap", maxWidth: "300px",
+              }} title={entry.detail}>{entry.detail}</span>
+            )}
+          </div>
+          {/* G1a: show failure reason in red below the label so silent-failure cycles are obviously distinct from successful ones. */}
+          {entry.kind === "cycle_failed" && entry.detail && (
+            <div style={{ color: "#ef4444", fontSize: "11px", marginLeft: "22px", whiteSpace: "pre-wrap" }}>
+              {entry.detail}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+
+  if (collapsed) {
+    return (
+      <details style={{ marginTop: "8px" }}>
+        <summary style={{
+          cursor: "pointer", fontSize: "12px", color: "#64748b", padding: "4px 0",
+          listStyle: "none", display: "flex", alignItems: "center", gap: "6px",
+        }}>
+          <span style={{ color: "#94a3b8" }}>{"\u25b8"}</span>
+          <span>Agent activity ({entries.length} events{totalFuel > 0 ? ` \u00b7 ${totalFuel.toFixed(1)} fuel` : ""}{elapsedMs > 0 ? ` \u00b7 ${elapsedMs > 1000 ? (elapsedMs / 1000).toFixed(1) + "s" : elapsedMs + "ms"}` : ""})</span>
+        </summary>
+        {timeline}
+      </details>
+    );
+  }
+
+  return timeline;
+}
+
+function AgentActivityBubble({ msg, renderContent }: { msg: ChatMsg; renderContent: (s: string) => string }) {
+  const activity = msg.agentActivity ?? [];
+  const isStreaming = msg.agentStatus === "running" || msg.agentStatus === "blocked";
+  const hasContent = msg.content && msg.content.trim().length > 0;
+
+  // During execution: show live activity
+  if (isStreaming && !hasContent) {
+    const statusVerb = msg.agentStatus === "blocked" ? "awaiting approval" : "thinking";
+    return (
+      <div className="ch-msg-content" style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: "8px", padding: "10px 14px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px", fontSize: "13px", color: "#a78bfa" }}>
+          <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: msg.agentStatus === "blocked" ? "#f59e0b" : "#a78bfa", animation: "ch-pulse 2s infinite" }} />
+          <span>{msg.agent ?? "Agent"} {statusVerb}\u2026</span>
+        </div>
+        {activity.length > 0 && <AgentActivityTimeline entries={activity} />}
+        {activity.length === 0 && (
+          <div style={{ fontSize: "12px", color: "#64748b" }}>Initializing cognitive loop\u2026</div>
+        )}
+      </div>
+    );
+  }
+
+  // After completion: primary content + collapsed activity
+  const usePre = hasContent && shouldRenderAsPre(msg.content, activity);
+  return (
+    <div>
+      {hasContent && usePre ? (
+        <pre style={{
+          background: "#0f172a", border: "1px solid #334155", borderRadius: "8px", padding: "10px 14px",
+          fontSize: "12px", lineHeight: "1.5", color: "#e2e8f0", fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+          whiteSpace: "pre-wrap", wordBreak: "break-word", overflowX: "auto", margin: 0,
+        }}>{msg.content}</pre>
+      ) : hasContent ? (
+        <div className="ch-msg-content" dangerouslySetInnerHTML={{ __html: renderContent(msg.content) }} />
+      ) : (
+        <div className="ch-msg-content" style={{ color: "#94a3b8", fontStyle: "italic" }}>
+          {msg.agentStatus === "failed" ? "Goal failed." : "No output."}
+        </div>
+      )}
+      {activity.length > 0 && <AgentActivityTimeline entries={activity} collapsed />}
+    </div>
+  );
+}
+
 /* ─── component ─── */
 export default function AiChatHub() {
   const [view, setView] = useState<View>("chat");
@@ -534,22 +715,26 @@ export default function AiChatHub() {
         const eventMod = await import("@tauri-apps/api/event");
         unlisten = await eventMod.listen<ConsentNotification>("consent-request-pending", (event) => {
           const notification = event.payload;
-          // Only show if it's for the currently selected agent (or show all if none selected)
-          const approvalMsg: ChatMsg = {
-            id: `approval-${notification.consent_id}`,
-            role: "approval",
-            content: notification.operation_summary,
-            agent: notification.agent_name,
-            timestamp: Date.now(),
-            approval: notification,
-            approvalStatus: "pending",
-          };
-          // Add to active conversation
-          setConversations(prev => prev.map(c => c.id === activeConvId ? {
-            ...c,
-            messages: [...c.messages, approvalMsg],
-            updatedAt: Date.now(),
-          } : c));
+          setConversations(prev => {
+            // Functional setState reads fresh state, avoiding stale-closure duplicates
+            // when the backend emits the pending event more than once for the same consent_id.
+            if (alreadyHasApprovalCard(prev, notification.consent_id)) {
+              return prev;
+            }
+            return prev.map(c => {
+              if (c.id !== activeConvId) return c;
+              const approvalMsg: ChatMsg = {
+                id: `approval-${notification.consent_id}`,
+                role: "approval",
+                content: notification.operation_summary,
+                agent: notification.agent_name,
+                timestamp: Date.now(),
+                approval: notification,
+                approvalStatus: "pending",
+              };
+              return { ...c, messages: [...c.messages, approvalMsg], updatedAt: Date.now() };
+            });
+          });
           logAudit(`HITL: ${notification.agent_name} requests approval`);
         });
       } catch { /* not in Tauri */ }
@@ -557,6 +742,24 @@ export default function AiChatHub() {
     return () => { unlisten?.(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConvId]);
+
+  /* ─── listen for consent-resolved events (cross-component dismissal) ─── */
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const eventMod = await import("@tauri-apps/api/event");
+        unlisten = await eventMod.listen<{ consent_id: string; status: string }>(
+          "consent-resolved",
+          (event) => {
+            const { consent_id } = event.payload;
+            setConversations(prev => removeResolvedApproval(prev, consent_id));
+          },
+        );
+      } catch { /* not in Tauri */ }
+    })();
+    return () => { unlisten?.(); };
+  }, []);
 
   /* ─── listen for auto-evolution events ─── */
   useEffect(() => {
@@ -679,15 +882,10 @@ export default function AiChatHub() {
       } else {
         await denyConsentRequest(consentId, "user", "User denied from chat");
       }
-      // Update the message status
-      setConversations(prev => prev.map(c => ({
-        ...c,
-        messages: c.messages.map(m =>
-          m.approval?.consent_id === consentId
-            ? { ...m, approvalStatus: action === "approve" ? "approved" as const : "denied" as const }
-            : m
-        ),
-      })));
+      // On success, remove the standalone card immediately — do not wait for the
+      // consent-resolved event. The agent activity timeline inside the bubble is
+      // the in-chat record; the Approvals page is the audit trail.
+      setConversations(prev => removeResolvedApproval(prev, consentId));
       logAudit(`HITL: ${action === "approve" ? "Approved" : "Denied"} consent ${consentId.slice(0, 8)}`);
     } catch (err) {
       logAudit(`HITL ${action} failed: ${String(err).slice(0, 60)}`);
@@ -976,6 +1174,150 @@ export default function AiChatHub() {
         return;
       }
 
+      // When an agent is selected, route through the cognitive loop (executeAgentGoal)
+      // so that tool dispatch (FsRead, FsWrite, ProcessExec, etc.) actually runs.
+      if (selectedAgent && hasDesktopRuntime()) {
+        const agentName = selectedAgent.name;
+        // Helper: update the agent message fields immutably
+        const updateAgentMsg = (patch: Partial<ChatMsg>) => {
+          setConversations(prev => prev.map(c => {
+            if (c.id !== currentConvId) return c;
+            return {
+              ...c,
+              messages: c.messages.map(m => m.id === assistantMsgId ? { ...m, ...patch } : m),
+              updatedAt: Date.now(),
+            };
+          }));
+        };
+        const addActivity = (entry: Omit<AgentActivityEntry, "id" | "timestamp">, extra?: Partial<ChatMsg>) => {
+          setConversations(prev => prev.map(c => {
+            if (c.id !== currentConvId) return c;
+            const msg = c.messages.find(m => m.id === assistantMsgId);
+            const existing = msg?.agentActivity ?? [];
+            const full: AgentActivityEntry = { ...entry, id: `ae-${Date.now()}-${existing.length}`, timestamp: Date.now() };
+            return {
+              ...c,
+              messages: c.messages.map(m => m.id === assistantMsgId
+                ? { ...m, agentActivity: [...existing, full], ...(extra ?? {}) }
+                : m),
+              updatedAt: Date.now(),
+            };
+          }));
+        };
+
+        // Initialize the assistant bubble with agent activity tracking
+        updateAgentMsg({ agentActivity: [], agentStatus: "running", agent: agentName });
+
+        try {
+          const eventMod = await import("@tauri-apps/api/event");
+          const agentId = selectedAgent.agent_id;
+
+          const unlistenCycle = await eventMod.listen<{
+            agent_id: string; goal_id: string; phase: string;
+            steps_executed: number; fuel_consumed: number;
+            should_continue: boolean; blocked_reason: string | null;
+            steps?: { action: string; status: string; result: string; fuel_cost: number }[];
+          }>("agent-cognitive-cycle", (event) => {
+            const p = event?.payload;
+            if (!p || p.agent_id !== agentId) return;
+            if (p.phase === "Blocked") return;
+            const phaseName = p.phase.charAt(0).toUpperCase() + p.phase.slice(1);
+            const fuel = typeof p.fuel_consumed === "number" ? p.fuel_consumed : 0;
+            addActivity({ kind: "phase", label: phaseName, fuelCost: fuel });
+            // Append individual step results from the steps[] payload
+            if (p.steps && Array.isArray(p.steps)) {
+              for (const step of p.steps) {
+                if (step.action && step.action !== "unknown" && step.status === "succeeded") {
+                  const preview = step.result ? (step.result.length > 200 ? step.result.slice(0, 200) + "\u2026" : step.result) : undefined;
+                  addActivity({ kind: "tool", label: `Executed ${step.action}`, detail: preview, fuelCost: step.fuel_cost });
+                }
+              }
+            }
+          });
+
+          const unlistenBlocked = await eventMod.listen<{
+            agent_id: string; goal_id: string; message: string;
+            action: string; agent_name: string;
+          }>("agent-blocked", (event) => {
+            const p = event?.payload;
+            if (!p || p.agent_id !== agentId) return;
+            addActivity(
+              { kind: "hitl_request", label: "Awaiting your approval", detail: p.message },
+              { agentStatus: "blocked" },
+            );
+          });
+
+          const unlistenResumed = await eventMod.listen<{
+            agent_id: string; goal_id: string; message: string;
+          }>("agent-resumed", (event) => {
+            const p = event?.payload;
+            if (!p || p.agent_id !== agentId) return;
+            addActivity(
+              { kind: "hitl_approved", label: "Approved", detail: p.message },
+              { agentStatus: "running" },
+            );
+          });
+
+          const goalDone = new Promise<{
+            success: boolean; reason?: string; result_summary?: string; final_output?: string;
+          }>((resolve) => {
+            eventMod.listen<{
+              agent_id: string; goal_id: string; success: boolean;
+              reason?: string; result_summary?: string; final_output?: string;
+            }>("agent-goal-completed", (event) => {
+              const p = event?.payload;
+              if (p && p.agent_id === agentId) resolve(p);
+            });
+          });
+
+          const goalId = await executeAgentGoal(agentId, currentInput, 5);
+          addActivity({ kind: "goal", label: "Goal assigned", detail: goalId });
+
+          const result = await Promise.race([
+            goalDone,
+            new Promise<{ success: boolean; reason?: string; result_summary?: string; final_output?: string }>((resolve) =>
+              setTimeout(() => resolve({ success: false, reason: "Timed out after 10 minutes waiting for the agent to finish." }), 600_000)
+            ),
+          ]);
+
+          const primaryOutput = (result.final_output && result.final_output.trim())
+            || (result.result_summary && result.result_summary.trim())
+            || (result.success ? "Goal completed successfully." : (result.reason || "Goal failed."));
+          const finalStatus = result.success ? "completed" as const : "failed" as const;
+          // G1a: distinguish failed cycles with their own activity kind + red styling
+          // so silent-failure cycles no longer look identical to successful ones.
+          const failureDetail = !result.success
+            ? (result.reason || result.result_summary || "Cycle failed without a reason string.")
+            : undefined;
+          addActivity(
+            result.success
+              ? { kind: "goal", label: "Goal completed", detail: result.result_summary }
+              : { kind: "cycle_failed", label: "Goal failed", detail: failureDetail },
+            { content: primaryOutput, agentStatus: finalStatus, streaming: false },
+          );
+          // Auto-title from first user message
+          setConversations(prev => prev.map(c => {
+            if (c.id !== currentConvId || c.title !== "New conversation") return c;
+            const firstUser = c.messages.find(m => m.role === "user");
+            if (!firstUser) return c;
+            const raw = firstUser.content.trim();
+            const title = raw.length > 50 ? raw.slice(0, 50) + "\u2026" : raw;
+            return { ...c, title: title.charAt(0).toUpperCase() + title.slice(1) };
+          }));
+          logAudit(`Agent ${agentName} ${result.success ? "completed" : "failed"}: ${primaryOutput.slice(0, 100)}`);
+
+          unlistenCycle();
+          unlistenBlocked();
+          unlistenResumed();
+        } catch (err) {
+          addActivity(
+            { kind: "error", label: "Error", detail: classifyError(String(err)) },
+            { content: classifyError(String(err)), agentStatus: "failed", streaming: false },
+          );
+        }
+        return;
+      }
+
       // For Ollama models: use streaming path
       if (isOllamaModel) {
         let unlisten: (() => void) | undefined;
@@ -1035,7 +1377,7 @@ export default function AiChatHub() {
       setSending(false);
       streamingMsgIdRef.current = null;
     }
-  }, [input, sending, selectedModel, activeConvId, models, logAudit, updateStreamingMsg, sendBuildRequest, pendingFiles]);
+  }, [input, sending, selectedModel, activeConvId, models, logAudit, updateStreamingMsg, sendBuildRequest, pendingFiles, selectedAgent]);
 
   const newConversation = useCallback(() => {
     const conv = createConversation(selectedModel);
@@ -1565,6 +1907,9 @@ export default function AiChatHub() {
                     )}
                     {/* HITL Approval card */}
                     {msg.approval ? (
+                      // Safety net: resolved cards are removed from the message list by
+                      // removeResolvedApproval; if one somehow survives, don't render stale state.
+                      msg.approvalStatus && msg.approvalStatus !== "pending" ? null : (
                       <div className={`ch-approval-card ch-approval-${msg.approvalStatus}`}>
                         <div className="ch-approval-header">
                           <span className="ch-approval-icon"><AlertTriangle size={14} aria-hidden="true" /></span>
@@ -1599,21 +1944,18 @@ export default function AiChatHub() {
                             </div>
                           )}
                         </div>
-                        {msg.approvalStatus === "pending" ? (
-                          <div className="ch-approval-actions">
-                            <button type="button" className="ch-approval-btn ch-approval-approve cursor-pointer" onClick={() => handleApproval(msg.approval!.consent_id, "approve")}>
-                              <Check size={12} aria-hidden="true" /> Approve
-                            </button>
-                            <button type="button" className="ch-approval-btn ch-approval-deny cursor-pointer" onClick={() => handleApproval(msg.approval!.consent_id, "deny")}>
-                              <X size={12} aria-hidden="true" /> Reject
-                            </button>
-                          </div>
-                        ) : (
-                          <div className={`ch-approval-resolved ch-approval-resolved-${msg.approvalStatus}`}>
-                            {msg.approvalStatus === "approved" ? <><Check size={12} aria-hidden="true" /> Approved</> : <><X size={12} aria-hidden="true" /> Denied</>}
-                          </div>
-                        )}
+                        <div className="ch-approval-actions">
+                          <button type="button" className="ch-approval-btn ch-approval-approve cursor-pointer" onClick={() => handleApproval(msg.approval!.consent_id, "approve")}>
+                            <Check size={12} aria-hidden="true" /> Approve
+                          </button>
+                          <button type="button" className="ch-approval-btn ch-approval-deny cursor-pointer" onClick={() => handleApproval(msg.approval!.consent_id, "deny")}>
+                            <X size={12} aria-hidden="true" /> Reject
+                          </button>
+                        </div>
                       </div>
+                      )
+                    ) : msg.agentActivity && msg.agentActivity.length > 0 ? (
+                      <AgentActivityBubble msg={msg} renderContent={renderContent} />
                     ) : msg.buildResult ? (
                       <BuildResultCard data={msg.buildResult} />
                     ) : msg.streaming && !msg.content ? (

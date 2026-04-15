@@ -851,6 +851,40 @@ pub struct AgentStatusEvent {
     pub fuel_remaining: u64,
 }
 
+/// Best-effort emitter used by crate-internal helpers that do not own a
+/// `tauri::Window` (e.g. time-machine undo/redo). Pulls the current
+/// `AppHandle` from `AppState` and broadcasts `"agent-status-changed"`.
+/// Returns silently when the app handle has not yet been registered or when
+/// the agent id is not a valid UUID.
+pub(crate) fn emit_agent_status_via_app(state: &AppState, agent_id: &str) {
+    let Ok(parsed) = uuid::Uuid::parse_str(agent_id) else {
+        return;
+    };
+    let Some(app) = state.app_handle() else {
+        return;
+    };
+    let status_opt = {
+        let supervisor = match state.supervisor.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        supervisor
+            .health_check()
+            .into_iter()
+            .find(|s| s.id == parsed)
+    };
+    if let Some(status) = status_opt {
+        let _ = app.emit(
+            "agent-status-changed",
+            AgentStatusEvent {
+                agent_id: agent_id.to_string(),
+                status: status.state.to_string(),
+                fuel_remaining: status.remaining_fuel,
+            },
+        );
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AuditRow {
     pub event_id: String,
@@ -1044,6 +1078,10 @@ pub struct AppState {
     pub cognitive_runtime: Arc<nexus_kernel::cognitive::CognitiveRuntime>,
     blocked_consent_waits: Arc<Mutex<HashMap<String, BlockedConsentWait>>>,
     computer_action_cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    /// G1b: cancellation flags for spawned cognitive-loop tasks, keyed by agent_id.
+    /// The Tauri `stop_agent` command sets the flag; the spawn loop polls it at
+    /// the top of each cycle and exits cleanly when set.
+    pub cognitive_cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
     hivemind: Arc<nexus_kernel::cognitive::HivemindCoordinator>,
     message_gateway: Arc<Mutex<MessageGateway>>,
     pub evolution_tracker: Arc<nexus_kernel::cognitive::EvolutionTracker>,
@@ -1219,6 +1257,7 @@ impl AppState {
             cognitive_runtime: cognitive_runtime.clone(),
             blocked_consent_waits: Arc::new(Mutex::new(HashMap::new())),
             computer_action_cancellations: Arc::new(Mutex::new(HashMap::new())),
+            cognitive_cancellations: Arc::new(Mutex::new(HashMap::new())),
             hivemind: Arc::new(nexus_kernel::cognitive::HivemindCoordinator::new(
                 Box::new(GatewayHivemindLlm),
                 Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
@@ -1530,6 +1569,7 @@ impl AppState {
             ),
             blocked_consent_waits: Arc::new(Mutex::new(HashMap::new())),
             computer_action_cancellations: Arc::new(Mutex::new(HashMap::new())),
+            cognitive_cancellations: Arc::new(Mutex::new(HashMap::new())),
             hivemind: Arc::new(nexus_kernel::cognitive::HivemindCoordinator::new(
                 Box::new(GatewayHivemindLlm),
                 Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
@@ -1933,6 +1973,25 @@ pub mod runtime {
         state: tauri::State<'_, AppState>,
         agent_id: String,
     ) -> Result<(), String> {
+        // G1b: the Chat bubble Stop button invokes this command. Previously
+        // it only transitioned the supervisor state and left the cognitive
+        // loop running in the background. Now it also signals the cancel
+        // flag and calls stop_agent_goal to drop the loop entry + wake any
+        // blocked consent waits. Order is deliberate:
+        //   1. Set cancel flag FIRST so the next cycle poll sees it.
+        //   2. stop_agent_goal clears the loop entry and wakes notifiers.
+        //   3. Supervisor state transition (through D2 chokepoint).
+        //   4. UI emit.
+        if let Some(flag) = state
+            .inner()
+            .cognitive_cancellations
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&agent_id)
+        {
+            flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        let _ = crate::commands::cognitive::stop_agent_goal(state.inner(), agent_id.clone());
         super::stop_agent(state.inner(), agent_id.clone())?;
         emit_agent_status(&window, state.inner(), &agent_id);
         Ok(())

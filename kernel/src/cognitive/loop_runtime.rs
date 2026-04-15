@@ -105,6 +105,7 @@ pub trait ActionExecutor: Send + Sync {
         agent_id: &str,
         action: &PlannedAction,
         audit: &mut AuditTrail,
+        hitl_approved: bool,
     ) -> Result<String, String>;
 }
 
@@ -123,7 +124,9 @@ pub trait LlmQueryHandler: Send + Sync {
 /// (filesystem, shell, web, API) with full governance enforcement.
 pub struct RegistryExecutor {
     registry: ActuatorRegistry,
-    /// Base directory for agent workspaces: `{base}/{agent_id}/workspace/`.
+    /// Working directory shared by every agent. Set by the host to the
+    /// process cwd (Option B: no per-agent sandbox). Retained as a field so
+    /// the host can override it (e.g. in tests).
     workspace_base: PathBuf,
     /// Shared supervisor for looking up the agent's effective runtime context.
     supervisor: Arc<Mutex<Supervisor>>,
@@ -140,7 +143,7 @@ pub struct RegistryExecutor {
 impl RegistryExecutor {
     /// Create a new registry executor.
     ///
-    /// * `workspace_base` — parent directory for agent workspaces (e.g. `~/.nexus/agents/`)
+    /// * `workspace_base` — working directory for all agents (Option B: typically the process cwd)
     /// * `audit` — shared audit trail
     /// * `supervisor` — source of agent capabilities, fuel, autonomy, and allowlists
     pub fn new(
@@ -201,6 +204,7 @@ impl RegistryExecutor {
     }
 
     /// Build the actuator context for a given agent.
+    #[allow(clippy::too_many_arguments)]
     fn build_context(
         &self,
         agent_id: &str,
@@ -209,8 +213,11 @@ impl RegistryExecutor {
         fuel_remaining: f64,
         autonomy_level: AutonomyLevel,
         egress_allowlist: Vec<String>,
+        hitl_approved: bool,
     ) -> ActuatorContext {
-        let working_dir = self.workspace_base.join(agent_id).join("workspace");
+        // Option B: every agent gets the same working_dir (the process cwd
+        // configured by the host). No per-UUID sandbox.
+        let working_dir = self.workspace_base.clone();
         ActuatorContext {
             agent_id: agent_id.to_string(),
             agent_name: agent_name.to_string(),
@@ -220,6 +227,7 @@ impl RegistryExecutor {
             fuel_remaining,
             egress_allowlist,
             action_review_engine: self.action_review_engine.clone(),
+            hitl_approved,
         }
     }
 }
@@ -230,6 +238,7 @@ impl ActionExecutor for RegistryExecutor {
         agent_id: &str,
         action: &PlannedAction,
         audit: &mut AuditTrail,
+        hitl_approved: bool,
     ) -> Result<String, String> {
         // For actions not handled by actuators (LlmQuery, MemoryStore, etc.),
         // fall through to the default placeholder behavior.
@@ -293,7 +302,18 @@ impl ActionExecutor for RegistryExecutor {
                             }),
                         );
 
-                        return handler.query(&full_prompt);
+                        // Silent-failure guard (G1a): an empty LLM response is
+                        // reported as a step failure so the cycle classifier can
+                        // mark the goal Failed rather than "Completed: 1 step, 10
+                        // fuel". Covers both primary plan steps and the planner's
+                        // synthetic two-strike fallback step — they funnel through
+                        // here.
+                        return match handler.query(&full_prompt) {
+                            Ok(output) if output.trim().is_empty() => {
+                                Err("llm_query returned empty response".to_string())
+                            }
+                            other => other,
+                        };
                     }
                     // No handler — fall through to stub
                 }
@@ -440,6 +460,7 @@ impl ActionExecutor for RegistryExecutor {
             fuel_remaining,
             autonomy_level,
             egress_allowlist,
+            hitl_approved,
         );
 
         self.registry
@@ -803,6 +824,8 @@ impl CognitiveRuntime {
                 fuel_consumed: 0.0,
                 should_continue: false,
                 blocked_reason: Some("shutdown requested".into()),
+                success: true,
+                failure_reason: None,
             });
         }
 
@@ -864,6 +887,8 @@ impl CognitiveRuntime {
                 fuel_consumed: 0.0,
                 should_continue: false,
                 blocked_reason: Some(reason),
+                success: true,
+                failure_reason: None,
             });
         }
         state.cycle_count += 1;
@@ -889,6 +914,8 @@ impl CognitiveRuntime {
                 fuel_consumed: 0.0,
                 should_continue: false,
                 blocked_reason: Some("fuel below reserve threshold".into()),
+                success: true,
+                failure_reason: None,
             });
         }
 
@@ -1143,6 +1170,8 @@ impl CognitiveRuntime {
                         fuel_consumed: 0.0,
                         should_continue: true,
                         blocked_reason: Some(format!("capability '{cap}' denied")),
+                        success: true,
+                        failure_reason: None,
                     });
                 }
             }
@@ -1167,6 +1196,8 @@ impl CognitiveRuntime {
                     fuel_consumed: 0.0,
                     should_continue: true,
                     blocked_reason: Some(reason),
+                    success: true,
+                    failure_reason: None,
                 });
             }
             if requires_hitl {
@@ -1210,6 +1241,8 @@ impl CognitiveRuntime {
                         fuel_consumed: 0.0,
                         should_continue: true,
                         blocked_reason: Some(format!("adversarial block: {summary}")),
+                        success: true,
+                        failure_reason: None,
                     });
                 }
                 // Adversarial challenge passed — proceed to execution
@@ -1286,7 +1319,7 @@ impl CognitiveRuntime {
                     total_steps
                 );
                 let (step_executed, step_fuel, step_error) =
-                    match executor.execute(agent_id, &action_clone, audit) {
+                    match executor.execute(agent_id, &action_clone, audit, requires_hitl) {
                         Ok(result) => {
                             eprintln!(
                                 "[agent:{}] actuator result for {}: {} chars — {}",
@@ -1366,6 +1399,8 @@ impl CognitiveRuntime {
                                     fuel_consumed: 0.0,
                                     should_continue: true,
                                     blocked_reason: Some(error),
+                                    success: true,
+                                    failure_reason: None,
                                 });
                             }
 
@@ -1402,6 +1437,8 @@ impl CognitiveRuntime {
                         fuel_consumed: step_fuel,
                         should_continue: true,
                         blocked_reason: step_error,
+                        success: true,
+                        failure_reason: None,
                     });
                 }
 
@@ -1477,7 +1514,23 @@ impl CognitiveRuntime {
         // ── Check if goal is complete ──
         if state.current_step_index >= state.steps.len() && !state.steps.is_empty() {
             let any_failed = state.steps.iter().any(|s| s.status == StepStatus::Failed);
-            let success = !any_failed;
+            // G1a: even if no step reported Failed, treat "all outputs empty" as
+            // a silent-failure cycle. Protects against executor paths that returned
+            // Ok("") in the past (e.g. LlmQuery stub or adapter with no handler).
+            let all_outputs_empty = state.steps.iter().all(|s| {
+                s.result
+                    .as_ref()
+                    .map(|r| r.trim().is_empty())
+                    .unwrap_or(true)
+            });
+            let success = !any_failed && !all_outputs_empty;
+            let failure_reason = if any_failed {
+                Some("one or more steps failed".to_string())
+            } else if all_outputs_empty {
+                Some("plan executed but produced no output".to_string())
+            } else {
+                None
+            };
 
             state.goal.status = if success {
                 GoalStatus::Completed
@@ -1536,7 +1589,9 @@ impl CognitiveRuntime {
                 steps_executed: total_steps,
                 fuel_consumed: total_fuel,
                 should_continue: false,
-                blocked_reason: None,
+                blocked_reason: failure_reason.clone(),
+                success,
+                failure_reason,
             });
         }
 
@@ -1555,6 +1610,8 @@ impl CognitiveRuntime {
                 fuel_consumed: fuel,
                 should_continue: true,
                 blocked_reason: error,
+                success: true,
+                failure_reason: None,
             });
         }
 
@@ -1570,6 +1627,8 @@ impl CognitiveRuntime {
             fuel_consumed: 0.0,
             should_continue: true,
             blocked_reason: None,
+            success: true,
+            failure_reason: None,
         })
     }
 
@@ -1631,7 +1690,7 @@ impl CognitiveRuntime {
             fuel_remaining,
             cycle_count: state.cycle_count,
             started_at_secs: state.started_at_secs,
-            last_step_result: compute_last_step_result(&state.steps),
+            last_step_result: compute_goal_output(&state.steps),
         })
     }
 
@@ -1828,7 +1887,7 @@ impl CognitiveRuntime {
                 fuel_remaining: state.total_fuel_consumed,
                 cycle_count: state.cycle_count,
                 started_at_secs: state.started_at_secs,
-                last_step_result: compute_last_step_result(&state.steps),
+                last_step_result: compute_goal_output(&state.steps),
             }));
         }
     }
@@ -1852,24 +1911,83 @@ impl CognitiveRuntime {
     }
 }
 
-/// Extract the last step result using the Bug P logic: prefer the most recent
-/// succeeded LlmQuery, fall back to any succeeded step with a result.
-fn compute_last_step_result(steps: &[AgentStep]) -> Option<String> {
-    steps
+/// Aggregate all succeeded step outputs into a single string for the goal-completed
+/// event. Preserves the LlmQuery-preference path for plans ending with reasoning.
+fn compute_goal_output(steps: &[AgentStep]) -> Option<String> {
+    // Pass 1: if the last succeeded step is an LlmQuery with non-empty result, return it directly.
+    if let Some(last) = steps
         .iter()
         .rev()
-        .find(|s| {
-            s.status == StepStatus::Succeeded
-                && s.result.is_some()
-                && matches!(s.action, PlannedAction::LlmQuery { .. })
-        })
-        .or_else(|| {
-            steps
-                .iter()
-                .rev()
-                .find(|s| s.status == StepStatus::Succeeded && s.result.is_some())
-        })
-        .and_then(|s| s.result.clone())
+        .find(|s| s.status == StepStatus::Succeeded)
+    {
+        if matches!(last.action, PlannedAction::LlmQuery { .. }) {
+            if let Some(ref r) = last.result {
+                if !r.trim().is_empty() {
+                    return Some(r.clone());
+                }
+            }
+        }
+    }
+
+    // Pass 2: aggregate all succeeded steps with non-empty results, in plan order.
+    let mut buf = String::with_capacity(1024);
+    for step in steps {
+        if step.status != StepStatus::Succeeded {
+            continue;
+        }
+        let trimmed = match step.result.as_deref() {
+            Some(s) if !s.trim().is_empty() => s,
+            _ => continue,
+        };
+
+        // Separator between sections.
+        if !buf.is_empty() {
+            buf.push('\n');
+        }
+
+        // Build step label.
+        let label = match &step.action {
+            PlannedAction::ShellCommand { command, args } => {
+                let full = if args.is_empty() {
+                    format!("$ {}", command)
+                } else {
+                    format!("$ {} {}", command, args.join(" "))
+                };
+                if full.chars().count() > 200 {
+                    full.chars().take(200).collect::<String>()
+                } else {
+                    full
+                }
+            }
+            PlannedAction::FileRead { path } => format!("Read {}", path),
+            PlannedAction::FileWrite { path, .. } => format!("Wrote {}", path),
+            PlannedAction::CodeExecute { language, .. } => {
+                format!("Executed {}", language)
+            }
+            PlannedAction::LlmQuery { .. } => "Reasoning".to_string(),
+            other => other.action_type().to_string(),
+        };
+
+        buf.push_str(&label);
+        buf.push_str(":\n");
+        buf.push_str(trimmed);
+        buf.push('\n');
+    }
+
+    // Pass 3: fallback — if nothing was aggregated, return None.
+    let result = buf.trim_end().to_string();
+    if result.is_empty() {
+        None
+    } else {
+        Some(result)
+    }
+}
+
+/// Extract the last step result. Prefer final LlmQuery, fall back to aggregation.
+#[deprecated(note = "use compute_goal_output")]
+#[allow(dead_code)]
+fn compute_last_step_result(steps: &[AgentStep]) -> Option<String> {
+    compute_goal_output(steps)
 }
 
 /// Determine if an action requires HITL approval based on autonomy level.
@@ -2067,6 +2185,7 @@ mod tests {
             _agent_id: &str,
             _action: &PlannedAction,
             _audit: &mut AuditTrail,
+            _hitl_approved: bool,
         ) -> Result<String, String> {
             let mut results = self.results.lock().unwrap();
             if results.is_empty() {
@@ -3306,6 +3425,7 @@ mod tests {
             agent_id: &str,
             action: &PlannedAction,
             audit: &mut AuditTrail,
+            _hitl_approved: bool,
         ) -> Result<String, String> {
             match action {
                 PlannedAction::MemoryStore {
@@ -3947,11 +4067,21 @@ mod tests {
 
     #[test]
     fn bug_p_a_prefers_llm_over_file_write() {
+        // Last step is FileWrite, so Pass 1 (LlmQuery preference) does not trigger.
+        // Pass 2 aggregates both steps with labels.
         let result = last_step_result_for(vec![
             llm_step(Some("answer")),
             file_write_step(Some("wrote 42 bytes to /tmp/out.txt")),
         ]);
-        assert_eq!(result.as_deref(), Some("answer"));
+        let r = result.unwrap();
+        assert!(
+            r.contains("Reasoning:\nanswer"),
+            "should contain llm section: {r}"
+        );
+        assert!(
+            r.contains("Wrote /tmp/out.txt:\nwrote 42 bytes to /tmp/out.txt"),
+            "should contain file write section: {r}"
+        );
     }
 
     #[test]
@@ -3959,7 +4089,10 @@ mod tests {
         let result = last_step_result_for(vec![file_write_step(Some(
             "wrote 42 bytes to /tmp/out.txt",
         ))]);
-        assert_eq!(result.as_deref(), Some("wrote 42 bytes to /tmp/out.txt"));
+        assert_eq!(
+            result.as_deref(),
+            Some("Wrote /tmp/out.txt:\nwrote 42 bytes to /tmp/out.txt")
+        );
     }
 
     #[test]
@@ -3968,17 +4101,34 @@ mod tests {
             llm_step(None),
             file_write_step(Some("wrote 42 bytes to /tmp/out.txt")),
         ]);
-        assert_eq!(result.as_deref(), Some("wrote 42 bytes to /tmp/out.txt"));
+        assert_eq!(
+            result.as_deref(),
+            Some("Wrote /tmp/out.txt:\nwrote 42 bytes to /tmp/out.txt")
+        );
     }
 
     #[test]
     fn bug_p_d_returns_most_recent_llm_result() {
+        // Last step is FileWrite, so Pass 1 does not trigger.
+        // Pass 2 aggregates all three steps with non-empty results.
         let result = last_step_result_for(vec![
             llm_step(Some("answer1")),
             llm_step(Some("answer2")),
             file_write_step(Some("wrote 42 bytes to /tmp/out.txt")),
         ]);
-        assert_eq!(result.as_deref(), Some("answer2"));
+        let r = result.unwrap();
+        assert!(
+            r.contains("answer1"),
+            "should contain first llm result: {r}"
+        );
+        assert!(
+            r.contains("answer2"),
+            "should contain second llm result: {r}"
+        );
+        assert!(
+            r.contains("Wrote /tmp/out.txt:\nwrote 42 bytes to /tmp/out.txt"),
+            "should contain file write section: {r}"
+        );
     }
 
     #[test]
@@ -4073,6 +4223,370 @@ mod tests {
         assert!(
             runtime.get_agent_status_fast(&agent_id).is_none(),
             "snapshot should be removed after stop_agent_loop"
+        );
+    }
+
+    // ── compute_goal_output tests ──
+
+    fn shell_step(
+        command: &str,
+        args: &[&str],
+        status: StepStatus,
+        result: Option<&str>,
+    ) -> AgentStep {
+        AgentStep {
+            id: uuid::Uuid::new_v4().to_string(),
+            goal_id: "goal-1".into(),
+            action: PlannedAction::ShellCommand {
+                command: command.to_string(),
+                args: args.iter().map(|s| s.to_string()).collect(),
+            },
+            status,
+            result: result.map(|s| s.to_string()),
+            fuel_cost: 1.0,
+            attempts: 1,
+            max_retries: 3,
+        }
+    }
+
+    fn llm_step_with_status(status: StepStatus, result: Option<&str>) -> AgentStep {
+        AgentStep {
+            id: uuid::Uuid::new_v4().to_string(),
+            goal_id: "goal-1".into(),
+            action: PlannedAction::LlmQuery {
+                prompt: "test".into(),
+                context: vec![],
+            },
+            status,
+            result: result.map(|s| s.to_string()),
+            fuel_cost: 1.0,
+            attempts: 1,
+            max_retries: 3,
+        }
+    }
+
+    #[test]
+    fn test_compute_goal_output_empty_steps() {
+        assert_eq!(compute_goal_output(&[]), None);
+    }
+
+    #[test]
+    fn test_compute_goal_output_single_succeeded_shell() {
+        let steps = vec![shell_step(
+            "ls",
+            &["-la"],
+            StepStatus::Succeeded,
+            Some("total 8\ndrwxrwxr-x 2 nexus..."),
+        )];
+        let out = compute_goal_output(&steps).unwrap();
+        assert!(out.starts_with("$ ls -la:\ntotal 8\ndrwxrwxr-x 2 nexus..."));
+    }
+
+    #[test]
+    fn test_compute_goal_output_two_shells_first_useful_second_empty() {
+        // THIS IS THE EXACT BUG FROM THE REAL RUN.
+        let steps = vec![
+            shell_step(
+                "ls",
+                &["-la"],
+                StepStatus::Succeeded,
+                Some("total 8\ndrwxrwxr-x 2 nexus nexus 4096 Apr 13 14:14 .\ndrwxrwxr-x 3 nexus nexus 4096 Apr 13 14:14 .."),
+            ),
+            shell_step("find", &[".", "-type", "f"], StepStatus::Succeeded, Some("")),
+        ];
+        let out = compute_goal_output(&steps).unwrap();
+        assert!(out.contains("ls -la"), "should contain ls label: {out}");
+        assert!(
+            out.contains("drwxrwxr-x 2 nexus"),
+            "should contain ls output: {out}"
+        );
+        assert!(
+            !out.contains("find . -type f"),
+            "should NOT contain empty find step: {out}"
+        );
+    }
+
+    #[test]
+    fn test_compute_goal_output_two_shells_both_useful() {
+        let steps = vec![
+            shell_step(
+                "ls",
+                &["-la"],
+                StepStatus::Succeeded,
+                Some("total 8\nfile1.txt"),
+            ),
+            shell_step(
+                "cat",
+                &["file1.txt"],
+                StepStatus::Succeeded,
+                Some("hello world"),
+            ),
+        ];
+        let out = compute_goal_output(&steps).unwrap();
+        assert!(
+            out.contains("$ ls -la:\ntotal 8\nfile1.txt"),
+            "should contain ls section: {out}"
+        );
+        assert!(
+            out.contains("$ cat file1.txt:\nhello world"),
+            "should contain cat section: {out}"
+        );
+        // Sections separated by blank line.
+        assert!(
+            out.contains("file1.txt\n\n$ cat"),
+            "sections should be separated by blank line: {out}"
+        );
+    }
+
+    #[test]
+    fn test_compute_goal_output_prefers_final_llm_query() {
+        let steps = vec![
+            shell_step("ls", &["-la"], StepStatus::Succeeded, Some("raw data")),
+            llm_step_with_status(StepStatus::Succeeded, Some("here is my analysis")),
+        ];
+        let out = compute_goal_output(&steps).unwrap();
+        assert_eq!(out, "here is my analysis");
+    }
+
+    #[test]
+    fn test_compute_goal_output_falls_back_when_final_llm_query_empty() {
+        let steps = vec![
+            shell_step(
+                "ls",
+                &["-la"],
+                StepStatus::Succeeded,
+                Some("ls output here"),
+            ),
+            llm_step_with_status(StepStatus::Succeeded, Some("")),
+        ];
+        let out = compute_goal_output(&steps).unwrap();
+        assert!(
+            out.contains("ls output here"),
+            "should fall through to aggregation: {out}"
+        );
+    }
+
+    #[test]
+    fn test_compute_goal_output_skips_failed_steps() {
+        let steps = vec![
+            shell_step(
+                "rm",
+                &["-rf", "/"],
+                StepStatus::Failed,
+                Some("command blocked"),
+            ),
+            shell_step("ls", &["-la"], StepStatus::Succeeded, Some("ok")),
+        ];
+        let out = compute_goal_output(&steps).unwrap();
+        assert!(out.contains("ok"), "should contain succeeded step: {out}");
+        assert!(
+            !out.contains("command blocked"),
+            "should NOT contain failed step: {out}"
+        );
+    }
+
+    #[test]
+    fn test_compute_goal_output_returns_none_when_all_steps_empty_or_failed() {
+        let steps = vec![
+            shell_step("rm", &["-rf", "/"], StepStatus::Failed, Some("blocked")),
+            shell_step("ls", &[], StepStatus::Succeeded, Some("")),
+        ];
+        assert_eq!(compute_goal_output(&steps), None);
+    }
+
+    #[test]
+    fn test_compute_goal_output_truncates_long_shell_command_label() {
+        // Build a command with non-ASCII chars exceeding 500 chars.
+        let long_cmd: String = "ls \u{4f60}\u{597d} ".repeat(100);
+        assert!(long_cmd.chars().count() > 500);
+        let steps = vec![shell_step(
+            &long_cmd,
+            &[],
+            StepStatus::Succeeded,
+            Some("ok"),
+        )];
+        let out = compute_goal_output(&steps).unwrap();
+        // Label line is "$ <truncated_cmd>:\n" — the part before ":\n" should be at most 200+2 ("$ " prefix is part of the 200).
+        let label_line = out.lines().next().unwrap();
+        // label_line ends with ":"
+        let label_without_colon = label_line.trim_end_matches(':');
+        assert!(
+            label_without_colon.chars().count() <= 200,
+            "label should be at most 200 chars, got {}",
+            label_without_colon.chars().count()
+        );
+        assert!(out.contains("ok"), "result should still be present: {out}");
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn test_compute_last_step_result_wrapper_still_returns_same_value() {
+        let steps = vec![
+            shell_step(
+                "ls",
+                &["-la"],
+                StepStatus::Succeeded,
+                Some("total 8\nfile1.txt"),
+            ),
+            shell_step(
+                "cat",
+                &["file1.txt"],
+                StepStatus::Succeeded,
+                Some("hello world"),
+            ),
+        ];
+        assert_eq!(
+            compute_last_step_result(&steps),
+            compute_goal_output(&steps)
+        );
+    }
+
+    // ── G1a silent-failure tests ──
+
+    /// A handler that returns a caller-configurable response — used to simulate
+    /// the empty-LLM path that the planner's two-strike fallback funnels into.
+    struct FixedLlmHandler {
+        response: String,
+    }
+
+    impl LlmQueryHandler for FixedLlmHandler {
+        fn query(&self, _prompt: &str) -> Result<String, String> {
+            Ok(self.response.clone())
+        }
+    }
+
+    /// G1a-1: the LlmQuery executor branch reclassifies an Ok("") response as
+    /// an error so the cycle classifier later marks the cycle Failed rather
+    /// than silently reporting "Completed: 1 step, 10 fuel".
+    #[test]
+    fn test_empty_llm_query_marks_step_failed() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let workspace = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/tmp"));
+        let executor = RegistryExecutor::new(
+            workspace,
+            Arc::new(Mutex::new(AuditTrail::new())),
+            sup,
+            None,
+        )
+        .with_llm_handler(Arc::new(FixedLlmHandler {
+            response: "".to_string(),
+        }));
+
+        let mut audit = AuditTrail::new();
+        let action = PlannedAction::LlmQuery {
+            prompt: "anything".to_string(),
+            context: vec![],
+        };
+        let result = executor.execute(&agent_id, &action, &mut audit, false);
+
+        assert!(
+            result.is_err(),
+            "empty LLM response must surface as Err; got {result:?}"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("empty response"),
+            "error must mention empty response; got: {err}"
+        );
+    }
+
+    /// G1a-2: even if every step records StepStatus::Succeeded, when all step
+    /// outputs are empty the cycle must be marked as failed so the surface
+    /// layer stops reporting success.
+    #[test]
+    fn test_cycle_with_all_empty_outputs_marks_failed() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup);
+        let goal = AgentGoal::new("do something".into(), 5);
+        runtime.assign_goal(&agent_id, goal).unwrap();
+
+        // Single-step plan whose executor will return Ok("") — bypassing the
+        // per-step empty guard (which only fires in RegistryExecutor) to force
+        // the goal-complete branch to detect "all outputs empty".
+        let planner = make_planner(
+            r#"[{"action": {"type": "LlmQuery", "prompt": "x", "context": []}, "description": "x"}]"#,
+        );
+        let memory_mgr = make_memory_mgr();
+        let executor = MockExecutor::always_ok("");
+        let mut audit = AuditTrail::new();
+
+        let result = runtime
+            .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+            .unwrap();
+
+        assert_eq!(result.phase, CognitivePhase::Learn);
+        assert!(
+            !result.success,
+            "all-empty-output cycle must set success=false; got {result:?}"
+        );
+        assert_eq!(
+            result.failure_reason.as_deref(),
+            Some("plan executed but produced no output"),
+            "failure_reason must name the empty-output classifier"
+        );
+    }
+
+    /// G1a-3: happy-path regression — a cycle with a real, non-empty step
+    /// output still classifies as success.
+    #[test]
+    fn test_cycle_with_real_step_marks_completed() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup);
+        let goal = AgentGoal::new("analyze".into(), 5);
+        runtime.assign_goal(&agent_id, goal).unwrap();
+
+        let planner = make_planner(
+            r#"[{"action": {"type": "LlmQuery", "prompt": "x", "context": []}, "description": "x"}]"#,
+        );
+        let memory_mgr = make_memory_mgr();
+        let executor = MockExecutor::always_ok("real output");
+        let mut audit = AuditTrail::new();
+
+        let result = runtime
+            .run_cycle(&agent_id, &planner, &memory_mgr, &executor, &mut audit)
+            .unwrap();
+
+        assert_eq!(result.phase, CognitivePhase::Learn);
+        assert!(
+            result.success,
+            "non-empty output cycle must remain success=true"
+        );
+        assert!(result.failure_reason.is_none());
+    }
+
+    /// G1b: synthetic-loop cancellation token test — confirms the
+    /// Arc<AtomicBool> flag pattern used by the Tauri spawn breaks a busy
+    /// polling loop within the 100ms budget. The real Tauri spawn is not
+    /// testable here without a full async harness; the flag-polling pattern
+    /// itself is validated below.
+    #[test]
+    fn test_cancel_flag_breaks_loop_within_budget() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::{Duration, Instant};
+
+        let flag = Arc::new(AtomicBool::new(false));
+        let flag_setter = flag.clone();
+
+        // Flip the flag after ~20ms so a 1ms-polling loop must exit well under 100ms.
+        let setter = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(20));
+            flag_setter.store(true, Ordering::Relaxed);
+        });
+
+        let start = Instant::now();
+        loop {
+            if flag.load(Ordering::Relaxed) {
+                break;
+            }
+            if start.elapsed() > Duration::from_millis(100) {
+                panic!("cancel flag did not break the loop within 100ms");
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        setter.join().unwrap();
+        assert!(
+            start.elapsed() < Duration::from_millis(100),
+            "loop should exit within 100ms of flag being set"
         );
     }
 }

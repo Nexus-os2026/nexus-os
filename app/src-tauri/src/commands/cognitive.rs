@@ -388,23 +388,41 @@ pub(crate) fn apply_non_file_undo_actions(
                 field,
                 value,
             } => {
+                let mut status_emit_needed = false;
                 if let Ok(agent_uuid) = Uuid::parse_str(agent_id) {
                     let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-                    if let Some(handle) = supervisor.get_agent_mut(agent_uuid) {
-                        match field.as_str() {
-                            "status" => {
-                                if let Some(status) = value.as_str().and_then(parse_agent_state) {
-                                    handle.state = status;
+                    match field.as_str() {
+                        "status" => {
+                            if let Some(status) = value.as_str().and_then(parse_agent_state) {
+                                // Route through the chokepoint so the audit
+                                // trail records the transition. FSM rejection
+                                // falls back to force_transition because undo
+                                // must restore the recorded state verbatim.
+                                if supervisor
+                                    .transition_agent_state(agent_uuid, status, "time-machine-undo")
+                                    .is_err()
+                                {
+                                    let _ = supervisor.force_transition_agent_state(
+                                        agent_uuid,
+                                        status,
+                                        "time-machine-undo-forced",
+                                    );
                                 }
+                                status_emit_needed = true;
                             }
-                            "fuel_remaining" => {
+                        }
+                        "fuel_remaining" => {
+                            if let Some(handle) = supervisor.get_agent_mut(agent_uuid) {
                                 if let Some(fuel) = value.as_u64() {
                                     handle.remaining_fuel = fuel;
                                 }
                             }
-                            _ => {}
                         }
+                        _ => {}
                     }
+                }
+                if status_emit_needed {
+                    crate::emit_agent_status_via_app(state, agent_id);
                 }
                 if field == "memories" {
                     restore_agent_memories(state, agent_id, value);
@@ -648,11 +666,25 @@ impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
 
             match handle.join() {
                 Ok(Ok(response)) => {
+                    let pre_strip_len = response.output_text.len();
+                    let starts_with_think =
+                        response.output_text.trim_start().starts_with("<think>");
+                    let has_closing_think = response.output_text.contains("</think>");
+                    let stripped = strip_think_tags(&response.output_text);
+                    let post_strip_len = stripped.len();
                     eprintln!(
-                        "[planner] Flash Inference query complete ({} chars)",
-                        response.output_text.len()
+                        "[planner] prompt={} chars -> response={} chars (stripped={} chars)",
+                        prompt.len(),
+                        pre_strip_len,
+                        post_strip_len
                     );
-                    return Ok(strip_think_tags(&response.output_text));
+                    if pre_strip_len > 0 && post_strip_len == 0 {
+                        eprintln!(
+                            "[planner] WARNING: response stripped to empty. pre_strip={} starts_with_think={} has_closing={}",
+                            pre_strip_len, starts_with_think, has_closing_think
+                        );
+                    }
+                    return Ok(stripped);
                 }
                 Ok(Err(e)) => {
                     eprintln!("[planner] Flash Inference error: {e}");
@@ -724,10 +756,29 @@ impl nexus_kernel::cognitive::PlannerLlm for GatewayPlannerLlm {
         // crashes (e.g., llama.cpp segfault caught by signal handler, or Ollama timeout),
         // we return an error instead of killing the app.
         let query_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            provider.query(prompt, 4096, &model)
+            provider.query(prompt, 2048, &model)
         }));
         match query_result {
-            Ok(Ok(response)) => Ok(strip_think_tags(&response.output_text)),
+            Ok(Ok(response)) => {
+                let pre_strip_len = response.output_text.len();
+                let starts_with_think = response.output_text.trim_start().starts_with("<think>");
+                let has_closing_think = response.output_text.contains("</think>");
+                let stripped = strip_think_tags(&response.output_text);
+                let post_strip_len = stripped.len();
+                eprintln!(
+                    "[planner] prompt={} chars -> response={} chars (stripped={} chars)",
+                    prompt.len(),
+                    pre_strip_len,
+                    post_strip_len
+                );
+                if pre_strip_len > 0 && post_strip_len == 0 {
+                    eprintln!(
+                        "[planner] WARNING: response stripped to empty. pre_strip={} starts_with_think={} has_closing={}",
+                        pre_strip_len, starts_with_think, has_closing_think
+                    );
+                }
+                Ok(stripped)
+            }
             Ok(Err(e)) => Err(e),
             Err(_panic) => Err(nexus_kernel::errors::AgentError::SupervisorError(
                 "LLM provider panicked during query — model may be corrupted or out of memory"
@@ -1421,7 +1472,35 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
     agent_id: String,
     goal_id: String,
 ) {
+    // G1b: register a cancellation flag so the Chat Stop button can break the
+    // loop cleanly. Flag handle is stored in AppState keyed by agent_id so the
+    // Tauri `stop_agent` command can look it up and set it.
+    let cancel_flag = Arc::new(AtomicBool::new(false));
+    state
+        .cognitive_cancellations
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .insert(agent_id.clone(), cancel_flag.clone());
+
     tauri::async_runtime::spawn(async move {
+        // Drop-guard removes the cancellation entry on any exit path (normal,
+        // break, return, panic).
+        struct CancelGuard {
+            state: AppState,
+            agent_id: String,
+        }
+        impl Drop for CancelGuard {
+            fn drop(&mut self) {
+                if let Ok(mut map) = self.state.cognitive_cancellations.lock() {
+                    map.remove(&self.agent_id);
+                }
+            }
+        }
+        let _cancel_guard = CancelGuard {
+            state: state.clone(),
+            agent_id: agent_id.clone(),
+        };
+
         // NOTE: Do NOT install a custom panic hook here. Calling prev_hook(info)
         // inside a hook can cause a double-panic (which aborts the entire process).
         // The catch_unwind below is sufficient for recovery.
@@ -1432,10 +1511,19 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
         };
         let memory_mgr = nexus_kernel::cognitive::AgentMemoryManager::new(Box::new(mem_store));
 
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        let workspace_base = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("agents");
+        // Option B: agents run in the process cwd, not a per-UUID sandbox.
+        // See commit message for security posture notes.
+        let workspace_base = std::env::current_dir().unwrap_or_else(|err| {
+            eprintln!(
+                "[cognitive] WARNING: failed to read current_dir ({}), falling back to /home/nexus",
+                err
+            );
+            std::path::PathBuf::from("/home/nexus")
+        });
+        eprintln!(
+            "[cognitive] agent working directory: {}",
+            workspace_base.display()
+        );
         let memory_mgr = Arc::new(memory_mgr);
         let executor = nexus_kernel::cognitive::RegistryExecutor::new(
             workspace_base,
@@ -1450,6 +1538,32 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
 
         let max_cycles = 500u32;
         'cycle_loop: for _cycle in 0..max_cycles {
+            // G1b: check cancellation flag before starting a new cycle. If the
+            // user hit Stop while we were sleeping between cycles, exit cleanly
+            // and emit a Failed goal-completed event.
+            if cancel_flag.load(Ordering::Relaxed) {
+                bridge.emit(
+                    "agent-goal-completed",
+                    json!({
+                        "agent_id": &agent_id,
+                        "goal_id": &goal_id,
+                        "success": false,
+                        "reason": "cancelled by user",
+                        "result_summary": "Goal cancelled by user.",
+                    }),
+                );
+                persist_task_completion(
+                    &state,
+                    &agent_id,
+                    &goal_id,
+                    "failed",
+                    "Goal cancelled by user.",
+                    false,
+                    0.0,
+                );
+                break 'cycle_loop;
+            }
+
             let before_snapshot = capture_agent_snapshot(&state, &agent_id);
 
             // Run the cognitive cycle inside catch_unwind
@@ -1467,6 +1581,32 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
                         )
                     })
                 }));
+
+            // G1b: poll cancellation again immediately after the potentially
+            // long-running cycle returns, so we exit before the inter-cycle
+            // sleep (or the next iteration's setup) wastes time.
+            if cancel_flag.load(Ordering::Relaxed) {
+                bridge.emit(
+                    "agent-goal-completed",
+                    json!({
+                        "agent_id": &agent_id,
+                        "goal_id": &goal_id,
+                        "success": false,
+                        "reason": "cancelled by user",
+                        "result_summary": "Goal cancelled by user.",
+                    }),
+                );
+                persist_task_completion(
+                    &state,
+                    &agent_id,
+                    &goal_id,
+                    "failed",
+                    "Goal cancelled by user.",
+                    false,
+                    0.0,
+                );
+                break 'cycle_loop;
+            }
 
             let result = match cycle_result_or_panic {
                 Ok(r) => r,
@@ -1738,8 +1878,13 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
 
                     // If the cognitive loop signals it should stop, we're done
                     if !cycle_result.should_continue {
-                        let success =
-                            cycle_result.phase == nexus_kernel::cognitive::CognitivePhase::Learn;
+                        // G1a: respect the kernel's explicit success flag. Reaching
+                        // the Learn phase is necessary but not sufficient — cycles
+                        // can finish in Learn yet produce no real output (empty
+                        // LLM responses, planner fallback that yielded nothing),
+                        // and the kernel flags those via cycle_result.success.
+                        let success = cycle_result.success
+                            && cycle_result.phase == nexus_kernel::cognitive::CognitivePhase::Learn;
 
                         // Hoist status — single call, used by both result_summary and emit
                         let status = state.cognitive_runtime.get_agent_status(&agent_id);
@@ -1766,9 +1911,13 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
                                     .unwrap_or_else(|| "Goal completed successfully.".to_string())
                             })
                         } else {
+                            // G1a: prefer the explicit failure_reason over the
+                            // ambiguous blocked_reason, so silent-failure cycles
+                            // surface "plan executed but produced no output" etc.
                             cycle_result
-                                .blocked_reason
+                                .failure_reason
                                 .clone()
+                                .or_else(|| cycle_result.blocked_reason.clone())
                                 .map(|r| format!("Goal failed: {}", r))
                                 .unwrap_or_else(|| {
                                     format!("Goal stopped in {} phase.", cycle_result.phase)

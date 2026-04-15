@@ -489,6 +489,18 @@ pub struct CycleResult {
     pub fuel_consumed: f64,
     pub should_continue: bool,
     pub blocked_reason: Option<String>,
+    /// Whether the cycle produced a real result. `false` when the cycle
+    /// hit a silent-failure path (empty LLM response, all steps empty,
+    /// planner fallback that produced nothing).
+    #[serde(default = "default_cycle_success")]
+    pub success: bool,
+    /// Human-readable reason when `success == false`. `None` on the happy path.
+    #[serde(default)]
+    pub failure_reason: Option<String>,
+}
+
+fn default_cycle_success() -> bool {
+    true
 }
 
 /// Configuration for the cognitive loop.
@@ -704,6 +716,8 @@ mod tests {
             fuel_consumed: 12.5,
             should_continue: true,
             blocked_reason: None,
+            success: true,
+            failure_reason: None,
         };
         let json = serde_json::to_string(&result).unwrap();
         let back: CycleResult = serde_json::from_str(&json).unwrap();
