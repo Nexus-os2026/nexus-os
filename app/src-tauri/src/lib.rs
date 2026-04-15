@@ -10815,7 +10815,85 @@ pub mod runtime {
         }
     }
 
+    /// Resolves the Nexus OS workspace root.
+    ///
+    /// Resolution order:
+    ///   1. `NEXUS_WORKSPACE_ROOT` env var (if set and the path exists)
+    ///   2. Walk up from `current_dir()` looking for a `.git` directory or file
+    ///   3. Fall back to `current_dir()` with a warning
+    ///
+    /// G7: Tauri launches the backend with cwd == `app/src-tauri`, which broke
+    /// every agent goal expressed relative to the repo root (C2: "read
+    /// README.md", C3: "list src-tauri/src/"). `run()` calls this once at
+    /// startup and `set_current_dir`s into the result so both the executor's
+    /// `workspace_base` and the planner's `PlanningContext.working_directory`
+    /// read the same corrected cwd.
+    fn resolve_workspace_root() -> std::path::PathBuf {
+        use std::path::PathBuf;
+
+        if let Ok(env_root) = std::env::var("NEXUS_WORKSPACE_ROOT") {
+            let p = PathBuf::from(&env_root);
+            if p.exists() {
+                return p;
+            }
+            eprintln!(
+                "[startup] NEXUS_WORKSPACE_ROOT='{}' does not exist; ignoring",
+                env_root
+            );
+        }
+
+        let cwd = std::env::current_dir().unwrap_or_else(|err| {
+            eprintln!("[startup] WARNING: current_dir() failed: {err}; using /home/nexus");
+            PathBuf::from("/home/nexus")
+        });
+
+        let mut walker = cwd.as_path();
+        loop {
+            if walker.join(".git").exists() {
+                return walker.to_path_buf();
+            }
+            match walker.parent() {
+                Some(parent) => walker = parent,
+                None => {
+                    eprintln!(
+                        "[startup] WARNING: workspace root could not be resolved (no .git ancestor from {}); falling back to cwd",
+                        cwd.display()
+                    );
+                    return cwd;
+                }
+            }
+        }
+    }
+
     pub fn run() {
+        // G7: anchor the process cwd to the repo root BEFORE anything else —
+        // AppState construction, tokio spawn, Tauri handler registration, and
+        // every `std::env::current_dir()` consumer in the runtime (kernel
+        // planner + executor, chat_llm, tools_infra, simulation,
+        // audit_compliance) all observe the corrected value once this block
+        // runs. The three-line log below is the safety belt for regressions.
+        let original_cwd = std::env::current_dir().unwrap_or_default();
+        let workspace_root = resolve_workspace_root();
+        eprintln!("[startup] cwd before: {}", original_cwd.display());
+        eprintln!(
+            "[startup] workspace_root resolved to: {}",
+            workspace_root.display()
+        );
+        if workspace_root != original_cwd {
+            if let Err(err) = std::env::set_current_dir(&workspace_root) {
+                eprintln!(
+                    "[startup] WARNING: failed to set cwd to {}: {} — agents will use the launched-from cwd",
+                    workspace_root.display(),
+                    err
+                );
+            } else {
+                eprintln!(
+                    "[startup] cwd after:  {}",
+                    std::env::current_dir().unwrap_or_default().display()
+                );
+            }
+        }
+
         let builder = tauri::Builder::<tauri::Wry>::default()
             .plugin(
                 tauri_plugin_global_shortcut::Builder::new()
