@@ -51,6 +51,10 @@ pub struct ActuatorContext {
     pub fuel_remaining: f64,
     pub egress_allowlist: Vec<String>,
     pub action_review_engine: Option<Arc<dyn ActionReviewEngine>>,
+    /// True when the current action was explicitly approved via HITL (human-in-the-loop).
+    /// Allows the shell actuator to override the static command allowlist for commands
+    /// that are not on the blocklist.
+    pub hitl_approved: bool,
 }
 
 impl std::fmt::Debug for ActuatorContext {
@@ -70,6 +74,7 @@ impl std::fmt::Debug for ActuatorContext {
                     .as_ref()
                     .map(|_| "<dyn ActionReviewEngine>"),
             )
+            .field("hitl_approved", &self.hitl_approved)
             .finish()
     }
 }
