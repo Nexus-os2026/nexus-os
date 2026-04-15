@@ -80,14 +80,17 @@ impl CognitivePlanner {
         // G8: splice in the real top-level cwd contents so the planner can
         // resolve phrases like "src/" against the actual layout rather than
         // hallucinating paths. Empty string when no listing is available.
+        // G8b: added the inference hint sentence so small models (gemma4:e2b/e4b)
+        // don't silently construct paths at the workspace root when the user
+        // reference isn't visible at the top level.
         let cwd_block = match &context.directory_listing {
             Some(listing) => format!(
-                "\n\nCurrent working directory contents (top-level, max 60 entries):\n{listing}\n"
+                "\n\nCurrent working directory contents (top-level, max 60 entries):\n{listing}\n\nIf the user mentions a directory or file not visible in the listing above, it is likely nested inside one of the listed directories — search for it there before assuming the path is at the workspace root.\n"
             ),
             None => String::new(),
         };
 
-        format!(
+        let prompt = format!(
             r#"CRITICAL: Output ONLY a JSON array. Do NOT think out loud. Do NOT use <think> tags. Do NOT explain. Start your response with `[` and end with `]`.
 
 You are the planning subsystem for Nexus OS. Create a step-by-step plan to achieve the goal below.
@@ -181,7 +184,20 @@ Do NOT include any text outside the JSON array."#,
                 String::new()
             },
             action_types = self.allowed_action_types(&context.agent_capabilities),
-        )
+        );
+        // G8b diagnostic — TEMPORARY, remove after C3 verified
+        let cwd_present = prompt.contains("Current working directory contents");
+        let cwd_idx = prompt
+            .find("Current working directory contents")
+            .map(|i| i.to_string())
+            .unwrap_or_else(|| "NOT FOUND".to_string());
+        eprintln!(
+            "[g8-diag] build_planning_prompt assembled: total_len={}, cwd_block_present={}, cwd_block_position={}",
+            prompt.len(),
+            cwd_present,
+            cwd_idx
+        );
+        prompt
     }
 
     fn build_replan_prompt(

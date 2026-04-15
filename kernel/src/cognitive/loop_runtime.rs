@@ -128,11 +128,30 @@ fn read_cwd_listing(cwd: &std::path::Path) -> Option<String> {
         .take(60)
         .map(|(is_dir, name)| if is_dir { format!("{name}/") } else { name })
         .collect();
-    if formatted.is_empty() {
+    let result = if formatted.is_empty() {
         None
     } else {
         Some(formatted.join("\n"))
+    };
+    // G8b diagnostic — TEMPORARY, remove after C3 verified
+    match &result {
+        Some(listing) => {
+            let entry_count = listing.lines().count();
+            eprintln!(
+                "[g8-diag] read_cwd_listing for {}: {} entries, first 200 chars: {}",
+                cwd.display(),
+                entry_count,
+                listing.chars().take(200).collect::<String>()
+            );
+        }
+        None => {
+            eprintln!(
+                "[g8-diag] read_cwd_listing for {}: None (empty or unreadable)",
+                cwd.display()
+            );
+        }
     }
+    result
 }
 
 /// Trait for executing planned actions. Separates execution from the loop logic.
