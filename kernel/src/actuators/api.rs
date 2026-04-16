@@ -53,10 +53,13 @@ impl GovernedApiClient {
 
     /// Check URL against egress allowlist.
     fn check_egress(url: &str, context: &ActuatorContext) -> Result<(), ActuatorError> {
+        // Scheme is stripped on both sides so `http://host` matches an
+        // `https://host` allowlist entry (see firewall::egress::strip_scheme).
+        let candidate = crate::firewall::egress::strip_scheme(url);
         let allowed = context
             .egress_allowlist
             .iter()
-            .any(|prefix| url.starts_with(prefix));
+            .any(|prefix| candidate.starts_with(crate::firewall::egress::strip_scheme(prefix)));
 
         if !allowed {
             return Err(ActuatorError::EgressDenied(format!(

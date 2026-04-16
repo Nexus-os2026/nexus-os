@@ -141,10 +141,13 @@ impl GovernedWeb {
 
     /// Check if a URL is allowed by the agent's egress allowlist.
     fn check_egress(url: &str, context: &ActuatorContext) -> Result<(), ActuatorError> {
+        // Scheme is stripped on both sides so `http://host` matches an
+        // `https://host` allowlist entry (see firewall::egress::strip_scheme).
+        let candidate = crate::firewall::egress::strip_scheme(url);
         let allowed = context
             .egress_allowlist
             .iter()
-            .any(|prefix| url.starts_with(prefix));
+            .any(|prefix| candidate.starts_with(crate::firewall::egress::strip_scheme(prefix)));
 
         if !allowed {
             return Err(ActuatorError::EgressDenied(format!(
@@ -603,6 +606,33 @@ mod tests {
         let ctx = make_context();
         assert!(GovernedWeb::check_egress("https://example.com/page", &ctx).is_ok());
         assert!(GovernedWeb::check_egress("https://other.com/page", &ctx).is_err());
+    }
+
+    #[test]
+    fn http_matches_https_allowlist() {
+        let ctx = make_context();
+        assert!(
+            GovernedWeb::check_egress("http://example.com/path", &ctx).is_ok(),
+            "http://host must match https://host allowlist entry"
+        );
+    }
+
+    #[test]
+    fn https_matches_https_allowlist() {
+        let ctx = make_context();
+        assert!(
+            GovernedWeb::check_egress("https://example.com/path", &ctx).is_ok(),
+            "https://host must still match https://host allowlist entry"
+        );
+    }
+
+    #[test]
+    fn different_host_still_blocked() {
+        let ctx = make_context();
+        assert!(
+            GovernedWeb::check_egress("http://evil.com", &ctx).is_err(),
+            "different host must stay blocked regardless of scheme"
+        );
     }
 
     #[test]

@@ -78,19 +78,43 @@ const DANGEROUS_PATTERNS: &[&str] = &[
 pub struct GovernedShell;
 
 impl GovernedShell {
+    /// Extract the binary name from a command string.
+    ///
+    /// Defensive handling for planner output that packs the binary and its
+    /// first argument into the `command` field (e.g. `"git status"` instead
+    /// of `command="git"`, `args=["status"]`). The binary name is everything
+    /// up to the first whitespace character.
+    pub(crate) fn extract_binary_name(command: &str) -> &str {
+        match command.split_once(char::is_whitespace) {
+            Some((binary, _rest)) => binary,
+            None => command,
+        }
+    }
+
     /// Validate command + args against allowlist and blocklist.
     fn validate_command(command: &str, args: &[String]) -> Result<(), ActuatorError> {
+        // If the planner packed the binary + extra args into `command`,
+        // split them so the blocklist/allowlist check sees only the binary
+        // and the subcommand check sees the first extra token as a subcommand.
+        let binary = Self::extract_binary_name(command);
+        let mut effective_args: Vec<String> = command
+            .split_whitespace()
+            .skip(1)
+            .map(str::to_string)
+            .collect();
+        effective_args.extend(args.iter().cloned());
+
         // Check blocklist
-        let cmd_lower = command.to_lowercase();
+        let cmd_lower = binary.to_lowercase();
         if COMMAND_BLOCKLIST.contains(&cmd_lower.as_str()) {
             return Err(ActuatorError::CommandBlocked(format!(
-                "command '{command}' is blocklisted"
+                "command '{binary}' is blocklisted"
             )));
         }
 
         // Check for python3 special case: only -c flag allowed
         if cmd_lower == "python3" || cmd_lower == "python" {
-            if args.first().map(|a| a.as_str()) != Some("-c") {
+            if effective_args.first().map(|a| a.as_str()) != Some("-c") {
                 return Err(ActuatorError::CommandBlocked(
                     "python3 only allowed with -c flag".into(),
                 ));
@@ -99,7 +123,7 @@ impl GovernedShell {
         }
 
         // Check dangerous patterns in full command string
-        let full_cmd = format!("{} {}", command, args.join(" "));
+        let full_cmd = format!("{} {}", binary, effective_args.join(" "));
         for pattern in DANGEROUS_PATTERNS {
             if full_cmd.contains(pattern) {
                 return Err(ActuatorError::CommandBlocked(format!(
@@ -116,13 +140,13 @@ impl GovernedShell {
         // Check subcommand-restricted commands
         for (restricted_cmd, allowed_subs) in SUBCOMMAND_ALLOWLIST {
             if cmd_lower == *restricted_cmd {
-                if let Some(sub) = args.first() {
+                if let Some(sub) = effective_args.first() {
                     let sub_lower = sub.to_lowercase();
                     if allowed_subs.contains(&sub_lower.as_str()) {
                         return Ok(());
                     }
                     return Err(ActuatorError::CommandBlocked(format!(
-                        "subcommand '{sub}' not allowed for '{command}'; allowed: {}",
+                        "subcommand '{sub}' not allowed for '{binary}'; allowed: {}",
                         allowed_subs.join(", ")
                     )));
                 }
@@ -132,7 +156,7 @@ impl GovernedShell {
         }
 
         Err(ActuatorError::CommandBlocked(format!(
-            "command '{command}' not in allowlist"
+            "command '{binary}' not in allowlist"
         )))
     }
 }
@@ -165,14 +189,25 @@ impl Actuator for GovernedShell {
 
         Self::validate_command(command, args)?;
 
+        // Defensive: if the planner packed extra tokens into `command`
+        // (e.g. `"git status"`), split them off so the binary is clean and
+        // the extra tokens are prepended to the arg list.
+        let binary = Self::extract_binary_name(command);
+        let mut effective_args: Vec<String> = command
+            .split_whitespace()
+            .skip(1)
+            .map(str::to_string)
+            .collect();
+        effective_args.extend(args.iter().cloned());
+
         // Run through `sh -c` so the shell resolves the command via its own PATH
         // (which includes /usr/bin, /usr/sbin, etc.). Command::new("free") fails
         // in Tauri because the parent process PATH is minimal — the binary isn't
         // found before spawn. Using sh -c also enables pipes and redirects.
-        let full_command = if args.is_empty() {
-            command.to_string()
+        let full_command = if effective_args.is_empty() {
+            binary.to_string()
         } else {
-            format!("{} {}", command, shell_escape_args(args))
+            format!("{} {}", binary, shell_escape_args(&effective_args))
         };
         // Ensure working directory exists (it may not for newly created agents)
         if !context.working_dir.exists() {
@@ -423,6 +458,40 @@ mod tests {
     fn git_disallowed_subcommand() {
         let err = GovernedShell::validate_command("git", &["rebase".into()]).unwrap_err();
         assert!(matches!(err, ActuatorError::CommandBlocked(_)));
+    }
+
+    #[test]
+    fn command_with_space_is_split() {
+        assert_eq!(GovernedShell::extract_binary_name("git status"), "git");
+        assert_eq!(GovernedShell::extract_binary_name("python3"), "python3");
+        assert_eq!(
+            GovernedShell::extract_binary_name("python3 -m pytest"),
+            "python3"
+        );
+    }
+
+    #[test]
+    fn shell_command_splits_compound_command() {
+        let tmp = TempDir::new().unwrap();
+        let ctx = make_context(tmp.path());
+        let shell = GovernedShell;
+
+        // Planner packed "hello" into the command field; extra arg in args.
+        let action = PlannedAction::ShellCommand {
+            command: "echo hello".into(),
+            args: vec!["world".into()],
+        };
+        let result = shell.execute(&action, &ctx).unwrap();
+        assert!(result.success);
+        let out = result.output.trim();
+        assert!(
+            out.contains("hello") && out.contains("world"),
+            "expected 'hello world' in output, got: {out:?}"
+        );
+
+        // Validation alone should accept "git status" with empty args.
+        GovernedShell::validate_command("git status", &[])
+            .expect("compound 'git status' command must validate");
     }
 
     #[test]

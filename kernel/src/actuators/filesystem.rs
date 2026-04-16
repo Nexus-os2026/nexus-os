@@ -25,13 +25,15 @@ const FUEL_COST_WRITE: f64 = 2.0;
 pub struct GovernedFilesystem;
 
 impl GovernedFilesystem {
-    /// Resolve a user-provided path relative to the agent's workspace,
-    /// rejecting any attempt to escape the sandbox.
     /// System paths that agents can read (but never write).
     /// These are safe because they're read-only virtual filesystems.
     const READABLE_SYSTEM_PREFIXES: &'static [&'static str] =
         &["/proc/", "/sys/class/", "/sys/devices/", "/etc/os-release"];
 
+    /// Resolves a user-supplied path to its canonical form.
+    /// Under Option B security posture, paths outside the workspace are permitted.
+    /// The blocklist (enforced in the shell actuator) is the only hard safety rail.
+    /// This function canonicalizes for symlink resolution, not for containment.
     pub(crate) fn resolve_safe_path(
         workspace: &Path,
         user_path: &str,
@@ -80,18 +82,6 @@ impl GovernedFilesystem {
                     .ok_or_else(|| ActuatorError::PathTraversal("no filename".into()))?,
             )
         };
-
-        let canonical_workspace = workspace
-            .canonicalize()
-            .map_err(|e| ActuatorError::IoError(format!("canonicalize workspace failed: {e}")))?;
-
-        if !canonical.starts_with(&canonical_workspace) {
-            return Err(ActuatorError::PathTraversal(format!(
-                "resolved path '{}' escapes workspace '{}'",
-                canonical.display(),
-                canonical_workspace.display()
-            )));
-        }
 
         Ok(canonical)
     }
@@ -248,16 +238,20 @@ mod tests {
     }
 
     #[test]
-    fn path_traversal_rejected() {
+    fn absolute_path_allowed() {
         let tmp = TempDir::new().unwrap();
-        let ctx = make_context(tmp.path());
-        let fs = GovernedFilesystem;
+        let workspace = tmp.path();
 
-        let action = PlannedAction::FileRead {
-            path: "../../etc/passwd".into(),
-        };
-        let err = fs.execute(&action, &ctx).unwrap_err();
-        assert!(matches!(err, ActuatorError::PathTraversal(_)));
+        let resolved = GovernedFilesystem::resolve_safe_path(workspace, "/tmp/test.txt")
+            .expect("Option B: absolute paths outside workspace must be permitted");
+        assert!(
+            resolved.ends_with("test.txt"),
+            "resolved path {resolved:?} should end with test.txt"
+        );
+        assert!(
+            resolved.to_string_lossy().contains("/tmp/"),
+            "resolved path {resolved:?} should be under /tmp"
+        );
     }
 
     #[test]

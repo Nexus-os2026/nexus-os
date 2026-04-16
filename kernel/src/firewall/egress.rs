@@ -14,6 +14,22 @@ use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
 
+/// Strip a leading `http://` or `https://` scheme from a URL.
+///
+/// Used by egress-allowlist comparisons so that an `http://host` candidate
+/// matches an `https://host` allowlist entry (planners sometimes emit one
+/// scheme while the manifest lists the other). Returns the input unchanged
+/// if neither prefix is present.
+pub fn strip_scheme(url: &str) -> &str {
+    if let Some(rest) = url.strip_prefix("https://") {
+        rest
+    } else if let Some(rest) = url.strip_prefix("http://") {
+        rest
+    } else {
+        url
+    }
+}
+
 /// Default rate limit: 60 requests per minute per endpoint.
 pub const DEFAULT_RATE_LIMIT_PER_MIN: u32 = 60;
 
@@ -125,10 +141,13 @@ impl EgressGovernor {
         };
 
         // Find the matching allowed endpoint prefix.
+        // Scheme is stripped on both sides so an `http://host` candidate
+        // matches an `https://host` allowlist entry (and vice versa).
+        let candidate_no_scheme = strip_scheme(url);
         let matched_prefix = policy
             .allowed_endpoints
             .iter()
-            .find(|prefix| url.starts_with(prefix.as_str()));
+            .find(|prefix| candidate_no_scheme.starts_with(strip_scheme(prefix.as_str())));
 
         let prefix = match matched_prefix {
             Some(p) => p.clone(),
