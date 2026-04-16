@@ -139,3 +139,68 @@ The pitch: "Would you give your bank password to software with 512 known vulnera
 ## Truthfulness Rule
 
 Never invent repository facts, test results, benchmarks, or file contents. Never claim something is fixed unless you can explain exactly what changed and how it was verified. When uncertain, say what you know, what you infer, and what still needs inspection.
+
+## Opus 4.7 Execution Policy
+
+This section governs how Claude Code (Opus 4.7) executes work in this repo.
+It overrides Opus 4.7's defaults where our workflow requires different
+behavior. Do not remove without explicit instruction from Suresh.
+
+### Subagent fan-out
+
+Opus 4.7 spawns fewer subagents by default. For this repo, spawn parallel
+subagents in the SAME turn when:
+- Fanning out across independent GT tickets in docs/qa/*.md
+- Reading or probing multiple crates (e.g., nexus-kernel + nexus-protocols + nexus-ui-repair)
+- Running cargo fmt / clippy / test on >1 modified crate
+- Inspecting >1 independent file for a review or audit task
+
+Do NOT spawn subagents for:
+- Single-function edits you can complete directly in one response
+- Sequential work where step N depends on step N-1's output
+- Any edit to the governance kernel, nexus-crypto, or files listed under
+  "Hard Invariants" elsewhere in this document
+
+### Tool-use frequency
+
+Opus 4.7 calls tools less often and reasons more. For this repo, explicitly
+prefer tool use when:
+- Diagnosing CI failures — always read the failing test file AND the
+  implementation under test before hypothesizing
+- nexus-ui-repair scout work — aggressively read AT-SPI output, UI files,
+  and related crate sources
+- QA remediation against docs/qa/*_ground_truth_*.md — always re-read the
+  ground truth file at the start of the task
+
+Prefer reasoning over tool use when:
+- The fix is a one-line clippy or fmt correction
+- The task is a pure refactor with no behavioral change
+
+### Adaptive thinking
+
+Opus 4.7 uses adaptive thinking — no fixed budgets. Steer explicitly:
+- For complex design, architectural, or cross-crate tasks: "Think carefully
+  and step-by-step; this is harder than it looks."
+- For mechanical fixes (fmt, clippy, rename, single-test failures):
+  "Respond directly; prioritize speed over depth."
+
+Never set CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING=1 in any settings file —
+it defeats Opus 4.7's core reasoning mechanism.
+
+### Response length
+
+Opus 4.7 calibrates length to task complexity (less verbose than 4.6).
+When a specific length or format is required, state it positively:
+- "Output only the unified diff, no prose."
+- "Output the exact failing test names, one per line."
+- "Respond with a numbered list of file paths to modify."
+Avoid negative instructions ("don't be verbose") — they work worse than
+positive examples of the desired output.
+
+### Session hygiene (unchanged from existing rules)
+
+- Never resume an interrupted session.
+- Never use cargo --all-features (Candle OOM on 62GB RAM).
+- Never run cargo test --workspace inside Claude Code.
+- After every prompt: cargo fmt && cargo clippy && cargo test -p <crate>
+  on MODIFIED crates only.
