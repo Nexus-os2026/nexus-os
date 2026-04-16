@@ -556,6 +556,14 @@ export interface ConsentNotification {
   batch_action_count?: number | null;
   batch_actions: string[];
   review_each_available?: boolean;
+  /** Origin surface: "chat" | "agents" | "mobile" | "approvals" | "system" | "unknown" */
+  source_surface: string;
+  /** Approval status: "pending" | "approved" | "denied" | "expired" | "cancelled" */
+  status: string;
+  /** RFC3339 timestamp when approval was resolved. */
+  resolved_at?: string | null;
+  /** ID of user/system that resolved the approval. */
+  resolved_by?: string | null;
 }
 
 // ── Protocols Dashboard Types ──

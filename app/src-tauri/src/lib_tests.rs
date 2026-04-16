@@ -2924,12 +2924,14 @@ fn test_batch_approve_consents_resolves_goal_rows() {
         json!({"summary": "other", "goal_id": "goal-other"}),
     );
 
-    let resolved = batch_approve_consents(&state, "goal-batch".into(), "user".into())
+    let (resolved, meta) = batch_approve_consents(&state, "goal-batch".into(), "user".into())
         .unwrap_or_else(|e| {
             eprintln!("operation failed: {e}");
             std::process::exit(1)
         });
     assert_eq!(resolved.len(), 2);
+    assert_eq!(meta.agent_id, "a1");
+    assert_eq!(meta.source_surface, "unknown");
 
     let pending = list_pending_consents(&state).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
@@ -2951,10 +2953,12 @@ fn test_review_consent_batch_resolves_pending_request() {
         json!({"summary": "batch", "goal_id": "goal-review", "review_each_available": true}),
     );
 
-    review_consent_batch(&state, "c-review-batch-1".into(), "user".into()).unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
+    let meta = review_consent_batch(&state, "c-review-batch-1".into(), "user".into())
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+    assert_eq!(meta.agent_id, "a1");
 
     let pending = list_pending_consents(&state).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
@@ -2966,9 +2970,9 @@ fn test_review_consent_batch_resolves_pending_request() {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
-    assert!(history.iter().any(|item| {
-        item.consent_id == "c-review-batch-1" && item.risk_level.ends_with(":review_each")
-    }));
+    assert!(history
+        .iter()
+        .any(|item| { item.consent_id == "c-review-batch-1" && item.status == "review_each" }));
 }
 
 #[test]
@@ -2991,7 +2995,7 @@ fn test_batch_deny_consents_resolves_goal_rows() {
         json!({"summary": "single", "goal_id": "goal-deny"}),
     );
 
-    let resolved = batch_deny_consents(
+    let (resolved, meta) = batch_deny_consents(
         &state,
         "goal-deny".into(),
         "user".into(),
@@ -3002,6 +3006,8 @@ fn test_batch_deny_consents_resolves_goal_rows() {
         std::process::exit(1)
     });
     assert_eq!(resolved.len(), 2);
+    assert_eq!(meta.agent_id, "a1");
+    assert_eq!(meta.source_surface, "unknown");
     assert!(list_pending_consents(&state)
         .unwrap_or_else(|e| {
             eprintln!("operation failed: {e}");

@@ -157,12 +157,15 @@ export function InlineApprovalBanner({
     return () => clearInterval(t);
   }, [pending.length]);
 
-  // Fix G9: when the user is on the Chat page, AiChatHub's consent-pending
-  // listener already surfaces every pending consent inline in the active
-  // conversation, so suppress the floating banner to avoid duplicate UX.
-  // Banner remains the canonical surface on every non-chat page.
-  const onChatPage = currentPage === "ai-chat-hub" || currentPage === "chat";
-  const visiblePending = onChatPage ? [] : pending;
+  // Suppress the floating banner on pages that render inline approval UX:
+  // - Chat (AiChatHub): approval cards injected into the conversation stream
+  // - Agents: inline approval panel rendered in AgentOutputPanel
+  // Banner remains the canonical surface on every other page (dashboard, etc.).
+  const suppressedPage =
+    currentPage === "ai-chat-hub" ||
+    currentPage === "chat" ||
+    currentPage === "agents";
+  const visiblePending = suppressedPage ? [] : pending;
 
   if (visiblePending.length === 0) return null;
 

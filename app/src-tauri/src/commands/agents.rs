@@ -308,6 +308,7 @@ pub(crate) fn enqueue_transcendent_review(
         "min_review_seconds": 60,
         "mode": mode,
         "manifest_json": manifest_json,
+        "source_surface": "agents",
     });
     let now = chrono::Utc::now().to_rfc3339();
     state

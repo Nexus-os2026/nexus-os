@@ -1140,19 +1140,22 @@ export default function App(): JSX.Element {
             ]);
           });
 
-          // Listen for goal completion
-          const goalDone = new Promise<{ success: boolean; reason?: string; result_summary?: string }>((resolve) => {
+          // Listen for goal completion (goalId filter set after executeAgentGoal)
+          let activeGoalId = "";
+          let unlistenGoalDone: (() => void) | undefined;
+          const goalDone = new Promise<{ success: boolean; reason?: string; result_summary?: string; final_output?: string }>((resolve) => {
             eventMod.listen<{
-              agent_id: string; goal_id: string; success: boolean; reason?: string; result_summary?: string;
+              agent_id: string; goal_id: string; success: boolean; reason?: string; result_summary?: string; final_output?: string;
             }>("agent-goal-completed", (event) => {
               const p = event?.payload;
-              if (p && p.agent_id === selectedAgent) {
+              if (p && p.agent_id === selectedAgent && (!activeGoalId || p.goal_id === activeGoalId)) {
                 resolve(p);
               }
-            });
+            }).then((fn) => { unlistenGoalDone = fn; });
           });
 
           const goalId = await executeAgentGoal(selectedAgent, input, 5);
+          activeGoalId = goalId;
           stepMessages.push(`Goal assigned: ${goalId}`);
           setMessages((prev) =>
             prev.map((m) =>
@@ -1165,14 +1168,14 @@ export default function App(): JSX.Element {
           // Wait for completion (with 10-minute timeout)
           const result = await Promise.race([
             goalDone,
-            new Promise<{ success: boolean; reason?: string; result_summary?: string }>((resolve) =>
+            new Promise<{ success: boolean; reason?: string; result_summary?: string; final_output?: string }>((resolve) =>
               setTimeout(() => resolve({ success: false, reason: "Timed out after 10 minutes waiting for the agent to finish." }), 600_000)
             ),
           ]);
 
           const summary = result.success
-            ? (result.result_summary || "Goal completed successfully.")
-            : (result.result_summary || result.reason || "Goal failed — unknown error. Check the audit log for details.");
+            ? (result.final_output || result.result_summary || "Goal completed successfully.")
+            : (result.final_output || result.result_summary || result.reason || "Goal failed — unknown error. Check the audit log for details.");
           stepMessages.push(summary);
           const finalVariant = result.success ? undefined : ("error" as const);
           setMessages((prev) =>
@@ -1185,6 +1188,7 @@ export default function App(): JSX.Element {
           unlistenCycle();
           unlistenBlocked();
           unlistenResumed();
+          unlistenGoalDone?.();
           setRuntimeError(null);
           play(result.success ? "notification" : "error");
           bumpActivity();

@@ -112,6 +112,14 @@ pub struct ConsentNotification {
     pub batch_action_count: Option<u32>,
     pub batch_actions: Vec<String>,
     pub review_each_available: bool,
+    /// Origin surface: "chat" | "agents" | "mobile" | "approvals" | "system" | "unknown"
+    pub source_surface: String,
+    /// Approval status: "pending" | "approved" | "denied" | "expired" | "cancelled"
+    pub status: String,
+    /// RFC3339 timestamp when approval was resolved (None while pending).
+    pub resolved_at: Option<String>,
+    /// ID of user/system that resolved the approval.
+    pub resolved_by: Option<String>,
 }
 
 /// Compute the auto-deny deadline given a risk level and creation timestamp.
@@ -197,6 +205,17 @@ pub(crate) fn consent_row_to_notification(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let source_surface = op_json
+        .get("source_surface")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+    // Validate source_surface to controlled set
+    let source_surface = match source_surface.as_str() {
+        "chat" | "agents" | "mobile" | "approvals" | "system" => source_surface,
+        _ => "unknown".to_string(),
+    };
+
     ConsentNotification {
         consent_id: row.id.clone(),
         agent_id: row.agent_id.clone(),
@@ -213,14 +232,25 @@ pub(crate) fn consent_row_to_notification(
         batch_action_count,
         batch_actions,
         review_each_available,
+        source_surface,
+        status: row.status.clone(),
+        resolved_at: row.resolved_at.clone(),
+        resolved_by: row.resolved_by.clone(),
     }
+}
+
+/// Metadata returned after resolving a consent request, for event emission.
+#[derive(Debug, Clone)]
+pub struct ConsentResolutionMeta {
+    pub agent_id: String,
+    pub source_surface: String,
 }
 
 pub fn approve_consent_request(
     state: &AppState,
     consent_id: String,
     approved_by: String,
-) -> Result<(), String> {
+) -> Result<ConsentResolutionMeta, String> {
     // Look up agent_id from pending consents in DB
     let pending = state
         .db
@@ -233,6 +263,11 @@ pub fn approve_consent_request(
     let agent_id_str = consent_row.agent_id.clone();
     let op_json: serde_json::Value =
         serde_json::from_str(&consent_row.operation_json).unwrap_or(json!({}));
+    let source_surface = op_json
+        .get("source_surface")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
 
     // 1. Resolve in database
     state
@@ -309,7 +344,10 @@ pub fn approve_consent_request(
         }),
     );
 
-    Ok(())
+    Ok(ConsentResolutionMeta {
+        agent_id: agent_id_str,
+        source_surface,
+    })
 }
 
 pub(crate) fn deny_consent_request(
@@ -317,7 +355,7 @@ pub(crate) fn deny_consent_request(
     consent_id: String,
     denied_by: String,
     reason: Option<String>,
-) -> Result<(), String> {
+) -> Result<ConsentResolutionMeta, String> {
     // Look up agent_id from pending consents in DB
     let pending = state
         .db
@@ -330,6 +368,11 @@ pub(crate) fn deny_consent_request(
     let agent_id_str = consent_row.agent_id.clone();
     let op_json: serde_json::Value =
         serde_json::from_str(&consent_row.operation_json).unwrap_or(json!({}));
+    let source_surface = op_json
+        .get("source_surface")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
 
     // 1. Resolve in database
     state
@@ -375,14 +418,17 @@ pub(crate) fn deny_consent_request(
         }),
     );
 
-    Ok(())
+    Ok(ConsentResolutionMeta {
+        agent_id: agent_id_str,
+        source_surface,
+    })
 }
 
 pub(crate) fn batch_approve_consents(
     state: &AppState,
     goal_id: String,
     approved_by: String,
-) -> Result<Vec<String>, String> {
+) -> Result<(Vec<String>, ConsentResolutionMeta), String> {
     let consent_rows = consent_rows_for_goal(state, &goal_id)?;
     if consent_rows.is_empty() {
         return Err(format!(
@@ -391,6 +437,13 @@ pub(crate) fn batch_approve_consents(
     }
 
     let agent_id = consent_rows[0].agent_id.clone();
+    let first_op_json: serde_json::Value =
+        serde_json::from_str(&consent_rows[0].operation_json).unwrap_or(json!({}));
+    let source_surface = first_op_json
+        .get("source_surface")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
     let approval_count = state
         .cognitive_runtime
         .pending_hitl_steps(&agent_id)
@@ -431,14 +484,20 @@ pub(crate) fn batch_approve_consents(
         }),
     );
 
-    Ok(resolved_ids)
+    Ok((
+        resolved_ids,
+        ConsentResolutionMeta {
+            agent_id,
+            source_surface,
+        },
+    ))
 }
 
 pub(crate) fn review_consent_batch(
     state: &AppState,
     consent_id: String,
     reviewed_by: String,
-) -> Result<(), String> {
+) -> Result<ConsentResolutionMeta, String> {
     let pending = state
         .db
         .load_pending_consent()
@@ -447,6 +506,14 @@ pub(crate) fn review_consent_batch(
         .iter()
         .find(|row| row.id == consent_id)
         .ok_or_else(|| format!("consent request '{consent_id}' not found or already resolved"))?;
+    let op_json: serde_json::Value =
+        serde_json::from_str(&consent_row.operation_json).unwrap_or(json!({}));
+    let source_surface = op_json
+        .get("source_surface")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+    let agent_id = consent_row.agent_id.clone();
 
     state
         .db
@@ -468,7 +535,10 @@ pub(crate) fn review_consent_batch(
         }),
     );
 
-    Ok(())
+    Ok(ConsentResolutionMeta {
+        agent_id,
+        source_surface,
+    })
 }
 
 pub(crate) fn batch_deny_consents(
@@ -476,7 +546,7 @@ pub(crate) fn batch_deny_consents(
     goal_id: String,
     denied_by: String,
     reason: Option<String>,
-) -> Result<Vec<String>, String> {
+) -> Result<(Vec<String>, ConsentResolutionMeta), String> {
     let consent_rows = consent_rows_for_goal(state, &goal_id)?;
     if consent_rows.is_empty() {
         return Err(format!(
@@ -485,6 +555,13 @@ pub(crate) fn batch_deny_consents(
     }
 
     let agent_id = consent_rows[0].agent_id.clone();
+    let first_op_json: serde_json::Value =
+        serde_json::from_str(&consent_rows[0].operation_json).unwrap_or(json!({}));
+    let source_surface = first_op_json
+        .get("source_surface")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
     let deny_reason = reason
         .clone()
         .unwrap_or_else(|| "Consent batch denied by user".to_string());
@@ -518,7 +595,13 @@ pub(crate) fn batch_deny_consents(
         }),
     );
 
-    Ok(resolved_ids)
+    Ok((
+        resolved_ids,
+        ConsentResolutionMeta {
+            agent_id,
+            source_surface,
+        },
+    ))
 }
 
 pub(crate) fn list_pending_consents(state: &AppState) -> Result<Vec<ConsentNotification>, String> {
@@ -562,12 +645,7 @@ pub(crate) fn get_consent_history(
                 .ok()
                 .and_then(|uuid| meta.get(&uuid).map(|m| m.name.clone()))
                 .unwrap_or_else(|| row.agent_id.clone());
-            let mut notif = consent_row_to_notification(row, &agent_name);
-            // For resolved items, include the status info in risk_level field
-            if row.status != "pending" {
-                notif.risk_level = format!("{}:{}", tier_to_risk_level(&row.hitl_tier), row.status);
-            }
-            notif
+            consent_row_to_notification(row, &agent_name)
         })
         .collect();
     Ok(notifications)

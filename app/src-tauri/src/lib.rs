@@ -9434,11 +9434,16 @@ pub mod runtime {
         consent_id: String,
         approved_by: String,
     ) -> Result<(), String> {
-        super::approve_consent_request(state.inner(), consent_id.clone(), approved_by)?;
+        let meta = super::approve_consent_request(state.inner(), consent_id.clone(), approved_by)?;
         // Best-effort: notify frontend that consent was resolved
         let _ = window.emit(
             "consent-resolved",
-            serde_json::json!({"consent_id": consent_id, "status": "approved"}),
+            serde_json::json!({
+                "consent_id": consent_id,
+                "status": "approved",
+                "agent_id": meta.agent_id,
+                "source_surface": meta.source_surface,
+            }),
         );
         Ok(())
     }
@@ -9451,11 +9456,17 @@ pub mod runtime {
         denied_by: String,
         reason: Option<String>,
     ) -> Result<(), String> {
-        super::deny_consent_request(state.inner(), consent_id.clone(), denied_by, reason)?;
+        let meta =
+            super::deny_consent_request(state.inner(), consent_id.clone(), denied_by, reason)?;
         // Best-effort: notify frontend that consent was resolved
         let _ = window.emit(
             "consent-resolved",
-            serde_json::json!({"consent_id": consent_id, "status": "denied"}),
+            serde_json::json!({
+                "consent_id": consent_id,
+                "status": "denied",
+                "agent_id": meta.agent_id,
+                "source_surface": meta.source_surface,
+            }),
         );
         Ok(())
     }
@@ -9479,12 +9490,18 @@ pub mod runtime {
         goal_id: String,
         approved_by: String,
     ) -> Result<(), String> {
-        let consent_ids = super::batch_approve_consents(state.inner(), goal_id, approved_by)?;
+        let (consent_ids, meta) =
+            super::batch_approve_consents(state.inner(), goal_id, approved_by)?;
         for consent_id in consent_ids {
             // Best-effort: notify frontend of each resolved consent
             let _ = window.emit(
                 "consent-resolved",
-                serde_json::json!({"consent_id": consent_id, "status": "approved"}),
+                serde_json::json!({
+                    "consent_id": consent_id,
+                    "status": "approved",
+                    "agent_id": meta.agent_id,
+                    "source_surface": meta.source_surface,
+                }),
             );
         }
         Ok(())
@@ -9497,11 +9514,16 @@ pub mod runtime {
         consent_id: String,
         reviewed_by: String,
     ) -> Result<(), String> {
-        super::review_consent_batch(state.inner(), consent_id.clone(), reviewed_by)?;
+        let meta = super::review_consent_batch(state.inner(), consent_id.clone(), reviewed_by)?;
         // Best-effort: notify frontend that consent entered review-each mode
         let _ = window.emit(
             "consent-resolved",
-            serde_json::json!({"consent_id": consent_id, "status": "review_each"}),
+            serde_json::json!({
+                "consent_id": consent_id,
+                "status": "review_each",
+                "agent_id": meta.agent_id,
+                "source_surface": meta.source_surface,
+            }),
         );
         Ok(())
     }
@@ -9514,12 +9536,18 @@ pub mod runtime {
         denied_by: String,
         reason: Option<String>,
     ) -> Result<(), String> {
-        let consent_ids = super::batch_deny_consents(state.inner(), goal_id, denied_by, reason)?;
+        let (consent_ids, meta) =
+            super::batch_deny_consents(state.inner(), goal_id, denied_by, reason)?;
         for consent_id in consent_ids {
             // Best-effort: notify frontend of each resolved consent
             let _ = window.emit(
                 "consent-resolved",
-                serde_json::json!({"consent_id": consent_id, "status": "denied"}),
+                serde_json::json!({
+                    "consent_id": consent_id,
+                    "status": "denied",
+                    "agent_id": meta.agent_id,
+                    "source_surface": meta.source_surface,
+                }),
             );
         }
         Ok(())

@@ -393,12 +393,56 @@ function StatsBar({ stats }: { stats: HitlStats | null }) {
 
 // ── Main Component ──
 
+type LedgerTab = "all" | "pending" | "approved" | "denied";
+
+const SURFACE_LABELS: Record<string, string> = {
+  chat: "Chat",
+  agents: "Agents",
+  mobile: "Mobile",
+  approvals: "Approvals",
+  system: "System",
+  unknown: "Unknown",
+};
+
+function surfaceBadgeColor(surface: string): { bg: string; border: string; text: string } {
+  switch (surface) {
+    case "chat": return { bg: "rgba(96, 165, 250, 0.12)", border: "#60a5fa44", text: "#93c5fd" };
+    case "agents": return { bg: "rgba(168, 85, 247, 0.12)", border: "#a855f744", text: "#c084fc" };
+    case "mobile": return { bg: "rgba(34, 211, 238, 0.12)", border: "#22d3ee44", text: "#67e8f9" };
+    case "system": return { bg: "rgba(251, 191, 36, 0.12)", border: "#fbbf2444", text: "#fcd34d" };
+    default: return { bg: "rgba(148, 163, 184, 0.12)", border: "#94a3b844", text: "#94a3b8" };
+  }
+}
+
+function statusColor(status: string): string {
+  switch (status) {
+    case "approved": return "#4ade80";
+    case "denied": return "#f87171";
+    case "expired": return "#fb923c";
+    case "cancelled": return "#94a3b8";
+    default: return "#facc15";
+  }
+}
+
+function formatTimestamp(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, {
+      month: "short", day: "numeric",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 export default function ApprovalCenter(): JSX.Element {
   const [pending, setPending] = useState<ConsentNotification[]>([]);
   const [history, setHistory] = useState<ConsentNotification[]>([]);
   const [stats, setStats] = useState<HitlStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<LedgerTab>("all");
   const unlistenRef = useRef<(() => void)[]>([]);
   const isDesktop = hasDesktopRuntime();
 
@@ -622,8 +666,42 @@ export default function ApprovalCenter(): JSX.Element {
         </div>
       )}
 
-      {/* Pending section */}
+      {/* Tab bar */}
       {isDesktop && (
+        <div style={{ display: "flex", gap: "0.25rem", marginBottom: "1.25rem" }}>
+          {(["all", "pending", "approved", "denied"] as LedgerTab[]).map((tab) => {
+            const active = activeTab === tab;
+            let count = 0;
+            if (tab === "all") count = pending.length + history.length;
+            else if (tab === "pending") count = pending.length;
+            else count = history.filter((h) => h.status === tab).length;
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  background: active ? "rgba(96, 165, 250, 0.15)" : "transparent",
+                  border: active ? "1px solid #60a5fa44" : "1px solid transparent",
+                  color: active ? "#93c5fd" : "#94a3b8",
+                  padding: "0.35rem 0.9rem",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  fontFamily: "var(--font-mono, monospace)",
+                  fontSize: "0.8rem",
+                  fontWeight: active ? 600 : 400,
+                  textTransform: "capitalize",
+                }}
+              >
+                {tab}{count > 0 ? ` (${count})` : ""}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pending section — visible on "all" and "pending" tabs */}
+      {isDesktop && (activeTab === "all" || activeTab === "pending") && (
         <div style={{ marginBottom: "2rem" }}>
           <h3
             style={{
@@ -666,89 +744,149 @@ export default function ApprovalCenter(): JSX.Element {
         </div>
       )}
 
-      {/* History section */}
-      {isDesktop && history.length > 0 && (
-        <div>
-          <h3
-            style={{
-              fontFamily: "var(--font-display, monospace)",
-              color: "var(--text-primary, #e2e8f0)",
-              fontSize: "1rem",
-              marginBottom: "0.75rem",
-            }}
-          >
-            Recent Decisions
-          </h3>
-          <div
-            style={{
-              background: "var(--bg-secondary, #1e293b)",
-              border: "1px solid var(--border, #334155)",
-              borderRadius: 10,
-              overflow: "hidden",
-            }}
-          >
-            {history.map((item, i) => {
-              const parts = item.risk_level.split(":");
-              const riskBase = parts[0];
-              const status = parts[1] ?? "pending";
-              const rc = riskColor(riskBase);
-              return (
-                <div
-                  key={item.consent_id + i}
-                  style={{
-                    padding: "0.65rem 1rem",
-                    borderBottom: i < history.length - 1 ? "1px solid var(--border, #334155)" : "none",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    {status === "approved" ? (
-                      <CheckCircle size={14} style={{ color: "#4ade80" }} />
-                    ) : status === "denied" ? (
-                      <XCircle size={14} style={{ color: "#f87171" }} />
-                    ) : (
-                      <Clock size={14} style={{ color: "#facc15" }} />
-                    )}
-                    <span style={{ color: "var(--text-primary, #e2e8f0)", fontSize: "0.85rem" }}>
-                      {item.agent_name}
-                    </span>
-                    <span style={{ color: "var(--text-secondary, #64748b)", fontSize: "0.8rem" }}>
-                      {item.operation_summary}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <span
-                      style={{
-                        background: rc.bg,
-                        border: `1px solid ${rc.border}`,
-                        color: rc.text,
-                        padding: "0.1rem 0.4rem",
-                        borderRadius: 4,
-                        fontSize: "0.7rem",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {riskBase}
-                    </span>
-                    <span
-                      style={{
-                        color: status === "approved" ? "#4ade80" : status === "denied" ? "#f87171" : "#facc15",
-                        fontSize: "0.75rem",
+      {/* Ledger / History section */}
+      {isDesktop && (() => {
+        const filteredHistory = activeTab === "all"
+          ? history
+          : activeTab === "pending"
+            ? []
+            : history.filter((h) => h.status === activeTab);
+        if (activeTab === "pending" || filteredHistory.length === 0) return null;
+        return (
+          <div>
+            <h3
+              style={{
+                fontFamily: "var(--font-display, monospace)",
+                color: "var(--text-primary, #e2e8f0)",
+                fontSize: "1rem",
+                marginBottom: "0.75rem",
+              }}
+            >
+              {activeTab === "all" ? "Approval Ledger" : `${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Decisions`}
+            </h3>
+            <div
+              style={{
+                background: "var(--bg-secondary, #1e293b)",
+                border: "1px solid var(--border, #334155)",
+                borderRadius: 10,
+                overflow: "hidden",
+              }}
+            >
+              {/* Table header */}
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "auto 1fr auto auto auto auto",
+                gap: "0.5rem",
+                padding: "0.5rem 1rem",
+                fontSize: "0.7rem",
+                color: "#64748b",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                borderBottom: "1px solid var(--border, #334155)",
+                letterSpacing: "0.05em",
+              }}>
+                <span>Status</span>
+                <span>Action</span>
+                <span>Source</span>
+                <span>Risk</span>
+                <span>Created</span>
+                <span>Resolved</span>
+              </div>
+              {filteredHistory.map((item, i) => {
+                const rc = riskColor(item.risk_level);
+                const sc = surfaceBadgeColor(item.source_surface);
+                return (
+                  <div
+                    key={item.consent_id + i}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "auto 1fr auto auto auto auto",
+                      gap: "0.5rem",
+                      padding: "0.55rem 1rem",
+                      borderBottom: i < filteredHistory.length - 1 ? "1px solid var(--border, #334155)" : "none",
+                      alignItems: "center",
+                    }}
+                  >
+                    {/* Status icon + label */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                      {item.status === "approved" ? (
+                        <CheckCircle size={13} style={{ color: "#4ade80" }} />
+                      ) : item.status === "denied" ? (
+                        <XCircle size={13} style={{ color: "#f87171" }} />
+                      ) : item.status === "expired" ? (
+                        <Clock size={13} style={{ color: "#fb923c" }} />
+                      ) : (
+                        <Clock size={13} style={{ color: "#facc15" }} />
+                      )}
+                      <span style={{
+                        color: statusColor(item.status),
+                        fontSize: "0.72rem",
                         fontWeight: 600,
                         textTransform: "uppercase",
-                      }}
-                    >
-                      {status}
+                      }}>
+                        {item.status}
+                      </span>
+                    </div>
+                    {/* Action summary */}
+                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <span style={{ color: "var(--text-primary, #e2e8f0)", fontSize: "0.82rem" }}>
+                        {item.agent_name}
+                      </span>
+                      <span style={{ color: "var(--text-secondary, #64748b)", fontSize: "0.78rem", marginLeft: "0.4rem" }}>
+                        {item.operation_summary}
+                      </span>
+                    </div>
+                    {/* Source surface badge */}
+                    <span style={{
+                      background: sc.bg,
+                      border: `1px solid ${sc.border}`,
+                      color: sc.text,
+                      padding: "0.1rem 0.4rem",
+                      borderRadius: 4,
+                      fontSize: "0.68rem",
+                      fontWeight: 500,
+                      whiteSpace: "nowrap",
+                    }}>
+                      {SURFACE_LABELS[item.source_surface] ?? item.source_surface}
+                    </span>
+                    {/* Risk badge */}
+                    <span style={{
+                      background: rc.bg,
+                      border: `1px solid ${rc.border}`,
+                      color: rc.text,
+                      padding: "0.1rem 0.4rem",
+                      borderRadius: 4,
+                      fontSize: "0.68rem",
+                      fontWeight: 600,
+                    }}>
+                      {item.risk_level}
+                    </span>
+                    {/* Created timestamp */}
+                    <span style={{ color: "#94a3b8", fontSize: "0.72rem", whiteSpace: "nowrap" }}>
+                      {formatTimestamp(item.requested_at)}
+                    </span>
+                    {/* Resolved timestamp + by */}
+                    <span style={{ color: "#94a3b8", fontSize: "0.72rem", whiteSpace: "nowrap" }}>
+                      {item.resolved_at ? (
+                        <>
+                          {formatTimestamp(item.resolved_at)}
+                          {item.resolved_by && (
+                            <span style={{ color: "#64748b", marginLeft: "0.3rem" }}>
+                              by {item.resolved_by}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        "\u2014"
+                      )}
                     </span>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

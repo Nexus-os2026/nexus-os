@@ -558,6 +558,7 @@ export default function AiChatHub() {
   // Agent control state
   const [preinstalledAgents, setPreinstalledAgents] = useState<PreinstalledAgent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<SelectedAgent | null>(null);
+  const selectedAgentIdRef = useRef<string | null>(null);
   const [agentStatus, setAgentStatus] = useState<AgentRunStatus>("Idle");
   const [showAgentDropdown, setShowAgentDropdown] = useState(false);
   const [showAgentLogs, setShowAgentLogs] = useState(false);
@@ -721,6 +722,17 @@ export default function AiChatHub() {
             if (alreadyHasApprovalCard(prev, notification.consent_id)) {
               return prev;
             }
+            // Only render approval cards in chat when:
+            // 1. The notification's agent matches the currently selected agent in this
+            //    chat session (explicit conversation/session match), OR
+            // 2. The source_surface is "chat" (warden review from chat LLM path)
+            // Otherwise, this approval belongs to another surface (Agents page, etc.)
+            const agentMatchesSession =
+              selectedAgentIdRef.current != null &&
+              notification.agent_id === selectedAgentIdRef.current;
+            if (!agentMatchesSession && notification.source_surface !== "chat") {
+              return prev;
+            }
             return prev.map(c => {
               if (c.id !== activeConvId) return c;
               const approvalMsg: ChatMsg = {
@@ -850,6 +862,7 @@ export default function AiChatHub() {
 
   const selectAgent = useCallback((agent: PreinstalledAgent) => {
     const status = normalizeAgentRunStatus(agent.status);
+    selectedAgentIdRef.current = agent.agent_id;
     setSelectedAgent({
       agent_id: agent.agent_id,
       name: agent.name,

@@ -1755,6 +1755,7 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
                                 "batch_action_count": batch_actions.len(),
                                 "batch_actions": batch_actions.clone(),
                                 "review_each_available": true,
+                                "source_surface": "agents",
                             })
                         } else {
                             let single_action = pending_hitl_steps
@@ -1768,6 +1769,7 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
                                 "phase": status.as_ref().map(|s| format!("{}", s.phase)).unwrap_or_else(|| "blocked".to_string()),
                                 "fuel_cost": 5.0,
                                 "side_effects": [single_action],
+                                "source_surface": "agents",
                             })
                         };
 
@@ -1846,7 +1848,12 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
 
                         bridge.emit(
                             "consent-resolved",
-                            json!({"consent_id": consent_id, "status": &resolution_status}),
+                            json!({
+                                "consent_id": consent_id,
+                                "status": &resolution_status,
+                                "agent_id": &agent_id,
+                                "source_surface": "agents",
+                            }),
                         );
 
                         if resolution_status == "approved" {

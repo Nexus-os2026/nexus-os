@@ -1452,7 +1452,8 @@ pub(crate) fn create_warden_consent_request(
         "goal_id": state
             .cognitive_runtime
             .get_agent_status(agent_id)
-            .and_then(|status| status.active_goal.map(|goal| goal.id))
+            .and_then(|status| status.active_goal.map(|goal| goal.id)),
+        "source_surface": "chat",
     });
     let row = nexus_persistence::ConsentRow {
         id: consent_id.clone(),
