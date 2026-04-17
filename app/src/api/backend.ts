@@ -1288,6 +1288,7 @@ export function executeAgentGoal(
   agentId: string,
   goalDescription: string,
   priority: number,
+  model?: string,
 ): Promise<string> {
   return invokeDesktop<string>("execute_agent_goal", {
     agentId,
@@ -1295,6 +1296,8 @@ export function executeAgentGoal(
     goalDescription,
     goal_description: goalDescription,
     priority,
+    modelOverride: model ?? null,
+    model_override: model ?? null,
   });
 }
 

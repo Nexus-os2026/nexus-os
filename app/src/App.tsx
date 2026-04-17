@@ -1154,7 +1154,11 @@ export default function App(): JSX.Element {
             }).then((fn) => { unlistenGoalDone = fn; });
           });
 
-          const goalId = await executeAgentGoal(selectedAgent, input, 5);
+          const effectiveModel =
+            !selectedModel || selectedModel === "mock" || selectedModel === "auto"
+              ? undefined
+              : selectedModel;
+          const goalId = await executeAgentGoal(selectedAgent, input, 5, effectiveModel);
           activeGoalId = goalId;
           stepMessages.push(`Goal assigned: ${goalId}`);
           setMessages((prev) =>
