@@ -99,6 +99,7 @@ pub(crate) fn assign_agent_goal(
     agent_id: String,
     goal_description: String,
     priority: u8,
+    model_override: Option<String>,
 ) -> Result<String, String> {
     state.check_rate(nexus_kernel::rate_limit::RateCategory::AgentExecute)?;
     state.validate_input(&goal_description)?;
@@ -109,6 +110,7 @@ pub(crate) fn assign_agent_goal(
     );
     let mut goal = nexus_kernel::cognitive::AgentGoal::new(effective_goal_description, priority);
     goal.user_goal = goal_description.clone();
+    goal.model_override = normalize_model_override(model_override);
     let goal_id = goal.id.clone();
     state
         .cognitive_runtime
@@ -120,6 +122,23 @@ pub(crate) fn assign_agent_goal(
         json!({"action": "assign_agent_goal", "agent_id": agent_id, "goal_id": goal_id}),
     );
     Ok(goal_id)
+}
+
+/// Normalize a raw model override value into `Option<String>`.
+///
+/// Sentinels `""`, `"auto"`, `"mock"` all collapse to `None` so existing
+/// manifest/auto-resolver fallback applies. Any other non-empty string is
+/// preserved as an explicit override.
+pub(crate) fn normalize_model_override(raw: Option<String>) -> Option<String> {
+    let trimmed = raw.map(|value| value.trim().to_string())?;
+    if trimmed.is_empty() {
+        return None;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    if lower == "auto" || lower == "mock" {
+        return None;
+    }
+    Some(trimmed)
 }
 
 pub(crate) fn persist_task_start(state: &AppState, agent_id: &str, goal_id: &str) {
@@ -1171,6 +1190,7 @@ impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
             agent_id.to_string(),
             default_goal.to_string(),
             5,
+            None,
         )?;
         self.state.log_event(
             agent_uuid,
@@ -1209,7 +1229,7 @@ pub(crate) struct RunnerGoalCallback {
 
 impl nexus_kernel::scheduler::ScheduleGoalCallback for RunnerGoalCallback {
     fn execute_goal(&self, agent_id: &str, goal: &str) -> Result<String, String> {
-        execute_agent_goal(&self.state, agent_id.to_string(), goal.to_string(), 5)
+        execute_agent_goal(&self.state, agent_id.to_string(), goal.to_string(), 5, None)
     }
 }
 
@@ -1325,10 +1345,17 @@ pub fn execute_agent_goal(
     agent_id: String,
     goal_description: String,
     priority: u8,
+    model_override: Option<String>,
 ) -> Result<String, String> {
     let before_snapshot = capture_agent_snapshot(state, &agent_id);
     // Assign the goal to the cognitive runtime
-    let goal_id = assign_agent_goal(state, agent_id.clone(), goal_description, priority)?;
+    let goal_id = assign_agent_goal(
+        state,
+        agent_id.clone(),
+        goal_description,
+        priority,
+        model_override,
+    )?;
     persist_task_start(state, &agent_id, &goal_id);
     let after_snapshot = capture_agent_snapshot(state, &agent_id);
     record_agent_execution_checkpoint(
@@ -2039,7 +2066,13 @@ pub(crate) fn execute_hivemind_subtask(
     agent_id: &str,
     description: &str,
 ) -> Result<String, String> {
-    let goal_id = execute_agent_goal(state, agent_id.to_string(), description.to_string(), 5)?;
+    let goal_id = execute_agent_goal(
+        state,
+        agent_id.to_string(),
+        description.to_string(),
+        5,
+        None,
+    )?;
     spawn_cognitive_loop_with_bridge(
         BackendEventBridge::default(),
         state.clone(),

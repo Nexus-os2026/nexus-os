@@ -248,6 +248,7 @@ fn test_full_agent_flow() {
         agent_id.clone(),
         "Create a file called test.txt with content Hello World".to_string(),
         5,
+        None,
     )
     .expect("execute_agent_goal should assign the goal");
     let (tx, rx) = mpsc::channel();

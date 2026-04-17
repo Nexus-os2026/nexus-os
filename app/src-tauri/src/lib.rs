@@ -400,6 +400,19 @@ fn route_from_model_mapping(value: &Value) -> Option<String> {
 }
 
 fn resolve_agent_llm_route(state: &AppState, agent_id: &str) -> Option<AgentLlmRoute> {
+    // 0. BUG-DROP: per-goal override set by the Chat page model dropdown.
+    //    Takes priority over memory mappings and config assignments so the UI
+    //    selection is authoritative for the lifetime of the active goal.
+    if let Some(status) = state.cognitive_runtime.get_agent_status(agent_id) {
+        if let Some(goal) = status.active_goal {
+            if let Some(model) = goal.model_override {
+                if !model.trim().is_empty() {
+                    return Some(AgentLlmRoute { model });
+                }
+            }
+        }
+    }
+
     // Optional: returns None if config file cannot be loaded
     let config = load_config().ok()?;
     let _agent_short = &agent_id[..agent_id.len().min(8)];
@@ -9271,8 +9284,15 @@ pub mod runtime {
         agent_id: String,
         goal_description: String,
         priority: u8,
+        model_override: Option<String>,
     ) -> Result<String, String> {
-        super::assign_agent_goal(state.inner(), agent_id, goal_description, priority)
+        super::assign_agent_goal(
+            state.inner(),
+            agent_id,
+            goal_description,
+            priority,
+            model_override,
+        )
     }
 
     /// Execute a goal end-to-end: assign, run cognitive cycles in background,
@@ -9284,9 +9304,15 @@ pub mod runtime {
         agent_id: String,
         goal_description: String,
         priority: u8,
+        model_override: Option<String>,
     ) -> Result<String, String> {
-        let goal_id =
-            super::execute_agent_goal(state.inner(), agent_id.clone(), goal_description, priority)?;
+        let goal_id = super::execute_agent_goal(
+            state.inner(),
+            agent_id.clone(),
+            goal_description,
+            priority,
+            model_override,
+        )?;
         // Spawn the background cognitive loop driver
         super::spawn_cognitive_loop(window, state.inner().clone(), agent_id, goal_id.clone());
         Ok(goal_id)

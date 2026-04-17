@@ -83,6 +83,14 @@ pub struct AgentGoal {
     pub deadline: Option<String>,
     pub parent_goal: Option<String>,
     pub status: GoalStatus,
+    /// Per-goal LLM model override (BUG-DROP). When `Some`, forces LLM dispatch
+    /// to use this model for the lifetime of the goal, bypassing the agent's
+    /// manifest `llm_model` and the gateway auto-resolver. When `None`, the
+    /// existing manifest/auto-resolver fallback applies unchanged. Sentinels
+    /// like "mock" / "auto" / "" should be normalized to `None` by callers
+    /// before setting this field.
+    #[serde(default)]
+    pub model_override: Option<String>,
 }
 
 impl AgentGoal {
@@ -96,6 +104,7 @@ impl AgentGoal {
             deadline: None,
             parent_goal: None,
             status: GoalStatus::Pending,
+            model_override: None,
         }
     }
 }
