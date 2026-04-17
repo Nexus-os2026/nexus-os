@@ -365,6 +365,8 @@ impl Default for EncryptionConfig {
 mod tests {
     use super::*;
 
+    static ENV_KEY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn encrypt_decrypt_roundtrip() {
         let salt = generate_salt();
@@ -477,6 +479,7 @@ mod tests {
 
     #[test]
     fn from_env_hex_key() {
+        let _guard = ENV_KEY_LOCK.lock().unwrap();
         let hex = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         std::env::set_var("NEXUS_ENCRYPTION_KEY", hex);
         let key = EncryptionKey::from_env().unwrap();
@@ -487,6 +490,7 @@ mod tests {
 
     #[test]
     fn from_env_passphrase() {
+        let _guard = ENV_KEY_LOCK.lock().unwrap();
         std::env::set_var("NEXUS_ENCRYPTION_KEY", "my-strong-passphrase");
         let key = EncryptionKey::from_env().unwrap();
         assert_eq!(key.key.len(), 32);
