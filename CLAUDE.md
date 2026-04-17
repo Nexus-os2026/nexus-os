@@ -204,3 +204,34 @@ positive examples of the desired output.
 - Never run cargo test --workspace inside Claude Code.
 - After every prompt: cargo fmt && cargo clippy && cargo test -p <crate>
   on MODIFIED crates only.
+
+### Audit and scratch artifact location
+
+Never write audit reports, codebase analyses, deep-read documents,
+ground-truth drafts, or any file intended for future reference to /tmp.
+/tmp is cleared on reboot; the artifact is lost.
+
+Write persistent artifacts to these paths, relative to repo root:
+
+- docs/audits/   — codebase audits, deep reads, architecture reviews,
+                   security or governance audits
+- docs/qa/       — ground truth docs and GT ticket backlogs
+                   (e.g., chat_page_ground_truth_v1.md, group_d_backlog.md)
+- docs/adr/      — architecture decision records
+- /tmp/          — ONLY for truly ephemeral files (test output parsed
+                   and discarded in the same session, intermediate diffs,
+                   throwaway scratch)
+
+Filename convention for audits: <YYYY-MM-DD>_<short-kebab-topic>.md
+Examples:
+  docs/audits/2026-04-17_nexus_os_deep_audit.md
+  docs/audits/2026-04-20_nexus-ui-repair_scout_review.md
+  docs/audits/2026-05-01_governance_kernel_security_audit.md
+
+When asked to produce an audit or deep read, always:
+1. Write it directly to docs/audits/ with the naming convention above.
+2. Include the full relative path in the session recap.
+3. Do NOT commit the audit — Suresh reviews and commits manually.
+
+This rule also applies when Suresh asks for a "ground truth" doc
+(write to docs/qa/) or an "ADR" / "design decision" (write to docs/adr/).
