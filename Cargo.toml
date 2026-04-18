@@ -69,6 +69,7 @@ members = [
   "crates/nexus-self-improve",
   "crates/nexus-computer-use",
   "crates/nexus-ui-repair",
+  "crates/nexus-swarm",
   "nexus-code",
 ]
 

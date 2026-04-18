@@ -11940,6 +11940,14 @@ pub mod runtime {
                 nx_bridge::commands::nx_learned_patterns,
                 nx_bridge::commands::nx_learning_stats,
                 log_frontend_error,
+                commands::swarm::swarm_plan,
+                commands::swarm::swarm_approve,
+                commands::swarm::swarm_reject,
+                commands::swarm::swarm_cancel,
+                commands::swarm::swarm_cancel_node,
+                commands::swarm::swarm_state,
+                commands::swarm::swarm_provider_health,
+                commands::swarm::swarm_refresh_provider_health,
             ])
             .run(tauri::generate_context!())
             .unwrap_or_else(|e| {

@@ -51,6 +51,7 @@ nexus-external-tools = { path = "../../crates/nexus-external-tools" }
 nexus-collab-protocol = { path = "../../crates/nexus-collab-protocol" }
 nexus-software-factory = { path = "../../crates/nexus-software-factory" }
 nexus-mcp = { path = "../../crates/nexus-mcp" }
+nexus-swarm = { path = "../../crates/nexus-swarm" }
 nexus-a2a = { path = "../../crates/nexus-a2a" }
 nexus-memory = { path = "../../crates/nexus-memory" }
 nexus-migrate = { path = "../../crates/nexus-migrate" }

@@ -1,0 +1,45 @@
+[package]
+name = "nexus-swarm"
+description = "Swarm orchestration: Director decomposes intent into a DAG, Coordinator runs DAG nodes in parallel through a governed Provider abstraction."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "nexus-swarm-healthcheck"
+path = "src/bin/healthcheck.rs"
+
+[dependencies]
+nexus-kernel = { path = "../../kernel" }
+nexus-governance-oracle = { path = "../nexus-governance-oracle" }
+nexus-memory = { path = "../nexus-memory" }
+nexus-connectors-llm = { path = "../../connectors/llm" }
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2"
+tracing = "0.1"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "sync", "macros", "fs", "process", "io-util"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+async-trait = "0.1"
+futures = "0.3"
+petgraph = "0.6"
+toml = "0.8"
+keyring = { version = "3", default-features = false, features = ["linux-native", "apple-native", "windows-native"] }
+fs2 = "0.4"
+dirs = "5"
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1.11"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "sync", "macros", "test-util"] }
+wiremock = "0.6"
+tempfile = "3"
+serde_json = "1.0"
+
+[lints]
+workspace = true
