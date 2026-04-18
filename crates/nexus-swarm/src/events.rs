@@ -2,7 +2,16 @@
 //!
 //! Every variant is `Serialize` so the coordinator can ship them as tagged
 //! JSON through the Tauri event channel `"swarm:event"`.
+//!
+//! Phase 1.5b: provider-touching variants carry a `ticket_nonce: Uuid` so
+//! every event in a run can be correlated back to the `SwarmTicket` issued
+//! by the GovernanceOracle when the DAG was approved. This is the audit
+//! primitive that ties the broadcast stream to the oracle's hash-chained
+//! decision log. Three new variants (`OracleTicketIssued`,
+//! `OracleRuntimeCheck`, `OracleRuntimeDenial`) surface the oracle
+//! interactions themselves.
 
+use crate::oracle_policy::{HighRiskEvent, OracleDecisionSummary};
 use crate::routing::RouteDenied;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -58,6 +67,7 @@ pub enum SwarmEvent {
         capability_id: String,
         provider_id: String,
         model_id: String,
+        ticket_nonce: Uuid,
     },
     /// Free-form progress payload from a node — streaming tokens, subtask
     /// updates, etc.
@@ -65,14 +75,17 @@ pub enum SwarmEvent {
         r#ref: NodeRef,
         phase: String,
         payload: serde_json::Value,
+        ticket_nonce: Uuid,
     },
     NodeCompleted {
         r#ref: NodeRef,
         result: serde_json::Value,
+        ticket_nonce: Uuid,
     },
     NodeFailed {
         r#ref: NodeRef,
         reason: String,
+        ticket_nonce: Uuid,
     },
     RouteDenied {
         r#ref: NodeRef,
@@ -83,6 +96,7 @@ pub enum SwarmEvent {
         tokens_remaining: u64,
         cents_remaining: u32,
         wall_ms_remaining: u64,
+        ticket_nonce: Uuid,
     },
     ProviderHealthUpdate {
         providers: Vec<ProviderHealth>,
@@ -92,6 +106,35 @@ pub enum SwarmEvent {
     },
     SwarmCancelled {
         run_id: Uuid,
+    },
+
+    /// Emitted once when the Director receives a sealed approval token from
+    /// the oracle. Carries only the opaque identifiers the frontend needs to
+    /// correlate a run with its ticket; the full SwarmTicket (including the
+    /// SealedToken body) is kept server-side.
+    OracleTicketIssued {
+        ticket_id: Uuid,
+        budget_hash: String,
+        dag_content_hash: String,
+    },
+
+    /// A runtime high-risk re-check was submitted to the oracle; `decision`
+    /// summarizes the outcome. Always emitted when a check is made — both
+    /// on approval and denial — so the event stream reflects every oracle
+    /// interaction, not just the failures. Field named `highrisk_event`
+    /// rather than `event` to avoid collision with the enum's serde tag.
+    OracleRuntimeCheck {
+        ticket_nonce: Uuid,
+        highrisk_event: HighRiskEvent,
+        decision: OracleDecisionSummary,
+    },
+
+    /// A runtime high-risk check was denied. The corresponding `NodeFailed`
+    /// is emitted separately by the coordinator's node-failure path.
+    OracleRuntimeDenial {
+        ticket_nonce: Uuid,
+        hints: Vec<String>,
+        node_id: String,
     },
 }
 
@@ -118,6 +161,7 @@ mod tests {
                 node_id: "n1".into(),
             },
             reason: "provider unreachable".into(),
+            ticket_nonce: Uuid::nil(),
         };
         let j = serde_json::to_string(&ev).unwrap();
         assert!(j.contains("provider unreachable"));

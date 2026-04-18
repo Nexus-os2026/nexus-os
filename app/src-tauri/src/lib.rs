@@ -11998,6 +11998,7 @@ pub mod runtime {
                 commands::swarm::swarm_state,
                 commands::swarm::swarm_provider_health,
                 commands::swarm::swarm_refresh_provider_health,
+                commands::swarm::swarm_audit_tail,
                 commands::oracle_runtime::oracle_runtime_status,
             ])
             .run(tauri::generate_context!())

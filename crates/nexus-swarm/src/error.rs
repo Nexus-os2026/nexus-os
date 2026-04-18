@@ -42,6 +42,19 @@ pub enum SwarmError {
 
     #[error("sub-agent spawning is not supported in Phase 1")]
     SubagentSpawnRejected,
+
+    /// The GovernanceOracle denied plan approval or a runtime high-risk
+    /// re-check. `hints` are locally synthesized from the denial class that
+    /// was tripped — never oracle-authored (the oracle returns no reason by
+    /// design; see `oracle_bridge.rs` module header).
+    #[error("oracle policy denied: {}", .hints.join(", "))]
+    OraclePolicyDenied { hints: Vec<String> },
+
+    /// The oracle channel could not be reached or the returned SealedToken
+    /// failed verification. Covers both transport errors (engine dead,
+    /// timeout) and crypto errors (bad signature, corrupt payload).
+    #[error("oracle unreachable: {detail}")]
+    OracleUnreachable { detail: String },
 }
 
 impl From<RouteDenied> for SwarmError {

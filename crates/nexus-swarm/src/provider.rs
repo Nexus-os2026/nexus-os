@@ -91,4 +91,29 @@ pub trait Provider: Send + Sync {
     async fn health_check(&self) -> ProviderHealth;
 
     async fn invoke(&self, req: InvokeRequest) -> Result<InvokeResponse, ProviderError>;
+
+    /// Estimate the cents cost of a single invocation. Default uses
+    /// `req.max_tokens` times the per-1k-token rate of the provider's
+    /// declared `cost_class`. Implementers with more accurate per-model
+    /// pricing MAY override — but should not lie downward, because the
+    /// estimate is the input the oracle uses to decide whether
+    /// `CloudCallAboveThreshold` triggers.
+    fn estimate_cents(&self, req: &InvokeRequest) -> u32 {
+        let rate_per_1k = cost_class_rate_per_1k_tokens(self.capabilities().cost_class);
+        // saturating math: upstream req.max_tokens is untrusted input
+        let tokens = req.max_tokens as u64;
+        let product = tokens.saturating_mul(rate_per_1k);
+        (product / 1_000).min(u32::MAX as u64) as u32
+    }
+}
+
+/// Rate card in cents per 1K tokens. Rough heuristic; providers override
+/// `estimate_cents` when they have authoritative pricing.
+fn cost_class_rate_per_1k_tokens(class: crate::profile::CostClass) -> u64 {
+    match class {
+        crate::profile::CostClass::Free => 0,
+        crate::profile::CostClass::Low => 1,
+        crate::profile::CostClass::Standard => 5,
+        crate::profile::CostClass::Premium => 30,
+    }
 }

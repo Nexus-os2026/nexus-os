@@ -29,6 +29,8 @@ pub mod dag;
 pub mod director;
 pub mod error;
 pub mod events;
+pub mod oracle_bridge;
+pub mod oracle_policy;
 pub mod profile;
 pub mod provider;
 pub mod providers;
@@ -40,9 +42,11 @@ pub use budget::Budget;
 pub use capability::{AgentCapabilityDescriptor, SwarmCapability};
 pub use coordinator::{SwarmCoordinator, SwarmRunHandle};
 pub use dag::{DagEdge, DagNode, DagNodeStatus, ExecutionDag};
-pub use director::{Director, SwarmDirector};
+pub use director::{Director, PlannedSwarm, SwarmDirector};
 pub use error::SwarmError;
 pub use events::{ProviderHealth, ProviderHealthStatus, SwarmEvent};
+pub use oracle_bridge::{SwarmOracleBridge, SwarmSummary, SwarmTicket};
+pub use oracle_policy::{HighRiskEvent, HighRiskPolicy, OracleDecisionSummary, OracleDenial};
 pub use profile::{
     ContextSize, CostClass, LatencyClass, PrivacyClass, ReasoningTier, TaskProfile, ToolUseLevel,
 };
@@ -51,3 +55,8 @@ pub use provider::{
 };
 pub use registry::CapabilityRegistry;
 pub use routing::{RouteCandidate, RouteDenied, Router, RoutingPolicy};
+
+/// Test-only fixtures. Importers reach for `nexus_swarm::testing::*`.
+pub mod testing {
+    pub use crate::oracle_bridge::testing::NullSwarmOracleBridge;
+}

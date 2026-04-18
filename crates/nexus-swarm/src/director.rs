@@ -7,12 +7,24 @@
 use crate::budget::Budget;
 use crate::dag::{DagNode, DagNodeStatus, ExecutionDag};
 use crate::error::SwarmError;
+use crate::oracle_bridge::{OracleBridge, SwarmTicket};
 use crate::profile::TaskProfile;
 use crate::provider::{InvokeRequest, Provider};
 use crate::registry::CapabilityRegistry;
+use nexus_crypto::CryptoIdentity;
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
+
+/// The Director's output after plan approval: the built `ExecutionDag` and
+/// the `SwarmTicket` the coordinator needs to drive the run under oracle
+/// governance. Constructed only by `Director::plan`; never assembled by
+/// the UI path.
+#[derive(Debug)]
+pub struct PlannedSwarm {
+    pub dag: ExecutionDag,
+    pub ticket: SwarmTicket,
+}
 
 /// JSON schema the Director expects back from its planning provider.
 #[derive(Debug, Clone, Deserialize)]
@@ -61,8 +73,10 @@ impl Director {
         &self,
         intent: &str,
         registry: &CapabilityRegistry,
-        _budget: &Budget,
-    ) -> Result<ExecutionDag, SwarmError> {
+        budget: &Budget,
+        caller: &CryptoIdentity,
+        bridge: &dyn OracleBridge,
+    ) -> Result<PlannedSwarm, SwarmError> {
         let prompt = build_prompt(intent, registry);
 
         for attempt in 0..2 {
@@ -89,7 +103,11 @@ impl Director {
                 .map_err(|e| SwarmError::DirectorUnavailable(e.to_string()))?;
 
             match parse_plan(&resp.text) {
-                Ok(plan) => return build_dag(plan, registry),
+                Ok(plan) => {
+                    let dag = build_dag(plan, registry)?;
+                    let ticket = bridge.request_plan_approval(&dag, budget, caller).await?;
+                    return Ok(PlannedSwarm { dag, ticket });
+                }
                 Err(e) if attempt == 0 => {
                     tracing::warn!(
                         target: "nexus_swarm::director",
@@ -189,12 +207,18 @@ mod tests {
     use super::*;
     use crate::capability::{AgentCapabilityDescriptor, CapabilityInvocation, SwarmCapability};
     use crate::events::ProviderHealth;
+    use crate::oracle_bridge::testing::NullSwarmOracleBridge;
     use crate::profile::{CostClass, PrivacyClass};
     use crate::provider::{
         InvokeRequest, InvokeResponse, ModelDescriptor, ProviderCapabilities, ProviderError,
     };
     use async_trait::async_trait;
+    use nexus_crypto::SignatureAlgorithm;
     use std::sync::Mutex;
+
+    fn test_caller() -> CryptoIdentity {
+        CryptoIdentity::generate(SignatureAlgorithm::Ed25519).expect("Ed25519 keygen for tests")
+    }
 
     struct CannedProvider {
         id: String,
@@ -273,15 +297,20 @@ mod tests {
         });
         let director = Director::new(provider, "planner".into());
         let registry = test_registry();
-        let dag = director
+        let bridge = NullSwarmOracleBridge::new();
+        let caller = test_caller();
+        let planned = director
             .plan(
                 "write hello world",
                 &registry,
                 &Budget::unlimited_for_tests(),
+                &caller,
+                &bridge,
             )
             .await
             .unwrap();
-        assert_eq!(dag.node_count(), 1);
+        assert_eq!(planned.dag.node_count(), 1);
+        assert_eq!(planned.ticket.dag_content_hash.len(), 64);
     }
 
     #[tokio::test]
@@ -293,11 +322,19 @@ mod tests {
         });
         let director = Director::new(provider, "planner".into());
         let registry = test_registry();
-        let dag = director
-            .plan("x", &registry, &Budget::unlimited_for_tests())
+        let bridge = NullSwarmOracleBridge::new();
+        let caller = test_caller();
+        let planned = director
+            .plan(
+                "x",
+                &registry,
+                &Budget::unlimited_for_tests(),
+                &caller,
+                &bridge,
+            )
             .await
             .unwrap();
-        assert_eq!(dag.node_count(), 1);
+        assert_eq!(planned.dag.node_count(), 1);
     }
 
     #[tokio::test]
@@ -308,8 +345,16 @@ mod tests {
         });
         let director = Director::new(provider, "planner".into());
         let registry = test_registry();
+        let bridge = NullSwarmOracleBridge::new();
+        let caller = test_caller();
         let err = director
-            .plan("x", &registry, &Budget::unlimited_for_tests())
+            .plan(
+                "x",
+                &registry,
+                &Budget::unlimited_for_tests(),
+                &caller,
+                &bridge,
+            )
             .await
             .unwrap_err();
         assert!(matches!(err, SwarmError::DirectorParse(_)));

@@ -14,12 +14,14 @@ path = "src/bin/healthcheck.rs"
 
 [dependencies]
 nexus-kernel = { path = "../../kernel" }
+nexus-crypto = { path = "../nexus-crypto" }
 nexus-governance-oracle = { path = "../nexus-governance-oracle" }
 nexus-memory = { path = "../nexus-memory" }
 nexus-connectors-llm = { path = "../../connectors/llm" }
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sha2 = "0.10"
 thiserror = "2"
 tracing = "0.1"
 uuid = { version = "1.10", features = ["v4", "serde"] }
