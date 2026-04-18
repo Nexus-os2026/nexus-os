@@ -2,6 +2,7 @@
 #![allow(unused_imports)]
 mod commands;
 mod nx_bridge;
+pub mod oracle_runtime;
 use base64::Engine;
 use chrono::TimeZone;
 use nexus_adaptation::evolution::{EvolutionConfig, EvolutionEngine, MutationType, Strategy};
@@ -1166,6 +1167,9 @@ pub struct AppState {
     governance_ruleset: Arc<Mutex<nexus_governance_engine::GovernanceRuleset>>,
     governance_audit_log: Arc<Mutex<nexus_governance_engine::DecisionAuditLog>>,
     governance_evolution: Arc<Mutex<nexus_governance_evolution::GovernanceEvolution>>,
+    /// Live GovernanceOracle + DecisionEngine pair, spawned at startup.
+    /// Subsystems obtain a sender via `oracle_sender()`.
+    oracle_runtime: Arc<oracle_runtime::OracleRuntime>,
     #[cfg(all(
         feature = "tauri-runtime",
         any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1221,6 +1225,35 @@ impl AppState {
         ));
         let audit_for_runner = audit.clone();
         let supervisor_for_runner = supervisor.clone();
+
+        // Governance ruleset hoisted out of the struct literal so the same
+        // rules seed both AppState::governance_ruleset (for hot-swap via the
+        // evolution engine) and the DecisionEngine backing the oracle
+        // runtime. Keeping them in sync at startup is cheap; drift after
+        // hot-swap is handled separately in Phase 1.5b+.
+        let production_ruleset = nexus_governance_engine::GovernanceRuleset::new(
+            "nexus-default".into(),
+            1,
+            vec![
+                nexus_governance_engine::GovernanceRule {
+                    id: "allow-llm".into(),
+                    description: "Allow LLM queries".into(),
+                    effect: nexus_governance_engine::RuleEffect::Allow,
+                    conditions: vec![nexus_governance_engine::RuleCondition::CapabilityInSet(
+                        vec!["llm.query".into()],
+                    )],
+                },
+                nexus_governance_engine::GovernanceRule {
+                    id: "deny-dangerous".into(),
+                    description: "Deny dangerous capabilities by default".into(),
+                    effect: nexus_governance_engine::RuleEffect::Deny,
+                    conditions: vec![nexus_governance_engine::RuleCondition::CapabilityInSet(
+                        vec!["agent.create".into(), "process.exec".into()],
+                    )],
+                },
+            ],
+        );
+
         let state = Self {
             supervisor: supervisor.clone(),
             audit,
@@ -1459,35 +1492,7 @@ impl AppState {
             mcp_standalone: Arc::new(mcp2_cmds::McpState::default()),
             a2a_crate: Arc::new(a2a_crate_cmds::A2aState::default()),
             memory_kernel: Arc::new(mk_cmds::MemoryKernelState::default()),
-            governance_ruleset: Arc::new(Mutex::new(
-                nexus_governance_engine::GovernanceRuleset::new(
-                    "nexus-default".into(),
-                    1,
-                    vec![
-                        nexus_governance_engine::GovernanceRule {
-                            id: "allow-llm".into(),
-                            description: "Allow LLM queries".into(),
-                            effect: nexus_governance_engine::RuleEffect::Allow,
-                            conditions: vec![
-                                nexus_governance_engine::RuleCondition::CapabilityInSet(vec![
-                                    "llm.query".into(),
-                                ]),
-                            ],
-                        },
-                        nexus_governance_engine::GovernanceRule {
-                            id: "deny-dangerous".into(),
-                            description: "Deny dangerous capabilities by default".into(),
-                            effect: nexus_governance_engine::RuleEffect::Deny,
-                            conditions: vec![
-                                nexus_governance_engine::RuleCondition::CapabilityInSet(vec![
-                                    "agent.create".into(),
-                                    "process.exec".into(),
-                                ]),
-                            ],
-                        },
-                    ],
-                ),
-            )),
+            governance_ruleset: Arc::new(Mutex::new(production_ruleset.clone())),
             governance_audit_log: Arc::new(Mutex::new(
                 nexus_governance_engine::DecisionAuditLog::new(),
             )),
@@ -1497,6 +1502,7 @@ impl AppState {
                     nexus_governance_evolution::default_attack_generators(),
                 ),
             )),
+            oracle_runtime: oracle_runtime::OracleRuntime::start(production_ruleset),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1513,6 +1519,27 @@ impl AppState {
         self.load_prebuilt_agents();
     }
 
+    /// Clone a `Sender<OracleRequest>` for submitting governance capability
+    /// requests. This is the single public handle onto the in-process
+    /// `GovernanceOracle` / `DecisionEngine` pair.
+    pub fn oracle_sender(
+        &self,
+    ) -> tokio::sync::mpsc::Sender<nexus_governance_oracle::OracleRequest> {
+        self.oracle_runtime.sender()
+    }
+
+    /// Snapshot of the oracle runtime, exposed through the
+    /// `oracle_runtime_status` Tauri command.
+    pub fn oracle_runtime_status(&self) -> oracle_runtime::OracleRuntimeStatus {
+        self.oracle_runtime.status()
+    }
+
+    /// Abort the oracle runtime's background tasks. Called from the app
+    /// shutdown hook; also used by tests for deterministic teardown.
+    pub fn shutdown_oracle_runtime(&self) {
+        self.oracle_runtime.shutdown();
+    }
+
     /// Create an AppState backed by an in-memory DB (for tests).
     #[cfg(any(test, feature = "test-support"))]
     pub fn new_in_memory() -> Self {
@@ -1526,6 +1553,8 @@ impl AppState {
                 db: test_db.clone(),
             },
         )));
+        let test_ruleset =
+            nexus_governance_engine::GovernanceRuleset::new("test".into(), 1, vec![]);
         Self {
             supervisor: supervisor.clone(),
             audit: Arc::new(Mutex::new(AuditTrail::new())),
@@ -1706,9 +1735,7 @@ impl AppState {
             mcp_standalone: Arc::new(mcp2_cmds::McpState::default()),
             a2a_crate: Arc::new(a2a_crate_cmds::A2aState::default()),
             memory_kernel: Arc::new(mk_cmds::MemoryKernelState::default()),
-            governance_ruleset: Arc::new(Mutex::new(
-                nexus_governance_engine::GovernanceRuleset::new("test".into(), 1, vec![]),
-            )),
+            governance_ruleset: Arc::new(Mutex::new(test_ruleset.clone())),
             governance_audit_log: Arc::new(Mutex::new(
                 nexus_governance_engine::DecisionAuditLog::new(),
             )),
@@ -1718,6 +1745,7 @@ impl AppState {
                     nexus_governance_evolution::default_attack_generators(),
                 ),
             )),
+            oracle_runtime: oracle_runtime::OracleRuntime::start(test_ruleset),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1898,6 +1926,7 @@ pub use commands::consent::*;
 pub use commands::enterprise::*;
 pub use commands::governance::*;
 pub use commands::model_hub::*;
+pub use commands::oracle_runtime::*;
 pub use commands::simulation::*;
 pub use commands::tools_infra::*;
 pub use commands::trust_security::*;
@@ -11012,6 +11041,19 @@ pub mod runtime {
         let builder = builder.setup(|app| {
             let state = app.state::<AppState>();
             state.set_app_handle(app.handle().clone());
+
+            // Log the oracle runtime status so the startup transcript
+            // confirms the DecisionEngine task is live. The runtime itself
+            // is already spawned by AppState::new(); this is a visibility
+            // checkpoint.
+            let oracle_status = state.oracle_runtime_status();
+            eprintln!(
+                "[startup] GovernanceOracle runtime active: is_running={}, processed={}, pending={}",
+                oracle_status.is_running,
+                oracle_status.total_processed,
+                oracle_status.pending_requests
+            );
+
             state
                 .agent_scheduler
                 .set_executor(Arc::new(ScheduledGoalExecutor {
@@ -11948,6 +11990,7 @@ pub mod runtime {
                 commands::swarm::swarm_state,
                 commands::swarm::swarm_provider_health,
                 commands::swarm::swarm_refresh_provider_health,
+                commands::oracle_runtime::oracle_runtime_status,
             ])
             .run(tauri::generate_context!())
             .unwrap_or_else(|e| {

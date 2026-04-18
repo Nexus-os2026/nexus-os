@@ -1,7 +1,15 @@
 //! Default routing policies for the three adapters we ship in Phase 1
-//! (Artisan, Herald, Broker) plus reference entries for the three NYI stubs
-//! (Scout, Watchdog, Prospector). Override at runtime by placing
-//! `~/.nexus/swarm_routing.toml` with a `[policies]` table.
+//! (Artisan, Herald, Broker) plus the Director policy and reference entries
+//! for the three NYI stubs (Scout, Watchdog, Prospector). Override at
+//! runtime by placing `~/.nexus/swarm_routing.toml` with a `[policies]`
+//! table.
+//!
+//! Phase 1.5a update: preference lists are now explicit per agent, with
+//! dedicated primary and fallback Ollama model_ids rather than a single
+//! generic "ollama" slot. Herald omits cloud routes entirely because its
+//! TaskProfile is `privacy=Sensitive`; the router's PrivacyClass guard
+//! would reject any cloud candidate anyway, but dropping them from the
+//! preference list makes the policy self-documenting.
 
 use crate::routing::{RouteCandidate, RoutingPolicy};
 use serde::{Deserialize, Serialize};
@@ -15,67 +23,66 @@ pub struct RoutingOverrideFile {
     pub policies: HashMap<String, Vec<RouteCandidate>>,
 }
 
-/// Built-in defaults. Kept minimal — preference order leans on local-first.
-pub fn builtin_policies() -> Vec<RoutingPolicy> {
-    let local_first = |agent: &str, cloud: &[(&str, &str, u32)]| -> RoutingPolicy {
-        let mut pref = vec![RouteCandidate {
-            provider_id: "ollama".into(),
-            model_id: String::new(), // resolved at router time when dynamic
-            est_cost_cents: 0,
-        }];
-        for (provider, model, cents) in cloud {
-            pref.push(RouteCandidate {
-                provider_id: (*provider).into(),
-                model_id: (*model).into(),
-                est_cost_cents: *cents,
-            });
-        }
-        RoutingPolicy {
-            agent_id: agent.into(),
-            preference_order: pref,
-        }
-    };
+fn cand(provider: &str, model: &str) -> RouteCandidate {
+    RouteCandidate {
+        provider_id: provider.into(),
+        model_id: model.into(),
+        est_cost_cents: 0,
+    }
+}
 
+/// Built-in defaults. Preference order is local-first with a named cloud
+/// fallback for everything except Herald (which is privacy-sensitive).
+pub fn builtin_policies() -> Vec<RoutingPolicy> {
     vec![
-        // Artisan (coder) — prefers local, falls back to cheap cloud.
-        local_first(
-            "artisan",
-            &[
-                ("openrouter", "deepseek/deepseek-coder-v3", 2),
-                ("openai", "gpt-4o-mini", 5),
+        // Director — plans DAGs. Prefers a mid-size local model; falls back
+        // to a smaller local model, then to codex-cli for heavier reasoning.
+        RoutingPolicy {
+            agent_id: "director".into(),
+            preference_order: vec![
+                cand("ollama", "qwen3.5:9b"),
+                cand("ollama", "gemma4:e4b"),
+                cand("codex-cli", "gpt-5.4"),
             ],
-        ),
-        // Herald (social-poster) — latency-sensitive, prefers small local.
-        local_first(
-            "herald",
-            &[
-                ("openrouter", "openai/gpt-4.1-mini", 2),
-                ("openai", "gpt-4o-mini", 3),
+        },
+        // Artisan — code generation. Uses coder-tuned models locally.
+        RoutingPolicy {
+            agent_id: "artisan".into(),
+            preference_order: vec![
+                cand("ollama", "qwen2.5-coder:14b"),
+                cand("ollama", "qwen2.5-coder:7b"),
+                cand("codex-cli", "gpt-5.4"),
             ],
-        ),
-        // Broker (collaboration) — prefers local; cloud fallback uses Haiku.
-        local_first(
-            "broker",
-            &[
-                ("anthropic", "claude-haiku-4-5-20251001", 2),
-                ("openrouter", "anthropic/claude-sonnet-4-6", 5),
+        },
+        // Herald — social posting. Sensitive privacy class → no cloud.
+        RoutingPolicy {
+            agent_id: "herald".into(),
+            preference_order: vec![cand("ollama", "gemma4:e2b"), cand("ollama", "qwen3.5:4b")],
+        },
+        // Broker — coordinates other agents. Prefers fast local models.
+        RoutingPolicy {
+            agent_id: "broker".into(),
+            preference_order: vec![
+                cand("ollama", "qwen3.5:9b"),
+                cand("ollama", "glm4:9b"),
+                cand("codex-cli", "gpt-5.4"),
             ],
-        ),
-        // Director is resolved via a dedicated "director" policy.
-        local_first(
-            "director",
-            &[
-                ("openrouter", "anthropic/claude-sonnet-4-6", 10),
-                ("anthropic", "claude-haiku-4-5-20251001", 3),
-                ("openai", "gpt-4o", 10),
-            ],
-        ),
-        // NYI descriptor stubs — included so an override TOML can name them
-        // without being rejected; runtime selection will never pick them
-        // because the registry filters stubs.
-        local_first("scout", &[]),
-        local_first("watchdog", &[]),
-        local_first("prospector", &[]),
+        },
+        // NYI descriptor stubs — included so an override TOML can name
+        // them without being rejected; runtime selection will never pick
+        // them because the registry filters stubs out of `select_for_task`.
+        RoutingPolicy {
+            agent_id: "scout".into(),
+            preference_order: vec![],
+        },
+        RoutingPolicy {
+            agent_id: "watchdog".into(),
+            preference_order: vec![],
+        },
+        RoutingPolicy {
+            agent_id: "prospector".into(),
+            preference_order: vec![],
+        },
     ]
 }
 
@@ -134,6 +141,46 @@ mod tests {
         ] {
             assert!(ids.contains(&id), "missing default for `{id}`");
         }
+    }
+
+    #[test]
+    fn director_has_primary_and_cloud_fallback() {
+        let ps = builtin_policies();
+        let director = ps.iter().find(|p| p.agent_id == "director").unwrap();
+        assert_eq!(director.preference_order.len(), 3);
+        assert_eq!(director.preference_order[0].provider_id, "ollama");
+        assert_eq!(director.preference_order[0].model_id, "qwen3.5:9b");
+        assert_eq!(director.preference_order[1].provider_id, "ollama");
+        assert_eq!(director.preference_order[2].provider_id, "codex-cli");
+    }
+
+    #[test]
+    fn artisan_uses_coder_models() {
+        let ps = builtin_policies();
+        let artisan = ps.iter().find(|p| p.agent_id == "artisan").unwrap();
+        assert_eq!(artisan.preference_order[0].model_id, "qwen2.5-coder:14b");
+        assert_eq!(artisan.preference_order[1].model_id, "qwen2.5-coder:7b");
+    }
+
+    #[test]
+    fn herald_has_no_cloud_routes() {
+        let ps = builtin_policies();
+        let herald = ps.iter().find(|p| p.agent_id == "herald").unwrap();
+        assert_eq!(herald.preference_order.len(), 2);
+        assert!(herald
+            .preference_order
+            .iter()
+            .all(|c| c.provider_id == "ollama"));
+    }
+
+    #[test]
+    fn broker_has_two_local_and_one_cloud() {
+        let ps = builtin_policies();
+        let broker = ps.iter().find(|p| p.agent_id == "broker").unwrap();
+        assert_eq!(broker.preference_order.len(), 3);
+        assert_eq!(broker.preference_order[0].model_id, "qwen3.5:9b");
+        assert_eq!(broker.preference_order[1].model_id, "glm4:9b");
+        assert_eq!(broker.preference_order[2].provider_id, "codex-cli");
     }
 
     #[test]

@@ -191,10 +191,7 @@ pub async fn swarm_approve(app: tauri::AppHandle, run_id: Uuid) -> Result<Uuid, 
     let coord = build_coordinator();
     let budget = Budget::new(200_000, 200, 300_000);
     let _ = s.events.send(SwarmEvent::PlanApproved { run_id });
-    let handle = coord
-        .run(dag, budget)
-        .await
-        .map_err(|e| e.to_string())?;
+    let handle = coord.run(dag, budget).await.map_err(|e| e.to_string())?;
     let actual_id = handle.run_id;
     s.runs.lock().await.insert(actual_id, handle);
     Ok(actual_id)
@@ -260,7 +257,8 @@ pub async fn swarm_refresh_provider_health(
     ensure_forwarder(app);
     let s = state();
     let mut futures = Vec::new();
-    for p in s.providers.values().cloned() {
+    for p in s.providers.values() {
+        let p = Arc::clone(p);
         futures.push(tokio::spawn(async move {
             tokio::time::timeout(std::time::Duration::from_secs(5), p.health_check())
                 .await
