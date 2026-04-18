@@ -1520,12 +1520,20 @@ impl AppState {
     }
 
     /// Clone a `Sender<OracleRequest>` for submitting governance capability
-    /// requests. This is the single public handle onto the in-process
-    /// `GovernanceOracle` / `DecisionEngine` pair.
+    /// requests. For subsystems that only need raw `GovernanceDecision`; use
+    /// [`Self::oracle`] when a sealed-token surface is required.
     pub fn oracle_sender(
         &self,
     ) -> tokio::sync::mpsc::Sender<nexus_governance_oracle::OracleRequest> {
         self.oracle_runtime.sender()
+    }
+
+    /// Full `Arc<GovernanceOracle>` handle. Use this when the caller needs
+    /// `SealedToken` issuance or `verify_token` verification — i.e. the
+    /// SwarmOracleBridge and any future subsystem that participates in the
+    /// hash-chained audit trail.
+    pub fn oracle(&self) -> std::sync::Arc<nexus_governance_oracle::GovernanceOracle> {
+        self.oracle_runtime.oracle()
     }
 
     /// Snapshot of the oracle runtime, exposed through the

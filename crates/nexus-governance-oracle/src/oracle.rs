@@ -81,11 +81,24 @@ pub struct GovernanceOracle {
 }
 
 impl GovernanceOracle {
-    /// Create a new oracle with a channel to the decision engine.
+    /// Create a new oracle with a freshly generated Ed25519 identity.
+    /// Behavior preserved byte-for-byte with the pre-1.5a.1 API.
     pub fn new(request_tx: mpsc::Sender<OracleRequest>, response_ceiling: Duration) -> Self {
         let identity = CryptoIdentity::generate(SignatureAlgorithm::Ed25519)
             .expect("Ed25519 key generation should never fail");
+        Self::with_identity(request_tx, response_ceiling, identity)
+    }
 
+    /// Create a new oracle with a caller-supplied identity. The caller owns
+    /// identity lifecycle (persistence, rotation, ephemeral-vs-durable). This
+    /// is the constructor `OracleRuntime` uses to bind the oracle to the
+    /// keypair stored at `~/.nexus/oracle_identity.key`, so sealed tokens
+    /// remain verifiable across app restarts.
+    pub fn with_identity(
+        request_tx: mpsc::Sender<OracleRequest>,
+        response_ceiling: Duration,
+        identity: CryptoIdentity,
+    ) -> Self {
         Self {
             request_tx,
             timing: TimingConfig {
@@ -192,6 +205,13 @@ impl GovernanceOracle {
     /// Get the verifying (public) key bytes. Returns a byte slice rather than
     /// a library-specific type, enabling algorithm-agile consumers.
     pub fn verifying_key_bytes(&self) -> &[u8] {
+        self.identity.verifying_key()
+    }
+
+    /// Alias for `verifying_key_bytes`. Mirrors `CryptoIdentity::verifying_key`
+    /// for callers that prefer the shorter name when the byte-slice return
+    /// type is already obvious from context.
+    pub fn verifying_key(&self) -> &[u8] {
         self.identity.verifying_key()
     }
 
@@ -309,5 +329,35 @@ mod tests {
 
         let verified = oracle.verify_token(&token).unwrap();
         assert_eq!(verified.agent_id, "a");
+    }
+
+    #[test]
+    fn with_identity_uses_passed_key() {
+        let identity = CryptoIdentity::generate(SignatureAlgorithm::Ed25519).unwrap();
+        let expected_vk = identity.verifying_key().to_vec();
+
+        let (tx, _rx) = mpsc::channel::<OracleRequest>(1);
+        let oracle =
+            GovernanceOracle::with_identity(tx, Duration::from_millis(10), identity.clone());
+
+        assert_eq!(oracle.verifying_key(), expected_vk.as_slice());
+        assert_eq!(oracle.verifying_key_bytes(), expected_vk.as_slice());
+
+        let payload = serde_json::to_vec(&TokenPayload {
+            decision: GovernanceDecision::Denied,
+            nonce: "n".into(),
+            timestamp: 0,
+            governance_version: String::new(),
+            request_nonce: "r".into(),
+            agent_id: "a".into(),
+        })
+        .unwrap();
+        let signature = identity.sign(&payload).unwrap();
+        let token = SealedToken {
+            payload,
+            signature,
+            token_id: "t".into(),
+        };
+        assert!(oracle.verify_token(&token).is_ok());
     }
 }
