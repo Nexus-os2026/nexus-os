@@ -143,6 +143,9 @@ import type {
 } from "./types";
 import { createDefaultConfig, normalizeConfig } from "./utils/config";
 import { PushToTalk } from "./voice/PushToTalk";
+import { swarmBus } from "./lib/swarm/swarm_bus";
+import { getProviderHealth } from "./lib/swarm/commands";
+import { setInitialProviderHealth } from "./lib/swarm/store";
 
 type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler" | "flash-inference" | "measurement" | "measurement-session" | "measurement-compare" | "measurement-batteries" | "capability-boundaries" | "model-routing" | "ab-validation" | "browser-agent" | "governance-oracle" | "token-economy" | "governed-control" | "world-sim" | "perception" | "agent-memory" | "external-tools" | "collab-protocol" | "software-factory" | "nexus-builder" | "memory-dashboard" | "self-improvement" | "nexus-code";
 type RuntimeMode = "desktop" | "mock";
@@ -770,6 +773,31 @@ export default function App(): JSX.Element {
       }
     };
   }, [play]);
+
+  // Swarm event bus: start once on mount, seed initial provider health.
+  // Idempotent under React.StrictMode dev double-invoke.
+  useEffect(() => {
+    if (!hasDesktopRuntime()) return;
+    let cancelled = false;
+
+    const boot = async (): Promise<void> => {
+      try {
+        await swarmBus.start();
+        const providers = await getProviderHealth();
+        if (!cancelled) setInitialProviderHealth(providers);
+      } catch {
+        // Swarm bus is optional for boot — the rest of the app keeps working
+        // if the Tauri event channel is unavailable (e.g. mock runtime).
+      }
+    };
+
+    void boot();
+
+    return () => {
+      cancelled = true;
+      void swarmBus.stop();
+    };
+  }, []);
 
   useEffect(() => {
     if (previousPageRef.current !== page) {
@@ -1511,32 +1539,7 @@ export default function App(): JSX.Element {
       );
     }
     if (page === "agents") {
-      return (
-        <Agents
-          agents={agents}
-          auditEvents={auditEvents}
-          factoryTrigger={factoryTrigger}
-          onStart={(id) => {
-            void handleStartAgent(id);
-          }}
-          onPause={(id) => {
-            void handlePauseAgent(id);
-          }}
-          onStop={(id) => {
-            void handleStopAgent(id);
-          }}
-          onCreate={(manifestJson) => {
-            void handleCreateAgent(manifestJson);
-          }}
-          onDelete={handleDeleteAgent}
-          onClearAll={() => { void handleClearAllAgents(); }}
-          onPermissions={(id) => {
-            setPermissionAgentId(id);
-            setPage("permissions");
-          }}
-          onNavigate={(p) => setPage(p as Page)}
-        />
-      );
+      return <Agents />;
     }
     if (page === "permissions") {
       const permAgent = agents.find((a) => a.id === permissionAgentId);

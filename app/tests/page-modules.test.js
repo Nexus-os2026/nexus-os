@@ -62,6 +62,14 @@ const KNOWN_ORPHAN_COMPONENTS = [
     'builder/ConversionReportCard.tsx',
     'builder/PresenceIndicators.tsx',
     'builder/RoleManager.tsx',
+    // Orphaned in Phase 2 when Agents.tsx became a swarm shell. Phase 3
+    // re-home candidates (see Phase 2 completion report); SlmStatusBadge
+    // → streaming-agent cards, NeuralGraph/HeatMap → DAG viewer telemetry.
+    // ActivityFeed is a delete candidate if the event tape supplants it.
+    'agents/ActivityFeed.tsx',
+    'agents/SlmStatusBadge.tsx',
+    'viz/HeatMap.tsx',
+    'viz/NeuralGraph.tsx',
 ];
 
 test("No orphan component files (all imported somewhere)", () => {
