@@ -17,10 +17,6 @@ ignore = [
     # Nexus uses Ed25519, not RSA decryption. Transitive dep via oauth2.
     { id = "RUSTSEC-2023-0071", reason = "Nexus uses Ed25519, not RSA decryption" },
 
-    # rustls-webpki: CRL matching logic error.
-    # Transitive dep via reqwest; no CRL validation in Nexus.
-    { id = "RUSTSEC-2026-0049", reason = "Transitive dep via reqwest; no CRL validation" },
-
     # tar 0.4.44: unpack_in symlink chmod and PAX size header issues.
     # tar used only in kernel for trusted package extraction.
     { id = "RUSTSEC-2026-0067", reason = "tar used only for trusted package extraction in kernel" },
