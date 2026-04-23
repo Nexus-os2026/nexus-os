@@ -61,12 +61,27 @@ beforeEach(() => {
 });
 
 describe("Agents shell", () => {
-  it("mounts the four placeholder regions without throwing", () => {
+  it("mounts the four regions without throwing", () => {
     expect(() => render(<Agents />)).not.toThrow();
     expect(screen.getByTestId("region-dag")).toBeInTheDocument();
     expect(screen.getByTestId("region-swarm")).toBeInTheDocument();
     expect(screen.getByTestId("region-events")).toBeInTheDocument();
     expect(screen.getByTestId("region-director")).toBeInTheDocument();
+  });
+
+  it("region-director hosts the live Director console", () => {
+    render(<Agents />);
+    const dir = screen.getByTestId("region-director");
+    expect(dir.querySelector('[data-testid="director-console"]')).not.toBeNull();
+    expect(dir.querySelector('[data-testid="director-textarea"]')).not.toBeNull();
+    expect(dir.querySelector('[data-testid="director-submit"]')).not.toBeNull();
+  });
+
+  it("region-dag hosts the DAG viewer's empty state when no plan is present", () => {
+    render(<Agents />);
+    const dag = screen.getByTestId("region-dag");
+    expect(dag.querySelector('[data-testid="dag-viewer"]')).not.toBeNull();
+    expect(dag.querySelector('[data-testid="dag-empty-state"]')).not.toBeNull();
   });
 
   it("renders provider dots when a ProviderHealthUpdate event arrives", async () => {

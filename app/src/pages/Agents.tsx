@@ -9,9 +9,14 @@
  * event flow: Rust broadcast → Tauri emit → swarmBus → store → React.
  */
 
+import { useEffect, useState } from "react";
 import { useSwarmStore } from "../lib/swarm/store";
 import { refreshProviderHealth } from "../lib/swarm/commands";
-import type { ProviderHealth, ProviderHealthStatus } from "../lib/swarm/types";
+import { selectIsPlanPending } from "../lib/swarm/selectors";
+import type { PlannedSwarmJson, ProviderHealth, ProviderHealthStatus } from "../lib/swarm/types";
+import { DirectorConsole } from "../components/swarm/DirectorConsole";
+import { PlanApprovalCard } from "../components/swarm/PlanApprovalCard";
+import { DagViewer } from "../components/swarm/DagViewer";
 
 function statusColor(status: ProviderHealthStatus): string {
   switch (status) {
@@ -157,6 +162,62 @@ function RunFooter(): JSX.Element {
   );
 }
 
+function DirectorRegion(): JSX.Element {
+  // Local lift of the most-recent `planSwarm` response so the approval
+  // card can access ticket_id / budget_hash / privacy_envelope, which
+  // the `plan_proposed` event doesn't carry. Cleared when the store's
+  // `selectIsPlanPending` flips false (i.e. plan_approved or
+  // plan_rejected event landed).
+  const [latestPlan, setLatestPlan] = useState<PlannedSwarmJson | null>(null);
+  const isPending = useSwarmStore(selectIsPlanPending);
+
+  useEffect(() => {
+    if (!isPending && latestPlan !== null) setLatestPlan(null);
+  }, [isPending, latestPlan]);
+
+  return (
+    <div
+      data-testid="region-director"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+        minHeight: 0,
+      }}
+    >
+      <DirectorConsole
+        onPlanReady={(planned): void => setLatestPlan(planned)}
+        pendingTicketId={latestPlan ? latestPlan.ticket_id : null}
+        onPlanCleared={(): void => setLatestPlan(null)}
+      />
+      {isPending && latestPlan !== null && (
+        <PlanApprovalCard
+          plan={latestPlan}
+          onDecisionSent={(): void => {
+            // The store will flip isPending on the next event, which
+            // triggers the effect above to null out latestPlan.
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function DagRegion(): JSX.Element {
+  return (
+    <div
+      data-testid="region-dag"
+      style={{
+        display: "flex",
+        minHeight: 0,
+        minWidth: 0,
+      }}
+    >
+      <DagViewer />
+    </div>
+  );
+}
+
 export function Agents(): JSX.Element {
   return (
     <div
@@ -181,10 +242,10 @@ export function Agents(): JSX.Element {
           minHeight: 0,
         }}
       >
-        <Placeholder label="DAG viewer (Phase 3)" testId="region-dag" />
+        <DagRegion />
         <Placeholder label="Streaming agents (Phase 3)" testId="region-swarm" />
         <Placeholder label="Event tape (Phase 3)" testId="region-events" />
-        <Placeholder label="Director console (Phase 3)" testId="region-director" />
+        <DirectorRegion />
       </main>
       <RunFooter />
     </div>

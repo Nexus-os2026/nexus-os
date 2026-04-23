@@ -29,6 +29,8 @@ export interface SwarmState {
   activeRun: RunState | null;
   /** Bounded tail of recent events for components that need the stream. */
   recentEvents: SwarmEvent[];
+  /** UI-only focus state; dispatched by the DAG viewer on node click. */
+  focusedNodeId: string | null;
 }
 
 const RECENT_EVENT_CAP = 100;
@@ -38,6 +40,7 @@ const initialState: SwarmState = {
   currentPlan: null,
   activeRun: null,
   recentEvents: [],
+  focusedNodeId: null,
 };
 
 // ── Store plumbing ──────────────────────────────────────────────────────────
@@ -83,6 +86,11 @@ export function getSwarmState(): SwarmState {
 /** Seed provider health before any events arrive. */
 export function setInitialProviderHealth(providers: ProviderHealth[]): void {
   setState((prev) => ({ ...prev, providerHealth: providers }));
+}
+
+/** Set or clear the focused DAG node. Pure UI state — not event-driven. */
+export function selectFocusedNode(nodeId: string | null): void {
+  setState((prev) => (prev.focusedNodeId === nodeId ? prev : { ...prev, focusedNodeId: nodeId }));
 }
 
 /** Test-only. Resets the store and re-attaches the dispatcher subscription. */

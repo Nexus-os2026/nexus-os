@@ -77,9 +77,17 @@ test("No orphan component files (all imported somewhere)", () => {
   function walk(dir) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
+      // Skip test directories and their contents — they're test fixtures,
+      // not shipped components, and their filename-based orphan match is
+      // meaningless.
       if (entry.isDirectory()) {
+        if (entry.name === "__tests__") continue;
         walk(full);
-      } else if (entry.name.endsWith(".tsx") || entry.name.endsWith(".ts")) {
+      } else if (
+        (entry.name.endsWith(".tsx") || entry.name.endsWith(".ts")) &&
+        !entry.name.endsWith(".test.tsx") &&
+        !entry.name.endsWith(".test.ts")
+      ) {
         allComponents.push(full);
       }
     }
