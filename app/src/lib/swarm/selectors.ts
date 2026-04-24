@@ -7,6 +7,7 @@ import type {
   DagEdge,
   DagNode,
   DagNodeStatus,
+  NodeBudgetState,
   PlannedSwarmJson,
   ProviderHealth,
   RunState,
@@ -231,6 +232,24 @@ export function selectEventsByNode(
 
 export function selectActiveRunCancellable(state: SwarmState): boolean {
   return state.activeRun !== null;
+}
+
+// Stable zero sentinel so per-node budget reads before any update don't
+// allocate a fresh object on every render and loop useSyncExternalStore.
+const ZERO_NODE_BUDGET: NodeBudgetState = Object.freeze({
+  tokens_consumed: 0,
+  cost_cents: 0,
+});
+
+export function selectNodeBudget(
+  nodeId: string,
+): (state: SwarmState) => NodeBudgetState {
+  return (state: SwarmState): NodeBudgetState => {
+    const run = state.activeRun;
+    if (!run) return ZERO_NODE_BUDGET;
+    const existing = run.node_budgets[nodeId];
+    return existing ?? ZERO_NODE_BUDGET;
+  };
 }
 
 export function selectEventFilter(state: SwarmState): EventFilter {

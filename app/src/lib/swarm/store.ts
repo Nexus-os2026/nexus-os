@@ -206,6 +206,7 @@ function dispatch(ev: SwarmEvent): void {
           node_states: Object.fromEntries(
             dag.nodes.map((n): [string, DagNodeStatus] => [n.id, n.status]),
           ),
+          node_budgets: {},
           ticket_id: prev.currentPlan?.ticket_id ?? null,
           started_at_ms: Date.now(),
         };
@@ -288,10 +289,43 @@ function dispatch(ev: SwarmEvent): void {
         return { ...prev, activeRun: null, recentEvents };
       }
 
-      // Node progress, budget, oracle-runtime variants don't mutate the
+      case "budget_update": {
+        // Per-node scope: accumulate into activeRun.node_budgets. Run-scoped
+        // updates (node_id null/absent) keep the Phase 2/3 behavior — they
+        // land in recentEvents only.
+        const nodeId = ev.node_id ?? null;
+        if (
+          nodeId === null ||
+          !prev.activeRun ||
+          prev.activeRun.run_id !== ev.run_id
+        ) {
+          return { ...prev, recentEvents };
+        }
+        const tokensDelta = ev.node_tokens_consumed ?? 0;
+        const centsDelta = ev.node_cost_cents_consumed ?? 0;
+        const existing = prev.activeRun.node_budgets[nodeId] ?? {
+          tokens_consumed: 0,
+          cost_cents: 0,
+        };
+        return {
+          ...prev,
+          activeRun: {
+            ...prev.activeRun,
+            node_budgets: {
+              ...prev.activeRun.node_budgets,
+              [nodeId]: {
+                tokens_consumed: existing.tokens_consumed + tokensDelta,
+                cost_cents: existing.cost_cents + centsDelta,
+              },
+            },
+          },
+          recentEvents,
+        };
+      }
+
+      // Node progress + oracle-runtime variants don't mutate the
       // top-level store shape today — they land in `recentEvents` only.
       case "node_event":
-      case "budget_update":
       case "oracle_runtime_check":
       case "oracle_runtime_denial":
         return { ...prev, recentEvents };

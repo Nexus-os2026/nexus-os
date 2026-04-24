@@ -128,4 +128,87 @@ describe("AgentCard", () => {
     expect(badge.textContent).toContain("42ms");
     expect(badge.textContent).toContain("LOCAL");
   });
+
+  it("tokens field reflects per-node BudgetUpdate deltas", () => {
+    const node = stubNode("n4", "research");
+    act(() => {
+      swarmBus.__injectForTest(planProposed([node], RUN));
+      swarmBus.__injectForTest(planApproved(RUN));
+      swarmBus.__injectForTest(nodeStarted(RUN, "n4"));
+    });
+    render(<AgentCard node={node} />);
+    expect(screen.getByTestId("agent-card-tokens-n4").textContent).toContain("0");
+    act(() => {
+      swarmBus.__injectForTest({
+        event: "budget_update",
+        run_id: RUN,
+        tokens_remaining: 0,
+        cents_remaining: 0,
+        wall_ms_remaining: 0,
+        ticket_nonce: "00000000-0000-0000-0000-000000000000",
+        node_id: "n4",
+        node_tokens_consumed: 42,
+        node_cost_cents_consumed: 1,
+      });
+    });
+    expect(screen.getByTestId("agent-card-tokens-n4").textContent).toContain("42");
+    // Per-node deltas accumulate.
+    act(() => {
+      swarmBus.__injectForTest({
+        event: "budget_update",
+        run_id: RUN,
+        tokens_remaining: 0,
+        cents_remaining: 0,
+        wall_ms_remaining: 0,
+        ticket_nonce: "00000000-0000-0000-0000-000000000000",
+        node_id: "n4",
+        node_tokens_consumed: 8,
+        node_cost_cents_consumed: 0,
+      });
+    });
+    expect(screen.getByTestId("agent-card-tokens-n4").textContent).toContain("50");
+  });
+
+  it("phase 'observe' payload updates the summary line", () => {
+    const node = stubNode("n5", "summarize");
+    act(() => {
+      swarmBus.__injectForTest(planProposed([node], RUN));
+      swarmBus.__injectForTest(planApproved(RUN));
+      swarmBus.__injectForTest(nodeStarted(RUN, "n5"));
+    });
+    render(<AgentCard node={node} />);
+    act(() => {
+      swarmBus.__injectForTest({
+        event: "node_event",
+        ref: { run_id: RUN, node_id: "n5" },
+        phase: "observe",
+        payload: { response_digest: "summary of quantum paper", completion_tokens: 9 },
+        ticket_nonce: "00000000-0000-0000-0000-000000000000",
+      });
+    });
+    expect(screen.getByTestId("agent-card-phase-n5").textContent).toContain("observe");
+    expect(screen.getByTestId("agent-card-summary-n5").textContent).toContain("response_digest");
+  });
+
+  it("run-scoped BudgetUpdate (node_id null) does not affect per-node tokens", () => {
+    const node = stubNode("n6", "review");
+    act(() => {
+      swarmBus.__injectForTest(planProposed([node], RUN));
+      swarmBus.__injectForTest(planApproved(RUN));
+      swarmBus.__injectForTest(nodeStarted(RUN, "n6"));
+    });
+    render(<AgentCard node={node} />);
+    act(() => {
+      swarmBus.__injectForTest({
+        event: "budget_update",
+        run_id: RUN,
+        tokens_remaining: 1000,
+        cents_remaining: 50,
+        wall_ms_remaining: 30000,
+        ticket_nonce: "00000000-0000-0000-0000-000000000000",
+        node_id: null,
+      });
+    });
+    expect(screen.getByTestId("agent-card-tokens-n6").textContent).toContain("0");
+  });
 });

@@ -55,6 +55,13 @@ pub enum SwarmError {
     /// timeout) and crypto errors (bad signature, corrupt payload).
     #[error("oracle unreachable: {detail}")]
     OracleUnreachable { detail: String },
+
+    /// The cooperative cancel token fired mid-invocation. Adapters return
+    /// this from `run_with_context` between phases when `ctx.cancelled()`
+    /// is observed; the coordinator translates it into a `NodeFailed`
+    /// event with reason "cancelled".
+    #[error("cancelled by user")]
+    Cancelled,
 }
 
 impl From<RouteDenied> for SwarmError {

@@ -25,6 +25,7 @@ import {
   selectActiveRun,
   selectEventsByNode,
   selectFocusedNodeId,
+  selectNodeBudget,
   selectProviderHealth,
 } from "../../lib/swarm/selectors";
 import type {
@@ -96,14 +97,6 @@ function latestActivity(events: readonly SwarmEvent[]): NodeActivity {
   return { phase: null, summary: null };
 }
 
-function countTokens(events: readonly SwarmEvent[]): number | null {
-  // No per-node token accounting exists in the event vocabulary today;
-  // BudgetUpdate is run-scoped. Surfacing "—" until Phase 4 threads
-  // per-node token deltas through NodeEvent.
-  void events;
-  return null;
-}
-
 function formatElapsed(ms: number): string {
   if (ms < 0) return "0s";
   const s = Math.floor(ms / 1000);
@@ -162,7 +155,8 @@ export function AgentCard({ node }: AgentCardProps): JSX.Element {
     () => adaptToSlmStatus(provenance.provider_id, provenance.model_id, providerHealth),
     [provenance, providerHealth],
   );
-  const tokens = useMemo(() => countTokens(nodeEvents), [nodeEvents]);
+  const nodeBudgetSelector = useMemo(() => selectNodeBudget(node.id), [node.id]);
+  const nodeBudget = useSwarmStore(nodeBudgetSelector);
 
   const startedAtRef = useRef<number>(activeRun?.started_at_ms ?? Date.now());
   const elapsedMs = useElapsed(startedAtRef);
@@ -263,7 +257,7 @@ export function AgentCard({ node }: AgentCardProps): JSX.Element {
         }}
       >
         <span data-testid={`agent-card-tokens-${node.id}`}>
-          tokens: {tokens === null ? "—" : tokens}
+          tokens: {nodeBudget.tokens_consumed}
         </span>
         <span data-testid={`agent-card-elapsed-${node.id}`}>{formatElapsed(elapsedMs)}</span>
         <button

@@ -200,6 +200,16 @@ export type SwarmEvent =
       cents_remaining: number;
       wall_ms_remaining: number;
       ticket_nonce: Uuid;
+      /**
+       * Per-node scope. `null` / absent → run-scoped (Phase 2/3 behavior).
+       * `string` → this update is a per-node delta for the specified
+       * node id.
+       */
+      node_id?: string | null;
+      /** Per-node token delta since the previous per-node update. */
+      node_tokens_consumed?: number | null;
+      /** Per-node cost cents delta since the previous per-node update. */
+      node_cost_cents_consumed?: number | null;
     }
   | { event: "provider_health_update"; providers: ProviderHealth[] }
   | { event: "swarm_completed"; run_id: Uuid }
@@ -268,11 +278,24 @@ export interface OracleRuntimeStatus {
  * In-memory projection of an active run held by the store. Not a
  * server-side type — assembled from incoming events.
  */
+/** Per-node cumulative token + cost accounting fed by per-node BudgetUpdate events. */
+export interface NodeBudgetState {
+  tokens_consumed: number;
+  cost_cents: number;
+}
+
 export interface RunState {
   run_id: Uuid;
   dag: ExecutionDagJson;
   /** Map from node id → current status as last reported by events. */
   node_states: Record<string, DagNodeStatus>;
+  /**
+   * Map from node id → cumulative budget consumed. Populated only by
+   * `BudgetUpdate` events whose `node_id` is non-null (Phase 4a's
+   * per-node BudgetUpdate path). Run-scoped BudgetUpdates do not touch
+   * this map.
+   */
+  node_budgets: Record<string, NodeBudgetState>;
   ticket_id: Uuid | null;
   started_at_ms: number;
 }

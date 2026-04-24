@@ -56,6 +56,18 @@ pub trait SwarmCapability: Send + Sync {
         &self,
         invocation: CapabilityInvocation,
     ) -> Result<Value, crate::error::SwarmError>;
+
+    /// Execute with access to the per-node `AgentExecutionContext`.
+    /// Default impl delegates to `run` so existing implementations
+    /// (stubs, tests) keep working. Phase 4a's real adapters override
+    /// this to emit phase events and record per-node budget.
+    async fn run_with_context(
+        &self,
+        invocation: CapabilityInvocation,
+        _ctx: &crate::context::AgentExecutionContext,
+    ) -> Result<Value, crate::error::SwarmError> {
+        self.run(invocation).await
+    }
 }
 
 /// Type-erased handle stored in the registry and passed to tasks.

@@ -14,8 +14,9 @@
 //!   latency, Large context, Public privacy, Standard cost. Code work needs
 //!   headroom on context and advanced tool-use.
 
-use crate::adapters::invoke_resolved_provider;
+use crate::adapters::{invoke_resolved_provider, invoke_with_context};
 use crate::capability::{AgentCapabilityDescriptor, CapabilityInvocation, SwarmCapability};
+use crate::context::AgentExecutionContext;
 use crate::error::SwarmError;
 use crate::profile::{
     ContextSize, CostClass, LatencyClass, PrivacyClass, ReasoningTier, TaskProfile, ToolUseLevel,
@@ -70,27 +71,40 @@ impl SwarmCapability for ArtisanAdapter {
     }
 
     async fn run(&self, invocation: CapabilityInvocation) -> Result<Value, SwarmError> {
-        let instruction = invocation
-            .inputs
-            .get("node_inputs")
-            .and_then(|n| n.get("instruction"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("Refine the code per the parent outputs.");
-        let language = invocation
-            .inputs
-            .get("node_inputs")
-            .and_then(|n| n.get("language"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("rust");
-        let parents = serde_json::to_string_pretty(&invocation.parent_outputs)
-            .unwrap_or_else(|_| "{}".into());
-        let prompt = format!(
-            "You are Artisan, a focused code-writer.\n\
-             Language: {language}\n\
-             Parent outputs:\n{parents}\n\n\
-             Task: {instruction}\n\n\
-             Return ONLY the code. No markdown fences, no prose."
-        );
+        let prompt = build_prompt(&invocation);
         invoke_resolved_provider(&self.providers, &invocation, prompt, 4096).await
     }
+
+    async fn run_with_context(
+        &self,
+        invocation: CapabilityInvocation,
+        ctx: &AgentExecutionContext,
+    ) -> Result<Value, SwarmError> {
+        let prompt = build_prompt(&invocation);
+        invoke_with_context(ctx, prompt, 4096).await
+    }
+}
+
+fn build_prompt(invocation: &CapabilityInvocation) -> String {
+    let instruction = invocation
+        .inputs
+        .get("node_inputs")
+        .and_then(|n| n.get("instruction"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("Refine the code per the parent outputs.");
+    let language = invocation
+        .inputs
+        .get("node_inputs")
+        .and_then(|n| n.get("language"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("rust");
+    let parents =
+        serde_json::to_string_pretty(&invocation.parent_outputs).unwrap_or_else(|_| "{}".into());
+    format!(
+        "You are Artisan, a focused code-writer.\n\
+         Language: {language}\n\
+         Parent outputs:\n{parents}\n\n\
+         Task: {instruction}\n\n\
+         Return ONLY the code. No markdown fences, no prose."
+    )
 }

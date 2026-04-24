@@ -42,6 +42,7 @@ pub use scout::ScoutStub;
 pub use watchdog::WatchdogStub;
 
 use crate::capability::{AgentCapabilityDescriptor, CapabilityInvocation};
+use crate::context::AgentExecutionContext;
 use crate::error::SwarmError;
 use crate::provider::{InvokeRequest, Provider};
 use serde_json::Value;
@@ -85,6 +86,84 @@ pub(crate) async fn invoke_resolved_provider(
             metadata: Value::Null,
         })
         .await?;
+    Ok(serde_json::json!({
+        "text": resp.text,
+        "tokens_in": resp.tokens_in,
+        "tokens_out": resp.tokens_out,
+        "cost_cents": resp.cost_cents,
+        "model_id": resp.model_id,
+    }))
+}
+
+/// Context-aware invocation. Emits `plan` → `act` → `observe` phase
+/// events around a single `Provider::invoke` call, records per-node
+/// token + cost on `ctx.budget`, and flushes a per-node `BudgetUpdate`.
+/// Checks `ctx.cancel` between every phase so a `swarm_cancel_node`
+/// aborts promptly with `SwarmError::Cancelled`.
+pub(crate) async fn invoke_with_context(
+    ctx: &AgentExecutionContext,
+    prompt: String,
+    max_tokens: u32,
+) -> Result<Value, SwarmError> {
+    ctx.emit
+        .emit_phase(
+            "plan",
+            serde_json::json!({ "tool": ctx.capability_id, "prompt_chars": prompt.len() }),
+        )
+        .await;
+    if ctx.cancelled() {
+        return Err(SwarmError::Cancelled);
+    }
+
+    ctx.emit
+        .emit_phase(
+            "act",
+            serde_json::json!({ "model_id": ctx.model_id, "max_tokens": max_tokens }),
+        )
+        .await;
+    if ctx.cancelled() {
+        return Err(SwarmError::Cancelled);
+    }
+
+    let resp = ctx
+        .provider
+        .invoke(InvokeRequest {
+            model_id: ctx.model_id.clone(),
+            prompt,
+            max_tokens,
+            temperature: Some(0.2),
+            metadata: Value::Null,
+        })
+        .await?;
+
+    if ctx.cancelled() {
+        return Err(SwarmError::Cancelled);
+    }
+
+    // Record per-node budget. tokens_in + tokens_out captures the full
+    // accounting; cost_cents is the provider's own pricing.
+    let consumed_tokens = u64::from(resp.tokens_in).saturating_add(u64::from(resp.tokens_out));
+    let delta = {
+        let mut guard = ctx.budget.lock().await;
+        guard.record(consumed_tokens, resp.cost_cents);
+        *guard
+    };
+    ctx.emit.emit_budget_update(delta).await;
+
+    let digest_len = resp.text.chars().count().min(120);
+    let response_digest: String = resp.text.chars().take(digest_len).collect();
+    ctx.emit
+        .emit_phase(
+            "observe",
+            serde_json::json!({
+                "response_digest": response_digest,
+                "completion_tokens": resp.tokens_out,
+                "prompt_tokens": resp.tokens_in,
+                "cost_cents": resp.cost_cents,
+            }),
+        )
+        .await;
+
     Ok(serde_json::json!({
         "text": resp.text,
         "tokens_in": resp.tokens_in,

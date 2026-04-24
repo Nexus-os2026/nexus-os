@@ -97,6 +97,18 @@ pub enum SwarmEvent {
         cents_remaining: u32,
         wall_ms_remaining: u64,
         ticket_nonce: Uuid,
+        /// Per-node scope. `None` → run-scoped (current behavior). `Some`
+        /// → this update is a per-node delta for the specified node.
+        #[serde(default)]
+        node_id: Option<String>,
+        /// Tokens consumed by this node since the last per-node update.
+        /// Only populated when `node_id` is `Some`.
+        #[serde(default)]
+        node_tokens_consumed: Option<u64>,
+        /// Cost cents attributable to this node since the last per-node
+        /// update. Only populated when `node_id` is `Some`.
+        #[serde(default)]
+        node_cost_cents_consumed: Option<u32>,
     },
     ProviderHealthUpdate {
         providers: Vec<ProviderHealth>,

@@ -199,14 +199,27 @@ fn event_to_audit_entry(
             cents_remaining,
             wall_ms_remaining,
             ticket_nonce,
-        } => (
-            *run_id,
-            *ticket_nonce,
-            "budget_update",
-            format!(
-                "tokens={tokens_remaining} cents={cents_remaining} wall_ms={wall_ms_remaining}"
-            ),
-        ),
+            node_id,
+            node_tokens_consumed,
+            node_cost_cents_consumed,
+        } => {
+            let scope = match node_id {
+                Some(id) => format!(
+                    " node={id} node_tokens={} node_cents={}",
+                    node_tokens_consumed.unwrap_or(0),
+                    node_cost_cents_consumed.unwrap_or(0),
+                ),
+                None => String::new(),
+            };
+            (
+                *run_id,
+                *ticket_nonce,
+                "budget_update",
+                format!(
+                    "tokens={tokens_remaining} cents={cents_remaining} wall_ms={wall_ms_remaining}{scope}"
+                ),
+            )
+        }
         SwarmEvent::OracleRuntimeCheck {
             ticket_nonce,
             highrisk_event,

@@ -336,6 +336,9 @@ impl SwarmCoordinator {
                 let node_inputs = node.inputs.clone();
                 let node_id_cloned = node_id.clone();
                 let ticket_nonce = ticket.nonce;
+                let provider_for_ctx = self.providers.get(&route.provider_id).cloned();
+                let model_for_ctx = route.model_id.clone();
+                let cancel_for_ctx = cancel.clone();
 
                 set.spawn(async move {
                     let _permit = sem.acquire_owned().await.ok();
@@ -362,7 +365,41 @@ impl SwarmCoordinator {
                         }),
                         parent_outputs: parent_outs,
                     };
-                    match cap.run(invocation).await {
+
+                    // When the resolved provider is registered, build a
+                    // per-node context and dispatch through
+                    // `run_with_context` so adapters can emit phase
+                    // events. When it isn't (test-only capabilities that
+                    // don't actually touch a provider), fall back to the
+                    // legacy `run` path.
+                    let result = match provider_for_ctx {
+                        Some(provider) => {
+                            let emitter: std::sync::Arc<dyn crate::emitter::EventEmitter> =
+                                std::sync::Arc::new(crate::emitter::CoordinatorEmitter::new(
+                                    events.clone(),
+                                    ticket_nonce,
+                                    run_id,
+                                    node_id_cloned.clone(),
+                                ));
+                            let ctx = crate::context::AgentExecutionContext {
+                                ticket_nonce,
+                                run_id,
+                                node_id: node_id_cloned.clone(),
+                                capability_id: capability_id.clone(),
+                                provider,
+                                model_id: model_for_ctx,
+                                emit: emitter,
+                                cancel: cancel_for_ctx,
+                                budget: std::sync::Arc::new(tokio::sync::Mutex::new(
+                                    crate::context::NodeBudget::new(),
+                                )),
+                            };
+                            cap.run_with_context(invocation, &ctx).await
+                        }
+                        None => cap.run(invocation).await,
+                    };
+
+                    match result {
                         Ok(v) => NodeOutcome::Done {
                             node_id: node_id_cloned,
                             value: v,
@@ -412,6 +449,9 @@ impl SwarmCoordinator {
                     cents_remaining: budget.cost_cents,
                     wall_ms_remaining: budget.wall_ms,
                     ticket_nonce: ticket.nonce,
+                    node_id: None,
+                    node_tokens_consumed: None,
+                    node_cost_cents_consumed: None,
                 });
             }
 

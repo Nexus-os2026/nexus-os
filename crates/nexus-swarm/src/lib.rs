@@ -24,9 +24,12 @@
 pub mod adapters;
 pub mod budget;
 pub mod capability;
+pub mod context;
 pub mod coordinator;
 pub mod dag;
 pub mod director;
+pub mod emitter;
+pub mod entry;
 pub mod error;
 pub mod events;
 pub mod oracle_bridge;
@@ -40,9 +43,12 @@ pub mod routing_defaults;
 
 pub use budget::Budget;
 pub use capability::{AgentCapabilityDescriptor, SwarmCapability};
+pub use context::{AgentExecutionContext, NodeBudget};
 pub use coordinator::{SwarmCoordinator, SwarmRunHandle};
 pub use dag::{DagEdge, DagNode, DagNodeStatus, ExecutionDag};
 pub use director::{Director, PlannedSwarm, SwarmDirector};
+pub use emitter::{CoordinatorEmitter, EventEmitter};
+pub use entry::{AgentError, SwarmAgentEntry};
 pub use error::SwarmError;
 pub use events::{ProviderHealth, ProviderHealthStatus, SwarmEvent};
 pub use oracle_bridge::{SwarmOracleBridge, SwarmSummary, SwarmTicket};

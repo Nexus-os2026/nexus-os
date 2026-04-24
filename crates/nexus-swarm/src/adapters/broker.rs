@@ -8,8 +8,9 @@
 //!   Medium context, Public privacy, Low cost. Coordination chatter is
 //!   structured and compact; doesn't need the headroom Artisan does.
 
-use crate::adapters::invoke_resolved_provider;
+use crate::adapters::{invoke_resolved_provider, invoke_with_context};
 use crate::capability::{AgentCapabilityDescriptor, CapabilityInvocation, SwarmCapability};
+use crate::context::AgentExecutionContext;
 use crate::error::SwarmError;
 use crate::profile::{
     ContextSize, CostClass, LatencyClass, PrivacyClass, ReasoningTier, TaskProfile, ToolUseLevel,
@@ -63,21 +64,34 @@ impl SwarmCapability for BrokerAdapter {
     }
 
     async fn run(&self, invocation: CapabilityInvocation) -> Result<Value, SwarmError> {
-        let directive = invocation
-            .inputs
-            .get("node_inputs")
-            .and_then(|n| n.get("directive"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        let parents = serde_json::to_string_pretty(&invocation.parent_outputs)
-            .unwrap_or_else(|_| "{}".into());
-        let prompt = format!(
-            "You are Broker, the coordination voice of the swarm.\n\
-             Upstream outputs:\n{parents}\n\n\
-             Directive: {directive}\n\n\
-             Produce a structured coordination note — what each downstream \n\
-             capability should do next, in 1-3 short bullets. No prose."
-        );
+        let prompt = build_prompt(&invocation);
         invoke_resolved_provider(&self.providers, &invocation, prompt, 1024).await
     }
+
+    async fn run_with_context(
+        &self,
+        invocation: CapabilityInvocation,
+        ctx: &AgentExecutionContext,
+    ) -> Result<Value, SwarmError> {
+        let prompt = build_prompt(&invocation);
+        invoke_with_context(ctx, prompt, 1024).await
+    }
+}
+
+fn build_prompt(invocation: &CapabilityInvocation) -> String {
+    let directive = invocation
+        .inputs
+        .get("node_inputs")
+        .and_then(|n| n.get("directive"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let parents =
+        serde_json::to_string_pretty(&invocation.parent_outputs).unwrap_or_else(|_| "{}".into());
+    format!(
+        "You are Broker, the coordination voice of the swarm.\n\
+         Upstream outputs:\n{parents}\n\n\
+         Directive: {directive}\n\n\
+         Produce a structured coordination note — what each downstream \n\
+         capability should do next, in 1-3 short bullets. No prose."
+    )
 }
