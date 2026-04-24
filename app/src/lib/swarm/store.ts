@@ -15,6 +15,7 @@
 
 import { useSyncExternalStore } from "react";
 import { swarmBus } from "./swarm_bus";
+import type { EventCategory } from "./event_category";
 import type {
   DagNodeStatus,
   PlannedSwarmJson,
@@ -22,6 +23,17 @@ import type {
   RunState,
   SwarmEvent,
 } from "./types";
+
+/**
+ * UI state driving the event-tape filter chips. `null` on a dimension
+ * means "no filter" for that dimension. `severityOnly` collapses to
+ * failure events when true.
+ */
+export interface EventFilter {
+  byAgent: string | null;
+  byEventType: EventCategory | null;
+  severityOnly: boolean;
+}
 
 export interface SwarmState {
   providerHealth: ProviderHealth[];
@@ -31,9 +43,17 @@ export interface SwarmState {
   recentEvents: SwarmEvent[];
   /** UI-only focus state; dispatched by the DAG viewer on node click. */
   focusedNodeId: string | null;
+  /** UI-only event-tape filter state. */
+  eventFilter: EventFilter;
 }
 
 const RECENT_EVENT_CAP = 100;
+
+const INITIAL_EVENT_FILTER: EventFilter = Object.freeze({
+  byAgent: null,
+  byEventType: null,
+  severityOnly: false,
+});
 
 const initialState: SwarmState = {
   providerHealth: [],
@@ -41,6 +61,7 @@ const initialState: SwarmState = {
   activeRun: null,
   recentEvents: [],
   focusedNodeId: null,
+  eventFilter: INITIAL_EVENT_FILTER,
 };
 
 // ── Store plumbing ──────────────────────────────────────────────────────────
@@ -91,6 +112,35 @@ export function setInitialProviderHealth(providers: ProviderHealth[]): void {
 /** Set or clear the focused DAG node. Pure UI state — not event-driven. */
 export function selectFocusedNode(nodeId: string | null): void {
   setState((prev) => (prev.focusedNodeId === nodeId ? prev : { ...prev, focusedNodeId: nodeId }));
+}
+
+/** Merge a partial filter over the current event-tape filter state. */
+export function setEventFilter(partial: Partial<EventFilter>): void {
+  setState((prev) => {
+    const next: EventFilter = { ...prev.eventFilter, ...partial };
+    if (
+      next.byAgent === prev.eventFilter.byAgent &&
+      next.byEventType === prev.eventFilter.byEventType &&
+      next.severityOnly === prev.eventFilter.severityOnly
+    ) {
+      return prev;
+    }
+    return { ...prev, eventFilter: next };
+  });
+}
+
+/** Reset every filter dimension. */
+export function clearEventFilter(): void {
+  setState((prev) => {
+    if (
+      prev.eventFilter.byAgent === null &&
+      prev.eventFilter.byEventType === null &&
+      !prev.eventFilter.severityOnly
+    ) {
+      return prev;
+    }
+    return { ...prev, eventFilter: INITIAL_EVENT_FILTER };
+  });
 }
 
 /** Test-only. Resets the store and re-attaches the dispatcher subscription. */

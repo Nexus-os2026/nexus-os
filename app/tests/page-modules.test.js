@@ -62,12 +62,13 @@ const KNOWN_ORPHAN_COMPONENTS = [
     'builder/ConversionReportCard.tsx',
     'builder/PresenceIndicators.tsx',
     'builder/RoleManager.tsx',
-    // Orphaned in Phase 2 when Agents.tsx became a swarm shell. Phase 3
-    // re-home candidates (see Phase 2 completion report); SlmStatusBadge
-    // → streaming-agent cards, NeuralGraph/HeatMap → DAG viewer telemetry.
-    // ActivityFeed is a delete candidate if the event tape supplants it.
+    // Orphaned in Phase 2 when Agents.tsx became a swarm shell.
+    // SlmStatusBadge was re-homed in Phase 3b into AgentCard — removed
+    // from this list. HeatMap and NeuralGraph remained orphaned after
+    // Phase 3b's honest evaluation: no data-driven use surfaced that
+    // would beat leaving them alone. ActivityFeed is still a delete
+    // candidate pending cleanup followup.
     'agents/ActivityFeed.tsx',
-    'agents/SlmStatusBadge.tsx',
     'viz/HeatMap.tsx',
     'viz/NeuralGraph.tsx',
 ];

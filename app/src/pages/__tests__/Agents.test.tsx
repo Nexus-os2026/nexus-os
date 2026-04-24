@@ -136,4 +136,35 @@ describe("Agents shell", () => {
     });
     expect(screen.getByTestId("run-footer")).toHaveTextContent(/no active run/i);
   });
+
+  it("region-swarm hosts the live SwarmGrid", () => {
+    render(<Agents />);
+    const region = screen.getByTestId("region-swarm");
+    expect(region.querySelector('[data-testid="swarm-grid"]')).not.toBeNull();
+    expect(region.querySelector('[data-testid="swarm-grid-empty"]')).not.toBeNull();
+  });
+
+  it("region-events hosts the live EventTape", () => {
+    render(<Agents />);
+    const region = screen.getByTestId("region-events");
+    expect(region.querySelector('[data-testid="event-tape"]')).not.toBeNull();
+    expect(region.querySelector('[data-testid="event-tape-filters"]')).not.toBeNull();
+  });
+
+  it("RunFooter Cancel button appears only when a run is active", async () => {
+    render(<Agents />);
+    expect(screen.queryByTestId("run-footer-cancel")).not.toBeInTheDocument();
+    const runId = "22222222-2222-2222-2222-222222222222";
+    act(() => {
+      swarmBus.__injectForTest({
+        event: "plan_proposed",
+        run_id: runId,
+        dag_json: { nodes: [], edges: [] },
+      });
+      swarmBus.__injectForTest(planApprovedEvent(runId));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("run-footer-cancel")).toBeInTheDocument();
+    });
+  });
 });

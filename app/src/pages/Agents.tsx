@@ -11,12 +11,14 @@
 
 import { useEffect, useState } from "react";
 import { useSwarmStore } from "../lib/swarm/store";
-import { refreshProviderHealth } from "../lib/swarm/commands";
+import { cancelSwarm, refreshProviderHealth } from "../lib/swarm/commands";
 import { selectIsPlanPending } from "../lib/swarm/selectors";
 import type { PlannedSwarmJson, ProviderHealth, ProviderHealthStatus } from "../lib/swarm/types";
 import { DirectorConsole } from "../components/swarm/DirectorConsole";
 import { PlanApprovalCard } from "../components/swarm/PlanApprovalCard";
 import { DagViewer } from "../components/swarm/DagViewer";
+import { SwarmGrid } from "../components/swarm/SwarmGrid";
+import { EventTape } from "../components/swarm/EventTape";
 
 function statusColor(status: ProviderHealthStatus): string {
   switch (status) {
@@ -104,30 +106,17 @@ function ProviderStrip(): JSX.Element {
   );
 }
 
-function Placeholder({ label, testId }: { label: string; testId: string }): JSX.Element {
-  return (
-    <div
-      data-testid={testId}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "#475569",
-        fontSize: 13,
-        fontFamily: "var(--font-mono, monospace)",
-        border: "1px dashed rgba(100,116,139,0.25)",
-        borderRadius: 10,
-        background: "rgba(30,41,59,0.25)",
-        minHeight: 0,
-      }}
-    >
-      {label}
-    </div>
-  );
-}
-
 function RunFooter(): JSX.Element {
   const activeRun = useSwarmStore((s) => s.activeRun);
+  const [cancelling, setCancelling] = useState(false);
+
+  const onCancel = (): void => {
+    if (!activeRun || cancelling) return;
+    const runId = activeRun.run_id;
+    setCancelling(true);
+    void cancelSwarm(runId).finally(() => setCancelling(false));
+  };
+
   return (
     <footer
       style={{
@@ -156,6 +145,26 @@ function RunFooter(): JSX.Element {
           <span>
             elapsed: {Math.max(0, Math.floor((Date.now() - activeRun.started_at_ms) / 1000))}s
           </span>
+          <button
+            type="button"
+            data-testid="run-footer-cancel"
+            onClick={onCancel}
+            disabled={cancelling}
+            style={{
+              marginLeft: "auto",
+              padding: "4px 12px",
+              borderRadius: 6,
+              background: "rgba(220,38,38,0.18)",
+              border: "1px solid rgba(248,113,113,0.45)",
+              color: "#fca5a5",
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: cancelling ? "not-allowed" : "pointer",
+              opacity: cancelling ? 0.55 : 1,
+            }}
+          >
+            {cancelling ? "cancelling…" : "Cancel run"}
+          </button>
         </>
       )}
     </footer>
@@ -218,6 +227,36 @@ function DagRegion(): JSX.Element {
   );
 }
 
+function SwarmRegion(): JSX.Element {
+  return (
+    <div
+      data-testid="region-swarm"
+      style={{
+        display: "flex",
+        minHeight: 0,
+        minWidth: 0,
+      }}
+    >
+      <SwarmGrid />
+    </div>
+  );
+}
+
+function EventsRegion(): JSX.Element {
+  return (
+    <div
+      data-testid="region-events"
+      style={{
+        display: "flex",
+        minHeight: 0,
+        minWidth: 0,
+      }}
+    >
+      <EventTape />
+    </div>
+  );
+}
+
 export function Agents(): JSX.Element {
   return (
     <div
@@ -243,8 +282,8 @@ export function Agents(): JSX.Element {
         }}
       >
         <DagRegion />
-        <Placeholder label="Streaming agents (Phase 3)" testId="region-swarm" />
-        <Placeholder label="Event tape (Phase 3)" testId="region-events" />
+        <SwarmRegion />
+        <EventsRegion />
         <DirectorRegion />
       </main>
       <RunFooter />
