@@ -4,46 +4,16 @@
 //! DAG node. The [`Router`](crate::routing::Router) consumes profiles to pick
 //! a concrete (provider, model) pair at runtime. Profiles never carry prompt
 //! text — just the shape of the work.
+//!
+//! `PrivacyClass`, `ReasoningTier`, and `CostClass` are re-exported from
+//! `nexus-swarm-core` because the `Provider` trait references them and
+//! lives in core. The other 4 enums (this file's `ToolUseLevel`,
+//! `LatencyClass`, `ContextSize`, plus the composite `TaskProfile`) are
+//! orchestration-side only — no agent crate references them.
 
 use serde::{Deserialize, Serialize};
 
-/// Privacy class of a task.
-///
-/// Hard deny rules, not downgrade rules:
-/// - `StrictLocal` — may only run on providers whose `privacy_class ==
-///   StrictLocal` (i.e. ollama). The router must never downgrade.
-/// - `Sensitive` — also restricted to local providers.
-/// - `Public` — any provider is eligible.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum PrivacyClass {
-    Public,
-    Sensitive,
-    StrictLocal,
-}
-
-impl PrivacyClass {
-    /// True if a task with `self` privacy may run on a provider with
-    /// `provider` privacy. Local providers satisfy every class; cloud
-    /// providers (Public) satisfy only `Public`.
-    pub fn satisfied_by(self, provider: PrivacyClass) -> bool {
-        match self {
-            PrivacyClass::Public => true,
-            PrivacyClass::Sensitive | PrivacyClass::StrictLocal => {
-                matches!(provider, PrivacyClass::StrictLocal)
-            }
-        }
-    }
-}
-
-/// Reasoning tier required by the task.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub enum ReasoningTier {
-    Trivial,
-    Light,
-    Medium,
-    Heavy,
-    Expert,
-}
+pub use nexus_swarm_core::profile_classes::{CostClass, PrivacyClass, ReasoningTier};
 
 /// Tool-use level required by the task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -68,15 +38,6 @@ pub enum ContextSize {
     Medium, // ≤32K
     Large,  // ≤128K
     Huge,   // >128K
-}
-
-/// Cost class expresses willingness-to-spend, not measured cost.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum CostClass {
-    Free,
-    Low,
-    Standard,
-    Premium,
 }
 
 /// The composite profile attached to a DAG node.

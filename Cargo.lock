@@ -1098,11 +1098,14 @@ dependencies = [
 name = "coder-agent"
 version = "10.6.0"
 dependencies = [
+ "async-trait",
  "nexus-connectors-llm",
  "nexus-sdk",
+ "nexus-swarm-core",
  "serde",
  "serde_json",
  "tempfile",
+ "tokio",
  "tracing",
  "uuid",
 ]
@@ -5907,6 +5910,7 @@ version = "10.6.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "coder-agent",
  "dirs 5.0.1",
  "fs2",
  "futures",
@@ -5916,6 +5920,7 @@ dependencies = [
  "nexus-governance-oracle",
  "nexus-kernel",
  "nexus-memory",
+ "nexus-swarm-core",
  "petgraph",
  "regex",
  "reqwest 0.12.28",
@@ -5929,6 +5934,18 @@ dependencies = [
  "tracing",
  "uuid",
  "wiremock",
+]
+
+[[package]]
+name = "nexus-swarm-core"
+version = "10.6.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

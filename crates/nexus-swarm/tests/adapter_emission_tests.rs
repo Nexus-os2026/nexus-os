@@ -101,9 +101,15 @@ fn mk_context(
 }
 
 fn artisan_invocation() -> CapabilityInvocation {
+    // Phase 4b: Artisan now delegates to coder-agent's `CoderEntry`,
+    // which expects `task` (not the legacy `instruction`) and an
+    // optional `style.language`.
     CapabilityInvocation {
         inputs: json!({
-            "node_inputs": {"instruction": "write fn add", "language": "rust"},
+            "node_inputs": {
+                "task": "write fn add",
+                "style": { "language": "rust" }
+            },
             "route": {"provider_id": "canned", "model_id": "canned-small"},
         }),
         parent_outputs: Default::default(),
@@ -145,8 +151,32 @@ fn assert_plan_act_observe(log: &[Recorded]) {
     );
 }
 
+/// Phase 4b: Artisan now delegates to `coder_agent::CoderEntry`, which
+/// emits a 5-phase semantic sequence (no `writing_files` when the
+/// invocation didn't supply `output_dir`).
+fn assert_coder_phases_no_output_dir(log: &[Recorded]) {
+    let phases: Vec<&str> = log
+        .iter()
+        .filter_map(|r| match r {
+            Recorded::Phase { phase, .. } => Some(phase.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        phases,
+        vec![
+            "parsing_input",
+            "planning",
+            "generating",
+            "parsing_response",
+            "complete"
+        ],
+        "expected coder 5-phase sequence, got {phases:?}"
+    );
+}
+
 #[tokio::test]
-async fn artisan_emits_plan_act_observe() {
+async fn artisan_emits_coder_phase_sequence() {
     let rec = Arc::new(RecordingEmitter::new());
     let ctx = mk_context("artisan", rec.clone(), CancelToken::new());
     let adapter = ArtisanAdapter::new(providers());
@@ -154,7 +184,7 @@ async fn artisan_emits_plan_act_observe() {
         .run_with_context(artisan_invocation(), &ctx)
         .await
         .expect("ok");
-    assert_plan_act_observe(&rec.snapshot().await);
+    assert_coder_phases_no_output_dir(&rec.snapshot().await);
 }
 
 #[tokio::test]

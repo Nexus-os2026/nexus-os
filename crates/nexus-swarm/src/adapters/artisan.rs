@@ -14,7 +14,7 @@
 //!   latency, Large context, Public privacy, Standard cost. Code work needs
 //!   headroom on context and advanced tool-use.
 
-use crate::adapters::{invoke_resolved_provider, invoke_with_context};
+use crate::adapters::invoke_resolved_provider;
 use crate::capability::{AgentCapabilityDescriptor, CapabilityInvocation, SwarmCapability};
 use crate::context::AgentExecutionContext;
 use crate::error::SwarmError;
@@ -80,8 +80,27 @@ impl SwarmCapability for ArtisanAdapter {
         invocation: CapabilityInvocation,
         ctx: &AgentExecutionContext,
     ) -> Result<Value, SwarmError> {
-        let prompt = build_prompt(&invocation);
-        invoke_with_context(ctx, prompt, 4096).await
+        // Phase 4b: delegate to coder-agent's SwarmAgentEntry impl. The
+        // entry handles its own phase emission, prompt building, provider
+        // dispatch, and per-node budget recording. The Phase 4a
+        // `invoke_with_context` prompt-shell stays available via `run`
+        // (legacy path used when the resolved provider isn't registered
+        // in the coordinator's map — see coordinator.rs spawn closure).
+        use coder_agent::swarm_entry::CoderEntry;
+        use nexus_swarm_core::SwarmAgentEntry;
+        CoderEntry::new()
+            .execute(invocation.inputs, ctx)
+            .await
+            .map_err(map_agent_error)
+    }
+}
+
+fn map_agent_error(err: nexus_swarm_core::AgentError) -> SwarmError {
+    match err {
+        nexus_swarm_core::AgentError::Cancelled => SwarmError::Cancelled,
+        nexus_swarm_core::AgentError::Provider(p) => SwarmError::from(p),
+        nexus_swarm_core::AgentError::InvalidInput(msg) => SwarmError::DirectorParse(msg),
+        nexus_swarm_core::AgentError::Internal(msg) => SwarmError::DirectorParse(msg),
     }
 }
 

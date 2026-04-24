@@ -18,6 +18,8 @@ nexus-crypto = { path = "../nexus-crypto" }
 nexus-governance-oracle = { path = "../nexus-governance-oracle" }
 nexus-memory = { path = "../nexus-memory" }
 nexus-connectors-llm = { path = "../../connectors/llm" }
+nexus-swarm-core = { path = "../nexus-swarm-core" }
+coder-agent = { path = "../../agents/coder" }
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

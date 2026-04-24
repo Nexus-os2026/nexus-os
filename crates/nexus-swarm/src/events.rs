@@ -16,29 +16,11 @@ use crate::routing::RouteDenied;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Health status reported by a single provider.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum ProviderHealthStatus {
-    Ok,
-    Degraded,
-    Unhealthy,
-}
-
-/// Result of a provider health check, surfaced to the UI.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ProviderHealth {
-    pub provider_id: String,
-    pub status: ProviderHealthStatus,
-    /// Observed latency in milliseconds; `None` when the probe failed before
-    /// a response was received.
-    pub latency_ms: Option<u64>,
-    pub models: Vec<String>,
-    /// Free-form notes (e.g. `"api_key not in keyring"`,
-    /// `"spend: $0.42 / $2.00"`).
-    pub notes: String,
-    /// Unix timestamp (seconds) when the probe completed.
-    pub checked_at_secs: i64,
-}
+// `ProviderHealth` + `ProviderHealthStatus` moved to `nexus-swarm-core`
+// so the `Provider` trait could move with them. Re-exported here so the
+// `events.rs` consumers (and the `SwarmEvent::ProviderHealthUpdate`
+// variant below) stay on `crate::events::ProviderHealth`.
+pub use nexus_swarm_core::provider_health::{ProviderHealth, ProviderHealthStatus};
 
 /// Coarse identity of a DAG node, used for event addressing.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

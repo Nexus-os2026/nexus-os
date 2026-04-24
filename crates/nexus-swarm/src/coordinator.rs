@@ -23,36 +23,14 @@ use crate::routing::{RouteCandidate, Router};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{broadcast, watch, Mutex, Semaphore};
+use tokio::sync::{broadcast, Mutex, Semaphore};
 use tokio::task::JoinSet;
 use uuid::Uuid;
 
-/// A tiny cancellation token built on `watch::channel(bool)` — we avoid
-/// pulling in `tokio-util` just for this.
-#[derive(Clone)]
-pub struct CancelToken {
-    tx: watch::Sender<bool>,
-    rx: watch::Receiver<bool>,
-}
-
-impl CancelToken {
-    pub fn new() -> Self {
-        let (tx, rx) = watch::channel(false);
-        Self { tx, rx }
-    }
-    pub fn is_cancelled(&self) -> bool {
-        *self.rx.borrow()
-    }
-    pub fn cancel(&self) {
-        let _ = self.tx.send(true);
-    }
-}
-
-impl Default for CancelToken {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// `CancelToken` moved to `nexus-swarm-core::cancel` so agent crates can
+// observe cancellation via `ctx.cancelled()`. Re-exported here for
+// existing callers that use `crate::coordinator::CancelToken`.
+pub use nexus_swarm_core::cancel::CancelToken;
 
 pub struct SwarmCoordinator {
     pub events: broadcast::Sender<SwarmEvent>,

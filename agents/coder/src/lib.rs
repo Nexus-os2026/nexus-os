@@ -8,6 +8,7 @@ pub mod git;
 pub mod init;
 pub mod llm_codegen;
 pub mod scanner;
+pub mod swarm_entry;
 pub mod terminal;
 pub mod test_runner;
 pub mod watcher;
