@@ -22,11 +22,11 @@ function mkPlan(privacy: PrivacyClass): PlannedSwarmJson {
 function stubProfile(): PlannedSwarmJson["dag"]["nodes"][number]["profile"] {
   return {
     privacy: "Public",
-    reasoning: "Balanced",
+    reasoning: "Medium",
     tool_use: "Basic",
     latency: "Batch",
     context: "Small",
-    cost: "Cheap",
+    cost: "Low",
   };
 }
 

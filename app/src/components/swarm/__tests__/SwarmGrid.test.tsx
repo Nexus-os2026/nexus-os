@@ -12,11 +12,11 @@ function stubNode(id: string, capability: string): DagNode {
     capability_id: capability,
     profile: {
       privacy: "Public",
-      reasoning: "Balanced",
+      reasoning: "Medium",
       tool_use: "Basic",
       latency: "Batch",
       context: "Small",
-      cost: "Cheap",
+      cost: "Low",
     },
     inputs: null,
     status: "Pending",

@@ -22,11 +22,11 @@ export type Uuid = string;
 // ── TaskProfile + enums (profile.rs) ────────────────────────────────────────
 
 export type PrivacyClass = "Public" | "Sensitive" | "StrictLocal";
-export type ReasoningTier = "Fast" | "Balanced" | "Deep";
-export type ToolUseLevel = "None" | "Basic" | "Rich";
+export type ReasoningTier = "Trivial" | "Light" | "Medium" | "Heavy" | "Expert";
+export type ToolUseLevel = "None" | "Basic" | "Advanced";
 export type LatencyClass = "Interactive" | "Batch" | "Background";
-export type ContextSize = "Small" | "Medium" | "Large";
-export type CostClass = "Free" | "Cheap" | "Moderate" | "Premium";
+export type ContextSize = "Small" | "Medium" | "Large" | "Huge";
+export type CostClass = "Free" | "Low" | "Standard" | "Premium";
 
 export interface TaskProfile {
   privacy: PrivacyClass;
