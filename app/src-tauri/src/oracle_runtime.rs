@@ -54,12 +54,24 @@ pub const ORACLE_RESPONSE_CEILING: Duration = Duration::from_millis(100);
 /// loops only.
 const EPHEMERAL_ENV: &str = "NEXUS_ORACLE_EPHEMERAL";
 
-/// Identity file byte layout is the same as `CryptoIdentity::to_bytes()`:
-///   [algorithm_byte (1) | signing_key (32) | verifying_key (32)]  — 65 bytes.
-/// `CryptoIdentity::from_bytes` re-derives the verifying key from the signing
-/// key, so we pass only bytes[1..33] into it; the trailing verifying-key bytes
-/// are written for inspection/debugging and ignored on load.
-const IDENTITY_FILE_MIN_LEN: usize = 33;
+/// Identity file V1 layout (Bug N):
+///   bytes 0..4   : magic `NXOK` (Nexus Oracle Key)
+///   byte  4      : version = 1
+///   bytes 5..70  : `CryptoIdentity::to_bytes()` payload — 65 bytes
+///                  `[algorithm_byte (1) | signing_key (32) | verifying_key (32)]`
+/// Total: 70 bytes. `CryptoIdentity::from_bytes` re-derives the verifying
+/// key from the signing key, so we only pass `payload[1..33]` into it; the
+/// trailing 32 verifying-key bytes are written for offline inspection.
+///
+/// V0 = legacy format written by Phase 1.5a.1: raw 65-byte payload, no
+/// header. Auto-migrated to V1 on next start. See `load_identity` for the
+/// detection ladder and `write_identity` for the atomic V1 writer.
+const IDENTITY_MAGIC: &[u8; 4] = b"NXOK";
+const IDENTITY_VERSION_V1: u8 = 1;
+const IDENTITY_HEADER_LEN: usize = 5;
+const IDENTITY_PAYLOAD_LEN: usize = 65;
+const IDENTITY_V1_LEN: usize = IDENTITY_HEADER_LEN + IDENTITY_PAYLOAD_LEN; // 70
+const IDENTITY_V0_LEN: usize = IDENTITY_PAYLOAD_LEN; // 65
 const ED25519_ALGO_BYTE: u8 = 0x01;
 
 /// Errors returned by the fallible entry points on `OracleRuntime`. The
@@ -93,6 +105,20 @@ pub enum OracleRuntimeError {
         path: PathBuf,
         detail: String,
     },
+    /// Bug N: file does not match the V1 magic header AND does not match
+    /// the legacy V0 length. Refusing to start prevents the trust root
+    /// from being silently regenerated over a corrupt or unrelated file.
+    IdentityFileCorrupt {
+        path: PathBuf,
+        detail: String,
+    },
+    /// Bug N: file matches the V1 magic but declares a version this build
+    /// does not understand. Non-recoverable — the app must not start, and
+    /// must not regenerate (would orphan the trust root).
+    IdentityFileFutureVersion {
+        path: PathBuf,
+        version: u8,
+    },
 }
 
 impl std::fmt::Display for OracleRuntimeError {
@@ -125,6 +151,18 @@ impl std::fmt::Display for OracleRuntimeError {
             Self::IdentityFormat { path, detail } => {
                 write!(f, "identity file {} is corrupt: {detail}", path.display())
             }
+            Self::IdentityFileCorrupt { path, detail } => write!(
+                f,
+                "identity file {} is corrupt or unrelated (refusing to regenerate): {detail}",
+                path.display()
+            ),
+            Self::IdentityFileFutureVersion { path, version } => write!(
+                f,
+                "identity file {} declares future version v{version}; this build only understands v{}; \
+                 refusing to start (will not regenerate to preserve trust root)",
+                path.display(),
+                IDENTITY_VERSION_V1
+            ),
         }
     }
 }
@@ -175,7 +213,47 @@ pub fn default_identity_path() -> Result<PathBuf, OracleRuntimeError> {
         .join("oracle_identity.key"))
 }
 
-fn load_identity(path: &Path) -> Result<CryptoIdentity, OracleRuntimeError> {
+/// Detection result for the V1 file-format ladder. Internal to the load
+/// helper — outer code only sees the final `CryptoIdentity` or a typed
+/// error.
+#[derive(Debug)]
+enum IdentityFileVersion {
+    V1,
+    /// Legacy 1.5a.1 format. Caller migrates to V1 in place after parse.
+    V0Migrated,
+}
+
+fn parse_payload(path: &Path, payload: &[u8]) -> Result<CryptoIdentity, OracleRuntimeError> {
+    if payload.len() != IDENTITY_PAYLOAD_LEN {
+        return Err(OracleRuntimeError::IdentityFileCorrupt {
+            path: path.to_path_buf(),
+            detail: format!(
+                "payload length {} ≠ expected {IDENTITY_PAYLOAD_LEN}",
+                payload.len()
+            ),
+        });
+    }
+    let algo = match payload[0] {
+        ED25519_ALGO_BYTE => SignatureAlgorithm::Ed25519,
+        other => {
+            return Err(OracleRuntimeError::IdentityFormat {
+                path: path.to_path_buf(),
+                detail: format!("unknown algorithm byte 0x{other:02x}"),
+            });
+        }
+    };
+    CryptoIdentity::from_bytes(algo, &payload[1..33]).map_err(|e| {
+        OracleRuntimeError::IdentityFormat {
+            path: path.to_path_buf(),
+            detail: format!("{e}"),
+        }
+    })
+}
+
+/// V0/V1/future/corrupt detection ladder. Returns the parsed identity
+/// alongside which version was loaded so the caller can rewrite a V0 file
+/// in V1 format on the same startup.
+fn read_identity(path: &Path) -> Result<(CryptoIdentity, IdentityFileVersion), OracleRuntimeError> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -195,32 +273,63 @@ fn load_identity(path: &Path) -> Result<CryptoIdentity, OracleRuntimeError> {
         path: path.to_path_buf(),
         source,
     })?;
-    if bytes.len() < IDENTITY_FILE_MIN_LEN {
-        return Err(OracleRuntimeError::IdentityFormat {
-            path: path.to_path_buf(),
-            detail: format!(
-                "file too short: {} bytes (expected >= {IDENTITY_FILE_MIN_LEN})",
-                bytes.len()
-            ),
-        });
-    }
-    let algo = match bytes[0] {
-        ED25519_ALGO_BYTE => SignatureAlgorithm::Ed25519,
-        other => {
-            return Err(OracleRuntimeError::IdentityFormat {
+
+    // V1: starts with NXOK magic.
+    if bytes.len() >= IDENTITY_HEADER_LEN && &bytes[..4] == IDENTITY_MAGIC {
+        let version = bytes[4];
+        if version != IDENTITY_VERSION_V1 {
+            return Err(OracleRuntimeError::IdentityFileFutureVersion {
                 path: path.to_path_buf(),
-                detail: format!("unknown algorithm byte 0x{other:02x}"),
+                version,
             });
         }
-    };
-    CryptoIdentity::from_bytes(algo, &bytes[1..33]).map_err(|e| {
-        OracleRuntimeError::IdentityFormat {
-            path: path.to_path_buf(),
-            detail: format!("{e}"),
+        if bytes.len() != IDENTITY_V1_LEN {
+            return Err(OracleRuntimeError::IdentityFileCorrupt {
+                path: path.to_path_buf(),
+                detail: format!(
+                    "V1 file length {} ≠ expected {IDENTITY_V1_LEN} (5-byte header + 65-byte payload)",
+                    bytes.len()
+                ),
+            });
         }
+        let identity = parse_payload(path, &bytes[IDENTITY_HEADER_LEN..])?;
+        return Ok((identity, IdentityFileVersion::V1));
+    }
+
+    // V0: legacy raw 65-byte payload.
+    if bytes.len() == IDENTITY_V0_LEN && bytes[0] == ED25519_ALGO_BYTE {
+        let identity = parse_payload(path, &bytes)?;
+        return Ok((identity, IdentityFileVersion::V0Migrated));
+    }
+
+    // Anything else: corrupt or unrelated. Refuse to start.
+    Err(OracleRuntimeError::IdentityFileCorrupt {
+        path: path.to_path_buf(),
+        detail: format!(
+            "no NXOK magic at start, and length ({} bytes) does not match V0 ({IDENTITY_V0_LEN}) or V1 ({IDENTITY_V1_LEN})",
+            bytes.len()
+        ),
     })
 }
 
+/// Public load entry point: returns the parsed identity. If the file was
+/// V0, it's transparently rewritten in V1 format before returning so the
+/// next start finds a clean V1 file.
+fn load_identity(path: &Path) -> Result<CryptoIdentity, OracleRuntimeError> {
+    let (identity, version) = read_identity(path)?;
+    if matches!(version, IdentityFileVersion::V0Migrated) {
+        eprintln!(
+            "[oracle] migrated identity file {} from V0 → V1 format",
+            path.display()
+        );
+        write_identity(path, &identity)?;
+    }
+    Ok(identity)
+}
+
+/// Write the identity file in V1 format atomically: write to a sibling
+/// tempfile, fsync it, then rename over the destination. Prevents a
+/// half-written file from being observed if the process crashes mid-write.
 fn write_identity(path: &Path, identity: &CryptoIdentity) -> Result<(), OracleRuntimeError> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|source| {
@@ -239,22 +348,78 @@ fn write_identity(path: &Path, identity: &CryptoIdentity) -> Result<(), OracleRu
             let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
         }
     }
-    std::fs::write(path, identity.to_bytes()).map_err(|source| {
-        OracleRuntimeError::IdentityWrite {
-            path: path.to_path_buf(),
-            source,
-        }
-    })?;
+
+    // Build the V1 byte vector: magic + version + payload.
+    let payload = identity.to_bytes();
+    let mut out = Vec::with_capacity(IDENTITY_V1_LEN);
+    out.extend_from_slice(IDENTITY_MAGIC);
+    out.push(IDENTITY_VERSION_V1);
+    out.extend_from_slice(&payload);
+    debug_assert_eq!(out.len(), IDENTITY_V1_LEN);
+
+    // Sibling tempfile in the same directory so the rename is atomic on
+    // the same filesystem. Suffix encodes pid + a per-call uuid so
+    // parallel writers (e.g. two cargo test threads racing on the same
+    // home dir) don't collide — without the uuid, thread A would rename
+    // the shared tempfile away mid-write and thread B's chmod would fail
+    // ENOENT.
+    let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let file_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("oracle_identity.key");
+    let tmp_path = parent.join(format!(
+        ".{file_name}.tmp.{}.{}",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+
+    // Write + fsync the tempfile.
+    {
+        use std::io::Write;
+        let mut f = std::fs::File::create(&tmp_path).map_err(|source| {
+            OracleRuntimeError::IdentityWrite {
+                path: tmp_path.clone(),
+                source,
+            }
+        })?;
+        f.write_all(&out)
+            .map_err(|source| OracleRuntimeError::IdentityWrite {
+                path: tmp_path.clone(),
+                source,
+            })?;
+        f.sync_all()
+            .map_err(|source| OracleRuntimeError::IdentityWrite {
+                path: tmp_path.clone(),
+                source,
+            })?;
+    }
+
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).map_err(
-            |source| OracleRuntimeError::IdentityChmod {
-                path: path.to_path_buf(),
+        // Set 0600 on the tempfile BEFORE rename so the destination is
+        // never observable with looser permissions.
+        if let Err(source) =
+            std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600))
+        {
+            let _ = std::fs::remove_file(&tmp_path);
+            return Err(OracleRuntimeError::IdentityChmod {
+                path: tmp_path,
                 source,
-            },
-        )?;
+            });
+        }
     }
+
+    // Atomic rename over destination.
+    if let Err(source) = std::fs::rename(&tmp_path, path) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(OracleRuntimeError::IdentityWrite {
+            path: path.to_path_buf(),
+            source,
+        });
+    }
+
     Ok(())
 }
 

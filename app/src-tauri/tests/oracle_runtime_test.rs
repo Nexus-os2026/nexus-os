@@ -404,6 +404,8 @@ fn corrupt_identity_file_errors() {
     let tmp = TempDir::new();
     let identity_path = tmp.path().join("oracle_identity.key");
 
+    // 30 bytes of arbitrary garbage — no NXOK magic, doesn't match V0 (65)
+    // or V1 (70) length. Must trip the V1 corrupt branch.
     std::fs::write(&identity_path, b"this-is-not-an-ed25519-keypair").expect("write garbage");
     #[cfg(unix)]
     {
@@ -421,9 +423,196 @@ fn corrupt_identity_file_errors() {
         Err(e) => e,
     };
     match err {
-        OracleRuntimeError::IdentityFormat { path, .. } => {
+        OracleRuntimeError::IdentityFileCorrupt { path, detail } => {
             assert_eq!(path, identity_path);
+            assert!(
+                detail.contains("NXOK") || detail.contains("length"),
+                "detail must surface the corruption reason; got {detail}"
+            );
         }
-        other => panic!("expected IdentityFormat, got {other:?}"),
+        other => panic!("expected IdentityFileCorrupt, got {other:?}"),
+    }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Bug N — V1 file-format tests
+// ───────────────────────────────────────────────────────────────────────────
+
+const NXOK: &[u8; 4] = b"NXOK";
+
+fn write_chmod_0600(path: &Path, bytes: &[u8]) {
+    std::fs::write(path, bytes).expect("write fixture");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).expect("chmod 0600");
+    }
+}
+
+#[test]
+fn identity_v1_round_trip() {
+    blocking_runtime().block_on(async move {
+        let tmp = TempDir::new();
+        let identity_path = tmp.path().join("oracle_identity.key");
+
+        // First start writes a fresh V1 file.
+        let rt1 = OracleRuntime::try_start_with_mode(
+            empty_ruleset(),
+            IdentityMode::Persistent(identity_path.clone()),
+        )
+        .expect("first start");
+        let vk1 = rt1.oracle().verifying_key_bytes().to_vec();
+        rt1.shutdown();
+        drop(rt1);
+
+        // File must be exactly 70 bytes, magic + version 1.
+        let bytes = std::fs::read(&identity_path).expect("read identity");
+        assert_eq!(
+            bytes.len(),
+            70,
+            "V1 file must be 70 bytes, got {}",
+            bytes.len()
+        );
+        assert_eq!(&bytes[0..4], NXOK, "magic must be NXOK");
+        assert_eq!(bytes[4], 1, "version must be 1");
+        assert_eq!(bytes[5], 0x01, "payload[0] must be Ed25519 algo byte");
+
+        // Second start loads the V1 file.
+        let rt2 = OracleRuntime::try_start_with_mode(
+            empty_ruleset(),
+            IdentityMode::Persistent(identity_path.clone()),
+        )
+        .expect("second start");
+        assert_eq!(rt2.oracle().verifying_key_bytes().to_vec(), vk1);
+        rt2.shutdown();
+    });
+}
+
+#[test]
+fn identity_v0_migrates_to_v1() {
+    blocking_runtime().block_on(async move {
+        let tmp = TempDir::new();
+        let identity_path = tmp.path().join("oracle_identity.key");
+
+        // Step 1: hand-craft a V0 file by generating an identity once
+        // through the runtime, reading the V1 file, and stripping the
+        // 5-byte header. That ensures the V0 fixture's 65-byte payload
+        // is a real, parseable Ed25519 keypair.
+        let scratch_path = tmp.path().join("scratch.key");
+        let scratch_rt = OracleRuntime::try_start_with_mode(
+            empty_ruleset(),
+            IdentityMode::Persistent(scratch_path.clone()),
+        )
+        .expect("scratch start");
+        let original_vk = scratch_rt.oracle().verifying_key_bytes().to_vec();
+        scratch_rt.shutdown();
+
+        let v1_bytes = std::fs::read(&scratch_path).expect("read scratch v1");
+        assert_eq!(v1_bytes.len(), 70, "scratch must be V1");
+        let v0_payload = &v1_bytes[5..]; // strip magic + version
+        assert_eq!(v0_payload.len(), 65);
+
+        // Write the V0 fixture to the real test path.
+        write_chmod_0600(&identity_path, v0_payload);
+        assert_eq!(
+            std::fs::metadata(&identity_path).unwrap().len(),
+            65,
+            "V0 fixture must be exactly 65 bytes"
+        );
+
+        // Step 2: start the runtime against the V0 file. Identity must
+        // match (proves V0 parser worked) AND the file must now be V1
+        // (proves auto-migration ran during this very startup).
+        let rt = OracleRuntime::try_start_with_mode(
+            empty_ruleset(),
+            IdentityMode::Persistent(identity_path.clone()),
+        )
+        .expect("start over V0 file");
+        let migrated_vk = rt.oracle().verifying_key_bytes().to_vec();
+        assert_eq!(
+            migrated_vk, original_vk,
+            "V0 → V1 migration must preserve the keypair byte-for-byte"
+        );
+        rt.shutdown();
+
+        let post = std::fs::read(&identity_path).expect("re-read");
+        assert_eq!(
+            post.len(),
+            70,
+            "after migration the file must be V1 (70 bytes)"
+        );
+        assert_eq!(&post[0..4], NXOK);
+        assert_eq!(post[4], 1);
+        assert_eq!(
+            &post[5..],
+            v0_payload,
+            "V1 payload must equal the original V0 bytes"
+        );
+    });
+}
+
+#[test]
+fn identity_future_version_errors() {
+    let tmp = TempDir::new();
+    let identity_path = tmp.path().join("oracle_identity.key");
+
+    // V1 magic + version 99 + 65 bytes of "real-shaped" payload (algo
+    // byte + 64 zero bytes). Length is right; only the version is in the
+    // future. Must refuse without regenerating.
+    let mut fixture = Vec::with_capacity(70);
+    fixture.extend_from_slice(NXOK);
+    fixture.push(99);
+    fixture.push(0x01); // valid algo marker — irrelevant; version check rejects first
+    fixture.extend_from_slice(&[0u8; 64]);
+    write_chmod_0600(&identity_path, &fixture);
+
+    let result = OracleRuntime::try_start_with_mode(
+        empty_ruleset(),
+        IdentityMode::Persistent(identity_path.clone()),
+    );
+    let err = match result {
+        Ok(_) => panic!("future version must refuse, got Ok"),
+        Err(e) => e,
+    };
+    match err {
+        OracleRuntimeError::IdentityFileFutureVersion { path, version } => {
+            assert_eq!(path, identity_path);
+            assert_eq!(version, 99);
+        }
+        other => panic!("expected IdentityFileFutureVersion, got {other:?}"),
+    }
+    // File must NOT have been silently regenerated — it should still be
+    // the future-versioned fixture we wrote.
+    let post = std::fs::read(&identity_path).expect("re-read");
+    assert_eq!(post, fixture, "fixture must be untouched after refusal");
+}
+
+#[test]
+fn identity_truncated_v1_errors() {
+    let tmp = TempDir::new();
+    let identity_path = tmp.path().join("oracle_identity.key");
+
+    // V1 magic + version + only 50 of the 65 payload bytes. Must trip the
+    // V1 corrupt-length branch.
+    let mut fixture = Vec::with_capacity(55);
+    fixture.extend_from_slice(NXOK);
+    fixture.push(1);
+    fixture.extend_from_slice(&[0u8; 50]);
+    write_chmod_0600(&identity_path, &fixture);
+
+    let result = OracleRuntime::try_start_with_mode(
+        empty_ruleset(),
+        IdentityMode::Persistent(identity_path.clone()),
+    );
+    let err = match result {
+        Ok(_) => panic!("truncated V1 must refuse, got Ok"),
+        Err(e) => e,
+    };
+    match err {
+        OracleRuntimeError::IdentityFileCorrupt { path, detail } => {
+            assert_eq!(path, identity_path);
+            assert!(detail.contains("V1") && detail.contains("length"));
+        }
+        other => panic!("expected IdentityFileCorrupt, got {other:?}"),
     }
 }
