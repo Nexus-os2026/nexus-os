@@ -75,6 +75,24 @@ for arg in "$@"; do
     esac
 done
 
+# ----- Bug X: target/ size preflight (non-blocking warning) ------------------
+# Workspace target/ creep is real — Phase 4b-herald hit ENOSPC at 251GB. Warn
+# (don't block) when target/ exceeds threshold so the developer notices before
+# the next gate run is the one that fails.
+NEXUS_TARGET_SIZE_LIMIT_GB="${NEXUS_TARGET_SIZE_LIMIT_GB:-200}"
+if [[ -d "$REPO_ROOT/target" ]]; then
+    TARGET_BYTES="$(du -sb "$REPO_ROOT/target" 2>/dev/null | awk '{print $1}')"
+    LIMIT_BYTES=$(( NEXUS_TARGET_SIZE_LIMIT_GB * 1024 * 1024 * 1024 ))
+    if [[ "$TARGET_BYTES" -gt "$LIMIT_BYTES" ]]; then
+        if command -v numfmt >/dev/null 2>&1; then
+            TARGET_HUMAN="$(numfmt --to=iec --suffix=B "$TARGET_BYTES")"
+        else
+            TARGET_HUMAN="${TARGET_BYTES}B"
+        fi
+        echo "[ci-local] WARNING: target/ is ${TARGET_HUMAN} (>${NEXUS_TARGET_SIZE_LIMIT_GB}GB). Run scripts/cleanup-target.sh --incremental to free ~80–96GB without losing compiled deps." >&2
+    fi
+fi
+
 # ----- --clean-check: stash working tree so we compile committed main --------
 # Stash BEFORE main() so the trap is armed before any job runs. Trap restores
 # the stash on normal exit, signal, or error.

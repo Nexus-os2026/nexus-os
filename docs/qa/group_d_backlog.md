@@ -101,3 +101,93 @@ IPC event delivery, two-pane Agents layout. Tested at 3 viewport sizes. Further 
 
 **Bug K status unchanged:** OllamaProvider uses /api/generate not /api/chat.
 Extraction logic is forward-compatible. Endpoint switch still separate ticket.
+
+---
+
+## Track B — Phase 1.5 / 4b governance + swarm bugs (2026-04)
+
+> Note on bug-letter namespace collision: the Phase 2C / 2D close-out
+> sections above use letters L/M/N/O/P/Q/R/S for *different* bugs. The
+> letters in this section are **Track B** (governance + swarm
+> infrastructure) — a separate per-phase scope. Commit messages use
+> "Bug L" / "Bug M" etc. without the Track prefix because the commit
+> SHA disambiguates. When in doubt, look up the SHA.
+
+### Closed (with SHAs)
+
+- Bug L — **CLOSED** (`f11e404d`) — Stale Haiku model id in nexus-code.
+  `claude-haiku-4-20250514` → `claude-haiku-4-5-20251001`. Single-line
+  string fix; no semantic change.
+
+- Bug M — **CLOSED** (`ad14c8c3`) — Governance ruleset hot-swap not
+  reaching the live DecisionEngine. AppState's `Arc<Mutex<>>` was a
+  swap surface that nothing propagated from. Engine now reads from
+  `Arc<RwLock<GovernanceRuleset>>` shared with AppState; new
+  `update_governance_ruleset(&self, new)` writes through the lock.
+  Engine API change is additive (`with_shared_ruleset` constructor
+  alongside existing `new`). +4 tests, +1 unit + 3 integration. No
+  evolution producer wired yet (see Bug Z).
+
+- Bug N — **CLOSED** (`bdb29cba`) — Versioned identity file format for
+  `~/.nexus/oracle_identity.key`. Added 4-byte NXOK magic + version
+  byte + 65-byte payload (V1, 70 bytes total). V0 → V1
+  auto-migration on first start; future-version refuses to start;
+  corrupt files refuse to start. Atomic write via tempfile + fsync +
+  chmod + rename. +4 integration tests including real-startup
+  migration test. Tempfile name keys on pid + uuid to prevent
+  parallel-test rename races.
+
+- Bug O — **CLOSED** (`dc8063e6`) — Session-scoped swarm caller
+  identity. swarm_plan was generating a fresh `CryptoIdentity` per
+  request. New file `~/.nexus/swarm_caller_identity.key` (NXSC magic,
+  V1 format, 70 bytes) loaded at AppState init, exposed via
+  `swarm_caller_identity()`. Architecturally separate from oracle
+  identity (oracle = system trust root; caller = user/session
+  identity, prepares for future multi-user). +6 integration tests
+  including 65-byte oracle-V0-lookalike rejection. Atomic write
+  duplicated from Bug N — see Bug AA.
+
+- Bug X — **CLOSED** (this commit) — `target/` size hygiene. New
+  `scripts/cleanup-target.sh` with --incremental | --aggressive |
+  --report-only modes. ci-local.sh emits non-blocking WARNING when
+  `target/` exceeds `NEXUS_TARGET_SIZE_LIMIT_GB` (default 200GB).
+  Disk hygiene policy documented in CLAUDE.md.
+
+Track B status as of Bug X: L/M/N/O/X all closed. **Track B complete.**
+
+### Open
+
+- Bug V — **PHASE 5 DEPENDENCY** — Real Twitter publish wiring in
+  `social-poster-agent` SwarmEntry. Currently `dry_run: false` returns
+  `publish_status: "deferred"` because `WebAgentContext` (governance/
+  fuel) and Twitter API credentials aren't threaded into
+  `AgentExecutionContext`. Phase 5 wires them.
+
+- Bug W — **PHASE 5 DEPENDENCY** — Per-channel post-count surface
+  missing from swarm context. `compliance::check_compliance(channel,
+  recent_posts: 0)` is hard-coded to 0 in social-poster's swarm_entry.
+  Compliance gate under-fires until the post-count surface is
+  plumbed.
+
+- Bug Y — **TEST HYGIENE** — `nexus-desktop-backend` lib_tests path
+  (`OracleRuntime::start(test_ruleset)` in lib.rs:1756) creates a
+  real `Persistent` runtime against `~/.nexus/oracle_identity.key`
+  during `cargo test`. Every test run touches the production user's
+  actual oracle identity file. Pre-dates Bug N; Bug N's atomic-write
+  refactor just made the prior race more visible. Should switch to
+  `IdentityMode::Ephemeral` or an explicit TempDir.
+
+- Bug Z — **EVOLUTION PRODUCER** — `update_governance_ruleset` has no
+  in-tree producer. The plumbing exists (Bug M); the trigger source
+  doesn't. Future phase tracks where evolution decides to swap (likely
+  after a Darwin-Core attack-arena verdict) and how it formats the new
+  `GovernanceRuleset`.
+
+- Bug AA — **WRITER DUPLICATION** — Atomic-write helper duplicated
+  between `app/src-tauri/src/oracle_runtime.rs` (Bug N) and
+  `app/src-tauri/src/swarm_caller_identity.rs` (Bug O). Tempfile +
+  fsync + chmod + rename logic is byte-identical. Extract once a
+  third consumer arrives or a writer-side fix needs to land in two
+  places. Per Bug O preflight: readers diverge semantically (oracle
+  accepts V0; swarm rejects 65-byte) so reader extraction is not on
+  the table.

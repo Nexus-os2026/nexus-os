@@ -235,3 +235,37 @@ When asked to produce an audit or deep read, always:
 
 This rule also applies when Suresh asks for a "ground truth" doc
 (write to docs/qa/) or an "ADR" / "design decision" (write to docs/adr/).
+
+## Disk hygiene (target/ size)
+
+The workspace `target/` directory grows fast on this codebase — Phase
+4b-herald hit ENOSPC mid-gate-run when `target/debug/` reached 251GB
+and the partition ran out of space. `target/debug/incremental/` alone
+was 96GB at peak. Real fix: regular cleanup, scripted.
+
+Use `scripts/cleanup-target.sh`:
+
+- `--incremental` (default) — `rm -rf target/{debug,release}/incremental`.
+  Frees 80–96GB. Preserves compiled crate artifacts in `deps/`. Next
+  compile rebuilds incremental state only (~2 min). Run when `target/`
+  approaches 200GB.
+
+- `--aggressive` — `cargo clean`. Wipes `target/` entirely. Forces a
+  cold workspace rebuild (10–15 min). Run after major version
+  milestones (Track close, dep refresh, version bump) to reset cleanly.
+
+- `--report-only` — print `target/` breakdown without deleting
+  anything. Use for monitoring scripts or quick health checks.
+
+`scripts/ci-local.sh` emits a non-blocking stderr WARNING when
+`target/` exceeds the threshold (default 200GB; override via
+`NEXUS_TARGET_SIZE_LIMIT_GB=N`). The warning is a visibility nudge,
+not a gate — ci-local still runs all 7 jobs.
+
+Policy:
+- Run `--incremental` opportunistically when the warning fires, or
+  before any phase that's likely to push past 200GB.
+- Run `--aggressive` after closing a Track or after a `cargo update`
+  pulls a wide dep cascade.
+- Don't run either inside a CI run — both invalidate caches the run
+  needs.
