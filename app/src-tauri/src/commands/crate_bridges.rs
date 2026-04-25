@@ -385,7 +385,7 @@ pub fn oracle_status(state: tauri::State<'_, AppState>) -> Result<OracleStatusSu
         .count();
     let ruleset = state
         .governance_ruleset
-        .lock()
+        .read()
         .unwrap_or_else(|p| p.into_inner());
     let rule_count = ruleset.rules.len();
     Ok(OracleStatusSummary {
@@ -479,7 +479,7 @@ pub fn oracle_get_agent_budget(
 
     let ruleset = state
         .governance_ruleset
-        .lock()
+        .read()
         .unwrap_or_else(|p| p.into_inner());
     Ok(BudgetSummary {
         agent_id,
@@ -1552,7 +1552,7 @@ pub fn governance_engine_get_rules(
 ) -> Result<serde_json::Value, String> {
     let ruleset = state
         .governance_ruleset
-        .lock()
+        .read()
         .map_err(|e| format!("lock: {e}"))?;
     let rules_summary: Vec<serde_json::Value> = ruleset
         .rules
@@ -1593,7 +1593,7 @@ pub fn governance_engine_evaluate(
 
     let ruleset = state
         .governance_ruleset
-        .lock()
+        .read()
         .map_err(|e| format!("lock: {e}"))?;
 
     // Create a temporary engine just for evaluation
@@ -1700,7 +1700,7 @@ pub fn governance_evolution_run_attack_cycle(
 ) -> Result<serde_json::Value, String> {
     let ruleset = state
         .governance_ruleset
-        .lock()
+        .read()
         .map_err(|e| format!("lock: {e}"))?
         .clone();
 

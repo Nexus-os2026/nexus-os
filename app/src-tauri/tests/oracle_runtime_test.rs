@@ -11,9 +11,12 @@
 //! identity-persistence tests supply an explicit temporary path.
 
 use nexus_desktop_backend::oracle_runtime::{IdentityMode, OracleRuntime, OracleRuntimeError};
-use nexus_governance_engine::{GovernanceRule, GovernanceRuleset, RuleCondition, RuleEffect};
+use nexus_governance_engine::{
+    GovernanceRule, GovernanceRuleset, RuleCondition, RuleEffect, RulesetHandle,
+};
 use nexus_governance_oracle::{CapabilityRequest, GovernanceDecision, OracleRequest};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::sync::oneshot;
 
@@ -615,4 +618,158 @@ fn identity_truncated_v1_errors() {
         }
         other => panic!("expected IdentityFileCorrupt, got {other:?}"),
     }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Bug M — ruleset hot-swap propagation tests
+// ───────────────────────────────────────────────────────────────────────────
+
+fn ruleset_allow(caps: &[&str]) -> GovernanceRuleset {
+    GovernanceRuleset::new(
+        format!("test-{}", uuid::Uuid::new_v4()),
+        1,
+        vec![GovernanceRule {
+            id: "allow".into(),
+            description: "Allow listed capabilities".into(),
+            effect: RuleEffect::Allow,
+            conditions: vec![RuleCondition::CapabilityInSet(
+                caps.iter().map(|s| (*s).into()).collect(),
+            )],
+        }],
+    )
+}
+
+async fn submit_and_wait(runtime: &Arc<OracleRuntime>, capability: &str) -> GovernanceDecision {
+    let (tx, rx) = oneshot::channel();
+    runtime
+        .sender()
+        .send(OracleRequest {
+            request: make_request(capability),
+            response_tx: tx,
+        })
+        .await
+        .expect("send");
+    tokio::time::timeout(Duration::from_secs(2), rx)
+        .await
+        .expect("decision timely")
+        .expect("oneshot delivered")
+}
+
+#[test]
+fn ruleset_hotswap_propagates_to_engine() {
+    blocking_runtime().block_on(async move {
+        let handle: RulesetHandle = Arc::new(RwLock::new(ruleset_allow(&["llm.query"])));
+        let runtime =
+            OracleRuntime::try_start_with_handle_and_mode(handle.clone(), IdentityMode::Ephemeral)
+                .expect("start");
+
+        // Pre-swap: llm.query allowed.
+        let pre = submit_and_wait(&runtime, "llm.query").await;
+        assert!(
+            matches!(pre, GovernanceDecision::Approved { .. }),
+            "pre-swap llm.query should be Approved; got {pre:?}"
+        );
+
+        // Hot-swap: replace ruleset with one that denies-by-default
+        // (empty rules → fall through to default deny).
+        {
+            let mut guard = handle.write().expect("write-lock");
+            *guard = empty_ruleset();
+        }
+
+        // Post-swap: same request now denied. Engine must read from the
+        // shared handle on this request, not from a stale clone.
+        let post = submit_and_wait(&runtime, "llm.query").await;
+        assert_eq!(
+            post,
+            GovernanceDecision::Denied,
+            "post-swap llm.query should be Denied (empty ruleset → deny by default); got {post:?}"
+        );
+
+        // Sibling Arc: runtime's handle is the same Arc we wrote through.
+        assert!(
+            Arc::ptr_eq(&handle, &runtime.governance_ruleset_handle()),
+            "governance_ruleset_handle() must return the same Arc the engine reads from"
+        );
+
+        runtime.shutdown();
+    });
+}
+
+#[test]
+fn ruleset_hotswap_under_concurrent_load() {
+    blocking_runtime().block_on(async move {
+        let handle: RulesetHandle = Arc::new(RwLock::new(ruleset_allow(&["llm.query"])));
+        let runtime =
+            OracleRuntime::try_start_with_handle_and_mode(handle.clone(), IdentityMode::Ephemeral)
+                .expect("start");
+
+        // Spawn 50 concurrent submitters racing the swap. Half will land
+        // pre-swap (Approved), half post-swap (Denied) — the exact split
+        // is a runtime race, but every submission must complete with
+        // SOME decision (no deadlock, no panic).
+        let mut handles = Vec::with_capacity(50);
+        for i in 0..50 {
+            let runtime = Arc::clone(&runtime);
+            handles.push(tokio::spawn(async move {
+                // Stagger half the submissions so they straddle the swap.
+                if i >= 25 {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+                submit_and_wait(&runtime, "llm.query").await
+            }));
+        }
+
+        // Mid-flight swap.
+        tokio::time::sleep(Duration::from_millis(2)).await;
+        {
+            let mut guard = handle.write().expect("write-lock");
+            *guard = empty_ruleset();
+        }
+
+        let mut decisions = Vec::with_capacity(50);
+        for h in handles {
+            decisions.push(h.await.expect("task did not panic"));
+        }
+        assert_eq!(decisions.len(), 50, "all 50 submissions must complete");
+
+        // The post-swap engine state must always deny llm.query — submit
+        // one more after the dust settles to confirm the swap is sticky.
+        let final_decision = submit_and_wait(&runtime, "llm.query").await;
+        assert_eq!(
+            final_decision,
+            GovernanceDecision::Denied,
+            "after swap and load drain, engine must consistently deny"
+        );
+
+        runtime.shutdown();
+    });
+}
+
+#[test]
+fn ruleset_handle_is_shared_arc_with_engine() {
+    // Structural invariant Bug M depends on: the handle the runtime
+    // exposes via `governance_ruleset_handle()` is the same Arc instance
+    // the DecisionEngine task is reading from. If this ever drifts (e.g.
+    // someone wraps the handle in another Arc layer), the propagation
+    // tests above stop reflecting reality.
+    blocking_runtime().block_on(async move {
+        let handle: RulesetHandle = Arc::new(RwLock::new(empty_ruleset()));
+        let runtime =
+            OracleRuntime::try_start_with_handle_and_mode(handle.clone(), IdentityMode::Ephemeral)
+                .expect("start");
+        assert!(
+            Arc::ptr_eq(&handle, &runtime.governance_ruleset_handle()),
+            "runtime must hold the SAME Arc the caller passed in — no wrap layer"
+        );
+        // Strong count: runtime + caller's clone = 2 minimum. Spawned
+        // engine task is moved into tokio so adds 1; 3 is the expected
+        // minimum without the test holding extras.
+        assert!(
+            Arc::strong_count(&handle) >= 2,
+            "runtime + test must both own a strong ref to the handle; count={}",
+            Arc::strong_count(&handle)
+        );
+        runtime.shutdown();
+    });
 }

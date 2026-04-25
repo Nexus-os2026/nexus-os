@@ -30,12 +30,12 @@
 //! [`OracleRuntime::shutdown`].
 
 use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
-use nexus_governance_engine::{DecisionEngine, GovernanceRuleset};
+use nexus_governance_engine::{DecisionEngine, GovernanceRuleset, RulesetHandle};
 use nexus_governance_oracle::{GovernanceDecision, GovernanceOracle, OracleRequest};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -472,6 +472,11 @@ pub struct OracleRuntime {
     external_tx: mpsc::Sender<OracleRequest>,
     processed: Arc<AtomicU64>,
     started_at: Instant,
+    /// Bug M: shared ruleset handle. Same `Arc<RwLock<...>>` the
+    /// `DecisionEngine` task reads from and that `AppState` writes to via
+    /// `update_governance_ruleset`. Hot-swaps propagate within
+    /// milliseconds — the engine sees the swap on its next request read.
+    ruleset_handle: RulesetHandle,
     relay_handle: std::sync::Mutex<Option<JoinHandle<()>>>,
     engine_handle: std::sync::Mutex<Option<JoinHandle<()>>>,
     /// Receiver parked here in stub mode so the channel stays alive.
@@ -494,6 +499,18 @@ impl OracleRuntime {
         })
     }
 
+    /// Bug M: production entry point that shares an externally-owned
+    /// `RulesetHandle`. `AppState` calls this so the engine reads through
+    /// the same `Arc<RwLock<...>>` that `update_governance_ruleset`
+    /// writes to. Panics on identity error like `start`.
+    pub fn start_with_handle(handle: RulesetHandle) -> Arc<Self> {
+        let mode = IdentityMode::from_env()
+            .expect("OracleRuntime: identity mode resolution must succeed at startup");
+        Self::try_start_with_handle_and_mode(handle, mode).unwrap_or_else(|e| {
+            panic!("OracleRuntime startup failed: {e}");
+        })
+    }
+
     /// Fallible startup with an explicit identity mode. Used by integration
     /// tests that supply a temporary identity path or ephemeral mode.
     pub fn try_start_with_mode(
@@ -501,10 +518,23 @@ impl OracleRuntime {
         mode: IdentityMode,
     ) -> Result<Arc<Self>, OracleRuntimeError> {
         let identity = resolve_identity(&mode)?;
-        Ok(Self::spawn_with_identity(ruleset, identity))
+        let handle = Arc::new(RwLock::new(ruleset));
+        Ok(Self::spawn_with_identity(handle, identity))
     }
 
-    fn spawn_with_identity(ruleset: GovernanceRuleset, identity: CryptoIdentity) -> Arc<Self> {
+    /// Bug M: fallible startup that shares an external ruleset handle.
+    /// Mirrors `try_start_with_mode` but does not own/wrap a ruleset —
+    /// caller passes the same `Arc<RwLock<...>>` that `AppState` will
+    /// hot-swap through.
+    pub fn try_start_with_handle_and_mode(
+        handle: RulesetHandle,
+        mode: IdentityMode,
+    ) -> Result<Arc<Self>, OracleRuntimeError> {
+        let identity = resolve_identity(&mode)?;
+        Ok(Self::spawn_with_identity(handle, identity))
+    }
+
+    fn spawn_with_identity(ruleset: RulesetHandle, identity: CryptoIdentity) -> Arc<Self> {
         let (external_tx, external_rx) = mpsc::channel::<OracleRequest>(ORACLE_CHANNEL_BUFFER);
         let processed = Arc::new(AtomicU64::new(0));
         let started_at = Instant::now();
@@ -528,6 +558,7 @@ impl OracleRuntime {
                 external_tx,
                 processed,
                 started_at,
+                ruleset_handle: ruleset,
                 relay_handle: std::sync::Mutex::new(None),
                 engine_handle: std::sync::Mutex::new(None),
                 _stub_rx: std::sync::Mutex::new(Some(external_rx)),
@@ -565,8 +596,9 @@ impl OracleRuntime {
             }
         });
 
+        let ruleset_for_engine = Arc::clone(&ruleset);
         let engine_handle = tokio::spawn(async move {
-            let mut engine = DecisionEngine::new(engine_rx, ruleset);
+            let mut engine = DecisionEngine::with_shared_ruleset(engine_rx, ruleset_for_engine);
             engine.run().await;
         });
 
@@ -589,10 +621,18 @@ impl OracleRuntime {
             external_tx,
             processed,
             started_at,
+            ruleset_handle: ruleset,
             relay_handle: std::sync::Mutex::new(Some(relay_handle)),
             engine_handle: std::sync::Mutex::new(Some(engine_handle)),
             _stub_rx: std::sync::Mutex::new(None),
         })
+    }
+
+    /// Bug M: clone of the shared `RulesetHandle` so `AppState` can hot-
+    /// swap the live ruleset via `update_governance_ruleset`. Same
+    /// `Arc<RwLock<...>>` the `DecisionEngine` task reads from.
+    pub fn governance_ruleset_handle(&self) -> RulesetHandle {
+        Arc::clone(&self.ruleset_handle)
     }
 
     /// Obtain a cloned `Sender<OracleRequest>` for submitting capability

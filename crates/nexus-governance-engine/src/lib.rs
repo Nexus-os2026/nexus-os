@@ -5,5 +5,5 @@ pub mod rules;
 pub mod versioning;
 
 pub use audit::DecisionAuditLog;
-pub use engine::DecisionEngine;
+pub use engine::{DecisionEngine, RulesetHandle};
 pub use rules::{GovernanceRule, GovernanceRuleset, RuleCondition, RuleEffect};

@@ -1164,7 +1164,11 @@ pub struct AppState {
     mcp_standalone: Arc<mcp2_cmds::McpState>,
     a2a_crate: Arc<a2a_crate_cmds::A2aState>,
     memory_kernel: Arc<mk_cmds::MemoryKernelState>,
-    governance_ruleset: Arc<Mutex<nexus_governance_engine::GovernanceRuleset>>,
+    /// Bug M: shared `Arc<RwLock<GovernanceRuleset>>` — same handle the
+    /// running `DecisionEngine` reads from. Hot-swaps via
+    /// `update_governance_ruleset` propagate to the live engine within
+    /// milliseconds; no engine restart required.
+    governance_ruleset: nexus_governance_engine::RulesetHandle,
     governance_audit_log: Arc<Mutex<nexus_governance_engine::DecisionAuditLog>>,
     governance_evolution: Arc<Mutex<nexus_governance_evolution::GovernanceEvolution>>,
     /// Live GovernanceOracle + DecisionEngine pair, spawned at startup.
@@ -1253,6 +1257,13 @@ impl AppState {
                 },
             ],
         );
+
+        // Bug M: build the shared `Arc<RwLock<...>>` once and clone into
+        // both `AppState.governance_ruleset` and the `OracleRuntime`. The
+        // `DecisionEngine` task reads through this handle on every
+        // request, so `update_governance_ruleset` writes propagate live.
+        let production_ruleset_handle: nexus_governance_engine::RulesetHandle =
+            Arc::new(std::sync::RwLock::new(production_ruleset));
 
         let state = Self {
             supervisor: supervisor.clone(),
@@ -1492,7 +1503,7 @@ impl AppState {
             mcp_standalone: Arc::new(mcp2_cmds::McpState::default()),
             a2a_crate: Arc::new(a2a_crate_cmds::A2aState::default()),
             memory_kernel: Arc::new(mk_cmds::MemoryKernelState::default()),
-            governance_ruleset: Arc::new(Mutex::new(production_ruleset.clone())),
+            governance_ruleset: production_ruleset_handle.clone(),
             governance_audit_log: Arc::new(Mutex::new(
                 nexus_governance_engine::DecisionAuditLog::new(),
             )),
@@ -1502,7 +1513,9 @@ impl AppState {
                     nexus_governance_evolution::default_attack_generators(),
                 ),
             )),
-            oracle_runtime: oracle_runtime::OracleRuntime::start(production_ruleset),
+            oracle_runtime: oracle_runtime::OracleRuntime::start_with_handle(
+                production_ruleset_handle,
+            ),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1548,6 +1561,29 @@ impl AppState {
         self.oracle_runtime.shutdown();
     }
 
+    /// Bug M: hot-swap the live governance ruleset. Writes through the
+    /// shared `Arc<RwLock<...>>` that the running `DecisionEngine` reads
+    /// from; the engine sees the new ruleset on its next request.
+    /// Logged at info level so audit can correlate the swap with
+    /// downstream decisions made under the new ruleset.
+    ///
+    /// No producer in-tree yet — this is the future entry point the
+    /// evolution engine will call once wired. Test paths exercise it
+    /// directly.
+    pub fn update_governance_ruleset(
+        &self,
+        new_ruleset: nexus_governance_engine::GovernanceRuleset,
+    ) {
+        let version_hash = new_ruleset.version_hash();
+        let mut guard = self
+            .governance_ruleset
+            .write()
+            .unwrap_or_else(|p| p.into_inner());
+        *guard = new_ruleset;
+        drop(guard);
+        eprintln!("[governance] ruleset hot-swapped, version={version_hash}");
+    }
+
     /// Create an AppState backed by an in-memory DB (for tests).
     #[cfg(any(test, feature = "test-support"))]
     pub fn new_in_memory() -> Self {
@@ -1563,6 +1599,8 @@ impl AppState {
         )));
         let test_ruleset =
             nexus_governance_engine::GovernanceRuleset::new("test".into(), 1, vec![]);
+        let test_ruleset_handle: nexus_governance_engine::RulesetHandle =
+            Arc::new(std::sync::RwLock::new(test_ruleset));
         Self {
             supervisor: supervisor.clone(),
             audit: Arc::new(Mutex::new(AuditTrail::new())),
@@ -1743,7 +1781,7 @@ impl AppState {
             mcp_standalone: Arc::new(mcp2_cmds::McpState::default()),
             a2a_crate: Arc::new(a2a_crate_cmds::A2aState::default()),
             memory_kernel: Arc::new(mk_cmds::MemoryKernelState::default()),
-            governance_ruleset: Arc::new(Mutex::new(test_ruleset.clone())),
+            governance_ruleset: test_ruleset_handle.clone(),
             governance_audit_log: Arc::new(Mutex::new(
                 nexus_governance_engine::DecisionAuditLog::new(),
             )),
@@ -1753,7 +1791,7 @@ impl AppState {
                     nexus_governance_evolution::default_attack_generators(),
                 ),
             )),
-            oracle_runtime: oracle_runtime::OracleRuntime::start(test_ruleset),
+            oracle_runtime: oracle_runtime::OracleRuntime::start_with_handle(test_ruleset_handle),
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
