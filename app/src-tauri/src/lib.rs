@@ -3,6 +3,7 @@
 mod commands;
 mod nx_bridge;
 pub mod oracle_runtime;
+pub mod swarm_caller_identity;
 use base64::Engine;
 use chrono::TimeZone;
 use nexus_adaptation::evolution::{EvolutionConfig, EvolutionEngine, MutationType, Strategy};
@@ -1174,6 +1175,11 @@ pub struct AppState {
     /// Live GovernanceOracle + DecisionEngine pair, spawned at startup.
     /// Subsystems obtain a sender via `oracle_sender()`.
     oracle_runtime: Arc<oracle_runtime::OracleRuntime>,
+    /// Bug O: persistent swarm caller identity. Loaded from
+    /// `~/.nexus/swarm_caller_identity.key` (or generated and saved on
+    /// first start). All `swarm_plan` calls within a session use this
+    /// same identity so audit trails can correlate plans.
+    swarm_caller_identity: Arc<nexus_crypto::CryptoIdentity>,
     #[cfg(all(
         feature = "tauri-runtime",
         any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1516,6 +1522,13 @@ impl AppState {
             oracle_runtime: oracle_runtime::OracleRuntime::start_with_handle(
                 production_ruleset_handle,
             ),
+            swarm_caller_identity: {
+                let mode = swarm_caller_identity::SwarmCallerMode::from_env()
+                    .expect("swarm caller mode resolution must succeed at startup");
+                let identity = swarm_caller_identity::try_load_or_generate(&mode)
+                    .unwrap_or_else(|e| panic!("swarm caller identity load failed: {e}"));
+                Arc::new(identity)
+            },
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1553,6 +1566,13 @@ impl AppState {
     /// `oracle_runtime_status` Tauri command.
     pub fn oracle_runtime_status(&self) -> oracle_runtime::OracleRuntimeStatus {
         self.oracle_runtime.status()
+    }
+
+    /// Bug O: persistent swarm caller identity. All `swarm_plan` calls
+    /// in this AppState's lifetime use this same identity, so audit
+    /// trails can correlate plans within and across sessions.
+    pub fn swarm_caller_identity(&self) -> Arc<nexus_crypto::CryptoIdentity> {
+        Arc::clone(&self.swarm_caller_identity)
     }
 
     /// Abort the oracle runtime's background tasks. Called from the app
@@ -1792,6 +1812,15 @@ impl AppState {
                 ),
             )),
             oracle_runtime: oracle_runtime::OracleRuntime::start_with_handle(test_ruleset_handle),
+            swarm_caller_identity: {
+                // Tests always use Ephemeral so they don't touch the
+                // developer's real `~/.nexus/swarm_caller_identity.key`.
+                let identity = swarm_caller_identity::try_load_or_generate(
+                    &swarm_caller_identity::SwarmCallerMode::Ephemeral,
+                )
+                .expect("ephemeral swarm caller cannot fail");
+                Arc::new(identity)
+            },
             #[cfg(all(
                 feature = "tauri-runtime",
                 any(target_os = "windows", target_os = "macos", target_os = "linux")

@@ -207,10 +207,15 @@ impl IdentityMode {
 /// `$HOME/.nexus/oracle_identity.key`. Matches the convention used for
 /// `metering.db`, `swarm_routing.toml`, and other per-user state files.
 pub fn default_identity_path() -> Result<PathBuf, OracleRuntimeError> {
+    default_identity_path_for("oracle_identity.key")
+}
+
+/// Generic resolver for `$HOME/.nexus/<file_name>`. Bug O reuses this so
+/// the swarm caller identity lives next to the oracle identity in the
+/// same convention. Additive helper; not behavior change.
+pub fn default_identity_path_for(file_name: &str) -> Result<PathBuf, OracleRuntimeError> {
     let home = std::env::var("HOME").map_err(|_| OracleRuntimeError::HomeDirMissing)?;
-    Ok(PathBuf::from(home)
-        .join(".nexus")
-        .join("oracle_identity.key"))
+    Ok(PathBuf::from(home).join(".nexus").join(file_name))
 }
 
 /// Detection result for the V1 file-format ladder. Internal to the load

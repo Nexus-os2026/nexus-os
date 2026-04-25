@@ -330,14 +330,21 @@ pub async fn swarm_plan(
     let budget = Budget::new(200_000, 200, 120_000);
 
     // Build the bridge against the live oracle. Cheap — it's just an Arc
-    // clone + struct literal. Caller identity is ephemeral (per-process
-    // runtime identity) until we have per-user identity wiring.
+    // clone + struct literal. Bug O: caller identity is now persistent
+    // across requests within a session (and across app restarts) so audit
+    // trails can correlate plans by caller. Loaded from
+    // `~/.nexus/swarm_caller_identity.key` at AppState init.
     let bridge = Arc::new(SwarmOracleBridge::new(state.oracle()));
-    let caller = nexus_crypto::CryptoIdentity::generate(nexus_crypto::SignatureAlgorithm::Ed25519)
-        .map_err(|e| format!("caller identity generation failed: {e}"))?;
+    let caller_arc = state.swarm_caller_identity();
 
     let planned = director
-        .plan(&intent, &s.registry, &budget, &caller, bridge.as_ref())
+        .plan(
+            &intent,
+            &s.registry,
+            &budget,
+            caller_arc.as_ref(),
+            bridge.as_ref(),
+        )
         .await
         .map_err(|e| e.to_string())?;
 

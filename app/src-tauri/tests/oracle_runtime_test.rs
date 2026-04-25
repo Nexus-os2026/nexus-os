@@ -773,3 +773,166 @@ fn ruleset_handle_is_shared_arc_with_engine() {
         runtime.shutdown();
     });
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// Bug O — swarm caller identity tests
+// ───────────────────────────────────────────────────────────────────────────
+
+use nexus_desktop_backend::swarm_caller_identity::{try_load_or_generate, SwarmCallerMode};
+
+const NXSC: &[u8; 4] = b"NXSC";
+
+fn write_chmod_0600_caller(path: &Path, bytes: &[u8]) {
+    std::fs::write(path, bytes).expect("write fixture");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).expect("chmod 0600");
+    }
+}
+
+#[test]
+fn swarm_caller_identity_persists_across_restart() {
+    let tmp = TempDir::new();
+    let path = tmp.path().join("swarm_caller_identity.key");
+
+    let id1 = try_load_or_generate(&SwarmCallerMode::Persistent(path.clone()))
+        .expect("first load_or_generate");
+    let vk1 = id1.verifying_key().to_vec();
+    drop(id1);
+
+    let id2 = try_load_or_generate(&SwarmCallerMode::Persistent(path.clone()))
+        .expect("second load_or_generate");
+    assert_eq!(
+        id2.verifying_key(),
+        vk1.as_slice(),
+        "swarm caller identity must persist byte-for-byte across restarts"
+    );
+}
+
+#[test]
+fn swarm_caller_identity_generated_fresh_when_file_absent() {
+    let tmp = TempDir::new();
+    let path = tmp.path().join("nested").join("swarm_caller_identity.key");
+    assert!(!path.exists());
+
+    let _id =
+        try_load_or_generate(&SwarmCallerMode::Persistent(path.clone())).expect("generate + write");
+
+    let bytes = std::fs::read(&path).expect("file written");
+    assert_eq!(
+        bytes.len(),
+        70,
+        "V1 file must be 70 bytes, got {}",
+        bytes.len()
+    );
+    assert_eq!(&bytes[0..4], NXSC, "magic must be NXSC");
+    assert_eq!(bytes[4], 1, "version must be 1");
+    assert_eq!(bytes[5], 0x01, "payload[0] must be Ed25519 algo byte");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&path)
+            .expect("metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600, "file must be mode 0600, got 0o{mode:o}");
+    }
+}
+
+#[test]
+fn swarm_caller_identity_ephemeral_skips_disk() {
+    let tmp = TempDir::new();
+    let path = tmp.path().join("swarm_caller_identity.key");
+    let _id = try_load_or_generate(&SwarmCallerMode::Ephemeral).expect("ephemeral generate");
+    assert!(
+        !path.exists(),
+        "Ephemeral mode must not write any file; tempdir contents: {:?}",
+        std::fs::read_dir(tmp.path())
+            .map(|d| d.collect::<Vec<_>>())
+            .unwrap_or_default()
+    );
+}
+
+#[test]
+fn swarm_caller_identity_corrupt_file_errors() {
+    let tmp = TempDir::new();
+    let path = tmp.path().join("swarm_caller_identity.key");
+    write_chmod_0600_caller(&path, b"this-is-not-an-NXSC-keypair-at-all");
+
+    let result = try_load_or_generate(&SwarmCallerMode::Persistent(path.clone()));
+    let err = match result {
+        Ok(_) => panic!("corrupt file must produce typed error, got Ok"),
+        Err(e) => e,
+    };
+    match err {
+        OracleRuntimeError::IdentityFileCorrupt { path: p, detail: d } => {
+            assert_eq!(p, path);
+            assert!(
+                d.contains("NXSC") || d.contains("V1"),
+                "detail must surface the corruption reason; got {d}"
+            );
+        }
+        other => panic!("expected IdentityFileCorrupt, got {other:?}"),
+    }
+}
+
+#[test]
+fn swarm_caller_identity_future_version_errors() {
+    let tmp = TempDir::new();
+    let path = tmp.path().join("swarm_caller_identity.key");
+
+    // NXSC magic + version 99 + 65-byte plausible payload. Length is
+    // right; only the version is in the future. Must refuse without
+    // regenerating (would orphan trust).
+    let mut fixture = Vec::with_capacity(70);
+    fixture.extend_from_slice(NXSC);
+    fixture.push(99);
+    fixture.push(0x01);
+    fixture.extend_from_slice(&[0u8; 64]);
+    write_chmod_0600_caller(&path, &fixture);
+
+    let result = try_load_or_generate(&SwarmCallerMode::Persistent(path.clone()));
+    let err = match result {
+        Ok(_) => panic!("future version must refuse"),
+        Err(e) => e,
+    };
+    match err {
+        OracleRuntimeError::IdentityFileFutureVersion {
+            path: p,
+            version: v,
+        } => {
+            assert_eq!(p, path);
+            assert_eq!(v, 99);
+        }
+        other => panic!("expected IdentityFileFutureVersion, got {other:?}"),
+    }
+    // File must NOT have been silently regenerated.
+    let post = std::fs::read(&path).expect("re-read");
+    assert_eq!(post, fixture, "fixture must be untouched after refusal");
+}
+
+#[test]
+fn swarm_caller_identity_65_byte_oracle_lookalike_rejected() {
+    // A 65-byte file at the swarm path = either corruption or someone
+    // dropped an oracle V0 file at the wrong path. Bug O has no V0 to
+    // migrate from; reject.
+    let tmp = TempDir::new();
+    let path = tmp.path().join("swarm_caller_identity.key");
+    let mut fixture = Vec::with_capacity(65);
+    fixture.push(0x01); // valid algo byte
+    fixture.extend_from_slice(&[0u8; 64]);
+    write_chmod_0600_caller(&path, &fixture);
+
+    let result = try_load_or_generate(&SwarmCallerMode::Persistent(path.clone()));
+    let err = match result {
+        Ok(_) => panic!("65-byte oracle-shaped file at swarm path must be rejected"),
+        Err(e) => e,
+    };
+    assert!(
+        matches!(err, OracleRuntimeError::IdentityFileCorrupt { .. }),
+        "expected IdentityFileCorrupt, got {err:?}"
+    );
+}
