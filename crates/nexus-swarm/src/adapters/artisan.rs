@@ -99,8 +99,14 @@ fn map_agent_error(err: nexus_swarm_core::AgentError) -> SwarmError {
     match err {
         nexus_swarm_core::AgentError::Cancelled => SwarmError::Cancelled,
         nexus_swarm_core::AgentError::Provider(p) => SwarmError::from(p),
-        nexus_swarm_core::AgentError::InvalidInput(msg) => SwarmError::DirectorParse(msg),
-        nexus_swarm_core::AgentError::Internal(msg) => SwarmError::DirectorParse(msg),
+        nexus_swarm_core::AgentError::InvalidInput(msg) => SwarmError::AgentInvalidInput {
+            agent: "artisan".into(),
+            detail: msg,
+        },
+        nexus_swarm_core::AgentError::Internal(msg) => SwarmError::AgentInternal {
+            agent: "artisan".into(),
+            detail: msg,
+        },
     }
 }
 

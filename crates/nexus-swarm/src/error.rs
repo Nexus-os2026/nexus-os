@@ -62,6 +62,19 @@ pub enum SwarmError {
     /// event with reason "cancelled".
     #[error("cancelled by user")]
     Cancelled,
+
+    /// An agent crate's `SwarmAgentEntry::execute` rejected its input as
+    /// malformed. Carries the agent id so the audit trail can attribute
+    /// the failure cleanly.
+    #[error("agent `{agent}` invalid input: {detail}")]
+    AgentInvalidInput { agent: String, detail: String },
+
+    /// An agent crate's `SwarmAgentEntry::execute` raised an internal
+    /// error not attributable to the provider, the input shape, or
+    /// cancellation. Catch-all for filesystem failures, serialization,
+    /// and other crate-internal issues.
+    #[error("agent `{agent}` internal error: {detail}")]
+    AgentInternal { agent: String, detail: String },
 }
 
 impl From<RouteDenied> for SwarmError {

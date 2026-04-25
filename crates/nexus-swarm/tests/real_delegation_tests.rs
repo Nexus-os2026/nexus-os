@@ -9,7 +9,7 @@
 //! shared output schema.
 
 use async_trait::async_trait;
-use nexus_swarm::adapters::ArtisanAdapter;
+use nexus_swarm::adapters::{ArtisanAdapter, HeraldAdapter};
 use nexus_swarm::capability::{CapabilityInvocation, SwarmCapability};
 use nexus_swarm::coordinator::CancelToken;
 use nexus_swarm::emitter::recording::{Recorded, RecordingEmitter};
@@ -163,7 +163,7 @@ async fn artisan_propagates_cancellation_through_coder_entry() {
 }
 
 #[tokio::test]
-async fn artisan_maps_invalid_input_to_director_parse() {
+async fn artisan_maps_invalid_input_to_typed_agent_error() {
     let rec = Arc::new(RecordingEmitter::new());
     let ctx = mk_ctx(rec, CancelToken::new());
     let adapter = ArtisanAdapter::new(providers());
@@ -172,8 +172,11 @@ async fn artisan_maps_invalid_input_to_director_parse() {
         .await
         .expect_err("should reject malformed input");
     match err {
-        SwarmError::DirectorParse(msg) => assert!(msg.contains("CoderInput")),
-        other => panic!("expected DirectorParse, got {other:?}"),
+        SwarmError::AgentInvalidInput { agent, detail } => {
+            assert_eq!(agent, "artisan");
+            assert!(detail.contains("CoderInput"));
+        }
+        other => panic!("expected AgentInvalidInput, got {other:?}"),
     }
 }
 
@@ -204,4 +207,118 @@ async fn artisan_emissions_reach_recording_emitter_through_coder_entry() {
         .filter(|r| matches!(r, Recorded::Budget { .. }))
         .count();
     assert_eq!(budget_emissions, 1);
+}
+
+// ── Herald → SocialPosterEntry ──────────────────────────────────────────────
+
+fn herald_invocation_with_message(msg: &str, dry_run: Option<bool>) -> CapabilityInvocation {
+    let mut node_inputs = serde_json::json!({
+        "channel": "X",
+        "audience": "Rust devs",
+        "message": msg,
+    });
+    if let Some(b) = dry_run {
+        node_inputs["dry_run"] = serde_json::Value::Bool(b);
+    }
+    CapabilityInvocation {
+        inputs: serde_json::json!({
+            "node_inputs": node_inputs,
+            "route": { "provider_id": "fake", "model_id": "fake-small" },
+        }),
+        parent_outputs: Default::default(),
+    }
+}
+
+fn malformed_herald_invocation() -> CapabilityInvocation {
+    // Missing `message`.
+    CapabilityInvocation {
+        inputs: serde_json::json!({
+            "node_inputs": { "channel": "X", "audience": "devs" },
+            "route": { "provider_id": "fake", "model_id": "fake-small" },
+        }),
+        parent_outputs: Default::default(),
+    }
+}
+
+fn herald_providers() -> Arc<HashMap<String, Arc<dyn Provider>>> {
+    let mut m: HashMap<String, Arc<dyn Provider>> = HashMap::new();
+    m.insert(
+        "fake".into(),
+        Arc::new(StaticProvider {
+            text: "Tokio 1.50 ships better spawn_blocking. Faster, fewer deadlocks.".into(),
+        }),
+    );
+    Arc::new(m)
+}
+
+#[tokio::test]
+async fn herald_delegates_to_social_poster_entry_dry_run_default() {
+    let rec = Arc::new(RecordingEmitter::new());
+    let ctx = mk_ctx(rec.clone(), CancelToken::new());
+    let adapter = HeraldAdapter::new(herald_providers());
+    let out = adapter
+        .run_with_context(herald_invocation_with_message("ship it", None), &ctx)
+        .await
+        .expect("ok");
+    assert_eq!(out.get("dry_run").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(
+        out.get("publish_status").and_then(|v| v.as_str()),
+        Some("skipped_dry_run")
+    );
+    assert!(out.get("draft").and_then(|v| v.as_str()).is_some());
+}
+
+#[tokio::test]
+async fn herald_dry_run_false_returns_publish_deferred() {
+    let rec = Arc::new(RecordingEmitter::new());
+    let ctx = mk_ctx(rec, CancelToken::new());
+    let adapter = HeraldAdapter::new(herald_providers());
+    let out = adapter
+        .run_with_context(
+            herald_invocation_with_message("real run", Some(false)),
+            &ctx,
+        )
+        .await
+        .expect("ok");
+    assert_eq!(out.get("dry_run").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(
+        out.get("publish_status").and_then(|v| v.as_str()),
+        Some("deferred"),
+        "Phase 5 publish wiring is intentionally out of scope; expect Deferred"
+    );
+}
+
+#[tokio::test]
+async fn herald_propagates_cancellation_through_social_poster_entry() {
+    let rec = Arc::new(RecordingEmitter::new());
+    let cancel = CancelToken::new();
+    let ctx = mk_ctx(rec, cancel.clone());
+    cancel.cancel();
+    let adapter = HeraldAdapter::new(herald_providers());
+    let err = adapter
+        .run_with_context(herald_invocation_with_message("anything", None), &ctx)
+        .await
+        .expect_err("should cancel");
+    match err {
+        SwarmError::Cancelled => {}
+        other => panic!("expected SwarmError::Cancelled, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn herald_maps_invalid_input_to_typed_agent_error_with_agent_name() {
+    let rec = Arc::new(RecordingEmitter::new());
+    let ctx = mk_ctx(rec, CancelToken::new());
+    let adapter = HeraldAdapter::new(herald_providers());
+    let err = adapter
+        .run_with_context(malformed_herald_invocation(), &ctx)
+        .await
+        .expect_err("should reject");
+    match err {
+        SwarmError::AgentInvalidInput { agent, detail } => {
+            assert_eq!(agent, "herald");
+            assert!(detail.contains("SocialPosterInput") || detail.contains("missing"));
+        }
+        other => panic!("expected AgentInvalidInput, got {other:?}"),
+    }
 }

@@ -117,9 +117,17 @@ fn artisan_invocation() -> CapabilityInvocation {
 }
 
 fn herald_invocation() -> CapabilityInvocation {
+    // Phase 4b-herald: Herald now delegates to social-poster-agent's
+    // SocialPosterEntry, which expects { channel, audience, message }.
+    // Tests omit `dry_run` to exercise the default-true path.
     CapabilityInvocation {
         inputs: json!({
-            "node_inputs": {"topic": "launch day", "platform": "twitter", "style": "neutral"},
+            "node_inputs": {
+                "channel": "X",
+                "audience": "Rust developers",
+                "message": "ship it",
+                "tone": "neutral"
+            },
             "route": {"provider_id": "canned", "model_id": "canned-small"},
         }),
         parent_outputs: Default::default(),
@@ -187,8 +195,34 @@ async fn artisan_emits_coder_phase_sequence() {
     assert_coder_phases_no_output_dir(&rec.snapshot().await);
 }
 
+/// Phase 4b-herald: Herald now delegates to
+/// `social_poster_agent::SocialPosterEntry`, which emits a 6-phase
+/// semantic sequence: parsing_input → drafting → parsing_response →
+/// reviewing → publishing → complete.
+fn assert_social_poster_phase_sequence(log: &[Recorded]) {
+    let phases: Vec<&str> = log
+        .iter()
+        .filter_map(|r| match r {
+            Recorded::Phase { phase, .. } => Some(phase.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        phases,
+        vec![
+            "parsing_input",
+            "drafting",
+            "parsing_response",
+            "reviewing",
+            "publishing",
+            "complete"
+        ],
+        "expected social-poster 6-phase sequence, got {phases:?}"
+    );
+}
+
 #[tokio::test]
-async fn herald_emits_plan_act_observe() {
+async fn herald_emits_social_poster_phase_sequence() {
     let rec = Arc::new(RecordingEmitter::new());
     let ctx = mk_context("herald", rec.clone(), CancelToken::new());
     let adapter = HeraldAdapter::new(providers());
@@ -196,7 +230,7 @@ async fn herald_emits_plan_act_observe() {
         .run_with_context(herald_invocation(), &ctx)
         .await
         .expect("ok");
-    assert_plan_act_observe(&rec.snapshot().await);
+    assert_social_poster_phase_sequence(&rec.snapshot().await);
 }
 
 #[tokio::test]

@@ -8,7 +8,7 @@
 //!   latency, Medium context, Public privacy, Low cost. Short posts, cheap
 //!   to generate, quick turnaround.
 
-use crate::adapters::{invoke_resolved_provider, invoke_with_context};
+use crate::adapters::invoke_resolved_provider;
 use crate::capability::{AgentCapabilityDescriptor, CapabilityInvocation, SwarmCapability};
 use crate::context::AgentExecutionContext;
 use crate::error::SwarmError;
@@ -75,8 +75,34 @@ impl SwarmCapability for HeraldAdapter {
         invocation: CapabilityInvocation,
         ctx: &AgentExecutionContext,
     ) -> Result<Value, SwarmError> {
-        let prompt = build_prompt(&invocation);
-        invoke_with_context(ctx, prompt, 512).await
+        // Phase 4b-herald: delegate to social-poster-agent's
+        // SocialPosterEntry. Real LLM call flows via ctx.provider; per-
+        // node tokens recorded into ctx.budget; emissions reach the
+        // coordinator's broadcast channel from inside the agent crate.
+        // The Phase 4a invoke_with_context prompt-shell stays available
+        // via `run` for the provider-not-in-registry coordinator
+        // fallback (test fixtures with empty provider maps).
+        use nexus_swarm_core::SwarmAgentEntry;
+        use social_poster_agent::swarm_entry::SocialPosterEntry;
+        SocialPosterEntry::new()
+            .execute(invocation.inputs, ctx)
+            .await
+            .map_err(map_agent_error)
+    }
+}
+
+fn map_agent_error(err: nexus_swarm_core::AgentError) -> SwarmError {
+    match err {
+        nexus_swarm_core::AgentError::Cancelled => SwarmError::Cancelled,
+        nexus_swarm_core::AgentError::Provider(p) => SwarmError::from(p),
+        nexus_swarm_core::AgentError::InvalidInput(msg) => SwarmError::AgentInvalidInput {
+            agent: "herald".into(),
+            detail: msg,
+        },
+        nexus_swarm_core::AgentError::Internal(msg) => SwarmError::AgentInternal {
+            agent: "herald".into(),
+            detail: msg,
+        },
     }
 }
 

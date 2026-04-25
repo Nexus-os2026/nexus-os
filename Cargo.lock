@@ -5927,6 +5927,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "social-poster-agent",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -8983,12 +8984,15 @@ dependencies = [
 name = "social-poster-agent"
 version = "10.6.0"
 dependencies = [
+ "async-trait",
  "nexus-connectors-llm",
  "nexus-connectors-web",
  "nexus-content",
  "nexus-sdk",
+ "nexus-swarm-core",
  "serde",
  "serde_json",
+ "tokio",
  "toml 0.8.2",
  "tracing",
  "uuid",

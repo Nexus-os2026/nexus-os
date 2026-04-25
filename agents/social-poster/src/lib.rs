@@ -1,5 +1,7 @@
 //! Social poster agent pipeline for governed research, generation, review, and publishing.
 
+pub mod swarm_entry;
+
 use nexus_connectors_llm::gateway::{select_provider, ProviderSelectionConfig};
 use nexus_connectors_llm::providers::LlmProvider;
 use nexus_connectors_web::reader::{CleanContent, WebReaderConnector};
