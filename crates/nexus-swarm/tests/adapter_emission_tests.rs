@@ -196,9 +196,11 @@ async fn artisan_emits_coder_phase_sequence() {
 }
 
 /// Phase 4b-herald: Herald now delegates to
-/// `social_poster_agent::SocialPosterEntry`, which emits a 6-phase
+/// `social_poster_agent::SocialPosterEntry`, which emits a 7-phase
 /// semantic sequence: parsing_input → drafting → parsing_response →
-/// reviewing → publishing → complete.
+/// counting_recent_posts → reviewing → publishing → complete. Bug W
+/// added the `counting_recent_posts` step (per-channel post count
+/// feeding the compliance gate).
 fn assert_social_poster_phase_sequence(log: &[Recorded]) {
     let phases: Vec<&str> = log
         .iter()
@@ -213,11 +215,12 @@ fn assert_social_poster_phase_sequence(log: &[Recorded]) {
             "parsing_input",
             "drafting",
             "parsing_response",
+            "counting_recent_posts",
             "reviewing",
             "publishing",
             "complete"
         ],
-        "expected social-poster 6-phase sequence, got {phases:?}"
+        "expected social-poster 7-phase sequence, got {phases:?}"
     );
 }
 
@@ -225,7 +228,10 @@ fn assert_social_poster_phase_sequence(log: &[Recorded]) {
 async fn herald_emits_social_poster_phase_sequence() {
     let rec = Arc::new(RecordingEmitter::new());
     let ctx = mk_context("herald", rec.clone(), CancelToken::new());
-    let adapter = HeraldAdapter::new(providers());
+    let adapter = HeraldAdapter::new(
+        providers(),
+        Arc::new(social_poster_agent::publish_state::InMemoryPublishState::new()),
+    );
     adapter
         .run_with_context(herald_invocation(), &ctx)
         .await

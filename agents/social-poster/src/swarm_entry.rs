@@ -66,12 +66,21 @@
 //! privacy class governs which provider can run the prompt, not what
 //! the prompt produces or where the result goes.
 
+use crate::channel::ChannelKey;
+use crate::publish_state::{PublishStateError, PublishStateHandle};
 use async_trait::async_trait;
 use nexus_content::compliance::{check_compliance, ComplianceDecision};
 use nexus_content::generator::SocialPlatform;
 use nexus_swarm_core::{AgentError, AgentExecutionContext, InvokeRequest, SwarmAgentEntry};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::sync::Arc;
+use std::time::Duration;
+
+/// Bug W: trailing window for the per-channel post-count read. Hard-
+/// coded for now; Bug AC tracks making it configurable from
+/// `agents/social-poster/manifest.toml`'s `posts_per_day`.
+const COMPLIANCE_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SocialPosterInput {
@@ -91,10 +100,20 @@ pub struct SocialPosterInput {
     /// isolated. Production callers must set `dry_run: false` explicitly.
     #[serde(default = "default_dry_run")]
     pub dry_run: bool,
+    /// Bug W: account identity within the platform. Single-tenant
+    /// callers omit and the `default_account_id` shim returns
+    /// `"default"` so the (platform, account_id) composite key always
+    /// has a value. Multi-account support flips this to required.
+    #[serde(default = "default_account_id")]
+    pub account_id: String,
 }
 
 fn default_dry_run() -> bool {
     true
+}
+
+fn default_account_id() -> String {
+    "default".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,12 +139,18 @@ pub struct SocialPosterOutput {
 
 const DEFAULT_MAX_TOKENS: u32 = 512;
 
-#[derive(Debug, Default, Clone)]
-pub struct SocialPosterEntry;
+/// Bug W: stateful entry. Holds an `Arc<dyn PublishStateHandle>` that
+/// the compliance gate reads from. The handle is NOT on
+/// `AgentExecutionContext` — keeping publish-specific concerns out of
+/// `nexus-swarm-core` (per the locked design from W's preflight).
+#[derive(Clone)]
+pub struct SocialPosterEntry {
+    publish_state: Arc<dyn PublishStateHandle>,
+}
 
 impl SocialPosterEntry {
-    pub fn new() -> Self {
-        Self
+    pub fn new(publish_state: Arc<dyn PublishStateHandle>) -> Self {
+        Self { publish_state }
     }
 }
 
@@ -204,11 +229,29 @@ impl SwarmAgentEntry for SocialPosterEntry {
 
         let draft = trim_to_platform_limit(parsed.channel, resp.text.trim());
 
-        // Reviewing: compliance check. `recent_posts: 0` is conservative —
-        // we don't have a per-channel post count surface in 4b-herald, so
-        // the check exercises rate-limit logic only when callers thread
-        // that count in via input later (Phase 5).
-        let decision = check_compliance(parsed.channel, 0);
+        // Bug W: real per-channel post-count drives the compliance gate.
+        // Read happens unconditionally — dry_run still benefits from the
+        // accurate "would I be rate-limited?" preview signal. Increment
+        // does NOT happen here; V wires `record_publish` on real publish.
+        let channel_key = ChannelKey::new(parsed.channel, parsed.account_id.clone());
+        let recent_posts = self
+            .publish_state
+            .recent_post_count(&channel_key, COMPLIANCE_WINDOW)
+            .await
+            .map_err(|e: PublishStateError| AgentError::Internal(format!("{e}")))?;
+        ctx.emit
+            .emit_phase(
+                "counting_recent_posts",
+                json!({
+                    "channel": platform_label(parsed.channel),
+                    "account_id": parsed.account_id,
+                    "window_secs": COMPLIANCE_WINDOW.as_secs(),
+                    "recent_posts": recent_posts,
+                }),
+            )
+            .await;
+
+        let decision = check_compliance(parsed.channel, recent_posts);
         let allowed = matches!(decision, ComplianceDecision::Allowed);
         let decision_label = match &decision {
             ComplianceDecision::Allowed => "allowed".to_string(),
@@ -217,7 +260,11 @@ impl SwarmAgentEntry for SocialPosterEntry {
         ctx.emit
             .emit_phase(
                 "reviewing",
-                json!({ "allowed": allowed, "decision": decision_label }),
+                json!({
+                    "allowed": allowed,
+                    "decision": decision_label,
+                    "recent_posts": recent_posts,
+                }),
             )
             .await;
 
@@ -225,11 +272,11 @@ impl SwarmAgentEntry for SocialPosterEntry {
         let publish_status = if !allowed {
             PublishStatus::BlockedByCompliance
         } else if parsed.dry_run {
+            // W: dry_run reads count, does not record. V wires
+            // record_publish on real publish.
             PublishStatus::SkippedDryRun
         } else {
-            // Real publish requires WebAgentContext + Twitter credentials
-            // threaded through to swarm context. Tracked as Bug V — Phase
-            // 5 work. The pipeline structurally completes here.
+            // V will replace this with actual publish + record_publish.
             PublishStatus::Deferred
         };
         ctx.emit
@@ -426,10 +473,12 @@ mod tests {
             "message": "Tokio 1.50 release",
             "tone": "concise",
         });
-        let out = SocialPosterEntry::new()
-            .execute(input, &ctx)
-            .await
-            .expect("ok");
+        let out = SocialPosterEntry::new(std::sync::Arc::new(
+            crate::publish_state::InMemoryPublishState::new(),
+        ))
+        .execute(input, &ctx)
+        .await
+        .expect("ok");
         let parsed: SocialPosterOutput =
             serde_json::from_value(out).expect("deserialize SocialPosterOutput");
         assert!(parsed.dry_run);
@@ -451,10 +500,12 @@ mod tests {
             "message": "msg",
             "dry_run": false,
         });
-        let out = SocialPosterEntry::new()
-            .execute(input, &ctx)
-            .await
-            .expect("ok");
+        let out = SocialPosterEntry::new(std::sync::Arc::new(
+            crate::publish_state::InMemoryPublishState::new(),
+        ))
+        .execute(input, &ctx)
+        .await
+        .expect("ok");
         let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
         assert!(!parsed.dry_run);
         assert!(
@@ -469,10 +520,12 @@ mod tests {
         let rec = Arc::new(RecordingEmitter::new());
         let ctx = mk_ctx(rec, CancelToken::new(), "anything");
         let input = json!({ "channel": "X", "audience": "devs" });
-        let err = SocialPosterEntry::new()
-            .execute(input, &ctx)
-            .await
-            .expect_err("expected InvalidInput");
+        let err = SocialPosterEntry::new(std::sync::Arc::new(
+            crate::publish_state::InMemoryPublishState::new(),
+        ))
+        .execute(input, &ctx)
+        .await
+        .expect_err("expected InvalidInput");
         match err {
             AgentError::InvalidInput(msg) => {
                 assert!(msg.contains("SocialPosterInput parse") || msg.contains("missing"));
@@ -486,10 +539,12 @@ mod tests {
         let rec = Arc::new(RecordingEmitter::new());
         let ctx = mk_ctx(rec, CancelToken::new(), "anything");
         let input = json!({ "channel": "X", "audience": "devs", "message": "  " });
-        let err = SocialPosterEntry::new()
-            .execute(input, &ctx)
-            .await
-            .expect_err("expected InvalidInput");
+        let err = SocialPosterEntry::new(std::sync::Arc::new(
+            crate::publish_state::InMemoryPublishState::new(),
+        ))
+        .execute(input, &ctx)
+        .await
+        .expect_err("expected InvalidInput");
         assert!(matches!(err, AgentError::InvalidInput(_)));
     }
 
@@ -500,15 +555,17 @@ mod tests {
         let ctx = mk_ctx(rec, cancel.clone(), "anything");
         cancel.cancel();
         let input = json!({ "channel": "X", "audience": "devs", "message": "msg" });
-        let err = SocialPosterEntry::new()
-            .execute(input, &ctx)
-            .await
-            .expect_err("expected Cancelled");
+        let err = SocialPosterEntry::new(std::sync::Arc::new(
+            crate::publish_state::InMemoryPublishState::new(),
+        ))
+        .execute(input, &ctx)
+        .await
+        .expect_err("expected Cancelled");
         assert!(matches!(err, AgentError::Cancelled));
     }
 
     #[tokio::test]
-    async fn emits_six_phases_in_order() {
+    async fn emits_seven_phases_in_order() {
         let rec = Arc::new(RecordingEmitter::new());
         let ctx = mk_ctx(rec.clone(), CancelToken::new(), "post text");
         let input = json!({
@@ -516,10 +573,12 @@ mod tests {
             "audience": "devs",
             "message": "ship it",
         });
-        SocialPosterEntry::new()
-            .execute(input, &ctx)
-            .await
-            .expect("ok");
+        SocialPosterEntry::new(std::sync::Arc::new(
+            crate::publish_state::InMemoryPublishState::new(),
+        ))
+        .execute(input, &ctx)
+        .await
+        .expect("ok");
         let log = rec.snapshot().await;
         let phases: Vec<&str> = log
             .iter()
@@ -534,6 +593,7 @@ mod tests {
                 "parsing_input",
                 "drafting",
                 "parsing_response",
+                "counting_recent_posts",
                 "reviewing",
                 "publishing",
                 "complete"
@@ -561,12 +621,207 @@ mod tests {
             "audience": "devs",
             "message": "long",
         });
-        let out = SocialPosterEntry::new()
+        let out = SocialPosterEntry::new(std::sync::Arc::new(
+            crate::publish_state::InMemoryPublishState::new(),
+        ))
+        .execute(input, &ctx)
+        .await
+        .expect("ok");
+        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
+        assert!(parsed.draft.chars().count() <= 280);
+        assert!(parsed.draft.ends_with('…'));
+    }
+
+    // ── Bug W: per-channel post-count drives the compliance gate ────────
+
+    fn now_secs() -> i64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0)
+    }
+
+    async fn count_recorded(
+        state: &crate::publish_state::InMemoryPublishState,
+        key: &ChannelKey,
+    ) -> usize {
+        // Use the trait surface to assert "no record_publish call" by
+        // measuring the post count before/after across an arbitrarily
+        // wide window. record_publish stamps now(); seeded posts via
+        // insert_at use a known epoch so reads are deterministic.
+        state
+            .recent_post_count(key, std::time::Duration::from_secs(86_400))
+            .await
+            .expect("ok")
+    }
+
+    #[tokio::test]
+    async fn w_dry_run_with_seeded_count_under_limit_skips_publish_and_does_not_increment() {
+        let rec = Arc::new(RecordingEmitter::new());
+        let ctx = mk_ctx(rec.clone(), CancelToken::new(), "Body of the post.");
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        let key = ChannelKey::new(SocialPlatform::X, "default");
+        // Seed 7 recent posts (well under X's 300 limit).
+        let now = now_secs();
+        for i in 0..7 {
+            state.insert_at(key.clone(), now - (i * 60));
+        }
+        let before = count_recorded(&state, &key).await;
+        assert_eq!(before, 7);
+
+        let input = json!({
+            "channel": "X",
+            "audience": "Rust devs",
+            "message": "drafty",
+            "dry_run": true,
+        });
+        let out = SocialPosterEntry::new(state.clone())
             .execute(input, &ctx)
             .await
             .expect("ok");
         let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
-        assert!(parsed.draft.chars().count() <= 280);
-        assert!(parsed.draft.ends_with('…'));
+        assert!(matches!(
+            parsed.publish_status,
+            PublishStatus::SkippedDryRun
+        ));
+        assert!(parsed.dry_run);
+
+        // The counting_recent_posts emit must reflect the seeded count.
+        let snap = rec.snapshot().await;
+        let recent_posts_event = snap
+            .iter()
+            .find_map(|r| match r {
+                Recorded::Phase { phase, payload, .. } if phase == "counting_recent_posts" => {
+                    Some(payload.clone())
+                }
+                _ => None,
+            })
+            .expect("counting_recent_posts phase emitted");
+        assert_eq!(
+            recent_posts_event
+                .get("recent_posts")
+                .and_then(|v| v.as_u64()),
+            Some(7),
+            "compliance gate must read seeded count, not 0"
+        );
+
+        // No record_publish was called: count is unchanged.
+        let after = count_recorded(&state, &key).await;
+        assert_eq!(after, before, "dry_run path must not record");
+    }
+
+    #[tokio::test]
+    async fn w_count_at_or_above_limit_blocks_by_compliance_even_when_dry_run_true() {
+        let rec = Arc::new(RecordingEmitter::new());
+        let ctx = mk_ctx(rec, CancelToken::new(), "ignored draft");
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        // Instagram limit is 25 — seed exactly 25 to trigger Blocked.
+        let key = ChannelKey::new(SocialPlatform::Instagram, "default");
+        let now = now_secs();
+        for i in 0..25 {
+            state.insert_at(key.clone(), now - (i * 30));
+        }
+
+        let input = json!({
+            "channel": "Instagram",
+            "audience": "creators",
+            "message": "draft",
+            "dry_run": true,
+        });
+        let out = SocialPosterEntry::new(state.clone())
+            .execute(input, &ctx)
+            .await
+            .expect("ok");
+        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
+        assert!(
+            matches!(parsed.publish_status, PublishStatus::BlockedByCompliance),
+            "expected BlockedByCompliance, got {:?}",
+            parsed.publish_status
+        );
+        // Compliance block wins over dry_run path — count unchanged.
+        let after = count_recorded(&state, &key).await;
+        assert_eq!(after, 25);
+    }
+
+    #[tokio::test]
+    async fn w_dry_run_false_returns_deferred_and_does_not_record() {
+        let rec = Arc::new(RecordingEmitter::new());
+        let ctx = mk_ctx(rec, CancelToken::new(), "real-run draft");
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        let key = ChannelKey::new(SocialPlatform::X, "default");
+        let before = count_recorded(&state, &key).await;
+
+        let input = json!({
+            "channel": "X",
+            "audience": "devs",
+            "message": "ship it",
+            "dry_run": false,
+        });
+        let out = SocialPosterEntry::new(state.clone())
+            .execute(input, &ctx)
+            .await
+            .expect("ok");
+        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
+        assert!(
+            matches!(parsed.publish_status, PublishStatus::Deferred),
+            "Phase 5 (V) wires real publish; W stops at Deferred"
+        );
+        // V is what records — W must not.
+        let after = count_recorded(&state, &key).await;
+        assert_eq!(after, before, "Deferred path must not record");
+    }
+
+    #[tokio::test]
+    async fn w_account_id_isolates_compliance_decision_per_channel_key() {
+        // Same platform, two account_ids: one over the limit, one empty.
+        // The over-limit account must be blocked; the empty one must
+        // pass. Confirms the gate keys on (platform, account_id), not
+        // platform alone.
+        let rec_a = Arc::new(RecordingEmitter::new());
+        let rec_b = Arc::new(RecordingEmitter::new());
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        let blocked_key = ChannelKey::new(SocialPlatform::Instagram, "acct-blocked");
+        let now = now_secs();
+        for i in 0..25 {
+            state.insert_at(blocked_key.clone(), now - (i * 30));
+        }
+
+        let ctx_a = mk_ctx(rec_a, CancelToken::new(), "draft");
+        let blocked_out = SocialPosterEntry::new(state.clone())
+            .execute(
+                json!({
+                    "channel": "Instagram",
+                    "audience": "x",
+                    "message": "y",
+                    "account_id": "acct-blocked",
+                }),
+                &ctx_a,
+            )
+            .await
+            .expect("ok");
+        let blocked_parsed: SocialPosterOutput = serde_json::from_value(blocked_out).unwrap();
+        assert!(matches!(
+            blocked_parsed.publish_status,
+            PublishStatus::BlockedByCompliance
+        ));
+
+        let ctx_b = mk_ctx(rec_b, CancelToken::new(), "draft");
+        let allowed_out = SocialPosterEntry::new(state.clone())
+            .execute(
+                json!({
+                    "channel": "Instagram",
+                    "audience": "x",
+                    "message": "y",
+                    "account_id": "acct-fresh",
+                }),
+                &ctx_b,
+            )
+            .await
+            .expect("ok");
+        let allowed_parsed: SocialPosterOutput = serde_json::from_value(allowed_out).unwrap();
+        assert!(matches!(
+            allowed_parsed.publish_status,
+            PublishStatus::SkippedDryRun
+        ));
     }
 }

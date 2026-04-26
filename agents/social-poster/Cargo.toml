@@ -16,6 +16,7 @@ path = "src/main.rs"
 nexus-connectors-llm = { path = "../../connectors/llm" }
 nexus-connectors-web = { path = "../../connectors/web" }
 nexus-content = { path = "../../content" }
+nexus-persistence = { path = "../../persistence" }
 nexus-sdk = { path = "../../sdk" }
 nexus-swarm-core = { path = "../../crates/nexus-swarm-core" }
 async-trait = "0.1"
@@ -27,3 +28,4 @@ uuid = { version = "1.10", features = ["v4", "serde"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync"] }
+tempfile = "3.13"

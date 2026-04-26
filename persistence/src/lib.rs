@@ -1322,6 +1322,20 @@ impl NexusDatabase {
             CREATE INDEX IF NOT EXISTS idx_cap_hist_agent ON capability_history(agent_id);
             CREATE INDEX IF NOT EXISTS idx_cap_hist_time ON capability_history(created_at);
 
+            -- Bug W: per-channel post-count source for Herald compliance gate.
+            -- One row per real publish; SqlitePublishState reads counts in a
+            -- trailing time window and writes new rows on V's publish trigger.
+            CREATE TABLE IF NOT EXISTS social_publish_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                platform TEXT NOT NULL,
+                account_id TEXT NOT NULL,
+                published_at INTEGER NOT NULL,
+                content_hash TEXT,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_social_publish_log_lookup
+                ON social_publish_log(platform, account_id, published_at);
+
             COMMIT;",
             )?;
         }
@@ -1815,6 +1829,46 @@ impl NexusDatabase {
             }
         }
         Ok(result)
+    }
+
+    // ── Bug W: social publish log ───────────────────────────────────────────
+
+    /// Append a publish record. `published_at_secs` is epoch seconds.
+    /// `content_hash` is optional and reserved for V's idempotency path.
+    /// Returns the new row's primary key.
+    pub fn record_social_publish(
+        &self,
+        platform: &str,
+        account_id: &str,
+        published_at_secs: i64,
+        content_hash: Option<&str>,
+    ) -> Result<i64> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.execute(
+            "INSERT INTO social_publish_log (platform, account_id, published_at, content_hash)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![platform, account_id, published_at_secs, content_hash],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    /// Count posts on `(platform, account_id)` whose `published_at` is
+    /// `>= cutoff_secs`. The caller computes the cutoff as `now - window`
+    /// so the trait stays neutral on time semantics.
+    pub fn count_social_publishes_in_window(
+        &self,
+        platform: &str,
+        account_id: &str,
+        cutoff_secs: i64,
+    ) -> Result<i64> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM social_publish_log
+             WHERE platform = ?1 AND account_id = ?2 AND published_at >= ?3",
+            params![platform, account_id, cutoff_secs],
+            |row| row.get(0),
+        )?;
+        Ok(count)
     }
 }
 

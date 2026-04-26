@@ -90,9 +90,35 @@ fn state() -> Arc<SwarmInner> {
             }
             let providers = Arc::new(providers_map);
 
+            // Bug W: Herald needs an Arc<dyn PublishStateHandle> for
+            // per-channel post-count compliance reads. The swarm STATE
+            // initializer is a module-level OnceLock with no AppState
+            // in scope, so it opens its own NexusDatabase against the
+            // default path. WAL mode means rusqlite tolerates the
+            // concurrent connection; AppState's own NexusDatabase
+            // points at the same file.
+            let publish_state: Arc<
+                dyn social_poster_agent::publish_state::PublishStateHandle,
+            > = match nexus_persistence::NexusDatabase::open(
+                &nexus_persistence::NexusDatabase::default_db_path(),
+            ) {
+                Ok(db) => Arc::new(social_poster_agent::publish_state::SqlitePublishState::new(
+                    Arc::new(db),
+                )),
+                Err(e) => {
+                    eprintln!(
+                        "[swarm] WARNING: NexusDatabase open failed ({e}); Herald falling back to InMemoryPublishState (post-count history will not survive restart)"
+                    );
+                    Arc::new(social_poster_agent::publish_state::InMemoryPublishState::new())
+                }
+            };
+
             let mut registry = CapabilityRegistry::new();
             registry.register(Arc::new(ArtisanAdapter::new(Arc::clone(&providers))));
-            registry.register(Arc::new(HeraldAdapter::new(Arc::clone(&providers))));
+            registry.register(Arc::new(HeraldAdapter::new(
+                Arc::clone(&providers),
+                Arc::clone(&publish_state),
+            )));
             registry.register(Arc::new(BrokerAdapter::new(Arc::clone(&providers))));
             registry.register(Arc::new(ScoutStub));
             registry.register(Arc::new(WatchdogStub));

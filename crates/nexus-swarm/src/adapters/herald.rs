@@ -23,11 +23,23 @@ use std::sync::Arc;
 
 pub struct HeraldAdapter {
     providers: Arc<HashMap<String, Arc<dyn Provider>>>,
+    /// Bug W: per-channel post-count source. Wired into the cloned
+    /// `SocialPosterEntry` constructed per request. Adapter init keeps
+    /// the handle so the entry can stay stateless across calls (cheap
+    /// `Arc::clone` per request, no shared mutable state on the adapter
+    /// beyond what the trait already provides).
+    publish_state: Arc<dyn social_poster_agent::publish_state::PublishStateHandle>,
 }
 
 impl HeraldAdapter {
-    pub fn new(providers: Arc<HashMap<String, Arc<dyn Provider>>>) -> Self {
-        Self { providers }
+    pub fn new(
+        providers: Arc<HashMap<String, Arc<dyn Provider>>>,
+        publish_state: Arc<dyn social_poster_agent::publish_state::PublishStateHandle>,
+    ) -> Self {
+        Self {
+            providers,
+            publish_state,
+        }
     }
 }
 
@@ -84,7 +96,7 @@ impl SwarmCapability for HeraldAdapter {
         // fallback (test fixtures with empty provider maps).
         use nexus_swarm_core::SwarmAgentEntry;
         use social_poster_agent::swarm_entry::SocialPosterEntry;
-        SocialPosterEntry::new()
+        SocialPosterEntry::new(Arc::clone(&self.publish_state))
             .execute(invocation.inputs, ctx)
             .await
             .map_err(map_agent_error)

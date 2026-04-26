@@ -147,13 +147,32 @@ Extraction logic is forward-compatible. Endpoint switch still separate ticket.
   including 65-byte oracle-V0-lookalike rejection. Atomic write
   duplicated from Bug N — see Bug AA.
 
-- Bug X — **CLOSED** (this commit) — `target/` size hygiene. New
+- Bug X — **CLOSED** (`da542c79`) — `target/` size hygiene. New
   `scripts/cleanup-target.sh` with --incremental | --aggressive |
   --report-only modes. ci-local.sh emits non-blocking WARNING when
   `target/` exceeds `NEXUS_TARGET_SIZE_LIMIT_GB` (default 200GB).
   Disk hygiene policy documented in CLAUDE.md.
 
-Track B status as of Bug X: L/M/N/O/X all closed. **Track B complete.**
+- Bug W — **CLOSED** (this commit) — Per-channel post-count surface
+  for Herald's compliance gate. New `social_publish_log` SQLite table
+  in `nexus-persistence` (platform, account_id, published_at,
+  content_hash, indexed on the composite key). New
+  `social-poster-agent::publish_state::PublishStateHandle` async
+  trait with `InMemoryPublishState` (Mutex<HashMap>) and
+  `SqlitePublishState` (Arc<NexusDatabase>) impls. `SocialPosterEntry`
+  now holds `Arc<dyn PublishStateHandle>`; the hard-coded
+  `check_compliance(_, 0)` is replaced with a real read on
+  `(platform, account_id)` keyed by new `ChannelKey`. 24h trailing
+  window (see Bug AC). `dry_run` reads count, does NOT increment;
+  `record_publish` is wired but only V's real publish path will call
+  it. HeraldAdapter takes the handle in its constructor; production
+  wiring opens its own `NexusDatabase::open(default_db_path())` from
+  the swarm `OnceLock` initializer (the static path has no AppState
+  reference). +4 unit tests on the entry, +5 integration tests on the
+  SQLite impl, +5 trait-level tests on the in-memory impl.
+
+Track B status as of Bug W: L/M/N/O/X/W all closed. Bug V (real
+publish) and Bug AB/AC (filed against W) remain open.
 
 ### Open
 
@@ -162,12 +181,6 @@ Track B status as of Bug X: L/M/N/O/X all closed. **Track B complete.**
   `publish_status: "deferred"` because `WebAgentContext` (governance/
   fuel) and Twitter API credentials aren't threaded into
   `AgentExecutionContext`. Phase 5 wires them.
-
-- Bug W — **PHASE 5 DEPENDENCY** — Per-channel post-count surface
-  missing from swarm context. `compliance::check_compliance(channel,
-  recent_posts: 0)` is hard-coded to 0 in social-poster's swarm_entry.
-  Compliance gate under-fires until the post-count surface is
-  plumbed.
 
 - Bug Y — **TEST HYGIENE** — `nexus-desktop-backend` lib_tests path
   (`OracleRuntime::start(test_ruleset)` in lib.rs:1756) creates a
@@ -191,3 +204,32 @@ Track B status as of Bug X: L/M/N/O/X all closed. **Track B complete.**
   places. Per Bug O preflight: readers diverge semantically (oracle
   accepts V0; swarm rejects 65-byte) so reader extraction is not on
   the table.
+
+- Bug AB — **LEGACY PATH** — `SocialPosterAgent::run` in
+  `agents/social-poster/src/lib.rs` (the non-swarm execution path)
+  still calls `check_compliance(platform, slot as usize)` with a
+  loop-index slot, not a real post count. Bug W only rewired the
+  swarm path through `SocialPosterEntry`; the legacy path remains
+  on its synthetic counter. Either retire `SocialPosterAgent::run`
+  in favour of the swarm path or thread the same
+  `PublishStateHandle` through it. Filed during Bug W to keep the
+  W diff scoped.
+
+- Bug AC — **HARDCODED WINDOW** — `COMPLIANCE_WINDOW: Duration =
+  24h` is a `const` in `agents/social-poster/src/swarm_entry.rs`.
+  Platform-specific limits (X = 3-hour rolling, IG = daily, FB =
+  daily) are encoded inside `nexus_content::compliance` but the
+  *window over which we count* is single-valued in W. Pull the
+  window from `manifest.toml` per platform once V wires real
+  publishing — until V exists, a single trailing-24h window is the
+  conservative read for all three platforms.
+
+- Bug AD — **DUPLICATE DB HANDLE** — Bug W's swarm `OnceLock`
+  initializer in `app/src-tauri/src/commands/swarm.rs::state()`
+  opens its own `NexusDatabase::open(default_db_path())` because the
+  static path has no `AppState` reference. AppState already holds an
+  `Arc<NexusDatabase>` against the same file; SQLite WAL keeps the
+  two connections coherent, but it's wasteful and creates two
+  independent connection pools. Thread AppState (or just its
+  `Arc<NexusDatabase>`) into the swarm initializer so the same
+  handle is reused. Filed during Bug W as a v1 → v2 follow-up.
