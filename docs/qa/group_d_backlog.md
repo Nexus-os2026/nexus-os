@@ -153,7 +153,59 @@ Extraction logic is forward-compatible. Endpoint switch still separate ticket.
   `target/` exceeds `NEXUS_TARGET_SIZE_LIMIT_GB` (default 200GB).
   Disk hygiene policy documented in CLAUDE.md.
 
-- Track C #3 (commit 1 of 2) — **CLOSED** (this commit) — Backend
+- Track C #3 (commit 2 of 2) — **CLOSED** (this commit) — Frontend
+  MediaRecorder + mic button on DirectorConsole. Closes Track C #3
+  and Track C as a whole.
+
+  - New `app/src/voice/wav_encoder.ts` — pure functions:
+    `downsampleFloat32` (linear interpolation, identity below
+    target rate), `floatTo16BitPCM` (clamping s16le conversion),
+    `encodeWav` (44-byte RIFF/fmt/data header), and
+    `encodeFloat32ChunksToWav` composing the full pipeline.
+  - `app/src/voice/PushToTalk.ts` — desktop branch wired:
+    AudioContext + ScriptProcessor capture mirroring
+    `VoiceAssistant.tsx:534` precedent. Float32 chunks collected
+    in `onaudioprocess`, downsampled to 16kHz mono, wrapped in
+    WAV, handed to `transcribePushToTalk(audioBytes,
+    16000)`. The "not yet wired" throw at line 80 is gone. The
+    mock-mode SpeechRecognition path is preserved for browser
+    dev. Permission errors mapped explicitly:
+    `NotAllowedError → "Microphone permission denied"`,
+    `NotFoundError → "No microphone detected"`,
+    `NotReadableError → "Microphone is in use by another
+    application"`. Setup-time rejection (start-fail) is buffered
+    on the recorder and surfaced via `stopAndTranscribe`'s await
+    chain — single consumer-facing await; no leaked unhandled
+    rejection.
+  - `app/src/components/swarm/DirectorConsole.tsx` — mic button
+    inline before the Submit button. Pre-flight
+    `voicePipelineHealth()` on mount; mic stays disabled with
+    `title=` tooltip until the probe lands and reflects health
+    afterward. Recording state: red `var(--nexus-danger)` pill
+    with the existing `swarm-node-pulse` keyframe; respects
+    `prefers-reduced-motion`. Click → start; second click or
+    30s auto-cap → stop + transcribe. Captured transcript
+    appended to the textarea with the documented separator
+    semantics via the new `appendTranscript` pure helper
+    (exported for unit testing). Cursor lands at the new end via
+    `setSelectionRange` queued through `queueMicrotask`. Errors
+    routed through the existing `setError(...)` span. The 30s
+    cap is owned by DirectorConsole (single React-state owner),
+    not by the recorder — surfaces "Recording auto-stopped at
+    30s" while still consuming whatever was captured.
+  - `app/tsconfig.json` — added `src/lib/swarm/__tests__` and
+    `src/voice/__tests__` to the existing test-dir exclude list
+    (matches precedent for sibling test dirs).
+  - +11 wav_encoder tests + 6 PushToTalk desktop tests + 9 new
+    DirectorConsole tests (5 mic + 4 appendTranscript helper) =
+    +26 vitest specs. Test infra (MediaDevices + AudioContext
+    stubs) is local to each test file — no changes to global
+    `app/src/test/setup.ts`. Existing DirectorConsole tests
+    untouched in behaviour; existing PushToTalk consumer in
+    `App.tsx` still compiles (the `void recorder.startRecording()`
+    + `await recorder.stopAndTranscribe()` shape is unchanged).
+
+- Track C #3 (commit 1 of 2) — **CLOSED** (`03277bba`) — Backend
   wiring for local STT. `voice/stt.py` gains a JSON-over-stdout CLI
   (`--health` and `transcribe <wav-path>`) consumed by the Tauri
   subprocess bridge. The legacy `transcribe_push_to_talk` model-load
@@ -261,13 +313,13 @@ Extraction logic is forward-compatible. Endpoint switch still separate ticket.
   SQLite impl, +5 trait-level tests on the in-memory impl.
 
 Track B status as of Bug V: L/M/N/O/X/W/V all closed. **Phase 5
-complete.** Track C: items 1 (Swarm Audit Viewer) and 2 (cross-page
-swarm status indicator) closed. Item 3 (DirectorConsole mic input)
-in progress — commit 1 of 2 (backend STT wiring) lands here; commit
-2 (frontend mic button + MediaRecorder) is next. Bug AB/AC/AD
-(filed against W), Bug AE/AF/AG/AH/AI/AJ/AK (filed against V), Bug
-AL/AM (filed against Track C #1), Bug AN/AO (filed against Track
-C #2), and Bug AP (filed against Track C #3) remain open as backlog.
+complete.** **Track C complete** — items 1 (Swarm Audit Viewer),
+2 (cross-page swarm status indicator), and 3 (DirectorConsole mic
+input) all closed. Architecture Q1 (Broker) reopens next. Bug
+AB/AC/AD (filed against W), Bug AE/AF/AG/AH/AI/AJ/AK (filed against
+V), Bug AL/AM (Track C #1), Bug AN/AO (Track C #2), Bug AP/AS
+(Track C #3 commit 1), and Bug AT/AU/AV/AW (Track C #3 commit 2)
+remain open as backlog.
 
 ### Open
 
@@ -450,3 +502,46 @@ C #2), and Bug AP (filed against Track C #3) remain open as backlog.
   #3 — file as standalone hygiene.
 
 - **AS** — voice/tests/test_real_backends.py::test_synthesize_to_wav_executes_command fails when run in the full suite. Pre-existing breakage in TTS (piper) synthesis testing, unrelated to STT or Track C #3. Pinned for triage; not blocking voice/STT work.
+
+- Bug AT — **macOS NSMicrophoneUsageDescription** — Track C #3
+  commit 2 ships frontend mic capture via
+  `navigator.mediaDevices.getUserMedia`. Linux/X11 (Suresh's dev
+  environment) doesn't enforce mic permission at the OS level, so
+  the prompt is a no-op. macOS REQUIRES an
+  `NSMicrophoneUsageDescription` string in the Tauri-generated
+  `Info.plist` for `getUserMedia` to even surface a permission
+  prompt — without it, the call fails silently. Add the bundle
+  config in `app/src-tauri/tauri.conf.json` (Tauri 2 has a
+  `bundle.macOS.entitlements` / `infoPlist` slot) before any
+  macOS bundle ships. Out of scope today; file for the next
+  cross-platform pass.
+
+- Bug AU — **MIGRATE ScriptProcessor → AudioWorklet** — Track C
+  #3 commit 2 captures audio via
+  `audioContext.createScriptProcessor(4096, 1, 1)` matching the
+  `VoiceAssistant.tsx:534` precedent. ScriptProcessor is
+  deprecated; the modern equivalent is AudioWorklet (worklet
+  file, separate worker context, message-port for sample
+  delivery). Works on WRY/webkitgtk today but should be hardened
+  before browser engines drop ScriptProcessor entirely. Track C
+  #3 commit 2 will need migrating; `VoiceAssistant.tsx`'s
+  legacy capture path too.
+
+- Bug AV — **INSERT-AT-CURSOR FOR TRANSCRIPT** — Track C #3 commit
+  2 ships append-at-end semantics: the transcribed text always
+  lands at the end of the textarea regardless of where the user's
+  cursor was pre-recording. v2 should respect `selectionStart` /
+  `selectionEnd` and insert at cursor (or replace selection if
+  one exists). The `appendTranscript` helper would be
+  generalised to `insertTranscript(currentText, cursor,
+  transcript)`. Low priority; v1 ships append-only.
+
+- Bug AW — **BASE64 audio_bytes WIRE FORMAT** — Track C #3 commit
+  1 sends `audio_bytes: Vec<u8>` as a JSON array of integers
+  (Tauri 2 default serialization). At 16kHz mono s16le that's
+  ~32KB/s PCM, ~6–8MB JSON for a 30s recording. The 30s cap
+  keeps us under the Tauri 2 default ~8MB IPC ceiling, but the
+  encoding bloat is wasteful. If recording duration ever extends
+  (or the user-flow demands continuous capture), switch to a
+  base64 string field on the wire. Tauri 2's binary IPC is in
+  beta; revisit once stable.

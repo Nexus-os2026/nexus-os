@@ -102,3 +102,205 @@ describe("DirectorConsole", () => {
     await waitFor(() => expect(onPlanCleared).toHaveBeenCalledTimes(1));
   });
 });
+
+// ── Track C #3 commit 2: mic button + transcript append ──────────────────
+
+import { appendTranscript } from "../DirectorConsole";
+import { mockCommandError } from "../../../test/setup";
+
+interface FakeAudioContext {
+  sampleRate: number;
+  destination: object;
+  createMediaStreamSource: () => { connect: () => void; disconnect: () => void };
+  createScriptProcessor: () => {
+    connect: () => void;
+    disconnect: () => void;
+    onaudioprocess:
+      | ((e: { inputBuffer: { getChannelData: () => Float32Array } }) => void)
+      | null;
+  };
+  close: () => Promise<void>;
+}
+
+function installAudioStubs(): void {
+  Object.defineProperty(window.navigator, "mediaDevices", {
+    configurable: true,
+    writable: true,
+    value: {
+      getUserMedia: () =>
+        Promise.resolve({
+          getTracks: () => [{ stop: () => {} }],
+        } as unknown as MediaStream),
+    },
+  });
+  const audioCtorImpl = function (this: FakeAudioContext): FakeAudioContext {
+    this.sampleRate = 48_000;
+    this.destination = {};
+    this.createMediaStreamSource = () => ({
+      connect: () => {},
+      disconnect: () => {},
+    });
+    this.createScriptProcessor = () => ({
+      connect: () => {},
+      disconnect: () => {},
+      onaudioprocess: null,
+    });
+    this.close = () => Promise.resolve();
+    return this;
+  } as unknown as { new (): FakeAudioContext };
+  Object.defineProperty(window, "AudioContext", {
+    configurable: true,
+    writable: true,
+    value: audioCtorImpl,
+  });
+}
+
+describe("DirectorConsole mic button (Track C #3 commit 2)", () => {
+  beforeEach(() => {
+    __resetSwarmStoreForTest();
+    installAudioStubs();
+  });
+
+  it("renders mic button disabled when pipeline_health unreachable", async () => {
+    mockCommands({
+      swarm_plan: plannedResponse(),
+      swarm_reject: null,
+      voice_pipeline_health: {
+        reachable: false,
+        model: null,
+        last_error: "No module named 'faster_whisper'",
+      },
+    });
+    render(
+      <DirectorConsole
+        onPlanReady={(): void => {}}
+        pendingTicketId={null}
+        onPlanCleared={(): void => {}}
+      />,
+    );
+    const mic = screen.getByTestId("director-mic") as HTMLButtonElement;
+    await waitFor(() => {
+      expect(mic.getAttribute("title") ?? "").toContain("Voice unavailable:");
+    });
+    expect(mic.disabled).toBe(true);
+  });
+
+  it("renders mic button enabled when pipeline_health reachable", async () => {
+    mockCommands({
+      swarm_plan: plannedResponse(),
+      swarm_reject: null,
+      voice_pipeline_health: { reachable: true, model: "tiny", last_error: null },
+    });
+    render(
+      <DirectorConsole
+        onPlanReady={(): void => {}}
+        pendingTicketId={null}
+        onPlanCleared={(): void => {}}
+      />,
+    );
+    const mic = screen.getByTestId("director-mic") as HTMLButtonElement;
+    await waitFor(() => expect(mic.disabled).toBe(false));
+    expect(mic.getAttribute("title")).toBe("Push to talk");
+  });
+
+  it("clicking mic engages recording state (aria-pressed flips, label shows Stop)", async () => {
+    mockCommands({
+      swarm_plan: plannedResponse(),
+      swarm_reject: null,
+      voice_pipeline_health: { reachable: true, model: "tiny", last_error: null },
+      transcribe_push_to_talk: {
+        text: "hello world",
+        language: "en",
+        confidence: 0.91,
+        latency_ms: 120,
+        model: "tiny",
+      },
+    });
+    render(
+      <DirectorConsole
+        onPlanReady={(): void => {}}
+        pendingTicketId={null}
+        onPlanCleared={(): void => {}}
+      />,
+    );
+    const mic = await screen.findByTestId("director-mic");
+    await waitFor(() => expect((mic as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(mic);
+    await waitFor(() => expect(mic.getAttribute("aria-pressed")).toBe("true"));
+    expect(mic.textContent).toContain("Stop");
+  });
+
+  it("clicking mic again appends transcript to textarea with cursor at end", async () => {
+    mockCommands({
+      swarm_plan: plannedResponse(),
+      swarm_reject: null,
+      voice_pipeline_health: { reachable: true, model: "tiny", last_error: null },
+      transcribe_push_to_talk: {
+        text: "hello world",
+        language: "en",
+        confidence: 0.91,
+        latency_ms: 120,
+        model: "tiny",
+      },
+    });
+    render(
+      <DirectorConsole
+        onPlanReady={(): void => {}}
+        pendingTicketId={null}
+        onPlanCleared={(): void => {}}
+      />,
+    );
+    const mic = await screen.findByTestId("director-mic");
+    await waitFor(() => expect((mic as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(mic);
+    fireEvent.click(mic);
+    const ta = (await screen.findByTestId(
+      "director-textarea",
+    )) as HTMLTextAreaElement;
+    await waitFor(() => expect(ta.value).toBe("hello world"));
+    // Microtask cursor restore.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(ta.selectionStart).toBe(ta.value.length);
+    expect(ta.selectionEnd).toBe(ta.value.length);
+  });
+
+  it("backend transcribe error sets the director-error span", async () => {
+    mockCommandError("transcribe_push_to_talk", "stt.py failed: bad audio", {
+      swarm_plan: plannedResponse(),
+      swarm_reject: null,
+      voice_pipeline_health: { reachable: true, model: "tiny", last_error: null },
+    });
+    render(
+      <DirectorConsole
+        onPlanReady={(): void => {}}
+        pendingTicketId={null}
+        onPlanCleared={(): void => {}}
+      />,
+    );
+    const mic = await screen.findByTestId("director-mic");
+    await waitFor(() => expect((mic as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(mic);
+    fireEvent.click(mic);
+    await waitFor(() =>
+      expect(screen.getByTestId("director-error")).toHaveTextContent(/bad audio/),
+    );
+  });
+});
+
+describe("appendTranscript helper", () => {
+  it("returns the transcript directly when current text is empty", () => {
+    expect(appendTranscript("", "hello")).toBe("hello");
+  });
+
+  it("joins with a single newline when current text doesn't end in one", () => {
+    expect(appendTranscript("foo", "bar")).toBe("foo\nbar");
+  });
+
+  it("doesn't add a second newline when current text already ends in one", () => {
+    expect(appendTranscript("foo\n", "bar")).toBe("foo\nbar");
+  });
+
+  it("preserves multiple existing trailing newlines (no stripping)", () => {
+    expect(appendTranscript("foo\n\n", "bar")).toBe("foo\n\nbar");
+  });
+});

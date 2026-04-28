@@ -20,10 +20,37 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { KeyboardEvent, ChangeEvent } from "react";
+import { voicePipelineHealth } from "../../api/backend";
+import type { VoicePipelineHealth } from "../../api/backend";
 import { planSwarm, rejectSwarm } from "../../lib/swarm/commands";
 import type { PlannedSwarmJson } from "../../lib/swarm/types";
 import { useSwarmStore } from "../../lib/swarm/store";
 import { selectActiveRun, selectIsPlanPending } from "../../lib/swarm/selectors";
+import { PushToTalk } from "../../voice/PushToTalk";
+
+/**
+ * Track C #3 commit 2: append a new transcript chunk to the existing
+ * textarea value with the documented separator semantics. Pure helper;
+ * exported for unit testing.
+ *
+ *   - empty existing → return transcript unchanged
+ *   - existing ends in `\n` → return existing + transcript (no double)
+ *   - else → return existing + "\n" + transcript
+ */
+export function appendTranscript(currentText: string, transcript: string): string {
+  if (currentText.length === 0) return transcript;
+  if (currentText.endsWith("\n")) return currentText + transcript;
+  return currentText + "\n" + transcript;
+}
+
+const MAX_RECORDING_MS = 30_000;
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 export interface DirectorConsoleProps {
   /**
@@ -61,6 +88,14 @@ export function DirectorConsole({
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // Track C #3 commit 2: mic state + pipeline-health probe.
+  const [pipelineHealth, setPipelineHealth] = useState<VoicePipelineHealth | null>(
+    null,
+  );
+  const [isRecording, setIsRecording] = useState(false);
+  const pushToTalkRef = useRef<PushToTalk | null>(null);
+  const recordingCapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const planPending = useSwarmStore(selectIsPlanPending);
   const activeRun = useSwarmStore(selectActiveRun);
   const disabled = planPending || activeRun !== null;
@@ -70,6 +105,95 @@ export function DirectorConsole({
   useEffect(() => {
     if (submitting && planPending) setSubmitting(false);
   }, [submitting, planPending]);
+
+  // Track C #3 commit 2: pre-flight pipeline-health probe on mount.
+  // Fires once; the mic button stays disabled until the probe lands.
+  // Failures land in synthetic { reachable: false } so the tooltip
+  // surfaces the cause instead of leaving the button mysterious.
+  useEffect(() => {
+    let cancelled = false;
+    void (async (): Promise<void> => {
+      try {
+        const health = await voicePipelineHealth();
+        if (!cancelled) setPipelineHealth(health);
+      } catch (e) {
+        if (!cancelled) {
+          setPipelineHealth({
+            reachable: false,
+            model: null,
+            last_error: e instanceof Error ? e.message : "Pipeline check failed",
+          });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Track C #3 commit 2: cleanup the recording cap timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (recordingCapTimerRef.current !== null) {
+        clearTimeout(recordingCapTimerRef.current);
+      }
+    };
+  }, []);
+
+  const performStop = useCallback(
+    async (autoCapped: boolean): Promise<void> => {
+      const recorder = pushToTalkRef.current;
+      if (!recorder || !isRecording) return;
+      if (recordingCapTimerRef.current !== null) {
+        clearTimeout(recordingCapTimerRef.current);
+        recordingCapTimerRef.current = null;
+      }
+      setIsRecording(false);
+      try {
+        const result = await recorder.stopAndTranscribe();
+        if (autoCapped) {
+          setError("Recording auto-stopped at 30s");
+        }
+        const transcript = result.transcript.trim();
+        if (transcript.length > 0) {
+          setText((prev) => {
+            const next = appendTranscript(prev, transcript);
+            // Schedule cursor restore for after the controlled-input
+            // re-render lands in the DOM.
+            queueMicrotask(() => {
+              const el = textareaRef.current;
+              if (el !== null) {
+                el.focus();
+                el.setSelectionRange(next.length, next.length);
+              }
+            });
+            return next;
+          });
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [isRecording],
+  );
+
+  const handleMicToggle = useCallback((): void => {
+    if (isRecording) {
+      void performStop(false);
+      return;
+    }
+    if (disabled) return;
+    if (pipelineHealth === null || !pipelineHealth.reachable) return;
+    setError(null);
+    if (pushToTalkRef.current === null) {
+      pushToTalkRef.current = new PushToTalk();
+    }
+    pushToTalkRef.current.startRecording();
+    setIsRecording(true);
+    recordingCapTimerRef.current = setTimeout(() => {
+      void performStop(true);
+    }, MAX_RECORDING_MS);
+  }, [isRecording, disabled, pipelineHealth, performStop]);
 
   const handleSubmit = useCallback(async (): Promise<void> => {
     const intent = text.trim();
@@ -158,6 +282,53 @@ export function DirectorConsole({
         }}
       />
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <button
+          type="button"
+          data-testid="director-mic"
+          aria-label={isRecording ? "Stop voice input" : "Start voice input"}
+          aria-pressed={isRecording}
+          title={
+            pipelineHealth === null
+              ? "Checking voice pipeline…"
+              : pipelineHealth.reachable
+                ? "Push to talk"
+                : `Voice unavailable: ${pipelineHealth.last_error ?? "Unknown error"}`
+          }
+          disabled={
+            (disabled && !isRecording) ||
+            (!isRecording && (pipelineHealth === null || !pipelineHealth.reachable))
+          }
+          onClick={handleMicToggle}
+          style={{
+            padding: "6px 14px",
+            borderRadius: 8,
+            background: isRecording
+              ? "rgba(255,109,122,0.18)"
+              : "rgba(15,23,42,0.6)",
+            border: `1px solid ${
+              isRecording ? "rgba(255,109,122,0.65)" : "rgba(100,116,139,0.45)"
+            }`,
+            color: isRecording ? "var(--nexus-danger, #ff6d7a)" : "#cbd5e1",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor:
+              ((disabled && !isRecording) ||
+                (!isRecording && (pipelineHealth === null || !pipelineHealth.reachable)))
+                ? "not-allowed"
+                : "pointer",
+            opacity:
+              ((disabled && !isRecording) ||
+                (!isRecording && (pipelineHealth === null || !pipelineHealth.reachable)))
+                ? 0.55
+                : 1,
+            animation:
+              isRecording && !prefersReducedMotion()
+                ? "swarm-node-pulse 1.5s ease-out infinite"
+                : undefined,
+          }}
+        >
+          {isRecording ? "■ Stop" : "🎙️ Mic"}
+        </button>
         <button
           type="button"
           data-testid="director-submit"

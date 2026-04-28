@@ -2,7 +2,7 @@ import "@testing-library/jest-dom";
 import { vi, beforeEach, expect } from "vitest";
 
 // Polyfill ResizeObserver for jsdom (needed by @xyflow/react and recharts)
-global.ResizeObserver = class {
+globalThis.ResizeObserver = class {
   observe() {}
   unobserve() {}
   disconnect() {}
