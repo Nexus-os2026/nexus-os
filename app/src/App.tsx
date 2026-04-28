@@ -34,6 +34,7 @@ import { HoloPanel } from "./components/fx/HoloPanel";
 import { NeuralBackground } from "./components/fx/NeuralBackground";
 import { PageTransition } from "./components/fx/PageTransition";
 import { Sidebar, type SidebarItem } from "./components/layout/Sidebar";
+import SwarmStatusBadge from "./components/swarm/SwarmStatusBadge";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 import { VoiceOverlay, type VoiceOverlayState } from "./components/VoiceOverlay";
 import { PulseRing } from "./components/viz/PulseRing";
@@ -1876,6 +1877,10 @@ export default function App(): JSX.Element {
         }}
       />
       <div className="nexus-shell text-slate-100">
+        <SwarmStatusBadge
+          onNavigate={(p) => setPage(p as Page)}
+          currentPage={page}
+        />
         <Sidebar
           items={NAV_ITEMS.map((item) =>
             item.id === "approvals" && pendingApprovalCount > 0

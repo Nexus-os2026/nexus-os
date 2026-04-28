@@ -64,26 +64,8 @@ function statusDot(kind: AgentNodeStatusKind): string {
   }
 }
 
-/**
- * Pulse keyframe for Running. Injected as a global stylesheet rule the
- * first time the component mounts (idempotent — `data-swarm-pulse` guard
- * prevents duplicate <style> tags across StrictMode double-mount and
- * multiple AgentNode instances).
- */
-function ensurePulseKeyframe(): void {
-  if (typeof document === "undefined") return;
-  if (document.querySelector("style[data-swarm-pulse]")) return;
-  const style = document.createElement("style");
-  style.setAttribute("data-swarm-pulse", "");
-  style.textContent = `
-    @keyframes swarm-node-pulse {
-      0%   { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.55); }
-      70%  { box-shadow: 0 0 0 10px rgba(56, 189, 248, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
-    }
-  `;
-  document.head.appendChild(style);
-}
+// `swarm-node-pulse` keyframe lives in styles/nexus-design-system.css
+// (Track C #2 promoted it from this file's inline injection).
 
 export function AgentNode({ data, selected }: NodeProps): JSX.Element {
   // @xyflow/react's generic NodeProps types `data` as `unknown`; cast once
@@ -91,7 +73,6 @@ export function AgentNode({ data, selected }: NodeProps): JSX.Element {
   const { dag } = data as AgentNodeData;
   const status = useSwarmStore(selectNodeStatus(dag.id));
   const kind = toStatusKind(status);
-  ensurePulseKeyframe();
 
   const initial = dag.capability_id.charAt(0).toUpperCase();
   const label = dag.capability_id;

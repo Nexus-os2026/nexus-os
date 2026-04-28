@@ -326,6 +326,18 @@
   50% { box-shadow: 0 0 14px rgba(239, 68, 68, 0.6); }
 }
 
+/*
+ * Track C #2: ring-pulse for "Running" state. Previously injected
+ * inline by AgentNode.tsx's ensurePulseKeyframe() helper; promoted
+ * into the design system stylesheet so SwarmStatusBadge can reuse
+ * the same animation without re-injecting at module load.
+ */
+@keyframes swarm-node-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(56, 189, 248, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+}
+
 @keyframes nx-shimmer {
   0% { background-position: -200% center; }
   100% { background-position: 200% center; }

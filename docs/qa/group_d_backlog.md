@@ -153,7 +153,29 @@ Extraction logic is forward-compatible. Endpoint switch still separate ticket.
   `target/` exceeds `NEXUS_TARGET_SIZE_LIMIT_GB` (default 200GB).
   Disk hygiene policy documented in CLAUDE.md.
 
-- Track C #1 — **CLOSED** (this commit) — Swarm Audit Viewer page.
+- Track C #2 — **CLOSED** (this commit) — Cross-page swarm status
+  indicator. New `app/src/components/swarm/SwarmStatusBadge.tsx`
+  (floating top-right pill, fixed-position). Subscribes to
+  `selectActiveRun`, `selectIsPlanPending`, and the new
+  `selectRunProgress` factory selector for `{ done, total, running,
+  failed }`. Direct `swarmBus` subscription captures
+  `swarm_completed` / `swarm_cancelled` events to hold a 5-second
+  terminal-state pill ("COMPLETED ✓" / "CANCELLED") before the badge
+  hides — the store dispatcher clears `activeRun` synchronously on
+  these events, so the hold has to be local state. Suppressed on
+  `page === "agents"` (where richer chrome already exists). Reduced-
+  motion respected via `window.matchMedia('(prefers-reduced-motion:
+  reduce)')` — pulse animation skipped when set. Reuses the
+  `nexus-topbar-chip` class for visual consistency. The
+  `swarm-node-pulse` keyframe was promoted from
+  `AgentNode.tsx`'s inline injection into
+  `app/src/styles/nexus-design-system.css` so both components reuse
+  the same CSS-defined animation. Mounted in `App.tsx` as a sibling
+  of `<Sidebar>` and the main column inside `.nexus-shell`. Click →
+  `setPage("agents")`. +1 selector + 4 selector tests + 9 component
+  tests. Pill-only in v1; per-node hover/popover filed as Bug AN.
+
+- Track C #1 — **CLOSED** (`2e984379`) — Swarm Audit Viewer page.
   New `app/src/pages/SwarmAudit.tsx` (read-only viewer for
   `swarm_audit_tail`), single-column layout, run-id picker
   (active-run default + paste override), filter chips for
@@ -215,11 +237,11 @@ Extraction logic is forward-compatible. Endpoint switch still separate ticket.
   SQLite impl, +5 trait-level tests on the in-memory impl.
 
 Track B status as of Bug V: L/M/N/O/X/W/V all closed. **Phase 5
-complete.** Track C: item 1 (Swarm Audit Viewer) closed in this
-commit. Items 2 (cross-page swarm status indicator) and 3
-(DirectorConsole mic input) remain. Bug AB/AC/AD (filed against W),
-Bug AE/AF/AG/AH/AI/AJ/AK (filed against V), and Bug AL/AM (filed
-against Track C #1) remain open as backlog.
+complete.** Track C: items 1 (Swarm Audit Viewer) and 2 (cross-page
+swarm status indicator) closed. Item 3 (DirectorConsole mic input)
+remains. Bug AB/AC/AD (filed against W), Bug AE/AF/AG/AH/AI/AJ/AK
+(filed against V), Bug AL/AM (filed against Track C #1), and Bug
+AN (filed against Track C #2) remain open as backlog.
 
 ### Open
 
@@ -372,3 +394,19 @@ against Track C #1) remain open as backlog.
   live-append is the v2 freshness affordance. Also re-evaluate
   whether `swarm_audit_tail` needs a backend `audit-update` event
   for clean cross-tab consistency.
+
+- Bug AN — **SWARM STATUS BADGE EXPANSION-ON-HOVER** — Track C #2
+  ships a pill-only indicator: it shows aggregate state ("RUNNING ·
+  3/7") and click navigates to `/agents`. A v2 affordance is a
+  hover/click expansion popover that surfaces per-node mini-status
+  (running list, failed list, recent oracle denials) without
+  forcing the user off their current page. Builds on the existing
+  `selectActiveNodes` (frozen-sentinel cached, currently running
+  only) plus a small popover positioning helper. Pill behaviour and
+  click-to-jump unchanged.
+
+- Bug AO — **BADGE PULSE COLOR DRIFT** — `SwarmStatusBadge`
+  ring-pulse uses `AgentNode`'s legacy `#38bdf8` (sky-blue) while
+  the chip foreground/border use `var(--nexus-accent)` `#4af7d3`
+  (mint cyan). Two cyan tones reading as a color bug at small
+  sizes. Reconcile to a single token before broader design polish.

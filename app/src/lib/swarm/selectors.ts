@@ -234,6 +234,65 @@ export function selectActiveRunCancellable(state: SwarmState): boolean {
   return state.activeRun !== null;
 }
 
+// ── Track C #2: run progress for the global status indicator ────────────────
+
+/**
+ * Counts derived from `activeRun.node_states` + the run's DAG. The
+ * `SwarmStatusBadge` reads this through `useSyncExternalStore`, so the
+ * factory pattern with a closure-cached object identity keeps the hook
+ * from looping when the upstream state slice is unchanged.
+ */
+export interface RunProgress {
+  readonly done: number;
+  readonly total: number;
+  readonly running: number;
+  readonly failed: number;
+}
+
+const ZERO_RUN_PROGRESS: RunProgress = Object.freeze({
+  done: 0,
+  total: 0,
+  running: 0,
+  failed: 0,
+});
+
+let _runProgressCacheState: SwarmState | null = null;
+let _runProgressCacheResult: RunProgress = ZERO_RUN_PROGRESS;
+export function selectRunProgress(state: SwarmState): RunProgress {
+  if (_runProgressCacheState === state) return _runProgressCacheResult;
+  const run = state.activeRun;
+  let result: RunProgress;
+  if (!run) {
+    result = ZERO_RUN_PROGRESS;
+  } else {
+    let done = 0;
+    let running = 0;
+    let failed = 0;
+    for (const n of run.dag.nodes) {
+      const live = run.node_states[n.id];
+      const status: DagNodeStatus = live ?? n.status;
+      if (status === "Running") {
+        running += 1;
+      } else if (typeof status === "object" && status !== null) {
+        if ("Done" in status) {
+          done += 1;
+        } else if ("Failed" in status) {
+          failed += 1;
+        }
+      }
+    }
+    result = Object.freeze({
+      done,
+      total: run.dag.nodes.length,
+      running,
+      failed,
+    });
+  }
+  _runProgressCacheState = state;
+  _runProgressCacheResult = result;
+  return result;
+}
+
 // Stable zero sentinel so per-node budget reads before any update don't
 // allocate a fresh object on every render and loop useSyncExternalStore.
 const ZERO_NODE_BUDGET: NodeBudgetState = Object.freeze({
