@@ -50,6 +50,12 @@ pub struct AuditEntry {
     pub seq: u64,
     pub event_kind: String,
     pub ticket_nonce: Uuid,
+    /// Bug AL/AM precursor (Track C #1): node identifier when the
+    /// underlying `SwarmEvent` references one, else `None`. Populated
+    /// per-variant in `event_to_audit_entry`. The frontend audit
+    /// viewer filters on this; serializes as `null` when absent
+    /// (Tauri's `Option<String>` representation).
+    pub node_id: Option<String>,
     pub timestamp: SystemTime,
     pub payload_summary: String,
 }
@@ -175,7 +181,7 @@ fn event_to_audit_entry(
     ev: &SwarmEvent,
     audit_seq: &std::sync::atomic::AtomicU64,
 ) -> Option<(Uuid, AuditEntry)> {
-    let (run_id, ticket_nonce, kind, summary) = match ev {
+    let (run_id, ticket_nonce, kind, summary, node_id) = match ev {
         SwarmEvent::NodeStarted {
             r#ref,
             capability_id,
@@ -187,6 +193,7 @@ fn event_to_audit_entry(
             *ticket_nonce,
             "node_started",
             format!("{capability_id} via {provider_id}/{model_id}"),
+            Some(r#ref.node_id.clone()),
         ),
         SwarmEvent::NodeEvent {
             r#ref,
@@ -198,6 +205,7 @@ fn event_to_audit_entry(
             *ticket_nonce,
             "node_event",
             format!("phase={phase}"),
+            Some(r#ref.node_id.clone()),
         ),
         SwarmEvent::NodeCompleted {
             r#ref,
@@ -208,6 +216,7 @@ fn event_to_audit_entry(
             *ticket_nonce,
             "node_completed",
             format!("node={}", r#ref.node_id),
+            Some(r#ref.node_id.clone()),
         ),
         SwarmEvent::NodeFailed {
             r#ref,
@@ -218,6 +227,7 @@ fn event_to_audit_entry(
             *ticket_nonce,
             "node_failed",
             format!("node={} reason={reason}", r#ref.node_id),
+            Some(r#ref.node_id.clone()),
         ),
         SwarmEvent::BudgetUpdate {
             run_id,
@@ -244,6 +254,7 @@ fn event_to_audit_entry(
                 format!(
                     "tokens={tokens_remaining} cents={cents_remaining} wall_ms={wall_ms_remaining}{scope}"
                 ),
+                node_id.clone(),
             )
         }
         SwarmEvent::OracleRuntimeCheck {
@@ -263,6 +274,9 @@ fn event_to_audit_entry(
                 "event={highrisk_event:?} approved={} token_id={:?}",
                 decision.approved, decision.token_id
             ),
+            // No node_id on this variant — runtime checks fire on
+            // ticket_nonce, not on a specific node.
+            None,
         ),
         SwarmEvent::OracleRuntimeDenial {
             ticket_nonce,
@@ -273,6 +287,11 @@ fn event_to_audit_entry(
             *ticket_nonce,
             "oracle_runtime_denial",
             format!("node={node_id} hints=[{}]", hints.join("; ")),
+            // OracleRuntimeDenial always denies *for* a specific node.
+            // Surfacing it through the audit `node_id` field lets the
+            // frontend filter chip find denials by node without
+            // payload_summary string-parsing.
+            Some(node_id.clone()),
         ),
         _ => return None,
     };
@@ -284,6 +303,7 @@ fn event_to_audit_entry(
             seq,
             event_kind: kind.into(),
             ticket_nonce,
+            node_id,
             timestamp: SystemTime::now(),
             payload_summary: summary,
         },
@@ -530,4 +550,107 @@ pub async fn swarm_audit_tail(run_id: Uuid) -> Result<Vec<AuditEntry>, String> {
     let s = state();
     let store = s.audit.lock().await;
     Ok(store.get(&run_id).cloned().unwrap_or_default())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nexus_swarm::events::NodeRef;
+
+    fn fresh_seq() -> std::sync::atomic::AtomicU64 {
+        std::sync::atomic::AtomicU64::new(0)
+    }
+
+    #[test]
+    fn event_to_audit_entry_node_started_populates_node_id() {
+        // Track C #1: per-variant node_id extraction. NodeStarted
+        // carries `r#ref.node_id`; the audit entry must surface it
+        // so the frontend filter chip works without payload string-
+        // parsing.
+        let run_id = Uuid::new_v4();
+        let nonce = Uuid::new_v4();
+        let ev = SwarmEvent::NodeStarted {
+            r#ref: NodeRef {
+                run_id,
+                node_id: "node-7".into(),
+            },
+            capability_id: "herald".into(),
+            provider_id: "anthropic".into(),
+            model_id: "claude-haiku".into(),
+            ticket_nonce: nonce,
+        };
+        let seq = fresh_seq();
+        let (out_run, entry) =
+            event_to_audit_entry(&ev, &seq).expect("NodeStarted produces an audit entry");
+        assert_eq!(out_run, run_id);
+        assert_eq!(entry.event_kind, "node_started");
+        assert_eq!(entry.node_id.as_deref(), Some("node-7"));
+        assert_eq!(entry.ticket_nonce, nonce);
+    }
+
+    #[test]
+    fn event_to_audit_entry_run_scoped_budget_update_has_no_node_id() {
+        // Run-scoped BudgetUpdate (node_id: None on the event) must
+        // produce an AuditEntry with node_id: None. Per-node
+        // BudgetUpdates DO carry node_id; a separate test covers that.
+        let run_id = Uuid::new_v4();
+        let nonce = Uuid::new_v4();
+        let ev = SwarmEvent::BudgetUpdate {
+            run_id,
+            tokens_remaining: 1000,
+            cents_remaining: 250,
+            wall_ms_remaining: 60_000,
+            ticket_nonce: nonce,
+            node_id: None,
+            node_tokens_consumed: None,
+            node_cost_cents_consumed: None,
+        };
+        let seq = fresh_seq();
+        let (out_run, entry) =
+            event_to_audit_entry(&ev, &seq).expect("BudgetUpdate produces an audit entry");
+        assert_eq!(out_run, run_id);
+        assert_eq!(entry.event_kind, "budget_update");
+        assert_eq!(entry.node_id, None);
+    }
+
+    #[test]
+    fn event_to_audit_entry_per_node_budget_update_carries_node_id() {
+        // Per-node BudgetUpdate path (Phase 4a). The audit row must
+        // surface the node_id so per-node budget activity is
+        // filterable.
+        let run_id = Uuid::new_v4();
+        let nonce = Uuid::new_v4();
+        let ev = SwarmEvent::BudgetUpdate {
+            run_id,
+            tokens_remaining: 800,
+            cents_remaining: 200,
+            wall_ms_remaining: 50_000,
+            ticket_nonce: nonce,
+            node_id: Some("node-3".into()),
+            node_tokens_consumed: Some(50),
+            node_cost_cents_consumed: Some(5),
+        };
+        let seq = fresh_seq();
+        let (_, entry) =
+            event_to_audit_entry(&ev, &seq).expect("per-node BudgetUpdate produces entry");
+        assert_eq!(entry.node_id.as_deref(), Some("node-3"));
+    }
+
+    #[test]
+    fn event_to_audit_entry_oracle_runtime_denial_carries_node_id() {
+        // OracleRuntimeDenial always denies *for* a specific node.
+        // The audit entry must expose that so denial-by-node filtering
+        // doesn't require payload_summary parsing.
+        let nonce = Uuid::new_v4();
+        let ev = SwarmEvent::OracleRuntimeDenial {
+            ticket_nonce: nonce,
+            hints: vec!["budget".into(), "policy".into()],
+            node_id: "node-9".into(),
+        };
+        let seq = fresh_seq();
+        let (_, entry) =
+            event_to_audit_entry(&ev, &seq).expect("OracleRuntimeDenial produces entry");
+        assert_eq!(entry.event_kind, "oracle_runtime_denial");
+        assert_eq!(entry.node_id.as_deref(), Some("node-9"));
+    }
 }

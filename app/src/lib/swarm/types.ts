@@ -255,12 +255,36 @@ export interface AuditTimestamp {
   nanos_since_epoch: number;
 }
 
+/**
+ * Track C #1: typed event_kind union. Mirrors the strings produced
+ * by `event_to_audit_entry` in `app/src-tauri/src/commands/swarm.rs`.
+ * If the Rust side adds a new event_kind, the
+ * `auditKindCategory` exhaustiveness check in
+ * `audit_kind_category.ts` is the next source of truth that breaks.
+ */
+export type AuditEventKind =
+  | "node_started"
+  | "node_event"
+  | "node_completed"
+  | "node_failed"
+  | "budget_update"
+  | "oracle_runtime_check"
+  | "oracle_runtime_denial";
+
 export interface AuditEntry {
-  seq: number;
-  event_kind: string;
-  ticket_nonce: Uuid;
-  timestamp: AuditTimestamp;
-  payload_summary: string;
+  readonly seq: number;
+  readonly event_kind: AuditEventKind;
+  readonly ticket_nonce: Uuid;
+  /**
+   * Track C #1: node identifier when the source `SwarmEvent`
+   * references one. `null` for run-level events (e.g.
+   * oracle_runtime_check) and for budget_update entries that fired
+   * at run scope rather than node scope. Tauri serializes Rust
+   * `Option<String>` as `string | null`.
+   */
+  readonly node_id: string | null;
+  readonly timestamp: AuditTimestamp;
+  readonly payload_summary: string;
 }
 
 // ── OracleRuntimeStatus (oracle_runtime.rs) ─────────────────────────────────

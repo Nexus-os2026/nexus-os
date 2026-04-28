@@ -153,7 +153,25 @@ Extraction logic is forward-compatible. Endpoint switch still separate ticket.
   `target/` exceeds `NEXUS_TARGET_SIZE_LIMIT_GB` (default 200GB).
   Disk hygiene policy documented in CLAUDE.md.
 
-- Bug V — **CLOSED** (this commit) — Real Twitter publish wiring in
+- Track C #1 — **CLOSED** (this commit) — Swarm Audit Viewer page.
+  New `app/src/pages/SwarmAudit.tsx` (read-only viewer for
+  `swarm_audit_tail`), single-column layout, run-id picker
+  (active-run default + paste override), filter chips for
+  `event_kind`, node_id substring filter, client-side time-range
+  filter (1m / 5m / 15m / 1h / All), expand-to-JSON rows.
+  Rust-side: `AuditEntry` extended with `node_id: Option<String>`;
+  per-variant extraction in `event_to_audit_entry`
+  (`app/src-tauri/src/commands/swarm.rs`). TS-side: typed
+  `AuditEventKind` union replaces the prior bare `string`; new
+  `audit_kind_category.ts` mapper reuses the EventTape pill
+  palette. Routing: new `swarm-audit` Page slug, NAV entry under
+  MONITORING, lazy import + switch arm in `App.tsx`. +4 Rust unit
+  tests on `event_to_audit_entry`; +15 vitest specs (4 on
+  `auditKindCategory` exhaustiveness; 7 on the page component;
+  4 on the pure `filterEntries` helper). Persistence + live-append
+  filed as Bug AL / AM (out of v1 scope).
+
+- Bug V — **CLOSED** (`fdfcd132`) — Real Twitter publish wiring in
   `social-poster-agent`'s swarm path. New `PublishExecutor` async
   trait (`credentials_present` + `publish`); production
   `RealPublishExecutor` wraps `TwitterConnector::post_status_update`
@@ -197,8 +215,11 @@ Extraction logic is forward-compatible. Endpoint switch still separate ticket.
   SQLite impl, +5 trait-level tests on the in-memory impl.
 
 Track B status as of Bug V: L/M/N/O/X/W/V all closed. **Phase 5
-complete.** Track C is next. Bug AB/AC/AD (filed against W) and
-Bug AE/AF/AG/AH/AI/AJ/AK (filed against V) remain open as backlog.
+complete.** Track C: item 1 (Swarm Audit Viewer) closed in this
+commit. Items 2 (cross-page swarm status indicator) and 3
+(DirectorConsole mic input) remain. Bug AB/AC/AD (filed against W),
+Bug AE/AF/AG/AH/AI/AJ/AK (filed against V), and Bug AL/AM (filed
+against Track C #1) remain open as backlog.
 
 ### Open
 
@@ -326,3 +347,28 @@ Bug AE/AF/AG/AH/AI/AJ/AK (filed against V) remain open as backlog.
   file). Originally bundled with Bug AE's typed error work in V's
   draft; split out so the security migration is independently
   schedulable.
+
+- Bug AL — **SWARM AUDIT TAIL PERSISTENCE** — The audit tail
+  surfaced by `swarm_audit_tail` is held in
+  `Arc<Mutex<HashMap<Uuid, Vec<AuditEntry>>>>`
+  (`app/src-tauri/src/commands/swarm.rs:68`) — pure in-memory, lost
+  on desktop restart. The Swarm Audit Viewer (Track C #1) works
+  for the life of one process; users who close the app expecting
+  the tail to be there will be surprised. Migrate to a
+  SQLite-backed store mirroring W's `social_publish_log` pattern
+  (new table on `nexus-persistence`, typed helpers, async
+  read/write through `PublishStateHandle`-style trait). Required
+  to make Track C #1's UX hold up across restarts.
+
+- Bug AM — **SWARM AUDIT VIEWER LIVE-APPEND** — Track C #1's page
+  fetches `swarm_audit_tail` once on mount and on manual refresh.
+  It does NOT subscribe to `swarm:event` and project new audit
+  entries into the visible list. After a run completes, users
+  must click Refresh to see the final audit rows. Add an
+  optional live-append path: subscribe to the event stream while
+  the page is mounted, project incoming `SwarmEvent`s through the
+  same `event_to_audit_entry` shape (or a frontend twin), and
+  merge by `seq`. v1 chose one-shot for snapshot semantics;
+  live-append is the v2 freshness affordance. Also re-evaluate
+  whether `swarm_audit_tail` needs a backend `audit-update` event
+  for clean cross-tab consistency.

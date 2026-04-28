@@ -49,6 +49,7 @@ import { SetupWizard } from "./pages/SetupWizard";
 import { Workflows } from "./pages/Workflows";
 const CommandCenter = React.lazy(() => import("./pages/CommandCenter"));
 const AuditTimeline = React.lazy(() => import("./pages/AuditTimeline"));
+const SwarmAudit = React.lazy(() => import("./pages/SwarmAudit"));
 const ComplianceDashboard = React.lazy(() => import("./pages/ComplianceDashboard"));
 const ClusterStatusPage = React.lazy(() => import("./pages/ClusterStatus"));
 const TrustDashboard = React.lazy(() => import("./pages/TrustDashboard"));
@@ -147,7 +148,7 @@ import { swarmBus } from "./lib/swarm/swarm_bus";
 import { getProviderHealth } from "./lib/swarm/commands";
 import { setInitialProviderHealth } from "./lib/swarm/store";
 
-type Page = "dashboard" | "chat" | "agents" | "audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler" | "flash-inference" | "measurement" | "measurement-session" | "measurement-compare" | "measurement-batteries" | "capability-boundaries" | "model-routing" | "ab-validation" | "browser-agent" | "governance-oracle" | "token-economy" | "governed-control" | "world-sim" | "perception" | "agent-memory" | "external-tools" | "collab-protocol" | "software-factory" | "nexus-builder" | "memory-dashboard" | "self-improvement" | "nexus-code";
+type Page = "dashboard" | "chat" | "agents" | "audit" | "swarm-audit" | "workflows" | "marketplace" | "settings" | "command-center" | "audit-timeline" | "marketplace-browser" | "developer-portal" | "compliance" | "cluster" | "trust" | "distributed-audit" | "permissions" | "protocols" | "identity" | "firewall" | "browser" | "computer-control" | "code-editor" | "terminal" | "file-manager" | "system-monitor" | "notes" | "project-manager" | "database" | "api-client" | "design-studio" | "email-client" | "messaging" | "media-studio" | "app-store" | "ai-chat-hub" | "deploy-pipeline" | "learning-center" | "policy-management" | "documents" | "model-hub" | "time-machine" | "voice-assistant" | "approvals" | "simulation" | "mission-control" | "dna-lab" | "timeline-viewer" | "knowledge-graph" | "immune-dashboard" | "consciousness" | "dreams" | "temporal" | "civilization" | "self-rewrite" | "admin-console" | "admin-users" | "admin-fleet" | "admin-policies" | "admin-compliance" | "admin-health" | "integrations" | "login" | "workspaces" | "telemetry" | "usage-billing" | "scheduler" | "flash-inference" | "measurement" | "measurement-session" | "measurement-compare" | "measurement-batteries" | "capability-boundaries" | "model-routing" | "ab-validation" | "browser-agent" | "governance-oracle" | "token-economy" | "governed-control" | "world-sim" | "perception" | "agent-memory" | "external-tools" | "collab-protocol" | "software-factory" | "nexus-builder" | "memory-dashboard" | "self-improvement" | "nexus-code";
 type RuntimeMode = "desktop" | "mock";
 
 const NAV_ITEMS: SidebarItem[] = [
@@ -181,6 +182,7 @@ const NAV_ITEMS: SidebarItem[] = [
   // ── MONITORING ──
   { id: "system-monitor", label: "System Monitor", icon: "Activity", shortcut: "", section: "MONITORING" },
   { id: "audit", label: "Audit", icon: "Shield", shortcut: "", section: "MONITORING" },
+  { id: "swarm-audit", label: "Swarm Audit", icon: "ScrollText", shortcut: "", section: "MONITORING" },
   { id: "audit-timeline", label: "Audit Timeline", icon: "Clock", shortcut: "", section: "MONITORING" },
   { id: "trust", label: "Trust Dashboard", icon: "Award", shortcut: "", section: "MONITORING" },
   { id: "firewall", label: "Firewall", icon: "Lock", shortcut: "", section: "MONITORING" },
@@ -338,6 +340,7 @@ const PAGE_SUMMARIES: Partial<Record<Page, string>> = {
   "dna-lab": "Evolution bay for breeding, comparing, and mutating agent genomes.",
   settings: "Control panel for runtime policy, providers, privacy posture, and system tuning.",
   audit: "Hash-chained governance trail — inspect events, actions, and tamper-proof records.",
+  "swarm-audit": "Read-only audit tail for a swarm run — filter by event kind, node, and time window.",
   "audit-timeline": "Trace temporal events, decisions, and governance history across the mesh.",
   workflows: "Automation pipelines — chain agent actions into governed, repeatable workflows.",
   "command-center": "Run direct commands against the governed operating layer.",
@@ -1596,6 +1599,9 @@ export default function App(): JSX.Element {
     }
     if (page === "audit") {
       return <Audit events={auditEvents} onRefresh={() => void refreshDesktopData()} />;
+    }
+    if (page === "swarm-audit") {
+      return <SwarmAudit />;
     }
     if (page === "workflows") {
       return <Workflows />;
