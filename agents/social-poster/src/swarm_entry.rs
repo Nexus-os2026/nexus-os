@@ -31,7 +31,12 @@
 //!   "draft": "Full text of the generated post",
 //!   "channel": "X",
 //!   "compliance": "Allowed",
-//!   "publish_status": "skipped_dry_run" | "deferred" | "blocked_by_compliance",
+//!   "publish_status":
+//!       "skipped_dry_run" | "blocked_by_compliance" | "deferred"
+//!     | "credentials_missing" | "auth_failure"
+//!     | { "published": { "post_id": "...", "url": "..." } }
+//!     | { "rate_limited": { "retry_after_secs": 60 } }
+//!     | { "failed": { "reason": "..." } },
 //!   "tokens_used": 152,
 //!   "dry_run": true
 //! }
@@ -39,24 +44,44 @@
 //!
 //! # Phase events
 //!
-//! Six emissions per execution. Names are semantic, not generic:
+//! Per-call emission count varies by branch:
 //!
-//! 1. `parsing_input`     — `{ channel, audience_chars, has_research }`
-//! 2. `drafting`          — `{ model_id, max_tokens }` (just before the provider call)
-//! 3. `parsing_response`  — `{ response_chars }` (after the provider call)
-//! 4. `reviewing`         — `{ allowed, decision }` (compliance check)
-//! 5. `publishing`        — `{ dry_run, channel, publish_status }`
-//! 6. `complete`          — `{ tokens_used, draft_chars, publish_status }`
+//! - dry_run / blocked_by_compliance: 6 phases
+//! - credentials_missing: 7 phases (adds `checking_credentials`)
+//! - published / publish failures: 9 phases
+//!   (adds `checking_credentials`, `publishing`, `publish_complete`)
 //!
-//! # Publish step (Phase 5 deferral)
+//! Sequence (subset on non-publish branches):
+//!
+//! 1. `parsing_input`         — `{ channel, audience_chars, has_research }`
+//! 2. `drafting`              — `{ model_id, max_tokens }`
+//! 3. `parsing_response`      — `{ response_chars }`
+//! 4. `counting_recent_posts` — `{ channel, account_id, window_secs, recent_posts }` (Bug W)
+//! 5. `reviewing`             — `{ allowed, decision, recent_posts }`
+//! 6. `checking_credentials`  — `{ channel, credentials_present }` (Bug V, real-publish path)
+//! 7. `publishing`            — `{ channel, account_id, draft_chars }` (Bug V, before connector)
+//! 8. `publish_complete`      — `{ channel, publish_status }` (Bug V, after connector)
+//! 9. `complete`              — `{ tokens_used, draft_chars, publish_status }`
+//!
+//! # Publish step (Bug V: real Twitter wiring)
 //!
 //! When `dry_run: true`, no real publishing happens — the post is drafted,
-//! compliance-checked, and returned. When `dry_run: false`, the publish
-//! step is **structurally present but not wired**: `publish_status:
-//! "deferred"` is returned without invoking `TwitterConnector`. Real
-//! publish requires plumbing `WebAgentContext` (governance/fuel) and API
-//! credentials through to swarm context — Phase 5 work tracked as
-//! Bug V in the backlog.
+//! compliance-checked, and returned with `skipped_dry_run`. When
+//! `dry_run: false`:
+//!
+//! - The pre-flight `checking_credentials` event reports whether OAuth1
+//!   keys are configured. If missing, V short-circuits at
+//!   `credentials_missing` without invoking the connector (no silent
+//!   fall-through to mock mode).
+//! - Otherwise, the `PublishExecutor` trait runs the connector inside
+//!   `tokio::task::spawn_blocking` (the connector is sync via
+//!   `reqwest::blocking`). Result is mapped to `published`,
+//!   `rate_limited`, `auth_failure`, or `failed`.
+//! - `record_publish` fires only on `published` (Bug AH tracks the
+//!   reserve→confirm pattern that would close the partial-failure hole).
+//!
+//! `Deferred` is retained one revision for backwards compatibility with
+//! external consumers; Bug AI tracks deletion.
 //!
 //! # Privacy class semantics
 //!
@@ -69,18 +94,182 @@
 use crate::channel::ChannelKey;
 use crate::publish_state::{PublishStateError, PublishStateHandle};
 use async_trait::async_trait;
+use nexus_connectors_web::twitter::{TweetResult, TwitterConnector};
+use nexus_connectors_web::WebAgentContext;
 use nexus_content::compliance::{check_compliance, ComplianceDecision};
 use nexus_content::generator::SocialPlatform;
+use nexus_kernel::errors::AgentError as KernelAgentError;
 use nexus_swarm_core::{AgentError, AgentExecutionContext, InvokeRequest, SwarmAgentEntry};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
+use uuid::Uuid;
 
 /// Bug W: trailing window for the per-channel post-count read. Hard-
 /// coded for now; Bug AC tracks making it configurable from
 /// `agents/social-poster/manifest.toml`'s `posts_per_day`.
 const COMPLIANCE_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// Bug V: stable input format for `content_hash`. Doc-only — the actual
+/// `format!` call uses these three components. Documented to keep
+/// future readers from drifting it (changing the format silently
+/// invalidates dedupe across deploys).
+#[allow(dead_code)]
+const CONTENT_HASH_INPUT_FORMAT: &str = "{platform}|{account_id}|{text}";
+
+/// Bug V: Twitter publish budget for the per-call `WebAgentContext`.
+/// Mirrors the value `RealPublishStep` uses in the legacy
+/// `agents/social-poster/src/lib.rs:498` path. The connector charges
+/// 10 fuel for `post_status_update`; we set headroom for one call.
+const PUBLISH_FUEL_BUDGET: u64 = 50;
+
+/// Bug V: indirection trait for the real Twitter publish call. Keeps
+/// `SocialPosterEntry::execute` testable without making real HTTP
+/// calls. Production wiring uses `RealPublishExecutor` (constructed
+/// inside `SocialPosterEntry::new`); tests inject a stub via
+/// `SocialPosterEntry::with_publish_executor`.
+///
+/// Two methods:
+/// - `credentials_present` — fast sync check used to gate the publish
+///   path and surface `CredentialsMissing` without invoking the
+///   connector. The production impl reads the same kernel config
+///   that the connector's loader reads (see `x_credentials_present`).
+/// - `publish` — the actual call. `text` is moved because the
+///   production impl spawns a blocking task and needs to own it.
+#[async_trait]
+pub trait PublishExecutor: Send + Sync {
+    fn credentials_present(&self) -> bool;
+    async fn publish(&self, text: String) -> Result<TweetResult, KernelAgentError>;
+}
+
+/// Bug V: production `PublishExecutor`. Wraps `TwitterConnector`'s
+/// sync (`reqwest::blocking`) `post_status_update` in
+/// `tokio::task::spawn_blocking`. Builds a fresh `WebAgentContext`
+/// per call (see locked decision #2) — capabilities and fuel are
+/// adapter-local concerns, not entry-level state.
+pub struct RealPublishExecutor;
+
+impl RealPublishExecutor {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for RealPublishExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl PublishExecutor for RealPublishExecutor {
+    fn credentials_present(&self) -> bool {
+        x_credentials_present()
+    }
+
+    async fn publish(&self, text: String) -> Result<TweetResult, KernelAgentError> {
+        let join = tokio::task::spawn_blocking(move || {
+            let mut connector = TwitterConnector::new();
+            let mut agent_ctx = WebAgentContext::new(
+                Uuid::new_v4(),
+                ["social.x.post".to_string(), "social.x.read".to_string()]
+                    .into_iter()
+                    .collect::<HashSet<_>>(),
+                PUBLISH_FUEL_BUDGET,
+            );
+            connector.post_status_update(&mut agent_ctx, &text)
+        })
+        .await;
+        match join {
+            Ok(inner) => inner,
+            Err(join_err) => Err(KernelAgentError::SupervisorError(format!(
+                "publish task join error: {join_err}"
+            ))),
+        }
+    }
+}
+
+/// Bug V: are X / Twitter OAuth1 credentials configured? Mirrors the
+/// gate that `connectors/web/src/twitter.rs::load_twitter_credentials`
+/// applies (all four fields non-empty after trim). We can't call the
+/// connector's loader directly (it's `fn`, not `pub fn`, and locked
+/// decision #1 forbids touching twitter.rs); we read the same kernel
+/// config it reads. Returns `true` iff a real publish would not fall
+/// through to the connector's mock mode.
+fn x_credentials_present() -> bool {
+    match nexus_kernel::config::load_config() {
+        Ok(config) => {
+            let s = &config.social;
+            !s.x_api_key.trim().is_empty()
+                && !s.x_api_secret.trim().is_empty()
+                && !s.x_access_token.trim().is_empty()
+                && !s.x_access_secret.trim().is_empty()
+        }
+        Err(_) => false,
+    }
+}
+
+/// Bug V: deterministic dedupe digest. Format is locked by
+/// `CONTENT_HASH_INPUT_FORMAT`. Returned as a hex sha256.
+fn content_hash_for(platform: SocialPlatform, account_id: &str, text: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(
+        format!(
+            "{platform}|{account_id}|{text}",
+            platform = platform_label(platform),
+            account_id = account_id,
+            text = text,
+        )
+        .as_bytes(),
+    );
+    format!("{:x}", hasher.finalize())
+}
+
+/// Bug V: parse "retry after {n} ms" from the connector's
+/// `AgentError::SupervisorError` text. The connector formats the
+/// rate-limit message at `connectors/web/src/twitter.rs:354`.
+/// Returns whole seconds (rounding up partials) so callers get a
+/// retry-friendly integer.
+fn parse_retry_after_ms_to_secs(msg: &str) -> Option<u64> {
+    // Pattern fragment: "retry after {ms} ms"
+    let needle = "retry after ";
+    let start = msg.find(needle)? + needle.len();
+    let rest = &msg[start..];
+    let end = rest.find(' ')?;
+    let ms: u64 = rest[..end].parse().ok()?;
+    Some(ms.div_ceil(1_000))
+}
+
+/// Bug V: classify a connector error message into the shape V's
+/// `PublishStatus` exposes. Connector's error stringification is the
+/// only signal — it flattens everything into
+/// `AgentError::SupervisorError(String)` (see preflight Q1).
+fn classify_publish_error(msg: &str) -> PublishStatus {
+    let lower = msg.to_ascii_lowercase();
+    if lower.contains("rate limited") || lower.contains("rate_limited") {
+        PublishStatus::RateLimited {
+            retry_after_secs: parse_retry_after_ms_to_secs(msg),
+        }
+    } else if lower.contains(" 401")
+        || lower.contains("unauthorized")
+        || lower.contains("auth")
+        || lower.contains("credentials are not configured")
+    {
+        // The "credentials are not configured" branch fires when the
+        // connector itself rejects a request with no creds. Our
+        // pre-flight `x_credentials_present` check catches this earlier
+        // for the swarm path, but the connector may still raise it on
+        // a race between config save and call.
+        PublishStatus::AuthFailure
+    } else {
+        PublishStatus::Failed {
+            reason: msg.to_string(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SocialPosterInput {
@@ -124,7 +313,32 @@ pub enum PublishStatus {
     /// Compliance check rejected the draft; no publish attempted.
     BlockedByCompliance,
     /// `dry_run` was false but real publish wiring is Phase 5.
+    /// Bug V keeps this variant alive one revision so the swarm tests
+    /// in `crates/nexus-swarm/tests/` (which run with no creds) can
+    /// distinguish "no creds → deferred" from "creds present + posted".
+    /// Bug AI tracks deletion after one rev of dogfooding.
     Deferred,
+    /// Bug V: real publish succeeded.
+    Published {
+        post_id: String,
+        url: Option<String>,
+    },
+    /// Bug V: Twitter returned a 429 (or the connector translated one).
+    /// `retry_after_secs` is whatever the connector parsed out of the
+    /// rate-limit message; `None` if the message lacked a number.
+    RateLimited { retry_after_secs: Option<u64> },
+    /// Bug V: 401 / "auth" / "unauthorized" from the connector.
+    /// Distinct so the swarm log can surface "rotate creds" without
+    /// parsing strings.
+    AuthFailure,
+    /// Bug V: `load_twitter_credentials()` returned `None` — config
+    /// has at least one empty OAuth1 field. The connector would
+    /// silently fall through to mock mode; V detects and returns this
+    /// instead so callers don't think they shipped.
+    CredentialsMissing,
+    /// Bug V: catch-all for transport, 5xx, content-rejected, and
+    /// any other connector error not matched above.
+    Failed { reason: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -139,18 +353,38 @@ pub struct SocialPosterOutput {
 
 const DEFAULT_MAX_TOKENS: u32 = 512;
 
-/// Bug W: stateful entry. Holds an `Arc<dyn PublishStateHandle>` that
-/// the compliance gate reads from. The handle is NOT on
-/// `AgentExecutionContext` — keeping publish-specific concerns out of
-/// `nexus-swarm-core` (per the locked design from W's preflight).
+/// Bug W/V: stateful entry. Holds an `Arc<dyn PublishStateHandle>`
+/// (Bug W; compliance gate reads from it) and an
+/// `Arc<dyn PublishExecutor>` (Bug V; performs the actual Twitter
+/// call). Both are kept off `AgentExecutionContext` — publish-specific
+/// concerns stay out of `nexus-swarm-core` (per the locked design).
 #[derive(Clone)]
 pub struct SocialPosterEntry {
     publish_state: Arc<dyn PublishStateHandle>,
+    publish_executor: Arc<dyn PublishExecutor>,
 }
 
 impl SocialPosterEntry {
+    /// Production constructor. Uses the real Twitter publish
+    /// executor; for tests, prefer
+    /// [`SocialPosterEntry::with_publish_executor`].
     pub fn new(publish_state: Arc<dyn PublishStateHandle>) -> Self {
-        Self { publish_state }
+        Self {
+            publish_state,
+            publish_executor: Arc::new(RealPublishExecutor::new()),
+        }
+    }
+
+    /// Test seam: inject a stub `PublishExecutor` so behavior tests
+    /// can exercise the V branches without touching the network.
+    pub fn with_publish_executor(
+        publish_state: Arc<dyn PublishStateHandle>,
+        publish_executor: Arc<dyn PublishExecutor>,
+    ) -> Self {
+        Self {
+            publish_state,
+            publish_executor,
+        }
     }
 }
 
@@ -268,27 +502,104 @@ impl SwarmAgentEntry for SocialPosterEntry {
             )
             .await;
 
-        // Publishing — gated on dry_run AND compliance.
-        let publish_status = if !allowed {
+        // Publishing — gated on compliance, dry_run, then credentials.
+        // Bug V: the real-publish branch lives below the compliance
+        // and dry_run gates; only the (allowed && !dry_run) intersection
+        // calls the connector.
+        let publish_status: PublishStatus = if !allowed {
             PublishStatus::BlockedByCompliance
         } else if parsed.dry_run {
-            // W: dry_run reads count, does not record. V wires
-            // record_publish on real publish.
+            // W: dry_run reads count, does not record. V keeps this
+            // path unchanged — dry_run never reaches the connector.
             PublishStatus::SkippedDryRun
         } else {
-            // V will replace this with actual publish + record_publish.
-            PublishStatus::Deferred
+            // V: real publish path. Pre-flight cred check first so
+            // we fail fast and don't silently fall through to the
+            // connector's mock mode.
+            let creds_ok = self.publish_executor.credentials_present();
+            ctx.emit
+                .emit_phase(
+                    "checking_credentials",
+                    json!({
+                        "channel": platform_label(parsed.channel),
+                        "credentials_present": creds_ok,
+                    }),
+                )
+                .await;
+            if !creds_ok {
+                PublishStatus::CredentialsMissing
+            } else {
+                if ctx.cancelled() {
+                    return Err(AgentError::Cancelled);
+                }
+                ctx.emit
+                    .emit_phase(
+                        "publishing",
+                        json!({
+                            "channel": platform_label(parsed.channel),
+                            "account_id": parsed.account_id,
+                            "draft_chars": draft.chars().count(),
+                        }),
+                    )
+                    .await;
+                let publish_result = self.publish_executor.publish(draft.clone()).await;
+                let status = match publish_result {
+                    Ok(TweetResult { tweet_id, .. }) => {
+                        // Bug V: record_publish only on confirmed success.
+                        // Bug AH tracks the reserve→confirm pattern that
+                        // would close the under-counting hole on partial
+                        // failures.
+                        let hash = content_hash_for(parsed.channel, &parsed.account_id, &draft);
+                        if let Err(e) = self
+                            .publish_state
+                            .record_publish(&channel_key, Some(hash), Some(tweet_id.clone()))
+                            .await
+                        {
+                            // The post landed; the audit row is the only
+                            // thing missing. Log and continue — Bug AH
+                            // catalogues the consistency hole.
+                            tracing::error!(
+                                "publish recorded on Twitter but record_publish failed: {e}"
+                            );
+                        }
+                        PublishStatus::Published {
+                            url: Some(format!("https://twitter.com/i/web/status/{tweet_id}")),
+                            post_id: tweet_id,
+                        }
+                    }
+                    Err(KernelAgentError::FuelExhausted) => {
+                        // Budget exhaustion is a swarm-level concern,
+                        // not a publish status. Bubble through.
+                        return Err(AgentError::Internal("fuel_exhausted".into()));
+                    }
+                    Err(KernelAgentError::CapabilityDenied(cap)) => {
+                        // Capabilities are constructed locally; this
+                        // should be unreachable in production. Surface
+                        // as Failed so the audit trail captures it.
+                        PublishStatus::Failed {
+                            reason: format!("capability_denied:{cap}"),
+                        }
+                    }
+                    Err(KernelAgentError::SupervisorError(msg)) => classify_publish_error(&msg),
+                    Err(other) => {
+                        // Other AgentError variants (FuelViolation,
+                        // ApprovalRequired, etc.) — coordinator-level
+                        // signals, not publish outcomes.
+                        return Err(AgentError::Internal(format!("publish: {other}")));
+                    }
+                };
+                ctx.emit
+                    .emit_phase(
+                        "publish_complete",
+                        json!({
+                            "channel": platform_label(parsed.channel),
+                            "publish_status": publish_status_label(&status),
+                        }),
+                    )
+                    .await;
+                status
+            }
         };
-        ctx.emit
-            .emit_phase(
-                "publishing",
-                json!({
-                    "dry_run": parsed.dry_run,
-                    "channel": platform_label(parsed.channel),
-                    "publish_status": publish_status_label(&publish_status),
-                }),
-            )
-            .await;
 
         ctx.emit
             .emit_phase(
@@ -337,6 +648,11 @@ fn publish_status_label(s: &PublishStatus) -> &'static str {
         PublishStatus::SkippedDryRun => "skipped_dry_run",
         PublishStatus::BlockedByCompliance => "blocked_by_compliance",
         PublishStatus::Deferred => "deferred",
+        PublishStatus::Published { .. } => "published",
+        PublishStatus::RateLimited { .. } => "rate_limited",
+        PublishStatus::AuthFailure => "auth_failure",
+        PublishStatus::CredentialsMissing => "credentials_missing",
+        PublishStatus::Failed { .. } => "failed",
     }
 }
 
@@ -491,7 +807,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn explicit_dry_run_false_marks_publish_as_deferred() {
+    async fn explicit_dry_run_false_with_no_creds_returns_credentials_missing() {
+        // V supersedes the W-era `Deferred` path. With dry_run=false
+        // and no Twitter creds in the test environment,
+        // `RealPublishExecutor::credentials_present` returns false and
+        // the entry short-circuits at `CredentialsMissing` without
+        // touching the connector.
         let rec = Arc::new(RecordingEmitter::new());
         let ctx = mk_ctx(rec, CancelToken::new(), "post text");
         let input = json!({
@@ -509,8 +830,8 @@ mod tests {
         let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
         assert!(!parsed.dry_run);
         assert!(
-            matches!(parsed.publish_status, PublishStatus::Deferred),
-            "expected Deferred, got {:?}",
+            matches!(parsed.publish_status, PublishStatus::CredentialsMissing),
+            "expected CredentialsMissing under no-creds test env, got {:?}",
             parsed.publish_status
         );
     }
@@ -565,7 +886,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn emits_seven_phases_in_order() {
+    async fn dry_run_emits_six_phases_in_order() {
+        // V renamed/reshaped from the W-era `emits_seven_phases_in_order`.
+        // dry_run never reaches the connector, so V's
+        // checking_credentials / publishing / publish_complete events
+        // do not fire. The W-era terminal "publishing" emission was
+        // dropped in V (its "publishing" now means "about to invoke
+        // the connector" — a different semantic). Net effect: the
+        // dry_run path emits 6 phases, not 7.
         let rec = Arc::new(RecordingEmitter::new());
         let ctx = mk_ctx(rec.clone(), CancelToken::new(), "post text");
         let input = json!({
@@ -595,7 +923,6 @@ mod tests {
                 "parsing_response",
                 "counting_recent_posts",
                 "reviewing",
-                "publishing",
                 "complete"
             ],
             "phases out of order: {phases:?}"
@@ -744,7 +1071,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn w_dry_run_false_returns_deferred_and_does_not_record() {
+    async fn w_dry_run_false_no_creds_does_not_record() {
+        // V supersedes Deferred: with dry_run=false and no creds, the
+        // V flow returns CredentialsMissing without invoking the
+        // connector. Either way (W's Deferred or V's CredentialsMissing)
+        // the invariant is the same — record_publish must NOT fire on
+        // the no-creds path.
         let rec = Arc::new(RecordingEmitter::new());
         let ctx = mk_ctx(rec, CancelToken::new(), "real-run draft");
         let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
@@ -762,13 +1094,12 @@ mod tests {
             .await
             .expect("ok");
         let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
-        assert!(
-            matches!(parsed.publish_status, PublishStatus::Deferred),
-            "Phase 5 (V) wires real publish; W stops at Deferred"
-        );
-        // V is what records — W must not.
+        assert!(matches!(
+            parsed.publish_status,
+            PublishStatus::CredentialsMissing
+        ));
         let after = count_recorded(&state, &key).await;
-        assert_eq!(after, before, "Deferred path must not record");
+        assert_eq!(after, before, "no-creds path must not record");
     }
 
     #[tokio::test]
@@ -823,5 +1154,402 @@ mod tests {
             allowed_parsed.publish_status,
             PublishStatus::SkippedDryRun
         ));
+    }
+
+    // ── Bug V: real publish wiring (stub executor) ─────────────────────
+
+    /// Test PublishExecutor stub. Configurable creds-present flag and
+    /// scripted publish outcomes. Records the publish-call payload so
+    /// tests can assert what the entry hands to the executor.
+    struct StubExecutor {
+        creds_present: bool,
+        outcome: tokio::sync::Mutex<StubOutcome>,
+        last_text: tokio::sync::Mutex<Option<String>>,
+    }
+
+    enum StubOutcome {
+        Ok(TweetResult),
+        SupervisorErr(String),
+        Capability(String),
+        Fuel,
+    }
+
+    impl StubExecutor {
+        fn ok(creds: bool, tweet_id: &str) -> Arc<Self> {
+            Arc::new(Self {
+                creds_present: creds,
+                outcome: tokio::sync::Mutex::new(StubOutcome::Ok(TweetResult {
+                    tweet_id: tweet_id.into(),
+                    posted_at: 0,
+                })),
+                last_text: tokio::sync::Mutex::new(None),
+            })
+        }
+        fn supervisor_err(creds: bool, msg: &str) -> Arc<Self> {
+            Arc::new(Self {
+                creds_present: creds,
+                outcome: tokio::sync::Mutex::new(StubOutcome::SupervisorErr(msg.into())),
+                last_text: tokio::sync::Mutex::new(None),
+            })
+        }
+        fn no_creds() -> Arc<Self> {
+            Arc::new(Self {
+                creds_present: false,
+                outcome: tokio::sync::Mutex::new(StubOutcome::SupervisorErr(
+                    "should-not-be-called".into(),
+                )),
+                last_text: tokio::sync::Mutex::new(None),
+            })
+        }
+        fn capability_denied(creds: bool, cap: &str) -> Arc<Self> {
+            Arc::new(Self {
+                creds_present: creds,
+                outcome: tokio::sync::Mutex::new(StubOutcome::Capability(cap.into())),
+                last_text: tokio::sync::Mutex::new(None),
+            })
+        }
+        fn fuel_exhausted(creds: bool) -> Arc<Self> {
+            Arc::new(Self {
+                creds_present: creds,
+                outcome: tokio::sync::Mutex::new(StubOutcome::Fuel),
+                last_text: tokio::sync::Mutex::new(None),
+            })
+        }
+    }
+
+    #[async_trait]
+    impl PublishExecutor for StubExecutor {
+        fn credentials_present(&self) -> bool {
+            self.creds_present
+        }
+        async fn publish(&self, text: String) -> Result<TweetResult, KernelAgentError> {
+            *self.last_text.lock().await = Some(text);
+            let outcome = std::mem::replace(
+                &mut *self.outcome.lock().await,
+                StubOutcome::SupervisorErr("consumed".into()),
+            );
+            match outcome {
+                StubOutcome::Ok(r) => Ok(r),
+                StubOutcome::SupervisorErr(msg) => Err(KernelAgentError::SupervisorError(msg)),
+                StubOutcome::Capability(c) => Err(KernelAgentError::CapabilityDenied(c)),
+                StubOutcome::Fuel => Err(KernelAgentError::FuelExhausted),
+            }
+        }
+    }
+
+    fn v_input(account_id: &str, dry_run: bool) -> Value {
+        json!({
+            "channel": "X",
+            "audience": "devs",
+            "message": "ship it",
+            "account_id": account_id,
+            "dry_run": dry_run,
+        })
+    }
+
+    #[tokio::test]
+    async fn v_dry_run_with_creds_still_skipped_no_publish_no_record() {
+        let rec = Arc::new(RecordingEmitter::new());
+        let ctx = mk_ctx(rec.clone(), CancelToken::new(), "draft body");
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        let executor = StubExecutor::ok(true, "tweet_should_not_be_used");
+        let entry = SocialPosterEntry::with_publish_executor(state.clone(), executor.clone());
+        let out = entry
+            .execute(v_input("default", true), &ctx)
+            .await
+            .expect("ok");
+        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
+        assert!(matches!(
+            parsed.publish_status,
+            PublishStatus::SkippedDryRun
+        ));
+        assert!(
+            executor.last_text.lock().await.is_none(),
+            "publish must not be called"
+        );
+        // No record_publish either.
+        let key = ChannelKey::new(SocialPlatform::X, "default");
+        assert_eq!(count_recorded(&state, &key).await, 0);
+    }
+
+    #[tokio::test]
+    async fn v_creds_missing_returns_credentials_missing_no_publish_no_record() {
+        let rec = Arc::new(RecordingEmitter::new());
+        let ctx = mk_ctx(rec.clone(), CancelToken::new(), "draft body");
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        let executor = StubExecutor::no_creds();
+        let entry = SocialPosterEntry::with_publish_executor(state.clone(), executor.clone());
+        let out = entry
+            .execute(v_input("default", false), &ctx)
+            .await
+            .expect("ok");
+        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
+        assert!(matches!(
+            parsed.publish_status,
+            PublishStatus::CredentialsMissing
+        ));
+        assert!(executor.last_text.lock().await.is_none());
+        let key = ChannelKey::new(SocialPlatform::X, "default");
+        assert_eq!(count_recorded(&state, &key).await, 0);
+        // checking_credentials event must have fired with present=false.
+        let snap = rec.snapshot().await;
+        let cc = snap
+            .iter()
+            .find_map(|r| match r {
+                Recorded::Phase { phase, payload, .. } if phase == "checking_credentials" => {
+                    Some(payload.clone())
+                }
+                _ => None,
+            })
+            .expect("checking_credentials emitted");
+        assert_eq!(
+            cc.get("credentials_present").and_then(|v| v.as_bool()),
+            Some(false)
+        );
+    }
+
+    #[tokio::test]
+    async fn v_publish_success_returns_published_and_records_post_id() {
+        let rec = Arc::new(RecordingEmitter::new());
+        let ctx = mk_ctx(rec.clone(), CancelToken::new(), "draft body");
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        let executor = StubExecutor::ok(true, "fake_123");
+        let entry = SocialPosterEntry::with_publish_executor(state.clone(), executor.clone());
+        let out = entry
+            .execute(v_input("default", false), &ctx)
+            .await
+            .expect("ok");
+        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
+        match parsed.publish_status {
+            PublishStatus::Published { post_id, url } => {
+                assert_eq!(post_id, "fake_123");
+                assert_eq!(
+                    url.as_deref(),
+                    Some("https://twitter.com/i/web/status/fake_123")
+                );
+            }
+            other => panic!("expected Published, got {other:?}"),
+        }
+        // record_publish fired exactly once with the post_id.
+        let key = ChannelKey::new(SocialPlatform::X, "default");
+        let entries = state.entries_for(&key);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].post_id.as_deref(), Some("fake_123"));
+        // The publish call received the trimmed/draft text.
+        let last = executor.last_text.lock().await.clone();
+        assert!(last.is_some(), "publish must have been called");
+    }
+
+    #[tokio::test]
+    async fn v_published_path_emits_nine_phases_in_order() {
+        // V replaces W's emits_seven_phases_in_order with a 9-phase
+        // happy-path assertion (W's terminal "publishing" emission was
+        // dropped; V emits "checking_credentials", "publishing",
+        // "publish_complete" only on the real-publish path).
+        let rec = Arc::new(RecordingEmitter::new());
+        let ctx = mk_ctx(rec.clone(), CancelToken::new(), "draft body");
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        let executor = StubExecutor::ok(true, "tweet_xyz");
+        let entry = SocialPosterEntry::with_publish_executor(state, executor);
+        entry
+            .execute(v_input("default", false), &ctx)
+            .await
+            .expect("ok");
+        let phases: Vec<&str> = rec
+            .snapshot()
+            .await
+            .iter()
+            .filter_map(|r| match r {
+                Recorded::Phase { phase, .. } => Some(phase.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|s| Box::leak(s.to_string().into_boxed_str()) as &str)
+            .collect();
+        assert_eq!(
+            phases,
+            vec![
+                "parsing_input",
+                "drafting",
+                "parsing_response",
+                "counting_recent_posts",
+                "reviewing",
+                "checking_credentials",
+                "publishing",
+                "publish_complete",
+                "complete",
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn v_rate_limit_message_parses_to_seconds() {
+        let rec = Arc::new(RecordingEmitter::new());
+        let ctx = mk_ctx(rec.clone(), CancelToken::new(), "draft body");
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        // Connector formats: "social.x rate limited, retry after 60000 ms"
+        let executor =
+            StubExecutor::supervisor_err(true, "social.x rate limited, retry after 60000 ms");
+        let entry = SocialPosterEntry::with_publish_executor(state.clone(), executor);
+        let out = entry
+            .execute(v_input("default", false), &ctx)
+            .await
+            .expect("ok");
+        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
+        match parsed.publish_status {
+            PublishStatus::RateLimited { retry_after_secs } => {
+                assert_eq!(retry_after_secs, Some(60));
+            }
+            other => panic!("expected RateLimited, got {other:?}"),
+        }
+        // No record_publish on rate-limit.
+        let key = ChannelKey::new(SocialPlatform::X, "default");
+        assert_eq!(count_recorded(&state, &key).await, 0);
+    }
+
+    #[tokio::test]
+    async fn v_rate_limit_message_without_number_yields_none() {
+        // The connector path with no parseable retry_after — fall back
+        // to None rather than a fabricated number.
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        let executor = StubExecutor::supervisor_err(true, "rate limited but no number");
+        let rec = Arc::new(RecordingEmitter::new());
+        let ctx = mk_ctx(rec, CancelToken::new(), "d");
+        let out = SocialPosterEntry::with_publish_executor(state, executor)
+            .execute(v_input("default", false), &ctx)
+            .await
+            .expect("ok");
+        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
+        assert!(matches!(
+            parsed.publish_status,
+            PublishStatus::RateLimited {
+                retry_after_secs: None
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn v_auth_error_returns_auth_failure() {
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        let executor =
+            StubExecutor::supervisor_err(true, "x request failed with status 401 Unauthorized");
+        let rec = Arc::new(RecordingEmitter::new());
+        let ctx = mk_ctx(rec, CancelToken::new(), "d");
+        let out = SocialPosterEntry::with_publish_executor(state.clone(), executor)
+            .execute(v_input("default", false), &ctx)
+            .await
+            .expect("ok");
+        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
+        assert!(matches!(parsed.publish_status, PublishStatus::AuthFailure));
+        let key = ChannelKey::new(SocialPlatform::X, "default");
+        assert_eq!(count_recorded(&state, &key).await, 0);
+    }
+
+    #[tokio::test]
+    async fn v_generic_5xx_returns_failed_with_reason() {
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        let executor = StubExecutor::supervisor_err(
+            true,
+            "x request failed with status 503 Service Unavailable",
+        );
+        let rec = Arc::new(RecordingEmitter::new());
+        let ctx = mk_ctx(rec, CancelToken::new(), "d");
+        let out = SocialPosterEntry::with_publish_executor(state.clone(), executor)
+            .execute(v_input("default", false), &ctx)
+            .await
+            .expect("ok");
+        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
+        match parsed.publish_status {
+            PublishStatus::Failed { reason } => {
+                assert!(reason.contains("503"), "expected 503 in reason: {reason}");
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+        let key = ChannelKey::new(SocialPlatform::X, "default");
+        assert_eq!(count_recorded(&state, &key).await, 0);
+    }
+
+    #[tokio::test]
+    async fn v_capability_denied_returns_failed() {
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        let executor = StubExecutor::capability_denied(true, "social.x.post");
+        let rec = Arc::new(RecordingEmitter::new());
+        let ctx = mk_ctx(rec, CancelToken::new(), "d");
+        let out = SocialPosterEntry::with_publish_executor(state, executor)
+            .execute(v_input("default", false), &ctx)
+            .await
+            .expect("ok");
+        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
+        match parsed.publish_status {
+            PublishStatus::Failed { reason } => {
+                assert!(reason.contains("capability_denied"));
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn v_fuel_exhausted_bubbles_to_internal() {
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        let executor = StubExecutor::fuel_exhausted(true);
+        let rec = Arc::new(RecordingEmitter::new());
+        let ctx = mk_ctx(rec, CancelToken::new(), "d");
+        let err = SocialPosterEntry::with_publish_executor(state, executor)
+            .execute(v_input("default", false), &ctx)
+            .await
+            .expect_err("fuel exhaustion must surface as AgentError, not PublishStatus");
+        match err {
+            AgentError::Internal(msg) => assert!(msg.contains("fuel_exhausted")),
+            other => panic!("expected Internal, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn v_compliance_block_wins_over_real_publish_path() {
+        let rec = Arc::new(RecordingEmitter::new());
+        let ctx = mk_ctx(rec, CancelToken::new(), "d");
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        // Seed Instagram (limit 25) past the gate.
+        let key = ChannelKey::new(SocialPlatform::Instagram, "default");
+        let now = now_secs();
+        for i in 0..25 {
+            state.insert_at(key.clone(), now - (i * 30));
+        }
+        let executor = StubExecutor::ok(true, "should_not_be_called");
+        let entry = SocialPosterEntry::with_publish_executor(state.clone(), executor.clone());
+        let out = entry
+            .execute(
+                json!({
+                    "channel": "Instagram",
+                    "audience": "x",
+                    "message": "y",
+                    "dry_run": false,
+                }),
+                &ctx,
+            )
+            .await
+            .expect("ok");
+        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
+        assert!(matches!(
+            parsed.publish_status,
+            PublishStatus::BlockedByCompliance
+        ));
+        assert!(
+            executor.last_text.lock().await.is_none(),
+            "compliance block must short-circuit before publish"
+        );
+    }
+
+    #[tokio::test]
+    async fn v_content_hash_is_stable_for_same_inputs() {
+        let h1 = content_hash_for(SocialPlatform::X, "default", "hello world");
+        let h2 = content_hash_for(SocialPlatform::X, "default", "hello world");
+        let h3 = content_hash_for(SocialPlatform::X, "other", "hello world");
+        let h4 = content_hash_for(SocialPlatform::Instagram, "default", "hello world");
+        assert_eq!(h1, h2, "same inputs must hash identically");
+        assert_ne!(h1, h3, "account_id must affect the digest");
+        assert_ne!(h1, h4, "platform must affect the digest");
+        assert_eq!(h1.len(), 64, "sha256 hex must be 64 chars");
     }
 }

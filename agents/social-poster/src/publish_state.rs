@@ -54,13 +54,25 @@ pub trait PublishStateHandle: Send + Sync {
     ) -> Result<usize, PublishStateError>;
 
     /// Append a publish record. Stamps `published_at = now()`.
-    /// `content_hash` is optional; V will populate it with a digest of
-    /// the published payload for idempotency / dedupe purposes.
+    /// `content_hash` is optional; V populates it with a sha256 digest
+    /// of `(platform, account_id, draft_text)` for dedupe.
+    /// `post_id` is the platform's returned id (Twitter's tweet_id);
+    /// optional because non-Twitter platforms or future no-id flows
+    /// may omit it.
     async fn record_publish(
         &self,
         channel: &ChannelKey,
         content_hash: Option<String>,
+        post_id: Option<String>,
     ) -> Result<(), PublishStateError>;
+}
+
+/// In-memory row stored by `InMemoryPublishState`. SQLite has its own
+/// columnar layout — this struct is the test/in-process mirror.
+#[derive(Debug, Clone)]
+pub struct PublishedEntry {
+    pub at: i64,
+    pub post_id: Option<String>,
 }
 
 /// Now in epoch seconds. Helper so tests can shim the clock if/when we
@@ -86,7 +98,7 @@ pub(crate) fn platform_label(p: SocialPlatform) -> &'static str {
 
 #[derive(Default)]
 pub struct InMemoryPublishState {
-    posts: Mutex<HashMap<ChannelKey, Vec<i64>>>,
+    posts: Mutex<HashMap<ChannelKey, Vec<PublishedEntry>>>,
 }
 
 impl InMemoryPublishState {
@@ -98,7 +110,17 @@ impl InMemoryPublishState {
     /// callers go through `record_publish`.
     pub fn insert_at(&self, channel: ChannelKey, published_at_secs: i64) {
         let mut guard = self.posts.lock().unwrap_or_else(|p| p.into_inner());
-        guard.entry(channel).or_default().push(published_at_secs);
+        guard.entry(channel).or_default().push(PublishedEntry {
+            at: published_at_secs,
+            post_id: None,
+        });
+    }
+
+    /// Test-only: read back all entries for a channel. Used by V tests
+    /// that need to assert post_id round-trips.
+    pub fn entries_for(&self, channel: &ChannelKey) -> Vec<PublishedEntry> {
+        let guard = self.posts.lock().unwrap_or_else(|p| p.into_inner());
+        guard.get(channel).cloned().unwrap_or_default()
     }
 }
 
@@ -114,7 +136,7 @@ impl PublishStateHandle for InMemoryPublishState {
         let guard = self.posts.lock().unwrap_or_else(|p| p.into_inner());
         let count = guard
             .get(channel)
-            .map(|stamps| stamps.iter().filter(|&&t| t >= cutoff).count())
+            .map(|entries| entries.iter().filter(|e| e.at >= cutoff).count())
             .unwrap_or(0);
         Ok(count)
     }
@@ -123,16 +145,20 @@ impl PublishStateHandle for InMemoryPublishState {
         &self,
         channel: &ChannelKey,
         _content_hash: Option<String>,
+        post_id: Option<String>,
     ) -> Result<(), PublishStateError> {
         // content_hash isn't materialized by the in-memory impl — the
-        // SQLite impl persists it for V's idempotency path. The trait
-        // contract is that it's accepted, not necessarily retained at
-        // every layer.
+        // SQLite impl persists it for V's dedupe path. post_id IS
+        // retained so V's tests can assert it round-trips without a
+        // SQLite handle.
         let mut guard = self.posts.lock().unwrap_or_else(|p| p.into_inner());
         guard
             .entry(channel.clone())
             .or_default()
-            .push(now_epoch_secs());
+            .push(PublishedEntry {
+                at: now_epoch_secs(),
+                post_id,
+            });
         Ok(())
     }
 }
@@ -169,11 +195,18 @@ impl PublishStateHandle for SqlitePublishState {
         &self,
         channel: &ChannelKey,
         content_hash: Option<String>,
+        post_id: Option<String>,
     ) -> Result<(), PublishStateError> {
         let platform = platform_label(channel.platform);
         let now = now_epoch_secs();
         self.db
-            .record_social_publish(platform, &channel.account_id, now, content_hash.as_deref())
+            .record_social_publish(
+                platform,
+                &channel.account_id,
+                now,
+                content_hash.as_deref(),
+                post_id.as_deref(),
+            )
             .map_err(|e| PublishStateError::Storage(format!("{e}")))?;
         Ok(())
     }
@@ -199,7 +232,7 @@ mod tests {
         let state = InMemoryPublishState::new();
         let key = ChannelKey::default_account(SocialPlatform::X);
         for _ in 0..5 {
-            state.record_publish(&key, None).await.expect("ok");
+            state.record_publish(&key, None, None).await.expect("ok");
         }
         let n = state
             .recent_post_count(&key, Duration::from_secs(86_400))
@@ -233,9 +266,9 @@ mod tests {
         let x_b = ChannelKey::new(SocialPlatform::X, "acct-b");
         let ig_a = ChannelKey::new(SocialPlatform::Instagram, "acct-a");
         for _ in 0..3 {
-            state.record_publish(&x_a, None).await.expect("ok");
+            state.record_publish(&x_a, None, None).await.expect("ok");
         }
-        state.record_publish(&x_b, None).await.expect("ok");
+        state.record_publish(&x_b, None, None).await.expect("ok");
         // ig_a never written.
         assert_eq!(
             state
@@ -267,7 +300,7 @@ mod tests {
         // The in-memory impl doesn't retain the hash, but the call must
         // succeed (the trait contract is accept, not retain).
         state
-            .record_publish(&key, Some("sha256:abc".into()))
+            .record_publish(&key, Some("sha256:abc".into()), None)
             .await
             .expect("ok");
         let n = state
@@ -275,5 +308,48 @@ mod tests {
             .await
             .expect("ok");
         assert_eq!(n, 1);
+    }
+
+    // ── Bug V: post_id round-trip ──────────────────────────────────────
+
+    #[tokio::test]
+    async fn inmemory_record_publish_retains_post_id() {
+        let state = InMemoryPublishState::new();
+        let key = ChannelKey::new(SocialPlatform::X, "default");
+        state
+            .record_publish(&key, None, Some("tweet_42".into()))
+            .await
+            .expect("ok");
+        let entries = state.entries_for(&key);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].post_id.as_deref(), Some("tweet_42"));
+    }
+
+    #[tokio::test]
+    async fn inmemory_record_publish_post_ids_independent_per_call() {
+        let state = InMemoryPublishState::new();
+        let key = ChannelKey::new(SocialPlatform::X, "default");
+        state
+            .record_publish(&key, None, Some("tweet_1".into()))
+            .await
+            .expect("ok");
+        state
+            .record_publish(&key, None, Some("tweet_2".into()))
+            .await
+            .expect("ok");
+        state.record_publish(&key, None, None).await.expect("ok");
+        let ids: Vec<Option<String>> = state
+            .entries_for(&key)
+            .into_iter()
+            .map(|e| e.post_id)
+            .collect();
+        assert_eq!(
+            ids,
+            vec![
+                Some("tweet_1".to_string()),
+                Some("tweet_2".to_string()),
+                None,
+            ]
+        );
     }
 }

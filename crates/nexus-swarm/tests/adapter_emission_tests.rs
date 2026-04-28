@@ -195,12 +195,18 @@ async fn artisan_emits_coder_phase_sequence() {
     assert_coder_phases_no_output_dir(&rec.snapshot().await);
 }
 
-/// Phase 4b-herald: Herald now delegates to
-/// `social_poster_agent::SocialPosterEntry`, which emits a 7-phase
-/// semantic sequence: parsing_input → drafting → parsing_response →
-/// counting_recent_posts → reviewing → publishing → complete. Bug W
-/// added the `counting_recent_posts` step (per-channel post count
-/// feeding the compliance gate).
+/// Phase 4b-herald (W) + V: Herald delegates to
+/// `social_poster_agent::SocialPosterEntry`. The emitted phase
+/// sequence depends on the publish branch taken:
+/// - dry_run / blocked_by_compliance: 6 phases (parsing_input,
+///   drafting, parsing_response, counting_recent_posts, reviewing,
+///   complete). V dropped W's terminal "publishing" emission.
+/// - credentials_missing: 7 phases (adds checking_credentials).
+/// - published / publish failures: 9 phases (adds
+///   checking_credentials, publishing, publish_complete).
+///
+/// `herald_invocation` omits `dry_run`, defaulting to true → the
+/// 6-phase sequence applies here.
 fn assert_social_poster_phase_sequence(log: &[Recorded]) {
     let phases: Vec<&str> = log
         .iter()
@@ -217,10 +223,9 @@ fn assert_social_poster_phase_sequence(log: &[Recorded]) {
             "parsing_response",
             "counting_recent_posts",
             "reviewing",
-            "publishing",
             "complete"
         ],
-        "expected social-poster 7-phase sequence, got {phases:?}"
+        "expected social-poster dry-run 6-phase sequence, got {phases:?}"
     );
 }
 

@@ -1345,6 +1345,12 @@ impl NexusDatabase {
         self.add_column_if_missing("task_history", "quality_score", "REAL")?;
         self.add_column_if_missing("agents", "parent_agent_id", "TEXT")?;
         self.add_column_if_missing("agents", "was_running", "INTEGER NOT NULL DEFAULT 0")?;
+        // Bug V: persist Twitter's returned tweet_id alongside each publish row
+        // so retries can dedupe and the audit trail can join to the platform's
+        // record. Pre-V databases get the column added in place; the existing
+        // `add_column_if_missing` helper swallows the duplicate-column error
+        // so this is safe across reopens.
+        self.add_column_if_missing("social_publish_log", "post_id", "TEXT")?;
         Ok(())
     }
 
@@ -1842,12 +1848,13 @@ impl NexusDatabase {
         account_id: &str,
         published_at_secs: i64,
         content_hash: Option<&str>,
+        post_id: Option<&str>,
     ) -> Result<i64> {
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
         conn.execute(
-            "INSERT INTO social_publish_log (platform, account_id, published_at, content_hash)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![platform, account_id, published_at_secs, content_hash],
+            "INSERT INTO social_publish_log (platform, account_id, published_at, content_hash, post_id)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![platform, account_id, published_at_secs, content_hash, post_id],
         )?;
         Ok(conn.last_insert_rowid())
     }

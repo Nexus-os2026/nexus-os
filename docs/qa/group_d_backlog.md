@@ -153,7 +153,32 @@ Extraction logic is forward-compatible. Endpoint switch still separate ticket.
   `target/` exceeds `NEXUS_TARGET_SIZE_LIMIT_GB` (default 200GB).
   Disk hygiene policy documented in CLAUDE.md.
 
-- Bug W — **CLOSED** (this commit) — Per-channel post-count surface
+- Bug V — **CLOSED** (this commit) — Real Twitter publish wiring in
+  `social-poster-agent`'s swarm path. New `PublishExecutor` async
+  trait (`credentials_present` + `publish`); production
+  `RealPublishExecutor` wraps `TwitterConnector::post_status_update`
+  in `tokio::task::spawn_blocking`. `WebAgentContext` is constructed
+  per-call (not carried on the entry, per locked decision #2).
+  `PublishStatus` extended with `Published { post_id, url }`,
+  `RateLimited { retry_after_secs }`, `AuthFailure`,
+  `CredentialsMissing`, `Failed { reason }`. `record_publish` trait
+  amended to accept `post_id: Option<String>`; new `post_id TEXT`
+  column on `social_publish_log` (idempotent ALTER). Cred check
+  short-circuits at `CredentialsMissing` instead of falling through
+  to the connector's mock mode. `record_publish` runs only on
+  confirmed `Published` (Bug AH catalogues the partial-failure hole).
+  Phase emit set: dry_run / blocked = 6 phases (W's terminal
+  "publishing" emission dropped); credentials_missing = 7;
+  published / publish-error = 9 (adds checking_credentials,
+  publishing, publish_complete). +13 unit tests on the entry, +2
+  on the in-memory state (post_id round-trip), +2 SQLite
+  integration tests (post_id round-trip + migration idempotency).
+  Existing W tests touched: 2 lib tests updated for V's superseded
+  Deferred contract; 1 nexus-swarm cross-crate test updated for
+  same; 1 phase-sequence assertion updated (W's 7-phase →
+  V's 6-phase dry-run shape).
+
+- Bug W — **CLOSED** (`6922787c`) — Per-channel post-count surface
   for Herald's compliance gate. New `social_publish_log` SQLite table
   in `nexus-persistence` (platform, account_id, published_at,
   content_hash, indexed on the composite key). New
@@ -171,16 +196,11 @@ Extraction logic is forward-compatible. Endpoint switch still separate ticket.
   reference). +4 unit tests on the entry, +5 integration tests on the
   SQLite impl, +5 trait-level tests on the in-memory impl.
 
-Track B status as of Bug W: L/M/N/O/X/W all closed. Bug V (real
-publish) and Bug AB/AC (filed against W) remain open.
+Track B status as of Bug V: L/M/N/O/X/W/V all closed. **Phase 5
+complete.** Track C is next. Bug AB/AC/AD (filed against W) and
+Bug AE/AF/AG/AH/AI/AJ/AK (filed against V) remain open as backlog.
 
 ### Open
-
-- Bug V — **PHASE 5 DEPENDENCY** — Real Twitter publish wiring in
-  `social-poster-agent` SwarmEntry. Currently `dry_run: false` returns
-  `publish_status: "deferred"` because `WebAgentContext` (governance/
-  fuel) and Twitter API credentials aren't threaded into
-  `AgentExecutionContext`. Phase 5 wires them.
 
 - Bug Y — **TEST HYGIENE** — `nexus-desktop-backend` lib_tests path
   (`OracleRuntime::start(test_ruleset)` in lib.rs:1756) creates a
@@ -233,3 +253,76 @@ publish) and Bug AB/AC (filed against W) remain open.
   independent connection pools. Thread AppState (or just its
   `Arc<NexusDatabase>`) into the swarm initializer so the same
   handle is reused. Filed during Bug W as a v1 → v2 follow-up.
+
+- Bug AE — **TYPED PUBLISH ERROR** — V maps publish failures into
+  `SwarmError::AgentInternal { agent, detail }` with a string-shaped
+  detail (locked decision #7); coordinator retries / dashboards have
+  to parse strings to recover the failure shape. Add
+  `SwarmError::PublishFailed { agent, reason, retryable }` (mirrored
+  on swarm-core's `AgentError` so `map_agent_error` routes it
+  cleanly) so the coordinator can act on rate-limit / auth /
+  transport without parsing. Scope: `nexus-swarm` and
+  `agents/social-poster` only.
+
+- Bug AF — **SQLITE-BACKED IDEMPOTENCY** — V relies on Twitter's
+  own ~1h duplicate-status detection as the cross-restart dedupe
+  backstop (locked decision #3). The in-memory
+  `nexus-connectors-core` `IdempotencyManager` would solve in-process
+  retries but loses state on restart. Build a `IdempotencyStore` trait
+  with a SQLite impl (mirroring W's `PublishStateHandle` shape) so
+  cross-restart dedupe doesn't depend on Twitter's behavior. Wire V's
+  publish path through it before any callers actually retry.
+
+- Bug AG — **RETRYABLE HINT LOST IN STRINGIFICATION** — V's flat
+  error mapping (`PublishStatus::Failed { reason }`) loses the
+  retryable signal that exists in the connector's underlying error
+  flavour. Subsumed by Bug AE if `PublishFailed { ... retryable }`
+  lands; otherwise add a parallel `retryable: bool` field on the
+  `Failed` variant. Today the swarm UI cannot distinguish "5xx —
+  try again" from "content rejected — never retry" without parsing
+  the reason string.
+
+- Bug AH — **RESERVE→CONFIRM ATOMICITY ON record_publish** — V
+  fires `record_publish` only after a confirmed publish success
+  (locked decision #5). Two partial-failure modes still
+  under-count: (1) Twitter accepts the post but the connector's
+  response parse fails — V's branch sees an error and skips
+  `record_publish` even though the post landed; (2) `record_publish`
+  itself fails after the publish lands — V logs and returns
+  `Published`, leaving the audit row missing. Both windows are
+  rare. Closing them needs a reserve→confirm pattern: write a
+  pending row before publish, confirm it post-success, expire it on
+  failure. Out of scope for V; tracked here for V+1.
+
+- Bug AI — **REMOVE DEAD `PublishStatus::Deferred`** — V supersedes
+  the Deferred variant. It's retained one revision so any external
+  serializers / dashboards keyed on `"deferred"` get a deprecation
+  window (locked decision #6). After one rev of V dogfooding, drop
+  the variant + its label.
+
+- Bug AJ — **HARDCODED PUBLISH FUEL BUDGET** —
+  `PUBLISH_FUEL_BUDGET = 50` is a `const` on
+  `RealPublishExecutor` in
+  `agents/social-poster/src/swarm_entry.rs`. The connector charges
+  10 fuel per `post_status_update` so 50 = a 5x ceiling — but
+  there is no governance path. Should derive from `ctx.budget` (so
+  swarm-level fuel governs the per-call ceiling) or be made
+  configurable via `agents/social-poster/manifest.toml`. Drifts
+  silently if the connector's per-call cost ever changes. Filed
+  during Bug V as a v1 follow-up.
+
+- Bug AK — **CREDENTIAL VAULT MIGRATION** — Twitter OAuth1 keys
+  (and future social creds) are stored as plaintext strings in
+  `kernel/src/config.rs::SocialConfig` and read at connector
+  construction by
+  `connectors/web/src/twitter.rs::load_twitter_credentials`. Move
+  them to the encrypted vault scaffold at
+  `connectors/core/src/vault.rs` so secrets are not on disk in
+  plaintext. Touches `kernel/src/config.rs` (drop the four `x_*`
+  fields or transitionally point them at the vault),
+  `connectors/web/src/twitter.rs::load_twitter_credentials` (read
+  from vault instead of TOML), and `app/src/pages/Settings.tsx`
+  (frontend save path now writes to the vault, not the config
+  file). Originally bundled with Bug AE's typed error work in V's
+  draft; split out so the security migration is independently
+  schedulable.

@@ -272,7 +272,11 @@ async fn herald_delegates_to_social_poster_entry_dry_run_default() {
 }
 
 #[tokio::test]
-async fn herald_dry_run_false_returns_publish_deferred() {
+async fn herald_dry_run_false_with_no_creds_returns_credentials_missing() {
+    // Bug V supersedes Bug W's `Deferred` placeholder. With dry_run=false
+    // and no Twitter creds in the test environment, V's
+    // RealPublishExecutor::credentials_present() returns false and the
+    // entry surfaces `credentials_missing` without invoking the connector.
     let rec = Arc::new(RecordingEmitter::new());
     let ctx = mk_ctx(rec, CancelToken::new());
     let adapter = HeraldAdapter::new(
@@ -289,8 +293,8 @@ async fn herald_dry_run_false_returns_publish_deferred() {
     assert_eq!(out.get("dry_run").and_then(|v| v.as_bool()), Some(false));
     assert_eq!(
         out.get("publish_status").and_then(|v| v.as_str()),
-        Some("deferred"),
-        "Phase 5 publish wiring is intentionally out of scope; expect Deferred"
+        Some("credentials_missing"),
+        "V short-circuits at the cred check when no OAuth1 keys are configured"
     );
 }
 
