@@ -153,7 +153,31 @@ Extraction logic is forward-compatible. Endpoint switch still separate ticket.
   `target/` exceeds `NEXUS_TARGET_SIZE_LIMIT_GB` (default 200GB).
   Disk hygiene policy documented in CLAUDE.md.
 
-- Track C #2 — **CLOSED** (this commit) — Cross-page swarm status
+- Track C #3 (commit 1 of 2) — **CLOSED** (this commit) — Backend
+  wiring for local STT. `voice/stt.py` gains a JSON-over-stdout CLI
+  (`--health` and `transcribe <wav-path>`) consumed by the Tauri
+  subprocess bridge. The legacy `transcribe_push_to_talk` model-load
+  probe is replaced with a real transcribe path: validates 16kHz
+  mono PCM, writes the bytes to a tempfile via
+  `std::env::temp_dir() + Uuid`, spawns `python3 stt.py transcribe`
+  from `/voice/`, parses the result JSON, and returns the typed
+  `TranscribeResult { text, language, confidence, latency_ms,
+  model }`. New `voice_pipeline_health` Tauri command emits the
+  reachable/model/last_error tuple and mirrors it onto
+  `VoiceRuntimeState.pipeline_health`. Audit invariant: every
+  attempt — success OR failure — appends a hash-chained
+  `EventType::ToolCall` row with payload
+  `{action, transcript_sha256, audio_duration_ms, model,
+  latency_ms}`. Transcript text is NEVER persisted; only the SHA-256
+  of the text reaches the audit trail. Privacy invariant: local-only
+  path; no cloud-STT fallback. Pipeline-down is surfaced loudly.
+  +6 Python pytest specs (4 pass, 2 skip on machines without
+  faster-whisper) + 4 Rust unit tests on validation, audit
+  emission, and health. Frontend mic button lands in commit 2;
+  this commit is unblocked-on-merge but not user-visible. Track C
+  #3 itself remains open until commit 2 ships.
+
+- Track C #2 — **CLOSED** (`f9155fa3`) — Cross-page swarm status
   indicator. New `app/src/components/swarm/SwarmStatusBadge.tsx`
   (floating top-right pill, fixed-position). Subscribes to
   `selectActiveRun`, `selectIsPlanPending`, and the new
@@ -239,9 +263,11 @@ Extraction logic is forward-compatible. Endpoint switch still separate ticket.
 Track B status as of Bug V: L/M/N/O/X/W/V all closed. **Phase 5
 complete.** Track C: items 1 (Swarm Audit Viewer) and 2 (cross-page
 swarm status indicator) closed. Item 3 (DirectorConsole mic input)
-remains. Bug AB/AC/AD (filed against W), Bug AE/AF/AG/AH/AI/AJ/AK
-(filed against V), Bug AL/AM (filed against Track C #1), and Bug
-AN (filed against Track C #2) remain open as backlog.
+in progress — commit 1 of 2 (backend STT wiring) lands here; commit
+2 (frontend mic button + MediaRecorder) is next. Bug AB/AC/AD
+(filed against W), Bug AE/AF/AG/AH/AI/AJ/AK (filed against V), Bug
+AL/AM (filed against Track C #1), Bug AN/AO (filed against Track
+C #2), and Bug AP (filed against Track C #3) remain open as backlog.
 
 ### Open
 
@@ -410,3 +436,17 @@ AN (filed against Track C #2) remain open as backlog.
   the chip foreground/border use `var(--nexus-accent)` `#4af7d3`
   (mint cyan). Two cyan tones reading as a color bug at small
   sizes. Reconcile to a single token before broader design polish.
+
+- Bug AP — **DEAD WEBSOCKET VOICE BRIDGE** —
+  `services/voice/nexus_voice/voice_server.py` exposes a websocket
+  bridge on `127.0.0.1:9876` (`voice_server.py:6–12`) that is
+  **never started by any Tauri command** (repo-wide grep on
+  `nexus_voice` against `app/src-tauri/src/` returns zero). The
+  active subprocess bridge in Track C #3 commit 1 targets `/voice/`
+  exclusively. `services/voice/voice_engine.py:18` is also explicit
+  that its transcription is stubbed. Delete `services/voice/`
+  entirely in a separate cleanup commit; `requirements.txt` there
+  pins `websockets >= 12.0` for nothing. Out of scope for Track C
+  #3 — file as standalone hygiene.
+
+- **AS** — voice/tests/test_real_backends.py::test_synthesize_to_wav_executes_command fails when run in the full suite. Pre-existing breakage in TTS (piper) synthesis testing, unrelated to STT or Track C #3. Pinned for triage; not blocking voice/STT work.

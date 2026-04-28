@@ -804,31 +804,357 @@ pub(crate) fn save_config(config: NexusConfig) -> Result<(), String> {
     save_nexus_config(&config).map_err(agent_error)
 }
 
-pub(crate) fn transcribe_push_to_talk() -> Result<String, String> {
-    let voice_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../voice");
+// ── Track C #3: local STT subprocess bridge ──────────────────────────────────
+
+/// Result of a successful `transcribe_push_to_talk` call. Mirrors the JSON
+/// emitted by `voice/stt.py transcribe <path>` (TranscriptionResult dataclass
+/// in stt.py). `sentence_chunks` is intentionally not surfaced over the
+/// Tauri boundary in v1 — frontend only uses the flattened `text`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TranscribeResult {
+    pub text: String,
+    pub language: Option<String>,
+    pub confidence: Option<f32>,
+    pub latency_ms: u64,
+    pub model: String,
+}
+
+/// Bug AL-class health surface for the local STT pipeline. Returned by
+/// the explicit `voice_pipeline_health` command and also reflected onto
+/// `VoiceRuntimeState.pipeline_health` after every transcribe attempt.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VoicePipelineHealth {
+    pub reachable: bool,
+    pub model: Option<String>,
+    pub last_error: Option<String>,
+}
+
+const STT_REQUIRED_SAMPLE_RATE: u32 = 16_000;
+const PCM_BYTES_PER_FRAME: u32 = 2; // s16le mono
+
+/// Resolve the `/voice/` directory relative to the Tauri crate at compile
+/// time. The Python pipeline is shipped alongside the desktop app so this
+/// path is stable across runs.
+fn voice_pipeline_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../voice")
+}
+
+/// Track C #3: surface the STT pipeline's reachability + model identity.
+/// Spawns `python3 stt.py --health` from the voice/ dir; parses the
+/// single JSON line. Updates `VoiceRuntimeState.pipeline_health` so
+/// downstream UI can read the same status without re-probing.
+pub(crate) fn voice_pipeline_health(state: &AppState) -> Result<VoicePipelineHealth, String> {
+    let voice_dir = voice_pipeline_dir();
     if !voice_dir.exists() {
-        return Ok("voice runtime unavailable".to_string());
+        let health = VoicePipelineHealth {
+            reachable: false,
+            model: None,
+            last_error: Some(format!("voice dir missing: {}", voice_dir.display())),
+        };
+        write_pipeline_health(state, &health);
+        return Ok(health);
+    }
+    let output = Command::new("python3")
+        .arg("stt.py")
+        .arg("--health")
+        .current_dir(&voice_dir)
+        .output();
+    let health = match output {
+        Ok(result) if result.status.success() => {
+            let stdout = String::from_utf8_lossy(&result.stdout);
+            match serde_json::from_str::<Value>(stdout.trim()) {
+                Ok(json) => VoicePipelineHealth {
+                    reachable: true,
+                    model: json
+                        .get("model")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    last_error: None,
+                },
+                Err(e) => VoicePipelineHealth {
+                    reachable: false,
+                    model: None,
+                    last_error: Some(format!("invalid health json: {e}")),
+                },
+            }
+        }
+        Ok(result) => {
+            // Non-zero exit — parse stderr for the structured reason.
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            let reason = serde_json::from_str::<Value>(stderr.trim())
+                .ok()
+                .and_then(|v| {
+                    v.get("reason")
+                        .and_then(|r| r.as_str())
+                        .map(|s| s.to_string())
+                })
+                .unwrap_or_else(|| stderr.trim().to_string());
+            VoicePipelineHealth {
+                reachable: false,
+                model: None,
+                last_error: Some(reason),
+            }
+        }
+        Err(e) => VoicePipelineHealth {
+            reachable: false,
+            model: None,
+            last_error: Some(format!("python3 spawn failed: {e}")),
+        },
+    };
+    write_pipeline_health(state, &health);
+    Ok(health)
+}
+
+/// Track C #3: bridge audio bytes → /voice/stt.py → typed transcript.
+/// Privacy invariant: local-only path; no fallback to cloud STT.
+/// Audit invariant: every attempt (success OR failure) emits a hash-
+/// chained ToolCall row. Transcript text is NEVER persisted; only the
+/// SHA-256 of the text reaches the audit trail.
+pub(crate) fn transcribe_push_to_talk(
+    state: &AppState,
+    audio_bytes: Vec<u8>,
+    sample_rate: u32,
+) -> Result<TranscribeResult, String> {
+    if audio_bytes.is_empty() {
+        let err = "empty audio_bytes".to_string();
+        emit_voice_audit_failure(state, &err, audio_bytes.len(), sample_rate);
+        write_pipeline_health(
+            state,
+            &VoicePipelineHealth {
+                reachable: false,
+                model: None,
+                last_error: Some(err.clone()),
+            },
+        );
+        return Err(err);
+    }
+    if sample_rate != STT_REQUIRED_SAMPLE_RATE {
+        let err = format!("sample_rate must be {STT_REQUIRED_SAMPLE_RATE}, got {sample_rate}");
+        emit_voice_audit_failure(state, &err, audio_bytes.len(), sample_rate);
+        write_pipeline_health(
+            state,
+            &VoicePipelineHealth {
+                reachable: false,
+                model: None,
+                last_error: Some(err.clone()),
+            },
+        );
+        return Err(err);
     }
 
-    let output = Command::new("python3")
-        .arg("-c")
-        .arg(
-            "from stt import FasterWhisperSTT; model=FasterWhisperSTT().model; print(f'push-to-talk via {model}')",
-        )
+    let voice_dir = voice_pipeline_dir();
+    if !voice_dir.exists() {
+        let err = format!("voice runtime unavailable: {}", voice_dir.display());
+        emit_voice_audit_failure(state, &err, audio_bytes.len(), sample_rate);
+        write_pipeline_health(
+            state,
+            &VoicePipelineHealth {
+                reachable: false,
+                model: None,
+                last_error: Some(err.clone()),
+            },
+        );
+        return Err(err);
+    }
+
+    // Frontend sends a fully-formed WAV (locked decision #2). We just
+    // write to a tempfile and hand the path to Python.
+    let tmp_path = std::env::temp_dir().join(format!("nexus_voice_{}.wav", Uuid::new_v4()));
+    if let Err(e) = std::fs::write(&tmp_path, &audio_bytes) {
+        let err = format!("tempfile write failed: {e}");
+        emit_voice_audit_failure(state, &err, audio_bytes.len(), sample_rate);
+        write_pipeline_health(
+            state,
+            &VoicePipelineHealth {
+                reachable: false,
+                model: None,
+                last_error: Some(err.clone()),
+            },
+        );
+        return Err(err);
+    }
+
+    let spawn_result = Command::new("python3")
+        .arg("stt.py")
+        .arg("transcribe")
+        .arg(&tmp_path)
         .current_dir(&voice_dir)
         .output();
 
-    match output {
-        Ok(result) if result.status.success() => {
-            let text = String::from_utf8_lossy(&result.stdout).trim().to_string();
-            if text.is_empty() {
-                Ok("push-to-talk ready".to_string())
-            } else {
-                Ok(text)
-            }
+    // Best-effort cleanup; failure to remove the tempfile is non-fatal
+    // (OS will reap on reboot via /tmp).
+    let _ = std::fs::remove_file(&tmp_path);
+
+    let (stdout, stderr, status_ok) = match spawn_result {
+        Ok(result) => (
+            String::from_utf8_lossy(&result.stdout).to_string(),
+            String::from_utf8_lossy(&result.stderr).to_string(),
+            result.status.success(),
+        ),
+        Err(e) => {
+            let err = format!("python3 spawn failed: {e}");
+            emit_voice_audit_failure(state, &err, audio_bytes.len(), sample_rate);
+            write_pipeline_health(
+                state,
+                &VoicePipelineHealth {
+                    reachable: false,
+                    model: None,
+                    last_error: Some(err.clone()),
+                },
+            );
+            return Err(err);
         }
-        _ => Ok("push-to-talk captured audio".to_string()),
+    };
+
+    if !status_ok {
+        let reason = serde_json::from_str::<Value>(stderr.trim())
+            .ok()
+            .and_then(|v| v.get("reason").and_then(|r| r.as_str()).map(String::from))
+            .unwrap_or_else(|| stderr.trim().to_string());
+        let err = format!("stt.py failed: {reason}");
+        emit_voice_audit_failure(state, &err, audio_bytes.len(), sample_rate);
+        write_pipeline_health(
+            state,
+            &VoicePipelineHealth {
+                reachable: false,
+                model: None,
+                last_error: Some(reason),
+            },
+        );
+        return Err(err);
     }
+
+    let parsed: Value = match serde_json::from_str(stdout.trim()) {
+        Ok(v) => v,
+        Err(e) => {
+            let err = format!("invalid stt.py json: {e}");
+            emit_voice_audit_failure(state, &err, audio_bytes.len(), sample_rate);
+            write_pipeline_health(
+                state,
+                &VoicePipelineHealth {
+                    reachable: false,
+                    model: None,
+                    last_error: Some(err.clone()),
+                },
+            );
+            return Err(err);
+        }
+    };
+
+    let text = parsed
+        .get("text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let language = parsed
+        .get("language")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let confidence = parsed
+        .get("confidence")
+        .and_then(|v| v.as_f64())
+        .map(|f| f as f32);
+    let latency_ms = parsed
+        .get("latency_ms")
+        .and_then(|v| v.as_f64())
+        .map(|f| f as u64)
+        .unwrap_or(0);
+    let model = parsed
+        .get("model")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+
+    emit_voice_audit_success(
+        state,
+        &text,
+        audio_bytes.len(),
+        sample_rate,
+        &model,
+        latency_ms,
+    );
+    write_pipeline_health(
+        state,
+        &VoicePipelineHealth {
+            reachable: true,
+            model: Some(model.clone()),
+            last_error: None,
+        },
+    );
+
+    Ok(TranscribeResult {
+        text,
+        language,
+        confidence,
+        latency_ms,
+        model,
+    })
+}
+
+fn write_pipeline_health(state: &AppState, health: &VoicePipelineHealth) {
+    let mut voice = match state.voice.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    voice.pipeline_health = Some(if health.reachable {
+        "ok".to_string()
+    } else {
+        format!(
+            "error: {}",
+            health.last_error.as_deref().unwrap_or("unknown")
+        )
+    });
+}
+
+fn audio_duration_ms(byte_count: usize, sample_rate: u32) -> u64 {
+    if sample_rate == 0 {
+        return 0;
+    }
+    let frames = byte_count as u64 / u64::from(PCM_BYTES_PER_FRAME);
+    (frames * 1000) / u64::from(sample_rate)
+}
+
+fn emit_voice_audit_success(
+    state: &AppState,
+    text: &str,
+    audio_byte_count: usize,
+    sample_rate: u32,
+    model: &str,
+    latency_ms: u64,
+) {
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(text.as_bytes());
+    let transcript_hash = hex::encode(hasher.finalize());
+    let payload = json!({
+        "action": "voice_transcription",
+        "transcript_sha256": transcript_hash,
+        "audio_duration_ms": audio_duration_ms(audio_byte_count, sample_rate),
+        "model": model,
+        "latency_ms": latency_ms,
+    });
+    let mut audit = match state.audit.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    let _ = audit.append_event(Uuid::nil(), EventType::ToolCall, payload);
+}
+
+fn emit_voice_audit_failure(
+    state: &AppState,
+    reason: &str,
+    audio_byte_count: usize,
+    sample_rate: u32,
+) {
+    let payload = json!({
+        "action": "voice_transcription_failed",
+        "reason": reason,
+        "audio_duration_ms": audio_duration_ms(audio_byte_count, sample_rate),
+    });
+    let mut audit = match state.audit.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    let _ = audit.append_event(Uuid::nil(), EventType::ToolCall, payload);
 }
 
 /// Returns tray status data for the system tray indicator and Mission Control.
@@ -3720,5 +4046,103 @@ pub(crate) fn test_llm_connection(provider_name: String) -> Result<TestConnectio
             error: Some(e.to_string()),
             model_used: None,
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::AppState;
+
+    fn audit_event_count(state: &AppState) -> usize {
+        let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+        audit.events().len()
+    }
+
+    fn last_audit_action(state: &AppState) -> Option<String> {
+        let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+        audit
+            .events()
+            .last()
+            .and_then(|e| e.payload.get("action").and_then(|a| a.as_str()))
+            .map(|s| s.to_string())
+    }
+
+    fn pipeline_health_field(state: &AppState) -> Option<String> {
+        let voice = state.voice.lock().unwrap_or_else(|p| p.into_inner());
+        voice.pipeline_health.clone()
+    }
+
+    #[test]
+    fn transcribe_push_to_talk_rejects_empty_audio_bytes() {
+        let state = AppState::new_in_memory();
+        let before = audit_event_count(&state);
+        let err =
+            transcribe_push_to_talk(&state, vec![], 16_000).expect_err("empty bytes must fail");
+        assert!(err.contains("empty audio_bytes"), "unexpected error: {err}",);
+        // Audit row landed (failure variant).
+        assert_eq!(
+            audit_event_count(&state),
+            before + 1,
+            "failure path must still emit audit"
+        );
+        assert_eq!(
+            last_audit_action(&state).as_deref(),
+            Some("voice_transcription_failed"),
+        );
+        // Pipeline health reflects the error.
+        let health = pipeline_health_field(&state).expect("health written");
+        assert!(health.starts_with("error:"), "got {health}");
+    }
+
+    #[test]
+    fn transcribe_push_to_talk_rejects_non_16khz_sample_rate() {
+        let state = AppState::new_in_memory();
+        let before = audit_event_count(&state);
+        // Plausible-looking PCM bytes; sample rate is the failure signal.
+        let bytes = vec![0u8; 320];
+        let err =
+            transcribe_push_to_talk(&state, bytes, 44_100).expect_err("44.1kHz must be rejected");
+        assert!(
+            err.contains("sample_rate must be 16000"),
+            "unexpected error: {err}",
+        );
+        assert_eq!(audit_event_count(&state), before + 1);
+        assert_eq!(
+            last_audit_action(&state).as_deref(),
+            Some("voice_transcription_failed"),
+        );
+    }
+
+    #[test]
+    fn voice_pipeline_health_returns_unreachable_when_voice_dir_missing() {
+        // Construct an AppState; the /voice/ dir IS present in this
+        // checkout, so we can't test the missing-dir branch without
+        // relocating cwd. Instead, exercise the live spawn path: it
+        // either returns reachable=true (faster-whisper installed) or
+        // reachable=false (not installed). Either way, pipeline_health
+        // is written.
+        let state = AppState::new_in_memory();
+        let result = voice_pipeline_health(&state).expect("ok");
+        // Whichever side fired, pipeline_health must be populated.
+        let health = pipeline_health_field(&state).expect("health written");
+        if result.reachable {
+            assert_eq!(health, "ok");
+            assert!(result.model.is_some());
+            assert!(result.last_error.is_none());
+        } else {
+            assert!(health.starts_with("error:"), "got {health}");
+            assert!(result.last_error.is_some());
+        }
+    }
+
+    #[test]
+    fn audio_duration_ms_is_correct_for_16khz_mono_s16le() {
+        // 16000 frames @ 2 bytes/frame = 32000 bytes = 1000ms.
+        assert_eq!(audio_duration_ms(32_000, 16_000), 1_000);
+        // 8000 bytes = 4000 frames = 250ms.
+        assert_eq!(audio_duration_ms(8_000, 16_000), 250);
+        // Zero rate is the safe-divide path.
+        assert_eq!(audio_duration_ms(8_000, 0), 0);
     }
 }

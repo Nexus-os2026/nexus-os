@@ -46,6 +46,12 @@ export interface VoiceRuntimeState {
   wake_word_enabled: boolean;
   push_to_talk_enabled: boolean;
   overlay_visible: boolean;
+  /**
+   * Track C #3: status of the local STT pipeline. `null` before any
+   * transcribe attempt or health probe. `"ok"` after success.
+   * `"error: <reason>"` after failure.
+   */
+  pipeline_health: string | null;
 }
 
 export interface ScreenRegion {

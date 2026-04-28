@@ -1,4 +1,4 @@
-import { hasDesktopRuntime, transcribePushToTalk } from "../api/backend";
+import { hasDesktopRuntime } from "../api/backend";
 
 export interface PushToTalkResult {
   transcript: string;
@@ -78,11 +78,10 @@ export class PushToTalk {
     this.isRecording = false;
 
     if (hasDesktopRuntime()) {
-      const transcript = await transcribePushToTalk();
-      return {
-        transcript,
-        source: "tauri-stt"
-      };
+      throw new Error(
+        "Desktop voice transcription not yet wired (Track C #3 commit 2). " +
+        "Browser SpeechRecognition fallback intentionally disabled to preserve privacy invariant."
+      );
     }
 
     if (this.recognition && this.pendingTranscript) {

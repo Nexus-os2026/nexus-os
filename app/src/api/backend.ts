@@ -224,8 +224,47 @@ export function saveConfig(config: NexusConfig): Promise<void> {
   return invokeDesktop<void>("save_config", { config });
 }
 
-export function transcribePushToTalk(): Promise<string> {
-  return invokeDesktop<string>("transcribe_push_to_talk");
+/**
+ * Track C #3: result of a successful local STT subprocess call.
+ * Mirrors the Rust `TranscribeResult` struct + the Python
+ * `TranscriptionResult` JSON shape. `sentence_chunks` is intentionally
+ * omitted in v1 — the flat `text` is what the UI surfaces.
+ */
+export interface TranscribeResult {
+  text: string;
+  language: string | null;
+  confidence: number | null;
+  latency_ms: number;
+  model: string;
+}
+
+/**
+ * Track C #3: pipeline-down detection surface. Returned by
+ * `voice_pipeline_health` and mirrored onto
+ * `VoiceRuntimeState.pipeline_health` after every transcribe attempt.
+ */
+export interface VoicePipelineHealth {
+  reachable: boolean;
+  model: string | null;
+  last_error: string | null;
+}
+
+export function transcribePushToTalk(
+  audioBytes: Uint8Array,
+  sampleRate: number,
+): Promise<TranscribeResult> {
+  // Tauri serializes Vec<u8> as a JSON array of integers; the wrapper
+  // accepts a Uint8Array for caller ergonomics and unwraps it.
+  return invokeDesktop<TranscribeResult>("transcribe_push_to_talk", {
+    audioBytes: Array.from(audioBytes),
+    audio_bytes: Array.from(audioBytes),
+    sampleRate,
+    sample_rate: sampleRate,
+  });
+}
+
+export function voicePipelineHealth(): Promise<VoicePipelineHealth> {
+  return invokeDesktop<VoicePipelineHealth>("voice_pipeline_health");
 }
 
 export function startJarvisMode(): Promise<VoiceRuntimeState> {

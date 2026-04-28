@@ -937,6 +937,13 @@ pub struct VoiceRuntimeState {
     pub wake_word_enabled: bool,
     pub push_to_talk_enabled: bool,
     pub overlay_visible: bool,
+    /// Track C #3: status of the local STT pipeline as observed on the
+    /// most recent transcribe attempt or health probe. `None` until the
+    /// first probe lands. `Some("ok")` after a successful run; on
+    /// failure, `Some("error: <reason>")` with the parsed reason.
+    /// Frontend reads this to surface pipeline-down status.
+    #[serde(default)]
+    pub pipeline_health: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1279,6 +1286,7 @@ impl AppState {
                 wake_word_enabled: true,
                 push_to_talk_enabled: true,
                 overlay_visible: false,
+                pipeline_health: None,
             })),
             identity_mgr: Arc::new(Mutex::new(
                 nexus_kernel::identity::IdentityManager::in_memory(),
@@ -1629,6 +1637,7 @@ impl AppState {
                 wake_word_enabled: true,
                 push_to_talk_enabled: true,
                 overlay_visible: false,
+                pipeline_health: None,
             })),
             identity_mgr: Arc::new(Mutex::new(
                 nexus_kernel::identity::IdentityManager::in_memory(),
@@ -2278,8 +2287,19 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn transcribe_push_to_talk() -> Result<String, String> {
-        super::transcribe_push_to_talk()
+    fn transcribe_push_to_talk(
+        state: tauri::State<'_, AppState>,
+        audio_bytes: Vec<u8>,
+        sample_rate: u32,
+    ) -> Result<super::TranscribeResult, String> {
+        super::transcribe_push_to_talk(state.inner(), audio_bytes, sample_rate)
+    }
+
+    #[tauri::command]
+    fn voice_pipeline_health(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<super::VoicePipelineHealth, String> {
+        super::voice_pipeline_health(state.inner())
     }
 
     #[tauri::command]
@@ -11255,6 +11275,7 @@ pub mod runtime {
                 stop_jarvis_mode,
                 jarvis_status,
                 transcribe_push_to_talk,
+                voice_pipeline_health,
                 tray_status,
                 detect_hardware,
                 check_ollama,

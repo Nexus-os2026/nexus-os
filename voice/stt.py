@@ -329,3 +329,104 @@ def os_environ(key: str) -> Optional[str]:
     import os
 
     return os.environ.get(key)
+
+
+# ── Track C #3: CLI entrypoint for the Tauri subprocess bridge ────────────────
+#
+# Two subcommands:
+#   python3 stt.py --health          → JSON {"status": "ok", "model": "<name>"}
+#   python3 stt.py transcribe <path> → JSON TranscriptionResult on stdout
+#
+# Errors emit a JSON `{"status": "error", "reason": "<msg>"}` to stderr and
+# exit 1. Stdout is reserved for success payloads only — Rust parses it
+# directly. Keep stdout JSON-only (no logging) so the parser is robust.
+
+def _cli_health() -> int:
+    import json as _json
+    import sys as _sys
+
+    try:
+        stt = FasterWhisperSTT()
+    except Exception as exc:  # pragma: no cover — exercised only when the
+        _sys.stderr.write(    # backend init crashes (deps missing, etc.)
+            _json.dumps({"status": "error", "reason": f"init: {exc}"}) + "\n"
+        )
+        return 1
+    if stt._faster_whisper_model is None and stt.whisper_command is None:
+        # No backend available — the model loaded would have set one.
+        details = stt._faster_whisper_error or "no backend"
+        _sys.stderr.write(
+            _json.dumps({"status": "error", "reason": details}) + "\n"
+        )
+        return 1
+    payload = {"status": "ok", "model": stt.model}
+    _sys.stdout.write(_json.dumps(payload) + "\n")
+    return 0
+
+
+def _cli_transcribe(audio_path: str) -> int:
+    import json as _json
+    import sys as _sys
+
+    try:
+        stt = FasterWhisperSTT()
+        result = stt.transcribe_audio_file(audio_path)
+    except FileNotFoundError as exc:
+        _sys.stderr.write(
+            _json.dumps({"status": "error", "reason": f"missing_file: {exc}"})
+            + "\n"
+        )
+        return 1
+    except Exception as exc:
+        _sys.stderr.write(
+            _json.dumps({"status": "error", "reason": f"transcribe: {exc}"})
+            + "\n"
+        )
+        return 1
+    payload = {
+        "text": result.text,
+        "language": result.language,
+        "confidence": result.confidence,
+        "latency_ms": result.latency_ms,
+        "model": result.model,
+        "sentence_chunks": list(result.sentence_chunks),
+    }
+    _sys.stdout.write(_json.dumps(payload) + "\n")
+    return 0
+
+
+def _cli_main(argv: Sequence[str]) -> int:
+    import json as _json
+    import sys as _sys
+
+    if len(argv) < 2:
+        _sys.stderr.write(
+            _json.dumps(
+                {"status": "error", "reason": "usage: stt.py --health | transcribe <path>"}
+            )
+            + "\n"
+        )
+        return 1
+    cmd = argv[1]
+    if cmd == "--health":
+        return _cli_health()
+    if cmd == "transcribe":
+        if len(argv) < 3:
+            _sys.stderr.write(
+                _json.dumps(
+                    {"status": "error", "reason": "transcribe requires a wav path"}
+                )
+                + "\n"
+            )
+            return 1
+        return _cli_transcribe(argv[2])
+    _sys.stderr.write(
+        _json.dumps({"status": "error", "reason": f"unknown subcommand: {cmd}"}) + "\n"
+    )
+    return 1
+
+
+if __name__ == "__main__":
+    import sys as _sys
+
+    raise SystemExit(_cli_main(_sys.argv))
