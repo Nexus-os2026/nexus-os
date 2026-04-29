@@ -69,8 +69,20 @@ export async function refreshProviderHealth(): Promise<void> {
   await invoke<ProviderHealth[]>("swarm_refresh_provider_health");
 }
 
-export async function getSwarmAuditTail(runId: Uuid): Promise<AuditEntry[]> {
-  return invoke<AuditEntry[]>("swarm_audit_tail", { runId, run_id: runId });
+export async function getSwarmAuditTail(
+  runId: Uuid,
+  limit?: number,
+  offset?: number,
+): Promise<AuditEntry[]> {
+  // Bug AL: backend command now accepts optional limit / offset.
+  // Existing callers passing only runId continue to work; the
+  // server-side defaults are 1000 / 0.
+  return invoke<AuditEntry[]>("swarm_audit_tail", {
+    runId,
+    run_id: runId,
+    limit,
+    offset,
+  });
 }
 
 export async function getOracleRuntimeStatus(): Promise<OracleRuntimeStatus> {

@@ -466,17 +466,32 @@ remain open as backlog.
   draft; split out so the security migration is independently
   schedulable.
 
-- Bug AL — **SWARM AUDIT TAIL PERSISTENCE** — The audit tail
-  surfaced by `swarm_audit_tail` is held in
-  `Arc<Mutex<HashMap<Uuid, Vec<AuditEntry>>>>`
-  (`app/src-tauri/src/commands/swarm.rs:68`) — pure in-memory, lost
-  on desktop restart. The Swarm Audit Viewer (Track C #1) works
-  for the life of one process; users who close the app expecting
-  the tail to be there will be surprised. Migrate to a
-  SQLite-backed store mirroring W's `social_publish_log` pattern
-  (new table on `nexus-persistence`, typed helpers, async
-  read/write through `PublishStateHandle`-style trait). Required
-  to make Track C #1's UX hold up across restarts.
+- Bug AL — **CLOSED** (this commit) — Persistent swarm audit tail.
+  Resolved per `docs/architecture/decisions/0002_swarm_audit_persistence.md`.
+  New `swarm_audit_log` SQLite table on `nexus-persistence` (id,
+  run_id, seq, event_kind, ticket_nonce, node_id, timestamp_secs,
+  timestamp_nanos, payload_summary, previous_hash, current_hash,
+  created_at) plus index on (run_id, seq). Helpers
+  `record_swarm_audit`, `query_swarm_audit_by_run`,
+  `last_swarm_audit_hash_for_run`, `verify_swarm_audit_chain`,
+  and the genesis-hash constant exposed as
+  `SWARM_AUDIT_GENESIS_HASH`. Per-row hash chain via SHA-256 over
+  `(run_id|seq|event_kind|ticket_nonce|node_id|timestamp_secs|timestamp_nanos|payload_summary|previous_hash)`.
+  The prior in-memory `Arc<Mutex<HashMap<Uuid, Vec<AuditEntry>>>>`
+  on `SwarmInner` is dropped; the forwarder pulls AppState's
+  `Arc<NexusDatabase>` and chains rows on every broadcast.
+  `swarm_audit_tail` Tauri command grows optional `limit` /
+  `offset` args (defaults 1000 / 0); existing zero-arg-other-than-
+  run_id callers keep working. Wire shape `AuditEntry` gains
+  `previous_hash` and `current_hash` strings. Audit-write failures
+  log via eprintln but do NOT crash the swarm runtime.
+
+  +5 persistence tests (round-trip, chain genesis, tamper detect,
+  pagination, migration idempotency); existing 4 swarm tests
+  unchanged; existing 11 SwarmAudit vitest specs unchanged
+  (mocks updated to include the two new hash fields).
+  Filed Bug BA (retention/prune), Bug BC (hash-inspection UI),
+  Bug BD (`swarm_list_runs` + run-history dropdown).
 
 - Bug AM — **SWARM AUDIT VIEWER LIVE-APPEND** — Track C #1's page
   fetches `swarm_audit_tail` once on mount and on manual refresh.
@@ -569,3 +584,37 @@ remain open as backlog.
 - **AY** — `app/src/pages/__tests__/TokenEconomy.test.tsx::renders heading after load` uses the same `/Token Economy/i` regex pattern that matches the loading state's "Loading token economy..." text. Test currently passes (only asserts presence, not interaction), but the assertion is satisfied by the loading-state DOM rather than the loaded DOM — so the test name is a partial lie. Tighten the regex or change the assertion to a post-load-only target. Not blocking; the test is green.
 
 - **AZ** — Codebase-wide audit for tests using `/<heading>/i` regex patterns where the loading state text contains the heading substring (e.g. "Loading X..."). The TokenEconomy fix in this commit addresses one instance; similar latent races may exist in other page tests. Sweep `app/src/pages/__tests__/` and `app/src/components/**/__tests__/` for the pattern.
+
+- Bug BA — **SWARM_AUDIT_LOG UNBOUNDED GROWTH** — Bug AL ships
+  the `swarm_audit_log` SQLite table without retention or pruning
+  (matches existing precedent — no audit-flavoured table in
+  `persistence/src/lib.rs::migrate()` has TTL or vacuum logic).
+  Realistic scale is dozens to a few hundred provider-touching
+  events per run; long-lived deployments will accumulate. Add
+  retention when storage exceeds ~10MB or row count exceeds
+  ~100k. Suggested approach: a periodic `DELETE FROM
+  swarm_audit_log WHERE created_at < ?` with the cutoff driven
+  by config (`audit_retention_days`). Out of scope for v1.
+
+- Bug BC — **HASH-CHAIN INSPECTION UI** — Bug AL stores
+  `previous_hash` and `current_hash` per row; the SwarmAudit page
+  receives them on the wire but does not render or verify them
+  today. v2 affordances: (i) a small chain-integrity badge
+  ("verified" / "broken at row N") via a new
+  `swarm_audit_verify` Tauri command wrapping
+  `verify_swarm_audit_chain`; (ii) click-to-show the SHA-256 hex
+  in the expand-to-JSON row body; (iii) a "copy chain" export.
+  Storage and verification primitives are already in place.
+
+- Bug BD — **swarm_list_runs + RUN-HISTORY DROPDOWN** — Bug AL
+  persists rows but the SwarmAudit page's run-id picker is still
+  paste-only with active-run default. After persistence, paste-
+  any-historical-run-id works, but discoverability is poor.
+  Add a `swarm_list_runs(limit) -> Vec<RunSummary>` Tauri command
+  (`{ run_id, started_at, event_count }`, derived via `SELECT
+  DISTINCT run_id, MIN(created_at), COUNT(*) FROM swarm_audit_log
+  GROUP BY run_id ORDER BY MIN(created_at) DESC LIMIT ?`) and a
+  dropdown of recent runs alongside the paste input on
+  `SwarmAudit.tsx`. UX iteration; deserves its own preflight.
+
+- **BE** — `swarm_audit` forwarder logs write failures via eprintln only. In production builds where stderr is not captured, audit-write failures are silent. Add a metric/counter (e.g. `swarm_audit_write_failures_total`) that the SwarmAudit page or a future health endpoint can surface. Structural chain integrity survives missed writes (subsequent rows chain off last successful row), but a user depending on completeness needs visibility.

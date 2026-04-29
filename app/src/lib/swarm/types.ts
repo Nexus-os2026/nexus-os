@@ -285,6 +285,15 @@ export interface AuditEntry {
   readonly node_id: string | null;
   readonly timestamp: AuditTimestamp;
   readonly payload_summary: string;
+  /**
+   * Bug AL: per-row hash chain. First row of a run carries the
+   * `SWARM_AUDIT_GENESIS_HASH` constant in `previous_hash`;
+   * subsequent rows reference the prior row's `current_hash`.
+   * `current_hash` is sha256 over the row contents + previous_hash,
+   * encoded as lowercase hex (64 chars).
+   */
+  readonly previous_hash: string;
+  readonly current_hash: string;
 }
 
 // ── OracleRuntimeStatus (oracle_runtime.rs) ─────────────────────────────────

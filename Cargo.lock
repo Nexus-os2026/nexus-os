@@ -5764,9 +5764,11 @@ name = "nexus-persistence"
 version = "10.6.0"
 dependencies = [
  "chrono",
+ "hex",
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 2.0.18",
  "uuid",
 ]

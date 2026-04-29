@@ -45,6 +45,10 @@ use crate::AppState;
 /// Entry in the oracle-anchored audit tail surfaced through
 /// `swarm_audit_tail`. Every provider-touching `SwarmEvent` that carries a
 /// `ticket_nonce` produces one entry, in broadcast order.
+///
+/// Bug AL: rows are persisted to the `swarm_audit_log` SQLite table on
+/// the writer side; reads come from the same table. The wire shape gains
+/// `previous_hash` and `current_hash` for per-row chain integrity.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditEntry {
     pub seq: u64,
@@ -58,6 +62,11 @@ pub struct AuditEntry {
     pub node_id: Option<String>,
     pub timestamp: SystemTime,
     pub payload_summary: String,
+    /// Bug AL: per-row hash chain. First row of a run uses
+    /// `SWARM_AUDIT_GENESIS_HASH`; subsequent rows reference the
+    /// previous row's `current_hash`.
+    pub previous_hash: String,
+    pub current_hash: String,
 }
 
 /// Cross-command state for the swarm subsystem. The pending-plan store now
@@ -71,8 +80,10 @@ struct SwarmInner {
     events: broadcast::Sender<SwarmEvent>,
     runs: Arc<Mutex<HashMap<Uuid, SwarmRunHandle>>>,
     pending_plans: Arc<Mutex<HashMap<Uuid, PlannedSwarm>>>,
-    audit: Arc<Mutex<HashMap<Uuid, Vec<AuditEntry>>>>,
-    /// Monotonic sequence counter used when building `AuditEntry`.
+    /// Monotonic per-process sequence counter used when building
+    /// `AuditEntry`. Bug AL: the SQLite table also auto-increments
+    /// its row id; `seq` is preserved on the wire for backwards-
+    /// compatibility with Track C #1 frontend `key={entry.seq}` use.
     audit_seq: Arc<std::sync::atomic::AtomicU64>,
 }
 
@@ -151,7 +162,6 @@ fn state() -> Arc<SwarmInner> {
                 events,
                 runs: Arc::new(Mutex::new(HashMap::new())),
                 pending_plans: Arc::new(Mutex::new(HashMap::new())),
-                audit: Arc::new(Mutex::new(HashMap::new())),
                 audit_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             })
         })
@@ -164,13 +174,41 @@ fn ensure_forwarder(app: tauri::AppHandle) {
     }
     let s = state();
     let mut rx = s.events.subscribe();
-    let audit = Arc::clone(&s.audit);
     let audit_seq = Arc::clone(&s.audit_seq);
+    // Bug AL: pull AppState's NexusDatabase handle once at forwarder
+    // spawn time; persist each broadcast event by chaining hashes
+    // into the swarm_audit_log table.
+    use tauri::Manager;
+    let db: Arc<nexus_persistence::NexusDatabase> = {
+        let state_ref = app.state::<AppState>();
+        Arc::clone(&state_ref.inner().db)
+    };
     tauri::async_runtime::spawn(async move {
         while let Ok(ev) = rx.recv().await {
             if let Some((run_id, entry)) = event_to_audit_entry(&ev, &audit_seq) {
-                let mut store = audit.lock().await;
-                store.entry(run_id).or_default().push(entry);
+                let prev = match db.last_swarm_audit_hash_for_run(&run_id) {
+                    Ok(Some(h)) => h,
+                    Ok(None) => nexus_persistence::SWARM_AUDIT_GENESIS_HASH.to_string(),
+                    Err(e) => {
+                        eprintln!("swarm_audit: last_hash lookup failed for run {run_id}: {e}");
+                        nexus_persistence::SWARM_AUDIT_GENESIS_HASH.to_string()
+                    }
+                };
+                if let Err(e) = db.record_swarm_audit(
+                    &run_id,
+                    entry.seq,
+                    &entry.event_kind,
+                    &entry.ticket_nonce,
+                    entry.node_id.as_deref(),
+                    entry.timestamp,
+                    &entry.payload_summary,
+                    &prev,
+                ) {
+                    eprintln!(
+                        "swarm_audit: record failed for run {run_id} seq {}: {e}",
+                        entry.seq
+                    );
+                }
             }
             let _ = app.emit("swarm:event", &ev);
         }
@@ -297,6 +335,10 @@ fn event_to_audit_entry(
     };
 
     let seq = audit_seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    // Bug AL: the chain hashes are filled in by the forwarder when it
+    // writes to swarm_audit_log; the in-flight `AuditEntry` carries
+    // empty placeholders until the read path materializes them from
+    // the row on `swarm_audit_tail`.
     Some((
         run_id,
         AuditEntry {
@@ -306,6 +348,8 @@ fn event_to_audit_entry(
             node_id,
             timestamp: SystemTime::now(),
             payload_summary: summary,
+            previous_hash: String::new(),
+            current_hash: String::new(),
         },
     ))
 }
@@ -545,11 +589,43 @@ pub async fn swarm_refresh_provider_health(
 /// Return the oracle-anchored audit tail for a run. Read-only; the server
 /// keeps these in memory for the life of the process. Empty vec if the
 /// run_id was never seen.
+/// Bug AL: persistent swarm audit tail. Reads from `swarm_audit_log`
+/// (SQLite) instead of the prior in-memory HashMap. `limit` and
+/// `offset` are optional; defaults are 1000 / 0 so the original
+/// Track C #1 wire shape (`swarm_audit_tail(run_id)`) keeps working.
 #[tauri::command]
-pub async fn swarm_audit_tail(run_id: Uuid) -> Result<Vec<AuditEntry>, String> {
-    let s = state();
-    let store = s.audit.lock().await;
-    Ok(store.get(&run_id).cloned().unwrap_or_default())
+pub async fn swarm_audit_tail(
+    state: tauri::State<'_, AppState>,
+    run_id: Uuid,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> Result<Vec<AuditEntry>, String> {
+    let limit = limit.unwrap_or(1000);
+    let offset = offset.unwrap_or(0);
+    let rows = state
+        .inner()
+        .db
+        .query_swarm_audit_by_run(&run_id, limit, offset)
+        .map_err(|e| format!("swarm_audit_tail query failed: {e}"))?;
+    Ok(rows
+        .into_iter()
+        .map(|r| AuditEntry {
+            seq: r.seq,
+            event_kind: r.event_kind,
+            ticket_nonce: r.ticket_nonce,
+            node_id: r.node_id,
+            timestamp: secs_nanos_to_systemtime(r.timestamp_secs, r.timestamp_nanos),
+            payload_summary: r.payload_summary,
+            previous_hash: r.previous_hash,
+            current_hash: r.current_hash,
+        })
+        .collect())
+}
+
+fn secs_nanos_to_systemtime(secs: i64, nanos: i64) -> SystemTime {
+    let s = if secs < 0 { 0u64 } else { secs as u64 };
+    let n = if nanos < 0 { 0u32 } else { nanos as u32 };
+    std::time::UNIX_EPOCH + std::time::Duration::new(s, n)
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 use std::path::Path;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use chrono::Utc;
 use rusqlite::{params, Connection};
@@ -1336,6 +1336,26 @@ impl NexusDatabase {
             CREATE INDEX IF NOT EXISTS idx_social_publish_log_lookup
                 ON social_publish_log(platform, account_id, published_at);
 
+            -- Bug AL: persistent swarm audit tail. Mirrors the Bug W
+            -- social_publish_log shape with hash-chain columns.
+            -- Single global table; per-run partition via the run_id index.
+            CREATE TABLE IF NOT EXISTS swarm_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                event_kind TEXT NOT NULL,
+                ticket_nonce TEXT NOT NULL,
+                node_id TEXT,
+                timestamp_secs INTEGER NOT NULL,
+                timestamp_nanos INTEGER NOT NULL,
+                payload_summary TEXT NOT NULL,
+                previous_hash TEXT NOT NULL,
+                current_hash TEXT NOT NULL,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_swarm_audit_log_run_seq
+                ON swarm_audit_log(run_id, seq);
+
             COMMIT;",
             )?;
         }
@@ -1877,6 +1897,226 @@ impl NexusDatabase {
         )?;
         Ok(count)
     }
+
+    // ── Bug AL: persistent swarm audit tail ────────────────────────────
+
+    /// Append a swarm-audit row, computing its `current_hash` from the
+    /// row contents + the supplied `previous_hash` (chain link). Returns
+    /// `(row_id, current_hash)`.
+    ///
+    /// Hash input: `run_id|seq|event_kind|ticket_nonce|node_id_or_empty
+    /// |timestamp_secs|timestamp_nanos|payload_summary|previous_hash`.
+    /// SHA-256 lowercase hex.
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_swarm_audit(
+        &self,
+        run_id: &uuid::Uuid,
+        seq: u64,
+        event_kind: &str,
+        ticket_nonce: &uuid::Uuid,
+        node_id: Option<&str>,
+        timestamp: SystemTime,
+        payload_summary: &str,
+        previous_hash: &str,
+    ) -> Result<(i64, String)> {
+        let (secs, nanos) = systemtime_to_secs_nanos(timestamp);
+        let current_hash = compute_swarm_audit_hash(
+            run_id,
+            seq,
+            event_kind,
+            ticket_nonce,
+            node_id,
+            secs,
+            nanos,
+            payload_summary,
+            previous_hash,
+        );
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.execute(
+            "INSERT INTO swarm_audit_log
+                (run_id, seq, event_kind, ticket_nonce, node_id,
+                 timestamp_secs, timestamp_nanos, payload_summary,
+                 previous_hash, current_hash)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                run_id.to_string(),
+                seq as i64,
+                event_kind,
+                ticket_nonce.to_string(),
+                node_id,
+                secs,
+                nanos,
+                payload_summary,
+                previous_hash,
+                &current_hash,
+            ],
+        )?;
+        Ok((conn.last_insert_rowid(), current_hash))
+    }
+
+    /// Read swarm-audit rows for a run, ordered by `seq` ascending.
+    pub fn query_swarm_audit_by_run(
+        &self,
+        run_id: &uuid::Uuid,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<SwarmAuditRow>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT id, run_id, seq, event_kind, ticket_nonce, node_id,
+                    timestamp_secs, timestamp_nanos, payload_summary,
+                    previous_hash, current_hash
+             FROM swarm_audit_log
+             WHERE run_id = ?1
+             ORDER BY seq ASC
+             LIMIT ?2 OFFSET ?3",
+        )?;
+        let rows = stmt.query_map(
+            params![run_id.to_string(), limit as i64, offset as i64],
+            SwarmAuditRow::from_row,
+        )?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    /// Tail of the per-run hash chain. `Ok(None)` when no rows exist
+    /// for `run_id` — the caller chains from `GENESIS_HASH`.
+    pub fn last_swarm_audit_hash_for_run(&self, run_id: &uuid::Uuid) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let result: rusqlite::Result<String> = conn.query_row(
+            "SELECT current_hash FROM swarm_audit_log
+             WHERE run_id = ?1
+             ORDER BY seq DESC
+             LIMIT 1",
+            params![run_id.to_string()],
+            |row| row.get(0),
+        );
+        match result {
+            Ok(h) => Ok(Some(h)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Walk the chain for a run and return the index of the first row
+    /// whose `current_hash` does not match a recomputation, or `None`
+    /// if intact. Detects out-of-band tampering with the table.
+    pub fn verify_swarm_audit_chain(&self, run_id: &uuid::Uuid) -> Result<Option<usize>> {
+        let rows = self.query_swarm_audit_by_run(run_id, u32::MAX, 0)?;
+        let mut prev = SWARM_AUDIT_GENESIS_HASH.to_string();
+        for (idx, row) in rows.iter().enumerate() {
+            if row.previous_hash != prev {
+                return Ok(Some(idx));
+            }
+            let recomputed = compute_swarm_audit_hash(
+                run_id,
+                row.seq,
+                &row.event_kind,
+                &row.ticket_nonce,
+                row.node_id.as_deref(),
+                row.timestamp_secs,
+                row.timestamp_nanos,
+                &row.payload_summary,
+                &row.previous_hash,
+            );
+            if recomputed != row.current_hash {
+                return Ok(Some(idx));
+            }
+            prev = row.current_hash.clone();
+        }
+        Ok(None)
+    }
+}
+
+/// Genesis hash for the swarm-audit per-run chain. First row in a run
+/// must carry this in its `previous_hash`.
+pub const SWARM_AUDIT_GENESIS_HASH: &str =
+    "0000000000000000000000000000000000000000000000000000000000000000";
+
+/// One row from `swarm_audit_log`. Mirrors the table columns.
+#[derive(Debug, Clone)]
+pub struct SwarmAuditRow {
+    pub id: i64,
+    pub run_id: uuid::Uuid,
+    pub seq: u64,
+    pub event_kind: String,
+    pub ticket_nonce: uuid::Uuid,
+    pub node_id: Option<String>,
+    pub timestamp_secs: i64,
+    pub timestamp_nanos: i64,
+    pub payload_summary: String,
+    pub previous_hash: String,
+    pub current_hash: String,
+}
+
+impl SwarmAuditRow {
+    fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
+        let run_id_s: String = row.get(1)?;
+        let nonce_s: String = row.get(4)?;
+        let parse_uuid = |s: &str| {
+            uuid::Uuid::parse_str(s).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    0,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })
+        };
+        let seq_i: i64 = row.get(2)?;
+        Ok(SwarmAuditRow {
+            id: row.get(0)?,
+            run_id: parse_uuid(&run_id_s)?,
+            seq: seq_i as u64,
+            event_kind: row.get(3)?,
+            ticket_nonce: parse_uuid(&nonce_s)?,
+            node_id: row.get(5)?,
+            timestamp_secs: row.get(6)?,
+            timestamp_nanos: row.get(7)?,
+            payload_summary: row.get(8)?,
+            previous_hash: row.get(9)?,
+            current_hash: row.get(10)?,
+        })
+    }
+}
+
+fn systemtime_to_secs_nanos(t: SystemTime) -> (i64, i64) {
+    match t.duration_since(std::time::UNIX_EPOCH) {
+        Ok(d) => (d.as_secs() as i64, d.subsec_nanos() as i64),
+        Err(_) => (0, 0),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compute_swarm_audit_hash(
+    run_id: &uuid::Uuid,
+    seq: u64,
+    event_kind: &str,
+    ticket_nonce: &uuid::Uuid,
+    node_id: Option<&str>,
+    timestamp_secs: i64,
+    timestamp_nanos: i64,
+    payload_summary: &str,
+    previous_hash: &str,
+) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    let line = format!(
+        "{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        run_id,
+        seq,
+        event_kind,
+        ticket_nonce,
+        node_id.unwrap_or(""),
+        timestamp_secs,
+        timestamp_nanos,
+        payload_summary,
+        previous_hash,
+    );
+    hasher.update(line.as_bytes());
+    hex::encode(hasher.finalize())
 }
 
 // ── StateStore Implementation ───────────────────────────────────────────────
@@ -3979,5 +4219,245 @@ mod tests {
         let rows = db.list_agent_ecosystems("creator-1").unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].id, "eco-1");
+    }
+
+    // ── Bug AL: swarm_audit_log tests ──────────────────────────────────
+
+    fn now_st() -> SystemTime {
+        SystemTime::now()
+    }
+
+    #[test]
+    fn swarm_audit_round_trip_record_then_query() {
+        let db = test_db();
+        let run_id = uuid::Uuid::new_v4();
+        let nonce = uuid::Uuid::new_v4();
+        let (_id, h) = db
+            .record_swarm_audit(
+                &run_id,
+                0,
+                "node_started",
+                &nonce,
+                Some("node-a"),
+                now_st(),
+                "started a",
+                SWARM_AUDIT_GENESIS_HASH,
+            )
+            .expect("record");
+        assert_eq!(h.len(), 64);
+        let rows = db.query_swarm_audit_by_run(&run_id, 100, 0).expect("query");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].seq, 0);
+        assert_eq!(rows[0].event_kind, "node_started");
+        assert_eq!(rows[0].node_id.as_deref(), Some("node-a"));
+        assert_eq!(rows[0].previous_hash, SWARM_AUDIT_GENESIS_HASH);
+        assert_eq!(rows[0].current_hash, h);
+    }
+
+    #[test]
+    fn swarm_audit_chain_links_first_to_genesis_then_to_predecessor() {
+        let db = test_db();
+        let run_id = uuid::Uuid::new_v4();
+        let nonce = uuid::Uuid::new_v4();
+        let prev0 = db
+            .last_swarm_audit_hash_for_run(&run_id)
+            .expect("ok")
+            .unwrap_or_else(|| SWARM_AUDIT_GENESIS_HASH.to_string());
+        assert_eq!(prev0, SWARM_AUDIT_GENESIS_HASH);
+        let (_id1, h1) = db
+            .record_swarm_audit(
+                &run_id,
+                0,
+                "node_started",
+                &nonce,
+                None,
+                now_st(),
+                "first",
+                &prev0,
+            )
+            .expect("record 1");
+        let prev1 = db
+            .last_swarm_audit_hash_for_run(&run_id)
+            .expect("ok")
+            .expect("some");
+        assert_eq!(prev1, h1);
+        let (_id2, _h2) = db
+            .record_swarm_audit(
+                &run_id,
+                1,
+                "node_completed",
+                &nonce,
+                None,
+                now_st(),
+                "second",
+                &prev1,
+            )
+            .expect("record 2");
+        let rows = db.query_swarm_audit_by_run(&run_id, 100, 0).expect("query");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].previous_hash, SWARM_AUDIT_GENESIS_HASH);
+        assert_eq!(rows[1].previous_hash, h1);
+        assert_eq!(db.verify_swarm_audit_chain(&run_id).unwrap(), None);
+    }
+
+    #[test]
+    fn swarm_audit_verify_detects_payload_tamper() {
+        let db = test_db();
+        let run_id = uuid::Uuid::new_v4();
+        let nonce = uuid::Uuid::new_v4();
+        for i in 0..3 {
+            let prev = db
+                .last_swarm_audit_hash_for_run(&run_id)
+                .unwrap()
+                .unwrap_or_else(|| SWARM_AUDIT_GENESIS_HASH.to_string());
+            db.record_swarm_audit(
+                &run_id,
+                i,
+                "node_event",
+                &nonce,
+                None,
+                now_st(),
+                &format!("event-{i}"),
+                &prev,
+            )
+            .unwrap();
+        }
+        assert_eq!(db.verify_swarm_audit_chain(&run_id).unwrap(), None);
+        // Out-of-band tamper: rewrite the middle row's payload_summary
+        // without recomputing its hash.
+        {
+            let conn = db.conn.lock().unwrap_or_else(|p| p.into_inner());
+            conn.execute(
+                "UPDATE swarm_audit_log SET payload_summary = 'tampered'
+                 WHERE run_id = ?1 AND seq = 1",
+                params![run_id.to_string()],
+            )
+            .unwrap();
+        }
+        let break_idx = db.verify_swarm_audit_chain(&run_id).unwrap();
+        assert_eq!(break_idx, Some(1));
+    }
+
+    #[test]
+    fn swarm_audit_pagination_returns_correct_window_in_seq_order() {
+        let db = test_db();
+        let run_id = uuid::Uuid::new_v4();
+        let nonce = uuid::Uuid::new_v4();
+        for i in 0..100u64 {
+            let prev = db
+                .last_swarm_audit_hash_for_run(&run_id)
+                .unwrap()
+                .unwrap_or_else(|| SWARM_AUDIT_GENESIS_HASH.to_string());
+            db.record_swarm_audit(
+                &run_id,
+                i,
+                "node_event",
+                &nonce,
+                None,
+                now_st(),
+                &format!("e{i}"),
+                &prev,
+            )
+            .unwrap();
+        }
+        let page = db.query_swarm_audit_by_run(&run_id, 10, 20).unwrap();
+        assert_eq!(page.len(), 10);
+        assert_eq!(page[0].seq, 20);
+        assert_eq!(page[9].seq, 29);
+        // seq must be ascending across the page.
+        for win in page.windows(2) {
+            assert!(win[0].seq < win[1].seq);
+        }
+    }
+
+    /// Phase G perf fence (Bug AL): 1000-row insert + read on a real
+    /// SQLite file. `#[ignore]` so it doesn't burden the default CI
+    /// path; run via `cargo test -p nexus-persistence perf_swarm_audit
+    /// -- --include-ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn perf_swarm_audit_1000_row_insert_then_query() {
+        let dir =
+            std::env::temp_dir().join(format!("nexus_swarm_audit_perf_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("nexus.db");
+        let db = NexusDatabase::open(&path).unwrap();
+        let run_id = uuid::Uuid::new_v4();
+        let nonce = uuid::Uuid::new_v4();
+        let n = 1000u64;
+        let t0 = std::time::Instant::now();
+        let mut prev = SWARM_AUDIT_GENESIS_HASH.to_string();
+        for i in 0..n {
+            let (_id, h) = db
+                .record_swarm_audit(
+                    &run_id,
+                    i,
+                    "node_event",
+                    &nonce,
+                    None,
+                    now_st(),
+                    &format!("event-{i}"),
+                    &prev,
+                )
+                .unwrap();
+            prev = h;
+        }
+        let insert_dur = t0.elapsed();
+        let rate = (n as f64) / insert_dur.as_secs_f64();
+        eprintln!("[perf] inserted {n} rows in {insert_dur:?} ({rate:.0} rows/sec)");
+
+        let t1 = std::time::Instant::now();
+        let rows = db.query_swarm_audit_by_run(&run_id, 1000, 0).unwrap();
+        let query_dur = t1.elapsed();
+        eprintln!("[perf] queried {} rows in {query_dur:?}", rows.len());
+        assert_eq!(rows.len() as u64, n);
+
+        let _ = std::fs::remove_dir_all(&dir);
+        // Soft sanity assertions — failures are signal, not gate.
+        assert!(rate > 100.0, "insert rate too low: {rate:.0}/sec");
+        assert!(
+            query_dur < std::time::Duration::from_millis(50),
+            "query too slow: {query_dur:?}"
+        );
+    }
+
+    #[test]
+    fn swarm_audit_migration_idempotent_across_reopens() {
+        // Open in-memory DB twice via separate handles; both must
+        // succeed and the table must accept inserts on the second.
+        let db1 = test_db();
+        let run_id = uuid::Uuid::new_v4();
+        let nonce = uuid::Uuid::new_v4();
+        db1.record_swarm_audit(
+            &run_id,
+            0,
+            "node_started",
+            &nonce,
+            None,
+            now_st(),
+            "a",
+            SWARM_AUDIT_GENESIS_HASH,
+        )
+        .unwrap();
+        // Second migrate-only invocation against the same db must
+        // not fail (CREATE TABLE IF NOT EXISTS is idempotent).
+        db1.migrate().expect("re-migrate ok");
+        // Insert still works.
+        let prev = db1.last_swarm_audit_hash_for_run(&run_id).unwrap().unwrap();
+        db1.record_swarm_audit(
+            &run_id,
+            1,
+            "node_completed",
+            &nonce,
+            None,
+            now_st(),
+            "b",
+            &prev,
+        )
+        .unwrap();
+        assert_eq!(
+            db1.query_swarm_audit_by_run(&run_id, 100, 0).unwrap().len(),
+            2
+        );
     }
 }

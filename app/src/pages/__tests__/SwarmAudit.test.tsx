@@ -15,6 +15,14 @@ function entry(overrides: Partial<AuditEntry> & Pick<AuditEntry, "seq" | "event_
     node_id: overrides.node_id ?? null,
     timestamp: overrides.timestamp ?? { secs_since_epoch: nowSecs, nanos_since_epoch: 0 },
     payload_summary: overrides.payload_summary ?? "summary",
+    // Bug AL: hash-chain fields. Tests use placeholder hex; the
+    // production backend computes real SHA-256 in record_swarm_audit.
+    previous_hash:
+      overrides.previous_hash ??
+      "0000000000000000000000000000000000000000000000000000000000000000",
+    current_hash:
+      overrides.current_hash ??
+      "1111111111111111111111111111111111111111111111111111111111111111",
   };
 }
 
