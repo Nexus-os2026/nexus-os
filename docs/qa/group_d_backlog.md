@@ -565,3 +565,7 @@ remain open as backlog.
   beta; revisit once stable.
 
 - **AX** — `tests/integration/tests/full_agent_flow.rs::test_full_agent_flow` fails at HEAD due to file-path expectation drift in the actuator output. Test expects `~/.nexus/agents/<uuid>/workspace/test.txt`; actuator writes to `~/.nexus/agents/test.txt`. Pre-existing failure verified via git stash test, NOT introduced by Architecture Q1 commit. ci-local 7/7 still passes (this specific test path apparently not exercised by rust-tests-full). Triage and fix as standalone follow-up.
+
+- **AY** — `app/src/pages/__tests__/TokenEconomy.test.tsx::renders heading after load` uses the same `/Token Economy/i` regex pattern that matches the loading state's "Loading token economy..." text. Test currently passes (only asserts presence, not interaction), but the assertion is satisfied by the loading-state DOM rather than the loaded DOM — so the test name is a partial lie. Tighten the regex or change the assertion to a post-load-only target. Not blocking; the test is green.
+
+- **AZ** — Codebase-wide audit for tests using `/<heading>/i` regex patterns where the loading state text contains the heading substring (e.g. "Loading X..."). The TokenEconomy fix in this commit addresses one instance; similar latent races may exist in other page tests. Sweep `app/src/pages/__tests__/` and `app/src/components/**/__tests__/` for the pattern.

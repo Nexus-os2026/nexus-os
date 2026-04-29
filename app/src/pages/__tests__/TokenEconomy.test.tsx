@@ -38,7 +38,7 @@ describe("TokenEconomy", () => {
   it("switches to wallets tab", async () => {
     mockCommands(MOCKS);
     render(<TokenEconomy />);
-    await waitFor(() => expect(screen.getByText(/Token Economy/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Agent Wallets")).toBeInTheDocument());
     fireEvent.click(screen.getByText("Agent Wallets"));
     await waitFor(() => {
       const body = document.body.textContent || "";
