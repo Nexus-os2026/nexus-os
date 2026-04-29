@@ -597,7 +597,36 @@ impl SwarmAgentEntry for SocialPosterEntry {
                         }),
                     )
                     .await;
-                status
+                // Bug AE: re-route the failure-shaped statuses to typed
+                // Err so the swarm coordinator (and Bug BG's V2 retry
+                // loop) sees the structured retry hint without parsing
+                // strings. Audit emission (`publish_complete` event)
+                // already fired above, so the per-status row is
+                // preserved across both Ok and Err paths.
+                match status {
+                    PublishStatus::RateLimited { retry_after_secs } => {
+                        return Err(AgentError::PublishFailed {
+                            reason: "rate limited".into(),
+                            retryable: true,
+                            retry_after_secs,
+                        });
+                    }
+                    PublishStatus::Failed { reason } => {
+                        return Err(AgentError::PublishFailed {
+                            reason,
+                            retryable: false,
+                            retry_after_secs: None,
+                        });
+                    }
+                    PublishStatus::AuthFailure => {
+                        return Err(AgentError::PublishFailed {
+                            reason: "auth failure".into(),
+                            retryable: false,
+                            retry_after_secs: None,
+                        });
+                    }
+                    other => other,
+                }
             }
         };
 
@@ -1385,6 +1414,12 @@ mod tests {
 
     #[tokio::test]
     async fn v_rate_limit_message_parses_to_seconds() {
+        // Bug AE: rate-limited publishes now surface as
+        // Err(AgentError::PublishFailed { retryable: true, .. }) so the
+        // coordinator (and Bug BG's V2 retry loop) can act on the
+        // typed retry hint without parsing strings. The
+        // `publish_complete` phase event STILL fires before the Err
+        // return, preserving the audit row across the new wire shape.
         let rec = Arc::new(RecordingEmitter::new());
         let ctx = mk_ctx(rec.clone(), CancelToken::new(), "draft body");
         let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
@@ -1392,62 +1427,101 @@ mod tests {
         let executor =
             StubExecutor::supervisor_err(true, "social.x rate limited, retry after 60000 ms");
         let entry = SocialPosterEntry::with_publish_executor(state.clone(), executor);
-        let out = entry
+        let err = entry
             .execute(v_input("default", false), &ctx)
             .await
-            .expect("ok");
-        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
-        match parsed.publish_status {
-            PublishStatus::RateLimited { retry_after_secs } => {
+            .expect_err("rate-limited publish must surface as AgentError::PublishFailed");
+        match err {
+            AgentError::PublishFailed {
+                reason,
+                retryable,
+                retry_after_secs,
+            } => {
+                assert_eq!(reason, "rate limited");
+                assert!(retryable);
                 assert_eq!(retry_after_secs, Some(60));
             }
-            other => panic!("expected RateLimited, got {other:?}"),
+            other => panic!("expected PublishFailed, got {other:?}"),
         }
         // No record_publish on rate-limit.
         let key = ChannelKey::new(SocialPlatform::X, "default");
         assert_eq!(count_recorded(&state, &key).await, 0);
+        // Bug AE PHASE G4: audit row preserved — `publish_complete`
+        // phase event must still fire on the new Err path.
+        let phases: Vec<String> = rec
+            .snapshot()
+            .await
+            .iter()
+            .filter_map(|r| match r {
+                Recorded::Phase { phase, .. } => Some(phase.clone()),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            phases.iter().any(|p| p == "publish_complete"),
+            "publish_complete phase missing from emissions: {phases:?}"
+        );
     }
 
     #[tokio::test]
     async fn v_rate_limit_message_without_number_yields_none() {
         // The connector path with no parseable retry_after — fall back
-        // to None rather than a fabricated number.
+        // to None rather than a fabricated number. Bug AE: surfaces as
+        // Err with retryable=true, retry_after_secs=None.
         let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
         let executor = StubExecutor::supervisor_err(true, "rate limited but no number");
         let rec = Arc::new(RecordingEmitter::new());
         let ctx = mk_ctx(rec, CancelToken::new(), "d");
-        let out = SocialPosterEntry::with_publish_executor(state, executor)
+        let err = SocialPosterEntry::with_publish_executor(state, executor)
             .execute(v_input("default", false), &ctx)
             .await
-            .expect("ok");
-        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
+            .expect_err("rate-limited publish must surface as AgentError::PublishFailed");
         assert!(matches!(
-            parsed.publish_status,
-            PublishStatus::RateLimited {
-                retry_after_secs: None
+            err,
+            AgentError::PublishFailed {
+                retryable: true,
+                retry_after_secs: None,
+                ..
             }
         ));
     }
 
     #[tokio::test]
     async fn v_auth_error_returns_auth_failure() {
+        // Bug AE: auth failures surface as Err(AgentError::PublishFailed
+        // { retryable: false, reason: "auth failure" }). User action
+        // required to rotate creds — no auto-retry.
         let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
         let executor =
             StubExecutor::supervisor_err(true, "x request failed with status 401 Unauthorized");
         let rec = Arc::new(RecordingEmitter::new());
         let ctx = mk_ctx(rec, CancelToken::new(), "d");
-        let out = SocialPosterEntry::with_publish_executor(state.clone(), executor)
+        let err = SocialPosterEntry::with_publish_executor(state.clone(), executor)
             .execute(v_input("default", false), &ctx)
             .await
-            .expect("ok");
-        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
-        assert!(matches!(parsed.publish_status, PublishStatus::AuthFailure));
+            .expect_err("auth failure must surface as AgentError::PublishFailed");
+        match err {
+            AgentError::PublishFailed {
+                reason,
+                retryable,
+                retry_after_secs,
+            } => {
+                assert_eq!(reason, "auth failure");
+                assert!(!retryable);
+                assert_eq!(retry_after_secs, None);
+            }
+            other => panic!("expected PublishFailed, got {other:?}"),
+        }
         let key = ChannelKey::new(SocialPlatform::X, "default");
         assert_eq!(count_recorded(&state, &key).await, 0);
     }
 
     #[tokio::test]
     async fn v_generic_5xx_returns_failed_with_reason() {
+        // Bug AE: generic 5xx publishes surface as
+        // Err(AgentError::PublishFailed { retryable: false, reason }).
+        // Coordinator-level retry policy decides whether to attempt
+        // again; this commit only exposes the typed shape.
         let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
         let executor = StubExecutor::supervisor_err(
             true,
@@ -1455,16 +1529,21 @@ mod tests {
         );
         let rec = Arc::new(RecordingEmitter::new());
         let ctx = mk_ctx(rec, CancelToken::new(), "d");
-        let out = SocialPosterEntry::with_publish_executor(state.clone(), executor)
+        let err = SocialPosterEntry::with_publish_executor(state.clone(), executor)
             .execute(v_input("default", false), &ctx)
             .await
-            .expect("ok");
-        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
-        match parsed.publish_status {
-            PublishStatus::Failed { reason } => {
+            .expect_err("generic publish failure must surface as AgentError::PublishFailed");
+        match err {
+            AgentError::PublishFailed {
+                reason,
+                retryable,
+                retry_after_secs,
+            } => {
                 assert!(reason.contains("503"), "expected 503 in reason: {reason}");
+                assert!(!retryable);
+                assert_eq!(retry_after_secs, None);
             }
-            other => panic!("expected Failed, got {other:?}"),
+            other => panic!("expected PublishFailed, got {other:?}"),
         }
         let key = ChannelKey::new(SocialPlatform::X, "default");
         assert_eq!(count_recorded(&state, &key).await, 0);
@@ -1472,20 +1551,25 @@ mod tests {
 
     #[tokio::test]
     async fn v_capability_denied_returns_failed() {
+        // Bug AE: capability denied surfaces through PublishStatus::Failed
+        // (synthesized inside the publish dispatch) and then re-routes
+        // to Err(AgentError::PublishFailed { retryable: false }).
         let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
         let executor = StubExecutor::capability_denied(true, "social.x.post");
         let rec = Arc::new(RecordingEmitter::new());
         let ctx = mk_ctx(rec, CancelToken::new(), "d");
-        let out = SocialPosterEntry::with_publish_executor(state, executor)
+        let err = SocialPosterEntry::with_publish_executor(state, executor)
             .execute(v_input("default", false), &ctx)
             .await
-            .expect("ok");
-        let parsed: SocialPosterOutput = serde_json::from_value(out).unwrap();
-        match parsed.publish_status {
-            PublishStatus::Failed { reason } => {
+            .expect_err("capability_denied must surface as AgentError::PublishFailed");
+        match err {
+            AgentError::PublishFailed {
+                reason, retryable, ..
+            } => {
                 assert!(reason.contains("capability_denied"));
+                assert!(!retryable);
             }
-            other => panic!("expected Failed, got {other:?}"),
+            other => panic!("expected PublishFailed, got {other:?}"),
         }
     }
 

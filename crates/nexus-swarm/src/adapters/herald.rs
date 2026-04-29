@@ -111,6 +111,16 @@ fn map_agent_error(err: nexus_swarm_core::AgentError) -> SwarmError {
             agent: "herald".into(),
             detail: msg,
         },
+        nexus_swarm_core::AgentError::PublishFailed {
+            reason,
+            retryable,
+            retry_after_secs,
+        } => SwarmError::PublishFailed {
+            agent: "herald".into(),
+            reason,
+            retryable,
+            retry_after_secs,
+        },
         nexus_swarm_core::AgentError::Internal(msg) => SwarmError::AgentInternal {
             agent: "herald".into(),
             detail: msg,
@@ -143,4 +153,58 @@ fn build_prompt(invocation: &CapabilityInvocation) -> String {
          Topic: {topic}\n\n\
          Write ONE post. Obey platform length limits. No hashtags unless style requires it."
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Bug AE: AgentError::PublishFailed must round-trip through the
+    /// Herald adapter's mapping and reach SwarmError::PublishFailed
+    /// with all four fields preserved (agent attribution, reason,
+    /// retryable hint, retry_after_secs). The V2 retry loop (Bug BG)
+    /// reads `retryable` and `retry_after_secs` to drive the
+    /// connector retry policy, so any field loss here is silent
+    /// behavior loss.
+    #[test]
+    fn publish_failed_round_trips_with_all_fields() {
+        let agent_err = nexus_swarm_core::AgentError::PublishFailed {
+            reason: "rate limited".into(),
+            retryable: true,
+            retry_after_secs: Some(60),
+        };
+        let swarm_err = map_agent_error(agent_err);
+        match swarm_err {
+            SwarmError::PublishFailed {
+                agent,
+                reason,
+                retryable,
+                retry_after_secs,
+            } => {
+                assert_eq!(agent, "herald");
+                assert_eq!(reason, "rate limited");
+                assert!(retryable);
+                assert_eq!(retry_after_secs, Some(60));
+            }
+            other => panic!("expected SwarmError::PublishFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn publish_failed_non_retryable_round_trip() {
+        let agent_err = nexus_swarm_core::AgentError::PublishFailed {
+            reason: "auth failure".into(),
+            retryable: false,
+            retry_after_secs: None,
+        };
+        let swarm_err = map_agent_error(agent_err);
+        assert!(matches!(
+            swarm_err,
+            SwarmError::PublishFailed {
+                retryable: false,
+                retry_after_secs: None,
+                ..
+            }
+        ));
+    }
 }

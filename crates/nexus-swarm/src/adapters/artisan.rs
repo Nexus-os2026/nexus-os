@@ -107,6 +107,10 @@ fn map_agent_error(err: nexus_swarm_core::AgentError) -> SwarmError {
             agent: "artisan".into(),
             detail: msg,
         },
+        nexus_swarm_core::AgentError::PublishFailed { reason, .. } => SwarmError::AgentInternal {
+            agent: "artisan".into(),
+            detail: format!("unexpected publish_failed from non-publish agent: {reason}"),
+        },
     }
 }
 

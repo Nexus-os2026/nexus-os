@@ -393,15 +393,15 @@ remain open as backlog.
   `Arc<NexusDatabase>`) into the swarm initializer so the same
   handle is reused. Filed during Bug W as a v1 → v2 follow-up.
 
-- Bug AE — **TYPED PUBLISH ERROR** — V maps publish failures into
-  `SwarmError::AgentInternal { agent, detail }` with a string-shaped
-  detail (locked decision #7); coordinator retries / dashboards have
-  to parse strings to recover the failure shape. Add
-  `SwarmError::PublishFailed { agent, reason, retryable }` (mirrored
-  on swarm-core's `AgentError` so `map_agent_error` routes it
-  cleanly) so the coordinator can act on rate-limit / auth /
-  transport without parsing. Scope: `nexus-swarm` and
-  `agents/social-poster` only.
+- Bug AE — **CLOSED** (this commit) — Typed
+  `AgentError::PublishFailed { reason, retryable, retry_after_secs }`
+  and `SwarmError::PublishFailed { agent, reason, retryable,
+  retry_after_secs }` shipped. `agents/social-poster/src/swarm_entry.rs`
+  re-routes `PublishStatus::RateLimited`, `Failed`, and `AuthFailure`
+  into the new `Err` variant; herald adapter maps cleanly through
+  `map_agent_error`. Audit emission (`publish_complete` phase event)
+  preserved across the new `Err` paths. V2 retry loop tracked as Bug
+  BG (depends on AE + AF).
 
 - Bug AF — **SQLITE-BACKED IDEMPOTENCY** — V relies on Twitter's
   own ~1h duplicate-status detection as the cross-restart dedupe
@@ -412,14 +412,9 @@ remain open as backlog.
   cross-restart dedupe doesn't depend on Twitter's behavior. Wire V's
   publish path through it before any callers actually retry.
 
-- Bug AG — **RETRYABLE HINT LOST IN STRINGIFICATION** — V's flat
-  error mapping (`PublishStatus::Failed { reason }`) loses the
-  retryable signal that exists in the connector's underlying error
-  flavour. Subsumed by Bug AE if `PublishFailed { ... retryable }`
-  lands; otherwise add a parallel `retryable: bool` field on the
-  `Failed` variant. Today the swarm UI cannot distinguish "5xx —
-  try again" from "content rejected — never retry" without parsing
-  the reason string.
+- Bug AG — **CLOSED** (this commit) — Subsumed by Bug AE — typed
+  `SwarmError::PublishFailed` carries the retryable hint AG asked
+  for.
 
 - Bug AH — **RESERVE→CONFIRM ATOMICITY ON record_publish** — V
   fires `record_publish` only after a confirmed publish success
@@ -618,3 +613,5 @@ remain open as backlog.
   `SwarmAudit.tsx`. UX iteration; deserves its own preflight.
 
 - **BE** — `swarm_audit` forwarder logs write failures via eprintln only. In production builds where stderr is not captured, audit-write failures are silent. Add a metric/counter (e.g. `swarm_audit_write_failures_total`) that the SwarmAudit page or a future health endpoint can surface. Structural chain integrity survives missed writes (subsequent rows chain off last successful row), but a user depending on completeness needs visibility.
+
+- **BG** — V2 retry loop. Consume the typed `SwarmError::PublishFailed { retryable, retry_after_secs }` and `AF`'s persistent IdempotencyStore to implement automatic retry on transient publish failures. Connector retries fast/transient (≤30s, in-memory cache catches dup). Adapter retries slow/rate-limited (uses persistent idempotency cache). Coordinator stays generic. Depends on AE (filed) + AF (next commit).

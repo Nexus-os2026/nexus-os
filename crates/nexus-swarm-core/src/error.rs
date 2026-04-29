@@ -14,4 +14,10 @@ pub enum AgentError {
     InvalidInput(String),
     #[error("internal error: {0}")]
     Internal(String),
+    #[error("publish failed ({reason}, retryable={retryable})")]
+    PublishFailed {
+        reason: String,
+        retryable: bool,
+        retry_after_secs: Option<u64>,
+    },
 }

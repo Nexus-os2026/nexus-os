@@ -75,6 +75,19 @@ pub enum SwarmError {
     /// and other crate-internal issues.
     #[error("agent `{agent}` internal error: {detail}")]
     AgentInternal { agent: String, detail: String },
+
+    /// Bug AE: typed publish failure. Carries the structured retry hint
+    /// the in-Ok-output `PublishStatus::RateLimited{retry_after_secs}`
+    /// previously buried. V2 retry loop (Bug BG) consumes `retryable`
+    /// and `retry_after_secs` to decide whether/when to retry; this
+    /// commit only exposes the wire shape.
+    #[error("agent {agent} publish failed: {reason} (retryable={retryable})")]
+    PublishFailed {
+        agent: String,
+        reason: String,
+        retryable: bool,
+        retry_after_secs: Option<u64>,
+    },
 }
 
 impl From<RouteDenied> for SwarmError {
@@ -102,5 +115,32 @@ mod tests {
             agent_id: "broker".into(),
         };
         assert!(e.to_string().contains("broker"));
+    }
+
+    /// Bug AE: Display format must match the format string exactly so
+    /// downstream log scrapers and the Bug BG retry loop see a stable
+    /// shape.
+    #[test]
+    fn publish_failed_display_format() {
+        let e = SwarmError::PublishFailed {
+            agent: "herald".into(),
+            reason: "rate limited".into(),
+            retryable: true,
+            retry_after_secs: Some(60),
+        };
+        assert_eq!(
+            e.to_string(),
+            "agent herald publish failed: rate limited (retryable=true)"
+        );
+        let e2 = SwarmError::PublishFailed {
+            agent: "herald".into(),
+            reason: "auth failure".into(),
+            retryable: false,
+            retry_after_secs: None,
+        };
+        assert_eq!(
+            e2.to_string(),
+            "agent herald publish failed: auth failure (retryable=false)"
+        );
     }
 }
