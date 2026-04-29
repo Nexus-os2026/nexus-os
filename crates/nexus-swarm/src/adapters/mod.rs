@@ -14,7 +14,8 @@
 //!
 //! - [`artisan`] ← wraps `coder-agent` (code generation / fix loop style)
 //! - [`herald`] ← wraps `social-poster-agent` (social content style)
-//! - [`broker`] ← wraps `nexus-collaboration` (agent coordination style)
+//! - [`broker`] ← coordination-themed LLM capability (no separate crate;
+//!   see docs/architecture/decisions/0001_broker_fate.md)
 //!
 //! ## NYI stubs (Phase 1)
 //!

@@ -153,7 +153,25 @@ Extraction logic is forward-compatible. Endpoint switch still separate ticket.
   `target/` exceeds `NEXUS_TARGET_SIZE_LIMIT_GB` (default 200GB).
   Disk hygiene policy documented in CLAUDE.md.
 
-- Track C #3 (commit 2 of 2) — **CLOSED** (this commit) — Frontend
+- Architecture Q1 (Broker fate) — **DECIDED** (this commit) —
+  Resolved per `docs/architecture/decisions/0001_broker_fate.md`.
+  Status quo + doc fix on `BrokerAdapter` (it stays as a
+  coordination-themed LLM capability, registered in production via
+  the swarm registry; the misleading "wraps nexus-collaboration"
+  doc comments in `crates/nexus-swarm/src/adapters/broker.rs` and
+  `mod.rs` are corrected to match reality). The `agents/collaboration/`
+  crate is **deleted as inert code** — 895 LOC, 22 unit tests, zero
+  production callers. The `agents/conductor/` and
+  `tests/integration/` Cargo.toml deps are removed; the
+  `delegation_and_collaboration` integration test is renamed to
+  `delegation_lifecycle` and the GovernedChannel/AgentMessage block
+  is dropped (delegation half preserved). Orchestrator-style Broker
+  is **deferred** until Phase 4c materializes — design patterns
+  worth reimplementing (Blackboard with AccessLevel, GovernedChannel
+  with send/receive governance gates, Task/SubTask lifecycle) are
+  preserved in the ADR for future reference.
+
+- Track C #3 (commit 2 of 2) — **CLOSED** (`8d5c5b4a`) — Frontend
   MediaRecorder + mic button on DirectorConsole. Closes Track C #3
   and Track C as a whole.
 
@@ -545,3 +563,5 @@ remain open as backlog.
   (or the user-flow demands continuous capture), switch to a
   base64 string field on the wire. Tauri 2's binary IPC is in
   beta; revisit once stable.
+
+- **AX** — `tests/integration/tests/full_agent_flow.rs::test_full_agent_flow` fails at HEAD due to file-path expectation drift in the actuator output. Test expects `~/.nexus/agents/<uuid>/workspace/test.txt`; actuator writes to `~/.nexus/agents/test.txt`. Pre-existing failure verified via git stash test, NOT introduced by Architecture Q1 commit. ci-local 7/7 still passes (this specific test path apparently not exercised by rust-tests-full). Triage and fix as standalone follow-up.

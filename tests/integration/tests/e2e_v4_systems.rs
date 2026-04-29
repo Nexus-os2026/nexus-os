@@ -25,8 +25,6 @@ use nexus_marketplace::registry::MarketplaceRegistry;
 use nexus_enterprise::compliance::generate_soc2_report;
 use nexus_enterprise::rbac::{RbacEngine, Role};
 
-use nexus_collaboration::channel::{AgentMessage, GovernedChannel};
-
 use nexus_cloud::auth::AuthManager;
 use nexus_cloud::metering::MeteringEngine;
 use nexus_cloud::tenant::{Plan, TenantManager};
@@ -522,7 +520,7 @@ fn adaptive_governance_lifecycle() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn delegation_and_collaboration() {
+fn delegation_lifecycle() {
     let mut engine = DelegationEngine::new();
 
     let agent_a = Uuid::new_v4();
@@ -590,40 +588,12 @@ fn delegation_and_collaboration() {
     engine.revoke(grant2.id).expect("revoke should succeed");
     assert!(!engine.has_capability(agent_b, "llm.query"));
 
-    // --- GovernedChannel: send task_request, verify receipt and audit ---
-    let mut channel = GovernedChannel::new(
-        agent_a,
-        agent_b,
-        vec!["task_request".to_string(), "result".to_string()],
-        10, // max 10 per minute
-        5,  // 5 fuel per message
-        100,
-    );
-
-    let msg = AgentMessage::new(
-        agent_a,
-        agent_b,
-        "task_request",
-        json!({"task": "analyze data", "delegated_cap": "fs.read"}),
-        true,
-    );
-
-    assert!(channel.send(msg).is_ok());
-    assert_eq!(channel.fuel_remaining(), 95);
-
-    // Verify receipt
-    let received = channel.recv().expect("should receive message");
-    assert_eq!(received.message_type, "task_request");
-    assert_eq!(received.from, agent_a);
-    assert_eq!(received.to, agent_b);
-    assert!(received.requires_ack);
-
-    // Verify audit event was recorded for the channel send
-    let events = channel.audit_trail().events();
-    assert_eq!(events.len(), 1);
-    assert_eq!(events[0].event_type, EventType::ToolCall);
-    let action = events[0].payload.get("action").unwrap().as_str().unwrap();
-    assert_eq!(action, "channel_send");
+    // ADR 0001: the GovernedChannel + AgentMessage assertions that
+    // previously closed out this test were dropped along with the
+    // `nexus-collaboration` crate. The delegation half above is the
+    // remaining coverage; the multi-agent message-channel pattern is
+    // documented in docs/architecture/decisions/0001_broker_fate.md
+    // and slated for re-implementation if Phase 4c materializes.
 }
 
 // ---------------------------------------------------------------------------

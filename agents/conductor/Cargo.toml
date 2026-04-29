@@ -9,7 +9,6 @@ license = "MIT"
 nexus-kernel = { path = "../../kernel" }
 nexus-sdk = { path = "../../sdk" }
 nexus-connectors-llm = { path = "../../connectors/llm" }
-nexus-collaboration = { path = "../../agents/collaboration" }
 nexus-factory = { path = "../../factory" }
 web-builder-agent = { path = "../web-builder" }
 coder-agent = { path = "../coder" }

@@ -41,7 +41,6 @@ nexus-distributed = { path = "../../distributed" }
 nexus-enterprise = { path = "../../enterprise" }
 nexus-marketplace = { path = "../../marketplace" }
 nexus-cloud = { path = "../../cloud" }
-nexus-collaboration = { path = "../../agents/collaboration" }
 nexus-persistence = { path = "../../persistence" }
 nexus-auth = { path = "../../auth" }
 nexus-telemetry = { path = "../../telemetry" }

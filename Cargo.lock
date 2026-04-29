@@ -5142,17 +5142,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nexus-collaboration"
-version = "10.6.0"
-dependencies = [
- "nexus-sdk",
- "serde",
- "serde_json",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "nexus-computer-control"
 version = "10.6.0"
 dependencies = [
@@ -5189,7 +5178,6 @@ name = "nexus-conductor"
 version = "0.1.0"
 dependencies = [
  "coder-agent",
- "nexus-collaboration",
  "nexus-connectors-llm",
  "nexus-factory",
  "nexus-kernel",
@@ -5536,7 +5524,6 @@ dependencies = [
  "nexus-capability-measurement",
  "nexus-cloud",
  "nexus-collab-protocol",
- "nexus-collaboration",
  "nexus-computer-control",
  "nexus-conductor",
  "nexus-connectors-core",

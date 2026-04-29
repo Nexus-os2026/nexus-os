@@ -3,8 +3,8 @@
 //! Phase 4a wired `AgentExecutionContext` and phase emission into the
 //! three existing adapters (Artisan / Herald / Broker), which still call
 //! the resolved provider directly with a prompt-flavoured request. Phase
-//! 4b gives `coder-agent`, `social-poster-agent`, and `nexus-collaboration`
-//! public types implementing this trait, and the adapters dispatch to
+//! 4b gives `coder-agent` and `social-poster-agent` public types
+//! implementing this trait, and the adapters dispatch to
 //! `crate.execute(input, ctx)` instead of running their own prompt shell.
 //!
 //! `descriptor()` deliberately stays out of the trait: the swarm-side

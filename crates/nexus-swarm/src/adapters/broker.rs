@@ -1,12 +1,14 @@
-//! Broker adapter.
+//! BrokerAdapter — a coordination-themed LLM capability.
 //!
-//! - Wraps `nexus-collaboration` (`agents/collaboration`).
-//! - Entry point (Phase 1): adapter's own `run()` — routes a coordination
-//!   prompt through the resolved provider. Phase 2 will connect to the
-//!   collaboration blackboard/channel primitives.
-//! - Default `TaskProfile`: Medium reasoning, Basic tool-use, Batch latency,
-//!   Medium context, Public privacy, Low cost. Coordination chatter is
-//!   structured and compact; doesn't need the headroom Artisan does.
+//! Despite its name, BrokerAdapter does NOT bridge to a separate
+//! collaboration crate. It is a thin LLM-prompt wrapper that builds
+//! coordination prompts from parent_outputs + directive and invokes
+//! the routed provider. Structurally identical to Artisan/Herald
+//! adapters.
+//!
+//! See docs/architecture/decisions/0001_broker_fate.md for the
+//! rationale (the prior nexus-collaboration crate was deleted as
+//! inert code with zero production callers).
 
 use crate::adapters::{invoke_resolved_provider, invoke_with_context};
 use crate::capability::{AgentCapabilityDescriptor, CapabilityInvocation, SwarmCapability};
@@ -37,7 +39,7 @@ impl SwarmCapability for BrokerAdapter {
         AgentCapabilityDescriptor {
             id: "broker".into(),
             name: "Broker".into(),
-            role: "Cross-agent coordination (wraps nexus-collaboration)".into(),
+            role: "Coordination-themed LLM capability adapter".into(),
             task_profile_default: TaskProfile {
                 reasoning: ReasoningTier::Medium,
                 tool_use: ToolUseLevel::Basic,

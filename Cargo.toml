@@ -32,7 +32,6 @@ members = [
   "sdk",
   "enterprise",
   "cloud",
-  "agents/collaboration",
   "agents/conductor",
   "protocols",
   "packaging/airgap",
