@@ -5207,6 +5207,7 @@ version = "10.6.0"
 dependencies = [
  "aes-gcm",
  "nexus-kernel",
+ "nexus-persistence",
  "rand_distr 0.6.0",
  "serde",
  "serde_json",
@@ -5272,6 +5273,7 @@ dependencies = [
  "hmac",
  "nexus-connectors-core",
  "nexus-kernel",
+ "nexus-persistence",
  "percent-encoding",
  "rand 0.8.5",
  "regex",

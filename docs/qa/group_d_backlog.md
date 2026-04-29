@@ -403,14 +403,19 @@ remain open as backlog.
   preserved across the new `Err` paths. V2 retry loop tracked as Bug
   BG (depends on AE + AF).
 
-- Bug AF — **SQLITE-BACKED IDEMPOTENCY** — V relies on Twitter's
-  own ~1h duplicate-status detection as the cross-restart dedupe
-  backstop (locked decision #3). The in-memory
-  `nexus-connectors-core` `IdempotencyManager` would solve in-process
-  retries but loses state on restart. Build a `IdempotencyStore` trait
-  with a SQLite impl (mirroring W's `PublishStateHandle` shape) so
-  cross-restart dedupe doesn't depend on Twitter's behavior. Wire V's
-  publish path through it before any callers actually retry.
+- Bug AF — **CLOSED** (this commit) — Persistent
+  `IdempotencyManager` via internal storage swap shipped per
+  `docs/architecture/decisions/0003_persistent_idempotency_store.md`.
+  New `idempotency_cache` SQLite table + `lookup_idempotency` /
+  `record_idempotency` helpers in nexus-persistence. New
+  `IdempotencyManager::with_db(ttl, db)` ctor preserves the existing
+  `::new` API; HashMap is now a fast cache, SQLite the durable
+  source-of-truth on miss. `TwitterConnector::with_db` and
+  `post_status_update_idempotent(…, request_id)` close Bug V's
+  duplicate-tweet-on-retry gap. The 4 pre-AF consumers
+  (facebook.rs, instagram.rs, sequential.rs, http_connector.rs)
+  remain on `::new` because their construction sites lack
+  `Arc<NexusDatabase>`; tracked as Bug BJ.
 
 - Bug AG — **CLOSED** (this commit) — Subsumed by Bug AE — typed
   `SwarmError::PublishFailed` carries the retryable hint AG asked
@@ -614,4 +619,10 @@ remain open as backlog.
 
 - **BE** — `swarm_audit` forwarder logs write failures via eprintln only. In production builds where stderr is not captured, audit-write failures are silent. Add a metric/counter (e.g. `swarm_audit_write_failures_total`) that the SwarmAudit page or a future health endpoint can surface. Structural chain integrity survives missed writes (subsequent rows chain off last successful row), but a user depending on completeness needs visibility.
 
-- **BG** — V2 retry loop. Consume the typed `SwarmError::PublishFailed { retryable, retry_after_secs }` and `AF`'s persistent IdempotencyStore to implement automatic retry on transient publish failures. Connector retries fast/transient (≤30s, in-memory cache catches dup). Adapter retries slow/rate-limited (uses persistent idempotency cache). Coordinator stays generic. Depends on AE (filed) + AF (next commit).
+- **BG** — V2 retry loop. Consume the typed `SwarmError::PublishFailed { retryable, retry_after_secs }` and `AF`'s persistent IdempotencyStore to implement automatic retry on transient publish failures. Connector retries fast/transient (≤30s, in-memory cache catches dup). Adapter retries slow/rate-limited (uses persistent idempotency cache). Coordinator stays generic. Depends on AE (filed) + AF (next commit). Additionally requires threading `Arc<NexusDatabase>` through `SocialPosterEntry` → `RealPublishExecutor` → `TwitterConnector::with_db` so the production swarm path can use `post_status_update_idempotent` (currently the connector-layer wiring exists but `RealPublishExecutor::publish` still calls `TwitterConnector::new()`).
+
+- **BH** — Unified retention/prune helper. Both `swarm_audit_log` (Bug BA) and `idempotency_cache` (this commit's lazy eviction) are candidates for a shared retention layer. Today both use append-only-with-ad-hoc-cleanup; a `RetentionPolicy` trait + a single sweep helper would centralize TTL logic. Defer until storage growth empirically justifies it.
+
+- **BJ** — Upgrade IdempotencyManager consumers to `with_db`. The following consumers stay on `::new` after Bug AF because their construction sites lack `Arc<NexusDatabase>`: `connectors/social/src/facebook.rs:31`, `connectors/social/src/instagram.rs:32`, `workflows/src/sequential.rs:56`, `connectors/core/src/http_connector.rs:57`. Threading the DB handle through requires multi-crate dependency changes (each `::new()` is the public ctor; callers in `connectors/social/src/lib.rs`, `connectors/core/src/github_connector.rs:28`, `workflows/src/sequential.rs:54-55`, and `tests/integration/tests/full_pipeline.rs:120` likewise lack DB). Address as part of broader DI refactor or alongside whichever crate's next major work.
+
+- **BI** — `.gitignore` hygiene for Claude session machinery. Bug AF's commit added targeted entries (`.claude/scheduled_tasks.lock`, `.claude/tasks/`, `.claude/settings.local.json`) rather than a bare `.claude/` because the existing skill carve-outs (`!.claude/skills/claude-mem/` etc.) cannot survive an excluded parent. If future Claude session artifacts surface that aren't covered, append targeted entries; do not collapse to a bare directory rule.

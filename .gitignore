@@ -37,6 +37,14 @@ node_modules/
 /llama-bridge/llama-cpp/
 .claude/skills/*/node_modules/
 .claude/skills/*/dist/
+
+# Claude Code session machinery (Bug BI hygiene). Targeted rather than
+# bare `.claude/` because the carve-outs above (skills/claude-mem,
+# security-audit, ui-ux-pro-max) cannot survive an excluded parent.
+.claude/scheduled_tasks.lock
+.claude/tasks/
+.claude/settings.local.json
+
 app/dist/
 app/node_modules/
 node_modules/

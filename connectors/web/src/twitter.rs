@@ -2,6 +2,7 @@ use crate::WebAgentContext;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use hmac::{Hmac, Mac};
+use nexus_connectors_core::idempotency::IdempotencyManager;
 use nexus_connectors_core::rate_limit::{RateLimitDecision, RateLimiter};
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_kernel::config::load_config;
@@ -15,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha1::Sha1;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
@@ -73,10 +75,28 @@ pub struct TwitterConnector {
     credentials: Option<TwitterCredentials>,
     client: Client,
     pub last_rate_limit: RateLimitStatus,
+    /// Bug AF: persistent dedup for retried publishes. `IdempotencyManager`
+    /// is in-memory by default (`::new` path) and SQLite-backed when
+    /// constructed via `::with_db`. Retries that present the same
+    /// `request_id` short-circuit the API call and replay the cached
+    /// `tweet_id`, closing Bug V's documented duplicate-tweet-on-retry
+    /// gap.
+    idempotency: IdempotencyManager,
 }
 
 impl TwitterConnector {
     pub fn new() -> Self {
+        Self::build(IdempotencyManager::new(3_600))
+    }
+
+    /// Bug AF: persistent variant. Same as `::new` but the
+    /// idempotency cache survives process restart via SQLite. Pass an
+    /// `Arc<NexusDatabase>` shared with the rest of the app.
+    pub fn with_db(db: Arc<nexus_persistence::NexusDatabase>) -> Self {
+        Self::build(IdempotencyManager::with_db(3_600, db))
+    }
+
+    fn build(idempotency: IdempotencyManager) -> Self {
         let limiter = RateLimiter::new();
         limiter.configure("social.x", 60, 60);
 
@@ -93,6 +113,7 @@ impl TwitterConnector {
             credentials: load_twitter_credentials().ok().flatten(),
             client,
             last_rate_limit: RateLimitStatus::default(),
+            idempotency,
         }
     }
 
@@ -102,6 +123,42 @@ impl TwitterConnector {
         text: &str,
     ) -> Result<TweetResult, AgentError> {
         self.post_status_update(agent, text)
+    }
+
+    /// Bug AF: idempotent publish. Returns the cached `TweetResult` if
+    /// `request_id` was already used (short-circuits the API call).
+    /// Otherwise calls `post_status_update` and records the result
+    /// against `request_id` so a retry with the same id replays.
+    /// Stable cross-restart when the connector was built via `::with_db`.
+    pub fn post_status_update_idempotent(
+        &mut self,
+        agent: &mut WebAgentContext,
+        text: &str,
+        request_id: &str,
+    ) -> Result<TweetResult, AgentError> {
+        if let Some(cached) = self.idempotency.check_duplicate(request_id) {
+            // Cached value is the JSON-encoded TweetResult. Parse-or-
+            // refuse: a corrupt cached row should be a hard failure
+            // rather than a silent re-publish, since a re-publish is
+            // exactly what idempotency is supposed to prevent.
+            let result: TweetResult = serde_json::from_str(&cached).map_err(|e| {
+                AgentError::SupervisorError(format!(
+                    "idempotency cache decode failed for request_id={request_id}: {e}"
+                ))
+            })?;
+            return Ok(result);
+        }
+        let result = self.post_status_update(agent, text)?;
+        match serde_json::to_string(&result) {
+            Ok(encoded) => self.idempotency.record_completion(request_id, encoded),
+            Err(e) => {
+                // The publish landed; only the audit cache write
+                // failed. Same defensive policy as the AL/AH
+                // tracing::error path: log and continue.
+                eprintln!("idempotency cache encode failed for request_id={request_id}: {e}");
+            }
+        }
+        Ok(result)
     }
 
     pub fn post_status_update(
@@ -542,6 +599,35 @@ mod tests {
         assert_eq!(
             denied_result,
             Err(AgentError::CapabilityDenied("social.x.post".to_string()))
+        );
+    }
+
+    /// Bug AF: a second call with the same `request_id` must return
+    /// the cached `TweetResult` without producing a second mock-mode
+    /// publish (verified via timeline length).
+    #[test]
+    fn idempotent_publish_short_circuits_second_call() {
+        let mut connector = TwitterConnector::new();
+        let mut agent = WebAgentContext::new(
+            Uuid::new_v4(),
+            capability_set(&["social.x.post", "social.x.read"]),
+            1_000,
+        );
+        let first = connector
+            .post_status_update_idempotent(&mut agent, "hello from AF", "req-af-1")
+            .expect("first call ok");
+        // Second call with same request_id must return the cached
+        // TweetResult and must NOT push a second tweet onto the
+        // mock timeline.
+        let timeline_len_before = connector.timeline.len();
+        let second = connector
+            .post_status_update_idempotent(&mut agent, "hello from AF", "req-af-1")
+            .expect("second call ok");
+        assert_eq!(first, second, "cached result must equal first result");
+        assert_eq!(
+            connector.timeline.len(),
+            timeline_len_before,
+            "second idempotent call must not produce a second mock publish"
         );
     }
 }

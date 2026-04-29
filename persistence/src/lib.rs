@@ -1356,6 +1356,19 @@ impl NexusDatabase {
             CREATE INDEX IF NOT EXISTS idx_swarm_audit_log_run_seq
                 ON swarm_audit_log(run_id, seq);
 
+            -- Bug AF: persistent IdempotencyManager backing. Mirrors the
+            -- in-memory cache shape (request_id → response, expires_at_ms).
+            -- Lazy eviction at write-time keeps the table bounded; see
+            -- record_idempotency.
+            CREATE TABLE IF NOT EXISTS idempotency_cache (
+                request_id TEXT PRIMARY KEY,
+                response   TEXT NOT NULL,
+                expires_at_ms INTEGER NOT NULL,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_idempotency_expires
+                ON idempotency_cache(expires_at_ms);
+
             COMMIT;",
             )?;
         }
@@ -2028,6 +2041,66 @@ impl NexusDatabase {
             prev = row.current_hash.clone();
         }
         Ok(None)
+    }
+
+    // ── Bug AF: persistent IdempotencyManager backing ─────────────────
+
+    /// Look up a cached response for `request_id`. Returns the response
+    /// if a row exists with `expires_at_ms > now_ms`, otherwise `None`.
+    /// Expired rows are not returned (they remain on disk until the
+    /// next `record_idempotency` lazily evicts them).
+    pub fn lookup_idempotency(&self, request_id: &str, now_ms: u64) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT response FROM idempotency_cache
+             WHERE request_id = ?1 AND expires_at_ms > ?2",
+        )?;
+        let now_i: i64 = now_ms as i64;
+        let mut rows = stmt.query(params![request_id, now_i])?;
+        if let Some(row) = rows.next()? {
+            let resp: String = row.get(0)?;
+            Ok(Some(resp))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Insert (or replace) an idempotency entry. After the write, runs
+    /// a bounded best-effort eviction sweep (DELETE WHERE expires_at_ms
+    /// < now LIMIT 1000) so the table stays roughly bounded under
+    /// normal write traffic. Eviction failures are logged but never
+    /// fail the call — the authoritative HashMap layer in
+    /// `IdempotencyManager` is unaffected.
+    pub fn record_idempotency(
+        &self,
+        request_id: &str,
+        response: &str,
+        expires_at_ms: u64,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let exp_i: i64 = expires_at_ms as i64;
+        conn.execute(
+            "INSERT OR REPLACE INTO idempotency_cache
+                (request_id, response, expires_at_ms)
+             VALUES (?1, ?2, ?3)",
+            params![request_id, response, exp_i],
+        )?;
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        if let Err(e) = conn.execute(
+            "DELETE FROM idempotency_cache
+             WHERE request_id IN (
+                 SELECT request_id FROM idempotency_cache
+                 WHERE expires_at_ms < ?1
+                 LIMIT 1000
+             )",
+            params![now_ms],
+        ) {
+            eprintln!("idempotency lazy eviction sweep failed: {e}");
+        }
+        Ok(())
     }
 }
 
@@ -4458,6 +4531,116 @@ mod tests {
         assert_eq!(
             db1.query_swarm_audit_by_run(&run_id, 100, 0).unwrap().len(),
             2
+        );
+    }
+
+    // ── Bug AF: idempotency_cache tests ────────────────────────────────
+
+    #[test]
+    fn lookup_idempotency_returns_none_for_missing_id() {
+        let db = test_db();
+        let now_ms: u64 = 1_000_000;
+        assert_eq!(db.lookup_idempotency("missing", now_ms).unwrap(), None);
+    }
+
+    #[test]
+    fn lookup_idempotency_returns_response_for_live_entry() {
+        let db = test_db();
+        // Use real-clock now_ms because record_idempotency's lazy
+        // eviction sweep deletes rows with expires_at_ms < real now.
+        let now_ms: u64 = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        db.record_idempotency("req-1", "cached-body", now_ms + 60_000)
+            .unwrap();
+        assert_eq!(
+            db.lookup_idempotency("req-1", now_ms).unwrap(),
+            Some("cached-body".to_string())
+        );
+    }
+
+    #[test]
+    fn lookup_idempotency_returns_none_for_expired_entry() {
+        let db = test_db();
+        let expired_at: u64 = 1_000;
+        let now_ms: u64 = 5_000;
+        db.record_idempotency("req-2", "stale", expired_at).unwrap();
+        assert_eq!(db.lookup_idempotency("req-2", now_ms).unwrap(), None);
+    }
+
+    #[test]
+    fn record_idempotency_inserts_then_replaces_on_same_id() {
+        let db = test_db();
+        let now_ms: u64 = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        db.record_idempotency("req-3", "first", now_ms + 60_000)
+            .unwrap();
+        db.record_idempotency("req-3", "second", now_ms + 60_000)
+            .unwrap();
+        assert_eq!(
+            db.lookup_idempotency("req-3", now_ms).unwrap(),
+            Some("second".to_string())
+        );
+    }
+
+    #[test]
+    fn record_idempotency_lazy_eviction_deletes_expired_in_bounded_batch() {
+        let db = test_db();
+        // Use real-clock-based expiries so the eviction sweep (which
+        // reads SystemTime::now) actually treats them as expired.
+        let now_ms: u64 = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        // Seed 100 already-expired rows.
+        for i in 0..100u64 {
+            db.record_idempotency(&format!("expired-{i}"), "x", now_ms - 60_000)
+                .unwrap();
+        }
+        // After the seed loop, eviction has already swept some rows on
+        // each insert. Force one more sweep with a live entry and read
+        // the count from the conn directly.
+        db.record_idempotency("live-1", "alive", now_ms + 60_000)
+            .unwrap();
+        let conn = db.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let expired_remaining: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM idempotency_cache WHERE expires_at_ms < ?1",
+                params![now_ms as i64],
+                |row| row.get(0),
+            )
+            .unwrap();
+        // The 100-seed batch is well under the 1000-row LIMIT, so all
+        // expired rows must be gone after the eviction passes.
+        assert_eq!(expired_remaining, 0);
+        let live_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM idempotency_cache WHERE request_id = 'live-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(live_count, 1);
+    }
+
+    #[test]
+    fn idempotency_migration_idempotent_across_reopens() {
+        let db = test_db();
+        let now_ms: u64 = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        db.record_idempotency("req-mig", "ok", now_ms + 60_000)
+            .unwrap();
+        // CREATE TABLE IF NOT EXISTS must not duplicate the table or
+        // fail on the second pass.
+        db.migrate().expect("re-migrate ok");
+        assert_eq!(
+            db.lookup_idempotency("req-mig", now_ms).unwrap(),
+            Some("ok".to_string())
         );
     }
 }
