@@ -262,20 +262,50 @@ fn migrate_with_no_credentials_still_bumps_schema_version() {
 
 #[test]
 fn migrate_records_resave_failure_but_treats_facade_as_authoritative() {
+    // Cross-platform force-failure: use a regular file as an
+    // intermediate path component. `fs::create_dir_all` returns
+    // ENOTDIR on every supported platform because a regular file
+    // cannot have a child directory. Replaces the prior /proc-
+    // based mechanism, which was host-OS-dependent and failed on
+    // GitLab CI runners that allow /proc subdir creation.
+    //
+    // NOTE (AK-8): this test mutates NEXUS_CONFIG_PATH, which is
+    // process-global env state. Serialization with other env-
+    // mutating secrets tests is tracked by AK-8 in the Phase 1.5
+    // backlog.
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let unique = format!(
+        "nexus_ak_resave_fail_{}_{}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed),
+    );
+    let tmpdir = std::env::temp_dir().join(unique);
+    std::fs::create_dir_all(&tmpdir).unwrap();
+
+    // RAII cleanup — fires on panic too.
+    struct Cleanup(std::path::PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+            std::env::remove_var("NEXUS_CONFIG_PATH");
+        }
+    }
+    let _guard = Cleanup(tmpdir.clone());
+
+    // Regular FILE at the intermediate path: any attempt to
+    // create_dir_all a child fails with ENOTDIR.
+    let blocker = tmpdir.join("blocker");
+    std::fs::write(&blocker, b"x").unwrap();
+    let bad_path = blocker.join("subdir").join("config.toml");
+    std::env::set_var("NEXUS_CONFIG_PATH", &bad_path);
+
     let (facade, db) = build_facade(
         CredentialFacadeConfig::default(),
         KeyringBackendAdapter::os_keyring(),
     );
     let mut config = NexusConfig::default();
     config.social.x_api_key = "ck".into();
-    // Force config save failure: point NEXUS_CONFIG_PATH at a
-    // path that cannot be written (a directory that doesn't exist
-    // and whose parent is read-only — `/proc/<pid>/never-writable`).
-    // /proc is read-only on Linux; writing into it fails.
-    std::env::set_var(
-        "NEXUS_CONFIG_PATH",
-        "/proc/this/path/cannot/be/written/config.toml",
-    );
 
     let report = migrate_config_to_vault(&mut config, &facade).expect("ok");
     match report {
@@ -293,7 +323,7 @@ fn migrate_records_resave_failure_but_treats_facade_as_authoritative() {
     // facade is authoritative; on-disk fields are now stale).
     assert!(config.social.x_api_key.is_empty());
 
-    std::env::remove_var("NEXUS_CONFIG_PATH");
+    // env cleanup happens in Cleanup::drop.
 }
 
 #[test]
