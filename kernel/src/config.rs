@@ -37,6 +37,36 @@ pub struct NexusConfig {
     pub rate_limiting: crate::rate_limit::RateLimitConfig,
     #[serde(default)]
     pub api: crate::rate_limit::ApiHardeningConfig,
+    /// Bug AK: SecretsFacade behavior knobs. See ADR 0004.
+    #[serde(default)]
+    pub credential_facade: CredentialFacadeConfig,
+}
+
+/// Bug AK: SecretsFacade configuration. Controls per-scope lookup
+/// order. Scopes listed in `env_override_providers` are env-first
+/// (`env -> keyring -> sqlite -> memory`); all other scopes are
+/// keyring-first (`keyring -> env -> sqlite -> memory`). Default
+/// list is `["codex_cli", "ollama"]` because those tools are
+/// conventionally env-driven; the four LLM providers
+/// (anthropic / openai / openrouter / huggingface) stay
+/// keyring-first by default to neutralize the documented stale-env-var
+/// risk on paid-API keys (ADR 0004 Consequences).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CredentialFacadeConfig {
+    #[serde(default = "default_env_override_providers")]
+    pub env_override_providers: Vec<String>,
+}
+
+fn default_env_override_providers() -> Vec<String> {
+    vec!["codex_cli".to_string(), "ollama".to_string()]
+}
+
+impl Default for CredentialFacadeConfig {
+    fn default() -> Self {
+        Self {
+            env_override_providers: default_env_override_providers(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -288,6 +318,7 @@ impl Default for NexusConfig {
             backup: crate::backup::BackupScheduleConfig::default(),
             rate_limiting: crate::rate_limit::RateLimitConfig::default(),
             api: crate::rate_limit::ApiHardeningConfig::default(),
+            credential_facade: CredentialFacadeConfig::default(),
         }
     }
 }

@@ -1356,6 +1356,29 @@ impl NexusDatabase {
             CREATE INDEX IF NOT EXISTS idx_swarm_audit_log_run_seq
                 ON swarm_audit_log(run_id, seq);
 
+            -- Bug AK: kernel SecretsFacade SqliteEnvelope backend.
+            -- Encrypted credential storage; AES-256-GCM under HKDF of
+            -- the kernel master key. Plaintext never enters this row.
+            CREATE TABLE IF NOT EXISTS secrets (
+                scope TEXT NOT NULL,
+                name TEXT NOT NULL,
+                nonce BLOB NOT NULL,
+                ciphertext BLOB NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (scope, name)
+            );
+
+            -- Bug AK: schema_versions row gates idempotent one-shot
+            -- migrations (e.g. credential_vault_v1). One row per
+            -- migration key.
+            CREATE TABLE IF NOT EXISTS schema_versions (
+                key TEXT PRIMARY KEY,
+                version INTEGER NOT NULL,
+                completed_at INTEGER NOT NULL DEFAULT
+                                            (strftime('%s','now'))
+            );
+
             -- Bug AF: persistent IdempotencyManager backing. Mirrors the
             -- in-memory cache shape (request_id → response, expires_at_ms).
             -- Lazy eviction at write-time keeps the table bounded; see
@@ -2100,6 +2123,162 @@ impl NexusDatabase {
         ) {
             eprintln!("idempotency lazy eviction sweep failed: {e}");
         }
+        Ok(())
+    }
+
+    // ── Bug AK: SecretsFacade SqliteEnvelope helpers ───────────────────
+
+    /// Look up an encrypted secret by `(scope, name)`. Returns the
+    /// `(nonce, ciphertext)` tuple if present, or `None`.
+    pub fn lookup_secret(&self, scope: &str, name: &str) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT nonce, ciphertext FROM secrets
+             WHERE scope = ?1 AND name = ?2",
+        )?;
+        let mut rows = stmt.query(params![scope, name])?;
+        if let Some(row) = rows.next()? {
+            let nonce: Vec<u8> = row.get(0)?;
+            let ciphertext: Vec<u8> = row.get(1)?;
+            Ok(Some((nonce, ciphertext)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Insert (or replace) an encrypted secret. `created_at` is set on
+    /// first insert; subsequent updates rewrite `updated_at` while
+    /// preserving the original `created_at`.
+    pub fn record_secret(
+        &self,
+        scope: &str,
+        name: &str,
+        nonce: &[u8],
+        ciphertext: &[u8],
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        conn.execute(
+            "INSERT INTO secrets (scope, name, nonce, ciphertext,
+                                  created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+             ON CONFLICT(scope, name) DO UPDATE SET
+                nonce = excluded.nonce,
+                ciphertext = excluded.ciphertext,
+                updated_at = excluded.updated_at",
+            params![scope, name, nonce, ciphertext, now],
+        )?;
+        Ok(())
+    }
+
+    /// Delete a secret. Idempotent — succeeds whether or not the row
+    /// exists.
+    pub fn delete_secret(&self, scope: &str, name: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.execute(
+            "DELETE FROM secrets WHERE scope = ?1 AND name = ?2",
+            params![scope, name],
+        )?;
+        Ok(())
+    }
+
+    /// List every secret name in `scope`, sorted. Used by
+    /// `vault_list` Tauri command.
+    pub fn list_secrets(&self, scope: &str) -> Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stmt = conn.prepare("SELECT name FROM secrets WHERE scope = ?1 ORDER BY name")?;
+        let rows = stmt.query_map(params![scope], |row| row.get::<_, String>(0))?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
+    }
+
+    /// Read the `version` for a `schema_versions` `key`, or `None` if
+    /// absent. Used by one-shot migrations (e.g.
+    /// `credential_vault_v1`) to gate idempotent first-run logic.
+    pub fn schema_version(&self, key: &str) -> Result<Option<i64>> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let mut stmt = conn.prepare("SELECT version FROM schema_versions WHERE key = ?1")?;
+        let mut rows = stmt.query(params![key])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(row.get(0)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Run `f` inside a SQLite transaction. Commits if `Ok`,
+    /// rolls back on `Err`. The closure receives a `&Transaction`
+    /// it can use to write secrets / bump `schema_versions` / etc.
+    /// atomically. Required by Bug AK Refinement B
+    /// (migration transactionality).
+    pub fn with_transaction<F, R>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce(&rusqlite::Transaction<'_>) -> Result<R>,
+    {
+        let mut conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let tx = conn.transaction()?;
+        let out = f(&tx)?;
+        tx.commit()?;
+        Ok(out)
+    }
+
+    /// Bug AK Refinement B: atomic credential-vault migration.
+    /// Insert pre-encrypted `(scope, name, nonce, ciphertext)` rows,
+    /// verify-read each one, and bump
+    /// `schema_versions[schema_key] = schema_version` — all inside
+    /// one SQLite transaction. Rolls back on any verify-read
+    /// mismatch. Hides `rusqlite` from kernel callers so the kernel
+    /// crate doesn't need a direct rusqlite dep.
+    pub fn migrate_credential_vault_v1(
+        &self,
+        rows: &[(String, String, Vec<u8>, Vec<u8>)],
+        schema_key: &str,
+        schema_version: i64,
+    ) -> Result<()> {
+        let mut conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let tx = conn.transaction()?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        for (scope, name, nonce, ciphertext) in rows {
+            tx.execute(
+                "INSERT INTO secrets (scope, name, nonce, ciphertext,
+                                      created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+                params![scope, name, nonce, ciphertext, now],
+            )?;
+        }
+        for (scope, name, expected_nonce, expected_cipher) in rows {
+            let got: Option<(Vec<u8>, Vec<u8>)> = tx
+                .query_row(
+                    "SELECT nonce, ciphertext FROM secrets
+                     WHERE scope = ?1 AND name = ?2",
+                    params![scope, name],
+                    |row| Ok((row.get::<_, Vec<u8>>(0)?, row.get::<_, Vec<u8>>(1)?)),
+                )
+                .ok();
+            let Some((got_nonce, got_cipher)) = got else {
+                return Err(PersistenceError::NotFound(format!("{scope}.{name}")));
+            };
+            if got_nonce != *expected_nonce || got_cipher != *expected_cipher {
+                return Err(PersistenceError::Serialization(format!(
+                    "verify-read mismatch on {scope}.{name}"
+                )));
+            }
+        }
+        tx.execute(
+            "INSERT INTO schema_versions (key, version)
+             VALUES (?1, ?2)",
+            params![schema_key, schema_version],
+        )?;
+        tx.commit()?;
         Ok(())
     }
 }
@@ -4642,5 +4821,132 @@ mod tests {
             db.lookup_idempotency("req-mig", now_ms).unwrap(),
             Some("ok".to_string())
         );
+    }
+
+    // ── Bug AK: secrets table tests ────────────────────────────────────
+
+    #[test]
+    fn lookup_secret_returns_none_for_missing() {
+        let db = test_db();
+        assert!(db
+            .lookup_secret("llm", "anthropic_api_key")
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn record_then_lookup_secret_round_trips() {
+        let db = test_db();
+        let nonce: [u8; 12] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        let ciphertext: &[u8] = b"opaque-ciphertext-blob";
+        db.record_secret("llm", "anthropic_api_key", &nonce, ciphertext)
+            .unwrap();
+        let (got_nonce, got_cipher) = db
+            .lookup_secret("llm", "anthropic_api_key")
+            .unwrap()
+            .expect("row");
+        assert_eq!(got_nonce, nonce.to_vec());
+        assert_eq!(got_cipher, ciphertext.to_vec());
+    }
+
+    #[test]
+    fn record_secret_replaces_on_same_key() {
+        let db = test_db();
+        let n1: [u8; 12] = [0; 12];
+        let n2: [u8; 12] = [9; 12];
+        db.record_secret("llm", "anthropic_api_key", &n1, b"first")
+            .unwrap();
+        db.record_secret("llm", "anthropic_api_key", &n2, b"second")
+            .unwrap();
+        let (n, c) = db
+            .lookup_secret("llm", "anthropic_api_key")
+            .unwrap()
+            .unwrap();
+        assert_eq!(n, n2.to_vec());
+        assert_eq!(c, b"second".to_vec());
+    }
+
+    #[test]
+    fn delete_secret_removes_row_and_is_idempotent() {
+        let db = test_db();
+        let nonce: [u8; 12] = [1; 12];
+        db.record_secret("social", "x_access_token", &nonce, b"tok")
+            .unwrap();
+        db.delete_secret("social", "x_access_token").unwrap();
+        assert!(db
+            .lookup_secret("social", "x_access_token")
+            .unwrap()
+            .is_none());
+        // Second delete must not fail.
+        db.delete_secret("social", "x_access_token").unwrap();
+    }
+
+    #[test]
+    fn list_secrets_returns_sorted_names_in_scope() {
+        let db = test_db();
+        let nonce: [u8; 12] = [0; 12];
+        db.record_secret("llm", "openai_api_key", &nonce, b"a")
+            .unwrap();
+        db.record_secret("llm", "anthropic_api_key", &nonce, b"b")
+            .unwrap();
+        db.record_secret("social", "x_access_token", &nonce, b"c")
+            .unwrap();
+        let llm = db.list_secrets("llm").unwrap();
+        assert_eq!(
+            llm,
+            vec![
+                "anthropic_api_key".to_string(),
+                "openai_api_key".to_string()
+            ]
+        );
+        let social = db.list_secrets("social").unwrap();
+        assert_eq!(social, vec!["x_access_token".to_string()]);
+    }
+
+    #[test]
+    fn schema_version_round_trip_and_with_transaction_atomicity() {
+        let db = test_db();
+        // Initially absent.
+        assert_eq!(db.schema_version("credential_vault_v1").unwrap(), None);
+
+        // Successful transaction: write a secret + bump schema_version.
+        db.with_transaction(|tx| {
+            let nonce: [u8; 12] = [7; 12];
+            tx.execute(
+                "INSERT INTO secrets (scope, name, nonce, ciphertext,
+                                      created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+                params!["llm", "anthropic_api_key", nonce, b"cipher", 0_i64],
+            )?;
+            tx.execute(
+                "INSERT INTO schema_versions (key, version)
+                 VALUES (?1, ?2)",
+                params!["credential_vault_v1", 1_i64],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(db.schema_version("credential_vault_v1").unwrap(), Some(1));
+        assert!(db
+            .lookup_secret("llm", "anthropic_api_key")
+            .unwrap()
+            .is_some());
+
+        // Failing transaction: must roll back BOTH the row and the bump.
+        let _ = db.with_transaction(|tx| {
+            let nonce: [u8; 12] = [3; 12];
+            tx.execute(
+                "INSERT INTO secrets (scope, name, nonce, ciphertext,
+                                      created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+                params!["llm", "openai_api_key", nonce, b"x", 0_i64],
+            )?;
+            // Force rollback by returning Err.
+            Err::<(), _>(PersistenceError::Database(
+                rusqlite::Error::ExecuteReturnedResults,
+            ))
+        });
+        // The openai row must NOT have been committed.
+        assert!(db.lookup_secret("llm", "openai_api_key").unwrap().is_none());
     }
 }

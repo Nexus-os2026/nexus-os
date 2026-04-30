@@ -161,6 +161,31 @@ impl EncryptionKey {
     fn as_bytes(&self) -> &[u8; 32] {
         &self.key
     }
+
+    /// Test helper: build an `EncryptionKey` from a fixed 32-byte
+    /// array. Crate-private — tests in sibling modules
+    /// (e.g. `kernel/src/secrets/tests.rs`) need a deterministic
+    /// master key without depending on env vars or filesystem.
+    #[cfg(test)]
+    pub(crate) fn from_raw_for_test(bytes: [u8; 32]) -> Self {
+        Self { key: bytes }
+    }
+
+    /// Bug AK: derive a 32-byte domain subkey from the master key
+    /// using HKDF-SHA-256. `info` is the domain separator
+    /// (e.g. `b"nexus.secrets.v1"`). The master bytes never leave
+    /// `EncryptionKey`; the derived key is returned as a fresh
+    /// array. Caller should treat the returned key as sensitive
+    /// (wrap in `Zeroizing` if held).
+    pub fn derive_subkey(&self, info: &[u8]) -> [u8; 32] {
+        // No salt — domain separator alone is sufficient for
+        // domain isolation under a single master key.
+        let hk = hkdf::Hkdf::<Sha256>::new(None, &self.key);
+        let mut out = [0u8; 32];
+        hk.expand(info, &mut out)
+            .expect("32 bytes < 255 * HashLen for SHA-256");
+        out
+    }
 }
 
 // ── Encrypt / Decrypt helpers ──────────────────────────────────────────
