@@ -26,6 +26,15 @@ impl EnvBackend {
     /// Everything else gets the namespaced `NEXUS_<SCOPE>_<NAME>`.
     fn env_var_name(scope: &str, name: &str) -> String {
         if scope == "llm" {
+            // Bug AK Commit 3 UNILATERAL: nvidia's canonical env
+            // var is NVIDIA_NIM_API_KEY (matches the upstream NIM
+            // gateway naming and the existing build_provider_config
+            // call site), not NVIDIA_API_KEY. Special-case it so
+            // facade.get_secret("llm", "nvidia") finds the env
+            // entry that operators already set.
+            if name == "nvidia" {
+                return "NVIDIA_NIM_API_KEY".to_string();
+            }
             // anthropic / openai / openrouter / huggingface api_key
             // already-uppercased convention.
             let provider = name.trim_end_matches("_api_key").to_uppercase();

@@ -60,13 +60,27 @@ pub enum MigrationReport {
 /// Phase 1 fields to migrate. Tuple is `(scope, vault_name, value)`.
 /// Empty values are skipped. Note the on-disk -> vault name
 /// renames documented in the module header.
+///
+/// Bug AK Commit 3: extended with the six LLM api_key fields
+/// from `NexusConfig.llm`. Vault scope `"llm"`, names match the
+/// provider short identifiers (anthropic / openai / deepseek /
+/// gemini / nvidia / openrouter). Empty fields skip; v1
+/// schema_version covers both SocialConfig and LLM clearing in
+/// one idempotency gate (locked: v1-extended, no v2 bump).
 fn collect_phase1_fields(config: &NexusConfig) -> Vec<(String, String, String)> {
     let s = &config.social;
-    let candidates = [
+    let l = &config.llm;
+    let candidates: [(&str, &str, &String); 10] = [
         ("social", "x_consumer_key", &s.x_api_key),
         ("social", "x_consumer_secret", &s.x_api_secret),
         ("social", "x_access_token", &s.x_access_token),
         ("social", "x_access_token_secret", &s.x_access_secret),
+        ("llm", "anthropic", &l.anthropic_api_key),
+        ("llm", "openai", &l.openai_api_key),
+        ("llm", "deepseek", &l.deepseek_api_key),
+        ("llm", "gemini", &l.gemini_api_key),
+        ("llm", "nvidia", &l.nvidia_api_key),
+        ("llm", "openrouter", &l.openrouter_api_key),
     ];
     candidates
         .iter()
@@ -75,13 +89,19 @@ fn collect_phase1_fields(config: &NexusConfig) -> Vec<(String, String, String)> 
         .collect()
 }
 
-/// Clear the migrated SocialConfig fields. Called only AFTER the
-/// DB transaction has committed.
+/// Clear the migrated SocialConfig + LLM fields. Called only
+/// AFTER the DB transaction has committed.
 fn clear_phase1_fields(config: &mut NexusConfig) {
     config.social.x_api_key.clear();
     config.social.x_api_secret.clear();
     config.social.x_access_token.clear();
     config.social.x_access_secret.clear();
+    config.llm.anthropic_api_key.clear();
+    config.llm.openai_api_key.clear();
+    config.llm.deepseek_api_key.clear();
+    config.llm.gemini_api_key.clear();
+    config.llm.nvidia_api_key.clear();
+    config.llm.openrouter_api_key.clear();
 }
 
 /// Run the one-shot migration. See module header for the

@@ -34,8 +34,10 @@ use std::time::{Duration, Instant};
 pub const HAIKU_MODEL: &str = "claude-haiku-4-5-20251001";
 pub const HARD_CAP_USD: f64 = 2.00;
 
-const KEYRING_SERVICE: &str = "nexus.anthropic";
-const KEYRING_USER: &str = "api_key";
+// Bug AK Commit 3: per-provider KEYRING_SERVICE / KEYRING_USER
+// constants removed. The live OS keyring backend (Commit 4) will
+// own the namespace strings centrally inside
+// kernel/src/secrets/backend_keyring.rs.
 const DEFAULT_BASE_URL: &str = "https://api.anthropic.com/v1";
 const API_VERSION: &str = "2023-06-01";
 
@@ -195,11 +197,23 @@ impl AnthropicProvider {
         if let Some(k) = &self.key_override {
             return Ok(k.clone());
         }
-        let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
-            .map_err(|e| ProviderError::NotConfigured(format!("anthropic keyring: {e}")))?;
-        entry.get_password().map_err(|_| {
-            ProviderError::NotConfigured("anthropic api key missing from keyring".into())
-        })
+        // Bug AK Commit 3: route through the kernel SecretsFacade
+        // instead of opening an OS-keyring entry directly. The
+        // lookup chain (env → keyring stub → sqlite) preserves
+        // the pre-Commit-3 keyring-only path's outcome once
+        // Commit 4 activates the live keyring backend; until
+        // then the env+sqlite hops cover production.
+        let facade = nexus_kernel::secrets::global::try_facade().ok_or_else(|| {
+            ProviderError::NotConfigured(
+                "anthropic: vault not initialized (kernel::startup::run_migrations not run)".into(),
+            )
+        })?;
+        facade
+            .get_secret("llm", "anthropic")
+            .map(|s| s.value.to_string())
+            .map_err(|_| {
+                ProviderError::NotConfigured("anthropic api key missing from vault".into())
+            })
     }
 
     /// Approximate cost in USD given Anthropic's Haiku 4.5 pricing.

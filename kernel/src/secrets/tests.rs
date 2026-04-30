@@ -165,10 +165,18 @@ fn migrate_config_to_vault_happy_path_clears_fields_and_bumps_version() {
     let cfg = CredentialFacadeConfig::default();
     let (facade, db) = build_facade(cfg, KeyringBackendAdapter::os_keyring());
     let mut config = NexusConfig::default();
+    // SocialConfig (4 fields, Commit 2 substance).
     config.social.x_api_key = "ck".into();
     config.social.x_api_secret = "cs".into();
     config.social.x_access_token = "at".into();
     config.social.x_access_secret = "as".into();
+    // LLM (6 fields, Commit 3 substance — Phase 1 aggregate becomes 10).
+    config.llm.anthropic_api_key = "sk-ant".into();
+    config.llm.openai_api_key = "sk-openai".into();
+    config.llm.deepseek_api_key = "sk-ds".into();
+    config.llm.gemini_api_key = "sk-gem".into();
+    config.llm.nvidia_api_key = "sk-nv".into();
+    config.llm.openrouter_api_key = "sk-or".into();
     // Point save_config at an isolated temp file so the migration's
     // re-save step doesn't touch the real ~/.nexus/config.toml.
     let tmpdir = std::env::temp_dir().join(format!("nexus_ak_test_{}", uuid::Uuid::new_v4()));
@@ -182,25 +190,45 @@ fn migrate_config_to_vault_happy_path_clears_fields_and_bumps_version() {
             fields_migrated,
             config_resave_failed,
         } => {
-            assert_eq!(fields_migrated.len(), 4);
+            assert_eq!(fields_migrated.len(), 10);
             assert!(!config_resave_failed);
         }
         MigrationReport::AlreadyRun => panic!("expected Migrated"),
     }
-    // Fields cleared.
+    // SocialConfig fields cleared.
     assert!(config.social.x_api_key.is_empty());
     assert!(config.social.x_access_token.is_empty());
+    // LLM fields cleared.
+    assert!(config.llm.anthropic_api_key.is_empty());
+    assert!(config.llm.openai_api_key.is_empty());
+    assert!(config.llm.deepseek_api_key.is_empty());
+    assert!(config.llm.gemini_api_key.is_empty());
+    assert!(config.llm.nvidia_api_key.is_empty());
+    assert!(config.llm.openrouter_api_key.is_empty());
     // schema_version bumped.
     assert_eq!(db.schema_version("credential_vault_v1").unwrap(), Some(1));
-    // Vault has all four under the renamed keys.
-    let names = [
+    // Vault has all four social keys under the renamed keys.
+    let social_names = [
         "x_consumer_key",
         "x_consumer_secret",
         "x_access_token",
         "x_access_token_secret",
     ];
-    for name in names {
+    for name in social_names {
         let got = facade.get_secret("social", name).expect("ok");
+        assert!(!got.value.is_empty());
+    }
+    // Vault has all six LLM keys.
+    let llm_names = [
+        "anthropic",
+        "openai",
+        "deepseek",
+        "gemini",
+        "nvidia",
+        "openrouter",
+    ];
+    for name in llm_names {
+        let got = facade.get_secret("llm", name).expect("ok");
         assert!(!got.value.is_empty());
     }
     // Re-run is a no-op.

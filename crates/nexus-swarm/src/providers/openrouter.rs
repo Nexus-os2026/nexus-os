@@ -15,8 +15,11 @@ use serde::Deserialize;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-const KEYRING_SERVICE: &str = "nexus.openrouter";
-const KEYRING_USER: &str = "api_key";
+// Bug AK Commit 3: per-provider KEYRING_SERVICE / KEYRING_USER
+// constants removed. The live OS keyring backend (Commit 4) will
+// own the namespace strings centrally inside
+// kernel/src/secrets/backend_keyring.rs. See anthropic.rs for
+// the rewrite rationale.
 const DEFAULT_BASE_URL: &str = "https://openrouter.ai/api/v1";
 const CACHE_TTL: Duration = Duration::from_secs(3600);
 
@@ -58,11 +61,20 @@ impl OpenRouterSwarmProvider {
         if let Some(k) = &self.key_override {
             return Ok(k.clone());
         }
-        let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
-            .map_err(|e| ProviderError::NotConfigured(format!("openrouter keyring: {e}")))?;
-        entry.get_password().map_err(|_| {
-            ProviderError::NotConfigured("openrouter api key missing from keyring".into())
-        })
+        // Bug AK Commit 3: route through the kernel SecretsFacade.
+        // See anthropic.rs for the rationale.
+        let facade = nexus_kernel::secrets::global::try_facade().ok_or_else(|| {
+            ProviderError::NotConfigured(
+                "openrouter: vault not initialized (kernel::startup::run_migrations not run)"
+                    .into(),
+            )
+        })?;
+        facade
+            .get_secret("llm", "openrouter")
+            .map(|s| s.value.to_string())
+            .map_err(|_| {
+                ProviderError::NotConfigured("openrouter api key missing from vault".into())
+            })
     }
 
     async fn list_models_cached(&self) -> Result<Vec<ModelDescriptor>, ProviderError> {

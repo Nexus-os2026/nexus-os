@@ -830,6 +830,25 @@ pub(crate) fn get_audit_log(
 
 /// Build a [`ProviderSelectionConfig`] from the persisted config and environment.
 /// Environment variables take precedence over config file values.
+///
+/// Bug AK Commit 3: the six migrated LLM api_keys (anthropic /
+/// openai / deepseek / gemini / nvidia / openrouter) now read
+/// from the kernel `SecretsFacade` via
+/// `kernel::secrets::global::try_facade()`. The facade's lookup
+/// chain (env → keyring stub → sqlite → memory) preserves the
+/// "env-first" precedence the previous direct env::var path
+/// gave. The post-migration on-disk
+/// `config.llm.<provider>_api_key` fields are empty by design;
+/// the legacy `non_empty(&config.llm.X)` fallback is unreachable
+/// after Commit 3's startup migration runs. We keep a fallback
+/// only when the global facade isn't installed (test paths that
+/// bypass `kernel::startup::run_migrations`).
+///
+/// The six env-only providers (groq / mistral / together /
+/// fireworks / perplexity / cohere) keep the direct
+/// `std::env::var` shape — they have no NexusConfig backing and
+/// no migration path. Routing them through the facade would be
+/// uniform but adds no benefit over a direct env read.
 pub(crate) fn build_provider_config(config: &NexusConfig) -> ProviderSelectionConfig {
     let non_empty = |s: &str| -> Option<String> {
         if s.trim().is_empty() {
@@ -839,36 +858,42 @@ pub(crate) fn build_provider_config(config: &NexusConfig) -> ProviderSelectionCo
         }
     };
 
-    // Optional: env vars are optional provider configuration; missing vars yield None
+    // Bug AK Commit 3: facade-or-env helper for the six migrated
+    // LLM keys. Production: facade is installed; its lookup chain
+    // is keyring-stub → env → sqlite → memory, which preserves
+    // env-first precedence pre-migration callers expected. Tests
+    // that skip startup wiring: facade is None, fall back to a
+    // direct env::var so the path still finds operator-set
+    // ANTHROPIC_API_KEY etc. The legacy non_empty(&config.llm.X)
+    // fallback is dropped — post-migration those fields are empty
+    // and the pre-migration window for tests is covered by env::var.
+    let facade = nexus_kernel::secrets::global::try_facade();
+    let llm_lookup = |vault_name: &str, env_name: &str| -> Option<String> {
+        if let Some(f) = facade.as_ref() {
+            if let Ok(s) = f.get_secret("llm", vault_name) {
+                return Some(s.value.to_string());
+            }
+        }
+        std::env::var(env_name).ok()
+    };
+
     ProviderSelectionConfig {
         provider: std::env::var("LLM_PROVIDER").ok(),
         ollama_url: std::env::var("OLLAMA_URL")
             .ok()
             .or_else(|| non_empty(&config.llm.ollama_url)),
-        deepseek_api_key: std::env::var("DEEPSEEK_API_KEY")
-            .ok()
-            .or_else(|| non_empty(&config.llm.deepseek_api_key)),
-        anthropic_api_key: std::env::var("ANTHROPIC_API_KEY")
-            .ok()
-            .or_else(|| non_empty(&config.llm.anthropic_api_key)),
-        openai_api_key: std::env::var("OPENAI_API_KEY")
-            .ok()
-            .or_else(|| non_empty(&config.llm.openai_api_key)),
-        gemini_api_key: std::env::var("GEMINI_API_KEY")
-            .ok()
-            .or_else(|| non_empty(&config.llm.gemini_api_key)),
+        deepseek_api_key: llm_lookup("deepseek", "DEEPSEEK_API_KEY"),
+        anthropic_api_key: llm_lookup("anthropic", "ANTHROPIC_API_KEY"),
+        openai_api_key: llm_lookup("openai", "OPENAI_API_KEY"),
+        gemini_api_key: llm_lookup("gemini", "GEMINI_API_KEY"),
         groq_api_key: std::env::var("GROQ_API_KEY").ok(),
         mistral_api_key: std::env::var("MISTRAL_API_KEY").ok(),
         together_api_key: std::env::var("TOGETHER_API_KEY").ok(),
         fireworks_api_key: std::env::var("FIREWORKS_API_KEY").ok(),
         perplexity_api_key: std::env::var("PERPLEXITY_API_KEY").ok(),
         cohere_api_key: std::env::var("COHERE_API_KEY").ok(),
-        openrouter_api_key: std::env::var("OPENROUTER_API_KEY")
-            .ok()
-            .or_else(|| non_empty(&config.llm.openrouter_api_key)),
-        nvidia_api_key: std::env::var("NVIDIA_NIM_API_KEY")
-            .ok()
-            .or_else(|| non_empty(&config.llm.nvidia_api_key)),
+        openrouter_api_key: llm_lookup("openrouter", "OPENROUTER_API_KEY"),
+        nvidia_api_key: llm_lookup("nvidia", "NVIDIA_NIM_API_KEY"),
         flash_model_path: std::env::var("FLASH_MODEL_PATH").ok(),
         claude_code_enabled: std::env::var("CLAUDE_CODE_ENABLED")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))

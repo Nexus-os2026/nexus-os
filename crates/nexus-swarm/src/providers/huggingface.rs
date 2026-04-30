@@ -15,8 +15,11 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::time::{Duration, Instant};
 
-const KEYRING_SERVICE: &str = "nexus.hf";
-const KEYRING_USER: &str = "token";
+// Bug AK Commit 3: per-provider KEYRING_SERVICE / KEYRING_USER
+// constants removed. The live OS keyring backend (Commit 4) will
+// own the namespace strings centrally inside
+// kernel/src/secrets/backend_keyring.rs. See anthropic.rs for
+// the rewrite rationale.
 const DEFAULT_BASE_URL: &str = "https://api-inference.huggingface.co";
 const DEFAULT_MODEL_FALLBACK: &str = "meta-llama/Llama-3.2-3B-Instruct";
 
@@ -62,11 +65,21 @@ impl HuggingFaceProvider {
         if let Some(t) = &self.token_override {
             return Ok(t.clone());
         }
-        let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
-            .map_err(|e| ProviderError::NotConfigured(format!("hf keyring: {e}")))?;
-        entry
-            .get_password()
-            .map_err(|_| ProviderError::NotConfigured("hf token missing from keyring".into()))
+        // Bug AK Commit 3: route through the kernel SecretsFacade.
+        // See anthropic.rs for the rationale. Vault name uses
+        // "huggingface" (matches the existing
+        // env_override_providers default expansion); env-fallback
+        // resolves HUGGINGFACE_API_KEY.
+        let facade = nexus_kernel::secrets::global::try_facade().ok_or_else(|| {
+            ProviderError::NotConfigured(
+                "huggingface: vault not initialized (kernel::startup::run_migrations not run)"
+                    .into(),
+            )
+        })?;
+        facade
+            .get_secret("llm", "huggingface")
+            .map(|s| s.value.to_string())
+            .map_err(|_| ProviderError::NotConfigured("hf token missing from vault".into()))
     }
 }
 

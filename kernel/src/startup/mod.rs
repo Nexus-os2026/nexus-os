@@ -119,6 +119,13 @@ mod tests {
         config.social.x_api_secret = "cs".into();
         config.social.x_access_token = "at".into();
         config.social.x_access_secret = "as".into();
+        // Bug AK Commit 3: Phase 1 aggregate is 4 social + 6 llm = 10.
+        config.llm.anthropic_api_key = "sk-ant".into();
+        config.llm.openai_api_key = "sk-openai".into();
+        config.llm.deepseek_api_key = "sk-ds".into();
+        config.llm.gemini_api_key = "sk-gem".into();
+        config.llm.nvidia_api_key = "sk-nv".into();
+        config.llm.openrouter_api_key = "sk-or".into();
 
         // Isolate the config-file save path.
         let tmpdir =
@@ -147,13 +154,19 @@ mod tests {
                 fields_migrated,
                 config_resave_failed,
             } => {
-                assert_eq!(fields_migrated.len(), 4);
+                assert_eq!(fields_migrated.len(), 10);
                 assert!(!config_resave_failed);
             }
             MigrationReport::AlreadyRun => panic!("expected Migrated"),
         }
         assert!(config.social.x_api_key.is_empty());
         assert!(config.social.x_access_token.is_empty());
+        assert!(config.llm.anthropic_api_key.is_empty());
+        assert!(config.llm.openai_api_key.is_empty());
+        assert!(config.llm.deepseek_api_key.is_empty());
+        assert!(config.llm.gemini_api_key.is_empty());
+        assert!(config.llm.nvidia_api_key.is_empty());
+        assert!(config.llm.openrouter_api_key.is_empty());
         assert_eq!(db.schema_version("credential_vault_v1").unwrap(), Some(1));
 
         std::env::remove_var("NEXUS_CONFIG_PATH");

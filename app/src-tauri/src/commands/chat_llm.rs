@@ -2796,39 +2796,41 @@ pub(crate) async fn get_available_providers(
     Ok(providers)
 }
 
-/// Save an API key for a provider into `~/.nexus/config.toml` and set the
-/// environment variable for the current session.
+/// Save an API key for a provider.
+///
+/// Bug AK Commit 3: writes go to the kernel `SecretsFacade`
+/// (vault scope `"llm"`) instead of `~/.nexus/config.toml`. The
+/// in-process `std::env::set_var` is preserved so the facade's
+/// env-first lookup chain sees the new value immediately within
+/// the running process — without it, a freshly-set key would be
+/// resolvable only via SQLite and only after a kernel restart
+/// from sqlite. groq stays env-only (no NexusConfig backing,
+/// not in the migrated set).
 pub(crate) fn save_provider_api_key(provider: String, api_key: String) -> Result<(), String> {
-    let mut config = load_config().map_err(agent_error)?;
+    use nexus_kernel::secrets::Zeroizing;
 
-    match provider.to_lowercase().as_str() {
-        "anthropic" | "claude" => {
-            config.llm.anthropic_api_key = api_key.clone();
-            std::env::set_var("ANTHROPIC_API_KEY", &api_key);
-        }
-        "openai" => {
-            config.llm.openai_api_key = api_key.clone();
-            std::env::set_var("OPENAI_API_KEY", &api_key);
-        }
-        "deepseek" => {
-            config.llm.deepseek_api_key = api_key.clone();
-            std::env::set_var("DEEPSEEK_API_KEY", &api_key);
-        }
-        "gemini" | "google" => {
-            config.llm.gemini_api_key = api_key.clone();
-            std::env::set_var("GEMINI_API_KEY", &api_key);
-        }
-        "nvidia" | "nvidia-nim" | "nim" => {
-            config.llm.nvidia_api_key = api_key.clone();
-            std::env::set_var("NVIDIA_NIM_API_KEY", &api_key);
-        }
-        "groq" => {
-            std::env::set_var("GROQ_API_KEY", &api_key);
-        }
+    let (vault_name, env_name): (Option<&str>, &str) = match provider.to_lowercase().as_str() {
+        "anthropic" | "claude" => (Some("anthropic"), "ANTHROPIC_API_KEY"),
+        "openai" => (Some("openai"), "OPENAI_API_KEY"),
+        "deepseek" => (Some("deepseek"), "DEEPSEEK_API_KEY"),
+        "gemini" | "google" => (Some("gemini"), "GEMINI_API_KEY"),
+        "nvidia" | "nvidia-nim" | "nim" => (Some("nvidia"), "NVIDIA_NIM_API_KEY"),
+        "openrouter" => (Some("openrouter"), "OPENROUTER_API_KEY"),
+        "groq" => (None, "GROQ_API_KEY"),
         _ => return Err(format!("Unknown provider: {provider}")),
-    }
+    };
 
-    save_nexus_config(&config).map_err(agent_error)
+    if let Some(name) = vault_name {
+        let facade = nexus_kernel::secrets::global::try_facade()
+            .ok_or_else(|| "vault not initialized".to_string())?;
+        facade
+            .set_secret("llm", name, Zeroizing::new(api_key.clone()))
+            .map_err(|e| format!("vault write failed: {e}"))?;
+    }
+    // Always update the in-process env var so the facade's env-first
+    // chain sees the new value without a restart.
+    std::env::set_var(env_name, &api_key);
+    Ok(())
 }
 
 /// Status of the Claude Code CLI, returned to the frontend.
@@ -2932,15 +2934,27 @@ const API_PROVIDER_IDS: &[&str] = &[
 const CLI_PROVIDER_IDS: &[&str] = &["claude_code", "codex_cli"];
 
 fn api_key_for_provider(config: &NexusConfig, id: &str) -> String {
-    match id {
-        "openrouter" => config.llm.openrouter_api_key.clone(),
-        "deepseek" => config.llm.deepseek_api_key.clone(),
-        "nvidia" => config.llm.nvidia_api_key.clone(),
-        "openai" => config.llm.openai_api_key.clone(),
-        "gemini" => config.llm.gemini_api_key.clone(),
-        "anthropic" => config.llm.anthropic_api_key.clone(),
-        _ => String::new(),
+    // Bug AK Commit 3: source of truth shifted from
+    // NexusConfig.llm.<provider>_api_key to the kernel
+    // SecretsFacade (scope "llm"). Post-migration, the config
+    // fields are empty strings; the facade serves env → sqlite.
+    // Fall back to the legacy config field only when the facade
+    // isn't installed (test paths). Empty-string return preserves
+    // the existing "no key configured" semantics callers depend
+    // on.
+    let _ = config; // retained for signature compatibility;
+                    // the legacy non_empty(&config.llm.<id>_api_key)
+                    // fallback is dropped per Bug AK Commit 3 — see
+                    // app/src-tauri/src/commands/agents.rs::
+                    // build_provider_config rationale.
+    if let Some(facade) = nexus_kernel::secrets::global::try_facade() {
+        if let Ok(s) = facade.get_secret("llm", id) {
+            return s.value.to_string();
+        }
     }
+    // Facade not installed (test path) or key absent: callers
+    // treat empty string as "no key configured".
+    String::new()
 }
 
 fn is_api_provider_enabled(config: &NexusConfig, id: &str) -> bool {
