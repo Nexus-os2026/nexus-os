@@ -71,6 +71,7 @@ pub mod self_improve;
 pub mod self_rewrite;
 pub mod simulation;
 pub mod speculative;
+pub mod startup;
 pub mod supervisor;
 pub mod team_orchestrator;
 pub mod temporal;

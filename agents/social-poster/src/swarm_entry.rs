@@ -99,6 +99,7 @@ use nexus_connectors_web::WebAgentContext;
 use nexus_content::compliance::{check_compliance, ComplianceDecision};
 use nexus_content::generator::SocialPlatform;
 use nexus_kernel::errors::AgentError as KernelAgentError;
+use nexus_kernel::secrets::SecretsFacade;
 use nexus_swarm_core::{AgentError, AgentExecutionContext, InvokeRequest, SwarmAgentEntry};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -150,24 +151,42 @@ pub trait PublishExecutor: Send + Sync {
 /// `tokio::task::spawn_blocking`. Builds a fresh `WebAgentContext`
 /// per call (see locked decision #2) — capabilities and fuel are
 /// adapter-local concerns, not entry-level state.
-pub struct RealPublishExecutor;
-
-impl RealPublishExecutor {
-    pub fn new() -> Self {
-        Self
-    }
+pub struct RealPublishExecutor {
+    /// Bug AK Commit 2: facade is the canonical credential source
+    /// after the SocialConfig migration. `credentials_present`
+    /// reads four `social.*` keys; missing keys return false.
+    facade: Arc<SecretsFacade>,
 }
 
-impl Default for RealPublishExecutor {
-    fn default() -> Self {
-        Self::new()
+impl RealPublishExecutor {
+    pub fn new(facade: Arc<SecretsFacade>) -> Self {
+        Self { facade }
     }
 }
 
 #[async_trait]
 impl PublishExecutor for RealPublishExecutor {
     fn credentials_present(&self) -> bool {
-        x_credentials_present()
+        // Bug AK Commit 2: replaces the old free fn
+        // `x_credentials_present` that read NexusConfig.social.x_*.
+        // Vault names use the post-migration renames (see
+        // `kernel::secrets::migrate` module header). All four
+        // OAuth1 fields must be present and non-empty for a real
+        // publish; bearer-token mode is not currently consumed by
+        // `TwitterConnector::post_status_update` so we don't gate
+        // on it.
+        let names = [
+            "x_consumer_key",
+            "x_consumer_secret",
+            "x_access_token",
+            "x_access_token_secret",
+        ];
+        names.iter().all(|name| {
+            self.facade
+                .get_secret("social", name)
+                .map(|s| !s.value.is_empty())
+                .unwrap_or(false)
+        })
     }
 
     async fn publish(&self, text: String) -> Result<TweetResult, KernelAgentError> {
@@ -189,26 +208,6 @@ impl PublishExecutor for RealPublishExecutor {
                 "publish task join error: {join_err}"
             ))),
         }
-    }
-}
-
-/// Bug V: are X / Twitter OAuth1 credentials configured? Mirrors the
-/// gate that `connectors/web/src/twitter.rs::load_twitter_credentials`
-/// applies (all four fields non-empty after trim). We can't call the
-/// connector's loader directly (it's `fn`, not `pub fn`, and locked
-/// decision #1 forbids touching twitter.rs); we read the same kernel
-/// config it reads. Returns `true` iff a real publish would not fall
-/// through to the connector's mock mode.
-fn x_credentials_present() -> bool {
-    match nexus_kernel::config::load_config() {
-        Ok(config) => {
-            let s = &config.social;
-            !s.x_api_key.trim().is_empty()
-                && !s.x_api_secret.trim().is_empty()
-                && !s.x_access_token.trim().is_empty()
-                && !s.x_access_secret.trim().is_empty()
-        }
-        Err(_) => false,
     }
 }
 
@@ -368,10 +367,15 @@ impl SocialPosterEntry {
     /// Production constructor. Uses the real Twitter publish
     /// executor; for tests, prefer
     /// [`SocialPosterEntry::with_publish_executor`].
-    pub fn new(publish_state: Arc<dyn PublishStateHandle>) -> Self {
+    ///
+    /// Bug AK Commit 2: `facade` is threaded into
+    /// `RealPublishExecutor` so `credentials_present` resolves
+    /// from the kernel `SecretsFacade` rather than reading
+    /// `NexusConfig.social.x_*` directly.
+    pub fn new(publish_state: Arc<dyn PublishStateHandle>, facade: Arc<SecretsFacade>) -> Self {
         Self {
             publish_state,
-            publish_executor: Arc::new(RealPublishExecutor::new()),
+            publish_executor: Arc::new(RealPublishExecutor::new(facade)),
         }
     }
 
@@ -726,6 +730,11 @@ fn build_prompt(input: &SocialPosterInput) -> String {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use nexus_kernel::config::CredentialFacadeConfig;
+    use nexus_kernel::secrets::backend_env::EnvBackend;
+    use nexus_kernel::secrets::backend_keyring::KeyringBackendAdapter;
+    use nexus_kernel::secrets::backend_memory::MemoryBackend;
+    use nexus_kernel::secrets::Zeroizing;
     use nexus_swarm_core::emitter::recording::{Recorded, RecordingEmitter};
     use nexus_swarm_core::{
         CancelToken, CostClass, ModelDescriptor, NodeBudget, PrivacyClass, Provider,
@@ -734,6 +743,28 @@ mod tests {
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use uuid::Uuid;
+
+    /// Bug AK Commit 2: build a Memory-only facade for unit tests.
+    /// Construction returns a fresh facade per call; pass
+    /// pre-populated `(scope, name, value)` tuples to seed.
+    fn test_facade(seed: &[(&str, &str, &str)]) -> Arc<SecretsFacade> {
+        let env = Arc::new(EnvBackend::new());
+        let kr = Arc::new(KeyringBackendAdapter::os_keyring());
+        let mem = Arc::new(MemoryBackend::new());
+        // Seed memory backend before wrapping it.
+        for (scope, name, value) in seed {
+            use nexus_kernel::secrets::SecretBackend;
+            mem.set(scope, name, Zeroizing::new(value.to_string()))
+                .expect("seed memory backend");
+        }
+        Arc::new(SecretsFacade::new(
+            env,
+            kr,
+            None,
+            mem,
+            &CredentialFacadeConfig::default(),
+        ))
+    }
 
     struct FakeProvider {
         text: String,
@@ -818,9 +849,10 @@ mod tests {
             "message": "Tokio 1.50 release",
             "tone": "concise",
         });
-        let out = SocialPosterEntry::new(std::sync::Arc::new(
-            crate::publish_state::InMemoryPublishState::new(),
-        ))
+        let out = SocialPosterEntry::new(
+            std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new()),
+            test_facade(&[]),
+        )
         .execute(input, &ctx)
         .await
         .expect("ok");
@@ -850,9 +882,10 @@ mod tests {
             "message": "msg",
             "dry_run": false,
         });
-        let out = SocialPosterEntry::new(std::sync::Arc::new(
-            crate::publish_state::InMemoryPublishState::new(),
-        ))
+        let out = SocialPosterEntry::new(
+            std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new()),
+            test_facade(&[]),
+        )
         .execute(input, &ctx)
         .await
         .expect("ok");
@@ -870,9 +903,10 @@ mod tests {
         let rec = Arc::new(RecordingEmitter::new());
         let ctx = mk_ctx(rec, CancelToken::new(), "anything");
         let input = json!({ "channel": "X", "audience": "devs" });
-        let err = SocialPosterEntry::new(std::sync::Arc::new(
-            crate::publish_state::InMemoryPublishState::new(),
-        ))
+        let err = SocialPosterEntry::new(
+            std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new()),
+            test_facade(&[]),
+        )
         .execute(input, &ctx)
         .await
         .expect_err("expected InvalidInput");
@@ -889,9 +923,10 @@ mod tests {
         let rec = Arc::new(RecordingEmitter::new());
         let ctx = mk_ctx(rec, CancelToken::new(), "anything");
         let input = json!({ "channel": "X", "audience": "devs", "message": "  " });
-        let err = SocialPosterEntry::new(std::sync::Arc::new(
-            crate::publish_state::InMemoryPublishState::new(),
-        ))
+        let err = SocialPosterEntry::new(
+            std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new()),
+            test_facade(&[]),
+        )
         .execute(input, &ctx)
         .await
         .expect_err("expected InvalidInput");
@@ -905,9 +940,10 @@ mod tests {
         let ctx = mk_ctx(rec, cancel.clone(), "anything");
         cancel.cancel();
         let input = json!({ "channel": "X", "audience": "devs", "message": "msg" });
-        let err = SocialPosterEntry::new(std::sync::Arc::new(
-            crate::publish_state::InMemoryPublishState::new(),
-        ))
+        let err = SocialPosterEntry::new(
+            std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new()),
+            test_facade(&[]),
+        )
         .execute(input, &ctx)
         .await
         .expect_err("expected Cancelled");
@@ -930,9 +966,10 @@ mod tests {
             "audience": "devs",
             "message": "ship it",
         });
-        SocialPosterEntry::new(std::sync::Arc::new(
-            crate::publish_state::InMemoryPublishState::new(),
-        ))
+        SocialPosterEntry::new(
+            std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new()),
+            test_facade(&[]),
+        )
         .execute(input, &ctx)
         .await
         .expect("ok");
@@ -977,9 +1014,10 @@ mod tests {
             "audience": "devs",
             "message": "long",
         });
-        let out = SocialPosterEntry::new(std::sync::Arc::new(
-            crate::publish_state::InMemoryPublishState::new(),
-        ))
+        let out = SocialPosterEntry::new(
+            std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new()),
+            test_facade(&[]),
+        )
         .execute(input, &ctx)
         .await
         .expect("ok");
@@ -1031,7 +1069,7 @@ mod tests {
             "message": "drafty",
             "dry_run": true,
         });
-        let out = SocialPosterEntry::new(state.clone())
+        let out = SocialPosterEntry::new(state.clone(), test_facade(&[]))
             .execute(input, &ctx)
             .await
             .expect("ok");
@@ -1084,7 +1122,7 @@ mod tests {
             "message": "draft",
             "dry_run": true,
         });
-        let out = SocialPosterEntry::new(state.clone())
+        let out = SocialPosterEntry::new(state.clone(), test_facade(&[]))
             .execute(input, &ctx)
             .await
             .expect("ok");
@@ -1118,7 +1156,7 @@ mod tests {
             "message": "ship it",
             "dry_run": false,
         });
-        let out = SocialPosterEntry::new(state.clone())
+        let out = SocialPosterEntry::new(state.clone(), test_facade(&[]))
             .execute(input, &ctx)
             .await
             .expect("ok");
@@ -1147,7 +1185,7 @@ mod tests {
         }
 
         let ctx_a = mk_ctx(rec_a, CancelToken::new(), "draft");
-        let blocked_out = SocialPosterEntry::new(state.clone())
+        let blocked_out = SocialPosterEntry::new(state.clone(), test_facade(&[]))
             .execute(
                 json!({
                     "channel": "Instagram",
@@ -1166,7 +1204,7 @@ mod tests {
         ));
 
         let ctx_b = mk_ctx(rec_b, CancelToken::new(), "draft");
-        let allowed_out = SocialPosterEntry::new(state.clone())
+        let allowed_out = SocialPosterEntry::new(state.clone(), test_facade(&[]))
             .execute(
                 json!({
                     "channel": "Instagram",
@@ -1635,5 +1673,57 @@ mod tests {
         assert_ne!(h1, h3, "account_id must affect the digest");
         assert_ne!(h1, h4, "platform must affect the digest");
         assert_eq!(h1.len(), 64, "sha256 hex must be 64 chars");
+    }
+
+    // ── Bug AK Commit 2: facade-threaded credentials_present ────────
+
+    #[tokio::test]
+    async fn ak2_credentials_present_false_on_empty_facade() {
+        let facade = test_facade(&[]);
+        let exec = RealPublishExecutor::new(facade);
+        assert!(!exec.credentials_present());
+    }
+
+    #[tokio::test]
+    async fn ak2_credentials_present_true_when_all_four_keys_in_facade() {
+        let facade = test_facade(&[
+            ("social", "x_consumer_key", "ck"),
+            ("social", "x_consumer_secret", "cs"),
+            ("social", "x_access_token", "at"),
+            ("social", "x_access_token_secret", "ats"),
+        ]);
+        let exec = RealPublishExecutor::new(facade);
+        assert!(exec.credentials_present());
+    }
+
+    #[tokio::test]
+    async fn ak2_credentials_present_false_when_only_three_keys_present() {
+        let facade = test_facade(&[
+            ("social", "x_consumer_key", "ck"),
+            ("social", "x_consumer_secret", "cs"),
+            ("social", "x_access_token", "at"),
+            // x_access_token_secret missing
+        ]);
+        let exec = RealPublishExecutor::new(facade);
+        assert!(!exec.credentials_present());
+    }
+
+    #[tokio::test]
+    async fn ak2_social_poster_entry_constructs_with_facade() {
+        // Smoke test for the new SocialPosterEntry::new signature.
+        // No execute call — just verify construction succeeds and
+        // credentials_present reflects the seeded facade.
+        let state = std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new());
+        let facade = test_facade(&[
+            ("social", "x_consumer_key", "ck"),
+            ("social", "x_consumer_secret", "cs"),
+            ("social", "x_access_token", "at"),
+            ("social", "x_access_token_secret", "ats"),
+        ]);
+        let _entry = SocialPosterEntry::new(state, Arc::clone(&facade));
+        // Indirect assertion: build a separate executor with the
+        // same facade and check it sees the seeded credentials.
+        let exec = RealPublishExecutor::new(facade);
+        assert!(exec.credentials_present());
     }
 }

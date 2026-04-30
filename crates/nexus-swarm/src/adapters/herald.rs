@@ -96,7 +96,34 @@ impl SwarmCapability for HeraldAdapter {
         // fallback (test fixtures with empty provider maps).
         use nexus_swarm_core::SwarmAgentEntry;
         use social_poster_agent::swarm_entry::SocialPosterEntry;
-        SocialPosterEntry::new(Arc::clone(&self.publish_state))
+        // Bug AK Commit 2: SocialPosterEntry::new now requires an
+        // Arc<SecretsFacade>. The herald adapter has no facade in
+        // scope — adding one to `HeraldAdapter::new` would ripple
+        // through every adapter constructor. Read the process
+        // singleton installed by `kernel::startup::run_migrations`;
+        // fall back to a Memory-only facade when the global isn't
+        // installed so existing nexus-swarm integration tests
+        // (adapter_emission_tests etc.) that bypass startup wiring
+        // still get a working adapter — credentials_present
+        // returns false on the empty Memory backend, matching the
+        // pre-Commit-2 "no creds → fall through to mock" behavior.
+        // Production always has global installed (AppState::new
+        // wires it). FLAGGED AS UNILATERAL in the Commit 2 report.
+        let facade = nexus_kernel::secrets::global::try_facade().unwrap_or_else(|| {
+            use nexus_kernel::config::CredentialFacadeConfig;
+            use nexus_kernel::secrets::backend_env::EnvBackend;
+            use nexus_kernel::secrets::backend_keyring::KeyringBackendAdapter;
+            use nexus_kernel::secrets::backend_memory::MemoryBackend;
+            use nexus_kernel::secrets::SecretsFacade;
+            Arc::new(SecretsFacade::new(
+                Arc::new(EnvBackend::new()),
+                Arc::new(KeyringBackendAdapter::os_keyring()),
+                None,
+                Arc::new(MemoryBackend::new()),
+                &CredentialFacadeConfig::default(),
+            ))
+        });
+        SocialPosterEntry::new(Arc::clone(&self.publish_state), facade)
             .execute(invocation.inputs, ctx)
             .await
             .map_err(map_agent_error)

@@ -1224,6 +1224,31 @@ impl AppState {
                 })
             }),
         );
+        // Bug AK Commit 2: run the one-shot credential-vault
+        // migration before any consumer reads `config.social.x_*`
+        // (twitter / social-poster / etc.). This installs the
+        // process-singleton SecretsFacade exposed by
+        // `kernel::secrets::global::facade()`. Failure is
+        // best-effort — startup continues so a broken vault
+        // doesn't keep the desktop from launching, but consumers
+        // that hit `facade()` after a failed install will panic
+        // with the OnceLock not-installed message. Surface the
+        // result to stderr so an operator can see it.
+        {
+            let mut migration_config = load_config().unwrap_or_default();
+            match nexus_kernel::startup::run_migrations(&mut migration_config, db.clone()) {
+                Ok(report) => {
+                    eprintln!("kernel::startup: secrets migration {report:?}");
+                }
+                Err(e) => {
+                    eprintln!(
+                        "kernel::startup: secrets migration FAILED: {e}; \
+                         consumers reading via facade() will panic"
+                    );
+                }
+            }
+        }
+
         let evolution_tracker = Arc::new(nexus_kernel::cognitive::EvolutionTracker::new(Box::new(
             DbStrategyStore { db: db.clone() },
         )));

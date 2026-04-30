@@ -22,6 +22,7 @@ pub mod backend_env;
 pub mod backend_keyring;
 pub mod backend_memory;
 pub mod backend_sqlite;
+pub mod global;
 pub mod migrate;
 
 #[cfg(test)]

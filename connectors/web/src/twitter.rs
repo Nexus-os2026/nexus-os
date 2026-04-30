@@ -5,8 +5,8 @@ use hmac::{Hmac, Mac};
 use nexus_connectors_core::idempotency::IdempotencyManager;
 use nexus_connectors_core::rate_limit::{RateLimitDecision, RateLimiter};
 use nexus_kernel::audit::{AuditTrail, EventType};
-use nexus_kernel::config::load_config;
 use nexus_kernel::errors::AgentError;
+use nexus_kernel::secrets::SecretError;
 use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
@@ -440,13 +440,37 @@ impl Default for TwitterConnector {
 }
 
 fn load_twitter_credentials() -> Result<Option<TwitterCredentials>, AgentError> {
-    let config = load_config()?;
-    let social = config.social;
-    let key = social.x_api_key.trim().to_string();
-    let secret = social.x_api_secret.trim().to_string();
-    let token = social.x_access_token.trim().to_string();
-    let token_secret = social.x_access_secret.trim().to_string();
+    // Bug AK Commit 2: SocialConfig fields no longer live in
+    // ~/.nexus/config.toml after migration. Resolve via the kernel
+    // SecretsFacade singleton installed by
+    // `kernel::startup::run_migrations`. If the facade has not yet
+    // been installed (e.g., a test that bypassed startup wiring),
+    // treat as "no creds" — Ok(None) — matching the prior empty-
+    // field semantics. See ADR 0004 Implementation phasing.
+    let Some(facade) = nexus_kernel::secrets::global::try_facade() else {
+        return Ok(None);
+    };
 
+    let read = |name: &str| -> Result<Option<String>, AgentError> {
+        match facade.get_secret("social", name) {
+            Ok(secret) => Ok(Some(secret.value.to_string().trim().to_string())),
+            Err(SecretError::NotFound) => Ok(None),
+            Err(e) => Err(AgentError::SupervisorError(format!(
+                "vault read failed for social.{name}: {e}"
+            ))),
+        }
+    };
+
+    let key = read("x_consumer_key")?;
+    let secret = read("x_consumer_secret")?;
+    let token = read("x_access_token")?;
+    let token_secret = read("x_access_token_secret")?;
+
+    let (Some(key), Some(secret), Some(token), Some(token_secret)) =
+        (key, secret, token, token_secret)
+    else {
+        return Ok(None);
+    };
     if key.is_empty() || secret.is_empty() || token.is_empty() || token_secret.is_empty() {
         return Ok(None);
     }
