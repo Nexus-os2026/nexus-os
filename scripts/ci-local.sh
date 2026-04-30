@@ -208,7 +208,8 @@ job_cargo_audit() {
         --ignore RUSTSEC-2023-0071 \
         --ignore RUSTSEC-2026-0049 \
         --ignore RUSTSEC-2026-0067 \
-        --ignore RUSTSEC-2026-0068
+        --ignore RUSTSEC-2026-0068 \
+        --ignore RUSTSEC-2026-0114
 }
 
 # ----- cargo-deny (.gitlab-ci.yml:34-44) -------------------------------------

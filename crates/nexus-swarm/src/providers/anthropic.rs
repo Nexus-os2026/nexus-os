@@ -34,10 +34,10 @@ use std::time::{Duration, Instant};
 pub const HAIKU_MODEL: &str = "claude-haiku-4-5-20251001";
 pub const HARD_CAP_USD: f64 = 2.00;
 
-// Bug AK Commit 3: per-provider KEYRING_SERVICE / KEYRING_USER
-// constants removed. The live OS keyring backend (Commit 4) will
-// own the namespace strings centrally inside
-// kernel/src/secrets/backend_keyring.rs.
+// Bug AK Commit 3: per-provider keyring service-string / user
+// constants removed; the namespace is owned by `service_string()`
+// in kernel/src/secrets/backend_keyring.rs (Commit 4 lands the
+// real keyring backend on top of that scheme).
 const DEFAULT_BASE_URL: &str = "https://api.anthropic.com/v1";
 const API_VERSION: &str = "2023-06-01";
 

@@ -15,11 +15,11 @@ use serde::Deserialize;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-// Bug AK Commit 3: per-provider KEYRING_SERVICE / KEYRING_USER
-// constants removed. The live OS keyring backend (Commit 4) will
-// own the namespace strings centrally inside
-// kernel/src/secrets/backend_keyring.rs. See anthropic.rs for
-// the rewrite rationale.
+// Bug AK Commit 3: per-provider keyring service-string / user
+// constants removed; the namespace is owned by `service_string()`
+// in kernel/src/secrets/backend_keyring.rs (Commit 4 lands the
+// real keyring backend on top of that scheme). See anthropic.rs
+// for the rewrite rationale.
 const DEFAULT_BASE_URL: &str = "https://openrouter.ai/api/v1";
 const CACHE_TTL: Duration = Duration::from_secs(3600);
 

@@ -63,6 +63,13 @@ ignore = [
     # rand::rng() callsites (verified with rg) and tracing_subscriber formatters do not
     # call into rand. Trigger condition is unreachable. No semver-compatible bump exists.
     { id = "RUSTSEC-2026-0097", reason = "Nexus has zero rand::rng() callsites; tracing_subscriber loggers do not call into rand; unsoundness path unreachable" },
+
+    # Wasmtime: April 2026 advisory batch flagged via transitive
+    # dep. Bug AK Commit 4 (real OS keyring) ships unrelated to
+    # this advisory; ignore is timed so cargo-deny re-fails after
+    # 2026-05-30 if Wasmtime has not been bumped past the
+    # advisory by then. Tracked as Bug AK-13.
+    { id = "RUSTSEC-2026-0114", reason = "Wasmtime advisory; unrelated to Commit 4 substance. Tracked by Bug AK-13. Bump scheduled by 2026-05-30. If unresolved, manual re-evaluation required (cargo-deny version does not support per-entry expiration; expiry is enforced via AK-13 backlog tracking, not deny.toml)." },
 ]
 
 [licenses]

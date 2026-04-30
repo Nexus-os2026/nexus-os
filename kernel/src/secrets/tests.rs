@@ -142,10 +142,14 @@ fn resolve_log_seen_dedups_per_provider() {
 #[test]
 fn set_secret_writes_to_sqlite_and_get_round_trips() {
     let cfg = CredentialFacadeConfig::default();
-    // Use the OsKeyring stub here so that `set` falls through to
-    // sqlite (the stub returns BackendNotConfigured on every op).
-    // MockKeyring would itself accept the write and short-circuit.
-    let (facade, _db) = build_facade(cfg, KeyringBackendAdapter::os_keyring());
+    // Bug AK Commit 4: must use the rejecting test fixture
+    // because the real `OsKeyring` may accept writes when a
+    // kernel keyring service is available (which is true on
+    // many Linux dev machines). Pre-Commit-4 this used
+    // `os_keyring()` because the stub always rejected. The
+    // rejecting fixture preserves the stub's semantics so
+    // this test deterministically asserts sqlite write-through.
+    let (facade, _db) = build_facade(cfg, KeyringBackendAdapter::rejecting());
     facade
         .set_secret(
             "social",
@@ -339,4 +343,43 @@ fn migrate_returns_sqlite_unavailable_when_facade_lacks_sqlite() {
     let err =
         migrate_config_to_vault(&mut config, &facade).expect_err("expected SqliteUnavailable");
     assert!(matches!(err, MigrationError::SqliteUnavailable));
+}
+
+#[test]
+fn ak_commit4_real_keyring_falls_through_to_memory() {
+    // Bug AK Commit 4: validates that the real keyring backend
+    // (no longer a stub) participates in the facade chain
+    // without breaking fall-through. The keyring path returns
+    // either NotFound (entry absent) or BackendNotConfigured
+    // (no keyring service); both must yield to the next backend.
+    // We seed Memory with a unique key and confirm the facade
+    // returns it — proving the keyring backend stepped aside.
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let unique = format!(
+        "ak_commit4_chain_{}_{}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed),
+    );
+
+    use super::SecretBackend;
+    let env = Arc::new(EnvBackend::new());
+    // Real OS keyring (NOT MockKeyring) — this is the change
+    // Commit 4 ships.
+    let kr = Arc::new(KeyringBackendAdapter::os_keyring());
+    let mem = Arc::new(MemoryBackend::new());
+    mem.set("test", &unique, Zeroizing::new("from-memory".into()))
+        .expect("seed memory");
+    // No sqlite; the chain is env -> keyring -> memory (sqlite
+    // None).
+    let facade = SecretsFacade::new(env, kr, None, mem, &CredentialFacadeConfig::default());
+
+    // Default env_override_providers does NOT include scope
+    // "test", so chain order is keyring-first. Keyring will not
+    // have this unique key (or returns BackendNotConfigured if
+    // service is unavailable); env is unset; sqlite is None;
+    // memory wins.
+    let got = facade.get_secret("test", &unique).expect("ok");
+    assert_eq!(got.value.as_str(), "from-memory");
+    assert_eq!(got.source, ResolvedFrom::Memory);
 }
