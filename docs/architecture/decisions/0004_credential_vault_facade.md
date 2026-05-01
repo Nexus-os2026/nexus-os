@@ -1,6 +1,6 @@
 # ADR 0004: Credential Vault Facade
 
-- **Status:** PROPOSED
+- **Status:** ACCEPTED — Phase 1 shipped 2026-05-01
 - **Date:** 2026-04-30
 - **Deciders:** Suresh Karicheti (architect), Claude (technical advisor)
 - **Supersedes:** None (retires `connectors/core/src/vault.rs` in Phase 1)
@@ -297,7 +297,7 @@ If the `keyring` v3 crate exposes a built-in `mock` feature on the version pinne
 - **Commit 2:** `kernel::startup::run_migrations`, `OnceLock<Arc<SecretsFacade>>` global, `RealPublishExecutor` and `SocialPosterEntry` facade threading, Twitter and search consumer rewire.
 - **Commit 3:** LLM provider migration — 6 fields, vault scope `"llm"`, 4 nexus-swarm provider re-routes. Phase 1 aggregate is 10 fields total (4 SocialConfig + 6 LLM). The 6 env-only providers in `ProviderSelectionConfig` (groq / mistral / together / fireworks / perplexity / cohere) have no NexusConfig backing and need no migration — the facade's `EnvBackend` already serves them. Per-entry `LlmProviderEntry` api_key fields (variable count, dynamic IDs) are deferred to Bug AK-11.
 - **Commit 4:** real OS keyring backend — `keyring` v3 direct dep on `nexus-kernel` with `linux-native` / `apple-native` / `windows-native` features (no D-Bus / libsecret runtime dependency on Linux). Central `service_string("nexus.<scope>.<name>")` scheme + single `KEYRING_USER = "nexus"` constant in `kernel/src/secrets/backend_keyring.rs`. Soft-error policy: every keyring failure other than `NoEntry` returns `SecretError::BackendNotConfigured`, which the facade dispatch loop treats as fall-through (env → keyring → sqlite → memory). CI runners without a kernel keyring service skip the backend automatically. Live round-trip test gated `#[ignore]`; run manually on a desktop session.
-- **Commit 5:** `vault.rs` deletion and `http_connector` migration to facade.
+- **Commit 5:** `vault.rs` deletion + `http_connector` migration. Phase 1 complete.
 
 ## Trigger Conditions for Revisiting
 

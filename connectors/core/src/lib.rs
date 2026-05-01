@@ -8,4 +8,9 @@ pub mod idempotency;
 pub mod rate_limit;
 pub mod registry;
 pub mod validation;
-pub mod vault;
+// Bug AK Commit 5: the connector-local secrets module is
+// removed. Auth-secret resolution is owned by the kernel
+// SecretsFacade (kernel/src/secrets/backend_*.rs).
+// http_connector reads via
+// `kernel::secrets::global::try_facade()` under scope "http".
+// See ADR 0004 Implementation phasing.
