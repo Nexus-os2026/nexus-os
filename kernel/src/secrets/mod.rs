@@ -107,6 +107,14 @@ pub struct SecretsFacade {
     memory: Arc<MemoryBackend>,
     env_override_providers: Vec<String>,
     resolve_log_seen: Mutex<HashSet<String>>,
+    /// Bug AK-15: hash-chained audit trail. Every
+    /// get/set/delete/list call appends one row with the
+    /// (scope, name, result, capability="log_only",
+    /// resolved_from?) shape documented in ADR 0004 §Audit.
+    /// Plaintext values are NEVER recorded — see the
+    /// ak15_audit_records_ops_without_plaintext_leak
+    /// regression test.
+    audit: Arc<Mutex<crate::audit::AuditTrail>>,
 }
 
 impl SecretsFacade {
@@ -115,12 +123,18 @@ impl SecretsFacade {
     /// per-call from `env_override_providers`. `sqlite` is
     /// optional so test fixtures can build a Memory-only facade
     /// without opening a NexusDatabase.
+    ///
+    /// Bug AK-15: takes an `Arc<Mutex<AuditTrail>>` for hash-
+    /// chained audit logging of every facade op. Production
+    /// wiring (`kernel::startup::run_migrations`) reuses
+    /// `AppState::audit`; tests construct a fresh AuditTrail.
     pub fn new(
         env: Arc<EnvBackend>,
         keyring: Arc<KeyringBackendAdapter>,
         sqlite: Option<Arc<SqliteEnvelopeBackend>>,
         memory: Arc<MemoryBackend>,
         config: &CredentialFacadeConfig,
+        audit: Arc<Mutex<crate::audit::AuditTrail>>,
     ) -> Self {
         Self {
             env,
@@ -129,6 +143,54 @@ impl SecretsFacade {
             memory,
             env_override_providers: config.env_override_providers.clone(),
             resolve_log_seen: Mutex::new(HashSet::new()),
+            audit,
+        }
+    }
+
+    /// Bug AK-15: introspection accessor for the in-memory
+    /// audit trail. Used by tests + future federation sinks.
+    pub fn audit_trail(&self) -> Arc<Mutex<crate::audit::AuditTrail>> {
+        Arc::clone(&self.audit)
+    }
+
+    /// Bug AK-15: helper that appends one event to the
+    /// audit trail with the AK-15 payload shape. Failures
+    /// are eprintln'd and swallowed — audit-append failure
+    /// must NEVER block credential resolution (mirror of
+    /// Bug AL's record_swarm_audit defensive policy; Bug
+    /// BE will surface a counter for these in observability).
+    fn append_audit(
+        audit: &Mutex<crate::audit::AuditTrail>,
+        event_kind: &str,
+        scope: &str,
+        name: Option<&str>,
+        result: &str,
+        resolved_from: Option<&str>,
+    ) {
+        // AK-2 will replace Uuid::nil() with the active
+        // AgentExecutionContext once the capability ledger
+        // lands. Until then nil is the documented sentinel.
+        let agent_id = uuid::Uuid::nil();
+        let mut payload = serde_json::Map::new();
+        payload.insert("event".into(), event_kind.into());
+        payload.insert("scope".into(), scope.into());
+        if let Some(n) = name {
+            payload.insert("name".into(), n.into());
+        }
+        payload.insert("result".into(), result.into());
+        // AK-15 placeholder; AK-2 changes the value, not the
+        // schema.
+        payload.insert("capability".into(), "log_only".into());
+        if let Some(src) = resolved_from {
+            payload.insert("resolved_from".into(), src.into());
+        }
+        let mut guard = audit.lock().unwrap_or_else(|p| p.into_inner());
+        if let Err(e) = guard.append_event(
+            agent_id,
+            crate::audit::EventType::UserAction,
+            serde_json::Value::Object(payload),
+        ) {
+            eprintln!("secrets audit append failed (event={event_kind} scope={scope}): {e}");
         }
     }
 
@@ -180,6 +242,14 @@ impl SecretsFacade {
             match backend.get(scope, name) {
                 Ok(value) => {
                     self.maybe_log_first_resolve(scope, kind);
+                    Self::append_audit(
+                        &self.audit,
+                        "secret_accessed",
+                        scope,
+                        Some(name),
+                        "ok",
+                        Some(kind.as_str()),
+                    );
                     return Ok(ResolvedSecret {
                         value,
                         source: kind,
@@ -187,9 +257,27 @@ impl SecretsFacade {
                 }
                 Err(SecretError::NotFound) => continue,
                 Err(SecretError::BackendNotConfigured(_)) => continue,
-                Err(other) => return Err(other),
+                Err(other) => {
+                    Self::append_audit(
+                        &self.audit,
+                        "secret_accessed",
+                        scope,
+                        Some(name),
+                        "error",
+                        None,
+                    );
+                    return Err(other);
+                }
             }
         }
+        Self::append_audit(
+            &self.audit,
+            "secret_accessed",
+            scope,
+            Some(name),
+            "not_found",
+            None,
+        );
         Err(SecretError::NotFound)
     }
 
@@ -207,12 +295,40 @@ impl SecretsFacade {
                 continue;
             };
             match backend.set(scope, name, Zeroizing::new(value.clone().to_string())) {
-                Ok(()) => return Ok(()),
+                Ok(()) => {
+                    Self::append_audit(
+                        &self.audit,
+                        "secret_stored",
+                        scope,
+                        Some(name),
+                        "ok",
+                        Some(kind.as_str()),
+                    );
+                    return Ok(());
+                }
                 Err(SecretError::BackendReadOnly) => continue,
                 Err(SecretError::BackendNotConfigured(_)) => continue,
-                Err(other) => return Err(other),
+                Err(other) => {
+                    Self::append_audit(
+                        &self.audit,
+                        "secret_stored",
+                        scope,
+                        Some(name),
+                        "error",
+                        None,
+                    );
+                    return Err(other);
+                }
             }
         }
+        Self::append_audit(
+            &self.audit,
+            "secret_stored",
+            scope,
+            Some(name),
+            "backend_not_configured",
+            None,
+        );
         Err(SecretError::BackendNotConfigured(
             "no writable backend in chain".into(),
         ))
@@ -244,13 +360,26 @@ impl SecretsFacade {
     /// Delete from every backend that has the entry. Returns Ok
     /// even if no backend held it (idempotent).
     pub fn delete_secret(&self, scope: &str, name: &str) -> Result<(), SecretError> {
-        self.for_each_backend(|backend| backend.delete(scope, name))
+        let outcome = self.for_each_backend(|backend| backend.delete(scope, name));
+        let result = match &outcome {
+            Ok(()) => "ok",
+            Err(_) => "error",
+        };
+        Self::append_audit(
+            &self.audit,
+            "secret_deleted",
+            scope,
+            Some(name),
+            result,
+            None,
+        );
+        outcome
     }
 
     /// Union of names across all backends in the scope.
     pub fn list_secrets(&self, scope: &str) -> Result<Vec<String>, SecretError> {
         let mut acc: HashSet<String> = HashSet::new();
-        self.for_each_backend(|backend| match backend.list(scope) {
+        let collected = self.for_each_backend(|backend| match backend.list(scope) {
             Ok(names) => {
                 for n in names {
                     acc.insert(n);
@@ -258,7 +387,13 @@ impl SecretsFacade {
                 Ok(())
             }
             Err(other) => Err(other),
-        })?;
+        });
+        let result = match &collected {
+            Ok(()) => "ok",
+            Err(_) => "error",
+        };
+        Self::append_audit(&self.audit, "secrets_listed", scope, None, result, None);
+        collected?;
         let mut out: Vec<String> = acc.into_iter().collect();
         out.sort();
         Ok(out)

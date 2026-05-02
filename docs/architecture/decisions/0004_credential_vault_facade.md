@@ -165,7 +165,11 @@ Per-connector (caller-identity) gating is deferred — it requires runtime crate
 
 ### Audit
 
-All `get` / `set` / `delete` go through `nexus_kernel::audit::AuditTrail` on the ADR 0002 hash-chained persistence path. Plaintext values are NEVER logged. The existing `vault.rs` test asserting plaintext absence in audit JSON is preserved and extended to the facade.
+All `get` / `set` / `delete` / `list` operations append a hash-chained event to the kernel `AuditTrail` (in-memory event log with retention archival; SQLite-backed kernel audit persistence is tracked as Bug AK-16, out of Phase 1 scope). Plaintext values are NEVER logged. Secret names are non-sensitive metadata and ARE recorded by convention.
+
+Each event payload includes `scope`, `name` (omitted for `secrets_listed`), `result` (`ok` / `not_found` / `backend_not_configured` / `error`), `capability` (currently `"log_only"` until AK-2 lands the capability ledger), and `resolved_from` (`env` / `keyring` / `sqlite` / `memory`) for successful reads.
+
+The `vault.rs` plaintext-absence invariant is reinstated as `ak15_audit_records_ops_without_plaintext_leak` in `kernel/src/secrets/tests.rs`. Audit-append failures are eprintln'd and swallowed — never block credential resolution (mirror of Bug AL's defensive policy; Bug BE will add an observability counter).
 
 ### Zeroize
 

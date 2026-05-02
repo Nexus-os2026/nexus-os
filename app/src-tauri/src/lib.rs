@@ -1234,9 +1234,19 @@ impl AppState {
         // that hit `facade()` after a failed install will panic
         // with the OnceLock not-installed message. Surface the
         // result to stderr so an operator can see it.
+        // Bug AK-15: construct the AuditTrail BEFORE
+        // run_migrations so the SecretsFacade and AppState
+        // share the same hash-chained instance. Migration
+        // events + post-startup credential ops appear in
+        // one continuous audit chain.
+        let audit = Arc::new(Mutex::new(AuditTrail::new()));
         {
             let mut migration_config = load_config().unwrap_or_default();
-            match nexus_kernel::startup::run_migrations(&mut migration_config, db.clone()) {
+            match nexus_kernel::startup::run_migrations(
+                &mut migration_config,
+                db.clone(),
+                audit.clone(),
+            ) {
                 Ok(report) => {
                     eprintln!("kernel::startup: secrets migration {report:?}");
                 }
@@ -1252,7 +1262,6 @@ impl AppState {
         let evolution_tracker = Arc::new(nexus_kernel::cognitive::EvolutionTracker::new(Box::new(
             DbStrategyStore { db: db.clone() },
         )));
-        let audit = Arc::new(Mutex::new(AuditTrail::new()));
         let cognitive_runtime = Arc::new(
             nexus_kernel::cognitive::CognitiveRuntime::with_provider_registry(
                 supervisor.clone(),

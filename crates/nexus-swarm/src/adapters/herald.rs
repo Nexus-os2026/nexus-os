@@ -115,12 +115,14 @@ impl SwarmCapability for HeraldAdapter {
             use nexus_kernel::secrets::backend_keyring::KeyringBackendAdapter;
             use nexus_kernel::secrets::backend_memory::MemoryBackend;
             use nexus_kernel::secrets::SecretsFacade;
+            let audit = Arc::new(std::sync::Mutex::new(nexus_kernel::audit::AuditTrail::new()));
             Arc::new(SecretsFacade::new(
                 Arc::new(EnvBackend::new()),
                 Arc::new(KeyringBackendAdapter::os_keyring()),
                 None,
                 Arc::new(MemoryBackend::new()),
                 &CredentialFacadeConfig::default(),
+                audit,
             ))
         });
         SocialPosterEntry::new(Arc::clone(&self.publish_state), facade)

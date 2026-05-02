@@ -757,12 +757,14 @@ mod tests {
             mem.set(scope, name, Zeroizing::new(value.to_string()))
                 .expect("seed memory backend");
         }
+        let audit = Arc::new(std::sync::Mutex::new(nexus_kernel::audit::AuditTrail::new()));
         Arc::new(SecretsFacade::new(
             env,
             kr,
             None,
             mem,
             &CredentialFacadeConfig::default(),
+            audit,
         ))
     }
 

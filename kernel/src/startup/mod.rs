@@ -57,6 +57,7 @@ pub enum StartupError {
 pub fn run_migrations(
     config: &mut NexusConfig,
     db: Arc<nexus_persistence::NexusDatabase>,
+    audit: Arc<std::sync::Mutex<crate::audit::AuditTrail>>,
 ) -> Result<MigrationReport, StartupError> {
     let master = EncryptionKey::from_config(&config.security)
         .map_err(|e| StartupError::Crypto(format!("{e}")))?;
@@ -72,6 +73,7 @@ pub fn run_migrations(
         Some(sqlite),
         memory,
         &config.credential_facade,
+        audit,
     ));
 
     let report = migrate_config_to_vault(config, &facade)?;
@@ -141,12 +143,14 @@ mod tests {
         let kr = Arc::new(KeyringBackendAdapter::os_keyring());
         let sql = Arc::new(SqliteEnvelopeBackend::new(Arc::clone(&db), &master));
         let mem = Arc::new(MemoryBackend::new());
+        let audit = std::sync::Arc::new(std::sync::Mutex::new(crate::audit::AuditTrail::new()));
         let facade = Arc::new(SecretsFacade::new(
             env_b,
             kr,
             Some(sql),
             mem,
             &config.credential_facade,
+            audit,
         ));
         let report = migrate_config_to_vault(&mut config, &facade).expect("ok");
         match report {

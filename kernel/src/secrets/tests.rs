@@ -37,7 +37,8 @@ fn build_facade(
     let kr = Arc::new(keyring);
     let sql = Arc::new(SqliteEnvelopeBackend::new(Arc::clone(&db), &master));
     let mem = Arc::new(MemoryBackend::new());
-    let facade = Arc::new(SecretsFacade::new(env, kr, Some(sql), mem, &cfg));
+    let audit = Arc::new(std::sync::Mutex::new(crate::audit::AuditTrail::new()));
+    let facade = Arc::new(SecretsFacade::new(env, kr, Some(sql), mem, &cfg, audit));
     (facade, db)
 }
 
@@ -166,6 +167,15 @@ fn set_secret_writes_to_sqlite_and_get_round_trips() {
 
 #[test]
 fn migrate_config_to_vault_happy_path_clears_fields_and_bumps_version() {
+    // Bug AK-15 follow-up: NEXUS_CONFIG_PATH is process-global
+    // env state. The resave-failure sibling test mutates the
+    // same var; without serialization the two tests race and
+    // either can clobber the other's path. Holding
+    // NEXUS_CONFIG_PATH_GUARD (defined below) serializes them
+    // without affecting other secrets tests. Tightens AK-8.
+    let _guard = NEXUS_CONFIG_PATH_GUARD
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
     let cfg = CredentialFacadeConfig::default();
     let (facade, db) = build_facade(cfg, KeyringBackendAdapter::os_keyring());
     let mut config = NexusConfig::default();
@@ -274,9 +284,13 @@ fn migrate_records_resave_failure_but_treats_facade_as_authoritative() {
     // GitLab CI runners that allow /proc subdir creation.
     //
     // NOTE (AK-8): this test mutates NEXUS_CONFIG_PATH, which is
-    // process-global env state. Serialization with other env-
-    // mutating secrets tests is tracked by AK-8 in the Phase 1.5
-    // backlog.
+    // process-global env state. Serialized via
+    // NEXUS_CONFIG_PATH_GUARD (defined at the bottom of this
+    // file) so the happy-path migration test cannot clobber the
+    // bad path mid-run.
+    let _guard = NEXUS_CONFIG_PATH_GUARD
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQ: AtomicU64 = AtomicU64::new(0);
     let unique = format!(
@@ -337,7 +351,15 @@ fn migrate_returns_sqlite_unavailable_when_facade_lacks_sqlite() {
     let env = Arc::new(EnvBackend::new());
     let kr = Arc::new(KeyringBackendAdapter::os_keyring());
     let mem = Arc::new(MemoryBackend::new());
-    let facade = SecretsFacade::new(env, kr, None, mem, &CredentialFacadeConfig::default());
+    let audit = Arc::new(std::sync::Mutex::new(crate::audit::AuditTrail::new()));
+    let facade = SecretsFacade::new(
+        env,
+        kr,
+        None,
+        mem,
+        &CredentialFacadeConfig::default(),
+        audit,
+    );
     let mut config = NexusConfig::default();
     config.social.x_api_key = "ck".into();
     let err =
@@ -372,7 +394,15 @@ fn ak_commit4_real_keyring_falls_through_to_memory() {
         .expect("seed memory");
     // No sqlite; the chain is env -> keyring -> memory (sqlite
     // None).
-    let facade = SecretsFacade::new(env, kr, None, mem, &CredentialFacadeConfig::default());
+    let audit = Arc::new(std::sync::Mutex::new(crate::audit::AuditTrail::new()));
+    let facade = SecretsFacade::new(
+        env,
+        kr,
+        None,
+        mem,
+        &CredentialFacadeConfig::default(),
+        audit,
+    );
 
     // Default env_override_providers does NOT include scope
     // "test", so chain order is keyring-first. Keyring will not
@@ -383,3 +413,90 @@ fn ak_commit4_real_keyring_falls_through_to_memory() {
     assert_eq!(got.value.as_str(), "from-memory");
     assert_eq!(got.source, ResolvedFrom::Memory);
 }
+
+/// Bug AK-15: regression test for the audit-redaction
+/// invariant deleted with vault.rs in Commit 5. Every
+/// facade op (set/get/delete/get-after-delete) must produce
+/// exactly one audit row with the AK-15 payload shape, and
+/// the plaintext secret VALUE must NEVER appear anywhere in
+/// the audit JSON.
+#[test]
+fn ak15_audit_records_ops_without_plaintext_leak() {
+    use crate::audit::AuditTrail;
+    use std::sync::Mutex;
+
+    let env = Arc::new(EnvBackend::new());
+    let kr = Arc::new(KeyringBackendAdapter::rejecting()); // Memory wins set
+    let mem = Arc::new(MemoryBackend::new());
+    let audit = Arc::new(Mutex::new(AuditTrail::new()));
+    let facade = SecretsFacade::new(
+        env,
+        kr,
+        None,
+        mem,
+        &CredentialFacadeConfig::default(),
+        Arc::clone(&audit),
+    );
+
+    let secret_value = "ghp_super_secret_xyz_12345";
+    facade
+        .set_secret("test", "key1", Zeroizing::new(secret_value.into()))
+        .expect("set ok");
+    let got = facade.get_secret("test", "key1").expect("get ok");
+    assert_eq!(got.value.as_str(), secret_value);
+    facade.delete_secret("test", "key1").expect("delete ok");
+    let miss = facade
+        .get_secret("test", "key1")
+        .expect_err("expected NotFound after delete");
+    assert!(matches!(miss, SecretError::NotFound));
+
+    // Plaintext-absence regression invariant.
+    let trail = audit.lock().expect("audit unpoisoned");
+    let events: Vec<_> = trail.events().to_vec();
+    assert_eq!(
+        events.len(),
+        4,
+        "expected 4 audit events (set/get/delete/get-miss), got {}",
+        events.len()
+    );
+
+    for event in &events {
+        let payload_str = serde_json::to_string(&event.payload).unwrap_or_default();
+        assert!(
+            !payload_str.contains(secret_value),
+            "plaintext leak in audit event: {payload_str}"
+        );
+    }
+
+    // Per-event shape assertions.
+    let p0 = &events[0].payload;
+    assert_eq!(p0["event"], "secret_stored");
+    assert_eq!(p0["scope"], "test");
+    assert_eq!(p0["name"], "key1");
+    assert_eq!(p0["result"], "ok");
+    assert_eq!(p0["capability"], "log_only");
+    assert_eq!(p0["resolved_from"], "memory");
+
+    let p1 = &events[1].payload;
+    assert_eq!(p1["event"], "secret_accessed");
+    assert_eq!(p1["result"], "ok");
+    assert_eq!(p1["resolved_from"], "memory");
+
+    let p2 = &events[2].payload;
+    assert_eq!(p2["event"], "secret_deleted");
+    assert_eq!(p2["result"], "ok");
+
+    let p3 = &events[3].payload;
+    assert_eq!(p3["event"], "secret_accessed");
+    assert_eq!(p3["result"], "not_found");
+    // resolved_from omitted on miss; assert absence.
+    assert!(p3.get("resolved_from").is_none());
+}
+
+/// Bug AK-15 follow-up to AK-8: NEXUS_CONFIG_PATH is process-
+/// global env state. The two tests that mutate it must run
+/// serially. Both acquire this mutex at start; tests that
+/// don't touch the env var don't acquire and run in parallel
+/// as before. Tightens AK-8 (which still tracks the broader
+/// audit-of-env-mutating-tests sweep).
+static NEXUS_CONFIG_PATH_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
