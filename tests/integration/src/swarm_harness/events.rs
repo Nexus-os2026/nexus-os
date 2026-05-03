@@ -61,6 +61,29 @@ pub async fn drain_events_until_terminal(
     }
 }
 
+/// Drain `rx` for at most `duration` and return whatever events
+/// arrived. Unlike [`drain_events_until_terminal`], this never errors
+/// — a timeout with zero events is the success signal for scenarios
+/// that assert "no events should arrive" (e.g. plan denial paths
+/// where the coordinator is never reached).
+pub async fn drain_for_duration(
+    mut rx: broadcast::Receiver<SwarmEvent>,
+    duration: Duration,
+) -> Vec<SwarmEvent> {
+    let mut captured = Vec::new();
+    let _ = tokio::time::timeout(duration, async {
+        loop {
+            match rx.recv().await {
+                Ok(event) => captured.push(event),
+                Err(broadcast::error::RecvError::Closed) => return,
+                Err(broadcast::error::RecvError::Lagged(_)) => return,
+            }
+        }
+    })
+    .await;
+    captured
+}
+
 /// Stable string label per SwarmEvent variant. Useful for sequence
 /// assertions without pattern-matching every variant inline.
 pub fn event_kind_str(event: &SwarmEvent) -> &'static str {

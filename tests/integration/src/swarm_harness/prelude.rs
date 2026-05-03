@@ -6,10 +6,16 @@
 //! ```
 
 pub use crate::swarm_harness::{
-    drain_events_until_terminal, event_kind_str, oracle_returning, EventCaptureError, Scenario,
-    ScenarioBuilder, SyntheticCapability, SyntheticPlannerProvider,
+    correlate_audit_with_events, drain_events_until_terminal, drain_for_duration, event_kind_str,
+    oracle_returning, CorrelationReport, EventCaptureError, Scenario, ScenarioBuilder,
+    SyntheticCapability, SyntheticPlannerProvider,
 };
 pub use nexus_governance_oracle::GovernanceDecision;
+pub use nexus_swarm::dag::{DagNode, DagNodeStatus, ExecutionDag};
 pub use nexus_swarm::events::SwarmEvent;
 pub use nexus_swarm::oracle_bridge::dag_content_hash;
+pub use nexus_swarm::oracle_policy::HighRiskEvent;
+pub use nexus_swarm::profile::{
+    ContextSize, CostClass, LatencyClass, PrivacyClass, ReasoningTier, TaskProfile, ToolUseLevel,
+};
 pub use nexus_swarm::{Budget, PlannedSwarm, SwarmError};

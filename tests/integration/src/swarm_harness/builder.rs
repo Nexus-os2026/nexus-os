@@ -8,6 +8,7 @@ use crate::swarm_harness::providers::SyntheticPlannerProvider;
 use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use nexus_governance_oracle::GovernanceDecision;
 use nexus_kernel::audit::AuditTrail;
+use nexus_swarm::dag::ExecutionDag;
 use nexus_swarm::events::{ProviderHealth, ProviderHealthStatus, SwarmEvent};
 use nexus_swarm::oracle_bridge::testing::NullSwarmOracleBridge;
 use nexus_swarm::oracle_bridge::OracleBridge;
@@ -35,6 +36,9 @@ const SYNTHETIC_PLANNER_MODEL_ID: &str = "synthetic-planner";
 /// `SyntheticPlannerProvider::id`.
 const SYNTHETIC_PROVIDER_ID: &str = "synthetic-planner";
 
+/// Type alias for a DAG mutator closure stored on the builder.
+type DagMutator = Arc<dyn Fn(&mut ExecutionDag) + Send + Sync>;
+
 /// Fluent builder for a `Scenario`.
 ///
 /// Defaults: `NullSwarmOracleBridge`, `Budget::unlimited_for_tests`, a
@@ -46,6 +50,7 @@ pub struct ScenarioBuilder {
     capability_names: Vec<String>,
     budget: Budget,
     oracle_decision: Option<GovernanceDecision>,
+    dag_mutator: Option<DagMutator>,
 }
 
 impl ScenarioBuilder {
@@ -55,6 +60,7 @@ impl ScenarioBuilder {
             capability_names: Vec::new(),
             budget: Budget::unlimited_for_tests(),
             oracle_decision: None,
+            dag_mutator: None,
         }
     }
 
@@ -87,6 +93,24 @@ impl ScenarioBuilder {
     /// denial scenarios.
     pub fn with_oracle_decision(mut self, decision: GovernanceDecision) -> Self {
         self.oracle_decision = Some(decision);
+        self
+    }
+
+    /// Register a DAG mutator that runs in `Scenario::run` AFTER
+    /// `Director::plan` returns the approved `PlannedSwarm` but BEFORE
+    /// the coordinator sees it. The mutation invalidates the
+    /// approved `ticket.dag_content_hash`, which the coordinator's
+    /// per-iteration drift check detects and surfaces as a
+    /// `HighRiskEvent::PlanDrift`.
+    ///
+    /// The closure runs once per `Scenario::run` call. It takes
+    /// `&mut ExecutionDag`; use the public mutation API
+    /// (`add_node`, `get_mut`, `add_edge`) to invalidate the hash.
+    pub fn with_dag_mutator<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&mut ExecutionDag) + Send + Sync + 'static,
+    {
+        self.dag_mutator = Some(Arc::new(f));
         self
     }
 
@@ -170,6 +194,7 @@ impl ScenarioBuilder {
             audit,
             events_tx,
             capability_call_log,
+            dag_mutator: self.dag_mutator,
         }
     }
 }
@@ -199,6 +224,11 @@ pub struct Scenario {
     /// name into when invoked. Order reflects the coordinator's
     /// topological execution.
     pub capability_call_log: Arc<Mutex<Vec<String>>>,
+    /// Optional DAG mutator. Applied in `run()` after
+    /// `Director::plan` returns the approved `PlannedSwarm` but
+    /// before the coordinator sees it. Used by scenario D to
+    /// trigger plan-drift detection.
+    pub dag_mutator: Option<DagMutator>,
 }
 
 impl Scenario {
@@ -221,7 +251,16 @@ impl Scenario {
     /// coordinator's `events` channel is the same `events_tx` exposed
     /// on `Scenario`, so a receiver subscribed before this call sees
     /// every event the run emits.
-    pub async fn run(&self, planned: PlannedSwarm) -> Result<SwarmRunHandle, SwarmError> {
+    ///
+    /// If a `dag_mutator` was registered on the builder, it runs here
+    /// — between `Director::plan` (which returned `planned` against
+    /// the original DAG) and `SwarmCoordinator::run` (which will see
+    /// the mutated DAG). The coordinator's drift check then surfaces
+    /// the divergence.
+    pub async fn run(&self, mut planned: PlannedSwarm) -> Result<SwarmRunHandle, SwarmError> {
+        if let Some(mutator) = &self.dag_mutator {
+            mutator(&mut planned.dag);
+        }
         let coordinator = Arc::new(SwarmCoordinator::new(
             Arc::clone(&self.registry),
             Arc::clone(&self.router),

@@ -8,6 +8,7 @@
 
 pub mod builder;
 pub mod capabilities;
+pub mod correlation;
 pub mod events;
 pub mod oracles;
 pub mod prelude;
@@ -15,6 +16,9 @@ pub mod providers;
 
 pub use builder::{Scenario, ScenarioBuilder};
 pub use capabilities::SyntheticCapability;
-pub use events::{drain_events_until_terminal, event_kind_str, EventCaptureError};
+pub use correlation::{correlate_audit_with_events, CorrelationReport};
+pub use events::{
+    drain_events_until_terminal, drain_for_duration, event_kind_str, EventCaptureError,
+};
 pub use oracles::oracle_returning;
 pub use providers::SyntheticPlannerProvider;
