@@ -5512,6 +5512,7 @@ dependencies = [
 name = "nexus-integration"
 version = "10.6.0"
 dependencies = [
+ "async-trait",
  "base64 0.22.1",
  "chrono",
  "coder-agent",
@@ -5558,6 +5559,7 @@ dependencies = [
  "nexus-research",
  "nexus-sdk",
  "nexus-software-factory",
+ "nexus-swarm",
  "nexus-telemetry",
  "nexus-tenancy",
  "nexus-token-economy",
