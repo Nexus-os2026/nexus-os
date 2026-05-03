@@ -57,7 +57,13 @@ impl Provider for SyntheticPlannerProvider {
             supports_streaming: false,
             max_context: 32_000,
             cost_class: CostClass::Free,
-            privacy_class: PrivacyClass::Public,
+            // StrictLocal: the synthetic provider must satisfy the
+            // most restrictive privacy class so that
+            // `local_light()`-shaped synthetic capabilities (the B.1
+            // and B.2 default) route through it without a privacy
+            // denial in the Router. The provider never touches a
+            // network in test, so this is accurate.
+            privacy_class: PrivacyClass::StrictLocal,
         }
     }
 

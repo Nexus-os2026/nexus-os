@@ -8,9 +8,13 @@
 
 pub mod builder;
 pub mod capabilities;
+pub mod events;
+pub mod oracles;
 pub mod prelude;
 pub mod providers;
 
 pub use builder::{Scenario, ScenarioBuilder};
 pub use capabilities::SyntheticCapability;
+pub use events::{drain_events_until_terminal, event_kind_str, EventCaptureError};
+pub use oracles::oracle_returning;
 pub use providers::SyntheticPlannerProvider;

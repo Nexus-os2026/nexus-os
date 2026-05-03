@@ -6,7 +6,10 @@
 //! ```
 
 pub use crate::swarm_harness::{
-    Scenario, ScenarioBuilder, SyntheticCapability, SyntheticPlannerProvider,
+    drain_events_until_terminal, event_kind_str, oracle_returning, EventCaptureError, Scenario,
+    ScenarioBuilder, SyntheticCapability, SyntheticPlannerProvider,
 };
+pub use nexus_governance_oracle::GovernanceDecision;
+pub use nexus_swarm::events::SwarmEvent;
 pub use nexus_swarm::oracle_bridge::dag_content_hash;
 pub use nexus_swarm::{Budget, PlannedSwarm, SwarmError};

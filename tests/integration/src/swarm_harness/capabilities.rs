@@ -10,21 +10,31 @@ use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 
 /// Synthetic capability with a configurable name. Records every call
-/// onto a shared `Arc<Mutex<Vec<String>>>` so that B.2 scenarios can
-/// assert which capabilities were exercised. Returns a deterministic
-/// `{"synthetic": <name>}` JSON envelope.
+/// onto a shared `Arc<Mutex<Vec<String>>>` so the scenario can assert
+/// the invocation order matches the DAG's topological execution.
+/// Returns a deterministic `{"synthetic": <name>}` JSON envelope.
 pub struct SyntheticCapability {
     name: String,
     call_log: Arc<Mutex<Vec<String>>>,
 }
 
 impl SyntheticCapability {
-    /// Build a capability registered under `name`. The name is also the
-    /// `capability_id` the Director's canned plan must reference.
+    /// Build a capability registered under `name` with its own private
+    /// call log. Useful for one-off tests.
     pub fn named(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
             call_log: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    /// Build a capability that records calls into a shared log. Used
+    /// by `ScenarioBuilder` so a scenario can observe the cross-
+    /// capability invocation order via `Scenario::capability_call_log`.
+    pub fn with_shared_log(name: impl Into<String>, call_log: Arc<Mutex<Vec<String>>>) -> Self {
+        Self {
+            name: name.into(),
+            call_log,
         }
     }
 
