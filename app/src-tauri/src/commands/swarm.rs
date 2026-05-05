@@ -114,27 +114,45 @@ fn state() -> Arc<SwarmInner> {
             // default path. WAL mode means rusqlite tolerates the
             // concurrent connection; AppState's own NexusDatabase
             // points at the same file.
+            //
+            // Bug BG: the same db handle is now also threaded into
+            // HeraldAdapter so the production publish path can use
+            // `TwitterConnector::with_db` +
+            // `post_status_update_idempotent`. On db-open failure,
+            // both publish_state and the herald adapter fall back to
+            // an in-memory NexusDatabase fixture; idempotency dedup
+            // does not survive process restart in that mode (matches
+            // the publish_state fallback contract).
+            let herald_db: Arc<nexus_persistence::NexusDatabase> =
+                match nexus_persistence::NexusDatabase::open(
+                    &nexus_persistence::NexusDatabase::default_db_path(),
+                ) {
+                    Ok(db) => Arc::new(db),
+                    Err(e) => {
+                        eprintln!(
+                            "[swarm] WARNING: NexusDatabase open failed ({e}); Herald falling back to in-memory db (post-count history and idempotency dedup will not survive restart)"
+                        );
+                        Arc::new(
+                            nexus_persistence::NexusDatabase::in_memory().unwrap_or_else(|e2| {
+                                panic!(
+                                    "[swarm] FATAL: failed to open even in-memory NexusDatabase: {e2}"
+                                )
+                            }),
+                        )
+                    }
+                };
             let publish_state: Arc<
                 dyn social_poster_agent::publish_state::PublishStateHandle,
-            > = match nexus_persistence::NexusDatabase::open(
-                &nexus_persistence::NexusDatabase::default_db_path(),
-            ) {
-                Ok(db) => Arc::new(social_poster_agent::publish_state::SqlitePublishState::new(
-                    Arc::new(db),
-                )),
-                Err(e) => {
-                    eprintln!(
-                        "[swarm] WARNING: NexusDatabase open failed ({e}); Herald falling back to InMemoryPublishState (post-count history will not survive restart)"
-                    );
-                    Arc::new(social_poster_agent::publish_state::InMemoryPublishState::new())
-                }
-            };
+            > = Arc::new(social_poster_agent::publish_state::SqlitePublishState::new(
+                Arc::clone(&herald_db),
+            ));
 
             let mut registry = CapabilityRegistry::new();
             registry.register(Arc::new(ArtisanAdapter::new(Arc::clone(&providers))));
             registry.register(Arc::new(HeraldAdapter::new(
                 Arc::clone(&providers),
                 Arc::clone(&publish_state),
+                Arc::clone(&herald_db),
             )));
             registry.register(Arc::new(BrokerAdapter::new(Arc::clone(&providers))));
             registry.register(Arc::new(ScoutStub));

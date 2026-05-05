@@ -17,6 +17,7 @@ nexus-kernel = { path = "../../kernel" }
 nexus-crypto = { path = "../nexus-crypto" }
 nexus-governance-oracle = { path = "../nexus-governance-oracle" }
 nexus-memory = { path = "../nexus-memory" }
+nexus-persistence = { path = "../../persistence" }
 nexus-connectors-llm = { path = "../../connectors/llm" }
 nexus-swarm-core = { path = "../nexus-swarm-core" }
 coder-agent = { path = "../../agents/coder" }

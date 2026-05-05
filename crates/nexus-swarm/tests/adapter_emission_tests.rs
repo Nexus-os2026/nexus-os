@@ -236,6 +236,7 @@ async fn herald_emits_social_poster_phase_sequence() {
     let adapter = HeraldAdapter::new(
         providers(),
         Arc::new(social_poster_agent::publish_state::InMemoryPublishState::new()),
+        Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db")),
     );
     adapter
         .run_with_context(herald_invocation(), &ctx)

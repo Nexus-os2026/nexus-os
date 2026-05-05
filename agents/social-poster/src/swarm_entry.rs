@@ -124,7 +124,7 @@ const CONTENT_HASH_INPUT_FORMAT: &str = "{platform}|{account_id}|{text}";
 /// Bug V: Twitter publish budget for the per-call `WebAgentContext`.
 /// Mirrors the value `RealPublishStep` uses in the legacy
 /// `agents/social-poster/src/lib.rs:498` path. The connector charges
-/// 10 fuel for `post_status_update`; we set headroom for one call.
+/// 10 fuel for `post_status_update_idempotent`; we set headroom for one call.
 const PUBLISH_FUEL_BUDGET: u64 = 50;
 
 /// Bug V: indirection trait for the real Twitter publish call. Keeps
@@ -147,7 +147,7 @@ pub trait PublishExecutor: Send + Sync {
 }
 
 /// Bug V: production `PublishExecutor`. Wraps `TwitterConnector`'s
-/// sync (`reqwest::blocking`) `post_status_update` in
+/// sync (`reqwest::blocking`) idempotent publish call in
 /// `tokio::task::spawn_blocking`. Builds a fresh `WebAgentContext`
 /// per call (see locked decision #2) — capabilities and fuel are
 /// adapter-local concerns, not entry-level state.
@@ -156,11 +156,16 @@ pub struct RealPublishExecutor {
     /// after the SocialConfig migration. `credentials_present`
     /// reads four `social.*` keys; missing keys return false.
     facade: Arc<SecretsFacade>,
+    /// Bug BG: persistent idempotency backing for
+    /// `TwitterConnector::with_db`. The `publish` body uses this to
+    /// build a connector whose `IdempotencyManager` survives process
+    /// restart. Closes Bug AF's deferred swarm-path threading.
+    db: Arc<nexus_persistence::NexusDatabase>,
 }
 
 impl RealPublishExecutor {
-    pub fn new(facade: Arc<SecretsFacade>) -> Self {
-        Self { facade }
+    pub fn new(facade: Arc<SecretsFacade>, db: Arc<nexus_persistence::NexusDatabase>) -> Self {
+        Self { facade, db }
     }
 }
 
@@ -173,7 +178,7 @@ impl PublishExecutor for RealPublishExecutor {
         // `kernel::secrets::migrate` module header). All four
         // OAuth1 fields must be present and non-empty for a real
         // publish; bearer-token mode is not currently consumed by
-        // `TwitterConnector::post_status_update` so we don't gate
+        // the connector's idempotent publish call so we don't gate
         // on it.
         let names = [
             "x_consumer_key",
@@ -190,8 +195,15 @@ impl PublishExecutor for RealPublishExecutor {
     }
 
     async fn publish(&self, text: String) -> Result<TweetResult, KernelAgentError> {
+        // Bug BG: per-logical-publish UUID. Generated here so the
+        // request_id is unique per publish call. Bug BK will lift
+        // this to a retry-decorator and reuse the same id across
+        // attempts — at HEAD there is no retry loop, so each call
+        // gets a fresh uuid.
+        let request_id = Uuid::new_v4().to_string();
+        let db = Arc::clone(&self.db);
         let join = tokio::task::spawn_blocking(move || {
-            let mut connector = TwitterConnector::new();
+            let mut connector = TwitterConnector::with_db(db);
             let mut agent_ctx = WebAgentContext::new(
                 Uuid::new_v4(),
                 ["social.x.post".to_string(), "social.x.read".to_string()]
@@ -199,7 +211,7 @@ impl PublishExecutor for RealPublishExecutor {
                     .collect::<HashSet<_>>(),
                 PUBLISH_FUEL_BUDGET,
             );
-            connector.post_status_update(&mut agent_ctx, &text)
+            connector.post_status_update_idempotent(&mut agent_ctx, &text, &request_id)
         })
         .await;
         match join {
@@ -372,10 +384,19 @@ impl SocialPosterEntry {
     /// `RealPublishExecutor` so `credentials_present` resolves
     /// from the kernel `SecretsFacade` rather than reading
     /// `NexusConfig.social.x_*` directly.
-    pub fn new(publish_state: Arc<dyn PublishStateHandle>, facade: Arc<SecretsFacade>) -> Self {
+    ///
+    /// Bug BG: `db` is threaded into `RealPublishExecutor` so the
+    /// production publish path uses `TwitterConnector::with_db` +
+    /// `post_status_update_idempotent` — closes Bug AF's deferred
+    /// swarm-path threading for the persistent idempotency cache.
+    pub fn new(
+        publish_state: Arc<dyn PublishStateHandle>,
+        facade: Arc<SecretsFacade>,
+        db: Arc<nexus_persistence::NexusDatabase>,
+    ) -> Self {
         Self {
             publish_state,
-            publish_executor: Arc::new(RealPublishExecutor::new(facade)),
+            publish_executor: Arc::new(RealPublishExecutor::new(facade, db)),
         }
     }
 
@@ -744,6 +765,13 @@ mod tests {
     use tokio::sync::Mutex;
     use uuid::Uuid;
 
+    /// Bug BG: in-memory NexusDatabase for unit tests. Mirrors the
+    /// pattern in `kernel/src/secrets/tests.rs:34`. Returns a fresh
+    /// db per call so tests do not share idempotency cache state.
+    fn test_db() -> Arc<nexus_persistence::NexusDatabase> {
+        Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"))
+    }
+
     /// Bug AK Commit 2: build a Memory-only facade for unit tests.
     /// Construction returns a fresh facade per call; pass
     /// pre-populated `(scope, name, value)` tuples to seed.
@@ -854,6 +882,7 @@ mod tests {
         let out = SocialPosterEntry::new(
             std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new()),
             test_facade(&[]),
+            test_db(),
         )
         .execute(input, &ctx)
         .await
@@ -887,6 +916,7 @@ mod tests {
         let out = SocialPosterEntry::new(
             std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new()),
             test_facade(&[]),
+            test_db(),
         )
         .execute(input, &ctx)
         .await
@@ -908,6 +938,7 @@ mod tests {
         let err = SocialPosterEntry::new(
             std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new()),
             test_facade(&[]),
+            test_db(),
         )
         .execute(input, &ctx)
         .await
@@ -928,6 +959,7 @@ mod tests {
         let err = SocialPosterEntry::new(
             std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new()),
             test_facade(&[]),
+            test_db(),
         )
         .execute(input, &ctx)
         .await
@@ -945,6 +977,7 @@ mod tests {
         let err = SocialPosterEntry::new(
             std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new()),
             test_facade(&[]),
+            test_db(),
         )
         .execute(input, &ctx)
         .await
@@ -971,6 +1004,7 @@ mod tests {
         SocialPosterEntry::new(
             std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new()),
             test_facade(&[]),
+            test_db(),
         )
         .execute(input, &ctx)
         .await
@@ -1019,6 +1053,7 @@ mod tests {
         let out = SocialPosterEntry::new(
             std::sync::Arc::new(crate::publish_state::InMemoryPublishState::new()),
             test_facade(&[]),
+            test_db(),
         )
         .execute(input, &ctx)
         .await
@@ -1071,7 +1106,7 @@ mod tests {
             "message": "drafty",
             "dry_run": true,
         });
-        let out = SocialPosterEntry::new(state.clone(), test_facade(&[]))
+        let out = SocialPosterEntry::new(state.clone(), test_facade(&[]), test_db())
             .execute(input, &ctx)
             .await
             .expect("ok");
@@ -1124,7 +1159,7 @@ mod tests {
             "message": "draft",
             "dry_run": true,
         });
-        let out = SocialPosterEntry::new(state.clone(), test_facade(&[]))
+        let out = SocialPosterEntry::new(state.clone(), test_facade(&[]), test_db())
             .execute(input, &ctx)
             .await
             .expect("ok");
@@ -1158,7 +1193,7 @@ mod tests {
             "message": "ship it",
             "dry_run": false,
         });
-        let out = SocialPosterEntry::new(state.clone(), test_facade(&[]))
+        let out = SocialPosterEntry::new(state.clone(), test_facade(&[]), test_db())
             .execute(input, &ctx)
             .await
             .expect("ok");
@@ -1187,7 +1222,7 @@ mod tests {
         }
 
         let ctx_a = mk_ctx(rec_a, CancelToken::new(), "draft");
-        let blocked_out = SocialPosterEntry::new(state.clone(), test_facade(&[]))
+        let blocked_out = SocialPosterEntry::new(state.clone(), test_facade(&[]), test_db())
             .execute(
                 json!({
                     "channel": "Instagram",
@@ -1206,7 +1241,7 @@ mod tests {
         ));
 
         let ctx_b = mk_ctx(rec_b, CancelToken::new(), "draft");
-        let allowed_out = SocialPosterEntry::new(state.clone(), test_facade(&[]))
+        let allowed_out = SocialPosterEntry::new(state.clone(), test_facade(&[]), test_db())
             .execute(
                 json!({
                     "channel": "Instagram",
@@ -1682,7 +1717,7 @@ mod tests {
     #[tokio::test]
     async fn ak2_credentials_present_false_on_empty_facade() {
         let facade = test_facade(&[]);
-        let exec = RealPublishExecutor::new(facade);
+        let exec = RealPublishExecutor::new(facade, test_db());
         assert!(!exec.credentials_present());
     }
 
@@ -1694,7 +1729,7 @@ mod tests {
             ("social", "x_access_token", "at"),
             ("social", "x_access_token_secret", "ats"),
         ]);
-        let exec = RealPublishExecutor::new(facade);
+        let exec = RealPublishExecutor::new(facade, test_db());
         assert!(exec.credentials_present());
     }
 
@@ -1706,7 +1741,7 @@ mod tests {
             ("social", "x_access_token", "at"),
             // x_access_token_secret missing
         ]);
-        let exec = RealPublishExecutor::new(facade);
+        let exec = RealPublishExecutor::new(facade, test_db());
         assert!(!exec.credentials_present());
     }
 
@@ -1722,10 +1757,10 @@ mod tests {
             ("social", "x_access_token", "at"),
             ("social", "x_access_token_secret", "ats"),
         ]);
-        let _entry = SocialPosterEntry::new(state, Arc::clone(&facade));
+        let _entry = SocialPosterEntry::new(state, Arc::clone(&facade), test_db());
         // Indirect assertion: build a separate executor with the
         // same facade and check it sees the seeded credentials.
-        let exec = RealPublishExecutor::new(facade);
+        let exec = RealPublishExecutor::new(facade, test_db());
         assert!(exec.credentials_present());
     }
 }

@@ -29,16 +29,25 @@ pub struct HeraldAdapter {
     /// `Arc::clone` per request, no shared mutable state on the adapter
     /// beyond what the trait already provides).
     publish_state: Arc<dyn social_poster_agent::publish_state::PublishStateHandle>,
+    /// Bug BG: persistent idempotency-store backing. Threaded into
+    /// `SocialPosterEntry` → `RealPublishExecutor` so the production
+    /// publish path uses `TwitterConnector::with_db` +
+    /// `post_status_update_idempotent` rather than the in-memory
+    /// `IdempotencyManager::new`. Closes Bug AF's deferred swarm-path
+    /// threading.
+    db: Arc<nexus_persistence::NexusDatabase>,
 }
 
 impl HeraldAdapter {
     pub fn new(
         providers: Arc<HashMap<String, Arc<dyn Provider>>>,
         publish_state: Arc<dyn social_poster_agent::publish_state::PublishStateHandle>,
+        db: Arc<nexus_persistence::NexusDatabase>,
     ) -> Self {
         Self {
             providers,
             publish_state,
+            db,
         }
     }
 }
@@ -125,10 +134,14 @@ impl SwarmCapability for HeraldAdapter {
                 audit,
             ))
         });
-        SocialPosterEntry::new(Arc::clone(&self.publish_state), facade)
-            .execute(invocation.inputs, ctx)
-            .await
-            .map_err(map_agent_error)
+        SocialPosterEntry::new(
+            Arc::clone(&self.publish_state),
+            facade,
+            Arc::clone(&self.db),
+        )
+        .execute(invocation.inputs, ctx)
+        .await
+        .map_err(map_agent_error)
     }
 }
 

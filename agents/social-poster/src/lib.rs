@@ -22,6 +22,7 @@ use serde_json::json;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -97,12 +98,20 @@ pub struct PipelineDependencies {
 
 impl PipelineDependencies {
     /// Builds production dependencies backed by real connectors/providers.
-    pub fn real(fuel_budget: u64, model_name: &str) -> Result<Self, AgentError> {
+    ///
+    /// Bug BG: `db` is threaded into `RealPublishStep` so the legacy
+    /// agent bin path (alongside the swarm path) uses
+    /// `TwitterConnector::with_db` + `post_status_update_idempotent`.
+    pub fn real(
+        fuel_budget: u64,
+        model_name: &str,
+        db: Arc<nexus_persistence::NexusDatabase>,
+    ) -> Result<Self, AgentError> {
         Ok(Self {
             search: Box::new(RealSearchStep::new(fuel_budget)),
             reader: Box::new(RealReaderStep::new(fuel_budget)),
             generator: Box::new(RealGenerateStep::new(model_name, fuel_budget)?),
-            publisher: Box::new(RealPublishStep::new(fuel_budget)),
+            publisher: Box::new(RealPublishStep::new(fuel_budget, db)),
         })
     }
 
@@ -141,7 +150,16 @@ pub struct SocialPosterAgent {
 
 impl SocialPosterAgent {
     /// Creates a social-poster agent from manifest values.
-    pub fn new(manifest: SocialPosterManifest, dry_run: bool) -> Result<Self, AgentError> {
+    ///
+    /// Bug BG: `db` is threaded into `PipelineDependencies::real` so
+    /// the production publisher uses `TwitterConnector::with_db` +
+    /// `post_status_update_idempotent`. The dry-run path does not use
+    /// `db`; callers may pass any handle (an in-memory db is fine).
+    pub fn new(
+        manifest: SocialPosterManifest,
+        dry_run: bool,
+        db: Arc<nexus_persistence::NexusDatabase>,
+    ) -> Result<Self, AgentError> {
         let model_name = manifest
             .llm_model
             .clone()
@@ -149,7 +167,7 @@ impl SocialPosterAgent {
         let dependencies = if dry_run {
             PipelineDependencies::dry_run_defaults(model_name.as_str(), manifest.fuel_budget)
         } else {
-            PipelineDependencies::real(manifest.fuel_budget, model_name.as_str())?
+            PipelineDependencies::real(manifest.fuel_budget, model_name.as_str(), db)?
         };
         Ok(Self::with_dependencies(manifest, dry_run, dependencies))
     }
@@ -468,12 +486,25 @@ pub fn load_manifest(path: &Path) -> Result<SocialPosterManifest, AgentError> {
 }
 
 /// Runs social-poster directly from a manifest path.
+///
+/// Bug BG: opens its own NexusDatabase against the default path so the
+/// agent's publisher can use the persistent idempotency cache. On
+/// open-failure the bin falls back to an in-memory db (idempotency
+/// dedup will not survive process restart in that mode).
 pub fn run_social_poster_from_manifest(
     manifest_path: &Path,
     dry_run: bool,
 ) -> Result<SocialPosterRunReport, AgentError> {
     let manifest = load_manifest(manifest_path)?;
-    let mut agent = SocialPosterAgent::new(manifest, dry_run)?;
+    let db =
+        Arc::new(
+            nexus_persistence::NexusDatabase::open(
+                &nexus_persistence::NexusDatabase::default_db_path(),
+            )
+            .or_else(|_| nexus_persistence::NexusDatabase::in_memory())
+            .map_err(|e| AgentError::SupervisorError(format!("open NexusDatabase: {e}")))?,
+        );
+    let mut agent = SocialPosterAgent::new(manifest, dry_run, db)?;
     agent.run()
 }
 
@@ -593,9 +624,9 @@ struct RealPublishStep {
 }
 
 impl RealPublishStep {
-    fn new(fuel_budget: u64) -> Self {
+    fn new(fuel_budget: u64, db: Arc<nexus_persistence::NexusDatabase>) -> Self {
         Self {
-            connector: TwitterConnector::new(),
+            connector: TwitterConnector::with_db(db),
             context: WebAgentContext::new(
                 Uuid::new_v4(),
                 ["social.x.post".to_string(), "social.x.read".to_string()]
@@ -610,8 +641,14 @@ impl RealPublishStep {
 
 impl PublishStep for RealPublishStep {
     fn publish_x(&mut self, text: &str) -> Result<TweetResult, AgentError> {
+        // Bug BG: per-publish UUID. Legacy bin path mirrors the swarm
+        // path's pattern in `RealPublishExecutor::publish`. Bug BK
+        // will lift this to a retry-decorator and reuse the request_id
+        // across attempts.
+        let request_id = Uuid::new_v4().to_string();
         self.calls += 1;
-        self.connector.post_status_update(&mut self.context, text)
+        self.connector
+            .post_status_update_idempotent(&mut self.context, text, &request_id)
     }
 
     fn publish_calls(&self) -> usize {

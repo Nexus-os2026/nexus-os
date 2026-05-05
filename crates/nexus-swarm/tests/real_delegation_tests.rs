@@ -258,6 +258,7 @@ async fn herald_delegates_to_social_poster_entry_dry_run_default() {
     let adapter = HeraldAdapter::new(
         herald_providers(),
         Arc::new(social_poster_agent::publish_state::InMemoryPublishState::new()),
+        Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db")),
     );
     let out = adapter
         .run_with_context(herald_invocation_with_message("ship it", None), &ctx)
@@ -282,6 +283,7 @@ async fn herald_dry_run_false_with_no_creds_returns_credentials_missing() {
     let adapter = HeraldAdapter::new(
         herald_providers(),
         Arc::new(social_poster_agent::publish_state::InMemoryPublishState::new()),
+        Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db")),
     );
     let out = adapter
         .run_with_context(
@@ -307,6 +309,7 @@ async fn herald_propagates_cancellation_through_social_poster_entry() {
     let adapter = HeraldAdapter::new(
         herald_providers(),
         Arc::new(social_poster_agent::publish_state::InMemoryPublishState::new()),
+        Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db")),
     );
     let err = adapter
         .run_with_context(herald_invocation_with_message("anything", None), &ctx)
@@ -325,6 +328,7 @@ async fn herald_maps_invalid_input_to_typed_agent_error_with_agent_name() {
     let adapter = HeraldAdapter::new(
         herald_providers(),
         Arc::new(social_poster_agent::publish_state::InMemoryPublishState::new()),
+        Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db")),
     );
     let err = adapter
         .run_with_context(malformed_herald_invocation(), &ctx)
