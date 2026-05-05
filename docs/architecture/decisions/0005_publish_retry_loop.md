@@ -536,3 +536,44 @@ unconditionally, regardless of emitter presence. Logs
 remain available even when the decorator is constructed
 without an emitter (e.g., direct test instantiation via
 `RetryingPublishExecutor::new`).
+
+## Amendment 5 (2026-05-05) — Bug BM Closed as Not-Needed
+
+Bug BM was filed against the assumption that
+`TwitterConnector` carried a framework-inherited
+`RetryPolicy` that would compound with the swarm-layer
+`RetryingPublishExecutor`. Implementation-time investigation
+of `connectors/web/src/twitter.rs` at HEAD `c02eca5f`
+verified:
+
+- `TwitterConnector` has no `retry_policy` field.
+- `TwitterConnector` has no retry loop in
+  `post_status_update`, `post_status_update_idempotent`,
+  or any other method.
+- `TwitterConnector` does not implement the framework
+  `Connector` trait declared in
+  `connectors/core/src/connector.rs`. It is hand-rolled.
+
+There is no connector-layer retry to disable. The
+swarm-layer `RetryingPublishExecutor` is the sole retry
+surface on the publish path; no compounding exists.
+
+**Status.** BM closed as not-needed at HEAD. No code change
+required.
+
+**Future.** If a future change adds a framework `Connector`
+impl to `TwitterConnector` (or adopts the
+`connectors/core` `RetryPolicy` abstraction), reopen this
+ADR to disable connector-layer retry on the publish path.
+The swarm-layer decorator's contract — backoff with jitter,
+`retry_after_secs` honoring, fail-closed classifier,
+`request_id` reuse, `NodeEvent` retry_attempt emission —
+must remain the sole retry policy on the publish path.
+
+**Correction to Amendment 1.** Amendment 1's narrative
+referenced Bug BM as the mechanism that would post-BK
+"disable connector retry on the publish path." That
+sentence assumed the retry compounding described above and
+is superseded by this amendment. The narrative point that
+classification happens at the decorator boundary (using
+`classify_publish_error`) is unaffected.
