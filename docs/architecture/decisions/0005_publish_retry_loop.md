@@ -471,3 +471,68 @@ final `publish_result`. Intermediate retry attempts do not
 surface to `execute`.
 
 No deduplication contract is required.
+
+## Amendment 4 (2026-05-05) — Per-Run Decorator Construction with Captured Emitter
+
+ADR 0005 originally listed two BK.3 mechanism candidates for
+emitter threading: (1) per-run decorator construction with
+captured emitter, (2) trait extension. BK.3 selects Option
+(1) and pins the construction approach.
+
+**Circular dependency finding.** `NodeRef` is defined in
+`crates/nexus-swarm/src/events.rs:25-30`, not in
+`nexus-swarm-core`. `agents/social-poster/Cargo.toml:22`
+declares only `nexus-swarm-core` (not `nexus-swarm`), and
+adding `nexus-swarm` to social-poster's deps would create a
+cycle (`crates/nexus-swarm/Cargo.toml:24` declares
+`social-poster-agent` as a dependency). The decorator
+therefore cannot construct `NodeRef` directly.
+
+**Indirection through emit_phase.** The decorator calls
+`EventEmitter::emit_phase("retry_attempt", payload)` on
+the captured `Arc<dyn EventEmitter>`. The
+`EventEmitter` impl handles `NodeRef` construction
+internally (CoordinatorEmitter does this at
+`crates/nexus-swarm/src/emitter.rs:43-46`; RecordingEmitter
+discards it). This decouples social-poster from
+`NodeRef` shape changes and avoids the dep cycle.
+
+A follow-up bug **BO-NODEREF-RELOCATE** is filed to
+consider moving `NodeRef` into `nexus-swarm-core` so future
+agent-side observability can construct events directly. Out
+of scope for BK.
+
+**Construction pattern: lazy wrap in execute().**
+`SocialPosterEntry` stores the un-wrapped
+`Arc<dyn PublishExecutor>` plus an
+`Option<RetryConfig>` field. The presence/absence of the
+config IS the wrap signal:
+
+- `SocialPosterEntry::new` sets
+  `retry_config: Some(RetryConfig::default())`. Production
+  retries are wrapped per-run with
+  `Arc::clone(&ctx.emit)`.
+- `SocialPosterEntry::with_publish_executor` sets
+  `retry_config: None`. Test-injected stubs run exactly
+  once per `execute()` call with no decorator interposed.
+
+`BK.2`'s eager wrap at construction time is removed; a
+single wrap site (inside `execute()` at
+`agents/social-poster/src/swarm_entry.rs:596`) eliminates
+the double-wrap risk.
+
+**Emission timing.** The decorator emits
+`emit_phase("retry_attempt", payload)` BEFORE
+`tokio::time::sleep(wait).await`, so observers receive the
+retry signal at attempt-START time. `emit_phase` is
+non-blocking in practice: CoordinatorEmitter swallows
+broadcast send failures (fire-and-forget,
+`crates/nexus-swarm/src/emitter.rs:53-59`); RecordingEmitter
+acquires a `tokio::sync::Mutex` (uncontended in test
+fixtures).
+
+**Tracing fallback.** `tracing::info!` continues to fire
+unconditionally, regardless of emitter presence. Logs
+remain available even when the decorator is constructed
+without an emitter (e.g., direct test instantiation via
+`RetryingPublishExecutor::new`).

@@ -394,6 +394,15 @@ const DEFAULT_MAX_TOKENS: u32 = 512;
 pub struct SocialPosterEntry {
     publish_state: Arc<dyn PublishStateHandle>,
     publish_executor: Arc<dyn PublishExecutor>,
+    /// Bug BK.3: when Some, `execute()` wraps
+    /// `publish_executor` in a per-run
+    /// `RetryingPublishExecutor` capturing
+    /// `Arc::clone(&ctx.emit)` so retry attempts
+    /// surface as `NodeEvent` retry_attempt
+    /// emissions. When None (set by the test
+    /// seam `with_publish_executor`), the
+    /// injected executor is used as-is.
+    retry_config: Option<RetryConfig>,
 }
 
 impl SocialPosterEntry {
@@ -415,14 +424,15 @@ impl SocialPosterEntry {
         facade: Arc<SecretsFacade>,
         db: Arc<nexus_persistence::NexusDatabase>,
     ) -> Self {
-        // Bug BK.2: wrap the production executor in the V2 retry
-        // decorator. Tests using `with_publish_executor` opt out
-        // and inject their own (un-retried) executor directly.
-        let real: Arc<dyn PublishExecutor> = Arc::new(RealPublishExecutor::new(facade, db));
-        let retrying = Arc::new(RetryingPublishExecutor::new(real, RetryConfig::default()));
+        // Bug BK.3: store the un-wrapped
+        // RealPublishExecutor; execute() builds the
+        // per-run retry decorator with a captured
+        // emitter. retry_config = Some(default)
+        // signals "wrap when executing."
         Self {
             publish_state,
-            publish_executor: retrying,
+            publish_executor: Arc::new(RealPublishExecutor::new(facade, db)),
+            retry_config: Some(RetryConfig::default()),
         }
     }
 
@@ -432,9 +442,14 @@ impl SocialPosterEntry {
         publish_state: Arc<dyn PublishStateHandle>,
         publish_executor: Arc<dyn PublishExecutor>,
     ) -> Self {
+        // Bug BK.3: test seam — retry_config=None
+        // skips the per-run wrap so injected stubs
+        // exercise their own publish behavior
+        // exactly once per execute() call.
         Self {
             publish_state,
             publish_executor,
+            retry_config: None,
         }
     }
 }
@@ -593,7 +608,22 @@ impl SwarmAgentEntry for SocialPosterEntry {
                         }),
                     )
                     .await;
-                let publish_result = self.publish_executor.publish(draft.clone()).await;
+                // Bug BK.3: build the per-run retry decorator with a
+                // captured emitter so each retry attempt emits a
+                // NodeEvent retry_attempt. Tests using
+                // with_publish_executor have retry_config=None and
+                // skip the wrap.
+                let publish_result = match &self.retry_config {
+                    Some(cfg) => {
+                        let decorator = RetryingPublishExecutor::with_emitter(
+                            Arc::clone(&self.publish_executor),
+                            *cfg,
+                            Arc::clone(&ctx.emit),
+                        );
+                        decorator.publish(draft.clone()).await
+                    }
+                    None => self.publish_executor.publish(draft.clone()).await,
+                };
                 let status = match publish_result {
                     Ok(TweetResult { tweet_id, .. }) => {
                         // Bug V: record_publish only on confirmed success.
@@ -1956,5 +1986,97 @@ mod tests {
         assert_eq!(c.max_backoff_secs, 60);
         assert_eq!(c.retry_after_cap_secs, 300);
         assert_eq!(c.jitter_pct, 0.20);
+    }
+
+    // ===== Bug BK.3: NodeEvent emission tests =====
+    // (Recorded + RecordingEmitter already imported at the top
+    //  of this `mod tests` block.)
+
+    /// Helper: extract retry_attempt phase events from a
+    /// RecordingEmitter snapshot.
+    async fn retry_attempt_events(rec: &RecordingEmitter) -> Vec<serde_json::Value> {
+        rec.snapshot()
+            .await
+            .into_iter()
+            .filter_map(|r| match r {
+                Recorded::Phase { phase, payload } if phase == "retry_attempt" => Some(payload),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn bk3_emits_retry_attempt_on_retry() {
+        let inner = ScriptableExecutor::new(
+            true,
+            vec![
+                StubOutcome::SupervisorErr("social.x rate limited, retry after 1 ms".into()),
+                StubOutcome::Ok(mk_tweet_result("tw-after-retry")),
+            ],
+        );
+        let rec = Arc::new(RecordingEmitter::new());
+        let emitter: Arc<dyn nexus_swarm_core::emitter::EventEmitter> = rec.clone();
+        let decorator =
+            RetryingPublishExecutor::with_emitter(inner, fast_test_config(0.0), emitter);
+        let result = decorator.publish("hello".into()).await;
+        assert!(result.is_ok(), "expected success after retry");
+        let events = retry_attempt_events(&rec).await;
+        assert_eq!(events.len(), 1, "exactly one retry_attempt event");
+        let payload = &events[0];
+        assert_eq!(
+            payload["attempt_num"].as_u64(),
+            Some(2),
+            "first retry has attempt_num=2"
+        );
+        assert!(
+            payload["wait_secs"].as_f64().is_some(),
+            "wait_secs must be a number"
+        );
+        let summary = payload["last_error_summary"]
+            .as_str()
+            .expect("last_error_summary must be a string");
+        assert!(
+            summary.contains("rate limited"),
+            "summary should reflect the underlying error: got {summary:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn bk3_no_retry_attempt_event_on_first_success() {
+        let inner =
+            ScriptableExecutor::new(true, vec![StubOutcome::Ok(mk_tweet_result("tw-immediate"))]);
+        let rec = Arc::new(RecordingEmitter::new());
+        let emitter: Arc<dyn nexus_swarm_core::emitter::EventEmitter> = rec.clone();
+        let decorator =
+            RetryingPublishExecutor::with_emitter(inner, fast_test_config(0.0), emitter);
+        let result = decorator.publish("hello".into()).await;
+        assert!(result.is_ok());
+        let events = retry_attempt_events(&rec).await;
+        assert!(
+            events.is_empty(),
+            "first-attempt success must not emit retry_attempt"
+        );
+    }
+
+    #[tokio::test]
+    async fn bk3_attempt_num_increments_across_retries() {
+        let inner = ScriptableExecutor::new(
+            true,
+            vec![
+                StubOutcome::SupervisorErr("social.x rate limited, retry after 1 ms".into()),
+                StubOutcome::SupervisorErr("social.x rate limited, retry after 1 ms".into()),
+                StubOutcome::Ok(mk_tweet_result("tw-third")),
+            ],
+        );
+        let rec = Arc::new(RecordingEmitter::new());
+        let emitter: Arc<dyn nexus_swarm_core::emitter::EventEmitter> = rec.clone();
+        let decorator =
+            RetryingPublishExecutor::with_emitter(inner, fast_test_config(0.0), emitter);
+        let result = decorator.publish("hello".into()).await;
+        assert!(result.is_ok(), "expected success on third attempt");
+        let events = retry_attempt_events(&rec).await;
+        assert_eq!(events.len(), 2, "two retry_attempt events for two retries");
+        assert_eq!(events[0]["attempt_num"].as_u64(), Some(2));
+        assert_eq!(events[1]["attempt_num"].as_u64(), Some(3));
     }
 }

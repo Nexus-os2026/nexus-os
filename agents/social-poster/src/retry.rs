@@ -23,7 +23,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use nexus_connectors_web::twitter::TweetResult;
+use nexus_swarm_core::emitter::EventEmitter;
 use rand::Rng;
+use serde_json::json;
 use uuid::Uuid;
 
 use crate::swarm_entry::{
@@ -61,11 +63,41 @@ impl Default for RetryConfig {
 pub struct RetryingPublishExecutor {
     inner: Arc<dyn PublishExecutor>,
     config: RetryConfig,
+    /// Bug BK.3: when present, the decorator emits
+    /// `SwarmEvent::NodeEvent` with phase=
+    /// "retry_attempt" via `emit_phase` on each
+    /// retry attempt START. When None (e.g., when
+    /// the decorator is constructed directly in a
+    /// test without a per-run context), only
+    /// `tracing::info!` fires.
+    emitter: Option<Arc<dyn EventEmitter>>,
 }
 
 impl RetryingPublishExecutor {
     pub fn new(inner: Arc<dyn PublishExecutor>, config: RetryConfig) -> Self {
-        Self { inner, config }
+        Self {
+            inner,
+            config,
+            emitter: None,
+        }
+    }
+
+    /// Bug BK.3: construct a decorator that emits
+    /// `NodeEvent` retry observability via the
+    /// supplied emitter. Used by
+    /// `SocialPosterEntry::execute` to wrap the
+    /// inner executor per-run, capturing
+    /// `Arc::clone(&ctx.emit)`.
+    pub fn with_emitter(
+        inner: Arc<dyn PublishExecutor>,
+        config: RetryConfig,
+        emitter: Arc<dyn EventEmitter>,
+    ) -> Self {
+        Self {
+            inner,
+            config,
+            emitter: Some(emitter),
+        }
     }
 
     /// Compute backoff for a given retry sequence number.
@@ -141,16 +173,32 @@ impl PublishExecutor for RetryingPublishExecutor {
                     // once coordinator wires Budget mutation.
                     let last_error_summary = truncate_error(&e.to_string(), 200);
                     let next_attempt_num = (attempt as u32) + 1;
+                    let wait_secs = wait.as_secs_f64();
                     tracing::info!(
                         request_id = %request_id,
                         attempt_num = next_attempt_num,
-                        wait_secs = wait.as_secs_f64(),
+                        wait_secs,
                         last_error_summary = %last_error_summary,
                         "publish retry scheduled"
                     );
-                    // BK.3 will emit SwarmEvent::NodeEvent here with
-                    // phase="retry_attempt" and the same payload
-                    // shape as the tracing fields above.
+                    // Bug BK.3: emit retry_attempt NodeEvent via
+                    // the per-run emitter (when present). The
+                    // emit_phase path delegates NodeRef
+                    // construction to the EventEmitter impl
+                    // (CoordinatorEmitter or RecordingEmitter),
+                    // keeping social-poster decoupled from
+                    // nexus-swarm's NodeRef type.
+                    if let Some(em) = &self.emitter {
+                        em.emit_phase(
+                            "retry_attempt",
+                            json!({
+                                "attempt_num": next_attempt_num,
+                                "wait_secs": wait_secs,
+                                "last_error_summary": last_error_summary,
+                            }),
+                        )
+                        .await;
+                    }
                     tokio::time::sleep(wait).await;
                     attempt += 1;
                 }
