@@ -384,3 +384,90 @@ respective sub-commit preflights:
   semantics (orthogonal to BK; flagged in case retry
   exhaustion later surfaces a
   `SwarmCompleted`-vs-`SwarmAborted` ambiguity).
+
+## Amendment 1 (2026-05-05) — Trait Boundary and Classifier Mechanism
+
+ADR 0005 originally specified that the retry decorator would
+classify on `AgentError::PublishFailed { retryable: true }`.
+BK.2 preflight revealed that `PublishExecutor::publish` returns
+`Result<TweetResult, KernelAgentError>` (kernel `AgentError`,
+not `swarm_core::AgentError`). Kernel `AgentError` does not
+carry a `PublishFailed` variant; rate-limit information is
+encoded in `SupervisorError(String)` payloads and decoded by
+the existing `classify_publish_error` helper at
+`agents/social-poster/src/swarm_entry.rs:261`.
+
+**Decision.** BK.2 reuses `classify_publish_error` at the
+decorator boundary. The classifier:
+
+- On `KernelAgentError::SupervisorError(msg)` → call
+  `classify_publish_error(&msg)`. Match on returned
+  `PublishStatus`:
+  - `RateLimited { retry_after_secs }` → retry, honor hint.
+  - All other `PublishStatus` variants → return error
+    (non-retryable).
+- On any other `KernelAgentError` variant → return error
+  (non-retryable by construction).
+
+This preserves the fail-closed property of the original ADR
+text. The narrative reference to `AgentError::PublishFailed`
+in this ADR describes the swarm-event-layer producer behavior
+(already in place at
+`agents/social-poster/src/swarm_entry.rs:631-647`), not the
+decorator's classifier input.
+
+**Deferred.** Migrating `PublishExecutor::publish`'s return
+type from `KernelAgentError` to `swarm_core::AgentError` (so
+the decorator classifies on a typed `PublishFailed` variant
+directly) is filed as follow-up bug
+**BN-RETRY-CLASSIFY-MIGRATION**. Out of scope for BK.
+
+## Amendment 2 (2026-05-05) — Trait Mechanism for request_id Reuse
+
+`PublishExecutor::publish(&self, text: String) -> Result<...>`
+cannot carry a `request_id` parameter without a trait change.
+BK.2 adds a sibling method with a default-impl forwarding
+pattern:
+
+```rust
+async fn publish_with_request_id(
+    &self,
+    text: String,
+    request_id: Uuid,
+) -> Result<TweetResult, KernelAgentError>;
+
+async fn publish(
+    &self,
+    text: String,
+) -> Result<TweetResult, KernelAgentError> {
+    self.publish_with_request_id(text, Uuid::new_v4()).await
+}
+```
+
+`RealPublishExecutor`, `StubExecutor`, and
+`RetryingPublishExecutor` implement `publish_with_request_id`
+directly. Existing callers of `.publish(text)` (e.g.,
+`SocialPosterEntry::execute` at `swarm_entry.rs:569`, the 13
+test sites using `with_publish_executor`) continue to compile
+unchanged; the trait's default impl generates a fresh UUID per
+call. The retry decorator's `publish_with_request_id`
+propagates the parameter across all retry attempts, satisfying
+the request_id reuse contract.
+
+Object safety preserved: both methods take `&self`, no
+generics on methods, no associated types in return position.
+
+## Amendment 3 (2026-05-05) — record_publish Single-Call Confirmation
+
+The BK.2 preflight raised a concern that idempotency cache
+replays under retry could cause `record_publish` to be called
+twice with the same `tweet_id`. This concern was reviewed and
+dismissed: the decorator's retry loop is internal to a single
+`self.publish_executor.publish(...)` invocation at
+`agents/social-poster/src/swarm_entry.rs:569`.
+`SocialPosterEntry::execute` calls `record_publish` exactly
+once per logical publish, in the `Ok` arm of the match on the
+final `publish_result`. Intermediate retry attempts do not
+surface to `execute`.
+
+No deduplication contract is required.

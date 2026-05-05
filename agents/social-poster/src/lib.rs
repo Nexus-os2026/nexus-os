@@ -2,6 +2,7 @@
 
 pub mod channel;
 pub mod publish_state;
+pub mod retry;
 pub mod swarm_entry;
 
 use nexus_connectors_llm::gateway::{select_provider, ProviderSelectionConfig};

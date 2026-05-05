@@ -93,12 +93,13 @@
 
 use crate::channel::ChannelKey;
 use crate::publish_state::{PublishStateError, PublishStateHandle};
+use crate::retry::{RetryConfig, RetryingPublishExecutor};
 use async_trait::async_trait;
 use nexus_connectors_web::twitter::{TweetResult, TwitterConnector};
 use nexus_connectors_web::WebAgentContext;
 use nexus_content::compliance::{check_compliance, ComplianceDecision};
 use nexus_content::generator::SocialPlatform;
-use nexus_kernel::errors::AgentError as KernelAgentError;
+pub(crate) use nexus_kernel::errors::AgentError as KernelAgentError;
 use nexus_kernel::secrets::SecretsFacade;
 use nexus_swarm_core::{AgentError, AgentExecutionContext, InvokeRequest, SwarmAgentEntry};
 use serde::{Deserialize, Serialize};
@@ -143,7 +144,23 @@ const PUBLISH_FUEL_BUDGET: u64 = 50;
 #[async_trait]
 pub trait PublishExecutor: Send + Sync {
     fn credentials_present(&self) -> bool;
-    async fn publish(&self, text: String) -> Result<TweetResult, KernelAgentError>;
+    /// Bug BK: publish with a caller-supplied idempotency key.
+    /// `RetryingPublishExecutor` captures one UUID per logical
+    /// publish and passes it on every retry attempt so the
+    /// connector's idempotency cache short-circuits on a
+    /// successful retry replay.
+    async fn publish_with_request_id(
+        &self,
+        text: String,
+        request_id: uuid::Uuid,
+    ) -> Result<TweetResult, KernelAgentError>;
+    /// Bug V: convenience wrapper. Generates a fresh
+    /// `request_id` per call. Default impl satisfies all
+    /// existing `.publish(text)` callers without trait churn.
+    async fn publish(&self, text: String) -> Result<TweetResult, KernelAgentError> {
+        self.publish_with_request_id(text, uuid::Uuid::new_v4())
+            .await
+    }
 }
 
 /// Bug V: production `PublishExecutor`. Wraps `TwitterConnector`'s
@@ -194,13 +211,17 @@ impl PublishExecutor for RealPublishExecutor {
         })
     }
 
-    async fn publish(&self, text: String) -> Result<TweetResult, KernelAgentError> {
-        // Bug BG: per-logical-publish UUID. Generated here so the
-        // request_id is unique per publish call. Bug BK will lift
-        // this to a retry-decorator and reuse the same id across
-        // attempts — at HEAD there is no retry loop, so each call
-        // gets a fresh uuid.
-        let request_id = Uuid::new_v4().to_string();
+    async fn publish_with_request_id(
+        &self,
+        text: String,
+        request_id: Uuid,
+    ) -> Result<TweetResult, KernelAgentError> {
+        // Bug BK.2: request_id is now caller-supplied. The retry
+        // decorator passes the same id across attempts so the
+        // connector's idempotency cache replays a successful retry.
+        // Bug BG: persistent idempotency via TwitterConnector::with_db
+        // is unchanged.
+        let request_id_string = request_id.to_string();
         let db = Arc::clone(&self.db);
         let join = tokio::task::spawn_blocking(move || {
             let mut connector = TwitterConnector::with_db(db);
@@ -211,7 +232,7 @@ impl PublishExecutor for RealPublishExecutor {
                     .collect::<HashSet<_>>(),
                 PUBLISH_FUEL_BUDGET,
             );
-            connector.post_status_update_idempotent(&mut agent_ctx, &text, &request_id)
+            connector.post_status_update_idempotent(&mut agent_ctx, &text, &request_id_string)
         })
         .await;
         match join {
@@ -258,7 +279,7 @@ fn parse_retry_after_ms_to_secs(msg: &str) -> Option<u64> {
 /// `PublishStatus` exposes. Connector's error stringification is the
 /// only signal — it flattens everything into
 /// `AgentError::SupervisorError(String)` (see preflight Q1).
-fn classify_publish_error(msg: &str) -> PublishStatus {
+pub(crate) fn classify_publish_error(msg: &str) -> PublishStatus {
     let lower = msg.to_ascii_lowercase();
     if lower.contains("rate limited") || lower.contains("rate_limited") {
         PublishStatus::RateLimited {
@@ -394,9 +415,14 @@ impl SocialPosterEntry {
         facade: Arc<SecretsFacade>,
         db: Arc<nexus_persistence::NexusDatabase>,
     ) -> Self {
+        // Bug BK.2: wrap the production executor in the V2 retry
+        // decorator. Tests using `with_publish_executor` opt out
+        // and inject their own (un-retried) executor directly.
+        let real: Arc<dyn PublishExecutor> = Arc::new(RealPublishExecutor::new(facade, db));
+        let retrying = Arc::new(RetryingPublishExecutor::new(real, RetryConfig::default()));
         Self {
             publish_state,
-            publish_executor: Arc::new(RealPublishExecutor::new(facade, db)),
+            publish_executor: retrying,
         }
     }
 
@@ -1326,7 +1352,11 @@ mod tests {
         fn credentials_present(&self) -> bool {
             self.creds_present
         }
-        async fn publish(&self, text: String) -> Result<TweetResult, KernelAgentError> {
+        async fn publish_with_request_id(
+            &self,
+            text: String,
+            _request_id: Uuid,
+        ) -> Result<TweetResult, KernelAgentError> {
             *self.last_text.lock().await = Some(text);
             let outcome = std::mem::replace(
                 &mut *self.outcome.lock().await,
@@ -1762,5 +1792,169 @@ mod tests {
         // same facade and check it sees the seeded credentials.
         let exec = RealPublishExecutor::new(facade, test_db());
         assert!(exec.credentials_present());
+    }
+
+    // ===== Bug BK.2: retry decorator tests =====
+
+    use crate::retry::{RetryConfig, RetryingPublishExecutor};
+
+    /// Multi-shot scripted executor for retry-decorator tests.
+    /// Each `publish_with_request_id` call pops the next outcome
+    /// from the queue and records the request_id seen.
+    struct ScriptableExecutor {
+        creds_present: bool,
+        outcomes: tokio::sync::Mutex<std::collections::VecDeque<StubOutcome>>,
+        request_ids_seen: tokio::sync::Mutex<Vec<Uuid>>,
+    }
+
+    impl ScriptableExecutor {
+        fn new(creds: bool, outcomes: Vec<StubOutcome>) -> Arc<Self> {
+            Arc::new(Self {
+                creds_present: creds,
+                outcomes: tokio::sync::Mutex::new(outcomes.into()),
+                request_ids_seen: tokio::sync::Mutex::new(Vec::new()),
+            })
+        }
+    }
+
+    #[async_trait]
+    impl PublishExecutor for ScriptableExecutor {
+        fn credentials_present(&self) -> bool {
+            self.creds_present
+        }
+
+        async fn publish_with_request_id(
+            &self,
+            _text: String,
+            request_id: Uuid,
+        ) -> Result<TweetResult, KernelAgentError> {
+            self.request_ids_seen.lock().await.push(request_id);
+            let outcome =
+                self.outcomes
+                    .lock()
+                    .await
+                    .pop_front()
+                    .unwrap_or(StubOutcome::SupervisorErr(
+                        "scripted outcome exhausted".into(),
+                    ));
+            match outcome {
+                StubOutcome::Ok(r) => Ok(r),
+                StubOutcome::SupervisorErr(msg) => Err(KernelAgentError::SupervisorError(msg)),
+                StubOutcome::Capability(c) => Err(KernelAgentError::CapabilityDenied(c)),
+                StubOutcome::Fuel => Err(KernelAgentError::FuelExhausted),
+            }
+        }
+    }
+
+    /// Mirrors the literal TweetResult construction in
+    /// StubExecutor::ok above. TweetResult does not derive Default.
+    fn mk_tweet_result(tweet_id: &str) -> TweetResult {
+        TweetResult {
+            tweet_id: tweet_id.to_string(),
+            posted_at: 0,
+        }
+    }
+
+    fn fast_test_config(jitter: f64) -> RetryConfig {
+        RetryConfig {
+            max_attempts: 3,
+            initial_backoff_ms: 1,
+            backoff_multiplier: 2.0,
+            max_backoff_secs: 1,
+            retry_after_cap_secs: 1,
+            jitter_pct: jitter,
+        }
+    }
+
+    #[tokio::test]
+    async fn bk2_retry_then_success_returns_ok() {
+        let inner = ScriptableExecutor::new(
+            true,
+            vec![
+                StubOutcome::SupervisorErr("social.x rate limited, retry after 1 ms".into()),
+                StubOutcome::Ok(mk_tweet_result("tw-success")),
+            ],
+        );
+        let decorator = RetryingPublishExecutor::new(inner.clone(), fast_test_config(0.0));
+        let result = decorator.publish("hello".into()).await;
+        match result {
+            Ok(t) => assert_eq!(t.tweet_id, "tw-success"),
+            Err(e) => panic!("expected Ok, got {e:?}"),
+        }
+        let ids = inner.request_ids_seen.lock().await;
+        assert_eq!(ids.len(), 2, "two attempts expected (one retry)");
+        assert_eq!(ids[0], ids[1], "request_id must be reused across retries");
+    }
+
+    #[tokio::test]
+    async fn bk2_non_retryable_error_is_not_retried() {
+        let inner = ScriptableExecutor::new(
+            true,
+            vec![
+                StubOutcome::Capability("social.x.post".into()),
+                StubOutcome::Ok(mk_tweet_result("must-not-reach")),
+            ],
+        );
+        let decorator = RetryingPublishExecutor::new(inner.clone(), fast_test_config(0.0));
+        let result = decorator.publish("hello".into()).await;
+        assert!(matches!(result, Err(KernelAgentError::CapabilityDenied(_))));
+        let ids = inner.request_ids_seen.lock().await;
+        assert_eq!(ids.len(), 1, "non-retryable must not retry");
+    }
+
+    #[tokio::test]
+    async fn bk2_retry_exhaustion_returns_last_error() {
+        let inner = ScriptableExecutor::new(
+            true,
+            vec![
+                StubOutcome::SupervisorErr("social.x rate limited, retry after 1 ms".into()),
+                StubOutcome::SupervisorErr("social.x rate limited, retry after 1 ms".into()),
+                StubOutcome::SupervisorErr("social.x rate limited, retry after 1 ms".into()),
+            ],
+        );
+        let decorator = RetryingPublishExecutor::new(inner.clone(), fast_test_config(0.0));
+        let result = decorator.publish("hello".into()).await;
+        assert!(matches!(result, Err(KernelAgentError::SupervisorError(_))));
+        let ids = inner.request_ids_seen.lock().await;
+        assert_eq!(ids.len(), 3, "exactly max_attempts=3 calls");
+        // request_id reused across all attempts
+        let first = ids[0];
+        for (i, id) in ids.iter().enumerate() {
+            assert_eq!(*id, first, "id at attempt {} differs from first", i + 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn bk2_server_hint_is_capped() {
+        // Server says "retry after 600000 ms" (600s). Decorator
+        // must cap at retry_after_cap_secs=1. Test budget: ~1.5s.
+        let inner = ScriptableExecutor::new(
+            true,
+            vec![
+                StubOutcome::SupervisorErr("social.x rate limited, retry after 600000 ms".into()),
+                StubOutcome::Ok(mk_tweet_result("tw-after-cap")),
+            ],
+        );
+        let decorator = RetryingPublishExecutor::new(inner, fast_test_config(0.0));
+        let start = std::time::Instant::now();
+        let result = decorator.publish("hello".into()).await;
+        let elapsed = start.elapsed();
+        assert!(result.is_ok(), "should succeed on retry");
+        assert!(
+            elapsed < std::time::Duration::from_millis(2000),
+            "cap must bound server hint sleep; elapsed={:?}",
+            elapsed
+        );
+    }
+
+    #[tokio::test]
+    async fn bk2_default_config_matches_adr_0005() {
+        let c = RetryConfig::default();
+        assert_eq!(c.max_attempts, 3);
+        assert_eq!(c.initial_backoff_ms, 200);
+        assert_eq!(c.backoff_multiplier, 2.0);
+        assert_eq!(c.max_backoff_secs, 60);
+        assert_eq!(c.retry_after_cap_secs, 300);
+        assert_eq!(c.jitter_pct, 0.20);
     }
 }
