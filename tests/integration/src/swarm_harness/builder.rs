@@ -3,6 +3,7 @@
 //! oracle bridge in one expression.
 
 use crate::swarm_harness::capabilities::SyntheticCapability;
+use crate::swarm_harness::herald_harness::HeraldHarnessCapability;
 use crate::swarm_harness::oracles::oracle_returning;
 use crate::swarm_harness::providers::SyntheticPlannerProvider;
 use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
@@ -18,6 +19,7 @@ use nexus_swarm::{
     Budget, CapabilityRegistry, Director, PlannedSwarm, SwarmCoordinator, SwarmError,
     SwarmRunHandle,
 };
+use social_poster_agent::swarm_entry::PublishExecutor;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
@@ -51,6 +53,11 @@ pub struct ScenarioBuilder {
     budget: Budget,
     oracle_decision: Option<GovernanceDecision>,
     dag_mutator: Option<DagMutator>,
+    /// Bug BL.2: scripted PublishExecutor for the
+    /// "herald" capability. When Some, build()
+    /// registers a HeraldHarnessCapability instead of
+    /// a SyntheticCapability for capability_id="herald".
+    publish_executor: Option<Arc<dyn PublishExecutor>>,
 }
 
 impl ScenarioBuilder {
@@ -61,6 +68,7 @@ impl ScenarioBuilder {
             budget: Budget::unlimited_for_tests(),
             oracle_decision: None,
             dag_mutator: None,
+            publish_executor: None,
         }
     }
 
@@ -114,6 +122,21 @@ impl ScenarioBuilder {
         self
     }
 
+    /// Bug BL.2: register the "herald" capability with
+    /// a scripted PublishExecutor. The capability runs
+    /// through SocialPosterEntry::with_publish_executor
+    /// wrapped in RetryingPublishExecutor (BK.2/BK.3),
+    /// so retry_attempt NodeEvents fire on retries.
+    /// Adds "herald" to the capability list if not
+    /// already present.
+    pub fn with_publish_capability(mut self, executor: Arc<dyn PublishExecutor>) -> Self {
+        self.publish_executor = Some(executor);
+        if !self.capability_names.iter().any(|n| n == "herald") {
+            self.capability_names.push("herald".into());
+        }
+        self
+    }
+
     /// Build the scenario. Panics if no canned plan was provided —
     /// scenario tests are deterministic by construction.
     pub fn build(self) -> Scenario {
@@ -140,10 +163,29 @@ impl ScenarioBuilder {
         router.register_provider(Arc::clone(&planner_provider) as Arc<dyn Provider>);
 
         for name in &self.capability_names {
-            registry.register(Arc::new(SyntheticCapability::with_shared_log(
-                name.clone(),
-                Arc::clone(&capability_call_log),
-            )));
+            // Bug BL.2: route capability_id="herald" to
+            // HeraldHarnessCapability when a scripted
+            // PublishExecutor is present. The herald
+            // capability's observability flows through
+            // NodeEvent emission (BK.3), not the
+            // capability_call_log; non-herald entries
+            // continue to use SyntheticCapability with
+            // the shared log.
+            if name == "herald" {
+                if let Some(executor) = self.publish_executor.as_ref() {
+                    registry.register(Arc::new(HeraldHarnessCapability::new(Arc::clone(executor))));
+                } else {
+                    registry.register(Arc::new(SyntheticCapability::with_shared_log(
+                        name.clone(),
+                        Arc::clone(&capability_call_log),
+                    )));
+                }
+            } else {
+                registry.register(Arc::new(SyntheticCapability::with_shared_log(
+                    name.clone(),
+                    Arc::clone(&capability_call_log),
+                )));
+            }
             // Every capability routes through the synthetic provider.
             // Free cost class + StrictLocal privacy on the provider
             // means the Router accepts any local_light task profile
