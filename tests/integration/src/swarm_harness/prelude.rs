@@ -7,8 +7,9 @@
 
 pub use crate::swarm_harness::{
     correlate_audit_with_events, drain_events_until_terminal, drain_for_duration, event_kind_str,
-    oracle_returning, CorrelationReport, EventCaptureError, Scenario, ScenarioBuilder,
-    SyntheticCapability, SyntheticPlannerProvider,
+    oracle_returning, CorrelationReport, EventCaptureError, HeraldHarnessCapability, Scenario,
+    ScenarioBuilder, ScriptedOutcome, ScriptedPublishExecutor, SyntheticCapability,
+    SyntheticPlannerProvider,
 };
 pub use nexus_governance_oracle::GovernanceDecision;
 pub use nexus_swarm::dag::{DagNode, DagNodeStatus, ExecutionDag};

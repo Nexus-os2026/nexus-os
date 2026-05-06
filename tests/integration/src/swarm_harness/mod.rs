@@ -10,9 +10,11 @@ pub mod builder;
 pub mod capabilities;
 pub mod correlation;
 pub mod events;
+pub mod herald_harness;
 pub mod oracles;
 pub mod prelude;
 pub mod providers;
+pub mod scripted_executor;
 
 pub use builder::{Scenario, ScenarioBuilder};
 pub use capabilities::SyntheticCapability;
@@ -20,5 +22,7 @@ pub use correlation::{correlate_audit_with_events, CorrelationReport};
 pub use events::{
     drain_events_until_terminal, drain_for_duration, event_kind_str, EventCaptureError,
 };
+pub use herald_harness::HeraldHarnessCapability;
 pub use oracles::oracle_returning;
 pub use providers::SyntheticPlannerProvider;
+pub use scripted_executor::{ScriptedOutcome, ScriptedPublishExecutor};
