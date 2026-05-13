@@ -13,12 +13,6 @@ pub struct AuthConfig {
     pub issuer_url: String,
     /// OAuth2 client ID registered with the IdP.
     pub client_id: String,
-    /// Client secret — loaded from env var in production.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub client_secret: Option<String>,
-    /// Environment variable name for client secret (preferred over inline).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub client_secret_env: Option<String>,
     /// OAuth2 redirect URI for the authorization code callback.
     pub redirect_uri: String,
     /// Requested OIDC scopes.
@@ -68,8 +62,6 @@ impl Default for AuthConfig {
             provider: AuthProvider::Local,
             issuer_url: String::new(),
             client_id: String::new(),
-            client_secret: None,
-            client_secret_env: None,
             redirect_uri: "http://localhost:1420/auth/callback".to_string(),
             scopes: default_scopes(),
             session_duration_hours: default_session_hours(),
@@ -80,15 +72,25 @@ impl Default for AuthConfig {
 }
 
 impl AuthConfig {
-    /// Resolve the client secret from environment variable if configured.
+    /// Resolve the OIDC client_secret via the kernel's SecretsFacade.
+    ///
+    /// BX-AUTH-OIDC-MIGRATION: previously had a two-tier fallback on
+    /// inline `self.client_secret` then env-var-name from
+    /// `self.client_secret_env`. Both fields were removed; resolution
+    /// now flows through the facade's env → keyring → sqlite → memory
+    /// chain at scope `"auth.oidc"` name `"client_secret"`.
     pub fn resolve_client_secret(&self) -> Option<String> {
-        if let Some(ref secret) = self.client_secret {
-            return Some(secret.clone());
-        }
-        if let Some(ref env_var) = self.client_secret_env {
-            return std::env::var(env_var).ok();
-        }
-        None
+        let _ = self;
+        nexus_kernel::secrets::global::try_facade()
+            .and_then(|f| {
+                f.get_secret(
+                    &nexus_kernel::secrets::SecretAuditCtx::startup(),
+                    "auth.oidc",
+                    "client_secret",
+                )
+                .ok()
+            })
+            .map(|s| s.value.to_string())
     }
 }
 
@@ -102,29 +104,6 @@ mod tests {
         assert_eq!(cfg.provider, AuthProvider::Local);
         assert_eq!(cfg.session_duration_hours, 8);
         assert_eq!(cfg.scopes.len(), 3);
-    }
-
-    #[test]
-    fn resolve_inline_secret() {
-        let cfg = AuthConfig {
-            client_secret: Some("inline-secret".to_string()),
-            ..Default::default()
-        };
-        assert_eq!(
-            cfg.resolve_client_secret(),
-            Some("inline-secret".to_string())
-        );
-    }
-
-    #[test]
-    fn resolve_env_secret() {
-        std::env::set_var("TEST_NEXUS_OIDC_SECRET", "env-secret");
-        let cfg = AuthConfig {
-            client_secret_env: Some("TEST_NEXUS_OIDC_SECRET".to_string()),
-            ..Default::default()
-        };
-        assert_eq!(cfg.resolve_client_secret(), Some("env-secret".to_string()));
-        std::env::remove_var("TEST_NEXUS_OIDC_SECRET");
     }
 
     #[test]

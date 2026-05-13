@@ -145,7 +145,6 @@ mod tests {
             provider: AuthProvider::Oidc,
             issuer_url: "https://keycloak.test/realms/nexus".to_string(),
             client_id: "nexus-client".to_string(),
-            client_secret: Some("secret123".to_string()),
             role_mapping: mapping,
             roles_claim: "realm_roles".to_string(),
             ..Default::default()

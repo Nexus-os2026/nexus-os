@@ -6,6 +6,7 @@ license.workspace = true
 description = "OIDC/SAML authentication, session management, and role-based user administration for Nexus OS"
 
 [dependencies]
+nexus-kernel = { path = "../kernel" }
 openidconnect = "4"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 jsonwebtoken = "9"

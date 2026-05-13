@@ -351,7 +351,6 @@ mod tests {
             provider: AuthProvider::Oidc,
             issuer_url: "https://idp.example.com".to_string(),
             client_id: "nexus-os".to_string(),
-            client_secret: Some("test-secret".to_string()),
             redirect_uri: "http://localhost:1420/auth/callback".to_string(),
             role_mapping,
             ..Default::default()
