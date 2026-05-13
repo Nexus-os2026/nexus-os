@@ -284,6 +284,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn verify_rate_limit_100_actions_per_minute() {
         let guard = input_timestamps();
         let mut timestamps = guard.lock().unwrap();
@@ -299,6 +300,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn verify_password_field_detection_rejects_typing() {
         let tmp = TempDir::new().unwrap();
         let ctx = ctx(&tmp, AutonomyLevel::L4, true);

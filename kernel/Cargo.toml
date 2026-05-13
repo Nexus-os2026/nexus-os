@@ -54,5 +54,6 @@ nix = { version = "0.29", features = ["signal", "resource", "process"] }
 
 [dev-dependencies]
 tempfile = "3"
+serial_test = "3"
 nexus-kernel = { path = ".", features = ["test-utils"] }
 nexus-persistence = { path = "../persistence", features = ["testing"] }
