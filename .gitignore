@@ -63,3 +63,6 @@ docs/page-audits/*/findings/*-[0-9]*.run[0-9]*.png
 # Working artifacts (investigation prompts, Codex CLI state)
 prompts/triage/
 .codex
+
+# Claude skills: ZIP is a build artifact, only source is versioned
+docs/claude-skills/*.zip
