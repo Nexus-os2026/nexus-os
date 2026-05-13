@@ -189,8 +189,12 @@ impl HttpConnector {
                     binding.secret_name
                 ))
             })?;
+            let audit_ctx = nexus_kernel::secrets::SecretAuditCtx {
+                agent_id: self.agent_id,
+                capability: "http.connector".into(),
+            };
             let token = facade
-                .get_secret("http", binding.secret_name.as_str())
+                .get_secret(&audit_ctx, "http", binding.secret_name.as_str())
                 .map(|s| s.value.to_string())
                 .map_err(|e| match e {
                     SecretError::NotFound => AgentError::SupervisorError(format!(

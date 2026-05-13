@@ -65,7 +65,11 @@ impl OpenAiSwarmProvider {
             )
         })?;
         facade
-            .get_secret("llm", "openai")
+            .get_secret(
+                &nexus_kernel::secrets::SecretAuditCtx::provider_init(),
+                "llm",
+                "openai",
+            )
             .map(|s| s.value.to_string())
             .map_err(|_| ProviderError::NotConfigured("openai api key missing from vault".into()))
     }

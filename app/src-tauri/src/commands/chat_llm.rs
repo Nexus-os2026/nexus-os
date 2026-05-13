@@ -2824,7 +2824,12 @@ pub(crate) fn save_provider_api_key(provider: String, api_key: String) -> Result
         let facade = nexus_kernel::secrets::global::try_facade()
             .ok_or_else(|| "vault not initialized".to_string())?;
         facade
-            .set_secret("llm", name, Zeroizing::new(api_key.clone()))
+            .set_secret(
+                &nexus_kernel::secrets::SecretAuditCtx::user_action(),
+                "llm",
+                name,
+                Zeroizing::new(api_key.clone()),
+            )
             .map_err(|e| format!("vault write failed: {e}"))?;
     }
     // Always update the in-process env var so the facade's env-first
@@ -2948,7 +2953,11 @@ fn api_key_for_provider(config: &NexusConfig, id: &str) -> String {
                     // app/src-tauri/src/commands/agents.rs::
                     // build_provider_config rationale.
     if let Some(facade) = nexus_kernel::secrets::global::try_facade() {
-        if let Ok(s) = facade.get_secret("llm", id) {
+        if let Ok(s) = facade.get_secret(
+            &nexus_kernel::secrets::SecretAuditCtx::user_action(),
+            "llm",
+            id,
+        ) {
             return s.value.to_string();
         }
     }

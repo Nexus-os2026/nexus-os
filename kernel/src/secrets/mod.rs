@@ -96,6 +96,62 @@ pub struct ResolvedSecret {
     pub source: ResolvedFrom,
 }
 
+/// Audit context for a SecretsFacade operation.
+///
+/// Real-AK-2: replaces the AK-15 placeholders (`agent_id = Uuid::nil()`,
+/// `capability = "log_only"`) with values sourced from the caller's
+/// execution context. Layering note: this type is kernel-local; callers
+/// in higher crates (nexus-swarm, agents/*, connectors/*) construct it
+/// by mapping from their own context types at the call seam, so the
+/// kernel does not depend on nexus-swarm-core or any caller crate.
+///
+/// Mapping convention for agent-initiated calls:
+///   agent_id   ← AgentExecutionContext.run_id
+///   capability ← AgentExecutionContext.capability_id
+///
+/// Mapping for non-agent callers: use one of the SYSTEM-class
+/// constructor functions below.
+#[derive(Debug, Clone)]
+pub struct SecretAuditCtx {
+    pub agent_id: uuid::Uuid,
+    pub capability: String,
+}
+
+impl SecretAuditCtx {
+    /// Generic non-agent sentinel. Use only when no more specific
+    /// sentinel fits.
+    pub fn system() -> Self {
+        Self {
+            agent_id: uuid::Uuid::nil(),
+            capability: "system".into(),
+        }
+    }
+
+    /// Human-initiated operation (Tauri commands).
+    pub fn user_action() -> Self {
+        Self {
+            agent_id: uuid::Uuid::nil(),
+            capability: "system.user_action".into(),
+        }
+    }
+
+    /// Connector or subsystem initialization at process startup.
+    pub fn startup() -> Self {
+        Self {
+            agent_id: uuid::Uuid::nil(),
+            capability: "system.startup".into(),
+        }
+    }
+
+    /// LLM provider api_key resolution at provider construction.
+    pub fn provider_init() -> Self {
+        Self {
+            agent_id: uuid::Uuid::nil(),
+            capability: "system.provider_init".into(),
+        }
+    }
+}
+
 /// Top-level credential vault. Holds typed backend Arcs (so
 /// migration can reach the `SqliteEnvelopeBackend` directly without
 /// downcasting through `dyn SecretBackend`) plus the dedup state for
@@ -161,16 +217,14 @@ impl SecretsFacade {
     /// BE will surface a counter for these in observability).
     fn append_audit(
         audit: &Mutex<crate::audit::AuditTrail>,
+        ctx: &SecretAuditCtx,
         event_kind: &str,
         scope: &str,
         name: Option<&str>,
         result: &str,
         resolved_from: Option<&str>,
     ) {
-        // AK-2 will replace Uuid::nil() with the active
-        // AgentExecutionContext once the capability ledger
-        // lands. Until then nil is the documented sentinel.
-        let agent_id = uuid::Uuid::nil();
+        let agent_id = ctx.agent_id;
         let mut payload = serde_json::Map::new();
         payload.insert("event".into(), event_kind.into());
         payload.insert("scope".into(), scope.into());
@@ -178,9 +232,7 @@ impl SecretsFacade {
             payload.insert("name".into(), n.into());
         }
         payload.insert("result".into(), result.into());
-        // AK-15 placeholder; AK-2 changes the value, not the
-        // schema.
-        payload.insert("capability".into(), "log_only".into());
+        payload.insert("capability".into(), ctx.capability.as_str().into());
         if let Some(src) = resolved_from {
             payload.insert("resolved_from".into(), src.into());
         }
@@ -234,7 +286,12 @@ impl SecretsFacade {
     /// (e.g. OSKeyring on a server without a keyring daemon).
     /// `NotFound` continues the chain. Any other error stops the
     /// walk and surfaces.
-    pub fn get_secret(&self, scope: &str, name: &str) -> Result<ResolvedSecret, SecretError> {
+    pub fn get_secret(
+        &self,
+        ctx: &SecretAuditCtx,
+        scope: &str,
+        name: &str,
+    ) -> Result<ResolvedSecret, SecretError> {
         for kind in self.chain_order(scope) {
             let Some(backend) = self.backend(kind) else {
                 continue;
@@ -244,6 +301,7 @@ impl SecretsFacade {
                     self.maybe_log_first_resolve(scope, kind);
                     Self::append_audit(
                         &self.audit,
+                        ctx,
                         "secret_accessed",
                         scope,
                         Some(name),
@@ -260,6 +318,7 @@ impl SecretsFacade {
                 Err(other) => {
                     Self::append_audit(
                         &self.audit,
+                        ctx,
                         "secret_accessed",
                         scope,
                         Some(name),
@@ -272,6 +331,7 @@ impl SecretsFacade {
         }
         Self::append_audit(
             &self.audit,
+            ctx,
             "secret_accessed",
             scope,
             Some(name),
@@ -286,6 +346,7 @@ impl SecretsFacade {
     /// receives the write.
     pub fn set_secret(
         &self,
+        ctx: &SecretAuditCtx,
         scope: &str,
         name: &str,
         value: Zeroizing<String>,
@@ -298,6 +359,7 @@ impl SecretsFacade {
                 Ok(()) => {
                     Self::append_audit(
                         &self.audit,
+                        ctx,
                         "secret_stored",
                         scope,
                         Some(name),
@@ -311,6 +373,7 @@ impl SecretsFacade {
                 Err(other) => {
                     Self::append_audit(
                         &self.audit,
+                        ctx,
                         "secret_stored",
                         scope,
                         Some(name),
@@ -323,6 +386,7 @@ impl SecretsFacade {
         }
         Self::append_audit(
             &self.audit,
+            ctx,
             "secret_stored",
             scope,
             Some(name),
@@ -359,7 +423,12 @@ impl SecretsFacade {
 
     /// Delete from every backend that has the entry. Returns Ok
     /// even if no backend held it (idempotent).
-    pub fn delete_secret(&self, scope: &str, name: &str) -> Result<(), SecretError> {
+    pub fn delete_secret(
+        &self,
+        ctx: &SecretAuditCtx,
+        scope: &str,
+        name: &str,
+    ) -> Result<(), SecretError> {
         let outcome = self.for_each_backend(|backend| backend.delete(scope, name));
         let result = match &outcome {
             Ok(()) => "ok",
@@ -367,6 +436,7 @@ impl SecretsFacade {
         };
         Self::append_audit(
             &self.audit,
+            ctx,
             "secret_deleted",
             scope,
             Some(name),
@@ -377,7 +447,11 @@ impl SecretsFacade {
     }
 
     /// Union of names across all backends in the scope.
-    pub fn list_secrets(&self, scope: &str) -> Result<Vec<String>, SecretError> {
+    pub fn list_secrets(
+        &self,
+        ctx: &SecretAuditCtx,
+        scope: &str,
+    ) -> Result<Vec<String>, SecretError> {
         let mut acc: HashSet<String> = HashSet::new();
         let collected = self.for_each_backend(|backend| match backend.list(scope) {
             Ok(names) => {
@@ -392,7 +466,15 @@ impl SecretsFacade {
             Ok(()) => "ok",
             Err(_) => "error",
         };
-        Self::append_audit(&self.audit, "secrets_listed", scope, None, result, None);
+        Self::append_audit(
+            &self.audit,
+            ctx,
+            "secrets_listed",
+            scope,
+            None,
+            result,
+            None,
+        );
         collected?;
         let mut out: Vec<String> = acc.into_iter().collect();
         out.sort();

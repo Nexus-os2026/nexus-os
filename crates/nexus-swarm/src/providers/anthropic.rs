@@ -209,7 +209,11 @@ impl AnthropicProvider {
             )
         })?;
         facade
-            .get_secret("llm", "anthropic")
+            .get_secret(
+                &nexus_kernel::secrets::SecretAuditCtx::provider_init(),
+                "llm",
+                "anthropic",
+            )
             .map(|s| s.value.to_string())
             .map_err(|_| {
                 ProviderError::NotConfigured("anthropic api key missing from vault".into())

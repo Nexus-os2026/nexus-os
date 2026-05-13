@@ -870,7 +870,11 @@ pub(crate) fn build_provider_config(config: &NexusConfig) -> ProviderSelectionCo
     let facade = nexus_kernel::secrets::global::try_facade();
     let llm_lookup = |vault_name: &str, env_name: &str| -> Option<String> {
         if let Some(f) = facade.as_ref() {
-            if let Ok(s) = f.get_secret("llm", vault_name) {
+            if let Ok(s) = f.get_secret(
+                &nexus_kernel::secrets::SecretAuditCtx::user_action(),
+                "llm",
+                vault_name,
+            ) {
                 return Some(s.value.to_string());
             }
         }

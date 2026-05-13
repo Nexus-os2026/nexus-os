@@ -13,7 +13,7 @@ use super::backend_keyring::{KeyringBackend, KeyringBackendAdapter, MockKeyring}
 use super::backend_memory::MemoryBackend;
 use super::backend_sqlite::SqliteEnvelopeBackend;
 use super::migrate::{migrate_config_to_vault, MigrationError, MigrationReport};
-use super::{ResolvedFrom, SecretError, SecretsFacade};
+use super::{ResolvedFrom, SecretAuditCtx, SecretError, SecretsFacade};
 use crate::config::{CredentialFacadeConfig, NexusConfig};
 use crate::crypto::EncryptionKey;
 use std::sync::Arc;
@@ -59,7 +59,9 @@ fn keyring_wins_over_stale_env_under_default() {
         CredentialFacadeConfig::default(),
         KeyringBackendAdapter::mock(mock),
     );
-    let got = facade.get_secret("llm", "anthropic_api_key").expect("ok");
+    let got = facade
+        .get_secret(&SecretAuditCtx::system(), "llm", "anthropic_api_key")
+        .expect("ok");
     assert_eq!(got.value.to_string(), "sk-live-keyring");
     assert_eq!(got.source, ResolvedFrom::Keyring);
     std::env::remove_var("ANTHROPIC_API_KEY");
@@ -76,7 +78,9 @@ fn env_wins_when_provider_in_override_list() {
         env_override_providers: vec!["llm".to_string()],
     };
     let (facade, _db) = build_facade(cfg, KeyringBackendAdapter::mock(mock));
-    let got = facade.get_secret("llm", "openai_api_key").expect("ok");
+    let got = facade
+        .get_secret(&SecretAuditCtx::system(), "llm", "openai_api_key")
+        .expect("ok");
     assert_eq!(got.value.to_string(), "sk-env-value");
     assert_eq!(got.source, ResolvedFrom::Env);
     std::env::remove_var("OPENAI_API_KEY");
@@ -92,7 +96,9 @@ fn keyring_miss_falls_through_to_env_for_llm_providers() {
         CredentialFacadeConfig::default(),
         KeyringBackendAdapter::mock(mock),
     );
-    let got = facade.get_secret("llm", "huggingface_api_key").expect("ok");
+    let got = facade
+        .get_secret(&SecretAuditCtx::system(), "llm", "huggingface_api_key")
+        .expect("ok");
     assert_eq!(got.value.to_string(), "env-fallback-value");
     assert_eq!(got.source, ResolvedFrom::Env);
     std::env::remove_var("HUGGINGFACE_API_KEY");
@@ -108,7 +114,7 @@ fn keyring_miss_returns_not_found_when_no_env_set() {
         KeyringBackendAdapter::mock(mock),
     );
     let err = facade
-        .get_secret("llm", "openrouter_api_key")
+        .get_secret(&SecretAuditCtx::system(), "llm", "openrouter_api_key")
         .expect_err("must surface NotFound");
     assert!(matches!(err, SecretError::NotFound));
 }
@@ -132,8 +138,12 @@ fn resolve_log_seen_dedups_per_provider() {
     .unwrap();
     let cfg = CredentialFacadeConfig::default();
     let (facade, _db) = build_facade(cfg, KeyringBackendAdapter::mock(mock));
-    let a = facade.get_secret("social", "x_access_token").expect("ok");
-    let b = facade.get_secret("social", "x_access_token").expect("ok");
+    let a = facade
+        .get_secret(&SecretAuditCtx::system(), "social", "x_access_token")
+        .expect("ok");
+    let b = facade
+        .get_secret(&SecretAuditCtx::system(), "social", "x_access_token")
+        .expect("ok");
     assert_eq!(a.value.to_string(), b.value.to_string());
     assert_eq!(a.source, ResolvedFrom::Keyring);
 }
@@ -153,12 +163,15 @@ fn set_secret_writes_to_sqlite_and_get_round_trips() {
     let (facade, _db) = build_facade(cfg, KeyringBackendAdapter::rejecting());
     facade
         .set_secret(
+            &SecretAuditCtx::system(),
             "social",
             "x_access_token",
             Zeroizing::new("at-12345".into()),
         )
         .expect("ok");
-    let got = facade.get_secret("social", "x_access_token").expect("ok");
+    let got = facade
+        .get_secret(&SecretAuditCtx::system(), "social", "x_access_token")
+        .expect("ok");
     assert_eq!(got.value.to_string(), "at-12345");
     assert_eq!(got.source, ResolvedFrom::Sqlite);
 }
@@ -229,7 +242,9 @@ fn migrate_config_to_vault_happy_path_clears_fields_and_bumps_version() {
         "x_access_token_secret",
     ];
     for name in social_names {
-        let got = facade.get_secret("social", name).expect("ok");
+        let got = facade
+            .get_secret(&SecretAuditCtx::system(), "social", name)
+            .expect("ok");
         assert!(!got.value.is_empty());
     }
     // Vault has all six LLM keys.
@@ -242,7 +257,9 @@ fn migrate_config_to_vault_happy_path_clears_fields_and_bumps_version() {
         "openrouter",
     ];
     for name in llm_names {
-        let got = facade.get_secret("llm", name).expect("ok");
+        let got = facade
+            .get_secret(&SecretAuditCtx::system(), "llm", name)
+            .expect("ok");
         assert!(!got.value.is_empty());
     }
     // Re-run is a no-op.
@@ -409,7 +426,9 @@ fn ak_commit4_real_keyring_falls_through_to_memory() {
     // have this unique key (or returns BackendNotConfigured if
     // service is unavailable); env is unset; sqlite is None;
     // memory wins.
-    let got = facade.get_secret("test", &unique).expect("ok");
+    let got = facade
+        .get_secret(&SecretAuditCtx::system(), "test", &unique)
+        .expect("ok");
     assert_eq!(got.value.as_str(), "from-memory");
     assert_eq!(got.source, ResolvedFrom::Memory);
 }
@@ -440,13 +459,22 @@ fn ak15_audit_records_ops_without_plaintext_leak() {
 
     let secret_value = "ghp_super_secret_xyz_12345";
     facade
-        .set_secret("test", "key1", Zeroizing::new(secret_value.into()))
+        .set_secret(
+            &SecretAuditCtx::system(),
+            "test",
+            "key1",
+            Zeroizing::new(secret_value.into()),
+        )
         .expect("set ok");
-    let got = facade.get_secret("test", "key1").expect("get ok");
+    let got = facade
+        .get_secret(&SecretAuditCtx::system(), "test", "key1")
+        .expect("get ok");
     assert_eq!(got.value.as_str(), secret_value);
-    facade.delete_secret("test", "key1").expect("delete ok");
+    facade
+        .delete_secret(&SecretAuditCtx::system(), "test", "key1")
+        .expect("delete ok");
     let miss = facade
-        .get_secret("test", "key1")
+        .get_secret(&SecretAuditCtx::system(), "test", "key1")
         .expect_err("expected NotFound after delete");
     assert!(matches!(miss, SecretError::NotFound));
 
@@ -474,7 +502,9 @@ fn ak15_audit_records_ops_without_plaintext_leak() {
     assert_eq!(p0["scope"], "test");
     assert_eq!(p0["name"], "key1");
     assert_eq!(p0["result"], "ok");
-    assert_eq!(p0["capability"], "log_only");
+    // AK-2: capability is now sourced from SecretAuditCtx. Tests above
+    // use SecretAuditCtx::system() so the capability is "system".
+    assert_eq!(p0["capability"], "system");
     assert_eq!(p0["resolved_from"], "memory");
 
     let p1 = &events[1].payload;

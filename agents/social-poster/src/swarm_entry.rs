@@ -203,9 +203,15 @@ impl PublishExecutor for RealPublishExecutor {
             "x_access_token",
             "x_access_token_secret",
         ];
+        // AK-2: `credentials_present` is a trait method without
+        // AgentExecutionContext in scope; it's a pre-flight
+        // presence check (not a per-agent-invocation read). Use
+        // the SYSTEM-class `startup` sentinel — threading ctx
+        // through the PublishExecutor trait is out of AK-2 scope.
+        let audit_ctx = nexus_kernel::secrets::SecretAuditCtx::startup();
         names.iter().all(|name| {
             self.facade
-                .get_secret("social", name)
+                .get_secret(&audit_ctx, "social", name)
                 .map(|s| !s.value.is_empty())
                 .unwrap_or(false)
         })

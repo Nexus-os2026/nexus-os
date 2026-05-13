@@ -70,7 +70,11 @@ impl OpenRouterSwarmProvider {
             )
         })?;
         facade
-            .get_secret("llm", "openrouter")
+            .get_secret(
+                &nexus_kernel::secrets::SecretAuditCtx::provider_init(),
+                "llm",
+                "openrouter",
+            )
             .map(|s| s.value.to_string())
             .map_err(|_| {
                 ProviderError::NotConfigured("openrouter api key missing from vault".into())

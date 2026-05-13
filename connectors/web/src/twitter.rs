@@ -452,7 +452,8 @@ fn load_twitter_credentials() -> Result<Option<TwitterCredentials>, AgentError> 
     };
 
     let read = |name: &str| -> Result<Option<String>, AgentError> {
-        match facade.get_secret("social", name) {
+        let ctx = nexus_kernel::secrets::SecretAuditCtx::startup();
+        match facade.get_secret(&ctx, "social", name) {
             Ok(secret) => Ok(Some(secret.value.to_string().trim().to_string())),
             Err(SecretError::NotFound) => Ok(None),
             Err(e) => Err(AgentError::SupervisorError(format!(

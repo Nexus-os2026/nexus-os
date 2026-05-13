@@ -77,7 +77,11 @@ impl HuggingFaceProvider {
             )
         })?;
         facade
-            .get_secret("llm", "huggingface")
+            .get_secret(
+                &nexus_kernel::secrets::SecretAuditCtx::provider_init(),
+                "llm",
+                "huggingface",
+            )
             .map(|s| s.value.to_string())
             .map_err(|_| ProviderError::NotConfigured("hf token missing from vault".into()))
     }
