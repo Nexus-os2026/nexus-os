@@ -43,7 +43,16 @@ impl MatrixAdapter {
             .unwrap_or_else(|_| "https://matrix.org".to_string());
         // Optional: Matrix credentials may not be configured in environment
         let user_id = std::env::var("NEXUS_MATRIX_USER_ID").ok();
-        let access_token = std::env::var("NEXUS_MATRIX_ACCESS_TOKEN").ok();
+        let access_token = nexus_kernel::secrets::global::try_facade()
+            .and_then(|f| {
+                f.get_secret(
+                    &nexus_kernel::secrets::SecretAuditCtx::startup(),
+                    "messaging.matrix",
+                    "access_token",
+                )
+                .ok()
+            })
+            .map(|s| s.value.to_string());
 
         Self {
             incoming: Vec::new(),

@@ -59,9 +59,27 @@ impl WhatsAppAdapter {
             .unwrap_or_else(|_| Client::new());
 
         // Optional: WhatsApp credentials may not be configured in environment
-        let access_token = std::env::var("WHATSAPP_ACCESS_TOKEN").ok();
+        let access_token = nexus_kernel::secrets::global::try_facade()
+            .and_then(|f| {
+                f.get_secret(
+                    &nexus_kernel::secrets::SecretAuditCtx::startup(),
+                    "messaging.whatsapp",
+                    "access_token",
+                )
+                .ok()
+            })
+            .map(|s| s.value.to_string());
         let phone_number_id = std::env::var("WHATSAPP_PHONE_NUMBER_ID").ok();
-        let verify_token = std::env::var("WHATSAPP_VERIFY_TOKEN").ok();
+        let verify_token = nexus_kernel::secrets::global::try_facade()
+            .and_then(|f| {
+                f.get_secret(
+                    &nexus_kernel::secrets::SecretAuditCtx::startup(),
+                    "messaging.whatsapp",
+                    "verify_token",
+                )
+                .ok()
+            })
+            .map(|s| s.value.to_string());
 
         Self {
             incoming: Vec::new(),
