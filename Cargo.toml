@@ -81,6 +81,11 @@ license = "MIT"
 [workspace.dependencies]
 regex = "1.10"
 scraper = "0.20"
+# AK-13: pinned to 43.0.2 per RUSTSEC-2026-0114 and the
+# 43.0.0 Linker use-after-free fix (GHSA-hfr4-7c6c-48w2 /
+# CVE-2026-34983) shipped in 43.0.1. Re-bump via this
+# single workspace pin going forward.
+wasmtime = "43.0.2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
