@@ -204,10 +204,9 @@ impl LlamaContext {
         // is handled in the frontend so we never accidentally swallow real content.
         let mut generated_text = String::new();
         let mut tokens_generated = 0u32;
-        let mut pos = prompt_tokens.len() as i32;
         let mut gen_batch = batch::create_batch(1);
 
-        for _ in 0..config.max_tokens {
+        for pos in (prompt_tokens.len() as i32..).take(config.max_tokens as usize) {
             // Sample next token
             let token = unsafe { ffi::llama_sampler_sample(self.sampler, self.ctx, -1) };
 
@@ -272,7 +271,6 @@ impl LlamaContext {
                 break;
             }
 
-            pos += 1;
         }
 
         batch::free_batch(gen_batch);
