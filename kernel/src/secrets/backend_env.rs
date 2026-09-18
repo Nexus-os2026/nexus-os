@@ -5,6 +5,10 @@
 //! `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.) and to
 //! `NEXUS_<SCOPE>_<NAME>` for everything else.
 //!
+//! Non-LLM scope/name components are flattened to shell-friendly,
+//! uppercase identifiers. For example `auth.oidc/client_secret` maps to
+//! `NEXUS_AUTH_OIDC_CLIENT_SECRET`.
+//!
 //! `set` always returns `BackendReadOnly` — the env is operator-owned;
 //! mutating it from inside the process would not survive the process
 //! anyway. `list` returns the empty set; the env namespace is too
@@ -18,6 +22,22 @@ pub struct EnvBackend;
 impl EnvBackend {
     pub fn new() -> Self {
         Self
+    }
+
+    /// Convert a secret scope/name component to a shell-friendly environment
+    /// variable component. ASCII alphanumerics and underscores are preserved;
+    /// separators such as dots and hyphens are flattened to underscores.
+    fn env_component(value: &str) -> String {
+        value
+            .chars()
+            .map(|ch| {
+                if ch.is_ascii_alphanumeric() {
+                    ch.to_ascii_uppercase()
+                } else {
+                    '_'
+                }
+            })
+            .collect()
     }
 
     /// Map `(scope, name)` to the env-var name we look up.
@@ -40,7 +60,11 @@ impl EnvBackend {
             let provider = name.trim_end_matches("_api_key").to_uppercase();
             format!("{provider}_API_KEY")
         } else {
-            format!("NEXUS_{}_{}", scope.to_uppercase(), name.to_uppercase())
+            format!(
+                "NEXUS_{}_{}",
+                Self::env_component(scope),
+                Self::env_component(name)
+            )
         }
     }
 }
@@ -74,5 +98,38 @@ impl SecretBackend for EnvBackend {
 
     fn list(&self, _scope: &str) -> Result<Vec<String>, SecretError> {
         Ok(Vec::new())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::EnvBackend;
+
+    #[test]
+    fn flattens_dotted_scope_to_shell_friendly_name() {
+        assert_eq!(
+            EnvBackend::env_var_name("auth.oidc", "client_secret"),
+            "NEXUS_AUTH_OIDC_CLIENT_SECRET"
+        );
+    }
+
+    #[test]
+    fn flattens_non_alphanumeric_separators() {
+        assert_eq!(
+            EnvBackend::env_var_name("integration.github", "oauth.client-secret"),
+            "NEXUS_INTEGRATION_GITHUB_OAUTH_CLIENT_SECRET"
+        );
+    }
+
+    #[test]
+    fn preserves_llm_provider_conventions() {
+        assert_eq!(
+            EnvBackend::env_var_name("llm", "anthropic"),
+            "ANTHROPIC_API_KEY"
+        );
+        assert_eq!(
+            EnvBackend::env_var_name("llm", "nvidia"),
+            "NVIDIA_NIM_API_KEY"
+        );
     }
 }
