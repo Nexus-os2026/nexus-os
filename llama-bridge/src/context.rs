@@ -270,7 +270,6 @@ impl LlamaContext {
                 });
                 break;
             }
-
         }
 
         batch::free_batch(gen_batch);
