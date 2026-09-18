@@ -116,7 +116,7 @@ impl UILearner {
             .iter()
             .map(|(k, v)| (k.clone(), *v))
             .collect();
-        sidebar_order.sort_by(|a, b| b.1.cmp(&a.1));
+        sidebar_order.sort_by_key(|a| std::cmp::Reverse(a.1));
         let sidebar_order: Vec<String> = sidebar_order.into_iter().map(|(k, _)| k).collect();
 
         let default_page = self
