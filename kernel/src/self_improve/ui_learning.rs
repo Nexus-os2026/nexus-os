@@ -147,7 +147,7 @@ impl UILearner {
             }
         }
         let mut quick_actions: Vec<(String, u64)> = action_counts.into_iter().collect();
-        quick_actions.sort_by(|a, b| b.1.cmp(&a.1));
+        quick_actions.sort_by_key(|a| std::cmp::Reverse(a.1));
         let quick_actions: Vec<String> = quick_actions
             .into_iter()
             .take(5)
