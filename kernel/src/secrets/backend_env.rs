@@ -130,7 +130,10 @@ impl SecretBackend for EnvBackend {
 
 #[cfg(test)]
 mod tests {
-    use super::EnvBackend;
+    use super::{EnvBackend, SecretBackend};
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn flattens_dotted_scope_to_shell_friendly_name() {
@@ -166,5 +169,38 @@ mod tests {
             EnvBackend::legacy_env_var_name("auth.oidc", "client_secret"),
             "NEXUS_AUTH.OIDC_CLIENT_SECRET"
         );
+    }
+
+    #[test]
+    fn get_falls_back_to_legacy_env_name() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let canonical = "NEXUS_TEST_BY_TOKEN";
+        let legacy = "NEXUS_TEST.BY_TOKEN";
+        std::env::remove_var(canonical);
+        std::env::set_var(legacy, "legacy-value");
+
+        let resolved = EnvBackend::new()
+            .get("test.by", "token")
+            .expect("legacy env name should remain readable");
+        assert_eq!(resolved.as_str(), "legacy-value");
+
+        std::env::remove_var(legacy);
+    }
+
+    #[test]
+    fn canonical_env_name_wins_over_legacy_name() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let canonical = "NEXUS_TEST_BZ_TOKEN";
+        let legacy = "NEXUS_TEST.BZ_TOKEN";
+        std::env::set_var(canonical, "canonical-value");
+        std::env::set_var(legacy, "legacy-value");
+
+        let resolved = EnvBackend::new()
+            .get("test.bz", "token")
+            .expect("canonical env name should resolve");
+        assert_eq!(resolved.as_str(), "canonical-value");
+
+        std::env::remove_var(canonical);
+        std::env::remove_var(legacy);
     }
 }
