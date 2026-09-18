@@ -9,6 +9,9 @@
 //! uppercase identifiers. For example `auth.oidc/client_secret` maps to
 //! `NEXUS_AUTH_OIDC_CLIENT_SECRET`.
 //!
+//! During the migration window, reads also fall back to the legacy,
+//! unflattened name so existing operator environments keep working.
+//!
 //! `set` always returns `BackendReadOnly` — the env is operator-owned;
 //! mutating it from inside the process would not survive the process
 //! anyway. `list` returns the empty set; the env namespace is too
@@ -40,7 +43,7 @@ impl EnvBackend {
             .collect()
     }
 
-    /// Map `(scope, name)` to the env-var name we look up.
+    /// Map `(scope, name)` to the canonical env-var name.
     /// LLM keys keep their conventional shape (`ANTHROPIC_API_KEY`)
     /// to preserve compatibility with existing operator workflows.
     /// Everything else gets the namespaced `NEXUS_<SCOPE>_<NAME>`.
@@ -67,6 +70,16 @@ impl EnvBackend {
             )
         }
     }
+
+    /// Return the legacy pre-flattening variable name.
+    /// This exists only to preserve read compatibility during migration.
+    fn legacy_env_var_name(scope: &str, name: &str) -> String {
+        if scope == "llm" {
+            Self::env_var_name(scope, name)
+        } else {
+            format!("NEXUS_{}_{}", scope.to_uppercase(), name.to_uppercase())
+        }
+    }
 }
 
 impl Default for EnvBackend {
@@ -81,11 +94,25 @@ impl SecretBackend for EnvBackend {
     }
 
     fn get(&self, scope: &str, name: &str) -> Result<Zeroizing<String>, SecretError> {
-        let var = Self::env_var_name(scope, name);
-        match std::env::var(&var) {
-            Ok(value) if !value.is_empty() => Ok(Zeroizing::new(value)),
-            _ => Err(SecretError::NotFound),
+        let canonical = Self::env_var_name(scope, name);
+        if let Ok(value) = std::env::var(&canonical) {
+            if !value.is_empty() {
+                return Ok(Zeroizing::new(value));
+            }
         }
+
+        // Compatibility fallback for environments that still use the old
+        // dotted/unflattened spelling. Canonical always wins when both exist.
+        let legacy = Self::legacy_env_var_name(scope, name);
+        if legacy != canonical {
+            if let Ok(value) = std::env::var(&legacy) {
+                if !value.is_empty() {
+                    return Ok(Zeroizing::new(value));
+                }
+            }
+        }
+
+        Err(SecretError::NotFound)
     }
 
     fn set(&self, _scope: &str, _name: &str, _value: Zeroizing<String>) -> Result<(), SecretError> {
@@ -130,6 +157,14 @@ mod tests {
         assert_eq!(
             EnvBackend::env_var_name("llm", "nvidia"),
             "NVIDIA_NIM_API_KEY"
+        );
+    }
+
+    #[test]
+    fn exposes_legacy_name_for_migration_compatibility() {
+        assert_eq!(
+            EnvBackend::legacy_env_var_name("auth.oidc", "client_secret"),
+            "NEXUS_AUTH.OIDC_CLIENT_SECRET"
         );
     }
 }
