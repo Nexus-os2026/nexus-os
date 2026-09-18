@@ -151,9 +151,7 @@ impl InputSafetyGuard {
                     return Err(ComputerUseError::BlockedKeyCombination { combo });
                 }
             }
-            KeyAction::KeyPress { key }
-                if is_combo_blocked(key) && !self.system_keys_allowed =>
-            {
+            KeyAction::KeyPress { key } if is_combo_blocked(key) && !self.system_keys_allowed => {
                 return Err(ComputerUseError::BlockedKeyCombination { combo: key.clone() });
             }
             _ => {}
