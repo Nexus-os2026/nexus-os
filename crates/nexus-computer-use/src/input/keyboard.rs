@@ -119,10 +119,8 @@ impl KeyboardController {
                     return Err(ComputerUseError::BlockedKeyCombination { combo });
                 }
             }
-            KeyAction::KeyPress { key } => {
-                if is_combo_blocked(key) {
-                    return Err(ComputerUseError::BlockedKeyCombination { combo: key.clone() });
-                }
+            KeyAction::KeyPress { key } if is_combo_blocked(key) => {
+                return Err(ComputerUseError::BlockedKeyCombination { combo: key.clone() });
             }
             _ => {}
         }

@@ -145,7 +145,7 @@ pub fn count_file_types(path: &std::path::Path) -> Vec<(String, usize)> {
     let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     walk_for_types(path, &mut counts);
     let mut sorted: Vec<_> = counts.into_iter().collect();
-    sorted.sort_by(|a, b| b.1.cmp(&a.1));
+    sorted.sort_by_key(|a| std::cmp::Reverse(a.1));
     sorted.into_iter().take(15).collect()
 }
 
