@@ -100,6 +100,13 @@ pub async fn execute_plan(
                             });
                         }
                         Err(e) => {
+                            if e.is_filesystem_denial() {
+                                let _ = event_tx.send(AgentEvent::ToolCallDenied {
+                                    name: step.tool.clone(),
+                                    reason: e.to_string(),
+                                });
+                                return Err(e);
+                            }
                             results.push(StepResult {
                                 step: step.step,
                                 success: false,
@@ -128,6 +135,9 @@ pub async fn execute_plan(
                     name: step.tool.clone(),
                     reason: format!("{}", e),
                 });
+                if e.is_filesystem_denial() {
+                    return Err(e);
+                }
                 results.push(StepResult {
                     step: step.step,
                     success: false,
