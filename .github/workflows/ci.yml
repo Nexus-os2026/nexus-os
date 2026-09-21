@@ -42,6 +42,14 @@ jobs:
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
 
+      # Privacy regressions exercise both real search backends.
+      - name: Install ripgrep 14.1.1 and verify search backends
+        shell: bash
+        run: |
+          cargo install ripgrep --version 14.1.1 --locked
+          rg --version
+          grep --version
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -86,6 +94,13 @@ jobs:
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
 
+      - name: Install ripgrep 14.1.1 and verify search backends
+        shell: bash
+        run: |
+          cargo install ripgrep --version 14.1.1 --locked
+          rg --version
+          grep --version
+
       - name: Run tests
         run: cargo test --workspace --locked
 
@@ -100,6 +115,15 @@ jobs:
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
+
+      - name: Install ripgrep 14.1.1 and verify search backends
+        shell: bash
+        run: |
+          cargo install ripgrep --version 14.1.1 --locked
+          rg --version
+          grep --version
+          # Expose Git for Windows grep/which to the native Cargo test process.
+          cygpath -w /usr/bin >> "$GITHUB_PATH"
 
       - name: Run tests
         run: cargo test --workspace --locked
