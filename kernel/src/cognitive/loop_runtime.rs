@@ -11,7 +11,7 @@ use super::types::{
     GoalStatus, LoopConfig, PlannedAction, PlanningContext, StepStatus,
 };
 use crate::actuators::{ActuatorContext, ActuatorRegistry};
-use crate::audit::{AuditTrail, EventType};
+use crate::audit::{AuditTrail, AuditWriter, EventType};
 use crate::autonomy::AutonomyLevel;
 use crate::capabilities::has_capability;
 use crate::errors::AgentError;
@@ -160,7 +160,7 @@ pub trait ActionExecutor: Send + Sync {
         &self,
         agent_id: &str,
         action: &PlannedAction,
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
         hitl_approved: bool,
     ) -> Result<String, String>;
 }
@@ -293,7 +293,7 @@ impl ActionExecutor for RegistryExecutor {
         &self,
         agent_id: &str,
         action: &PlannedAction,
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
         hitl_approved: bool,
     ) -> Result<String, String> {
         // For actions not handled by actuators (LlmQuery, MemoryStore, etc.),
@@ -785,7 +785,7 @@ impl CognitiveRuntime {
         agent_id: &str,
         phase: CognitivePhase,
         memory_mgr: &AgentMemoryManager,
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
     ) {
         let Some(selection) = self.resolve_phase_model(agent_id, phase, memory_mgr) else {
             return;
@@ -848,7 +848,7 @@ impl CognitiveRuntime {
         planner: &CognitivePlanner,
         memory_mgr: &AgentMemoryManager,
         executor: &dyn ActionExecutor,
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
     ) -> Result<CycleResult, AgentError> {
         self.run_cycle_with_evolution(agent_id, planner, memory_mgr, executor, audit, None)
     }
@@ -860,7 +860,7 @@ impl CognitiveRuntime {
         planner: &CognitivePlanner,
         memory_mgr: &AgentMemoryManager,
         executor: &dyn ActionExecutor,
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
         evolution_tracker: Option<&EvolutionTracker>,
     ) -> Result<CycleResult, AgentError> {
         let cycle_start = std::time::Instant::now();
@@ -2247,7 +2247,7 @@ mod tests {
             &self,
             _agent_id: &str,
             _action: &PlannedAction,
-            _audit: &mut AuditTrail,
+            _audit: &mut dyn AuditWriter,
             _hitl_approved: bool,
         ) -> Result<String, String> {
             let mut results = self.results.lock().unwrap();
@@ -3487,7 +3487,7 @@ mod tests {
             &self,
             agent_id: &str,
             action: &PlannedAction,
-            audit: &mut AuditTrail,
+            audit: &mut dyn AuditWriter,
             _hitl_approved: bool,
         ) -> Result<String, String> {
             match action {

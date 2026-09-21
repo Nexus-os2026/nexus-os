@@ -4,7 +4,7 @@
 //! databases, etc.), discover their tools, and call them with full governance:
 //! capability checks, PII redaction, fuel accounting, and audit trail.
 
-use nexus_kernel::audit::{AuditTrail, EventType};
+use nexus_kernel::audit::{AuditTrail, AuditWriter, EventType};
 use nexus_kernel::consent::{ConsentRuntime, GovernedOperation};
 use nexus_kernel::redaction::RedactionEngine;
 use serde::{Deserialize, Serialize};
@@ -452,7 +452,7 @@ impl McpHostManager {
         arguments: serde_json::Value,
         agent_id: Uuid,
         capabilities: &[&str],
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
     ) -> Result<McpToolResult, String> {
         if self.governance_enabled
             && !nexus_kernel::capabilities::has_capability(capabilities.iter().copied(), "mcp.call")

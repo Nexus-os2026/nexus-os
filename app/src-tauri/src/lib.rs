@@ -1070,6 +1070,11 @@ struct ChatConversationState {
 #[derive(Clone)]
 pub struct AppState {
     pub supervisor: Arc<Mutex<Supervisor>>,
+    /// Lock invariant: audit and supervisor guards must never overlap. Do not
+    /// hold audit across routing, secrets, Warden, models, tools or callbacks.
+    /// Execution passes an AuditWriter; readers snapshot before downstream work.
+    /// Readers needing both take the supervisor snapshot, release its guard,
+    /// then take the audit snapshot.
     pub audit: Arc<Mutex<AuditTrail>>,
     meta: Arc<Mutex<HashMap<AgentId, AgentMeta>>>,
     voice: Arc<Mutex<VoiceRuntimeState>>,
@@ -1872,6 +1877,11 @@ impl AppState {
         }
     }
 
+    /// Owned read snapshot. Never append to this copy; use the shared writer.
+    fn audit_snapshot(&self) -> AuditTrail {
+        self.audit.lock().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
     fn log_event(&self, agent_id: AgentId, event_type: EventType, payload: serde_json::Value) {
         let event_type_str = format!("{event_type:?}");
         let mut guard = match self.audit.lock() {
@@ -1882,6 +1892,8 @@ impl AppState {
             eprintln!("audit append failed: {e}");
         }
 
+        // Leaf critical section: serialize the DB chain's read/count/append as
+        // before. No callbacks or supervisor operations while holding audit.
         // Persist audit event to database
         let prev_hash = self
             .db

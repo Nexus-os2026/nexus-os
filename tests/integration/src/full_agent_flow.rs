@@ -66,13 +66,13 @@ async fn run_headless_goal_loop(
 
     for _ in 0..50_u32 {
         let cycle_res = {
-            let mut audit_guard = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+            let mut audit = state.audit.clone();
             state.cognitive_runtime.run_cycle_with_evolution(
                 &agent_id,
                 &planner,
                 &memory_mgr,
                 &executor,
-                &mut audit_guard,
+                &mut audit,
                 Some(&state.evolution_tracker),
             )
         };

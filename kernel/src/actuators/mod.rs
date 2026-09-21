@@ -48,7 +48,7 @@ pub use types::{
 };
 pub use web::{CurlWebBackend, GovernedWeb, WebSearchBackend, WebSearchResult};
 
-use crate::audit::{AuditTrail, EventType};
+use crate::audit::{AuditWriter, EventType};
 use crate::capabilities::has_capability;
 use crate::cognitive::types::PlannedAction;
 use serde_json::json;
@@ -127,7 +127,7 @@ impl ActuatorRegistry {
         &self,
         action: &PlannedAction,
         context: &ActuatorContext,
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
     ) -> Result<ActionResult, ActuatorError> {
         // Find the right actuator by trying each one
         let actuator = self.find_actuator_for(action)?;
@@ -303,7 +303,7 @@ impl ActuatorRegistry {
         success: bool,
         detail: &str,
         fuel_cost: f64,
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
     ) -> Result<(), ActuatorError> {
         let agent_uuid =
             uuid::Uuid::parse_str(&context.agent_id).unwrap_or_else(|_| uuid::Uuid::new_v4());
@@ -390,6 +390,7 @@ fn estimate_action_cost(action: &PlannedAction) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audit::AuditTrail;
     use crate::autonomy::AutonomyLevel;
     use std::collections::HashSet;
     use tempfile::TempDir;
