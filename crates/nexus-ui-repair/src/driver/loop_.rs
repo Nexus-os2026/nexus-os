@@ -401,29 +401,27 @@ impl Driver {
                                 }
                             }
                         }
-                        DriverState::Classify => {
-                            if !self.config.dry_run {
-                                let verdict = last_verdict.clone().unwrap_or(VisionVerdict {
-                                    verdict: VisionVerdictKind::Ambiguous,
-                                    confidence: 0.0,
-                                    reasoning: "no verdict".into(),
-                                    detected_changes: vec![],
-                                });
-                                let input = ClassifierInput {
-                                    vision_verdict: verdict,
-                                    console_errors: vec![],
-                                    ipc_traffic: vec![IpcEvent {
-                                        command: "stub".into(),
-                                    }],
-                                    dom_mutations: vec![DomMutation {
-                                        selector: "stub".into(),
-                                    }],
-                                    elapsed_ms: 600,
-                                    signal_change_after_action: true,
-                                };
-                                let c = self.classifier.classify(&input);
-                                outcome.classifications.push(c);
-                            }
+                        DriverState::Classify if !self.config.dry_run => {
+                            let verdict = last_verdict.clone().unwrap_or(VisionVerdict {
+                                verdict: VisionVerdictKind::Ambiguous,
+                                confidence: 0.0,
+                                reasoning: "no verdict".into(),
+                                detected_changes: vec![],
+                            });
+                            let input = ClassifierInput {
+                                vision_verdict: verdict,
+                                console_errors: vec![],
+                                ipc_traffic: vec![IpcEvent {
+                                    command: "stub".into(),
+                                }],
+                                dom_mutations: vec![DomMutation {
+                                    selector: "stub".into(),
+                                }],
+                                elapsed_ms: 600,
+                                signal_change_after_action: true,
+                            };
+                            let c = self.classifier.classify(&input);
+                            outcome.classifications.push(c);
                         }
                         _ => {}
                     }
