@@ -471,3 +471,168 @@ fn p0_001_warden_supervisor_audit_order() {
         assert!(state.audit.lock().unwrap().verify_integrity());
     });
 }
+
+struct DenyingWarden {
+    engine: WardenReviewEngine,
+    denials: Arc<AtomicUsize>,
+}
+
+impl ActionReviewEngine for DenyingWarden {
+    fn review(
+        &self,
+        id: &str,
+        name: &str,
+        action: &PlannedAction,
+    ) -> Result<ActionReviewDecision, String> {
+        let decision = self.engine.review_with(
+            id,
+            name,
+            action,
+            true,
+            || "p0-test-model".into(),
+            |_, _| Ok("NO requires human review".into()),
+        )?;
+        assert!(matches!(decision, ActionReviewDecision::Deny { .. }));
+        self.denials.fetch_add(1, Ordering::SeqCst);
+        Ok(decision)
+    }
+}
+
+fn warden_denial_scenario(rounds: usize) {
+    use nexus_kernel::cognitive::CognitivePhase;
+
+    let state = AppState::new_in_memory();
+    let id = agent(&state, "denial-lock-test", true);
+    agent(&state, "nexus-warden", true);
+    let workspace = std::env::temp_dir().join(format!("p0-001b-{}", Uuid::new_v4()));
+    std::fs::create_dir(&workspace).unwrap();
+    let denials = Arc::new(AtomicUsize::new(0));
+    let executor = RegistryExecutor::new(
+        workspace.clone(),
+        state.audit.clone(),
+        state.supervisor.clone(),
+        Some(Arc::new(DenyingWarden {
+            engine: WardenReviewEngine {
+                state: state.clone(),
+            },
+            denials: denials.clone(),
+        })),
+    );
+    let memory = AgentMemoryManager::new(Box::new(DbMemoryStore {
+        db: state.db.clone(),
+    }));
+    let planner = CognitivePlanner::new(Box::new(Plan {
+        response: r#"[{"action":{"type":"FileWrite","path":"denied.txt","content":"must not be written"},"description":"write test fixture"}]"#.into(),
+        access_secret: false,
+    }));
+
+    for round in 0..rounds {
+        let mut goal = AgentGoal::new(format!("Warden denial round {round}"), 5);
+        goal.model_override = Some("p0-test-model".into());
+        let goal_id = goal.id.clone();
+        state.cognitive_runtime.assign_goal(&id, goal).unwrap();
+        let result = run_cognitive_cycle(&state, &id, &planner, &memory, &executor).unwrap();
+        assert_eq!(denials.load(Ordering::SeqCst), round + 1);
+        assert_eq!(result.phase, CognitivePhase::Blocked);
+        assert_eq!(result.steps_executed, 0);
+        assert!(result.should_continue);
+        assert!(result
+            .blocked_reason
+            .unwrap()
+            .contains("Warden blocked action"));
+        assert!(!workspace.join("denied.txt").exists());
+
+        // These reads reacquire real loop-state after denial handling returns.
+        let status = state.cognitive_runtime.get_agent_status(&id).unwrap();
+        assert_eq!(status.phase, CognitivePhase::Blocked);
+        assert_eq!(status.active_goal.unwrap().id, goal_id);
+        assert_eq!(status.steps_completed, 0);
+        assert!(state.cognitive_runtime.pending_hitl_steps(&id).is_ok());
+
+        let pending = state.db.load_pending_consent().unwrap();
+        assert_eq!(pending.len(), 1);
+        let consent = &pending[0];
+        assert_eq!(consent.agent_id, id);
+        assert_eq!(consent.operation_type, "warden_review");
+        assert_eq!(consent.hitl_tier, "Tier2");
+        assert_eq!(consent.status, "pending");
+        let context: Value = serde_json::from_str(&consent.operation_json).unwrap();
+        assert_eq!(context["goal_id"], goal_id);
+        assert_eq!(context["warden_reason"], "requires human review");
+        assert_eq!(context["source_surface"], "chat");
+        assert!(context["summary"]
+            .as_str()
+            .unwrap()
+            .contains("denial-lock-test"));
+        assert_eq!(context["side_effects"].as_array().unwrap().len(), 1);
+
+        let audit = state.audit.lock().unwrap();
+        assert!(audit.verify_integrity());
+        assert_eq!(
+            audit
+                .events()
+                .iter()
+                .filter(|e| {
+                    e.payload["action"] == "warden_review"
+                        && e.payload["review_response"] == "NO requires human review"
+                })
+                .count(),
+            round + 1
+        );
+        assert!(audit.events().iter().any(|e| {
+            e.payload["action"] == "warden_decision"
+                && e.payload["decision"] == "NO"
+                && e.payload["consent_id"] == consent.id
+        }));
+        assert_eq!(
+            audit
+                .events()
+                .iter()
+                .filter(|e| {
+                    e.payload["event_kind"] == "warden.review" && e.payload["decision"] == "deny"
+                })
+                .count(),
+            round + 1
+        );
+        drop(audit);
+        assert_eq!(state.db.get_audit_count().unwrap(), (round * 3 + 2) as i64);
+
+        // Exercise the production resolution command, then replace this goal on
+        // the next round to detect stale consent goal IDs and leaked guards.
+        deny_consent_request(
+            &state,
+            consent.id.clone(),
+            "test-user".into(),
+            Some("Do not write the fixture".into()),
+        )
+        .unwrap();
+        assert!(state.db.load_pending_consent().unwrap().is_empty());
+        assert_eq!(
+            state.cognitive_runtime.get_agent_status(&id).unwrap().phase,
+            CognitivePhase::Reason
+        );
+        assert_eq!(
+            state.db.load_consent_by_agent(&id).unwrap().len(),
+            round + 1
+        );
+    }
+    state.cognitive_runtime.stop_agent_loop(&id).unwrap();
+    assert!(state.cognitive_runtime.get_agent_status(&id).is_none());
+    assert!(state.cognitive_runtime.get_agent_status_fast(&id).is_none());
+    std::fs::remove_dir_all(workspace).unwrap();
+}
+
+#[test]
+fn p0_001b_warden_denial_creates_consent_without_reentry() {
+    isolated(
+        "p0_001b_warden_denial_creates_consent_without_reentry",
+        || warden_denial_scenario(1),
+    );
+}
+
+#[test]
+fn p0_001b_repeated_denial_consent_and_status() {
+    isolated("p0_001b_repeated_denial_consent_and_status", || {
+        warden_denial_scenario(3)
+    });
+}

@@ -555,6 +555,10 @@ pub struct CognitiveRuntime {
     emitter: Arc<dyn EventEmitter>,
     provider_registry: HashMap<String, Arc<dyn LlmProvider>>,
     /// Active loop states keyed by agent_id string.
+    /// Never invoke an operation that may reacquire `loops` while holding its
+    /// guard. Cycle callbacks must use owned inputs or published snapshots,
+    /// not locking status/consent methods. Snapshot-map guards are leaf guards:
+    /// the only nested order is loops -> status_snapshots, never the reverse.
     loops: Mutex<HashMap<String, AgentLoopState>>,
     /// Shutdown flags keyed by agent_id.
     shutdown_flags: Mutex<HashMap<String, Arc<AtomicBool>>>,
@@ -569,8 +573,10 @@ pub struct CognitiveRuntime {
     /// A2A client for delegating tasks to external agents.
     a2a_client: Mutex<A2aClient>,
     /// Lock-free status snapshots published at each phase transition.
-    /// Readers use `get_agent_status_fast()` which briefly locks this map
-    /// (never held during a cycle) then does an atomic ArcSwap load.
+    /// Readers use `get_agent_status_fast()` which briefly locks this map and
+    /// does an atomic ArcSwap load. No callbacks run under the map guard.
+    /// Goal identity publication/removal is serialized with `loops` so a cycle
+    /// cannot observe a missing or replaced goal snapshot for its own agent.
     status_snapshots: Mutex<HashMap<String, Arc<ArcSwap<CognitiveStatusResponse>>>>,
 }
 
@@ -643,10 +649,8 @@ impl CognitiveRuntime {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .insert(agent_id.to_string(), shutdown);
-        self.loops
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .insert(agent_id.to_string(), state);
+        let mut loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
+        loops.insert(agent_id.to_string(), state);
 
         // Publish initial lock-free snapshot for status readers (Bug AB fix).
         let initial_snapshot = CognitiveStatusResponse {
@@ -666,6 +670,7 @@ impl CognitiveRuntime {
                 agent_id.to_string(),
                 Arc::new(ArcSwap::new(Arc::new(initial_snapshot))),
             );
+        drop(loops);
 
         Ok(())
     }
@@ -1705,14 +1710,13 @@ impl CognitiveRuntime {
         {
             flag.store(true, Ordering::Relaxed);
         }
-        self.loops
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .remove(agent_id);
+        let mut loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
+        loops.remove(agent_id);
         self.status_snapshots
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .remove(agent_id);
+        drop(loops);
         self.shutdown_flags
             .lock()
             .unwrap_or_else(|p| p.into_inner())
@@ -1762,6 +1766,9 @@ impl CognitiveRuntime {
     /// Staleness: bounded by the most recent phase transition (typically seconds).
     /// This method NEVER blocks on the cycle lock and is safe to call during
     /// long-running cycles.
+    /// The active goal ID is current while a cycle holds `loops`: assignment
+    /// and removal publish under that same guard. Other fields remain snapshots
+    /// of the last published phase, not a substitute for full status reads.
     pub fn get_agent_status_fast(&self, agent_id: &str) -> Option<CognitiveStatusResponse> {
         let map = self
             .status_snapshots
