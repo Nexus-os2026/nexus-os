@@ -136,10 +136,22 @@ impl CodeExecuteActuator {
             "bash" => "sh",
             _ => "txt",
         };
-        let name = format!("_nexus_exec.{extension}");
+        let name = format!("_nexus_exec-{}.{extension}", uuid::Uuid::new_v4());
         let temp_path = root.join(&name);
-        std::fs::write(&temp_path, code)
-            .map_err(|e| ActuatorError::IoError(format!("write temp code: {e}")))?;
+        {
+            use std::io::Write;
+            // Create a unique file without following a pre-existing workspace link.
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temp_path)
+                .map_err(|e| ActuatorError::IoError(format!("create temp code: {e}")))?;
+            if let Err(error) = file.write_all(code.as_bytes()) {
+                drop(file);
+                let _ = std::fs::remove_file(&temp_path);
+                return Err(ActuatorError::IoError(format!("write temp code: {error}")));
+            }
+        }
         let result = super::execution_platform::runtime_name(runtime).and_then(|program| {
             // Workspace-local basename avoids passing verbatim UNC paths to an
             // explicitly requested optional Bash. The cwd is still canonical.

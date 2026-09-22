@@ -123,9 +123,6 @@ impl GovernedShell {
         }
 
         // Check dangerous patterns in full command string
-        #[cfg(windows)]
-        let combined = super::execution_platform::bounded(combined, MAX_OUTPUT_BYTES);
-
         let full_cmd = format!("{} {}", binary, effective_args.join(" "));
         for pattern in DANGEROUS_PATTERNS {
             if full_cmd.contains(pattern) {
@@ -284,6 +281,9 @@ impl Actuator for GovernedShell {
             combined.truncate(MAX_OUTPUT_BYTES);
             combined.push_str("\n... [output truncated at 100KB]");
         }
+
+        #[cfg(windows)]
+        let combined = super::execution_platform::bounded(combined, MAX_OUTPUT_BYTES);
 
         let full_cmd = format!("{} {}", command, args.join(" "));
 
