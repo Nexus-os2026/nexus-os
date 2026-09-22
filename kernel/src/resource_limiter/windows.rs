@@ -52,7 +52,13 @@ impl Child {
     ) -> Result<Self, ResourceLimitError> {
         let environment =
             actuator_environment(spec, policy).map_err(ResourceLimitError::SpawnFailed)?;
-        Self::spawn_with_environment(spec, Some(&environment))
+        // Keep canonical authority in spec/environment validation. Some native
+        // runtimes (Node included) cannot resolve relative modules with a verbatim
+        // cwd. Use an identity-checked Win32 spelling only for process creation.
+        let mut process_spec = spec.clone();
+        process_spec.current_dir = actuator_working_directory(&spec.current_dir)
+            .map_err(ResourceLimitError::SpawnFailed)?;
+        Self::spawn_with_environment(&process_spec, Some(&environment))
     }
 
     fn spawn_with_environment(
@@ -229,6 +235,76 @@ impl Child {
         }
         Ok((accounting.ActiveProcesses == 0).then_some(status))
     }
+}
+
+fn ordinary_component(name: &OsStr) -> bool {
+    let Some(name) = name.to_str() else {
+        return false;
+    };
+    if name.is_empty()
+        || name.ends_with(['.', ' '])
+        || name
+            .chars()
+            .any(|c| c <= '\u{1f}' || r#"<>:"/\|?*"#.contains(c))
+    {
+        return false;
+    }
+    let upper = name.to_ascii_uppercase();
+    let stem = upper.split('.').next().unwrap().trim_end_matches(' ');
+    if matches!(stem, "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$") {
+        return false;
+    }
+    !["COM", "LPT"].iter().any(|prefix| {
+        stem.strip_prefix(prefix).is_some_and(|suffix| {
+            matches!(
+                suffix,
+                "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+            )
+        })
+    })
+}
+
+fn actuator_working_directory(canonical: &std::path::Path) -> io::Result<PathBuf> {
+    use std::path::{Component, Prefix};
+    let invalid = || {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "workspace has no equivalent Win32 runtime path",
+        )
+    };
+    let mut components = canonical.components();
+    let Some(Component::Prefix(prefix)) = components.next() else {
+        return Err(invalid());
+    };
+    let mut ordinary = match prefix.kind() {
+        Prefix::VerbatimDisk(letter) => PathBuf::from(format!("{}:\\", char::from(letter))),
+        Prefix::VerbatimUNC(server, share)
+            if ordinary_component(server) && ordinary_component(share) =>
+        {
+            let mut prefix = OsString::from(r"\\");
+            prefix.push(server);
+            prefix.push(r"\");
+            prefix.push(share);
+            prefix.push(r"\");
+            PathBuf::from(prefix)
+        }
+        _ => return Err(invalid()),
+    };
+    if components.next() != Some(Component::RootDir) {
+        return Err(invalid());
+    }
+    for component in components {
+        match component {
+            Component::Normal(name) if ordinary_component(name) => ordinary.push(name),
+            _ => return Err(invalid()),
+        }
+    }
+    // Reject normalization changes, stale/missing roots, and different targets.
+    // No raw caller spelling is ever used as a fallback.
+    if ordinary.canonicalize()?.as_path() != canonical {
+        return Err(invalid());
+    }
+    Ok(ordinary)
 }
 
 // Environment blocks use Windows' ordinal uppercase table, not locale or Rust
@@ -576,6 +652,46 @@ mod tests {
             .iter()
             .map(|(key, value)| ((*key).into(), (*value).into()))
             .collect()
+    }
+
+    #[test]
+    fn actuator_runtime_directory_retains_canonical_identity() {
+        let root = tempfile::Builder::new()
+            .prefix("runtime path ü ")
+            .tempdir()
+            .unwrap();
+        let canonical = root.path().canonicalize().unwrap();
+        let ordinary = actuator_working_directory(&canonical).unwrap();
+        assert_eq!(ordinary.canonicalize().unwrap(), canonical);
+        assert!(
+            matches!(ordinary.components().next(), Some(std::path::Component::Prefix(p)) if matches!(p.kind(), std::path::Prefix::Disk(_)))
+        );
+        assert!(actuator_working_directory(&canonical.join("missing")).is_err());
+        assert!(actuator_working_directory(&canonical.join("..")).is_err());
+        assert!(actuator_working_directory(std::path::Path::new("relative")).is_err());
+    }
+
+    #[test]
+    fn runtime_path_rejects_components_that_change_under_win32_normalization() {
+        for name in [
+            "NUL",
+            "con.txt",
+            "COM1",
+            "LPT³.txt",
+            "CONIN$",
+            "con .txt",
+            "trailing.",
+            "trailing ",
+            "a:b",
+            "..",
+            ".",
+            "a?b",
+        ] {
+            assert!(!ordinary_component(OsStr::new(name)), "{name}");
+        }
+        for name in ["workspace ü", ".config", "COM10", "normal.txt"] {
+            assert!(ordinary_component(OsStr::new(name)), "{name}");
+        }
     }
 
     #[test]
