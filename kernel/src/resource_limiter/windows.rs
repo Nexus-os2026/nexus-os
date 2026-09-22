@@ -776,3 +776,118 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod bash_temp_probe {
+    use super::*;
+
+    fn run_case(form: &str) -> (bool, bool, bool, String, String) {
+        let root = tempfile::Builder::new()
+            .prefix("nexus bash probe space ")
+            .tempdir()
+            .unwrap();
+        let canonical = root.path().canonicalize().unwrap();
+        let ordinary = actuator_working_directory(&canonical).unwrap();
+        let path = std::env::var_os("PATH").unwrap();
+        let dirs: Vec<_> = std::env::split_paths(&path)
+            .filter(|p| p.is_absolute())
+            .collect();
+        let path = std::env::join_paths(&dirs).unwrap();
+        let bash = dirs
+            .iter()
+            .map(|p| p.join("bash.exe"))
+            .find(|p| p.is_file())
+            .unwrap()
+            .canonicalize()
+            .unwrap();
+        let script = r#"[ -d "$HOME" ] || exit 91
+[ -d "$TMPDIR" ] || exit 92
+printf home > "$HOME/home-marker" || exit 93
+printf temp > "$TMPDIR/temp-marker" || exit 94
+if [ -d /tmp ]; then printf tmp-present; else printf tmp-missing; fi"#;
+        let mut spec = ResourceSpawnSpec {
+            program: ResourceProgram::Executable {
+                program: bash.into(),
+                args: vec!["-c".into(), script.into()],
+            },
+            current_dir: canonical.clone(),
+            stdin: ResourceStdin::Null,
+            stdout: ResourceOutput::Piped,
+            stderr: ResourceOutput::Piped,
+        };
+        let environment = if form == "canonical" {
+            actuator_environment(&spec, &ActuatorEnvironment::InlineCode { path }).unwrap()
+        } else {
+            let value = if form == "ordinary" {
+                ordinary.as_os_str().to_owned()
+            } else {
+                OsString::from(ordinary.to_str().unwrap().replace('\\', "/"))
+            };
+            let mut overrides = vec![(OsString::from("PATH"), path)];
+            for name in ["HOME", "TMPDIR", "USERPROFILE", "TEMP", "TMP"] {
+                overrides.push((name.into(), value.clone()));
+            }
+            environment_block(std::env::vars_os(), overrides).unwrap()
+        };
+        spec.current_dir = ordinary;
+        let native = Child::spawn_with_environment(&spec, Some(&environment)).unwrap();
+        let mut child = ResourceLimitedChild {
+            id: native.id(),
+            child: Some(native),
+            status: None,
+        };
+        let drain = |reader: ResourceReader| {
+            let (send, receive) = std::sync::mpsc::sync_channel(1);
+            std::thread::spawn(move || {
+                let mut bytes = Vec::new();
+                let result = reader.take(4096).read_to_end(&mut bytes).map(|_| bytes);
+                let _ = send.send(result);
+            });
+            receive
+        };
+        let stdout = drain(child.take_stdout().unwrap());
+        let stderr = drain(child.take_stderr().unwrap());
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let status = loop {
+            if let Some(status) = child.poll_exit().unwrap() {
+                break status;
+            }
+            assert!(Instant::now() < deadline, "probe deadline");
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        child
+            .terminate_and_reap(Instant::now() + Duration::from_secs(5))
+            .unwrap();
+        let out = stdout
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .unwrap();
+        let err = stderr
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .unwrap();
+        (
+            status.success(),
+            root.path().join("home-marker").is_file(),
+            root.path().join("temp-marker").is_file(),
+            String::from_utf8_lossy(&out).into_owned(),
+            String::from_utf8_lossy(&err).into_owned(),
+        )
+    }
+
+    #[test]
+    fn bash_temp_environment_probe() {
+        for round in 0..10 {
+            for form in ["canonical", "ordinary", "slashes"] {
+                println!("serial {round} {form}: {:?}", run_case(form));
+            }
+        }
+        for round in 0..10 {
+            std::thread::scope(|scope| {
+                for form in ["canonical", "ordinary", "slashes"] {
+                    scope.spawn(move || println!("parallel {round} {form}: {:?}", run_case(form)));
+                }
+            });
+        }
+    }
+}
