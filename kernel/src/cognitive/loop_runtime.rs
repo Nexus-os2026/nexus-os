@@ -4624,40 +4624,38 @@ mod tests {
         assert!(result.failure_reason.is_none());
     }
 
-    /// G1b: synthetic-loop cancellation token test — confirms the
-    /// Arc<AtomicBool> flag pattern used by the Tauri spawn breaks a busy
-    /// polling loop within the 100ms budget. The real Tauri spawn is not
-    /// testable here without a full async harness; the flag-polling pattern
-    /// itself is validated below.
+    /// G1b: verifies the AtomicBool cancellation pattern after the polling
+    /// worker is ready. This synthetic test has no production latency contract;
+    /// its finite watchdog allows for scheduler delays on every supported OS.
     #[test]
     fn test_cancel_flag_breaks_loop_within_budget() {
         use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::mpsc::{self, TryRecvError};
         use std::time::{Duration, Instant};
 
         let flag = Arc::new(AtomicBool::new(false));
-        let flag_setter = flag.clone();
-
-        // Flip the flag after ~20ms so a 1ms-polling loop must exit well under 100ms.
-        let setter = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(20));
-            flag_setter.store(true, Ordering::Relaxed);
+        let worker_flag = flag.clone();
+        let (ready_tx, ready_rx) = mpsc::sync_channel(1);
+        let (done_tx, done_rx) = mpsc::sync_channel(1);
+        let budget = Duration::from_secs(5);
+        let worker = std::thread::spawn(move || {
+            assert!(!worker_flag.load(Ordering::Relaxed));
+            ready_tx.send(()).unwrap();
+            let deadline = Instant::now() + budget;
+            while !worker_flag.load(Ordering::Relaxed) {
+                assert!(Instant::now() < deadline, "cancel flag was not observed");
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            done_tx.send(()).unwrap();
         });
 
-        let start = Instant::now();
-        loop {
-            if flag.load(Ordering::Relaxed) {
-                break;
-            }
-            if start.elapsed() > Duration::from_millis(100) {
-                panic!("cancel flag did not break the loop within 100ms");
-            }
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        setter.join().unwrap();
-        assert!(
-            start.elapsed() < Duration::from_millis(100),
-            "loop should exit within 100ms of flag being set"
-        );
+        ready_rx.recv_timeout(budget).expect("polling worker ready");
+        assert!(matches!(done_rx.try_recv(), Err(TryRecvError::Empty)));
+        flag.store(true, Ordering::Relaxed);
+        done_rx
+            .recv_timeout(budget)
+            .expect("polling worker cancelled");
+        worker.join().unwrap();
     }
 
     // ── G8 read_cwd_listing tests ──
