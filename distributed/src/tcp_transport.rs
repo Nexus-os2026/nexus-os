@@ -333,28 +333,34 @@ impl TcpTransportManager {
         read_framed_message(stream)
     }
 
-    /// Accept an incoming connection from the listener.
+    /// Accept an incoming connection without blocking on listener readiness.
     pub fn accept_connection(&mut self, remote_node_id: Uuid) -> Result<(), TcpTransportError> {
-        let listener = self.listener.as_ref().ok_or(TcpTransportError::Io {
-            details: "no listener bound".to_string(),
-        })?;
+        self.try_accept_connection(remote_node_id)
+            .map_err(|error| TcpTransportError::Io {
+                details: error.to_string(),
+            })
+    }
 
-        let (stream, addr) = listener.accept().map_err(|e| TcpTransportError::Io {
-            details: e.to_string(),
+    fn try_accept_connection(&mut self, remote_node_id: Uuid) -> std::io::Result<()> {
+        let listener = self.listener.as_ref().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::NotConnected, "no listener bound")
         })?;
-
-        let read_timeout = Duration::from_secs(self.config.read_timeout_secs);
-        stream
-            .set_read_timeout(Some(read_timeout))
-            .map_err(|e| TcpTransportError::Io {
-                details: e.to_string(),
-            })?;
+        let (stream, addr) = listener.accept()?;
+        self.prepare_incoming_stream(&stream)?;
 
         let mut conn = NodeConnection::new(remote_node_id, addr);
         conn.stream = Some(stream);
         conn.connected = true;
         self.connections.insert(remote_node_id, conn);
         Ok(())
+    }
+
+    fn prepare_incoming_stream(&self, stream: &TcpStream) -> std::io::Result<()> {
+        // Darwin inherits the listener's nonblocking mode. Framed read_exact
+        // needs the same blocking, timeout-bounded stream contract as connect;
+        // retrying a partial frame after WouldBlock would lose framing state.
+        stream.set_nonblocking(false)?;
+        stream.set_read_timeout(Some(Duration::from_secs(self.config.read_timeout_secs)))
     }
 
     /// Broadcast a message to all connected nodes.
@@ -618,6 +624,114 @@ mod tests {
         }
     }
 
+    fn accept_ready(manager: &mut TcpTransportManager, peer: Uuid) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            match manager.try_accept_connection(peer) {
+                Ok(()) => return,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    assert!(
+                        Instant::now() < deadline,
+                        "accept readiness deadline: {error}"
+                    );
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                Err(error) => panic!("accept failed: {error}"),
+            }
+        }
+    }
+
+    #[test]
+    fn empty_listener_remains_nonblocking() {
+        let mut manager = TcpTransportManager::new(Uuid::new_v4(), ConnectionConfig::default());
+        manager.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        let peer = Uuid::new_v4();
+        let error = manager.try_accept_connection(peer).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::WouldBlock);
+        assert!(!manager.is_connected(peer));
+    }
+
+    #[test]
+    fn incoming_stream_configuration_failure_is_not_published() {
+        let config = ConnectionConfig {
+            read_timeout_secs: 0,
+            ..ConnectionConfig::default()
+        };
+        let mut manager = TcpTransportManager::new(Uuid::new_v4(), config);
+        manager.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        let _client = TcpStream::connect(manager.local_addr().unwrap()).unwrap();
+        let peer = Uuid::new_v4();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            match manager.try_accept_connection(peer) {
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    assert!(Instant::now() < deadline);
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                Err(error) => {
+                    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+                    break;
+                }
+                Ok(()) => panic!("invalid stream configuration was accepted"),
+            }
+        }
+        assert!(!manager.is_connected(peer));
+    }
+
+    #[test]
+    fn incoming_stream_reads_fragmented_frame_with_bounded_waits() {
+        use std::sync::mpsc;
+
+        let config = ConnectionConfig {
+            read_timeout_secs: 1,
+            ..ConnectionConfig::default()
+        };
+        let mut manager = TcpTransportManager::new(Uuid::new_v4(), config);
+        manager.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        let mut client = TcpStream::connect(manager.local_addr().unwrap()).unwrap();
+        let peer = Uuid::new_v4();
+        accept_ready(&mut manager, peer);
+        let mut stream = manager
+            .connections
+            .get_mut(&peer)
+            .unwrap()
+            .stream
+            .take()
+            .unwrap();
+        // Exercise inherited nonblocking mode even on Linux, where accept
+        // normally creates a blocking stream already.
+        stream.set_nonblocking(true).unwrap();
+        manager.prepare_incoming_stream(&stream).unwrap();
+        assert_eq!(stream.read_timeout().unwrap(), Some(Duration::from_secs(1)));
+
+        let message = WireMessage::heartbeat(peer);
+        let frame = frame_message(&message).unwrap();
+        let (started_tx, started_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            let result = read_framed_message(&mut stream);
+            done_tx.send(result).unwrap();
+        });
+        started_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        // No bytes yet: a nonblocking stream would fail immediately. This
+        // channel deadline asserts waiting behavior, not network readiness.
+        let before_bytes = done_rx.recv_timeout(Duration::from_millis(100));
+        client.write_all(&frame[..2]).unwrap();
+        let after_partial_prefix = done_rx.recv_timeout(Duration::from_millis(100));
+        client.write_all(&frame[2..]).unwrap();
+        let received = done_rx.recv_timeout(Duration::from_secs(5));
+        reader.join().unwrap();
+        assert!(matches!(before_bytes, Err(mpsc::RecvTimeoutError::Timeout)));
+        assert!(matches!(
+            after_partial_prefix,
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+        let received = received.unwrap().unwrap();
+        assert_eq!(received.message_id, message.message_id);
+        assert_eq!(received.sender_node_id, peer);
+    }
+
     #[test]
     fn localhost_tcp_send_recv() {
         let node_a = Uuid::new_v4();
@@ -634,10 +748,7 @@ mod tests {
         let mut mgr_b = TcpTransportManager::new(node_b, config);
         mgr_b.connect(node_a, listen_addr).unwrap();
 
-        // A accepts the connection
-        // Give the OS a moment to register the connection
-        std::thread::sleep(Duration::from_millis(50));
-        mgr_a.accept_connection(node_b).unwrap();
+        accept_ready(&mut mgr_a, node_b);
 
         assert!(mgr_b.is_connected(node_a));
         assert!(mgr_a.is_connected(node_b));
@@ -673,14 +784,12 @@ mod tests {
         let mut mgr_b = TcpTransportManager::new(node_b, config.clone());
         mgr_b.connect(node_a, addr_a).unwrap();
 
-        std::thread::sleep(Duration::from_millis(50));
-        mgr_a.accept_connection(node_b).unwrap();
+        accept_ready(&mut mgr_a, node_b);
 
         let mut mgr_c = TcpTransportManager::new(node_c, config);
         mgr_c.connect(node_a, addr_a).unwrap();
 
-        std::thread::sleep(Duration::from_millis(50));
-        mgr_a.accept_connection(node_c).unwrap();
+        accept_ready(&mut mgr_a, node_c);
 
         assert_eq!(mgr_a.connected_nodes().len(), 2);
 
@@ -714,8 +823,7 @@ mod tests {
         let mut mgr_b = TcpTransportManager::new(node_b, config);
         mgr_b.connect(node_a, addr_a).unwrap();
 
-        std::thread::sleep(Duration::from_millis(50));
-        mgr_a.accept_connection(node_b).unwrap();
+        accept_ready(&mut mgr_a, node_b);
 
         assert!(mgr_a.is_connected(node_b));
         mgr_a.disconnect(node_b);
