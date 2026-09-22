@@ -1,0 +1,182 @@
+name: P0 CI Deep Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/p0-ci-deep-audit
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  diagnostic-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev \
+            glib-2.0 \
+            pkg-config
+
+      - name: Install Rust 1.94.0
+        uses: dtolnay/rust-toolchain@1.94.0
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install ripgrep 14.1.1 and verify search backends
+        shell: bash
+        run: |
+          cargo install ripgrep --version 14.1.1 --locked
+          rg --version
+          grep --version
+
+      - name: Run all workspace tests without failing fast
+        continue-on-error: true
+        run: cargo test --workspace --locked --no-fail-fast
+
+  diagnostic-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.94.0
+        uses: dtolnay/rust-toolchain@1.94.0
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install ripgrep 14.1.1 and verify search backends
+        shell: bash
+        run: |
+          cargo install ripgrep --version 14.1.1 --locked
+          rg --version
+          grep --version
+          # Expose Git for Windows grep/which to the native Cargo test process.
+          cygpath -w /usr/bin >> "$GITHUB_PATH"
+
+      - name: Run all workspace tests without failing fast
+        continue-on-error: true
+        run: cargo test --workspace --locked --no-fail-fast
+
+      - name: Run kernel library tests serially
+        continue-on-error: true
+        run: cargo test -p nexus-kernel --lib --locked -- --test-threads=1
+
+      - name: Print Windows tool discovery
+        shell: bash
+        run: |
+          where.exe bash || true
+          where.exe sh || true
+          where.exe python || true
+          where.exe python3 || true
+          where.exe node || true
+          where.exe echo || true
+          where.exe ls || true
+
+  diagnostic-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.94.0
+        uses: dtolnay/rust-toolchain@1.94.0
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install ripgrep 14.1.1 and verify search backends
+        shell: bash
+        run: |
+          cargo install ripgrep --version 14.1.1 --locked
+          rg --version
+          grep --version
+
+      - name: Run all workspace tests without failing fast
+        continue-on-error: true
+        run: cargo test --workspace --locked --no-fail-fast
+
+      - name: Repeat exact localhost TCP test 10 times serially
+        continue-on-error: true
+        shell: bash
+        run: |
+          passed=0
+          failed=0
+          for attempt in {1..10}; do
+            echo "TCP test attempt ${attempt}/10"
+            if cargo test -p nexus-distributed --lib --locked \
+              tcp_transport::tests::localhost_tcp_send_recv \
+              -- --exact --nocapture --test-threads=1; then
+              passed=$((passed + 1))
+            else
+              failed=$((failed + 1))
+            fi
+          done
+          printf 'TCP test repeats: %s passed, %s failed (10 total)\n' \
+            "$passed" "$failed" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$failed" -ne 0 ]; then
+            exit 1
+          fi
+
+  diagnostic-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        continue-on-error: true
+        run: npx tsc --noEmit
+
+      - name: Run current full frontend suite
+        continue-on-error: true
+        run: npm test
+
+      - name: Run AiChatHub in isolation
+        continue-on-error: true
+        run: |
+          npx vitest run \
+            src/pages/__tests__/AiChatHub.test.tsx \
+            --no-cache \
+            --maxWorkers=1
+
+      - name: Run full Vitest suite with one worker
+        continue-on-error: true
+        run: |
+          npx vitest run \
+            --no-cache \
+            --maxWorkers=1
+
+      - name: Build frontend independently
+        continue-on-error: true
+        run: npx vite build
