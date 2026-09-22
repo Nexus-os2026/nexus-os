@@ -244,6 +244,28 @@ fn spawn_failures_release_resources_and_allow_subsequent_execution() {
     let mut bad_cwd = spec("helper_direct");
     bad_cwd.current_dir = directory.path().join("missing-directory");
     #[cfg(windows)]
+    {
+        eprintln!("WARMUP start={}", handle_count());
+        drop(std::io::pipe().unwrap());
+        eprintln!("WARMUP after_std_pipe={}", handle_count());
+        let missing_path = directory.path().join("missing-executable.exe");
+        assert!(Command::new(missing_path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .is_err());
+        eprintln!("WARMUP after_std_missing={}", handle_count());
+        assert!(Command::new(std::env::current_exe().unwrap())
+            .current_dir(&bad_cwd.current_dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .is_err());
+        eprintln!("WARMUP after_std_bad_cwd={}", handle_count());
+    }
+    #[cfg(windows)]
     let before = handle_count();
     #[cfg(unix)]
     let before = next_pipe_descriptors();
