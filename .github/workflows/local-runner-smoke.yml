@@ -2,6 +2,11 @@ name: Nexus Local Runner Smoke Test
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - rebuild/phase0-trust-boundary
+    paths:
+      - ".github/workflows/local-runner-smoke.yml"
 
 permissions:
   contents: read
