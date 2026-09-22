@@ -567,11 +567,19 @@ fn p0_002c1_expiry_is_inherited_and_fails_closed_at_deadline() {
     );
     // Exercise the same lifecycle check used by resolve/narrow with a fixed
     // deadline, without sleeping or racing the wall clock.
+    // Windows SystemTime cannot represent a one-nanosecond separation.
+    let before = expiry - Duration::from_millis(1);
+    let after = expiry + Duration::from_millis(1);
+    assert!(before < expiry && expiry < after);
     let grants = registry.grants.read().unwrap();
     for id in [parent, child] {
-        assert!(active_grant(&grants, id, owner, expiry - Duration::from_nanos(1)).is_ok());
+        assert!(active_grant(&grants, id, owner, before).is_ok());
         assert_eq!(
             active_grant(&grants, id, owner, expiry).unwrap_err(),
+            WorkspaceAuthorityError::ExpiredGrant
+        );
+        assert_eq!(
+            active_grant(&grants, id, owner, after).unwrap_err(),
             WorkspaceAuthorityError::ExpiredGrant
         );
     }
