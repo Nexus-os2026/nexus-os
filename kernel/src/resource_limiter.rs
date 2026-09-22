@@ -108,6 +108,13 @@ pub struct ResourceSpawnSpec {
     pub stderr: ResourceOutput,
 }
 
+/// Fixed backend-only environment policy for Windows actuators. No caller map.
+#[cfg(windows)]
+pub(crate) enum ActuatorEnvironment {
+    Shell { path: OsString },
+    InlineCode { path: OsString },
+}
+
 pub type ResourceReader = Box<dyn Read + Send>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -128,6 +135,21 @@ impl ResourceLimiter {
 
     pub fn limits(&self) -> &ResourceLimits {
         &self.limits
+    }
+
+    /// Private actuator adapter; public spawn retains inherited environment semantics.
+    #[cfg(windows)]
+    pub(crate) fn spawn_actuator(
+        &self,
+        spec: &ResourceSpawnSpec,
+        environment: &ActuatorEnvironment,
+    ) -> Result<ResourceLimitedChild, ResourceLimitError> {
+        let child = platform::Child::spawn_actuator(spec, &self.limits, environment)?;
+        Ok(ResourceLimitedChild {
+            id: child.id(),
+            child: Some(child),
+            status: None,
+        })
     }
 
     /// Fail closed if containment cannot be established before execution.
