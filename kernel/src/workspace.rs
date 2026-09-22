@@ -28,6 +28,30 @@ pub fn resolve_path(workspace: &Path, requested: &Path) -> Result<PathBuf, Agent
     let root = workspace
         .canonicalize()
         .map_err(|e| AgentError::SupervisorError(format!("resolve workspace: {e}")))?;
+    resolve_under_root(&root, requested)
+}
+
+/// Resolve a relative target under an already-existing canonical authority root.
+/// Never creates the root or target. A missing/repointed root fails closed.
+/// Parent, absolute and platform-prefix components are rejected, even if they
+/// could normalize inside the root. Shares the P0-002A symlink/containment rules.
+/// This is pathname validation, not protection against concurrent namespace
+/// replacement or hard links.
+pub fn resolve_existing_relative(root: &Path, requested: &Path) -> Result<PathBuf, AgentError> {
+    if !root.is_absolute()
+        || !root.is_dir()
+        || root.canonicalize().map_err(|_| denied())? != root
+        || requested.as_os_str().is_empty()
+        || requested
+            .components()
+            .any(|part| !matches!(part, Component::Normal(_)))
+    {
+        return Err(denied());
+    }
+    resolve_under_root(root, requested)
+}
+
+fn resolve_under_root(root: &Path, requested: &Path) -> Result<PathBuf, AgentError> {
     let mut ancestor = root.join(requested);
     let mut suffix = Vec::new();
 
@@ -60,10 +84,10 @@ pub fn resolve_path(workspace: &Path, requested: &Path) -> Result<PathBuf, Agent
         }
     };
 
-    if !canonical.starts_with(&root) {
+    if !canonical.starts_with(root) {
         return Err(denied());
     }
-    append_missing_components(&root, canonical, suffix)
+    append_missing_components(root, canonical, suffix)
 }
 
 fn append_missing_components(

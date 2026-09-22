@@ -246,3 +246,61 @@ fn symlinks_resolving_inside_workspace_remain_allowed() {
     );
     f.assert_outside_untouched();
 }
+
+#[test]
+fn existing_relative_resolution_never_creates_root_or_target() {
+    use nexus_kernel::workspace::{resolve_existing_relative, resolve_path};
+    let temp = TempDir::new().unwrap();
+    let root = temp.path().canonicalize().unwrap().join("fresh");
+    assert!(resolve_existing_relative(&root, Path::new("nested/file")).is_err());
+    assert!(!root.exists());
+    // The original resolver retains its initialization and absolute-path contract.
+    assert_eq!(
+        resolve_path(&root, &root.join("file")).unwrap(),
+        root.join("file")
+    );
+    assert_eq!(
+        resolve_existing_relative(&root, Path::new("nested/file")).unwrap(),
+        root.join("nested/file")
+    );
+    assert!(!root.join("nested").exists());
+    std::fs::remove_dir(&root).unwrap();
+    assert!(resolve_existing_relative(&root, Path::new("file")).is_err());
+    assert!(!root.exists());
+}
+
+#[test]
+fn existing_relative_resolution_rejects_nonrelative_targets_and_file_roots() {
+    use nexus_kernel::workspace::resolve_existing_relative;
+    let f = Fixture::new();
+    let root = f.workspace.canonicalize().unwrap();
+    for target in [
+        Path::new("../nexus-work-evil/secret.txt"),
+        f.outside.as_path(),
+        root.as_path(),
+        Path::new("a/../../secret"),
+        Path::new(""),
+    ] {
+        assert!(resolve_existing_relative(&root, target).is_err());
+    }
+    let file = root.join("not-a-directory");
+    std::fs::write(&file, "evidence").unwrap();
+    assert!(resolve_existing_relative(&file, Path::new("child")).is_err());
+    f.assert_outside_untouched();
+}
+
+#[cfg(unix)]
+#[test]
+fn existing_relative_resolution_rejects_symlink_escape_and_root_repointing() {
+    use nexus_kernel::workspace::resolve_existing_relative;
+    use std::os::unix::fs::symlink;
+    let f = Fixture::new();
+    let root = f.workspace.canonicalize().unwrap();
+    symlink(&f.outside, root.join("escape")).unwrap();
+    assert!(resolve_existing_relative(&root, Path::new("escape/new/file")).is_err());
+    std::fs::remove_file(root.join("escape")).unwrap();
+    std::fs::remove_dir(&root).unwrap();
+    symlink(&f.outside, &root).unwrap();
+    assert!(resolve_existing_relative(&root, Path::new("file")).is_err());
+    f.assert_outside_untouched();
+}
