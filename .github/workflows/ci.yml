@@ -24,3 +24,5 @@ jobs:
       - name: Native kernel and containment inventory
         continue-on-error: true
         run: cargo test -p nexus-kernel --locked --no-fail-fast
+      - name: Node path representation probe
+        run: cargo test -p nexus-kernel --lib --locked node_path_forms -- --nocapture

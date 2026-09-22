@@ -666,3 +666,53 @@ fn main() {
         assert!(start.elapsed() < Duration::from_secs(12));
     }
 }
+
+#[cfg(all(test, windows))]
+mod node_path_diagnostic {
+    use super::*;
+    use crate::resource_limiter::*;
+    use std::time::{Duration, Instant};
+    #[test]
+    fn node_path_forms() {
+        let dir = tempfile::Builder::new()
+            .prefix("node path form ")
+            .tempdir()
+            .unwrap();
+        let canonical = dir.path().canonicalize().unwrap();
+        std::fs::write(
+            dir.path().join("probe.js"),
+            "console.log('native-script-ok');",
+        )
+        .unwrap();
+        let (directories, path) = absolute_search_path(&std::env::var_os("PATH").unwrap()).unwrap();
+        let executable = resolve_executable("node", &directories).unwrap();
+        for (form, cwd) in [("ordinary", dir.path()), ("canonical", canonical.as_path())] {
+            for (argform, args) in [
+                ("relative-script", vec![OsString::from("probe.js")]),
+                ("ordinary-script", vec![dir.path().join("probe.js").into()]),
+                ("canonical-script", vec![canonical.join("probe.js").into()]),
+                ("eval-cwd", vec!["-e".into(), "console.log(JSON.stringify({cwd:process.cwd(),resolved:require('path').resolve('probe.js')})); console.log(require('fs').realpathSync('probe.js'));".into()]),
+            ] {
+                let spec = ResourceSpawnSpec {
+                    program: ResourceProgram::Executable { program: executable.clone().into(), args },
+                    current_dir: cwd.to_path_buf(), stdin: ResourceStdin::Null,
+                    stdout: ResourceOutput::Piped, stderr: ResourceOutput::Piped,
+                };
+                let mut child = ResourceLimiter::default().spawn(&spec).unwrap();
+                let stdout = drain(child.take_stdout().unwrap(), 4096).unwrap();
+                let stderr = drain(child.take_stderr().unwrap(), 4096).unwrap();
+                let deadline = Instant::now() + Duration::from_secs(10);
+                let status = loop {
+                    if let Some(status) = child.poll_exit().unwrap() { break status; }
+                    assert!(Instant::now() < deadline);
+                    std::thread::sleep(Duration::from_millis(5));
+                };
+                child.terminate_and_reap(Instant::now() + Duration::from_secs(5)).unwrap();
+                eprintln!("NODE-PROBE {form}/{argform} status={status} stdout={} stderr={}",
+                    String::from_utf8_lossy(&stdout.recv_timeout(Duration::from_secs(5)).unwrap().unwrap()),
+                    String::from_utf8_lossy(&stderr.recv_timeout(Duration::from_secs(5)).unwrap().unwrap()));
+            }
+        }
+        let _ = path;
+    }
+}
