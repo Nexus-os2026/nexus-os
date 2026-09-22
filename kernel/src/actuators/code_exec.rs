@@ -4,6 +4,7 @@
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
 use crate::capabilities::has_capability;
 use crate::cognitive::types::PlannedAction;
+#[cfg(unix)]
 use std::process::Command;
 use std::time::Duration;
 
@@ -119,7 +120,68 @@ impl CodeExecuteActuator {
         Ok(())
     }
 
+    #[cfg(windows)]
+    fn execute_code(
+        runtime: &str,
+        code: &str,
+        working_dir: &std::path::Path,
+        timeout: Duration,
+    ) -> Result<(bool, String), ActuatorError> {
+        let root = working_dir
+            .canonicalize()
+            .map_err(|e| ActuatorError::IoError(format!("resolve workspace: {e}")))?;
+        let extension = match runtime {
+            "python3" => "py",
+            "node" => "js",
+            "bash" => "sh",
+            _ => "txt",
+        };
+        let name = format!("_nexus_exec-{}.{extension}", uuid::Uuid::new_v4());
+        let temp_path = root.join(&name);
+        {
+            use std::io::Write;
+            // Create a unique file without following a pre-existing workspace link.
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temp_path)
+                .map_err(|e| ActuatorError::IoError(format!("create temp code: {e}")))?;
+            if let Err(error) = file.write_all(code.as_bytes()) {
+                drop(file);
+                let _ = std::fs::remove_file(&temp_path);
+                return Err(ActuatorError::IoError(format!("write temp code: {error}")));
+            }
+        }
+        let result = super::execution_platform::runtime_name(runtime).and_then(|program| {
+            // Workspace-local basename avoids passing verbatim UNC paths to an
+            // explicitly requested optional Bash. The cwd is still canonical.
+            super::execution_platform::execute(
+                program,
+                &[name.into()],
+                &root,
+                true,
+                timeout,
+                MAX_OUTPUT_SIZE,
+            )
+        });
+        let _ = std::fs::remove_file(&temp_path);
+        let output = result?;
+        let mut combined = String::from_utf8_lossy(&output.stdout).into_owned();
+        if !output.stderr.is_empty() {
+            if !combined.is_empty() {
+                combined.push('\n');
+            }
+            combined.push_str("[stderr] ");
+            combined.push_str(&String::from_utf8_lossy(&output.stderr));
+        }
+        Ok((
+            output.status.success(),
+            super::execution_platform::bounded(combined, MAX_OUTPUT_SIZE),
+        ))
+    }
+
     /// Write code to a temporary file and execute it.
+    #[cfg(unix)]
     fn execute_code(
         runtime: &str,
         code: &str,
@@ -433,6 +495,77 @@ mod tests {
         let result = exec.execute(&action, &ctx).unwrap();
         assert!(result.success);
         assert!(result.output.contains("hello from bash"));
+    }
+
+    #[test]
+    fn executes_bash_in_canonical_workspace_with_spaces() {
+        let tmp = tempfile::Builder::new()
+            .prefix("nexus code space ")
+            .tempdir()
+            .unwrap();
+        let ctx = make_context(&tmp.path().canonicalize().unwrap());
+        let result = CodeExecuteActuator
+            .execute(
+                &PlannedAction::CodeExecute {
+                    language: "bash".into(),
+                    code: "printf 'canonical workspace'".into(),
+                    timeout_secs: Some(5),
+                },
+                &ctx,
+            )
+            .unwrap();
+        assert!(result.success, "{}", result.output);
+        assert_eq!(result.output, "canonical workspace");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_python_and_node_execute_within_workspace() {
+        let tmp = tempfile::Builder::new()
+            .prefix("nexus native runtime ")
+            .tempdir()
+            .unwrap();
+        let ctx = make_context(tmp.path());
+        for (language, code) in [
+            ("python3", "print('native runtime')"),
+            ("node", "console.log('native runtime')"),
+        ] {
+            let result = CodeExecuteActuator
+                .execute(
+                    &PlannedAction::CodeExecute {
+                        language: language.into(),
+                        code: code.into(),
+                        timeout_secs: Some(10),
+                    },
+                    &ctx,
+                )
+                .unwrap();
+            assert!(result.success, "{}", result.output);
+            assert_eq!(result.output.trim(), "native runtime");
+        }
+        assert_eq!(
+            std::fs::read_dir(tmp.path()).unwrap().count(),
+            0,
+            "temporary scripts cleaned"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn bash_receives_lowercase_proxy_restrictions() {
+        let tmp = TempDir::new().unwrap();
+        let result = CodeExecuteActuator
+            .execute(
+                &PlannedAction::CodeExecute {
+                    language: "bash".into(),
+                    code: r#"printf '%s|%s|%s' "$http_proxy" "$https_proxy" "$no_proxy""#.into(),
+                    timeout_secs: Some(10),
+                },
+                &make_context(tmp.path()),
+            )
+            .unwrap();
+        assert!(result.success, "{}", result.output);
+        assert_eq!(result.output, "http://0.0.0.0:0|http://0.0.0.0:0|");
     }
 
     #[test]

@@ -11,6 +11,8 @@ pub mod code_exec;
 pub mod cognitive_param;
 pub mod computer_use;
 pub mod docker;
+#[cfg(any(windows, test))]
+mod execution_platform;
 pub mod filesystem;
 pub mod governance_policy;
 pub mod image_gen;
