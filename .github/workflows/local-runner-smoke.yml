@@ -28,10 +28,43 @@ jobs:
           pwd
           uname -a
 
-      - name: Print available tool versions
+      - name: Inspect Rust availability without executing rustup or its proxies
         shell: bash
         run: |
-          for tool in rustc cargo node npm python3 rg; do
+          # Filesystem inventory only: even --version can auto-install via rustup.
+          # Do not execute discovered paths or resolve the repository toolchain.
+          for tool in rustup rustc cargo; do
+            if tool_path="$(command -v "$tool")"; then
+              printf '%s is on PATH at %s (not executed)\n' "$tool" "$tool_path"
+            else
+              printf '%s is not available on PATH\n' "$tool"
+            fi
+          done
+
+          rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
+          printf 'Inspecting installed toolchains under %s/toolchains\n' "$rustup_home"
+          found_toolchain=false
+          for toolchain_dir in "$rustup_home"/toolchains/*; do
+            [[ -d "$toolchain_dir" ]] || continue
+            found_toolchain=true
+            printf 'Toolchain directory: %s\n' "$toolchain_dir"
+            for tool in rustc cargo; do
+              tool_path="$toolchain_dir/bin/$tool"
+              if [[ -f "$tool_path" && -x "$tool_path" ]]; then
+                printf '%s is present and executable (not executed)\n' "$tool_path"
+              else
+                printf '%s is missing or not executable\n' "$tool_path"
+              fi
+            done
+          done
+          if [[ "$found_toolchain" == false ]]; then
+            printf 'No installed rustup toolchains found (or directory is inaccessible)\n'
+          fi
+
+      - name: Print available non-Rust tool versions
+        shell: bash
+        run: |
+          for tool in node npm python3 rg; do
             if command -v "$tool" > /dev/null 2>&1; then
               "$tool" --version
             else
