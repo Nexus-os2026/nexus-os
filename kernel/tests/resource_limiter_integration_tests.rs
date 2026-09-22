@@ -244,6 +244,22 @@ fn spawn_failures_release_resources_and_allow_subsequent_execution() {
     let mut bad_cwd = spec("helper_direct");
     bad_cwd.current_dir = directory.path().join("missing-directory");
     #[cfg(windows)]
+    {
+        // Windows initializes process-wide native resources on the first pipe
+        // and process-creation calls, including failed spawns. Warm those via
+        // std alone so this measures ResourceLimiter ownership, not OS startup.
+        // Native diagnostics confirmed stable counts for all 32 pairs below
+        // after this initialization, in isolated and full serial/parallel runs.
+        drop(std::io::pipe().unwrap());
+        let error = Command::new(directory.path().join("missing-executable.exe"))
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect_err("warmup executable must not exist");
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+    }
+    #[cfg(windows)]
     let before = handle_count();
     #[cfg(unix)]
     let before = next_pipe_descriptors();
