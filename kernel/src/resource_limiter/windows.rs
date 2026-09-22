@@ -667,7 +667,11 @@ mod tests {
             matches!(ordinary.components().next(), Some(std::path::Component::Prefix(p)) if matches!(p.kind(), std::path::Prefix::Disk(_)))
         );
         assert!(actuator_working_directory(&canonical.join("missing")).is_err());
-        assert!(actuator_working_directory(&canonical.join("..")).is_err());
+        // PathBuf::join normalizes .. on Windows verbatim paths. Preserve the
+        // unresolved spelling in OsString so the rejection actually exercises it.
+        let mut unresolved = canonical.as_os_str().to_owned();
+        unresolved.push(r"\..");
+        assert!(actuator_working_directory(std::path::Path::new(&unresolved)).is_err());
         assert!(actuator_working_directory(std::path::Path::new("relative")).is_err());
     }
 
