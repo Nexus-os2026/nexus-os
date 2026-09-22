@@ -1,0 +1,41 @@
+name: Nexus Local Runner Smoke Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: [self-hosted, Linux, X64, nexus-local]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Print runner information
+        shell: bash
+        run: |
+          hostname
+          whoami
+          pwd
+          uname -a
+
+      - name: Print available tool versions
+        shell: bash
+        run: |
+          for tool in rustc cargo node npm python3 rg; do
+            if command -v "$tool" > /dev/null 2>&1; then
+              "$tool" --version
+            else
+              printf '%s is not available\n' "$tool"
+            fi
+          done
+
+      - name: Confirm repository checkout
+        shell: bash
+        run: |
+          git rev-parse HEAD
+          git status --short --branch
