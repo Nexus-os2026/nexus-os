@@ -247,7 +247,10 @@ fn spawn_failures_release_resources_and_allow_subsequent_execution() {
     let before = handle_count();
     #[cfg(unix)]
     let before = next_pipe_descriptors();
-    for _ in 0..32 {
+    #[cfg(windows)]
+    eprintln!("HANDLE_DIAG baseline={before}");
+    for iteration in 0..32 {
+        let _ = iteration;
         assert!(matches!(
             ResourceLimiter::default().spawn(&missing),
             Err(ResourceLimitError::SpawnFailed(_))
@@ -256,7 +259,14 @@ fn spawn_failures_release_resources_and_allow_subsequent_execution() {
             ResourceLimiter::default().spawn(&bad_cwd),
             Err(ResourceLimitError::SpawnFailed(_))
         ));
+        #[cfg(windows)]
+        eprintln!("HANDLE_DIAG iteration={iteration} count={}", handle_count());
     }
+    #[cfg(windows)]
+    eprintln!(
+        "HANDLE_DIAG after_failures={} before={before}",
+        handle_count()
+    );
     #[cfg(windows)]
     assert!(
         handle_count() <= before + 2,
@@ -271,6 +281,11 @@ fn spawn_failures_release_resources_and_allow_subsequent_execution() {
     let (mut child, stdout, stderr) = spawn("helper_exit");
     assert!(exited(&mut child).success());
     cleanup(&mut child, stdout, stderr);
+    #[cfg(windows)]
+    eprintln!(
+        "HANDLE_DIAG after_finalize={} before={before}",
+        handle_count()
+    );
     #[cfg(windows)]
     assert!(
         handle_count() <= before + 2,
