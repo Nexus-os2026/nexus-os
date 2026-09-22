@@ -1,4 +1,8 @@
 use super::*;
+
+#[cfg(any(target_os = "macos", test))]
+#[path = "darwin_group.rs"]
+mod darwin_group;
 use nix::errno::Errno;
 use nix::libc;
 use nix::sys::signal::{killpg, Signal};
@@ -172,6 +176,23 @@ impl Child {
         match killpg(Pid::from_raw(self.id() as i32), Signal::SIGKILL) {
             Ok(()) => {}
             Err(Errno::ESRCH) if root_exited => {}
+            #[cfg(target_os = "macos")]
+            Err(Errno::EPERM) if root_exited => {
+                // Keep the leader unreaped while inspecting every group member.
+                // Root-only ESRCH cannot rule out a live, unsignalable descendant.
+                darwin_group::confirm_terminal(self.id() as i32).map_err(|error| {
+                    ResourceLimitError::TerminationFailed(io::Error::from_raw_os_error(
+                        error as i32,
+                    ))
+                })?;
+                // Detect an external reaper before accepting the observation.
+                // poll_exit invalidates ownership on ECHILD; never signal again.
+                if self.poll_exit()?.is_none() {
+                    return Err(ResourceLimitError::ObservationFailed(io::Error::other(
+                        "owned root exit changed during group observation",
+                    )));
+                }
+            }
             Err(error) => {
                 return Err(ResourceLimitError::TerminationFailed(
                     io::Error::from_raw_os_error(error as i32),
