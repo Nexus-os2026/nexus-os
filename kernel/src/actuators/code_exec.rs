@@ -518,6 +518,38 @@ mod tests {
         assert_eq!(result.output, "canonical workspace");
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn native_python_and_node_execute_within_workspace() {
+        let tmp = tempfile::Builder::new()
+            .prefix("nexus native runtime ")
+            .tempdir()
+            .unwrap();
+        let ctx = make_context(tmp.path());
+        for (language, code) in [
+            ("python3", "print('native runtime')"),
+            ("node", "console.log('native runtime')"),
+        ] {
+            let result = CodeExecuteActuator
+                .execute(
+                    &PlannedAction::CodeExecute {
+                        language: language.into(),
+                        code: code.into(),
+                        timeout_secs: Some(10),
+                    },
+                    &ctx,
+                )
+                .unwrap();
+            assert!(result.success, "{}", result.output);
+            assert_eq!(result.output.trim(), "native runtime");
+        }
+        assert_eq!(
+            std::fs::read_dir(tmp.path()).unwrap().count(),
+            0,
+            "temporary scripts cleaned"
+        );
+    }
+
     #[test]
     fn invalid_language_rejected() {
         let tmp = TempDir::new().unwrap();

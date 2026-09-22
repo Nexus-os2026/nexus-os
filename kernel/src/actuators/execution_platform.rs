@@ -80,6 +80,11 @@ pub(super) fn execute(
     let path = std::env::var_os("PATH")
         .ok_or_else(|| ActuatorError::IoError("backend executable PATH is missing".into()))?;
     let (directories, path) = absolute_search_path(&path)?;
+    let program = if program.eq_ignore_ascii_case("python3") {
+        "python"
+    } else {
+        program
+    };
     let executable = resolve_executable(program, &directories)?;
     let root = workspace
         .canonicalize()
@@ -155,7 +160,10 @@ fn execute_owned(
         let stderr = child
             .take_stderr()
             .ok_or_else(|| std::io::Error::other("missing stderr pipe"))?;
-        Ok::<_, std::io::Error>((drain(stdout, output_limit)?, drain(stderr, output_limit)?))
+        // One sentinel byte lets the caller report truncation, still with a
+        // strict per-stream memory cap independent of the child's output volume.
+        let capture_limit = output_limit.saturating_add(1);
+        Ok::<_, std::io::Error>((drain(stdout, capture_limit)?, drain(stderr, capture_limit)?))
     })();
     let outcome = if readers.is_ok() {
         let deadline = Instant::now() + timeout;
@@ -574,8 +582,51 @@ fn main() {
         )
         .unwrap();
         assert_eq!(output.status.code(), Some(7));
-        assert_eq!(output.stdout, vec![b'o'; 4096]);
-        assert_eq!(output.stderr, vec![b'e'; 4096]);
+        assert_eq!(output.stdout, vec![b'o'; 4097]);
+        assert_eq!(output.stderr, vec![b'e'; 4097]);
+        assert!(bounded(String::from_utf8(output.stdout).unwrap(), 4096)
+            .ends_with("[output truncated]"));
+    }
+
+    #[test]
+    fn native_adapter_propagates_setup_and_cleanup_failures() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut spec = ResourceSpawnSpec {
+            program: ResourceProgram::Executable {
+                program: fixture().join("fixture.exe").canonicalize().unwrap().into(),
+                args: vec!["descendant".into()],
+            },
+            current_dir: dir.path().canonicalize().unwrap(),
+            stdin: ResourceStdin::Null,
+            stdout: ResourceOutput::Piped,
+            stderr: ResourceOutput::Piped,
+        };
+        let environment = ActuatorEnvironment::Shell {
+            path: std::env::join_paths([fixture()]).unwrap(),
+        };
+        let mut child = ResourceLimiter::default()
+            .spawn_actuator(&spec, &environment)
+            .unwrap();
+        assert!(matches!(
+            child.terminate_and_reap(Instant::now()),
+            Err(ResourceLimitError::CleanupDeadlineExceeded)
+        ));
+        child
+            .terminate_and_reap(Instant::now() + Duration::from_secs(5))
+            .unwrap();
+        spec.program = ResourceProgram::Executable {
+            program: dir.path().join("missing.exe").into(),
+            args: vec![],
+        };
+        assert!(matches!(
+            execute_owned(&spec, &environment, Duration::from_secs(5), 4096),
+            Err(ActuatorError::IoError(_))
+        ));
+        spec.current_dir.push("missing");
+        assert!(matches!(
+            ResourceLimiter::default().spawn_actuator(&spec, &environment),
+            Err(ResourceLimitError::SpawnFailed(_))
+        ));
     }
 
     #[test]
