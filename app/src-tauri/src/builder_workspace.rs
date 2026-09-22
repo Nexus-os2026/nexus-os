@@ -1,4 +1,4 @@
-//! Private, invocation-scoped authority for fresh Builder planning only.
+//! Private authority for fresh Builder planning and registered React file writes.
 //! Metadata and paths are never accepted as credentials. No authority lock is
 //! held by this adapter across audit, provider calls, filesystem I/O or delivery.
 use nexus_kernel::manifest::FsPermissionLevel;
@@ -7,13 +7,17 @@ use nexus_kernel::workspace_authority::{
     WorkspaceAuthorityRegistry, WorkspaceAuthoritySource, WorkspaceBinding, WorkspaceGrantId,
 };
 use serde_json::{json, Value};
+use std::collections::{hash_map::Entry, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::SystemTime;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 use web_builder_agent::model_router::ModelSelection;
 use web_builder_agent::plan::PlanResult;
 use web_builder_agent::project::{create_project, transition, ProjectState, ProjectStatus};
+
+mod directory_identity;
+use directory_identity::{DirectoryIdentity, IdentityError};
 
 // Audit payloads contain descriptive project IDs, never grants or private principals.
 type Audit = Arc<dyn Fn(Value) + Send + Sync>;
@@ -41,6 +45,9 @@ pub(super) struct BuilderWorkspaceAuthority {
     root: PathBuf,
     allocator: Uuid,
     planner: Uuid,
+    writer: Uuid,
+    storage_identity: Arc<DirectoryIdentity>,
+    catalog: Arc<ProjectCatalog>,
 }
 impl BuilderWorkspaceAuthority {
     /// Trusted startup only. The existing identity-home policy rejects malformed
@@ -66,11 +73,16 @@ impl BuilderWorkspaceAuthority {
             .canonicalize()
             .map_err(|_| PlanningError::Authority("storage unavailable".into()))?;
         validate_root(&root)?;
+        let storage_identity = DirectoryIdentity::capture(&root)
+            .map_err(|_| PlanningError::Authority("storage identity unavailable".into()))?;
         Ok(Self {
             registry,
             root,
             allocator: Uuid::new_v4(),
             planner: Uuid::new_v4(),
+            writer: Uuid::new_v4(),
+            storage_identity: Arc::new(storage_identity),
+            catalog: Arc::new(ProjectCatalog::default()),
         })
     }
 
@@ -116,6 +128,8 @@ impl BuilderWorkspaceAuthority {
             root: self.root.join(project_id.to_string()),
             audit,
             revoked: false,
+            registration: None,
+            catalog: Arc::clone(&self.catalog),
         };
         execution.event("issue", "authorized");
         let allocated = (|| {
@@ -136,6 +150,15 @@ impl BuilderWorkspaceAuthority {
             let canonical = target
                 .canonicalize()
                 .map_err(|_| PlanningError::Authority("project unavailable".into()))?;
+            let identity = DirectoryIdentity::capture(&canonical)
+                .map_err(|_| PlanningError::Authority("project identity unavailable".into()))?;
+            execution.registration = Some(Arc::new(RegisteredBuilderProject {
+                project_id,
+                root: canonical.clone(),
+                storage_root: self.root.clone(),
+                storage_identity: Arc::clone(&self.storage_identity),
+                identity,
+            }));
             let child = self
                 .registry
                 .narrow(
@@ -159,6 +182,382 @@ impl BuilderWorkspaceAuthority {
     }
 }
 
+type WriteResult<T> = std::result::Result<T, &'static str>;
+
+// No grant or binding survives in this catalog. None is a permanent tombstone.
+// Snapshots share the retained handle; invalidation releases the catalog's
+// ownership. Any in-flight snapshot releases its last reference on exit.
+#[derive(Default)]
+struct ProjectCatalog {
+    projects: Mutex<HashMap<Uuid, Option<Arc<RegisteredBuilderProject>>>>,
+}
+
+struct RegisteredBuilderProject {
+    project_id: Uuid,
+    root: PathBuf,
+    storage_root: PathBuf,
+    storage_identity: Arc<DirectoryIdentity>,
+    identity: DirectoryIdentity,
+}
+
+impl RegisteredBuilderProject {
+    fn validate_identity(&self) -> std::result::Result<(), IdentityError> {
+        self.storage_identity.validate(&self.storage_root)?;
+        if self.root.parent() != Some(self.storage_root.as_path()) {
+            return Err(IdentityError::Changed);
+        }
+        self.identity.validate(&self.root)
+    }
+}
+
+impl ProjectCatalog {
+    // Called only by finish_plan after successful persistence AND revocation.
+    fn publish(&self, project: Arc<RegisteredBuilderProject>) -> WriteResult<()> {
+        project
+            .validate_identity()
+            .map_err(|_| "registration identity denied")?;
+        let mut projects = self.projects.lock().map_err(|_| "catalog unavailable")?;
+        match projects.entry(project.project_id) {
+            Entry::Vacant(entry) => {
+                entry.insert(Some(project));
+                Ok(())
+            }
+            Entry::Occupied(_) => Err("registration already exists"),
+        }
+    }
+
+    fn lookup(&self, id: Uuid) -> WriteResult<Arc<RegisteredBuilderProject>> {
+        self.projects
+            .lock()
+            .map_err(|_| "catalog unavailable")?
+            .get(&id)
+            .and_then(Option::as_ref)
+            .cloned()
+            .ok_or("project not registered")
+    }
+
+    fn active(&self, project: &Arc<RegisteredBuilderProject>) -> WriteResult<()> {
+        let current = self.lookup(project.project_id)?;
+        if !Arc::ptr_eq(&current, project) {
+            return Err("registration changed");
+        }
+        Ok(())
+    }
+
+    fn invalidate(&self, project: &Arc<RegisteredBuilderProject>) -> WriteResult<()> {
+        let released = {
+            let mut projects = self.projects.lock().map_err(|_| "catalog unavailable")?;
+            let entry = projects
+                .get_mut(&project.project_id)
+                .ok_or("project not registered")?;
+            if entry
+                .as_ref()
+                .is_some_and(|current| Arc::ptr_eq(current, project))
+            {
+                entry.take()
+            } else {
+                None
+            }
+        };
+        // Native handle destruction is outside the catalog lock as well.
+        drop(released);
+        Ok(())
+    }
+
+    fn validate(&self, project: &Arc<RegisteredBuilderProject>, audit: &Audit) -> WriteResult<()> {
+        self.active(project)?;
+        if let Err(error) = project.validate_identity() {
+            if error == IdentityError::Changed {
+                self.invalidate(project)?;
+                event(
+                    audit,
+                    Some(project.project_id),
+                    "registration.invalidate",
+                    "invalidated",
+                );
+            }
+            return Err("registration identity denied");
+        }
+        self.active(project)
+    }
+}
+
+fn event(audit: &Audit, project: Option<Uuid>, operation: &str, outcome: &str) {
+    audit(json!({"operation": format!("builder.{operation}"),
+        "project_id": project.map(|id| id.to_string()), "outcome": outcome}));
+}
+
+/// Portable lexical contract, before the existing P0-002A pathname policy.
+fn validate_relative_file(relative: &str) -> WriteResult<()> {
+    if relative.is_empty()
+        || relative
+            .chars()
+            .any(|c| c.is_control() || "\\:<>\"|?*".contains(c))
+    {
+        return Err("relative file path denied");
+    }
+    for component in relative.split('/') {
+        if component.is_empty()
+            || component == "."
+            || component == ".."
+            || component.ends_with(['.', ' '])
+        {
+            return Err("relative file path denied");
+        }
+        let stem = component
+            .split('.')
+            .next()
+            .unwrap_or("")
+            .trim_end_matches(' ')
+            .to_uppercase();
+        if matches!(
+            stem.as_str(),
+            "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+        ) || ["COM", "LPT"].iter().any(|prefix| {
+            stem.strip_prefix(prefix).is_some_and(|suffix| {
+                matches!(
+                    suffix,
+                    "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+                )
+            })
+        }) {
+            return Err("relative file path denied");
+        }
+    }
+    Ok(())
+}
+
+impl BuilderWorkspaceAuthority {
+    fn begin_write(
+        &self,
+        selector: &str,
+        relative: &str,
+        audit: Audit,
+    ) -> WriteResult<WriteExecution<'_>> {
+        let id = Uuid::parse_str(selector).map_err(|_| {
+            event(&audit, None, "registration.lookup", "denied");
+            "project not registered"
+        })?;
+        let project = self.catalog.lookup(id).inspect_err(|_| {
+            event(&audit, Some(id), "registration.lookup", "denied");
+        })?;
+        self.catalog.validate(&project, &audit)?;
+        let root = project.root.join("react");
+        // capture requires the exact canonical child, a directory and no reparse
+        // redirection. Nothing in this path provisions storage or directories.
+        let identity = DirectoryIdentity::capture(&root).map_err(|_| "React identity denied")?;
+        validate_relative_file(relative)?;
+        let binding = WorkspaceBinding {
+            agent_id: self.writer,
+            run_id: Uuid::new_v4(),
+        };
+        // A synchronous single-write execution has a bounded authority lifetime
+        // even if finalization fails. Explicit revoke is still required.
+        let expiry = SystemTime::now()
+            .checked_add(Duration::from_secs(60))
+            .ok_or("expiry unavailable")?;
+        let grant = self
+            .registry
+            .issue_trusted_root(
+                &root,
+                binding,
+                WorkspaceAuthoritySource::BackendAllocated,
+                FsPermissionLevel::ReadWrite,
+                Some(expiry),
+            )
+            .map_err(|_| {
+                event(&audit, Some(id), "write.issue", "denied");
+                "write issuance denied"
+            })?;
+        let execution = WriteExecution {
+            authority: self,
+            project,
+            root,
+            identity,
+            binding,
+            grant,
+            audit,
+            revoked: false,
+        };
+        execution.event("issue", "authorized");
+        Ok(execution)
+    }
+
+    fn write_file(
+        &self,
+        selector: &str,
+        relative: &str,
+        content: &[u8],
+        audit: Audit,
+    ) -> WriteResult<()> {
+        let execution = self
+            .begin_write(selector, relative, Arc::clone(&audit))
+            .inspect_err(|_| {
+                event(&audit, Uuid::parse_str(selector).ok(), "write", "denied");
+            })?;
+        execution.finish(relative, content)
+    }
+}
+
+struct WriteExecution<'a> {
+    authority: &'a BuilderWorkspaceAuthority,
+    project: Arc<RegisteredBuilderProject>,
+    root: PathBuf,
+    identity: DirectoryIdentity,
+    binding: WorkspaceBinding,
+    grant: WorkspaceGrantId,
+    audit: Audit,
+    revoked: bool,
+}
+
+impl WriteExecution<'_> {
+    fn event(&self, operation: &str, outcome: &str) {
+        event(
+            &self.audit,
+            Some(self.project.project_id),
+            &format!("write.{operation}"),
+            outcome,
+        );
+    }
+
+    fn resolve(&self) -> WriteResult<()> {
+        let grant = self
+            .authority
+            .registry
+            .resolve(self.grant, self.binding)
+            .map_err(|_| "write authority denied")?;
+        if grant.permission() != &FsPermissionLevel::ReadWrite || grant.root() != self.root {
+            return Err("write authority scope denied");
+        }
+        Ok(())
+    }
+
+    fn target(&self, relative: &str) -> WriteResult<PathBuf> {
+        self.resolve()?;
+        self.authority
+            .catalog
+            .validate(&self.project, &self.audit)?;
+        self.identity
+            .validate(&self.root)
+            .map_err(|_| "React identity denied")?;
+        validate_relative_file(relative)?;
+        let path = resolve_existing_relative(&self.root, Path::new(relative))
+            .map_err(|_| "write containment denied")?;
+        let parent = path.parent().ok_or("write parent denied")?;
+        if !parent.is_dir() || parent.canonicalize().map_err(|_| "write parent denied")? != parent {
+            return Err("write parent denied");
+        }
+        match std::fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.is_file() => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            _ => return Err("write target type denied"),
+        }
+        Ok(path)
+    }
+
+    fn mutate(&self, relative: &str, content: &[u8]) -> WriteResult<()> {
+        let resolved = self.resolve();
+        self.event(
+            "resolve",
+            if resolved.is_ok() {
+                "authorized"
+            } else {
+                "denied"
+            },
+        );
+        resolved?;
+        let authorized = self.target(relative);
+        self.event(
+            "authorize",
+            if authorized.is_ok() {
+                "authorized"
+            } else {
+                "denied"
+            },
+        );
+        authorized?;
+        // Do not reuse the pre-audit path. All authority, lifecycle, identity,
+        // parent and target checks run again immediately before the write.
+        // Like P0-002A, this is pathname validation, not an atomic namespace or
+        // hard-link isolation guarantee against concurrent hostile OS mutation.
+        let path = self.target(relative)?;
+        std::fs::write(path, content).map_err(|_| "file write failed")
+    }
+
+    fn revoke(&mut self) -> WriteResult<()> {
+        if self.revoked {
+            return Ok(());
+        }
+        let result = self
+            .authority
+            .registry
+            .revoke(self.grant, self.binding)
+            .map_err(|_| "write revocation failed");
+        if result.is_ok() {
+            self.revoked = true;
+        }
+        self.event("revoke", if result.is_ok() { "revoked" } else { "failed" });
+        result
+    }
+
+    fn finish(self, relative: &str, content: &[u8]) -> WriteResult<()> {
+        let result = self.mutate(relative, content);
+        self.finalize(result)
+    }
+
+    fn finalize(mut self, result: WriteResult<()>) -> WriteResult<()> {
+        let cleanup = self.revoke();
+        let result = cleanup.and(result);
+        self.event(
+            "complete",
+            if result.is_ok() {
+                "succeeded"
+            } else {
+                "failed"
+            },
+        );
+        result
+    }
+}
+
+impl Drop for WriteExecution<'_> {
+    fn drop(&mut self) {
+        if !self.revoked {
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.revoke()));
+            if !matches!(result, Ok(Ok(()))) {
+                eprintln!("Builder write abnormal-exit revocation failed");
+            }
+        }
+    }
+}
+
+pub(super) fn write_file(
+    state: &crate::AppState,
+    selector: &str,
+    relative: &str,
+    content: &str,
+) -> std::result::Result<(), String> {
+    let audit = audit_for(state);
+    let authority = state.builder_workspace.as_ref().map_err(|_| {
+        event(&audit, None, "write", "denied");
+        "Builder write authority unavailable".to_owned()
+    })?;
+    authority
+        .write_file(selector, relative, content.as_bytes(), audit)
+        .map_err(|error| format!("Builder write: {error}"))
+}
+
+fn audit_for(state: &crate::AppState) -> Audit {
+    let state = state.clone();
+    Arc::new(move |payload| {
+        state.log_event(
+            Uuid::nil(),
+            nexus_kernel::audit::EventType::UserAction,
+            payload,
+        );
+    })
+}
+
 fn validate_root(root: &Path) -> Result<()> {
     if !root.is_absolute() || !root.is_dir() || root.canonicalize().ok().as_deref() != Some(root) {
         return Err(PlanningError::Authority(
@@ -178,6 +577,8 @@ struct PlanningExecution {
     root: PathBuf,
     audit: Audit,
     revoked: bool,
+    registration: Option<Arc<RegisteredBuilderProject>>,
+    catalog: Arc<ProjectCatalog>,
 }
 impl PlanningExecution {
     fn event(&self, operation: &str, outcome: &str) {
@@ -368,7 +769,34 @@ fn finish_plan(
         }
     })();
     // Finalization precedes success, error delivery, and cost recording.
-    execution.revoke()?;
+    let cleanup = execution.revoke();
+    if cleanup.is_err() || result.is_err() {
+        event(
+            &execution.audit,
+            Some(execution.project_id),
+            "registration",
+            "denied",
+        );
+    }
+    cleanup?;
+    if result.is_ok() {
+        let registration = execution
+            .registration
+            .as_ref()
+            .ok_or_else(|| PlanningError::Authority("missing allocation identity".into()))?;
+        let published = execution.catalog.publish(Arc::clone(registration));
+        event(
+            &execution.audit,
+            Some(execution.project_id),
+            "registration",
+            if published.is_ok() {
+                "registered"
+            } else {
+                "denied"
+            },
+        );
+        published.map_err(|error| PlanningError::Authority(error.into()))?;
+    }
     execution.event(
         "complete",
         if result.is_ok() {
@@ -385,14 +813,7 @@ pub(super) fn generate_plan(
     prompt: &str,
 ) -> std::result::Result<Value, String> {
     let authority = state.builder_workspace.as_ref().map_err(Clone::clone)?;
-    let audit_state = state.clone();
-    let audit: Audit = Arc::new(move |payload| {
-        audit_state.log_event(
-            Uuid::nil(),
-            nexus_kernel::audit::EventType::UserAction,
-            payload,
-        );
-    });
+    let audit = audit_for(state);
     let completed = run_plan(authority, audit, prompt, |fallback| {
         generate_with_provider(prompt, fallback)
     })

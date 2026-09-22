@@ -5444,6 +5444,7 @@ dependencies = [
  "urlencoding",
  "uuid",
  "web-builder-agent",
+ "windows-sys 0.61.2",
  "zip",
 ]
 

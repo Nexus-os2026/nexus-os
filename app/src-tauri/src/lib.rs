@@ -5972,23 +5972,12 @@ pub mod runtime {
     /// Write a file to a React project directory (triggers Vite HMR).
     #[tauri::command]
     fn builder_dev_server_write_file(
+        state: tauri::State<'_, AppState>,
         project_id: String,
         relative_path: String,
         content: String,
     ) -> Result<(), String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id)
-            .join("react");
-
-        let full_path = project_dir.join(&relative_path);
-        if let Some(parent) = full_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("mkdir: {e}"))?;
-        }
-        std::fs::write(&full_path, content).map_err(|e| format!("write: {e}"))?;
-        Ok(())
+        super::builder_workspace::write_file(&state, &project_id, &relative_path, &content)
     }
 
     // ── Builder Deploy (Phase 7A) ─────────────────────────────────────
