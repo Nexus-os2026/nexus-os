@@ -16,3 +16,14 @@ jobs:
         run: cygpath -w /usr/bin >> "$GITHUB_PATH"
       - name: Compare owned Bash child temporary path representations
         run: cargo test -p nexus-kernel --lib --locked bash_temp_environment_probe -- --nocapture
+      - name: Candidate native kernel inventory
+        continue-on-error: true
+        run: cargo test -p nexus-kernel --locked --no-fail-fast
+      - name: Repeat Bash output and workspace contracts
+        shell: pwsh
+        run: |
+          for ($iteration = 1; $iteration -le 20; $iteration++) {
+            $threads = if ($iteration % 2 -eq 0) { 8 } else { 1 }
+            cargo test -p nexus-kernel --lib --locked actuators::code_exec::tests -- --test-threads=$threads
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }

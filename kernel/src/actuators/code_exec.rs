@@ -397,6 +397,17 @@ mod tests {
         }
     }
 
+    fn assert_bash_stdout(result: &ActionResult, expected: &str) {
+        assert!(result.success, "{}", result.output);
+        // ActionResult preserves runtime stderr alongside stdout. Optional Bash
+        // startup diagnostics do not change the script's exact stdout contract.
+        let stdout = result
+            .output
+            .split_once("\n[stderr] ")
+            .map_or(result.output.as_str(), |(stdout, _)| stdout);
+        assert_eq!(stdout, expected, "{}", result.output);
+    }
+
     #[test]
     fn validates_language() {
         assert!(CodeExecuteActuator::validate_language("python3").is_ok());
@@ -508,14 +519,29 @@ mod tests {
             .execute(
                 &PlannedAction::CodeExecute {
                     language: "bash".into(),
-                    code: "printf 'canonical workspace'".into(),
+                    code: r#"[ "$HOME" -ef . ] && [ "$TMPDIR" -ef . ] || exit 91
+printf 'canonical workspace' > workspace-proof
+printf 'canonical workspace'
+printf 'workspace diagnostic' >&2"#
+                        .into(),
                     timeout_secs: Some(5),
                 },
                 &ctx,
             )
             .unwrap();
-        assert!(result.success, "{}", result.output);
-        assert_eq!(result.output, "canonical workspace");
+        assert_bash_stdout(&result, "canonical workspace");
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("workspace-proof")).unwrap(),
+            "canonical workspace"
+        );
+        assert!(
+            result
+                .output
+                .split_once("\n[stderr] ")
+                .is_some_and(|(_, stderr)| stderr.ends_with("workspace diagnostic")),
+            "script diagnostics must remain observable: {}",
+            result.output
+        );
     }
 
     #[cfg(windows)]
@@ -564,8 +590,7 @@ mod tests {
                 &make_context(tmp.path()),
             )
             .unwrap();
-        assert!(result.success, "{}", result.output);
-        assert_eq!(result.output, "http://0.0.0.0:0|http://0.0.0.0:0|");
+        assert_bash_stdout(&result, "http://0.0.0.0:0|http://0.0.0.0:0|");
     }
 
     #[test]
