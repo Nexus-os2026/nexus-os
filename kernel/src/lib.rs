@@ -82,6 +82,7 @@ pub mod value_learning;
 pub mod verification;
 pub mod web_conduct;
 pub mod workspace;
+pub mod workspace_authority;
 
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_support;

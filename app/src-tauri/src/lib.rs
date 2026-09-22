@@ -1070,6 +1070,10 @@ struct ChatConversationState {
 #[derive(Clone)]
 pub struct AppState {
     pub supervisor: Arc<Mutex<Supervisor>>,
+    /// Backend-only authority store. C1 starts empty and has no IPC issuer or
+    /// production consumers. Cloned AppState values share revocation state.
+    #[allow(dead_code)] // Used by the trusted issuer in the later C2 migration.
+    workspace_authority: Arc<nexus_kernel::workspace_authority::WorkspaceAuthorityRegistry>,
     /// Lock invariant: audit and supervisor guards must never overlap. Do not
     /// hold audit across routing, secrets, Warden, models, tools or callbacks.
     /// Execution passes an AuditWriter; readers snapshot before downstream work.
@@ -1319,6 +1323,9 @@ impl AppState {
 
         let state = Self {
             supervisor: supervisor.clone(),
+            workspace_authority: Arc::new(
+                nexus_kernel::workspace_authority::WorkspaceAuthorityRegistry::new(),
+            ),
             audit,
             meta: Arc::new(Mutex::new(HashMap::new())),
             voice: Arc::new(Mutex::new(VoiceRuntimeState {
@@ -1670,6 +1677,9 @@ impl AppState {
             Arc::new(std::sync::RwLock::new(test_ruleset));
         Self {
             supervisor: supervisor.clone(),
+            workspace_authority: Arc::new(
+                nexus_kernel::workspace_authority::WorkspaceAuthorityRegistry::new(),
+            ),
             audit: Arc::new(Mutex::new(AuditTrail::new())),
             meta: Arc::new(Mutex::new(HashMap::new())),
             voice: Arc::new(Mutex::new(VoiceRuntimeState {
