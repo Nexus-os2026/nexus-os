@@ -46,6 +46,7 @@ async fn run_headless_goal_loop(
     state: AppState,
     agent_id: String,
     goal_id: String,
+    workspace_base: std::path::PathBuf,
 ) -> Result<(), String> {
     let planner = CognitivePlanner::new(Box::new(FixedPlannerLlm));
     let mem_store = DbMemoryStore {
@@ -53,10 +54,6 @@ async fn run_headless_goal_loop(
     };
     let memory_mgr = AgentMemoryManager::new(Box::new(mem_store));
 
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let workspace_base = std::path::PathBuf::from(&home)
-        .join(".nexus")
-        .join("agents");
     let executor = nexus_kernel::cognitive::RegistryExecutor::new(
         workspace_base,
         state.audit.clone(),
@@ -210,13 +207,12 @@ fn wait_for_pending_consent(state: &AppState, agent_id: &str) -> ConsentRow {
     }
 }
 
-fn agent_workspace_file(home: &TempDir, agent_id: &str, relative_path: &str) -> std::path::PathBuf {
+fn agent_workspace_path(home: &TempDir, agent_id: &str) -> std::path::PathBuf {
     home.path()
         .join(".nexus")
         .join("agents")
         .join(agent_id)
         .join("workspace")
-        .join(relative_path)
 }
 
 #[test]
@@ -242,6 +238,8 @@ fn test_full_agent_flow() {
     .to_string();
 
     let agent_id = create_agent(&state, manifest_json).expect("create_agent should succeed");
+    let agent_workspace = agent_workspace_path(&home, &agent_id);
+    std::fs::create_dir_all(&agent_workspace).expect("create agent workspace");
     start_agent(&state, agent_id.clone()).expect("start_agent should succeed");
     let goal_id = execute_agent_goal(
         &state,
@@ -255,6 +253,7 @@ fn test_full_agent_flow() {
     let loop_state = state.clone();
     let loop_agent_id = agent_id.clone();
     let loop_goal_id = goal_id.clone();
+    let loop_workspace = agent_workspace.clone();
     std::thread::spawn(move || {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_time()
@@ -264,6 +263,7 @@ fn test_full_agent_flow() {
             loop_state,
             loop_agent_id,
             loop_goal_id,
+            loop_workspace,
         ));
         let _ = tx.send(result);
     });
@@ -306,7 +306,7 @@ fn test_full_agent_flow() {
     assert_eq!(completed_task.status, "completed");
     assert!(completed_task.success);
 
-    let workspace_file = agent_workspace_file(&home, &agent_id, "test.txt");
+    let workspace_file = agent_workspace.join("test.txt");
     assert!(
         workspace_file.exists(),
         "expected {:?} to exist",
