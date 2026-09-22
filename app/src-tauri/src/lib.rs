@@ -1869,7 +1869,11 @@ impl AppState {
                     nexus_governance_evolution::default_attack_generators(),
                 ),
             )),
-            oracle_runtime: oracle_runtime::OracleRuntime::start_with_handle(test_ruleset_handle),
+            oracle_runtime: oracle_runtime::OracleRuntime::try_start_with_handle_and_mode(
+                test_ruleset_handle,
+                oracle_runtime::IdentityMode::Ephemeral,
+            )
+            .expect("ephemeral test Oracle identity initialization cannot fail"),
             swarm_caller_identity: {
                 // Tests always use Ephemeral so they don't touch the
                 // developer's real `~/.nexus/swarm_caller_identity.key`.
