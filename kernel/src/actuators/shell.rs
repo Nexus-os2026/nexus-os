@@ -123,6 +123,9 @@ impl GovernedShell {
         }
 
         // Check dangerous patterns in full command string
+        #[cfg(windows)]
+        let combined = super::execution_platform::bounded(combined, MAX_OUTPUT_BYTES);
+
         let full_cmd = format!("{} {}", binary, effective_args.join(" "));
         for pattern in DANGEROUS_PATTERNS {
             if full_cmd.contains(pattern) {
@@ -204,36 +207,62 @@ impl Actuator for GovernedShell {
         // (which includes /usr/bin, /usr/sbin, etc.). Command::new("free") fails
         // in Tauri because the parent process PATH is minimal — the binary isn't
         // found before spawn. Using sh -c also enables pipes and redirects.
+        #[cfg(unix)]
         let full_command = if effective_args.is_empty() {
             binary.to_string()
         } else {
             format!("{} {}", binary, shell_escape_args(&effective_args))
         };
         // Ensure working directory exists (it may not for newly created agents)
+        #[cfg(unix)]
         if !context.working_dir.exists() {
             // Best-effort: create working directory for agent; command will fail separately if needed
             let _ = std::fs::create_dir_all(&context.working_dir);
         }
 
-        let mut cmd = std::process::Command::new("/bin/sh");
-        cmd.arg("-c");
-        cmd.arg(&full_command);
-        cmd.current_dir(&context.working_dir);
-        cmd.env(
-            "PATH",
-            "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        );
-
-        // Capture stdout/stderr
-        cmd.stdout(std::process::Stdio::piped());
-        cmd.stderr(std::process::Stdio::piped());
-
-        let child = cmd
-            .spawn()
-            .map_err(|e| ActuatorError::IoError(format!("spawn '{command}': {e}")))?;
-
-        // Wait with timeout
-        let output = wait_with_timeout(child, COMMAND_TIMEOUT_SECS)?;
+        #[cfg(windows)]
+        if let Some(output) = super::execution_platform::basic_command(
+            binary,
+            &effective_args,
+            &context.working_dir,
+            MAX_OUTPUT_BYTES,
+        )? {
+            return Ok(ActionResult {
+                success: true,
+                output,
+                fuel_cost: FUEL_COST_SHELL,
+                side_effects: vec![SideEffect::CommandExecuted {
+                    command: format!("{} {}", command, args.join(" ")),
+                }],
+            });
+        }
+        #[cfg(unix)]
+        let output = {
+            let mut cmd = std::process::Command::new("/bin/sh");
+            cmd.arg("-c").arg(&full_command).env(
+                "PATH",
+                "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            );
+            cmd.current_dir(&context.working_dir);
+            cmd.stdout(std::process::Stdio::piped());
+            cmd.stderr(std::process::Stdio::piped());
+            let child = cmd
+                .spawn()
+                .map_err(|e| ActuatorError::IoError(format!("spawn '{command}': {e}")))?;
+            wait_with_timeout(child, COMMAND_TIMEOUT_SECS)?
+        };
+        #[cfg(windows)]
+        let output = super::execution_platform::execute(
+            binary,
+            &effective_args
+                .iter()
+                .map(std::ffi::OsString::from)
+                .collect::<Vec<_>>(),
+            &context.working_dir,
+            false,
+            std::time::Duration::from_secs(COMMAND_TIMEOUT_SECS),
+            MAX_OUTPUT_BYTES,
+        )?;
 
         let mut combined = String::new();
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -250,6 +279,7 @@ impl Actuator for GovernedShell {
         }
 
         // Truncate output
+        #[cfg(unix)]
         if combined.len() > MAX_OUTPUT_BYTES {
             combined.truncate(MAX_OUTPUT_BYTES);
             combined.push_str("\n... [output truncated at 100KB]");
@@ -268,6 +298,7 @@ impl Actuator for GovernedShell {
 
 /// Wait for a child process with a timeout. Kills the process if it exceeds
 /// the deadline.
+#[cfg(unix)]
 fn wait_with_timeout(
     mut child: std::process::Child,
     timeout_secs: u64,
@@ -316,6 +347,7 @@ fn wait_with_timeout(
 
 /// Shell-escape each argument and join with spaces for use with `sh -c`.
 /// Wraps each arg in single quotes, escaping any embedded single quotes.
+#[cfg(unix)]
 fn shell_escape_args(args: &[String]) -> String {
     args.iter()
         .map(|arg| {

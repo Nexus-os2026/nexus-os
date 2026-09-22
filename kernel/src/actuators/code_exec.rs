@@ -4,6 +4,7 @@
 use super::types::{ActionResult, Actuator, ActuatorContext, ActuatorError, SideEffect};
 use crate::capabilities::has_capability;
 use crate::cognitive::types::PlannedAction;
+#[cfg(unix)]
 use std::process::Command;
 use std::time::Duration;
 
@@ -119,7 +120,56 @@ impl CodeExecuteActuator {
         Ok(())
     }
 
+    #[cfg(windows)]
+    fn execute_code(
+        runtime: &str,
+        code: &str,
+        working_dir: &std::path::Path,
+        timeout: Duration,
+    ) -> Result<(bool, String), ActuatorError> {
+        let root = working_dir
+            .canonicalize()
+            .map_err(|e| ActuatorError::IoError(format!("resolve workspace: {e}")))?;
+        let extension = match runtime {
+            "python3" => "py",
+            "node" => "js",
+            "bash" => "sh",
+            _ => "txt",
+        };
+        let name = format!("_nexus_exec.{extension}");
+        let temp_path = root.join(&name);
+        std::fs::write(&temp_path, code)
+            .map_err(|e| ActuatorError::IoError(format!("write temp code: {e}")))?;
+        let result = super::execution_platform::runtime_name(runtime).and_then(|program| {
+            // Workspace-local basename avoids passing verbatim UNC paths to an
+            // explicitly requested optional Bash. The cwd is still canonical.
+            super::execution_platform::execute(
+                program,
+                &[name.into()],
+                &root,
+                true,
+                timeout,
+                MAX_OUTPUT_SIZE,
+            )
+        });
+        let _ = std::fs::remove_file(&temp_path);
+        let output = result?;
+        let mut combined = String::from_utf8_lossy(&output.stdout).into_owned();
+        if !output.stderr.is_empty() {
+            if !combined.is_empty() {
+                combined.push('\n');
+            }
+            combined.push_str("[stderr] ");
+            combined.push_str(&String::from_utf8_lossy(&output.stderr));
+        }
+        Ok((
+            output.status.success(),
+            super::execution_platform::bounded(combined, MAX_OUTPUT_SIZE),
+        ))
+    }
+
     /// Write code to a temporary file and execute it.
+    #[cfg(unix)]
     fn execute_code(
         runtime: &str,
         code: &str,
@@ -433,6 +483,27 @@ mod tests {
         let result = exec.execute(&action, &ctx).unwrap();
         assert!(result.success);
         assert!(result.output.contains("hello from bash"));
+    }
+
+    #[test]
+    fn executes_bash_in_canonical_workspace_with_spaces() {
+        let tmp = tempfile::Builder::new()
+            .prefix("nexus code space ")
+            .tempdir()
+            .unwrap();
+        let ctx = make_context(&tmp.path().canonicalize().unwrap());
+        let result = CodeExecuteActuator
+            .execute(
+                &PlannedAction::CodeExecute {
+                    language: "bash".into(),
+                    code: "printf 'canonical workspace'".into(),
+                    timeout_secs: Some(5),
+                },
+                &ctx,
+            )
+            .unwrap();
+        assert!(result.success, "{}", result.output);
+        assert_eq!(result.output, "canonical workspace");
     }
 
     #[test]
