@@ -5927,46 +5927,34 @@ pub mod runtime {
         serde_json::to_value(&result).map_err(|e| format!("serialize: {e}"))
     }
 
-    /// Start a Vite dev server for a React project.
+    /// Builder dev-server start (P0-002C4A). `project_id` is a selector for a
+    /// current-AppState registration only. No process-launch design is
+    /// approved, so this validates provenance and identity, then fails closed.
     #[tauri::command]
-    fn builder_dev_server_start(project_id: String) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id)
-            .join("react");
-
-        // Install deps if needed
-        // UI-initiated: grant process.exec capability for npm/vite.
-        let caps: &[&str] = &["process.exec"];
-        web_builder_agent::dev_server::DevServer::install_deps(&project_dir, caps)
-            .map_err(|e| format!("npm install: {e}"))?;
-
-        // Start the dev server
-        let mut server = web_builder_agent::dev_server::DevServer::new(project_dir);
-        let url = server.start(caps).map_err(|e| format!("start: {e}"))?;
-
-        // Note: In production, the server would be stored in AppState.
-        // For now we leak it intentionally — Drop will kill the process on app exit.
-        // A proper implementation would use DevServerRegistry in AppState.
-        std::mem::forget(server);
-
-        Ok(url)
+    fn builder_dev_server_start(
+        state: tauri::State<'_, AppState>,
+        project_id: String,
+    ) -> Result<String, String> {
+        super::builder_workspace::dev_server_start(&state, &project_id)
     }
 
-    /// Stop a Vite dev server for a React project.
+    /// Builder dev-server stop. No C4A-owned server can exist; no PID, port or
+    /// process name is ever consulted.
     #[tauri::command]
-    fn builder_dev_server_stop(_project_id: String) -> Result<(), String> {
-        // In a full implementation, this would look up the server in DevServerRegistry.
-        // For now, the Drop implementation handles cleanup on app exit.
-        Ok(())
+    fn builder_dev_server_stop(
+        state: tauri::State<'_, AppState>,
+        project_id: String,
+    ) -> Result<(), String> {
+        super::builder_workspace::dev_server_stop(&state, &project_id)
     }
 
-    /// Get the status of a project's dev server.
+    /// Builder dev-server status for a registered project (always stopped).
     #[tauri::command]
-    fn builder_dev_server_status(_project_id: String) -> Result<serde_json::Value, String> {
-        Ok(serde_json::json!({ "status": "stopped" }))
+    fn builder_dev_server_status(
+        state: tauri::State<'_, AppState>,
+        project_id: String,
+    ) -> Result<serde_json::Value, String> {
+        super::builder_workspace::dev_server_status(&state, &project_id)
     }
 
     /// Write a file to a React project directory (triggers Vite HMR).

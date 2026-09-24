@@ -1,4 +1,5 @@
-//! Private authority for fresh Builder planning and registered React file writes.
+//! Private authority for fresh Builder planning, registered React file writes and
+//! fail-closed dev-server selection (no process launch is authorized).
 //! Metadata and paths are never accepted as credentials. No authority lock is
 //! held by this adapter across audit, provider calls, filesystem I/O or delivery.
 use nexus_kernel::manifest::FsPermissionLevel;
@@ -399,6 +400,134 @@ impl BuilderWorkspaceAuthority {
     }
 }
 
+// P0-002C4A: no process-launch design is approved. Dev-server commands only
+// validate the private registration and retained identities; start then fails
+// closed. Nothing here spawns a process, creates a directory or holds a lock
+// across audit.
+#[derive(Clone, Copy)]
+enum DevServerOperation {
+    Start,
+    Stop,
+    Status,
+}
+
+impl DevServerOperation {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Start => "start",
+            Self::Stop => "stop",
+            Self::Status => "status",
+        }
+    }
+}
+
+// Bounded reason categories; never paths, handles, principals or processes.
+fn dev_server_event(
+    audit: &Audit,
+    project: Option<Uuid>,
+    operation: DevServerOperation,
+    outcome: &str,
+    reason: &str,
+) {
+    audit(
+        json!({"operation": format!("builder.devserver.{}", operation.name()),
+        "project_id": project.map(|id| id.to_string()), "outcome": outcome, "reason": reason}),
+    );
+}
+
+type DevServerDenial = (&'static str, &'static str); // (audit reason, client error)
+
+impl BuilderWorkspaceAuthority {
+    /// Selector → private registration → storage, project and existing React
+    /// identity. React must be the exact, non-redirected child of the
+    /// registered project; it is observed, never created.
+    fn validate_dev_server(
+        &self,
+        selector: &str,
+        audit: &Audit,
+    ) -> std::result::Result<Uuid, DevServerDenial> {
+        let id =
+            Uuid::parse_str(selector).map_err(|_| ("registration", "project not registered"))?;
+        let project = self
+            .catalog
+            .lookup(id)
+            .map_err(|error| ("registration", error))?;
+        self.catalog
+            .validate(&project, audit)
+            .map_err(|error| ("identity", error))?;
+        let react = project.root.join("react");
+        let identity =
+            DirectoryIdentity::capture(&react).map_err(|_| ("react", "React identity denied"))?;
+        // Final checks after capture: the registration is still current and
+        // React is still the same directory beneath the registered project.
+        self.catalog
+            .validate(&project, audit)
+            .map_err(|error| ("identity", error))?;
+        identity
+            .validate(&react)
+            .map_err(|_| ("react", "React identity denied"))?;
+        Ok(id)
+    }
+
+    fn dev_server(
+        &self,
+        selector: &str,
+        operation: DevServerOperation,
+        audit: &Audit,
+    ) -> WriteResult<Uuid> {
+        self.validate_dev_server(selector, audit)
+            .map_err(|(reason, error)| {
+                let project = Uuid::parse_str(selector).ok();
+                dev_server_event(audit, project, operation, "denied", reason);
+                error
+            })
+    }
+
+    /// Returns only a denial: launching npm, npx, Vite or any other process is
+    /// not authorized until a separately approved launch design exists.
+    fn dev_server_start(&self, selector: &str, audit: Audit) -> &'static str {
+        match self.dev_server(selector, DevServerOperation::Start, &audit) {
+            Ok(id) => {
+                dev_server_event(
+                    &audit,
+                    Some(id),
+                    DevServerOperation::Start,
+                    "denied",
+                    "launch_unavailable",
+                );
+                "launch unavailable"
+            }
+            Err(error) => error,
+        }
+    }
+
+    /// No C4A-owned server can exist, so there is nothing to stop. No PID,
+    /// port, process name or historical process is ever consulted.
+    fn dev_server_stop(&self, selector: &str, audit: Audit) -> WriteResult<()> {
+        let id = self.dev_server(selector, DevServerOperation::Stop, &audit)?;
+        dev_server_event(
+            &audit,
+            Some(id),
+            DevServerOperation::Stop,
+            "succeeded",
+            "no_owned_server",
+        );
+        Ok(())
+    }
+
+    fn dev_server_status(&self, selector: &str, audit: Audit) -> WriteResult<Value> {
+        let id = self.dev_server(selector, DevServerOperation::Status, &audit)?;
+        dev_server_event(
+            &audit,
+            Some(id),
+            DevServerOperation::Status,
+            "succeeded",
+            "no_owned_server",
+        );
+        Ok(json!({"status": "stopped", "launch_available": false}))
+    }
+}
+
 struct WriteExecution<'a> {
     authority: &'a BuilderWorkspaceAuthority,
     project: Arc<RegisteredBuilderProject>,
@@ -545,6 +674,50 @@ pub(super) fn write_file(
     authority
         .write_file(selector, relative, content.as_bytes(), audit)
         .map_err(|error| format!("Builder write: {error}"))
+}
+
+fn dev_server_authority<'a>(
+    state: &'a crate::AppState,
+    audit: &Audit,
+    operation: DevServerOperation,
+) -> std::result::Result<&'a BuilderWorkspaceAuthority, String> {
+    state.builder_workspace.as_deref().map_err(|_| {
+        dev_server_event(audit, None, operation, "denied", "authority_unavailable");
+        "Builder dev server: authority unavailable".to_owned()
+    })
+}
+
+/// Always an error: no process-launch design is approved (P0-002C4A).
+pub(super) fn dev_server_start(
+    state: &crate::AppState,
+    selector: &str,
+) -> std::result::Result<String, String> {
+    let audit = audit_for(state);
+    let authority = dev_server_authority(state, &audit, DevServerOperation::Start)?;
+    let denial = authority.dev_server_start(selector, audit);
+    Err(format!("Builder dev server: {denial}"))
+}
+
+pub(super) fn dev_server_stop(
+    state: &crate::AppState,
+    selector: &str,
+) -> std::result::Result<(), String> {
+    let audit = audit_for(state);
+    let authority = dev_server_authority(state, &audit, DevServerOperation::Stop)?;
+    authority
+        .dev_server_stop(selector, audit)
+        .map_err(|error| format!("Builder dev server: {error}"))
+}
+
+pub(super) fn dev_server_status(
+    state: &crate::AppState,
+    selector: &str,
+) -> std::result::Result<Value, String> {
+    let audit = audit_for(state);
+    let authority = dev_server_authority(state, &audit, DevServerOperation::Status)?;
+    authority
+        .dev_server_status(selector, audit)
+        .map_err(|error| format!("Builder dev server: {error}"))
 }
 
 fn audit_for(state: &crate::AppState) -> Audit {

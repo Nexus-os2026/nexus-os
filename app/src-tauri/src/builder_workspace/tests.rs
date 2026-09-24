@@ -1645,3 +1645,570 @@ fn p0_002c3_removed_project_is_not_recreated() {
         .lookup(Uuid::parse_str(&id).unwrap())
         .is_err());
 }
+
+// P0-002C4A: dev-server commands validate C3 provenance and identity, then
+// fail closed. No process is launched and nothing is created or mutated.
+fn devserver_events(f: &Fixture, from: usize) -> Vec<Value> {
+    f.events.lock().unwrap()[from..]
+        .iter()
+        .filter(|v| {
+            v["operation"]
+                .as_str()
+                .is_some_and(|op| op.starts_with("builder.devserver."))
+        })
+        .cloned()
+        .collect()
+}
+
+// Full recursive snapshot (paths, kinds, file bytes) without following links.
+fn tree(root: &Path) -> Vec<(PathBuf, String, Vec<u8>)> {
+    let mut entries = Vec::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            let metadata = std::fs::symlink_metadata(&path).unwrap();
+            let relative = path.strip_prefix(root).unwrap().to_path_buf();
+            if metadata.is_dir() {
+                pending.push(path);
+                entries.push((relative, "dir".into(), vec![]));
+            } else if metadata.is_file() {
+                entries.push((relative, "file".into(), std::fs::read(&path).unwrap()));
+            } else {
+                entries.push((relative, "other".into(), vec![]));
+            }
+        }
+    }
+    entries.sort();
+    entries
+}
+
+fn plant_react_project(react: &Path) {
+    std::fs::write(
+        react.join("package.json"),
+        r#"{"name":"c4a","scripts":{"preinstall":"exit 1","dev":"vite"},"devDependencies":{"vite":"^5.3.4"}}"#,
+    )
+    .unwrap();
+    std::fs::write(react.join("index.html"), "<html></html>").unwrap();
+}
+
+fn assert_all_deny(f: &Fixture, selector: &str, expected: &str) {
+    let from = f.events.lock().unwrap().len();
+    assert_eq!(
+        f.authority.dev_server_start(selector, f.audit()),
+        expected,
+        "{selector:?}"
+    );
+    assert_eq!(
+        f.authority
+            .dev_server_stop(selector, f.audit())
+            .unwrap_err(),
+        expected
+    );
+    assert_eq!(
+        f.authority
+            .dev_server_status(selector, f.audit())
+            .unwrap_err(),
+        expected
+    );
+    let events = devserver_events(f, from);
+    assert_eq!(events.len(), 3, "{selector:?}");
+    assert!(events.iter().all(|v| v["outcome"] == "denied"
+        && v["reason"] != "launch_unavailable"
+        && v["reason"] != "no_owned_server"));
+}
+
+#[test]
+fn p0_002c4a_registered_project_reaches_launch_unavailable_without_mutation() {
+    let f = Fixture::new();
+    let (id, root) = registered(&f);
+    plant_react_project(&root.join("react"));
+    let before = tree(&f.path);
+    for _ in 0..2 {
+        let from = f.events.lock().unwrap().len();
+        assert_eq!(
+            f.authority.dev_server_start(&id, f.audit()),
+            "launch unavailable"
+        );
+        let events = devserver_events(&f, from);
+        assert_eq!(
+            events,
+            vec![
+                json!({"operation": "builder.devserver.start", "project_id": id,
+                "outcome": "denied", "reason": "launch_unavailable"})
+            ]
+        );
+    }
+    assert_eq!(tree(&f.path), before);
+    assert!(!root.join("react/node_modules").exists());
+    assert!(!root.join("react/package-lock.json").exists());
+    // Launch denial never invalidates or alters the registration.
+    assert!(f
+        .authority
+        .catalog
+        .lookup(Uuid::parse_str(&id).unwrap())
+        .is_ok());
+}
+
+#[test]
+fn p0_002c4a_selectors_without_current_registration_deny_every_operation() {
+    let f = Fixture::new();
+    let (id, root) = registered(&f);
+    // A legacy/forged on-disk project with React, state and package metadata.
+    let legacy = Uuid::new_v4();
+    let forged = f.authority.root.join(legacy.to_string());
+    std::fs::create_dir_all(forged.join("react")).unwrap();
+    plant_react_project(&forged.join("react"));
+    std::fs::write(
+        forged.join("builder_state.json"),
+        format!(
+            r#"{{"project_id":"{legacy}","project_dir":"{}"}}"#,
+            root.display()
+        ),
+    )
+    .unwrap();
+    let before = tree(&f.path);
+    for selector in [
+        legacy.to_string(),
+        Uuid::new_v4().to_string(),
+        Uuid::nil().to_string(),
+        root.to_string_lossy().into_owned(),
+        root.join("react").to_string_lossy().into_owned(),
+        forged.to_string_lossy().into_owned(),
+        format!("{id}/../{legacy}"),
+        "../escape".into(),
+        "not-a-uuid".into(),
+        String::new(),
+        "1234".into(),
+        "127.0.0.1:5173".into(),
+        "npx vite".into(),
+    ] {
+        assert_all_deny(&f, &selector, "project not registered");
+    }
+    // Malformed selectors are never echoed into audit.
+    let from = f.events.lock().unwrap().len();
+    let _ = f.authority.dev_server_start("../escape", f.audit());
+    assert_eq!(devserver_events(&f, from)[0]["project_id"], Value::Null);
+    assert_eq!(tree(&f.path), before);
+    // A restarted authority over the same storage has an empty catalog.
+    let restarted =
+        BuilderWorkspaceAuthority::provision(Arc::new(WorkspaceAuthorityRegistry::new()), &f.path)
+            .unwrap();
+    assert_eq!(
+        restarted.dev_server_start(&id, f.audit()),
+        "project not registered"
+    );
+    assert!(restarted.dev_server_stop(&id, f.audit()).is_err());
+    assert!(restarted.dev_server_status(&id, f.audit()).is_err());
+    assert_eq!(tree(&f.path), before);
+}
+
+#[test]
+fn p0_002c4a_project_and_storage_identity_changes_deny_and_permanently_invalidate() {
+    for case in ["removed", "replaced", "storage-missing", "storage-replaced"] {
+        let f = Fixture::new();
+        let (id, root) = registered(&f);
+        let detached = f.path.with_extension("project");
+        let old_storage = f.path.with_extension("old");
+        match case {
+            "removed" => std::fs::remove_dir_all(&root).unwrap(),
+            "replaced" => {
+                std::fs::rename(&root, root.with_extension("original")).unwrap();
+                std::fs::create_dir_all(root.join("react")).unwrap();
+            }
+            _ => {
+                // Move the observed project first (Windows share-delete rule).
+                std::fs::rename(&root, &detached).unwrap();
+                std::fs::rename(&f.path, &old_storage).unwrap();
+                if case == "storage-replaced" {
+                    std::fs::create_dir(&f.path).unwrap();
+                    std::fs::rename(&detached, &root).unwrap();
+                }
+            }
+        }
+        assert_eq!(
+            f.authority.dev_server_start(&id, f.audit()),
+            "registration identity denied",
+            "{case}"
+        );
+        // Invalidation is permanent: later calls deny as unregistered.
+        assert_all_deny(&f, &id, "project not registered");
+        assert!(f
+            .authority
+            .catalog
+            .lookup(Uuid::parse_str(&id).unwrap())
+            .is_err());
+        match case {
+            "removed" => assert!(!root.exists()),
+            "replaced" => {
+                std::fs::remove_dir_all(&root).unwrap();
+                std::fs::rename(root.with_extension("original"), &root).unwrap();
+                assert_all_deny(&f, &id, "project not registered");
+                assert!(!root.join("react/node_modules").exists());
+            }
+            "storage-missing" => {
+                assert!(!f.path.exists());
+                std::fs::remove_dir_all(&detached).unwrap();
+                std::fs::remove_dir(&old_storage).unwrap();
+            }
+            _ => std::fs::remove_dir(&old_storage).unwrap(),
+        }
+        assert!(f
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|v| v["operation"] == "builder.registration.invalidate"));
+    }
+}
+
+#[test]
+fn p0_002c4a_missing_or_non_directory_react_denies_without_creation() {
+    let f = Fixture::new();
+    let (id, root) = registered(&f);
+    let react = root.join("react");
+    std::fs::remove_dir(&react).unwrap();
+    assert_all_deny(&f, &id, "React identity denied");
+    assert!(!react.exists());
+    std::fs::write(&react, b"not a directory").unwrap();
+    assert_all_deny(&f, &id, "React identity denied");
+    assert_eq!(std::fs::read(&react).unwrap(), b"not a directory");
+    // React is not part of the registration: its absence never invalidates.
+    assert!(f
+        .authority
+        .catalog
+        .lookup(Uuid::parse_str(&id).unwrap())
+        .is_ok());
+    std::fs::remove_file(&react).unwrap();
+    std::fs::create_dir(&react).unwrap();
+    assert_eq!(
+        f.authority.dev_server_start(&id, f.audit()),
+        "launch unavailable"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn p0_002c4a_unix_react_and_project_symlink_redirects_deny() {
+    use std::os::unix::fs::symlink;
+    let f = Fixture::new();
+    let (id, root) = registered(&f);
+    let react = root.join("react");
+    let relocated = root.join("elsewhere");
+    std::fs::rename(&react, &relocated).unwrap();
+    symlink(&relocated, &react).unwrap();
+    assert_all_deny(&f, &id, "React identity denied");
+    std::fs::remove_file(&react).unwrap();
+    std::fs::rename(&relocated, &react).unwrap();
+    assert_eq!(
+        f.authority.dev_server_start(&id, f.audit()),
+        "launch unavailable"
+    );
+    std::fs::rename(&root, root.with_extension("old")).unwrap();
+    symlink(root.with_extension("old"), &root).unwrap();
+    assert_eq!(
+        f.authority.dev_server_start(&id, f.audit()),
+        "registration identity denied"
+    );
+    assert_all_deny(&f, &id, "project not registered");
+}
+
+#[cfg(windows)]
+#[test]
+fn p0_002c4a_windows_native_reparse_project_and_react_redirect_deny() {
+    use std::os::windows::fs::symlink_dir;
+    for project_replacement in [true, false] {
+        let f = Fixture::new();
+        let (id, root) = registered(&f);
+        let target = if project_replacement {
+            root.clone()
+        } else {
+            root.join("react")
+        };
+        let old = target.with_extension("old");
+        std::fs::rename(&target, &old).unwrap();
+        symlink_dir(&old, &target)
+            .expect("native Windows test requires symlink creation privilege");
+        assert_ne!(
+            f.authority.dev_server_start(&id, f.audit()),
+            "launch unavailable"
+        );
+        assert!(f.authority.dev_server_stop(&id, f.audit()).is_err());
+        assert!(f.authority.dev_server_status(&id, f.audit()).is_err());
+        assert_eq!(
+            f.authority
+                .catalog
+                .lookup(Uuid::parse_str(&id).unwrap())
+                .is_err(),
+            project_replacement
+        );
+    }
+}
+
+#[test]
+fn p0_002c4a_stop_and_status_are_truthful_and_expose_no_process_authority() {
+    let f = Fixture::new();
+    let (id, root) = registered(&f);
+    let before = tree(&f.path);
+    let from = f.events.lock().unwrap().len();
+    for _ in 0..2 {
+        f.authority.dev_server_stop(&id, f.audit()).unwrap();
+    }
+    let status = f.authority.dev_server_status(&id, f.audit()).unwrap();
+    assert_eq!(
+        status,
+        json!({"status": "stopped", "launch_available": false})
+    );
+    assert_eq!(tree(&f.path), before);
+    let events = devserver_events(&f, from);
+    assert_eq!(events.len(), 3);
+    for event in &events {
+        assert_eq!(event["project_id"], id.as_str());
+        assert_eq!(event["outcome"], "succeeded");
+        assert_eq!(event["reason"], "no_owned_server");
+        assert_eq!(event.as_object().unwrap().len(), 4);
+    }
+    assert!(!root.join("react/node_modules").exists());
+}
+
+#[test]
+fn p0_002c4a_audit_reentry_and_no_sensitive_material() {
+    let path = std::env::temp_dir().join(format!("nexus-c4a-{}", Uuid::new_v4()));
+    let authority = Arc::new(
+        BuilderWorkspaceAuthority::provision(Arc::new(WorkspaceAuthorityRegistry::new()), &path)
+            .unwrap(),
+    );
+    let events = Arc::new(Mutex::new(Vec::<Value>::new()));
+    let result = run_plan(&authority, Arc::new(|_| {}), "site", |_| Ok(generated())).unwrap();
+    let root = PathBuf::from(&result.project_dir);
+    std::fs::create_dir(root.join("react")).unwrap();
+    let id = result.project_id;
+    let reentered = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let audit: Audit = {
+        let (weak, events, id, reentered) = (
+            Arc::downgrade(&authority),
+            Arc::clone(&events),
+            id.clone(),
+            Arc::clone(&reentered),
+        );
+        Arc::new(move |event| {
+            events.lock().unwrap().push(event);
+            // Re-enter every safe Builder authority path with no lock held.
+            if reentered.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < 3 {
+                let authority = weak.upgrade().unwrap();
+                let quiet: Audit = Arc::new(|_| {});
+                let _ = authority.catalog.lookup(Uuid::parse_str(&id).unwrap());
+                assert!(authority.dev_server_status(&id, Arc::clone(&quiet)).is_ok());
+                assert!(authority.dev_server_stop(&id, Arc::clone(&quiet)).is_ok());
+                let _ = authority.dev_server_start(&id, quiet);
+            }
+        })
+    };
+    let mut output = String::new();
+    output += authority.dev_server_start(&id, Arc::clone(&audit));
+    authority.dev_server_stop(&id, Arc::clone(&audit)).unwrap();
+    output += &authority
+        .dev_server_status(&id, Arc::clone(&audit))
+        .unwrap()
+        .to_string();
+    output += authority.dev_server_start("../private/caller/root", Arc::clone(&audit));
+    output += authority.dev_server_start(&Uuid::new_v4().to_string(), audit);
+    assert!(reentered.load(std::sync::atomic::Ordering::SeqCst) >= 3);
+    output += &serde_json::to_string(&*events.lock().unwrap()).unwrap();
+    for sensitive in [
+        path.to_string_lossy().into_owned(),
+        authority.root.to_string_lossy().into_owned(),
+        root.to_string_lossy().into_owned(),
+        root.join("react").to_string_lossy().into_owned(),
+        authority.allocator.to_string(),
+        authority.planner.to_string(),
+        authority.writer.to_string(),
+        "private/caller/root".into(),
+        "pid".into(),
+        "port".into(),
+        "url".into(),
+        "npm".into(),
+        "npx".into(),
+    ] {
+        assert!(!output.contains(&sensitive), "sensitive: {sensitive}");
+    }
+    drop(authority);
+    let _ = std::fs::remove_dir_all(&path);
+}
+
+#[test]
+fn p0_002c4a_appstate_commands_fail_closed_and_share_registration() {
+    let f = Fixture::new();
+    let mut state = crate::AppState::new_in_memory();
+    let unavailable = "Builder dev server: authority unavailable";
+    assert_eq!(dev_server_start(&state, "id").unwrap_err(), unavailable);
+    assert_eq!(dev_server_stop(&state, "id").unwrap_err(), unavailable);
+    assert_eq!(dev_server_status(&state, "id").unwrap_err(), unavailable);
+    state.builder_workspace = Ok(Arc::new(
+        BuilderWorkspaceAuthority::provision(Arc::clone(&state.workspace_authority), &f.path)
+            .unwrap(),
+    ));
+    let authority = state.builder_workspace.as_ref().unwrap();
+    let result = run_plan(authority, f.audit(), "site", |_| Ok(generated())).unwrap();
+    std::fs::create_dir(Path::new(&result.project_dir).join("react")).unwrap();
+    let id = result.project_id;
+    let cloned = state.clone();
+    assert_eq!(
+        dev_server_start(&cloned, &id).unwrap_err(),
+        "Builder dev server: launch unavailable"
+    );
+    dev_server_stop(&cloned, &id).unwrap();
+    assert_eq!(
+        dev_server_status(&state, &id).unwrap(),
+        json!({"status": "stopped", "launch_available": false})
+    );
+    assert_eq!(
+        dev_server_start(&state, "not-a-uuid").unwrap_err(),
+        "Builder dev server: project not registered"
+    );
+    let restarted = crate::AppState::new_in_memory();
+    assert!(dev_server_start(&restarted, &id).is_err());
+    assert!(dev_server_stop(&restarted, &id).is_err());
+    assert!(dev_server_status(&restarted, &id).is_err());
+    restarted.shutdown_oracle_runtime();
+    state.shutdown_oracle_runtime();
+}
+
+// HOME, cwd and PATH are process-global; this runs in its own test process.
+// Every executable a launch path could reach writes a sentinel if run.
+#[test]
+fn p0_002c4a_home_cwd_and_path_cannot_influence_or_trigger_execution() {
+    const FLAG: &str = "NEXUS_C4A_ENV_TEST";
+    const NAME: &str =
+        "builder_workspace::tests::p0_002c4a_home_cwd_and_path_cannot_influence_or_trigger_execution";
+    if std::env::var(FLAG).as_deref() == Ok(NAME) {
+        let f = Fixture::new();
+        let (id, root) = registered(&f);
+        let react = root.join("react");
+        plant_react_project(&react);
+        let tools = Fixture::new();
+        let sentinel = tools.path.join("sentinel");
+        let bin = tools.path.join("bin");
+        std::fs::create_dir_all(react.join("node_modules/.bin")).unwrap();
+        std::fs::create_dir(&bin).unwrap();
+        let script = format!("#!/bin/sh\necho ran > \"{}\"\n", sentinel.display());
+        let batch = format!("@echo ran > \"{}\"\r\n", sentinel.display());
+        for dir in [&bin, &react.join("node_modules/.bin")] {
+            for name in ["npm", "npx", "vite", "node"] {
+                let unix = dir.join(name);
+                std::fs::write(&unix, &script).unwrap();
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(&unix, std::fs::Permissions::from_mode(0o755))
+                        .unwrap();
+                }
+                for ext in ["cmd", "bat"] {
+                    std::fs::write(dir.join(format!("{name}.{ext}")), &batch).unwrap();
+                }
+            }
+        }
+        // Where the removed HOME-derived start path would have looked.
+        let home = Fixture::new();
+        let legacy = home.path.join(".nexus/builds").join(&id).join("react");
+        std::fs::create_dir_all(&legacy).unwrap();
+        plant_react_project(&legacy);
+        let (storage_before, home_before) = (tree(&f.path), tree(&home.path));
+        let original = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&react).unwrap();
+        std::env::set_var("HOME", &home.path);
+        std::env::set_var("USERPROFILE", &home.path);
+        std::env::set_var("PATH", &bin);
+        assert_eq!(
+            f.authority.dev_server_start(&id, f.audit()),
+            "launch unavailable"
+        );
+        f.authority.dev_server_stop(&id, f.audit()).unwrap();
+        assert_eq!(
+            f.authority.dev_server_status(&id, f.audit()).unwrap(),
+            json!({"status": "stopped", "launch_available": false})
+        );
+        // A selector naming the HOME-derived legacy project is not authority.
+        let legacy_id = Uuid::new_v4().to_string();
+        std::fs::create_dir_all(
+            home.path
+                .join(".nexus/builds")
+                .join(&legacy_id)
+                .join("react"),
+        )
+        .unwrap();
+        assert_eq!(
+            f.authority.dev_server_start(&legacy_id, f.audit()),
+            "project not registered"
+        );
+        std::env::set_current_dir(original).unwrap();
+        // Give any hypothetical detached child a moment to reveal itself.
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(!sentinel.exists(), "a process was launched");
+        assert_eq!(tree(&f.path), storage_before);
+        assert!(!legacy.join("node_modules").exists());
+        assert_eq!(
+            tree(&home.path).len(),
+            home_before.len() + 2 // only this test's legacy_id/react directories
+        );
+        eprintln!("C4A environment witness");
+        return;
+    }
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", NAME, "--nocapture"])
+        .env(FLAG, NAME)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("C4A environment witness"));
+}
+
+// Security invariant guard: no production launch path remains reachable from
+// the three dev-server commands or the Builder authority adapter.
+#[test]
+fn p0_002c4a_production_dev_server_commands_have_no_launch_path() {
+    let lib = include_str!("../lib.rs");
+    let start = lib.find("    fn builder_dev_server_start(").unwrap();
+    let end = lib.find("    fn builder_dev_server_write_file(").unwrap();
+    let commands = &lib[start..end];
+    for forbidden in [
+        "Command",
+        "DevServer",
+        "dev_server::",
+        "install_deps",
+        "forget",
+        "spawn",
+        "ResourceLimit",
+        "process.exec",
+        "HOME",
+        "env::",
+        "npm",
+        "npx",
+        "PathBuf",
+        "join(",
+    ] {
+        assert!(!commands.contains(forbidden), "{forbidden}");
+    }
+    assert_eq!(
+        commands
+            .matches("super::builder_workspace::dev_server_")
+            .count(),
+        3
+    );
+    let adapter = include_str!("../builder_workspace.rs");
+    for forbidden in [
+        "Command::",
+        "std::process",
+        "DevServer::",
+        "DevServerRegistry",
+        "web_builder_agent::dev_server",
+        "install_deps",
+        "mem::forget",
+        "ResourceLimit",
+        ".spawn(",
+        "env::var",
+        "create_dir_all(&react",
+    ] {
+        assert!(!adapter.contains(forbidden), "{forbidden}");
+    }
+}
