@@ -260,7 +260,14 @@ mod tests {
         let tempdir = TempDir::new().unwrap();
         let context = make_context(&tempdir);
         let resolved = TtsActuator::resolve_output_path(&context, "audio/test.wav").unwrap();
-        assert!(resolved.starts_with(tempdir.path()));
+        assert_eq!(
+            resolved,
+            tempdir
+                .path()
+                .canonicalize()
+                .unwrap()
+                .join("audio/test.wav")
+        );
     }
 
     #[test]

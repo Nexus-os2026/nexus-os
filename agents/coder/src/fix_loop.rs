@@ -268,8 +268,12 @@ fn apply_changes(project_path: &Path, changes: &[FileChange]) -> Result<usize, A
                 applied += 1;
             }
             FileChange::Delete(path) => {
-                let full = resolve(project_path, path.as_str())?;
-                if full.exists() {
+                let full =
+                    nexus_sdk::workspace::resolve_entry_for_unlink(project_path, Path::new(path))?;
+                // Retain the fix loop's relative-only input policy, without
+                // following the final symlink as read/write resolution does.
+                validate_relative_path(path)?;
+                if fs::symlink_metadata(&full).is_ok() {
                     fs::remove_file(full).map_err(|error| {
                         AgentError::SupervisorError(format!("failed deleting '{path}': {error}"))
                     })?;
@@ -283,6 +287,11 @@ fn apply_changes(project_path: &Path, changes: &[FileChange]) -> Result<usize, A
 }
 
 fn resolve(project_path: &Path, relative_path: &str) -> Result<PathBuf, AgentError> {
+    let relative = validate_relative_path(relative_path)?;
+    nexus_sdk::workspace::resolve_path(project_path, relative)
+}
+
+fn validate_relative_path(relative_path: &str) -> Result<&Path, AgentError> {
     let relative = Path::new(relative_path);
     if relative.is_absolute() {
         return Err(AgentError::SupervisorError(format!(
@@ -299,5 +308,134 @@ fn resolve(project_path: &Path, relative_path: &str) -> Result<PathBuf, AgentErr
             Component::Normal(_) | Component::CurDir => {}
         }
     }
-    Ok(project_path.join(relative))
+    Ok(relative)
+}
+
+#[cfg(all(test, unix))]
+mod containment_tests {
+    use super::*;
+
+    #[test]
+    fn p0_002a_fix_loop_denies_outside_entries_resolving_back_inside() {
+        for absolute in [false, true] {
+            let temp = tempfile::TempDir::new().unwrap();
+            let workspace = temp.path().join("workspace");
+            let outside = temp.path().join("outside");
+            fs::create_dir(&workspace).unwrap();
+            fs::create_dir(&outside).unwrap();
+            let target = workspace.join("target.txt");
+            let back = outside.join("back");
+            fs::write(&target, b"inside evidence").unwrap();
+            fs::write(outside.join("evidence.txt"), b"outside evidence").unwrap();
+            std::os::unix::fs::symlink(&outside, workspace.join("escape")).unwrap();
+            std::os::unix::fs::symlink(&target, &back).unwrap();
+            let entries = || {
+                let mut names: Vec<_> = fs::read_dir(&outside)
+                    .unwrap()
+                    .map(|entry| entry.unwrap().file_name())
+                    .collect();
+                names.sort();
+                names
+            };
+            let before = entries();
+            let path = if absolute {
+                back.to_str().unwrap().to_string()
+            } else {
+                "escape/back".into()
+            };
+            let result = apply_changes(&workspace, &[FileChange::Delete(path)]);
+            assert_eq!(entries(), before);
+            assert_eq!(fs::read_link(&back).unwrap(), target);
+            assert_eq!(fs::read(&target).unwrap(), b"inside evidence");
+            assert_eq!(
+                fs::read(outside.join("evidence.txt")).unwrap(),
+                b"outside evidence"
+            );
+            assert!(
+                matches!(result, Err(AgentError::CapabilityDenied(_))),
+                "{result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn p0_002a_fix_loop_unlinks_inside_leaf_without_following_it() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let workspace = temp.path().join("workspace");
+        let outside = temp.path().join("outside");
+        fs::create_dir(&workspace).unwrap();
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("target.txt"), b"outside evidence").unwrap();
+        for target in ["target.txt", "missing.txt"] {
+            let link = workspace.join("link");
+            std::os::unix::fs::symlink(outside.join(target), &link).unwrap();
+            assert_eq!(
+                apply_changes(&workspace, &[FileChange::Delete("link".into())]).unwrap(),
+                1
+            );
+            assert!(fs::symlink_metadata(link).is_err());
+            assert_eq!(
+                fs::read(outside.join("target.txt")).unwrap(),
+                b"outside evidence"
+            );
+            assert_eq!(fs::read_dir(&outside).unwrap().count(), 1);
+        }
+    }
+
+    #[test]
+    fn p0_002a_fix_loop_deletes_normal_inside_file() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let target = temp.path().join("file.txt");
+        fs::write(&target, b"inside evidence").unwrap();
+        assert_eq!(
+            apply_changes(temp.path(), &[FileChange::Delete("file.txt".into())]).unwrap(),
+            1
+        );
+        assert!(!target.exists());
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn p0_002_fix_loop_denies_symlink_mutations() {
+        for operation in ["create", "modify", "delete"] {
+            let temp = tempfile::TempDir::new().unwrap();
+            let workspace = temp.path().join("workspace");
+            let outside = temp.path().join("outside");
+            fs::create_dir_all(&workspace).unwrap();
+            fs::create_dir_all(&outside).unwrap();
+            fs::write(outside.join("secret.txt"), "outside evidence").unwrap();
+            std::os::unix::fs::symlink(&outside, workspace.join("escape")).unwrap();
+            let change = match operation {
+                "create" => FileChange::Create("escape/new/deep/file.txt".into(), "bad".into()),
+                "modify" => {
+                    FileChange::Modify("escape/secret.txt".into(), String::new(), "bad".into())
+                }
+                _ => FileChange::Delete("escape/secret.txt".into()),
+            };
+            let result = apply_changes(&workspace, &[change]);
+            assert_eq!(
+                fs::read_to_string(outside.join("secret.txt")).unwrap(),
+                "outside evidence"
+            );
+            assert_eq!(fs::read_dir(&outside).unwrap().count(), 1);
+            assert!(
+                matches!(result, Err(AgentError::CapabilityDenied(_))),
+                "{result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn p0_002_fix_loop_deletes_inside_symlink_without_deleting_target() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let target = temp.path().join("target.txt");
+        fs::write(&target, "inside evidence").unwrap();
+        std::os::unix::fs::symlink("target.txt", temp.path().join("alias.txt")).unwrap();
+        assert_eq!(
+            apply_changes(temp.path(), &[FileChange::Delete("alias.txt".into())]).unwrap(),
+            1
+        );
+        assert!(fs::symlink_metadata(temp.path().join("alias.txt")).is_err());
+        assert_eq!(fs::read_to_string(target).unwrap(), "inside evidence");
+    }
 }

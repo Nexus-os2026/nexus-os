@@ -21,14 +21,16 @@ use nexus_sdk::consent::{
     ApprovalQueue, ApprovalRequest, ConsentError, ConsentPolicyEngine, ConsentRuntime,
     GovernedOperation,
 };
-use nexus_sdk::resource_limiter::ResourceLimiter;
+use nexus_sdk::resource_limiter::{
+    ResourceLimitedChild, ResourceLimiter, ResourceOutput, ResourceProgram, ResourceSpawnSpec,
+    ResourceStdin,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -36,6 +38,7 @@ use uuid::Uuid;
 
 pub const TERMINAL_EXECUTE_CAPABILITY: &str = "terminal.execute";
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
+const CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 const ALLOWLIST: &[&str] = &[
     "cargo", "npm", "pip", "pip3", "git", "python", "python3", "node", "npx",
 ];
@@ -222,10 +225,10 @@ impl TerminalExecutor {
         let start = Instant::now();
 
         let mut process = spawn_shell(command, cwd)?;
-        let stdout = process.stdout.take().ok_or_else(|| {
+        let stdout = process.take_stdout().ok_or_else(|| {
             CommandError::ExecutionFailed("failed to capture stdout pipe".to_string())
         })?;
-        let stderr = process.stderr.take().ok_or_else(|| {
+        let stderr = process.take_stderr().ok_or_else(|| {
             CommandError::ExecutionFailed("failed to capture stderr pipe".to_string())
         })?;
 
@@ -236,7 +239,8 @@ impl TerminalExecutor {
         let mut collected_stdout = String::new();
         let mut collected_stderr = String::new();
         let exit_status;
-        let mut timed_out = false;
+        let cleanup_deadline;
+        let timed_out;
 
         loop {
             drain_output(
@@ -244,24 +248,40 @@ impl TerminalExecutor {
                 &mut collected_stdout,
                 &mut collected_stderr,
                 &mut on_chunk,
+                128,
             );
 
-            if let Some(status) = process.try_wait().map_err(|error| {
-                CommandError::ExecutionFailed(format!("failed waiting for command: {error}"))
-            })? {
-                exit_status = status;
-                break;
-            }
-
-            if start.elapsed() > effective_timeout {
-                timed_out = true;
-                // Kill the entire process group (child + all descendants) to
-                // prevent orphaned grandchildren from surviving the timeout.
-                // Best-effort: kill timed-out process tree to prevent orphan descendants
-                let _ = ResourceLimiter::kill_process_tree(process.id());
-                exit_status = process.wait().map_err(|error| {
-                    CommandError::ExecutionFailed(format!("failed waiting after kill: {error}"))
-                })?;
+            let observed = match process.poll_exit() {
+                Ok(status) => status,
+                Err(error) => {
+                    // Still explicitly clean up; readers are detached on any
+                    // cleanup failure instead of joining potentially live pipes.
+                    process
+                        .terminate_and_reap(Instant::now() + CLEANUP_TIMEOUT)
+                        .map_err(|cleanup| {
+                            CommandError::ExecutionFailed(format!(
+                                "failed waiting for command: {error}; cleanup failed: {cleanup}"
+                            ))
+                        })?;
+                    return Err(CommandError::ExecutionFailed(format!(
+                        "failed waiting for command: {error}"
+                    )));
+                }
+            };
+            if observed.is_some() || start.elapsed() > effective_timeout {
+                timed_out = observed.is_none();
+                cleanup_deadline = Instant::now() + CLEANUP_TIMEOUT;
+                // Even natural root exit can leave descendants holding pipes.
+                // Preserve the original exit status and clean the owned tree
+                // before attempting to join either output reader.
+                let report = process
+                    .terminate_and_reap(cleanup_deadline)
+                    .map_err(|error| {
+                        CommandError::ExecutionFailed(format!(
+                            "command tree cleanup failed: {error}"
+                        ))
+                    })?;
+                exit_status = observed.unwrap_or(report.status);
                 break;
             }
 
@@ -277,7 +297,20 @@ impl TerminalExecutor {
             }
         }
 
-        // Best-effort: join I/O reader threads, ignore panics
+        // Successful signaling does not itself guarantee pipe EOF on Unix.
+        // Bound reader completion too (e.g. a process that left the group).
+        while !stdout_handle.is_finished() || !stderr_handle.is_finished() {
+            if Instant::now() >= cleanup_deadline {
+                return Err(CommandError::ExecutionFailed(
+                    "output readers did not finish before cleanup deadline".to_string(),
+                ));
+            }
+            thread::sleep(
+                Duration::from_millis(5)
+                    .min(cleanup_deadline.saturating_duration_since(Instant::now())),
+            );
+        }
+        // Joining already-finished readers cannot block on a live pipe.
         let _ = stdout_handle.join();
         let _ = stderr_handle.join();
         drain_output(
@@ -285,6 +318,7 @@ impl TerminalExecutor {
             &mut collected_stdout,
             &mut collected_stderr,
             &mut on_chunk,
+            usize::MAX,
         );
 
         let duration_ms = start.elapsed().as_millis();
@@ -397,31 +431,18 @@ pub fn execute(
 /// shell-free command execution. This function will be removed in a future release.
 /// See: `sdk/src/typed_tools.rs`
 ///
-/// Resource limits (memory, CPU, process count, file size) are enforced via
-/// rlimits set in the child process.  On timeout, the entire process group is
-/// killed to prevent orphaned grandchildren.
-fn spawn_shell(command: &str, cwd: &Path) -> Result<std::process::Child, CommandError> {
+/// Linux rlimits are set before exec. The owned process group or Windows job
+/// is explicitly terminated/finalized on both timeout and natural root exit.
+fn spawn_shell(command: &str, cwd: &Path) -> Result<ResourceLimitedChild, CommandError> {
     eprintln!("DEPRECATED: spawn_shell called with raw command string. Migrate to sdk::typed_tools::execute_typed_tool for safe typed tool execution.");
-    let mut shell = if cfg!(target_os = "windows") {
-        let mut cmd = Command::new("cmd");
-        cmd.args(["/C", command]);
-        cmd
-    } else {
-        let mut cmd = Command::new("sh");
-        cmd.args(["-lc", command]);
-        cmd
-    };
-
-    // Apply OS-level resource limits (RLIMIT_AS, RLIMIT_CPU, RLIMIT_NPROC,
-    // RLIMIT_FSIZE) and put the child in its own process group via pre_exec.
-    let limiter = ResourceLimiter::default();
-    limiter.apply_to_command(&mut shell);
-
-    shell
-        .current_dir(cwd)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+    ResourceLimiter::default()
+        .spawn(&ResourceSpawnSpec {
+            program: ResourceProgram::Shell(command.to_string()),
+            current_dir: cwd.to_path_buf(),
+            stdin: ResourceStdin::Inherit,
+            stdout: ResourceOutput::Piped,
+            stderr: ResourceOutput::Piped,
+        })
         .map_err(|error| {
             CommandError::ExecutionFailed(format!(
                 "failed to spawn command '{command}' in '{}': {error}",
@@ -619,10 +640,13 @@ fn drain_output<F>(
     stdout: &mut String,
     stderr: &mut String,
     on_chunk: &mut F,
+    max_chunks: usize,
 ) where
     F: FnMut(OutputChunk),
 {
-    while let Ok(chunk) = receiver.try_recv() {
+    // Bound work while the child is running so output cannot starve timeout
+    // checks. After readers finish the caller drains the finite remainder.
+    for chunk in receiver.try_iter().take(max_chunks) {
         consume_chunk(chunk, stdout, stderr, on_chunk);
     }
 }

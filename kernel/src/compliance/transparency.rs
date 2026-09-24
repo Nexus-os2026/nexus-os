@@ -406,11 +406,10 @@ impl TransparencyReportGenerator {
         }
 
         let total = approvals + rejections;
-        let approval_rate_percent = if total > 0 {
-            ((approvals * 100) / total) as u8
-        } else {
-            100 // No decisions needed = fully compliant
-        };
+        let approval_rate_percent = (approvals * 100)
+            .checked_div(total)
+            .map(|rate| rate as u8)
+            .unwrap_or(100); // No decisions needed = fully compliant
 
         HumanOversightSummary {
             total_approvals: approvals,
