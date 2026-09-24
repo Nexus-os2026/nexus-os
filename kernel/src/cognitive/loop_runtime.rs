@@ -11,7 +11,7 @@ use super::types::{
     GoalStatus, LoopConfig, PlannedAction, PlanningContext, StepStatus,
 };
 use crate::actuators::{ActuatorContext, ActuatorRegistry};
-use crate::audit::{AuditTrail, EventType};
+use crate::audit::{AuditTrail, AuditWriter, EventType};
 use crate::autonomy::AutonomyLevel;
 use crate::capabilities::has_capability;
 use crate::errors::AgentError;
@@ -160,7 +160,7 @@ pub trait ActionExecutor: Send + Sync {
         &self,
         agent_id: &str,
         action: &PlannedAction,
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
         hitl_approved: bool,
     ) -> Result<String, String>;
 }
@@ -293,7 +293,7 @@ impl ActionExecutor for RegistryExecutor {
         &self,
         agent_id: &str,
         action: &PlannedAction,
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
         hitl_approved: bool,
     ) -> Result<String, String> {
         // For actions not handled by actuators (LlmQuery, MemoryStore, etc.),
@@ -555,6 +555,10 @@ pub struct CognitiveRuntime {
     emitter: Arc<dyn EventEmitter>,
     provider_registry: HashMap<String, Arc<dyn LlmProvider>>,
     /// Active loop states keyed by agent_id string.
+    /// Never invoke an operation that may reacquire `loops` while holding its
+    /// guard. Cycle callbacks must use owned inputs or published snapshots,
+    /// not locking status/consent methods. Snapshot-map guards are leaf guards:
+    /// the only nested order is loops -> status_snapshots, never the reverse.
     loops: Mutex<HashMap<String, AgentLoopState>>,
     /// Shutdown flags keyed by agent_id.
     shutdown_flags: Mutex<HashMap<String, Arc<AtomicBool>>>,
@@ -569,8 +573,10 @@ pub struct CognitiveRuntime {
     /// A2A client for delegating tasks to external agents.
     a2a_client: Mutex<A2aClient>,
     /// Lock-free status snapshots published at each phase transition.
-    /// Readers use `get_agent_status_fast()` which briefly locks this map
-    /// (never held during a cycle) then does an atomic ArcSwap load.
+    /// Readers use `get_agent_status_fast()` which briefly locks this map and
+    /// does an atomic ArcSwap load. No callbacks run under the map guard.
+    /// Goal identity publication/removal is serialized with `loops` so a cycle
+    /// cannot observe a missing or replaced goal snapshot for its own agent.
     status_snapshots: Mutex<HashMap<String, Arc<ArcSwap<CognitiveStatusResponse>>>>,
 }
 
@@ -643,10 +649,8 @@ impl CognitiveRuntime {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .insert(agent_id.to_string(), shutdown);
-        self.loops
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .insert(agent_id.to_string(), state);
+        let mut loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
+        loops.insert(agent_id.to_string(), state);
 
         // Publish initial lock-free snapshot for status readers (Bug AB fix).
         let initial_snapshot = CognitiveStatusResponse {
@@ -666,6 +670,7 @@ impl CognitiveRuntime {
                 agent_id.to_string(),
                 Arc::new(ArcSwap::new(Arc::new(initial_snapshot))),
             );
+        drop(loops);
 
         Ok(())
     }
@@ -785,7 +790,7 @@ impl CognitiveRuntime {
         agent_id: &str,
         phase: CognitivePhase,
         memory_mgr: &AgentMemoryManager,
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
     ) {
         let Some(selection) = self.resolve_phase_model(agent_id, phase, memory_mgr) else {
             return;
@@ -848,7 +853,7 @@ impl CognitiveRuntime {
         planner: &CognitivePlanner,
         memory_mgr: &AgentMemoryManager,
         executor: &dyn ActionExecutor,
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
     ) -> Result<CycleResult, AgentError> {
         self.run_cycle_with_evolution(agent_id, planner, memory_mgr, executor, audit, None)
     }
@@ -860,7 +865,7 @@ impl CognitiveRuntime {
         planner: &CognitivePlanner,
         memory_mgr: &AgentMemoryManager,
         executor: &dyn ActionExecutor,
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
         evolution_tracker: Option<&EvolutionTracker>,
     ) -> Result<CycleResult, AgentError> {
         let cycle_start = std::time::Instant::now();
@@ -1705,14 +1710,13 @@ impl CognitiveRuntime {
         {
             flag.store(true, Ordering::Relaxed);
         }
-        self.loops
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .remove(agent_id);
+        let mut loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
+        loops.remove(agent_id);
         self.status_snapshots
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .remove(agent_id);
+        drop(loops);
         self.shutdown_flags
             .lock()
             .unwrap_or_else(|p| p.into_inner())
@@ -1762,6 +1766,9 @@ impl CognitiveRuntime {
     /// Staleness: bounded by the most recent phase transition (typically seconds).
     /// This method NEVER blocks on the cycle lock and is safe to call during
     /// long-running cycles.
+    /// The active goal ID is current while a cycle holds `loops`: assignment
+    /// and removal publish under that same guard. Other fields remain snapshots
+    /// of the last published phase, not a substitute for full status reads.
     pub fn get_agent_status_fast(&self, agent_id: &str) -> Option<CognitiveStatusResponse> {
         let map = self
             .status_snapshots
@@ -2247,7 +2254,7 @@ mod tests {
             &self,
             _agent_id: &str,
             _action: &PlannedAction,
-            _audit: &mut AuditTrail,
+            _audit: &mut dyn AuditWriter,
             _hitl_approved: bool,
         ) -> Result<String, String> {
             let mut results = self.results.lock().unwrap();
@@ -3487,7 +3494,7 @@ mod tests {
             &self,
             agent_id: &str,
             action: &PlannedAction,
-            audit: &mut AuditTrail,
+            audit: &mut dyn AuditWriter,
             _hitl_approved: bool,
         ) -> Result<String, String> {
             match action {
@@ -4617,40 +4624,38 @@ mod tests {
         assert!(result.failure_reason.is_none());
     }
 
-    /// G1b: synthetic-loop cancellation token test — confirms the
-    /// Arc<AtomicBool> flag pattern used by the Tauri spawn breaks a busy
-    /// polling loop within the 100ms budget. The real Tauri spawn is not
-    /// testable here without a full async harness; the flag-polling pattern
-    /// itself is validated below.
+    /// G1b: verifies the AtomicBool cancellation pattern after the polling
+    /// worker is ready. This synthetic test has no production latency contract;
+    /// its finite watchdog allows for scheduler delays on every supported OS.
     #[test]
     fn test_cancel_flag_breaks_loop_within_budget() {
         use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::mpsc::{self, TryRecvError};
         use std::time::{Duration, Instant};
 
         let flag = Arc::new(AtomicBool::new(false));
-        let flag_setter = flag.clone();
-
-        // Flip the flag after ~20ms so a 1ms-polling loop must exit well under 100ms.
-        let setter = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(20));
-            flag_setter.store(true, Ordering::Relaxed);
+        let worker_flag = flag.clone();
+        let (ready_tx, ready_rx) = mpsc::sync_channel(1);
+        let (done_tx, done_rx) = mpsc::sync_channel(1);
+        let budget = Duration::from_secs(5);
+        let worker = std::thread::spawn(move || {
+            assert!(!worker_flag.load(Ordering::Relaxed));
+            ready_tx.send(()).unwrap();
+            let deadline = Instant::now() + budget;
+            while !worker_flag.load(Ordering::Relaxed) {
+                assert!(Instant::now() < deadline, "cancel flag was not observed");
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            done_tx.send(()).unwrap();
         });
 
-        let start = Instant::now();
-        loop {
-            if flag.load(Ordering::Relaxed) {
-                break;
-            }
-            if start.elapsed() > Duration::from_millis(100) {
-                panic!("cancel flag did not break the loop within 100ms");
-            }
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        setter.join().unwrap();
-        assert!(
-            start.elapsed() < Duration::from_millis(100),
-            "loop should exit within 100ms of flag being set"
-        );
+        ready_rx.recv_timeout(budget).expect("polling worker ready");
+        assert!(matches!(done_rx.try_recv(), Err(TryRecvError::Empty)));
+        flag.store(true, Ordering::Relaxed);
+        done_rx
+            .recv_timeout(budget)
+            .expect("polling worker cancelled");
+        worker.join().unwrap();
     }
 
     // ── G8 read_cwd_listing tests ──

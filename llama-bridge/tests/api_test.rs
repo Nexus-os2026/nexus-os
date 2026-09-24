@@ -136,7 +136,8 @@ fn test_model_metadata_dense() {
 fn test_hardware_detection() {
     let hw = detect_hardware();
     assert!(hw.cpu_cores > 0);
-    // RAM detection may return 0 on non-Linux, that's fine
+    #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
+    assert!(hw.total_ram_mb > 0);
 }
 
 #[test]

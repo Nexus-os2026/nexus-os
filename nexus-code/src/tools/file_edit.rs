@@ -61,11 +61,10 @@ impl NxTool for FileEditTool {
             None => return ToolResult::error("Missing required parameter: new_text"),
         };
 
-        let path = ctx.resolve_path(path_str);
-
-        if let Err(e) = ctx.check_path_allowed(&path) {
-            return ToolResult::error(format!("{}", e));
-        }
+        let path = match ctx.resolve_path(path_str) {
+            Ok(path) => path,
+            Err(e) => return ToolResult::from_path_error(e),
+        };
 
         // Read file
         let content = match tokio::fs::read_to_string(&path).await {

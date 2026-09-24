@@ -1,23 +1,28 @@
-//! OS-level resource containment for spawned subprocesses.
+//! Owned OS containment for governed subprocesses.
 //!
-//! Uses POSIX `setrlimit` via `pre_exec` to apply hard limits to child
-//! processes *before* they exec.  Limits propagate to all descendants,
-//! which closes the fork-bomb and memory-bomb gaps that fuel metering
-//! alone cannot address (fuel meters instruction count inside WASM, but
-//! native subprocesses bypass the WASM sandbox entirely).
-//!
-//! # Safety
-//!
-//! `CommandExt::pre_exec` is an inherently `unsafe` API because the
-//! closure runs between `fork()` and `exec()` in a signal-unsafe
-//! context.  The closure body uses only safe `nix` wrappers around
-//! async-signal-safe POSIX functions (`setrlimit`, `setpgid`).
-//! The parent process is never affected.
+//! Linux/macOS create a process group before exec; Linux additionally applies
+//! four hard rlimits. Windows assigns a private kill-on-close Job Object during
+//! process creation. Always explicitly finalize, even after natural root exit.
+//! Unix groups contain descendants that remain in the group; this is not a
+//! sandbox against a workload deliberately calling setsid/setpgid.
 
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::ffi::OsString;
+use std::io::{self, Read};
+use std::path::PathBuf;
+use std::process::ExitStatus;
+#[cfg(any(target_os = "linux", target_os = "macos", windows))]
+use std::time::Duration;
+use std::time::Instant;
 
-/// Hard resource limits applied to every spawned subprocess.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "resource_limiter/unix.rs"]
+mod platform;
+#[cfg(windows)]
+#[path = "resource_limiter/windows.rs"]
+mod platform;
+
+/// Linux hard resource limits; other supported platforms provide tree containment.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ResourceLimits {
     /// Maximum virtual memory in bytes (RLIMIT_AS). Default: 512 MB.
@@ -49,123 +54,239 @@ impl Default for ResourceLimits {
     }
 }
 
-/// Errors from resource limit operations.
-#[derive(Debug, Clone)]
+/// Failures preserve their OS error and distinguish cleanup from command failure.
+#[derive(Debug, thiserror::Error)]
 pub enum ResourceLimitError {
-    /// Failed to set a resource limit on the child process.
-    SetLimitFailed(String),
-    /// Failed to create or signal a process group.
-    ProcessGroupFailed(String),
+    #[error("process setup/spawn failed: {0}")]
+    SpawnFailed(#[source] io::Error),
+    #[error("process group/job setup failed: {0}")]
+    ContainmentSetupFailed(#[source] io::Error),
+    #[error("setrlimit failed: {0}")]
+    SetLimitFailed(#[source] io::Error),
+    #[error("exit observation failed: {0}")]
+    ObservationFailed(#[source] io::Error),
+    #[error("tree termination/reap failed: {0}")]
+    TerminationFailed(#[source] io::Error),
+    #[error("process cleanup deadline exceeded")]
+    CleanupDeadlineExceeded,
+    #[error("resource containment is unsupported on this platform")]
+    UnsupportedPlatform,
 }
 
-impl fmt::Display for ResourceLimitError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::SetLimitFailed(msg) => write!(f, "setrlimit failed: {msg}"),
-            Self::ProcessGroupFailed(msg) => write!(f, "process group failed: {msg}"),
-        }
-    }
-}
-
-impl std::error::Error for ResourceLimitError {}
-
-/// Applies OS-level resource limits to child processes.
+/// Only the two execution forms required by the terminal and native helpers.
 #[derive(Debug, Clone)]
+pub enum ResourceProgram {
+    /// Use an explicit executable path for portability (Windows does not search PATH).
+    Executable {
+        program: OsString,
+        args: Vec<OsString>,
+    },
+    /// `sh -lc` on Unix; system-directory `cmd.exe /C` on Windows.
+    Shell(String),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ResourceStdin {
+    Inherit,
+    Null,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ResourceOutput {
+    Inherit,
+    Null,
+    Piped,
+}
+
+/// Environment is inherited unchanged. No arbitrary pre-exec or handle hooks.
+#[derive(Debug, Clone)]
+pub struct ResourceSpawnSpec {
+    pub program: ResourceProgram,
+    pub current_dir: PathBuf,
+    pub stdin: ResourceStdin,
+    pub stdout: ResourceOutput,
+    pub stderr: ResourceOutput,
+}
+
+/// Fixed backend-only environment policy for Windows actuators. No caller map.
+#[cfg(windows)]
+pub(crate) enum ActuatorEnvironment {
+    Shell { path: OsString },
+    InlineCode { path: OsString },
+}
+
+pub type ResourceReader = Box<dyn Read + Send>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TerminationReport {
+    pub status: ExitStatus,
+    pub already_finalized: bool,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct ResourceLimiter {
     limits: ResourceLimits,
 }
 
 impl ResourceLimiter {
-    /// Create a limiter with the given limits.
     pub fn new(limits: ResourceLimits) -> Self {
         Self { limits }
     }
 
-    /// Access the underlying limits.
     pub fn limits(&self) -> &ResourceLimits {
         &self.limits
     }
 
-    /// Apply resource limits to a [`std::process::Command`] before it spawns.
-    ///
-    /// On Linux this installs a `pre_exec` hook that calls `setrlimit` for
-    /// `RLIMIT_AS`, `RLIMIT_CPU`, `RLIMIT_NPROC`, and `RLIMIT_FSIZE`, then
-    /// calls `setpgid(0, 0)` so the child becomes its own process-group
-    /// leader (enabling [`kill_process_tree`] to terminate all descendants).
-    ///
-    /// On non-Linux platforms this is a no-op.
-    #[cfg(target_os = "linux")]
-    pub fn apply_to_command(&self, cmd: &mut std::process::Command) {
-        use nix::sys::resource::{setrlimit, Resource};
-        use nix::unistd::{setpgid, Pid};
-        use std::os::unix::process::CommandExt;
+    /// Private actuator adapter; public spawn retains inherited environment semantics.
+    #[cfg(windows)]
+    pub(crate) fn spawn_actuator(
+        &self,
+        spec: &ResourceSpawnSpec,
+        environment: &ActuatorEnvironment,
+    ) -> Result<ResourceLimitedChild, ResourceLimitError> {
+        let child = platform::Child::spawn_actuator(spec, &self.limits, environment)?;
+        Ok(ResourceLimitedChild {
+            id: child.id(),
+            child: Some(child),
+            status: None,
+        })
+    }
 
-        let mem = self.limits.max_memory_bytes;
-        let cpu = self.limits.max_cpu_seconds;
-        let nproc = self.limits.max_processes as u64;
-        let fsize = self.limits.max_file_size_bytes;
-
-        // This unsafe block is irreducible: CommandExt::pre_exec is an unsafe fn in Rust's stdlib.
-        // The closure body uses only safe nix wrappers (setrlimit, setpgid).
-        // See: https://doc.rust-lang.org/std/os/unix/process/trait.CommandExt.html#tymethod.pre_exec
-        unsafe {
-            cmd.pre_exec(move || {
-                // Put the child in its own process group so we can kill the
-                // entire tree later with killpg.
-                setpgid(Pid::from_raw(0), Pid::from_raw(0)).map_err(std::io::Error::other)?;
-
-                // RLIMIT_AS — virtual address space (memory).
-                setrlimit(Resource::RLIMIT_AS, mem, mem).map_err(std::io::Error::other)?;
-
-                // RLIMIT_CPU — CPU time in seconds.
-                setrlimit(Resource::RLIMIT_CPU, cpu, cpu).map_err(std::io::Error::other)?;
-
-                // RLIMIT_NPROC — max child processes (fork-bomb defense).
-                setrlimit(Resource::RLIMIT_NPROC, nproc, nproc).map_err(std::io::Error::other)?;
-
-                // RLIMIT_FSIZE — max file size a process can create.
-                setrlimit(Resource::RLIMIT_FSIZE, fsize, fsize).map_err(std::io::Error::other)?;
-
-                Ok(())
-            });
+    /// Fail closed if containment cannot be established before execution.
+    pub fn spawn(
+        &self,
+        spec: &ResourceSpawnSpec,
+    ) -> Result<ResourceLimitedChild, ResourceLimitError> {
+        #[cfg(any(target_os = "linux", target_os = "macos", windows))]
+        {
+            let child = platform::Child::spawn(spec, &self.limits)?;
+            Ok(ResourceLimitedChild {
+                id: child.id(),
+                child: Some(child),
+                status: None,
+            })
         }
-    }
-
-    /// Non-Linux fallback — no-op.
-    #[cfg(not(target_os = "linux"))]
-    pub fn apply_to_command(&self, _cmd: &mut std::process::Command) {
-        // Resource limits via setrlimit are Linux-specific.
-        // On other platforms we rely on the wall-clock timeout only.
-    }
-
-    /// Kill an entire process tree rooted at `pid`.
-    ///
-    /// On Linux, sends `SIGKILL` to the process group (negative PID).
-    /// On other platforms, kills only the direct process.
-    #[cfg(target_os = "linux")]
-    pub fn kill_process_tree(pid: u32) -> Result<(), ResourceLimitError> {
-        use nix::sys::signal::{killpg, Signal};
-        use nix::unistd::Pid;
-
-        match killpg(Pid::from_raw(pid as i32), Signal::SIGKILL) {
-            Ok(()) => Ok(()),
-            Err(nix::errno::Errno::ESRCH) => Ok(()), // already exited
-            Err(e) => Err(ResourceLimitError::ProcessGroupFailed(e.to_string())),
+        #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+        {
+            let _ = spec;
+            Err(ResourceLimitError::UnsupportedPlatform)
         }
-    }
-
-    /// Non-Linux fallback — kill direct process only.
-    #[cfg(not(target_os = "linux"))]
-    pub fn kill_process_tree(pid: u32) -> Result<(), ResourceLimitError> {
-        // suppress unused pid
-        let _ = pid;
-        Ok(())
     }
 }
 
-impl Default for ResourceLimiter {
-    fn default() -> Self {
-        Self::new(ResourceLimits::default())
+/// Sole owner of process identity and containment. Intentionally not Clone.
+///
+/// `poll_exit` never releases that identity. After successful finalization only
+/// the historical ID/status remain; subsequent calls never signal that ID.
+/// On Unix the application must not independently reap this owner's child
+/// (including via a global SIGCHLD reaper or SA_NOCLDWAIT).
+pub struct ResourceLimitedChild {
+    id: u32,
+    #[cfg(any(target_os = "linux", target_os = "macos", windows))]
+    child: Option<platform::Child>,
+    status: Option<ExitStatus>,
+}
+
+impl ResourceLimitedChild {
+    pub fn id(&self) -> u32 {
+        self.id
+    }
+
+    pub fn take_stdout(&mut self) -> Option<ResourceReader> {
+        #[cfg(any(target_os = "linux", target_os = "macos", windows))]
+        {
+            self.child.as_mut()?.take_stdout()
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+        {
+            None
+        }
+    }
+
+    pub fn take_stderr(&mut self) -> Option<ResourceReader> {
+        #[cfg(any(target_os = "linux", target_os = "macos", windows))]
+        {
+            self.child.as_mut()?.take_stderr()
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+        {
+            None
+        }
+    }
+
+    /// Observe root exit without reaping or closing the containment identity.
+    pub fn poll_exit(&mut self) -> Result<Option<ExitStatus>, ResourceLimitError> {
+        if let Some(status) = self.status {
+            return Ok(Some(status));
+        }
+        #[cfg(any(target_os = "linux", target_os = "macos", windows))]
+        {
+            self.child.as_mut().expect("unfinalized owner").poll_exit()
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+        {
+            Err(ResourceLimitError::UnsupportedPlatform)
+        }
+    }
+
+    /// Request tree termination, then finalize the root within `deadline`.
+    /// Failure retains ownership for retry/Drop unless the root was finalized
+    /// just as the deadline expired. Never join pipe readers after failure.
+    /// An expired deadline still requests termination, but cannot
+    /// report successful cleanup. Repeated successful calls are deterministic.
+    pub fn terminate_and_reap(
+        &mut self,
+        deadline: Instant,
+    ) -> Result<TerminationReport, ResourceLimitError> {
+        if let Some(status) = self.status {
+            return Ok(TerminationReport {
+                status,
+                already_finalized: true,
+            });
+        }
+        #[cfg(any(target_os = "linux", target_os = "macos", windows))]
+        {
+            let child = self.child.as_mut().expect("unfinalized owner");
+            child.request_termination()?;
+            loop {
+                if Instant::now() >= deadline {
+                    return Err(ResourceLimitError::CleanupDeadlineExceeded);
+                }
+                if let Some(status) = child.try_finalize()? {
+                    self.status = Some(status);
+                    // OS identity is released only after termination and root reap.
+                    self.child.take();
+                    if Instant::now() >= deadline {
+                        return Err(ResourceLimitError::CleanupDeadlineExceeded);
+                    }
+                    return Ok(TerminationReport {
+                        status,
+                        already_finalized: false,
+                    });
+                }
+                std::thread::sleep(
+                    Duration::from_millis(5)
+                        .min(deadline.saturating_duration_since(Instant::now())),
+                );
+            }
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+        {
+            let _ = deadline;
+            Err(ResourceLimitError::UnsupportedPlatform)
+        }
+    }
+}
+
+impl Drop for ResourceLimitedChild {
+    fn drop(&mut self) {
+        #[cfg(any(target_os = "linux", target_os = "macos", windows))]
+        if let Some(child) = self.child.as_mut() {
+            // Defense in depth only: no blocking wait, no reportable success.
+            if child.request_termination().is_ok() {
+                let _ = child.try_finalize();
+            }
+        }
     }
 }
 
@@ -208,45 +329,11 @@ mod tests {
 
     #[test]
     fn error_display() {
-        let e = ResourceLimitError::SetLimitFailed("ENOMEM".to_string());
-        assert!(e.to_string().contains("ENOMEM"));
+        let e = ResourceLimitError::SetLimitFailed(std::io::Error::from_raw_os_error(12));
+        assert!(std::error::Error::source(&e).is_some());
 
-        let e = ResourceLimitError::ProcessGroupFailed("ESRCH".to_string());
-        assert!(e.to_string().contains("ESRCH"));
-    }
-
-    /// Verifies applying resource limits to a Command doesn't panic.
-    /// Panic-freedom is the assertion: the limiter must handle default config
-    /// on any platform without unwinding.
-    #[test]
-    fn apply_to_command_no_spawn_does_not_panic() {
-        let limiter = ResourceLimiter::default();
-        let mut cmd = std::process::Command::new("echo");
-        cmd.arg("test");
-        limiter.apply_to_command(&mut cmd);
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn apply_to_command_does_not_panic() {
-        let limiter = ResourceLimiter::default();
-        let mut cmd = std::process::Command::new("true");
-        limiter.apply_to_command(&mut cmd);
-        let status = cmd.status().expect("failed to run `true`");
-        assert!(status.success());
-    }
-
-    #[test]
-    fn kill_process_tree_nonexistent_pid() {
-        let result = ResourceLimiter::kill_process_tree(999_999_999);
-        assert!(result.is_ok());
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn kill_nonexistent_process_group_is_ok() {
-        let result = ResourceLimiter::kill_process_tree(2_000_000_000);
-        assert!(result.is_ok());
+        let e = ResourceLimitError::ContainmentSetupFailed(std::io::Error::from_raw_os_error(3));
+        assert!(std::error::Error::source(&e).is_some());
     }
 
     #[test]
@@ -284,52 +371,5 @@ mod tests {
         assert!(limits.max_file_size_bytes <= 1024 * 1024 * 1024);
         assert!(limits.timeout_seconds >= 10);
         assert!(limits.timeout_seconds <= 300);
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn memory_limit_enforced_on_child() {
-        let limits = ResourceLimits {
-            max_memory_bytes: 32 * 1024 * 1024,
-            max_cpu_seconds: 5,
-            max_processes: 10,
-            max_file_size_bytes: 100 * 1024 * 1024,
-            timeout_seconds: 5,
-        };
-        let limiter = ResourceLimiter::new(limits);
-        let mut cmd = std::process::Command::new("sh");
-        cmd.args(["-c", "head -c 67108864 /dev/zero | cat > /dev/null"]);
-        limiter.apply_to_command(&mut cmd);
-        let status = cmd.status().expect("failed to spawn");
-        let _ = status;
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn process_group_kill_terminates_children() {
-        use std::process::Stdio;
-
-        let limiter = ResourceLimiter::default();
-        let mut cmd = std::process::Command::new("sh");
-        cmd.args(["-c", "sleep 300"]);
-        cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::null());
-        limiter.apply_to_command(&mut cmd);
-
-        let mut child = cmd.spawn().expect("failed to spawn sleep");
-        let pid = child.id();
-
-        std::thread::sleep(std::time::Duration::from_millis(50));
-
-        let result = ResourceLimiter::kill_process_tree(pid);
-        assert!(result.is_ok());
-
-        let _ = child.wait();
-
-        // Verify process is dead using safe nix API.
-        use nix::sys::signal::kill;
-        use nix::unistd::Pid;
-        let probe = kill(Pid::from_raw(pid as i32), None);
-        assert!(probe.is_err(), "process should be dead");
     }
 }

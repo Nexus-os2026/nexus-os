@@ -141,7 +141,9 @@ impl NxConfig {
         Ok(config)
     }
 
-    /// Get the project directory (current working directory).
+    /// Process-derived compatibility project root, not explicit per-project
+    /// authorization. ToolContext rejects absent/relative roots; optional scope
+    /// patterns cannot grant access outside this directory.
     pub fn project_dir(&self) -> Option<std::path::PathBuf> {
         std::env::current_dir().ok()
     }
