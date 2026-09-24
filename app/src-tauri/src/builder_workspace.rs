@@ -19,6 +19,8 @@ use web_builder_agent::project::{create_project, transition, ProjectState, Proje
 
 mod directory_identity;
 use directory_identity::{DirectoryIdentity, IdentityError};
+// P0-002C4B private lifecycle primitive. No production source constructs it.
+mod process_lifecycle;
 
 // Audit payloads contain descriptive project IDs, never grants or private principals.
 type Audit = Arc<dyn Fn(Value) + Send + Sync>;
@@ -437,6 +439,21 @@ fn dev_server_event(
 
 type DevServerDenial = (&'static str, &'static str); // (audit reason, client error)
 
+/// Retained trusted snapshot: the private registration and the identity of its
+/// existing React directory. React is always derived from the registration,
+/// never from caller data. Not serialized; not a credential or containment.
+struct DevServerTarget {
+    project: Arc<RegisteredBuilderProject>,
+    react_identity: DirectoryIdentity,
+}
+
+impl DevServerTarget {
+    fn validate_react(&self) -> std::result::Result<(), IdentityError> {
+        self.react_identity
+            .validate(&self.project.root.join("react"))
+    }
+}
+
 impl BuilderWorkspaceAuthority {
     /// Selector → private registration → storage, project and existing React
     /// identity. React must be the exact, non-redirected child of the
@@ -446,6 +463,15 @@ impl BuilderWorkspaceAuthority {
         selector: &str,
         audit: &Audit,
     ) -> std::result::Result<Uuid, DevServerDenial> {
+        self.dev_server_target(selector, audit)
+            .map(|target| target.project.project_id)
+    }
+
+    fn dev_server_target(
+        &self,
+        selector: &str,
+        audit: &Audit,
+    ) -> std::result::Result<DevServerTarget, DevServerDenial> {
         let id =
             Uuid::parse_str(selector).map_err(|_| ("registration", "project not registered"))?;
         let project = self
@@ -455,18 +481,21 @@ impl BuilderWorkspaceAuthority {
         self.catalog
             .validate(&project, audit)
             .map_err(|error| ("identity", error))?;
-        let react = project.root.join("react");
-        let identity =
-            DirectoryIdentity::capture(&react).map_err(|_| ("react", "React identity denied"))?;
+        let react_identity = DirectoryIdentity::capture(&project.root.join("react"))
+            .map_err(|_| ("react", "React identity denied"))?;
+        let target = DevServerTarget {
+            project,
+            react_identity,
+        };
         // Final checks after capture: the registration is still current and
         // React is still the same directory beneath the registered project.
         self.catalog
-            .validate(&project, audit)
+            .validate(&target.project, audit)
             .map_err(|error| ("identity", error))?;
-        identity
-            .validate(&react)
+        target
+            .validate_react()
             .map_err(|_| ("react", "React identity denied"))?;
-        Ok(id)
+        Ok(target)
     }
 
     fn dev_server(

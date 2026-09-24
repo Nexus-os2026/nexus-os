@@ -3,13 +3,14 @@ use nexus_kernel::workspace_authority::WorkspaceAuthorityError;
 use std::sync::Mutex;
 use web_builder_agent::model_router::ProviderType;
 
-struct Fixture {
-    path: PathBuf,
-    authority: BuilderWorkspaceAuthority,
-    events: Arc<Mutex<Vec<Value>>>,
+// Shared (test-only) with the P0-002C4B lifecycle tests.
+pub(super) struct Fixture {
+    pub(super) path: PathBuf,
+    pub(super) authority: BuilderWorkspaceAuthority,
+    pub(super) events: Arc<Mutex<Vec<Value>>>,
 }
 impl Fixture {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let path = std::env::temp_dir().join(format!("nexus-c2-{}", Uuid::new_v4()));
         let registry = Arc::new(WorkspaceAuthorityRegistry::new());
         let authority = BuilderWorkspaceAuthority::provision(registry, &path).unwrap();
@@ -19,7 +20,7 @@ impl Fixture {
             events: Arc::new(Mutex::new(vec![])),
         }
     }
-    fn audit(&self) -> Audit {
+    pub(super) fn audit(&self) -> Audit {
         let events = Arc::clone(&self.events);
         Arc::new(move |event| events.lock().unwrap().push(event))
     }
@@ -707,7 +708,7 @@ fn p0_002c2_real_success_pipeline_rechecks_between_every_mutation() {
 
 // C3 fixtures register through the real C2 pipeline. Only the test fixture
 // creates React output: the C3 command must never create it or its parents.
-fn registered(f: &Fixture) -> (String, PathBuf) {
+pub(super) fn registered(f: &Fixture) -> (String, PathBuf) {
     let result = run_plan(&f.authority, f.audit(), "site", |_| Ok(generated())).unwrap();
     let root = PathBuf::from(result.project_dir);
     std::fs::create_dir(root.join("react")).unwrap();
@@ -2211,4 +2212,116 @@ fn p0_002c4a_production_dev_server_commands_have_no_launch_path() {
     ] {
         assert!(!adapter.contains(forbidden), "{forbidden}");
     }
+}
+
+// Source text without `//` comments (none of these sources embed `//` in code).
+fn code_only(source: &str) -> String {
+    source
+        .lines()
+        .map(|line| line.split("//").next().unwrap_or(""))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// P0-002C4B guard: the private lifecycle primitive is compiled but has no
+// production constructor, caller or process-creation path, and the frozen
+// C4A dev-server commands cannot reach it.
+#[test]
+fn p0_002c4b_production_commands_cannot_reach_lifecycle_or_launch() {
+    let lib = include_str!("../lib.rs");
+    let start = lib.find("    fn builder_dev_server_start(").unwrap();
+    let end = lib.find("    fn builder_dev_server_write_file(").unwrap();
+    let commands = &lib[start..end];
+    for forbidden in [
+        "lifecycle",
+        "Lifecycle",
+        "OwnedTree",
+        "ResourceLimit",
+        "ResourceSpawnSpec",
+        "Command",
+        "spawn",
+        "npm",
+        "npx",
+        "vite",
+        "node",
+        "process.exec",
+    ] {
+        assert!(!commands.contains(forbidden), "lib commands: {forbidden}");
+    }
+    // The whole Builder adapter code path behind the three commands.
+    let adapter = include_str!("../builder_workspace.rs");
+    let section = |from: &str, to: &str| {
+        let start = adapter.find(from).unwrap();
+        start..start + adapter[start..].find(to).unwrap()
+    };
+    let path = [
+        section("type DevServerDenial", "struct WriteExecution"),
+        section("fn dev_server_authority", "fn audit_for"),
+    ]
+    .map(|range| code_only(&adapter[range]).to_lowercase());
+    for code in &path {
+        assert!(code.contains("fn dev_server_start"));
+        for forbidden in [
+            "lifecycle",
+            "ownedtree",
+            "resourcelimit",
+            "resourcespawnspec",
+            "command",
+            "spawn",
+            "npm",
+            "npx",
+            "vite",
+            "node",
+            "process.exec",
+            "std::process",
+        ] {
+            assert!(!code.contains(forbidden), "adapter: {forbidden}");
+        }
+    }
+    // The module is declared once and constructed by no production source.
+    assert_eq!(adapter.matches("process_lifecycle").count(), 1);
+    assert!(adapter.contains("\nmod process_lifecycle;\n"));
+    for source in [lib, adapter] {
+        assert!(!source.contains("LifecycleRegistry"));
+    }
+    assert!(!lib.contains("process_lifecycle"));
+    // Non-test lifecycle code wraps an already-owned tree; it cannot create one.
+    // All #[cfg(test)] fixtures and the real launcher live in its tests module.
+    let lifecycle = include_str!("process_lifecycle.rs");
+    assert_eq!(lifecycle.matches("#[cfg(test)]").count(), 1);
+    assert!(lifecycle.trim_end().ends_with("#[cfg(test)]\nmod tests;"));
+    let production = code_only(lifecycle);
+    for forbidden in [
+        "ResourceLimiter",
+        "ResourceSpawnSpec",
+        "ResourceProgram",
+        "ResourceStdin",
+        "ResourceOutput",
+        "Command",
+        "process::Child",
+        "Stdio",
+        "env::",
+        "npm",
+        "npx",
+        "vite",
+        "node",
+        "kill",
+        "Serialize",
+        "Deserialize",
+        "tauri",
+        "WorkspaceGrant",
+        "WorkspaceBinding",
+        "AppState",
+    ] {
+        assert!(!production.contains(forbidden), "lifecycle: {forbidden}");
+    }
+    // Its only spawn is the owner thread; its only `.id()` is a thread's.
+    assert_eq!(production.matches(".spawn(").count(), 1);
+    assert!(production.contains("thread::Builder::new()"));
+    assert_eq!(
+        production.matches(".id()").count(),
+        production.matches("thread::current().id()").count()
+    );
+    assert_eq!(production.matches("allow(").count(), 1);
+    assert!(lifecycle.contains("#![cfg_attr(not(test), allow(dead_code))]"));
 }
